@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -11,16 +11,30 @@ from typing import Any
 
 import pytest
 
-from sqlbuild._native import collect_snowflake_cost
+from sqlbuild._native import (
+    CostCommandRequest,
+    CostRunRecord,
+    collect_snowflake_cost,
+    read_cost_run,
+    refresh_pending_cost_run,
+    write_cost_run,
+)
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.cost.models import RunCostSummary
 from sqlbuild.cost.types import CostStatus
+from tests.unit.src.sqlbuild.cli.commands._helpers.cost.helpers import write_snowflake_project
 from tests.unit.src.sqlbuild.cost._test_types import (
+    SnowflakeCostBudgetTestCase,
     SnowflakeCostFailureMessageTestCase,
     SnowflakeLargeRunCostTestCase,
     SnowflakeScaleTestCase,
 )
-from tests.unit.src.sqlbuild.cost.helpers import history_row, run_history_rows, write_ledger
+from tests.unit.src.sqlbuild.cost.helpers import (
+    build_cost_run_record,
+    history_row,
+    run_history_rows,
+    write_ledger,
+)
 
 _ORIGIN: datetime = datetime(2026, 8, 23, 1, tzinfo=UTC)
 _RUN_ID: str = "run-nightly"
@@ -64,6 +78,16 @@ class _Cursor:
 
 
 @dataclass
+class _Clock:
+    """A monotonic clock that advances only when the fake history answers a read."""
+
+    seconds: float = 0.0
+
+    def monotonic(self) -> float:
+        return self.seconds
+
+
+@dataclass
 class _FakeQueryHistory:
     """Answers `INFORMATION_SCHEMA.QUERY_HISTORY` reads from fixed rows, like Snowflake does.
 
@@ -75,15 +99,8 @@ class _FakeQueryHistory:
     rows: list[tuple[Any, ...]]
     timeout_window: timedelta | None = None
     reads: list[HistoryRead] = field(default_factory=list)
-
-    @property
-    def widest_bounded_read(self) -> timedelta:
-        """The widest end-time window of any bounded read."""
-
-        return max(
-            (read.end - read.start for read in self.reads if read.end is not None),
-            default=timedelta(0),
-        )
+    clock: _Clock = field(default_factory=_Clock)
+    seconds_per_read: float = 0.0
 
     @property
     def longest_sql(self) -> int:
@@ -102,6 +119,7 @@ class _FakeQueryHistory:
             datetime.fromisoformat(end_match.group(1)) if end_match is not None else None
         )
         timeout_seconds: str = kwargs["statement_params"]["STATEMENT_TIMEOUT_IN_SECONDS"]
+        self.clock.seconds += self.seconds_per_read
         self.reads.append(
             HistoryRead(start=start, end=end, sql_length=len(sql), timeout_seconds=timeout_seconds)
         )
@@ -121,7 +139,17 @@ class _FakeQueryHistory:
     "test_case",
     [
         SnowflakeScaleTestCase(
-            description="a 78-minute run of 20,000 statements is read in bounded slices",
+            description="an unsaturated 8-hour run is read with one query",
+            statement_count=5_000,
+            duration_minutes=480,
+            timeout_window=None,
+            expected_status=CostStatus.COMPLETE,
+            expected_query_count=5_000,
+            expected_minimum_reads=1,
+            expected_maximum_reads=1,
+        ),
+        SnowflakeScaleTestCase(
+            description="a 78-minute run of 20,000 statements splits its saturated window",
             statement_count=20_000,
             duration_minutes=78,
             timeout_window=None,
@@ -129,7 +157,7 @@ class _FakeQueryHistory:
             expected_query_count=20_000,
         ),
         SnowflakeScaleTestCase(
-            description="slices that reach the statement timeout are split and retried",
+            description="a window that reaches the statement timeout is split and retried",
             statement_count=6_500,
             duration_minutes=42,
             timeout_window=timedelta(minutes=8),
@@ -183,7 +211,8 @@ def test_given_large_run_when_collecting_snowflake_cost_then_sql_stays_bounded(
         assert fragment in (summary.message or "")
     assert history.longest_sql < test_case.expected_max_sql_length
     assert {read.timeout_seconds for read in history.reads} == {"10"}
-    assert history.widest_bounded_read <= test_case.expected_max_slice
+    assert test_case.expected_minimum_reads <= len(history.reads)
+    assert len(history.reads) <= test_case.expected_maximum_reads
 
 
 class _ClosingHistory(_FakeQueryHistory):
@@ -292,3 +321,119 @@ def test_given_query_history_error_when_adapter_collects_cost_then_message_names
 
     assert summary.status == test_case.expected_status
     assert summary.message == test_case.expected_message
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeCostBudgetTestCase(
+            description="the at-exit budget leaves a slow eight-hour run pending",
+            seconds_per_read=1.0,
+            expected_status=CostStatus.PENDING,
+            expected_message_fragment="30-second collection deadline exceeded",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_slow_history_when_collecting_at_exit_then_run_stays_pending(
+    test_case: SnowflakeCostBudgetTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    duration: timedelta = timedelta(hours=8)
+    rows: list[tuple[Any, ...]] = run_history_rows(
+        origin=_ORIGIN, statement_count=2_000, duration=duration
+    )
+    ledger_path: Path = tmp_path / "statements.jsonl"
+    write_ledger(path=ledger_path, run_id=_RUN_ID, rows=rows)
+    history: _ClosingHistory = _ClosingHistory(
+        rows=rows,
+        timeout_window=timedelta(minutes=10),
+        seconds_per_read=test_case.seconds_per_read,
+    )
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+    monkeypatch.setattr(adapter, "connect", lambda config: history)
+    monkeypatch.setattr("time.monotonic", history.clock.monotonic)
+
+    summary: RunCostSummary = adapter.collect_run_cost(
+        connection_config={},
+        target_database="ANALYTICS",
+        run_id=_RUN_ID,
+        started_at=_ORIGIN,
+        completed_at=_ORIGIN + duration,
+        statement_ledger_path=ledger_path,
+        usd_per_credit=Decimal("3.00"),
+        rate_source="default",
+    )
+
+    assert summary.status == test_case.expected_status
+    assert test_case.expected_message_fragment in (summary.message or "")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeCostBudgetTestCase(
+            description="sqb cost completes a slow eight-hour run left pending at exit",
+            seconds_per_read=1.0,
+            expected_status=CostStatus.COMPLETE,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_pending_slow_run_when_refreshing_with_sqb_cost_then_larger_budget_completes_it(
+    test_case: SnowflakeCostBudgetTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    duration: timedelta = timedelta(hours=8)
+    rows: list[tuple[Any, ...]] = run_history_rows(
+        origin=_ORIGIN, statement_count=2_000, duration=duration
+    )
+    ledger_dir: Path = tmp_path / "target" / "executions" / _RUN_ID
+    ledger_dir.mkdir(parents=True)
+    write_ledger(path=ledger_dir / "statements.jsonl", run_id=_RUN_ID, rows=rows)
+    record: CostRunRecord = build_cost_run_record(run_id=_RUN_ID, completed_at=_ORIGIN + duration)
+    write_cost_run(
+        project_dir=tmp_path,
+        record=replace(
+            record,
+            started_at=_ORIGIN,
+            cost=replace(record.cost, status=CostStatus.PENDING, resources=(), query_count=0),
+        ),
+    )
+    write_snowflake_project(tmp_path)
+    history: _ClosingHistory = _ClosingHistory(
+        rows=rows,
+        timeout_window=timedelta(minutes=10),
+        seconds_per_read=test_case.seconds_per_read,
+    )
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+    monkeypatch.setattr(adapter, "connect", lambda config: history)
+    monkeypatch.setattr("time.monotonic", history.clock.monotonic)
+    monkeypatch.setattr(
+        "sqlbuild.adapter.discovery.main.resolve_adapter.resolve_adapter",
+        lambda **kwargs: adapter,
+    )
+
+    refresh_pending_cost_run(
+        CostCommandRequest(
+            project_dir=tmp_path,
+            selector=_RUN_ID,
+            no_color=True,
+            limit=None,
+            no_limit=False,
+            sort=None,
+            order=None,
+            since=None,
+            until=None,
+            json_output=False,
+            json_output_path=None,
+        )
+    )
+
+    refreshed: CostRunRecord | None = read_cost_run(project_dir=tmp_path, run_id=_RUN_ID)
+    assert refreshed is not None
+    assert refreshed.cost.status == test_case.expected_status
+    assert refreshed.cost.query_count == len(rows)
+    assert history.clock.seconds > 30

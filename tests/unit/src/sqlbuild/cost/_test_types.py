@@ -114,7 +114,8 @@ class SnowflakeScaleTestCase:
     expected_query_count: int
     expected_message_fragments: tuple[str, ...] = ()
     expected_max_sql_length: int = 2_000
-    expected_max_slice: timedelta = timedelta(minutes=15)
+    expected_minimum_reads: int = 2
+    expected_maximum_reads: int = 1_000
 
 
 @dataclass(frozen=True)
@@ -131,3 +132,11 @@ class SnowflakeCostFailureMessageTestCase:
     description: str
     expected_status: CostStatus
     expected_message: str
+
+
+@dataclass(frozen=True)
+class SnowflakeCostBudgetTestCase:
+    description: str
+    seconds_per_read: float
+    expected_status: CostStatus
+    expected_message_fragment: str = ""

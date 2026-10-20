@@ -358,6 +358,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         statement_ledger_path: Path,
         usd_per_credit: Decimal,
         rate_source: str,
+        budget_seconds: float | None = None,
     ) -> RunCostSummary:
         telemetry_connection_config: dict[str, object] = dict(connection_config)
         telemetry_connection_config["login_timeout"] = _COST_LOGIN_TIMEOUT_SECONDS
@@ -381,6 +382,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 statement_ledger_path=statement_ledger_path,
                 usd_per_credit=usd_per_credit,
                 rate_source=rate_source,
+                budget_seconds=budget_seconds,
             )
         except Exception as error:
             summary = RunCostSummary(

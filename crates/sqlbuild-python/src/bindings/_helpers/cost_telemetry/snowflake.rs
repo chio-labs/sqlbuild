@@ -27,12 +27,10 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
 
-/// Overall budget of one collection; a run's history is read in slices well inside it.
+/// Default budget of one collection, which the at-exit collection keeps short.
 const DEADLINE_SECONDS: f64 = 30.0;
 /// Statement timeout of one query-history read.
 const QUERY_TIMEOUT_SECONDS: &str = "10";
-/// Widest end-time slice of one read; long runs are read as consecutive slices of this width.
-const SLICE_SECONDS: i64 = 15 * 60;
 /// Narrowest slice still split in half after a statement timeout.
 const MIN_TIMEOUT_SPLIT_SECONDS: i64 = 60;
 const STATEMENT_TIMEOUT_CODE: &str = "000630";
@@ -324,28 +322,6 @@ fn row_observation<'py>(
     Ok(Ok(observation))
 }
 
-/// Equal slice starts of a window, each at most `SLICE_SECONDS`; one slice for a short run.
-fn slice_starts<'py>(
-    (window_start, window_end): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
-    run: &Bound<'py, PyAny>,
-) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    let py: Python<'py> = run.py();
-    let width: Bound<'py, PyAny> = window_end.sub(window_start)?;
-    let slice: Bound<'py, PyAny> = timedelta(py, ("seconds", SLICE_SECONDS))?;
-    let count: usize = if run.le(&slice)? {
-        1
-    } else {
-        width
-            .sub(timedelta(py, ("microseconds", 1))?)?
-            .floor_div(&slice)?
-            .extract::<usize>()?
-            + 1
-    };
-    (0..count)
-        .map(|index| window_start.add(width.mul(index)?.div(count)?))
-        .collect()
-}
-
 /// Open-ended rows from `start`, which include running queries, or bounded windows if saturated.
 fn open_rows<'py>(
     history: &History<'py>,
@@ -375,30 +351,7 @@ fn open_rows<'py>(
     ))
 }
 
-/// Rows of the run window, read as bounded slices with an open-ended final slice.
-fn sliced_rows<'py>(
-    history: &History<'py>,
-    (window_start, window_end): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
-    run: &Bound<'py, PyAny>,
-) -> PyResult<(Vec<Bound<'py, PyAny>>, bool)> {
-    let starts: Vec<Bound<'py, PyAny>> = slice_starts((window_start, window_end), run)?;
-    let mut rows: Vec<Bound<'py, PyAny>> = Vec::new();
-    let mut saturated: bool = false;
-    for (index, start) in starts.iter().enumerate() {
-        let (slice, slice_saturated) = match starts.get(index + 1) {
-            Some(end) => bounded_rows(history, (start, end))?,
-            None => open_rows(history, (start, window_end))?,
-        };
-        rows.extend(slice);
-        saturated |= slice_saturated;
-    }
-    if starts.len() == 1 {
-        return Ok((rows, saturated));
-    }
-    Ok((merged_rows(rows.into_iter())?, saturated))
-}
-
-/// Observations of the run window: sliced history, bounded windows when saturated.
+/// Observations of the run window: one open read, halved windows when saturated or timed out.
 fn query_observations<'py>(
     history: &History<'py>,
     (started_at, completed_at): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
@@ -408,11 +361,7 @@ fn query_observations<'py>(
     let skew: Bound<'py, PyAny> = timedelta(py, ("minutes", 10))?;
     let window_start: Bound<'py, PyAny> = started_at.sub(&skew)?;
     let window_end: Bound<'py, PyAny> = completed_at.add(&skew)?;
-    let (rows, saturated) = sliced_rows(
-        history,
-        (&window_start, &window_end),
-        &completed_at.sub(started_at)?,
-    )?;
+    let (rows, saturated) = open_rows(history, (&window_start, &window_end))?;
     let observations: Bound<'py, PyList> = PyList::empty(py);
     let mut observed: HashSet<String> = HashSet::new();
     let mut skipped: Vec<(String, &'static str)> = Vec::new();
@@ -442,7 +391,7 @@ fn query_observations<'py>(
 }
 
 /// The budget a query-history read exhausted, or `None` for any other failure.
-fn budget_exhausted(py: Python<'_>, error: &PyErr) -> Option<String> {
+fn budget_exhausted(py: Python<'_>, error: &PyErr, budget_seconds: f64) -> Option<String> {
     if error.is_instance_of::<PyTimeoutError>(py)
         && error
             .value(py)
@@ -450,7 +399,7 @@ fn budget_exhausted(py: Python<'_>, error: &PyErr) -> Option<String> {
             .is_ok_and(|text| text.to_string_lossy() == DEADLINE_MESSAGE)
     {
         return Some(format!(
-            "{DEADLINE_SECONDS:.0}-second collection deadline exceeded"
+            "{budget_seconds:.0}-second collection deadline exceeded"
         ));
     }
     statement_timeout(py, error).then(|| {
@@ -603,6 +552,7 @@ struct Collection<'py> {
     rate_source: Bound<'py, PyAny>,
     attempts: i64,
     retry_delay_seconds: f64,
+    budget_seconds: f64,
 }
 
 fn collect<'py>(
@@ -611,7 +561,7 @@ fn collect<'py>(
     ledger_path: &Bound<'py, PyAny>,
 ) -> PyResult<Summary> {
     let py: Python<'py> = ledger_path.py();
-    history.deadline = monotonic(py)? + DEADLINE_SECONDS;
+    history.deadline = monotonic(py)? + collection.budget_seconds;
     let run_id: String = collection.run_id.extract()?;
     let ledger: Vec<Bound<'py, PyAny>> = read_ledger(ledger_path, &collection.run_id)?;
     let failure: Option<String> = consume_ledger_failure(py, &run_id)?;
@@ -660,7 +610,7 @@ fn collect<'py>(
         ) {
             Ok(observed) => observed,
             Err(error) => {
-                let Some(cause) = budget_exhausted(py, &error) else {
+                let Some(cause) = budget_exhausted(py, &error, collection.budget_seconds) else {
                     return Err(error);
                 };
                 if summary.is_some() {
@@ -775,6 +725,7 @@ fn collect_snowflake_cost<'py>(
                 "attempts",
                 "retry_delay_seconds",
                 "result_limit",
+                "budget_seconds",
             ],
         ),
     )?;
@@ -794,6 +745,9 @@ fn collect_snowflake_cost<'py>(
         attempts: optional("attempts", 3_i64.into_bound_py_any(py)?)?.extract()?,
         retry_delay_seconds: optional("retry_delay_seconds", 1.0_f64.into_bound_py_any(py)?)?
             .extract()?,
+        budget_seconds: optional("budget_seconds", py.None().into_bound(py))?
+            .extract::<Option<f64>>()?
+            .unwrap_or(DEADLINE_SECONDS),
     };
     let history: History<'py> = History {
         connection: arguments.value("connection")?,

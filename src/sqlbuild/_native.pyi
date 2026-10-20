@@ -7581,6 +7581,7 @@ def collect_snowflake_cost(
     attempts: int = 3,
     retry_delay_seconds: float = 1.0,
     result_limit: int = 10000,
+    budget_seconds: float | None = None,
 ) -> RunCostSummary: ...
 def snowflake_query_observations(
     *,
