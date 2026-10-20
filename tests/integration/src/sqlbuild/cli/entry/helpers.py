@@ -299,13 +299,16 @@ def run_without_reader(program: Path, *, args: tuple[str, ...], cwd: Path) -> La
 
     reader, writer = os.pipe()
     os.close(reader)
+    environment: dict[str, str] = {**os.environ, "NO_COLOR": "1"}
+    # The broken-pipe contract follows Python's default buffered stdout.
+    _ = environment.pop("PYTHONUNBUFFERED", None)
     try:
         completed: subprocess.CompletedProcess[bytes] = subprocess.run(
             [str(program), *args],
             cwd=cwd,
             stdout=writer,
             stderr=subprocess.PIPE,
-            env={**os.environ, "NO_COLOR": "1"},
+            env=environment,
             check=False,
             timeout=600,
         )
