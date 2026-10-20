@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+from queue import SimpleQueue
 from typing import cast
 
 import pytest
@@ -18,6 +20,9 @@ from sqlbuild._native import (
 )
 from sqlbuild.observability import LifecycleEvent
 from sqlbuild.runtime.event_exporting.exceptions import EventExporterInputError
+from sqlbuild.runtime.event_exporting.main._invoke_lifecycle_event_sink import (
+    invoke_lifecycle_event_sink,
+)
 from sqlbuild.runtime.output_capture.models import BoundCommandOutputSink
 from sqlbuild.sinks import CommandOutputRecord, CommandOutputStream
 from tests.unit.src.sqlbuild.runtime.event_exporting.classes._test_types import (
@@ -811,3 +816,77 @@ def test_given_backlog_when_shutting_down_then_outcome_events_arrive_and_backlog
     assert delivered[-1] == "invocation_completed"
     assert summary.dropped > 0
     assert summary.delivered + summary.dropped + summary.failed == summary.accepted
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (EventExporterDispatcherTestCase("second call started before the reserve", 4),),
+    ids=lambda case: case.description,
+)
+def test_given_lane_running_its_second_call_when_reserve_begins_then_it_counts_delivered(
+    test_case: EventExporterDispatcherTestCase,
+) -> None:
+    event_ids: tuple[str, ...] = ("event-1", "event-2", "event-3", "event-4")
+    started: dict[str, threading.Event] = {event_id: threading.Event() for event_id in event_ids}
+    gates: dict[str, threading.Event] = {event_id: threading.Event() for event_id in event_ids}
+    for event_id in ("event-1", "event-3", "event-4"):
+        gates[event_id].set()
+    release_second: threading.Event = gates["event-2"]
+    second_started: threading.Event = started["event-2"]
+    delivered: list[str] = []
+
+    def record(*, event: LifecycleEvent) -> None:
+        delivered.append(event.event_id)
+        started[event.event_id].set()
+        _ = gates[event.event_id].wait()
+
+    dispatcher: EventExporterDispatcher = EventExporterDispatcher(
+        exporters=(BoundEventExporter("recorder", record, {}),),
+        shutdown_timeout_seconds=2.0,
+        invocation_timeout_seconds=5.0,
+    )
+    dispatcher.enqueue(correlated_event(1, "statement_completed"))
+    dispatcher.enqueue(correlated_event(2, "statement_completed"))
+    dispatcher.enqueue(correlated_event(3, "run_completed"))
+    dispatcher.enqueue(lifecycle_event(4, "invocation_completed"))
+    assert second_started.wait(timeout=1.0)
+    release: threading.Timer = threading.Timer(1.7, release_second.set)
+    release.start()
+
+    summary: EventExportSummary = dispatcher.shutdown()
+
+    release.cancel()
+    assert tuple(delivered) == event_ids
+    assert summary.delivered == test_case.expected_delivered
+    assert (summary.dropped, summary.failed) == (0, 0)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (EventExporterDispatcherTestCase("claimed call runs, cancelled call is skipped", 1),),
+    ids=lambda case: case.description,
+)
+def test_given_claims_when_delivery_thread_runs_calls_then_only_unclaimed_cancellations_skip(
+    test_case: EventExporterDispatcherTestCase,
+) -> None:
+    calls: SimpleQueue[
+        tuple[Callable[..., object], Mapping[str, object], LifecycleEvent, int] | None
+    ] = SimpleQueue()
+    results: SimpleQueue[tuple[int, BaseException | None]] = SimpleQueue()
+    claims: dict[int, bool] = {2: False}
+    seen: list[str] = []
+
+    def record(*, event: LifecycleEvent) -> None:
+        seen.append(event.event_id)
+        assert claims.setdefault(1, False)
+
+    calls.put((record, {}, correlated_event(1, "statement_completed"), 1))
+    calls.put((record, {}, correlated_event(2, "statement_completed"), 2))
+    calls.put(None)
+
+    invoke_lifecycle_event_sink(calls=calls, results=results, claims=claims)
+
+    assert seen == ["event-1"]
+    assert results.qsize() == test_case.expected_delivered
+    assert results.get_nowait() == (1, None)
+    assert claims == {1: True}

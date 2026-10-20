@@ -12,12 +12,13 @@ def invoke_lifecycle_event_sink(
         tuple[Callable[..., object], Mapping[str, object], LifecycleEvent, int] | None
     ],
     results: SimpleQueue[tuple[int, BaseException | None]],
-    cancelled: set[int],
+    claims: dict[int, bool],
 ) -> None:
-    """Call the sink with each queued event in order and report how each call ended."""
+    """Claim and call the sink with each queued event in order and report how each call ended."""
 
     for function, provider_arguments, event, token in iter(calls.get, None):
-        if token in cancelled:
+        if not claims.setdefault(token, True):
+            del claims[token]
             continue
         try:
             _ = function(event=event, **provider_arguments)

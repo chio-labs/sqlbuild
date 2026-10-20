@@ -499,6 +499,12 @@ symbols = [
 reason = "Old-name steps re-read facts and physical state per move so a retry never repeats a completed step, and compatibility views are re-created in dependency order, so a chained view must read the columns of the view it selects from after that view is re-created. Each view's existence is checked right before it is redefined, and a model has only its own short chain of old names."
 
 [[targets.python.rule_exceptions]]
+rule = "FFS110"
+path = "src/sqlbuild/runtime/event_exporting/main/_invoke_lifecycle_event_sink.py"
+symbols = ["invoke_lifecycle_event_sink"]
+reason = "The delivery thread claims each call in the dict it shares with the native dispatcher; the claim is the mutation, atomic under the GIL, so a cancelled call is never both run and counted dropped."
+
+[[targets.python.rule_exceptions]]
 rule = "XSB051"
 path = "src/sqlbuild/executor/old_name_views/_helpers/janitor.py"
 symbols = ["apply_old_name_view_drops"]
@@ -759,7 +765,7 @@ pending_budgets = [
     "crates/sqlbuild-python/src/bindings/_helpers/event_exporting/registration.rs=2",
     "crates/sqlbuild-python/src/bindings/_helpers/event_exporting/scope.rs=17",
     "crates/sqlbuild-python/src/bindings/_helpers/event_exporting/values.rs=2",
-    "crates/sqlbuild-python/src/bindings/_helpers/event_exporting/workers.rs=13",
+    "crates/sqlbuild-python/src/bindings/_helpers/event_exporting/workers.rs=12",
     "crates/sqlbuild-python/src/bindings/_helpers/execution_history/conversion.rs=19",
     "crates/sqlbuild-python/src/bindings/_helpers/execution_history/functions.rs=2",
     "crates/sqlbuild-python/src/bindings/_helpers/execution_history/postgres.rs=28",

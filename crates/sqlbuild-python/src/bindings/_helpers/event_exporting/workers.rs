@@ -74,13 +74,13 @@ enum Notification {
 }
 
 impl Lane {
-    /// Start `exporter`'s delivery thread, which skips `cancelled` tokens and reports to `results`.
+    /// Start `exporter`'s delivery thread, which claims each call in `claims` and reports to `results`.
     fn start(py: Python<'_>, exporter: &Exporter, round: Round<'_>) -> PyResult<Self> {
         let calls: Bound<'_, PyAny> = imported(py, "queue", "SimpleQueue")?.call0()?;
         let arguments = PyDict::new(py);
         arguments.set_item("calls", &calls)?;
         arguments.set_item("results", round.shared.results.bind(py))?;
-        arguments.set_item("cancelled", round.shared.cancelled.bind(py))?;
+        arguments.set_item("claims", round.shared.claims.bind(py))?;
         let thread = call_with(
             &imported(py, "threading", "Thread")?,
             &[
@@ -122,11 +122,16 @@ impl State {
     /// Account reported attempts against their lanes, returning whether a diagnostic was queued.
     fn record_reports(
         &mut self,
+        py: Python<'_>,
         reports: Vec<(u64, Option<String>)>,
-        diagnostics: Option<usize>,
-    ) -> bool {
+        round: Round<'_>,
+    ) -> PyResult<bool> {
+        let claims: &Bound<'_, PyDict> = round.shared.claims.bind(py);
         let mut notify: bool = false;
         for (token, error_type) in reports {
+            if claims.contains(token)? {
+                claims.del_item(token)?;
+            }
             let Some(index) = self.tokens.remove(&token) else {
                 continue;
             };
@@ -147,7 +152,7 @@ impl State {
             match error_type {
                 Some(error_type) => {
                     notify |= self.note_failure(
-                        diagnostics,
+                        round.diagnostics,
                         (index, &attempt.kind, attempt.severity),
                         error_type,
                     );
@@ -159,44 +164,56 @@ impl State {
                 }
             }
         }
-        notify
+        Ok(notify)
     }
 
-    /// Skip `attempts` on their delivery thread, counting each as dropped for `index`.
-    fn cancel_attempts(
+    /// Cancel `attempts` the delivery thread has not claimed (checked and marked under the GIL), counting each dropped; returns the claimed.
+    fn cancel_unclaimed(
         &mut self,
         py: Python<'_>,
         index: usize,
         attempts: impl IntoIterator<Item = Attempt>,
-        cancelled: &Py<PyAny>,
-    ) -> PyResult<()> {
-        let cancelled: &Bound<'_, PyAny> = cancelled.bind(py);
+        claims: &Py<PyDict>,
+    ) -> PyResult<Vec<Attempt>> {
+        let claims: &Bound<'_, PyDict> = claims.bind(py);
+        let mut claimed: Vec<Attempt> = Vec::new();
         for attempt in attempts {
+            let already_claimed: bool = match claims.get_item(attempt.token)? {
+                Some(claim) => claim.is_truthy()?,
+                None => false,
+            };
+            if already_claimed {
+                claimed.push(attempt);
+                continue;
+            }
+            claims.set_item(attempt.token, false)?;
             self.tokens.remove(&attempt.token);
-            cancelled.call_method1("add", (attempt.token,))?;
             self.counts = drop_lifecycle_attempts(std::mem::take(&mut self.counts), &[index]);
         }
-        Ok(())
+        Ok(claimed)
     }
 
-    /// Retire `index`'s lane: its running call fails as timed out and its later attempts are dropped.
+    /// Retire `index`'s lane: calls it already claimed fail as timed out and the rest are dropped.
     fn abandon_lane(&mut self, py: Python<'_>, index: usize, round: Round<'_>) -> PyResult<bool> {
         let Some(mut lane) = self.lanes.get_mut(index).and_then(Option::take) else {
             return Ok(false);
         };
+        let attempts: VecDeque<Attempt> = std::mem::take(&mut lane.pending);
+        let claimed: Vec<Attempt> =
+            self.cancel_unclaimed(py, index, attempts, &round.shared.claims)?;
+        let claims: &Bound<'_, PyDict> = round.shared.claims.bind(py);
         let mut notify: bool = false;
-        if let Some(running) = lane.pending.pop_front() {
+        for running in claimed {
+            claims.del_item(running.token)?;
             self.tokens.remove(&running.token);
             self.blocked.insert(index);
             self.abandoned_calls = true;
-            notify = self.note_failure(
+            notify |= self.note_failure(
                 round.diagnostics,
                 (index, &running.kind, running.severity),
                 TIMEOUT_ERROR_TYPE.to_owned(),
             );
         }
-        let waiting: VecDeque<Attempt> = std::mem::take(&mut lane.pending);
-        self.cancel_attempts(py, index, waiting, &round.shared.cancelled)?;
         lane.retire(py)?;
         self.retired.push(lane);
         Ok(notify)
@@ -222,7 +239,7 @@ impl State {
     }
 
     /// Drop every queued and lane-waiting event that is not an outcome, counting each attempt.
-    fn reserve_for_outcomes(&mut self, py: Python<'_>, cancelled: &Py<PyAny>) -> PyResult<()> {
+    fn reserve_for_outcomes(&mut self, py: Python<'_>, claims: &Py<PyDict>) -> PyResult<()> {
         let capacity: usize = self.queue.capacity;
         let (queue, dropped) = retain_outcome_events(std::mem::replace(
             &mut self.queue,
@@ -237,11 +254,15 @@ impl State {
             let Some(lane) = self.lanes[index].as_mut() else {
                 continue;
             };
-            let running: Option<Attempt> = lane.pending.pop_front();
             let (kept, skipped): (VecDeque<Attempt>, VecDeque<Attempt>) =
                 lane.pending.drain(..).partition(|attempt| attempt.outcome);
-            lane.pending = running.into_iter().chain(kept).collect();
-            self.cancel_attempts(py, index, skipped, cancelled)?;
+            let claimed: Vec<Attempt> = self.cancel_unclaimed(py, index, skipped, claims)?;
+            let Some(lane) = self.lanes[index].as_mut() else {
+                continue;
+            };
+            let mut pending: Vec<Attempt> = claimed.into_iter().chain(kept).collect();
+            pending.sort_by_key(|attempt| attempt.token);
+            lane.pending = pending.into();
         }
         drop(dropped);
         Ok(())
@@ -403,14 +424,14 @@ impl DispatcherWorker {
     /// Record reported outcomes, expire, trim and feed lanes, then wait; `false` once delivery stops.
     fn dispatch_round(&self, py: Python<'_>) -> PyResult<bool> {
         let shared = &self.shared;
-        let reports: Vec<(u64, Option<String>)> = self.reported(py)?;
         let round = Round {
             shared,
             diagnostics: shared.diagnostics(),
         };
         let _held = shared.hold(py)?;
+        let reports: Vec<(u64, Option<String>)> = self.reported(py)?;
         let mut state = shared.locked()?;
-        let mut notify: bool = state.record_reports(reports, round.diagnostics);
+        let mut notify: bool = state.record_reports(py, reports, round)?;
         let stopped: bool = if Shared::past_deadline(&state) || state.force_stop {
             let drained: Vec<QueuedEvent<Queued>> = std::mem::take(&mut state.queue.items);
             for item in &drained {
@@ -428,7 +449,7 @@ impl DispatcherWorker {
             notify |= state.expire_lanes(py, shared.invocation_timeout, round)?;
             if !state.reserved && state.reserve_at.is_some_and(|at| Instant::now() >= at) {
                 state.reserved = true;
-                state.reserve_for_outcomes(py, &shared.cancelled)?;
+                state.reserve_for_outcomes(py, &shared.claims)?;
             }
             notify |= state.feed(py, round)?;
             state.stopping && !state.busy() && state.queue.items.is_empty()

@@ -8,7 +8,7 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyResult, Python, pyclass, pyfunction, pymethods,
 };
-use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PySet, PyString};
+use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyString};
 use sqlbuild_core::command_output::constants::COMMAND_OUTPUT_RECORD_TYPE;
 use sqlbuild_core::event_export::constants::{
     DEFAULT_EVENT_EXPORT_HEALTH_INTERVAL_SECONDS, DEFAULT_EVENT_EXPORT_INVOCATION_TIMEOUT_SECONDS,
@@ -118,8 +118,8 @@ pub(crate) struct Shared {
     condition: Py<PyAny>,
     /// The `SimpleQueue` every delivery thread reports `(token, error)` outcomes to.
     pub(crate) results: Py<PyAny>,
-    /// The Python set of attempt tokens delivery threads must skip.
-    pub(crate) cancelled: Py<PyAny>,
+    /// Attempt tokens a delivery thread claimed (`True`) before running, or the dispatcher cancelled (`False`).
+    pub(crate) claims: Py<PyDict>,
     state: Mutex<State>,
     pub(crate) invocation_timeout: Duration,
     shutdown_timeout: Duration,
@@ -679,7 +679,7 @@ impl EventExporterDispatcher {
         let shared = Arc::new(Shared {
             condition: imported(py, "threading", "Condition")?.call0()?.unbind(),
             results: imported(py, "queue", "SimpleQueue")?.call0()?.unbind(),
-            cancelled: PySet::empty(py)?.into_any().unbind(),
+            claims: PyDict::new(py).unbind(),
             state: Mutex::new(State {
                 bound: !exporters.is_none(),
                 counts: vec![ExporterCounts::default(); bound_exporters.len()],
