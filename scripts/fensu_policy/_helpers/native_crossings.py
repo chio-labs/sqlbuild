@@ -119,7 +119,12 @@ def budgeted_faults(
         path=path, edge_paths=ctx.option(NATIVE_EDGE_PATHS)
     ):
         return []
-    found: list[int] = lines(source=ctx.source)
+    return budget_faults(ctx=ctx, path=path, found=lines(source=ctx.source), what=what)
+
+
+def budget_faults(*, ctx: RuleContext, path: str, found: list[int], what: str) -> list[Fault]:
+    """Faults when the `found` lines of `path` exceed, or fall below, its pending budget."""
+
     budget: int | None = budgets_by_path(entries=ctx.option(NATIVE_PENDING_BUDGETS)).get(path)
     if budget is None:
         return [ctx.fault_for(path=ctx.path, line=line, column=0) for line in found]

@@ -1,4 +1,4 @@
-"""Rules keeping the native bindings crate from calling back into Python outside its edges."""
+"""Rules keeping the native bindings crate within its Python edges and module layers."""
 
 from __future__ import annotations
 
@@ -7,18 +7,27 @@ import ast
 from fensu import AnalyzerId, Family, Fault, File, RuleContext, rule
 
 from scripts.fensu_policy._helpers.native_crossings import (
+    budget_faults,
     budgeted_faults,
     budgets_by_path,
     crossing_lines,
     python_field_lines,
 )
+from scripts.fensu_policy._helpers.native_layers import (
+    helper_module,
+    layer_plan,
+    upward_reference_lines,
+)
 from scripts.fensu_policy._helpers.native_patches import native_patch_lines
 from scripts.fensu_policy.constants import (
     NATIVE_EDGE_PATHS,
+    NATIVE_LAYER_ORDER,
+    NATIVE_MODULE_LAYERS,
     NATIVE_PENDING_BUDGETS,
     NATIVE_TEST_PATCH_BUDGETS,
     NATIVE_TEST_PATH_PREFIX,
 )
+from scripts.fensu_policy.models import LayerPlan
 
 
 @rule(
@@ -53,6 +62,40 @@ def native_python_crossing(*, file: File, ctx: RuleContext) -> list[Fault]:
 def native_python_storage(*, file: File, ctx: RuleContext) -> list[Fault]:
     del file
     return budgeted_faults(ctx=ctx, lines=python_field_lines, what="Python-typed fields")
+
+
+@rule(
+    code="XSB075",
+    family=Family.CUSTOM,
+    slug="native-module-layering",
+    message="native binding helper modules must import only from lower layers",
+    remediation=(
+        "Move the shared item into a module of a lower layer, or move the importing code up; "
+        "assign every new helper module a layer in module_layers."
+    ),
+    analyzers=(AnalyzerId.RUST,),
+    options=(NATIVE_LAYER_ORDER, NATIVE_MODULE_LAYERS, NATIVE_PENDING_BUDGETS),
+)
+def native_module_layering(*, file: File, ctx: RuleContext) -> list[Fault]:
+    del file
+    path: str = "/".join(ctx.repo_relative_parts())
+    if helper_module(path=path) is None:
+        return []
+    plan: LayerPlan = layer_plan(
+        order=ctx.option(NATIVE_LAYER_ORDER), modules=ctx.option(NATIVE_MODULE_LAYERS)
+    )
+    found: list[int] | None = upward_reference_lines(path=path, source=ctx.source, plan=plan)
+    if found is None:
+        return [
+            ctx.fault_for(
+                path=ctx.path,
+                line=1,
+                column=0,
+                message="helper module has no layer",
+                remediation="Assign the module a layer in module_layers.",
+            )
+        ]
+    return budget_faults(ctx=ctx, path=path, found=found, what="upward module imports")
 
 
 @rule(

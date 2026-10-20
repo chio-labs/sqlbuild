@@ -27,3 +27,33 @@ class NativePatchTestCase:
     source: str
     expected_fault_count: int
     budgets: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class NativeReferencesTestCase:
+    description: str
+    source: str
+    expected_references: tuple[tuple[int, tuple[str, ...]], ...]
+
+
+@dataclass(frozen=True)
+class NativeLayerTestCase:
+    description: str
+    module: tuple[str, ...]
+    expected_layer: str | None
+
+
+@dataclass(frozen=True)
+class NativeDirectionTestCase:
+    description: str
+    source: str
+    target: str
+    expected_upward: bool
+
+
+@dataclass(frozen=True)
+class NativeLayeringTestCase:
+    description: str
+    path: str
+    source: str
+    expected_lines: list[int] | None

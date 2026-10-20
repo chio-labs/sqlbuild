@@ -58,6 +58,14 @@ version other than its manifest's, because the version is part of the build iden
 `fensu check` applies the Rust structure rules inside each crate: other crates use items through
 `main/` entry points, `models.rs`, `types.rs` and `constants.rs`, not through `_helpers/`.
 
+Inside `sqlbuild-python`, the custom rule XSB075 orders the `bindings/_helpers` modules in layers
+that follow the planned crate split: shared Python plumbing (`infra`), then the glue of the lower
+crates (`front`), the compiled project (`project`), planning and compilation as siblings (`plan`,
+`compile`), command output (`output`), command handlers (`commands`) and registration
+(`registry`). A module may import only from lower layers; `plan` and `compile` may not import each
+other. `module_layers` in `fensu.toml` assigns every helper module a layer, and
+`pending_budgets` records the imports that still point upward. Those budgets can only go down.
+
 ## Python module paths
 
 `sqlbuild-python` and `sqlbuild-cli` import Python by module path strings. The repository test
