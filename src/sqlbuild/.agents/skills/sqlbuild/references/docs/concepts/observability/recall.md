@@ -54,22 +54,20 @@ Then check what is true in the warehouse now, with the same command:
 
 ```bash
 sqb recall query --backend warehouse --format table \
-  "SELECT r.revenue_date, r.total_revenue_cents, p.payment_id, p.amount_cents
-   FROM prod.daily_revenue r JOIN prod.stg_payments p
-     ON CAST(p.paid_at AS DATE) = r.revenue_date
-   WHERE p.amount_cents < 0"
+  "SELECT payment_id, order_id, amount_cents, paid_at FROM prod.stg_payments WHERE amount_cents < 0"
 ```
 
 ```
-revenue_date | total_revenue_cents | payment_id | amount_cents
------------- | ------------------- | ---------- | ------------
-2026-04-03   | -1250               | 9          | -2200
+payment_id | order_id | amount_cents | paid_at
+---------- | -------- | ------------ | -------------------
+9          | 8        | -2200        | 2026-04-03 15:42:00
 
 1 row
 ```
 
-The bad row is still in prod, and payment 9 explains it. A coding agent can follow the same steps:
-every answer is a SQL query over the [views](#querying-history), with the same output in `--json`.
+Payment 9 is a refund recorded as a negative payment, and it is still in prod. A coding agent can
+follow the same steps: every answer is a SQL query over the [views](#querying-history), with the
+same output in `--json`.
 
 ## What is recorded
 
