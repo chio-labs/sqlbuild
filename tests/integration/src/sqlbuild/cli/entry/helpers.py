@@ -282,6 +282,29 @@ def prepare_custom_rules(directory: Path) -> None:
     (directory / "rules").mkdir()
 
 
+def prepare_removed_allow_exceptions(directory: Path) -> None:
+    """Write the project still setting the removed `[rules] allow_exceptions`."""
+
+    _ = write_project(directory)
+    _ = (directory / "sqlbuild_project.toml").write_text(
+        PROJECT_FILES["sqlbuild_project.toml"] + "\n[rules]\nallow_exceptions = true\n",
+        encoding="utf-8",
+    )
+
+
+def prepare_published_layer_options(directory: Path) -> None:
+    """Write the project with configured published-layer Rule options."""
+
+    _ = write_project(directory)
+    _ = (directory / "sqlbuild_project.toml").write_text(
+        PROJECT_FILES["sqlbuild_project.toml"]
+        + "\n[rules.rule_options.SQBRPROJECT107]\n"
+        + 'published_layers = ["mart"]\n'
+        + 'allowed_qualifiers = [{ qualifier = "csv_export", reason = "Export views." }]\n',
+        encoding="utf-8",
+    )
+
+
 def prepare_named_pipe_project(directory: Path) -> None:
     """Make the project file a named pipe that blocks its reader."""
 
