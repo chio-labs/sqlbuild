@@ -18,3 +18,10 @@ pub(super) struct EventExportWarningTestCase {
     pub(super) command_succeeded: bool,
     pub(super) expected_warning: Option<&'static str>,
 }
+
+/// A command, its exit code and what a preceding notice affects, and the closing line.
+pub(super) struct ClosingStatusTestCase {
+    pub(super) description: &'static str,
+    pub(super) exit_code: Option<i64>,
+    pub(super) expected_status: &'static str,
+}
