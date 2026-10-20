@@ -35,3 +35,16 @@ def spinner_threads() -> list[threading.Thread]:
     """The live progress spinner threads."""
 
     return list(filter(lambda thread: thread.name == SPINNER_THREAD_NAME, threading.enumerate()))
+
+
+def spinner_threads_started_after(earlier: list[threading.Thread]) -> list[threading.Thread]:
+    """The live spinner threads not in `earlier`, ignoring other tests' lingering threads."""
+
+    return list(filter(lambda thread: thread not in earlier, spinner_threads()))
+
+
+def stopped_after_join(threads: list[threading.Thread], timeout_seconds: float) -> bool:
+    """Whether every thread in `threads` has finished within `timeout_seconds` each."""
+
+    list(map(lambda thread: thread.join(timeout=timeout_seconds), threads))
+    return not any(map(lambda thread: thread.is_alive(), threads))
