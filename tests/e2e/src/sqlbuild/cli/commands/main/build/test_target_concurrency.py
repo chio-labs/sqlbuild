@@ -81,7 +81,9 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
 def test_given_target_concurrency_when_running_then_documented_precedence_applies(
     tmp_path: Path,
     test_case: TargetConcurrencyE2ETestCase,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("SQLBUILD_CONCURRENCY", raising=False)
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
         project_name="target_concurrency",
@@ -123,7 +125,9 @@ def test_given_target_concurrency_when_running_then_documented_precedence_applie
 def test_given_invalid_target_concurrency_when_running_then_config_error_is_coded(
     tmp_path: Path,
     test_case: TargetConcurrencyE2ETestCase,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("SQLBUILD_CONCURRENCY", raising=False)
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
         project_name="target_concurrency",
@@ -168,7 +172,9 @@ def test_given_invalid_target_concurrency_when_running_then_config_error_is_code
 def test_given_target_concurrency_when_planning_microbatches_then_warning_uses_it(
     test_case: TargetMicrobatchWarningE2ETestCase,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("SQLBUILD_CONCURRENCY", raising=False)
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
         project_name="target_microbatch",
