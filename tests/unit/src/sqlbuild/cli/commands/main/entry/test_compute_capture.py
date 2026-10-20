@@ -1,6 +1,7 @@
 import json
 import logging
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import Mock, patch
 
 import pytest
@@ -17,7 +18,11 @@ from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
     MainTestCase,
     ProjectCreationRoutingTestCase,
 )
-from tests.unit.src.sqlbuild.cli.commands.main.entry.helpers import build_handlers
+from tests.unit.src.sqlbuild.cli.commands.main.entry.helpers import (
+    PROJECT_LOGGING_MODULE,
+    build_handlers,
+    load_project_module,
+)
 
 
 @pytest.mark.parametrize(
@@ -181,6 +186,7 @@ def test_given_machine_json_and_all_log_families_when_cli_runs_then_stdout_remai
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     private_sql: str = "SELECT 'cli-private-sql'"
+    _ = (tmp_path / "project_logging.py").write_text(PROJECT_LOGGING_MODULE, encoding="utf-8")
 
     def run_compile(_request: CompileCommandRequest) -> int:
         logging.getLogger("sqlbuild.cli.matrix").debug("plain CLI internal")
@@ -189,12 +195,8 @@ def test_given_machine_json_and_all_log_families_when_cli_runs_then_stdout_remai
             message="structured CLI internal",
             sqlbuild_channel="cli_matrix",
         )
-        user_logger: logging.Logger = logging.getLogger("project.cli")
-        prior_level: int = user_logger.level
-        user_logger.setLevel(logging.DEBUG)
-        user_logger.debug("CLI user debug")
-        user_logger.info("CLI user info")
-        user_logger.setLevel(prior_level)
+        project_module: ModuleType = load_project_module(tmp_path / "project_logging.py")
+        project_module.log_user_messages()
         log_sql(logger=logging.getLogger("sqlbuild.cli.matrix"), sql=private_sql)
         print(json.dumps({"status": "ok"}, separators=(",", ":")))
         return test_case.expected_exit_code

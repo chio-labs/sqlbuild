@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import importlib.util
 from collections.abc import Callable
+from importlib.machinery import ModuleSpec
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Protocol, cast
 
 from sqlbuild._native import (
@@ -88,3 +91,27 @@ def build_handlers(**overrides: Any) -> CliEntrypointHandlers:
         run_rules=overrides.get("run_rules", noop_handler),
         run_scope=overrides.get("run_scope", noop_handler),
     )
+
+
+PROJECT_LOGGING_MODULE: str = """import logging
+
+
+def log_user_messages() -> None:
+    logger = logging.getLogger("project.cli")
+    prior_level = logger.level
+    logger.setLevel(logging.DEBUG)
+    logger.debug("CLI user debug")
+    logger.info("CLI user info")
+    logger.setLevel(prior_level)
+"""
+
+
+def load_project_module(path: Path) -> ModuleType:
+    """Import a project file so its log records come from inside the project directory."""
+
+    spec: ModuleSpec | None = importlib.util.spec_from_file_location(path.stem, path)
+    assert spec is not None
+    assert spec.loader is not None
+    module: ModuleType = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module

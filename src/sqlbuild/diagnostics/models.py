@@ -22,3 +22,4 @@ class DiagnosticRoutingOptions:
     debug_console: bool = False
     use_color: bool = False
     include_sql_text: bool = False
+    project_roots: tuple[str, ...] = ()

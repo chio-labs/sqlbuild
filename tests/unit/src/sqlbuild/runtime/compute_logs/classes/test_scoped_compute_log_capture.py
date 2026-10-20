@@ -438,7 +438,7 @@ def test_given_internal_user_and_sql_records_when_routing_then_policy_is_destina
         prior_user_level: int = user_logger.level
         user_logger.setLevel(logging.NOTSET)
         user_logger.debug("user debug access_key=debug-access-key")
-        user_logger.info(
+        user_logger.warning(
             "connected dsn=postgres://user:password@host Authorization: Bearer bearer-value "
             "authorization=Basic basic-value API-Key=hyphen-api-key "
             "access_key=visible-access-key private_key='private key with spaces' "

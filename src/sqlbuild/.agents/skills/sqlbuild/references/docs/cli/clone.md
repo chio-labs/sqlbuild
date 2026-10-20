@@ -20,6 +20,11 @@ SQLBuild never resolves or opens the origin target's connection, including for d
 deferred clone. Clone cannot perform a cross-account, cross-server, or cross-file
 transfer by opening a second connection.
 
+Clone never runs SQL analysis: it reads relation names, dependencies, and rendered view and
+function SQL from each target's project, so SQL analysis errors never stop it; structural errors,
+such as an unknown reference, still do. The hidden `--no-sql-analysis` flag (alias
+`--no-sql-validation`) is still accepted but has no effect.
+
 ## Usage
 
 ```bash
@@ -33,7 +38,6 @@ sqb --project-dir <path> clone --from <target> [--to <target>] [flags]
 | `--from` | Source target (required) |
 | `--to` | Destination target; defaults to the active target |
 | `--hard-copy` | Force physical table copies instead of zero-copy cloning |
-| `--no-sql-analysis` | Disable compile-time SQL analysis (`--no-sql-validation` is an alias) |
 | `--select`, `-s` | Select specific models to clone |
 | `--exclude` | Exclude specific models from cloning |
 | `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `build` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |

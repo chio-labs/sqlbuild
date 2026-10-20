@@ -3,19 +3,32 @@
 from __future__ import annotations
 
 import logging
+import sys
+import threading
 from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import TransientStatusReporter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.diagnostics.main.log_sql import log_sql
 from tests.unit.src.sqlbuild.diagnostics._test_types import (
+    ConsoleProgressLineTestCase,
     DiagnosticsContextualSqlTestCase,
     DiagnosticsLogTestCase,
+    SpinnerReuseTestCase,
+    ThirdPartyConsoleTestCase,
 )
-from tests.unit.src.sqlbuild.diagnostics.helpers import HostRecordingLogHandler
+from tests.unit.src.sqlbuild.diagnostics.helpers import (
+    HostRecordingLogHandler,
+    log_vendor_records,
+    spinner_threads,
+)
+from tests.unit.src.sqlbuild.presentation.classes.helpers import RecordingStream
+
+_CLEAR_LINE: str = "\r\x1b[K"
 
 
 @pytest.mark.parametrize(
@@ -49,6 +62,118 @@ def test_given_diagnostics_without_debug_when_logging_then_internal_records_are_
     absent_fragment: str
     for absent_fragment in test_case.expected_absent_console_fragments:
         assert absent_fragment not in console_error
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ThirdPartyConsoleTestCase(
+            description="normal console hides INFO and shows WARNING as one line",
+            debug=False,
+            expected_console_lines=(
+                "[warning] vendor.client token refresh failed",
+                "[error] vendor.client orders service rejected the request",
+            ),
+            expected_absent=("connecting to the orders service", "retrying with fallback"),
+            expected_traceback_count=1,
+        ),
+        ThirdPartyConsoleTestCase(
+            description="debug console shows every record with tracebacks",
+            debug=True,
+            expected_console_lines=(
+                "[info] vendor.client connecting to the orders service",
+                "[warning] vendor.client token refresh failed",
+                "retrying with fallback",
+                "[error] vendor.client orders service rejected the request",
+            ),
+            expected_absent=(),
+            expected_traceback_count=2,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_third_party_records_when_logging_then_console_follows_debug_policy(
+    test_case: ThirdPartyConsoleTestCase,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with configure_diagnostics(debug=test_case.debug):
+        log_vendor_records()
+
+    console_error: str = capsys.readouterr().err
+
+    assert all(line in console_error for line in test_case.expected_console_lines), console_error
+    assert not any(fragment in console_error for fragment in test_case.expected_absent)
+    assert console_error.count("Traceback (most recent call last):") == (
+        test_case.expected_traceback_count
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ConsoleProgressLineTestCase(
+            description="warning clears the live status line and redraws it afterwards",
+            message="Preparing clone plan...",
+            expected_log_line="[warning] vendor.client token refresh failed\n",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_live_status_line_when_logging_then_line_is_cleared_before_record(
+    test_case: ConsoleProgressLineTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("SQLBUILD_NO_PROGRESS", raising=False)
+    events: list[str] = []
+    stream: RecordingStream = RecordingStream(events=events, tty=True)
+    monkeypatch.setattr(sys, "stderr", stream)
+    reporter: TransientStatusReporter = TransientStatusReporter(stream=stream, use_color=False)
+    reporter.start(test_case.message)
+    try:
+        with configure_diagnostics(debug=False):
+            logging.getLogger("vendor.client").warning("token refresh failed")
+    finally:
+        reporter.close()
+
+    log_index: int = events.index(f"write:{test_case.expected_log_line}")
+    assert any(
+        event.startswith(f"write:{_CLEAR_LINE}") for event in events[log_index - 2 : log_index]
+    ), events
+    assert any(test_case.message in event for event in events[log_index + 1 :]), events
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SpinnerReuseTestCase(
+            description="debug records around one status line reuse its spinner thread",
+            record_count=200,
+            expected_spinner_threads=1,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_many_records_during_status_line_when_logging_then_one_spinner_thread_runs(
+    test_case: SpinnerReuseTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("SQLBUILD_NO_PROGRESS", raising=False)
+    stream: RecordingStream = RecordingStream(events=[], tty=True)
+    monkeypatch.setattr(sys, "stderr", stream)
+    reporter: TransientStatusReporter = TransientStatusReporter(stream=stream, use_color=False)
+    seen: list[threading.Thread] = []
+    reporter.start("Preparing clone plan...")
+    try:
+        with configure_diagnostics(debug=True):
+            for index in range(test_case.record_count):
+                logging.getLogger("vendor.client").warning("retrying request %d", index)
+                seen.extend(spinner_threads())
+    finally:
+        reporter.close()
+
+    assert len({id(thread) for thread in seen}) == test_case.expected_spinner_threads
+    assert spinner_threads() == []
+    assert stream.getvalue().count("retrying request") == test_case.record_count
 
 
 @pytest.mark.parametrize(
