@@ -575,18 +575,6 @@ impl<'py> Expansion<'_, 'py> {
     }
 }
 
-/// `merged_layer`, with a config error raised as the Python stage raises it.
-pub(crate) fn layered_values<'py>(
-    py: Python<'py>,
-    base: &Bound<'py, PyDict>,
-    overlay: &Bound<'py, PyDict>,
-) -> PyResult<Bound<'py, PyDict>> {
-    merged_layer(py, base, overlay).map_err(|halt| match halt {
-        Halt::Error(error) => error,
-        Halt::Config(error) => raised_config_error(py, error),
-    })
-}
-
 /// The Python exception a native config error raises as.
 pub(crate) fn raised_config_error(py: Python<'_>, error: ConfigError) -> PyErr {
     let raised = || -> PyResult<PyErr> {
