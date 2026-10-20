@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.163.0](https://github.com/chio-labs/sqlbuild/compare/v0.162.1...v0.163.0) (2026-10-20)
+
+
+### Features
+
+* answer simple commands in sqb, upgrade fensu and accept SharedMergeTree ([#1170](https://github.com/chio-labs/sqlbuild/issues/1170)) ([bb1c502](https://github.com/chio-labs/sqlbuild/commit/bb1c502837fa4d491f21df665fddedab998d766d))
+
 ## [0.162.1](https://github.com/chio-labs/sqlbuild/compare/v0.162.0...v0.162.1) (2026-10-19)
 
 
