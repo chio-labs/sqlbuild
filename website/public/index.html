@@ -380,6 +380,11 @@ run               <span class="dim">|</span> outcome <span class="dim">|</span> 
 2026-10-20T00:00  <span class="dim">|</span> <span class="ok">pass</span>    <span class="dim">|</span> 0               <span class="dim">|</span> completed <span class="dim">|</span> 0
 2026-10-19T23:59  <span class="dim">|</span> <span class="ok">pass</span>    <span class="dim">|</span> 0               <span class="dim">|</span> completed <span class="dim">|</span> 0
 
+<span class="cmd">sqb recall output last --tail 4</span>
+  daily_revenue
+    audit revenue_is_non_negative returned 1 row
+<span class="warn strong">✓ Completed with warnings</span>  PASS=89  WARN=1  FAIL=0  <span class="dim">…</span>
+
 <span class="cmd">sqb recall query --backend warehouse &quot;SELECT payment_id, order_id, amount_cents, paid_at
   FROM prod.stg_payments WHERE amount_cents &lt; 0&quot;</span>
 payment_id <span class="dim">|</span> order_id <span class="dim">|</span> amount_cents <span class="dim">|</span> paid_at
@@ -390,7 +395,7 @@ payment_id <span class="dim">|</span> order_id <span class="dim">|</span> amount
 						Real output from SQLBuild's example project, trimmed to the relevant lines. During a migration the old
 						table is never modified, archives can be renamed back until they expire, and every move is recorded.
 						In step 09 the audit started warning on the latest run, the build still exited 0, and the cause
-						is still in prod: a refund recorded as a negative payment. Two queries, no log digging.
+						is still in prod: a refund recorded as a negative payment. Three commands, no log digging.
 						History stays in a SQLite file in your project, or in ClickHouse for a team. No service, no
 						account, no paid tier.
 						<a href="/docs/concepts/models/migrations/">How migrations work</a> ·

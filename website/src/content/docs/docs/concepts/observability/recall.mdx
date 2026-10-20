@@ -34,7 +34,20 @@ run                         | outcome | violation_count | status    | exit_code
 
 The audit started warning on the latest build, and that build still exited 0, so nothing alerted.
 
-Then check what is true in the warehouse now, with the same command:
+See what that build printed, exactly as the scheduler saw it:
+
+```bash
+sqb recall output last --tail 4
+```
+
+```
+  daily_revenue
+    audit revenue_is_non_negative returned 1 row
+
+✓ Completed with warnings  PASS=89  WARN=1  FAIL=0  INSUFFICIENT=0  SKIP=0  TOTAL=90  (3.08s)
+```
+
+Then check what is true in the warehouse now, with `sqb recall query` again:
 
 ```bash
 sqb recall query --backend warehouse --format table \
@@ -50,8 +63,8 @@ payment_id | order_id | amount_cents | paid_at
 ```
 
 Payment 9 is a refund recorded as a negative payment, and it is still in prod. A coding agent can
-follow the same steps: every answer is a SQL query over the [views](#querying-history), with the
-same output in `--json`.
+follow the same steps: the history is SQL over the [views](#querying-history), and every query can
+return `--json`.
 
 ## What is recorded
 
