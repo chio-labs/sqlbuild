@@ -34,7 +34,7 @@ use crate::bindings::_helpers::rules::lint_pipeline::{
     CompiledSource, LintFile, LintOutcome, LintRequest, LintSettings, lint, lint_sources,
 };
 use crate::bindings::_helpers::rules::relation_keys::{
-    RelationKeyRow, RelationKeys, relation_keys, source_key_input,
+    RelationKeyRow, RelationKeys, one_row_seed_names, relation_keys, source_key_input,
 };
 use crate::bindings::_helpers::rules::rule_cache::stored_entries;
 use crate::bindings::_helpers::rules::rules_config::rules_config_of;
@@ -57,7 +57,7 @@ pub(crate) fn sql_lint_settings(
     dialect: &str,
     codes: &[String],
     threshold: impl Fn(&str) -> PyResult<Option<i64>>,
-    (relation_keys, allow_suppressions): (RelationKeys, bool),
+    relation_keys: RelationKeys,
 ) -> PyResult<LintSettings> {
     let defaults: LintSettings = LintSettings::default();
     Ok(LintSettings {
@@ -71,7 +71,6 @@ pub(crate) fn sql_lint_settings(
                 .unwrap_or(DEFAULT_MAX_RANKING_ORDER_BY),
             ..defaults.sql
         },
-        allow_suppressions,
         relation_keys,
         ..defaults
     })
@@ -116,9 +115,13 @@ fn early_lint_plan(inputs: &Bound<'_, PyAny>, dialect: &str) -> PyResult<Option<
     for model in record_field(inputs, "model_inputs")?.try_iter()? {
         rows.push(model_key_row(&model?)?);
     }
+    let seed_inputs: Vec<Bound<'_, PyAny>> = record_field(inputs, "seed_inputs")?
+        .try_iter()?
+        .collect::<PyResult<_>>()?;
+    let one_row_seeds: Vec<String> = one_row_seed_names(&seed_inputs)?;
     let mut seeds: Vec<Bound<'_, PyAny>> = Vec::new();
-    for seed in record_field(inputs, "seed_inputs")?.try_iter()? {
-        seeds.push(record_field(&seed?, "schema_entry")?);
+    for seed in &seed_inputs {
+        seeds.push(record_field(seed, "schema_entry")?);
     }
     let mut sources: Vec<Bound<'_, PyAny>> = Vec::new();
     for source in record_field(inputs, "source_inputs")?.try_iter()? {
@@ -131,12 +134,13 @@ fn early_lint_plan(inputs: &Bound<'_, PyAny>, dialect: &str) -> PyResult<Option<
             PyTuple::new(py, seeds)?.as_any(),
             PyTuple::new(py, sources)?.as_any(),
         ),
+        &one_row_seeds,
     )?;
     let settings: LintSettings = sql_lint_settings(
         dialect,
         &codes,
         |key| Ok(config.thresholds.get(key).map(|value| i64::from(*value))),
-        (keys, config.allow_exceptions),
+        keys,
     )?;
     Ok(Some(EarlyLintPlan {
         project_dir,

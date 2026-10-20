@@ -298,3 +298,23 @@ pub(crate) struct RowCodecTestCase {
     /// How many truncations of the rows still read back.
     pub(crate) expected_truncations_read: usize,
 }
+
+pub(crate) struct PublishedLayerTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) code: &'static str,
+    pub(crate) models: &'static [(&'static str, &'static [&'static str])],
+    pub(crate) options: Value,
+    pub(crate) expected_faults: &'static [(&'static str, &'static str)],
+}
+
+pub(crate) struct RelationExceptionTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) exceptions: Value,
+    pub(crate) expected_messages: &'static [&'static str],
+}
+
+pub(crate) struct StaleRelationExceptionTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) exceptions: Value,
+    pub(crate) expected_error: &'static str,
+}

@@ -199,10 +199,10 @@ need to execute SQL against controlled data. Use an audit when the answer depend
 A finding contains a stable code, project-relative path, line, column, explanation, and remediation.
 This makes the same requirement usable in a terminal, JSON output, CI annotation, or agent workflow.
 
-Intentional departures remain explicit. Exact exceptions and path- or resource-scoped ignores
-require a reason; exact exceptions are stale-checked so obsolete suppressions do not silently
-accumulate. Mandatory compiler correctness cannot be suppressed. A project can forbid exceptions,
-scoped ignores and inline suppressions entirely with `[rules] allow_exceptions = false`.
+Intentional departures remain explicit and live only in `sqlbuild_project.toml`. Exact and
+relation-level exceptions and path- or resource-scoped ignores require a reason; exceptions are
+stale-checked so obsolete entries do not silently accumulate. There are no inline suppression
+comments, and mandatory compiler correctness cannot be excepted at all.
 
 See [Findings and exceptions](/docs/concepts/rules/findings-and-exceptions) for configuration examples.
 
@@ -228,6 +228,9 @@ and [Execution and caching](/docs/concepts/rules/execution-and-caching) for the 
   </Card>
   <Card title="Findings and exceptions" icon="triangle-exclamation" href="/docs/concepts/rules/findings-and-exceptions">
     Understand diagnostics, exact exceptions, path ignores, and stale checks.
+  </Card>
+  <Card title="Published-layer Rules" icon="layer-group" href="/docs/concepts/rules/published-layer-rules">
+    Keep each domain's published layer free of consumer-specific variants.
   </Card>
   <Card title="Execution and caching" icon="gauge-high" href="/docs/concepts/rules/execution-and-caching">
     Learn evaluation order, focused execution, and dependency-aware reuse.

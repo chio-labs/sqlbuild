@@ -1,4 +1,4 @@
-"""Real-CLI coverage for forbidding Rule exceptions, scoped ignores and inline suppressions."""
+"""Real-CLI coverage for configuration-only Rule exceptions and rejected inline suppressions."""
 
 from __future__ import annotations
 
@@ -22,70 +22,66 @@ _IGNORE: str = (
     'reason = "Samples intentionally keep one row."\n'
 )
 _DIRECTIVE: str = "-- sqb: ignore SQBRSQL004 because the sample intentionally keeps one row\n"
-_SETTING_HELP: str = "[rules]\n            allow_exceptions = true"
+_PRINTED_ENTRY: str = (
+    "[[rules.rule_exceptions]]\n"
+    '            rule = "SQBRSQL004"\n'
+    '            path = "models/customers.sql"\n'
+    '            reason = "the sample intentionally keeps one row"'
+)
+_REMOVED: str = "sets [rules] allow_exceptions, which SQLBuild no longer supports"
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
         RuleExceptionPolicyTestCase(
-            description="exception forbidden",
-            rules_toml=f"allow_exceptions = false\n\n{_EXCEPTION}",
-            directive="",
-            expected_exit_code=1,
-            expected_fragments=(
-                "sqlbuild_project.toml has 1 [[rules.rule_exceptions]] entry",
-                "sets [rules] allow_exceptions = false",
-                _SETTING_HELP,
-            ),
-        ),
-        RuleExceptionPolicyTestCase(
-            description="scoped ignore forbidden",
-            rules_toml=f"allow_exceptions = false\n\n{_IGNORE}",
-            directive="",
-            expected_exit_code=1,
-            expected_fragments=("1 [[rules.rule_ignores]] entry", _SETTING_HELP),
-        ),
-        RuleExceptionPolicyTestCase(
-            description="inline suppression forbidden",
-            rules_toml="allow_exceptions = false\n",
+            description="inline directive is an error printing its exception",
+            rules_toml="",
             directive=_DIRECTIVE,
             expected_exit_code=1,
             expected_fragments=(
                 "SQBRSQL000",
-                "Inline Rule suppressions are not allowed in this project",
+                "Inline Rule suppressions are not supported",
+                _PRINTED_ENTRY,
                 "SQBRSQL004",
-                "allow_exceptions = true",
             ),
         ),
         RuleExceptionPolicyTestCase(
-            description="project-wide ignore stays allowed",
-            rules_toml='allow_exceptions = false\nignore = ["SQBRSQL004"]\n',
+            description="allow_exceptions false is a removed setting",
+            rules_toml=f"allow_exceptions = false\n\n{_EXCEPTION}",
             directive="",
-            expected_exit_code=0,
+            expected_exit_code=1,
+            expected_fragments=(_REMOVED, "remove the allow_exceptions line from [rules]"),
         ),
         RuleExceptionPolicyTestCase(
-            description="exception allowed explicitly",
-            rules_toml=f"allow_exceptions = true\n\n{_EXCEPTION}",
+            description="allow_exceptions true is a removed setting",
+            rules_toml="allow_exceptions = true\n",
             directive="",
-            expected_exit_code=0,
+            expected_exit_code=1,
+            expected_fragments=(_REMOVED,),
         ),
         RuleExceptionPolicyTestCase(
-            description="exception allowed by default",
+            description="configured exception",
             rules_toml=_EXCEPTION,
             directive="",
             expected_exit_code=0,
         ),
         RuleExceptionPolicyTestCase(
-            description="inline suppression allowed by default",
-            rules_toml="",
-            directive=_DIRECTIVE,
+            description="scoped ignore",
+            rules_toml=_IGNORE,
+            directive="",
+            expected_exit_code=0,
+        ),
+        RuleExceptionPolicyTestCase(
+            description="project-wide ignore",
+            rules_toml='ignore = ["SQBRSQL004"]\n',
+            directive="",
             expected_exit_code=0,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_allow_exceptions_setting_when_compiling_then_escape_hatches_follow_it(
+def test_given_rule_exception_mechanism_when_compiling_then_only_configuration_applies(
     test_case: RuleExceptionPolicyTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -116,30 +112,23 @@ def test_given_allow_exceptions_setting_when_compiling_then_escape_hatches_follo
     "test_case",
     [
         FormatExceptionPolicyTestCase(
-            description="string false is rejected like compile",
-            setting='allow_exceptions = "false"',
-            expected_exit_code=1,
-            expected_fragment="invalid rules config",
-            expected_compile_fragment="invalid rules config",
-        ),
-        FormatExceptionPolicyTestCase(
-            description="boolean false rejects the inline suppression",
+            description="removed setting is rejected like compile",
             setting="allow_exceptions = false",
             expected_exit_code=1,
-            expected_fragment="Inline Rule suppressions are not allowed in this project",
-            expected_compile_fragment="Inline Rule suppressions are not allowed in this project",
+            expected_fragment=_REMOVED,
+            expected_compile_fragment=_REMOVED,
         ),
         FormatExceptionPolicyTestCase(
-            description="boolean true keeps the inline suppression",
-            setting="allow_exceptions = true",
-            expected_exit_code=0,
-            expected_fragment="FAULT=0",
-            expected_compile_fragment="",
+            description="inline directive is rejected like compile",
+            setting="",
+            expected_exit_code=1,
+            expected_fragment="Inline Rule suppressions are not supported",
+            expected_compile_fragment="Inline Rule suppressions are not supported",
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_allow_exceptions_setting_when_formatting_then_it_is_validated_like_compile(
+def test_given_exception_policy_when_formatting_then_it_is_validated_like_compile(
     test_case: FormatExceptionPolicyTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

@@ -12,7 +12,7 @@ fn key_sets(keys: &[Vec<String>]) -> String {
     sets.join("\u{1d}")
 }
 
-/// A digest of the dialect, literal and ranking limits, sorted relation keys and suppressions.
+/// A digest of the dialect, literal and ranking limits and sorted relation keys.
 #[must_use]
 pub fn lint_key(input: &LintKeyInput) -> String {
     let mut relation_keys: Vec<(String, Vec<Vec<String>>)> = input.relation_keys.clone();
@@ -29,7 +29,6 @@ pub fn lint_key(input: &LintKeyInput) -> String {
             &input.max_literal_length.to_string(),
             &input.max_ranking_order_by.to_string(),
             &relations,
-            if input.allow_suppressions { "1" } else { "0" },
         ],
     )
 }

@@ -33,7 +33,7 @@ pub(crate) const LAYOUT_RULE_PREFIXES: [&str; 2] = ["SQBRPROJECT2", "SQBRDECLARA
 pub(crate) const TEST_RULE_PREFIX: &str = "SQBRTEST";
 pub(crate) const GRAPH_EDGE_RULE_CODE: &str = "SQBRGRAPH101";
 pub(crate) const REPLACEABLE_SKILL_STATES: [&str; 3] = ["fresh", "missing", "stale"];
-pub(crate) const RULE_EXAMPLES: [(&str, &str); 25] = [
+pub(crate) const RULE_EXAMPLES: [(&str, &str); 28] = [
     (
         "SQBRSQL040",
         "Compute category_key in an input CTE, then JOIN categories AS c ON o.category_key = c.category_key.",
@@ -63,8 +63,20 @@ pub(crate) const RULE_EXAMPLES: [(&str, &str); 25] = [
         "Internal flow is stg -> int_clean -> int_enriched; marts are published interfaces.",
     ),
     (
+        "SQBRGRAPH103",
+        "sales__mart__orders and sales__mart__orders__finance both read sales__int_enriched__orders; sales__mart_v__orders may read sales__mart__orders.",
+    ),
+    (
         "SQBRPROJECT101",
         "domain__int_clean__entity or domain__mart_v__entity.",
+    ),
+    (
+        "SQBRPROJECT107",
+        "sales publishes sales__mart__orders and sales__mart__customers; the finance variant lives in finance or sales intermediate.",
+    ),
+    (
+        "SQBRSQL038",
+        "JOIN customers AS c ON o.customer_id = c.customer_id, or CROSS JOIN a provably one-row relation such as a one-row seed or an aggregate without GROUP BY.",
     ),
     (
         "SQBRPROJECT105",

@@ -33,3 +33,27 @@ pub(crate) const NATIVE_ROWS_MEMO_VERSION: &str = "native-rules-rows-response-v2
 pub(crate) const SQL_RULE_PREFIX: &str = "SQBRSQL";
 /// Threshold key setting the fewest test cases a custom rule must ship.
 pub const MIN_CUSTOM_RULE_TEST_CASES_KEY: &str = "min_custom_rule_test_cases";
+/// Rules whose findings name a joined relation, so an exception may cover just that relation.
+pub(crate) const RELATION_EXCEPTION_RULES: [&str; 1] = ["SQBRSQL038"];
+/// The layers the `<domain>__<layer>__<entity>` model name grammar accepts.
+pub(crate) const MODEL_NAME_LAYERS: [&str; 7] = [
+    "stg",
+    "stg_v",
+    "int_clean",
+    "int_v",
+    "int_enriched",
+    "mart",
+    "mart_v",
+];
+/// The removed exception switch, which used to allow or forbid every escape hatch at once.
+pub(crate) const REMOVED_ALLOW_EXCEPTIONS: &str = "allow_exceptions";
+/// Published models must not read published models of their own domain.
+pub(crate) const PUBLISHED_READ_CODE: &str = "SQBRGRAPH103";
+/// Each domain's published layer uses one model name shape.
+pub(crate) const PUBLISHED_SHAPE_CODE: &str = "SQBRPROJECT107";
+/// The option naming the published layers.
+pub(crate) const PUBLISHED_LAYERS_OPTION: &str = "published_layers";
+/// The option listing qualifiers that do not count towards a domain's name shape.
+pub(crate) const ALLOWED_QUALIFIERS_OPTION: &str = "allowed_qualifiers";
+/// The published layers when a project does not configure them.
+pub(crate) const DEFAULT_PUBLISHED_LAYERS: [&str; 2] = ["mart", "mart_v"];

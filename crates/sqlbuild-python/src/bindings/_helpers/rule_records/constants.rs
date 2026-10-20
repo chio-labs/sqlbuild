@@ -19,6 +19,8 @@ const R_RULE_EXEMPTION: RecordSpec = RecordSpec {
         FieldSpec::required("rule"),
         FieldSpec::required("path"),
         FieldSpec::required("reason"),
+        FieldSpec::new("relation", FieldDefault::None),
+        FieldSpec::new("cte", FieldDefault::None),
     ],
 };
 const R_GRAPH_EDGE_EXCLUSION: RecordSpec = RecordSpec {
@@ -266,7 +268,6 @@ const R_RULES_CONFIG: RecordSpec = RecordSpec {
         FieldSpec::new("rule_exceptions", FieldDefault::EmptyTuple),
         FieldSpec::new("graph_edge_exceptions", FieldDefault::EmptyTuple),
         FieldSpec::new("rule_ignores", FieldDefault::EmptyTuple),
-        FieldSpec::new("allow_exceptions", FieldDefault::True),
         FieldSpec::new("select_star_allow", FieldDefault::EmptyTuple),
         FieldSpec::new("domains", FieldDefault::EmptyTuple),
         FieldSpec::new("approved_source_tokens", FieldDefault::EmptyTuple),

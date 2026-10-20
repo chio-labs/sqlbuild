@@ -718,11 +718,16 @@ select = ["SQBRSQL", "SQBRGRAPH", "XSQBRARCH"]
 
 Rules are opt-in. Exact codes activate individual checks and prefixes activate a family. Built-in
 codes begin with `SQBR`; repository-defined codes begin with `XSQBR`. See
-[Compiler-integrated Rules](/docs/concepts/rules) for configuration, authoring, and suppressions.
+[Compiler-integrated Rules](/docs/concepts/rules) for configuration, authoring, and exceptions.
 
-| Key | Default | Description |
-| --- | --- | --- |
-| `allow_exceptions` | `true` | When `false`, `[[rules.rule_exceptions]]` and `[[rules.rule_ignores]]` entries are configuration errors and inline `-- sqb: ignore` directives are `SQBRSQL000` errors. The project-wide `ignore` list stays allowed. See [Forbidding exceptions](/docs/concepts/rules/findings-and-exceptions#forbidding-exceptions). |
+| Key | Description |
+| --- | --- |
+| `ignore` | Rule codes or families turned off for the whole project. |
+| `[[rules.rule_exceptions]]` | One reviewed exception: `rule`, `path` and `reason`, plus `relation` and optional `cte` for relation-level Rules such as `SQBRSQL038`. Stale entries fail compilation. See [Findings and exceptions](/docs/concepts/rules/findings-and-exceptions). |
+| `[[rules.rule_ignores]]` | Rules turned off for `paths` or `selectors`, with a `reason`. |
+
+Rule exceptions live only in this file. Inline `-- sqb: ignore` comments are `SQBRSQL000` errors
+that print the entry to add, and the former `allow_exceptions` setting is a configuration error.
 
 ## Scopes
 

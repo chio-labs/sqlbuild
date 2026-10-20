@@ -1,4 +1,4 @@
-use crate::lint_text::models::{Neutralized, RetainedViolation};
+use crate::lint_text::models::{Neutralized, SuppressionFinding};
 
 pub(crate) struct NeutralizeTestCase {
     pub(crate) description: &'static str,
@@ -32,9 +32,7 @@ pub(crate) struct TokenAtTestCase {
 pub(crate) struct SuppressionTestCase {
     pub(crate) description: &'static str,
     pub(crate) contents: &'static str,
-    pub(crate) violations: Vec<(usize, &'static str)>,
-    pub(crate) allow: bool,
-    pub(crate) expected_retained: Vec<RetainedViolation>,
+    pub(crate) expected_findings: Vec<SuppressionFinding>,
 }
 
 pub(crate) struct FormatBodiesTestCase {

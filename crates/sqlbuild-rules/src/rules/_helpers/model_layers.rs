@@ -1,15 +1,23 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+
+use serde_json::Value;
 
 use crate::constants::{
-    INTERMEDIATE_LAYER_DIRECTORY, MART_LAYER_DIRECTORY, MODEL_SCHEMA_CONFIG_KEY, REFERENCE_KIND,
+    ALLOWED_QUALIFIERS_OPTION, DEFAULT_PUBLISHED_LAYERS, INTERMEDIATE_LAYER_DIRECTORY,
+    MART_LAYER_DIRECTORY, MODEL_SCHEMA_CONFIG_KEY, PUBLISHED_LAYERS_OPTION, REFERENCE_KIND,
     STAGING_LAYER_DIRECTORY,
 };
-use crate::models::{Fault, Model, RuleMetadata};
-use crate::rules::_helpers::evaluation::parse_name;
+use crate::models::{EvaluateRequest, Fault, Model, RuleMetadata, RulesConfig};
+use crate::rules::_helpers::evaluation::{parse_name, path_fault};
 use crate::rules::models::{FaultCollector, ProjectEvaluationRequest};
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 
 const NO_CANONICAL_LAYER_FOLDER: &str = "no canonical layer folder";
+/// Where an intermediate model that replaces a published one lives.
+const INTERMEDIATE_FOLDER: &str = "intermediate/enriched";
+const ENTITY_SHAPE: &str = "<domain>__<layer>__<entity>";
+const QUALIFIED_SHAPE: &str = "<domain>__<layer>__<entity>__<qualifier>";
+const MODEL_FILE_SUFFIX: &str = ".sql";
 
 pub(crate) fn explicit_model_schema(model: &Model, rule: &RuleMetadata, faults: &FaultCollector) {
     if model
@@ -203,4 +211,330 @@ fn model_fault(
         message,
         remediation: remediation.unwrap_or_else(|| rule.remediation.clone()),
     }
+}
+
+/// The published layers configured for `code`, or the defaults.
+fn published_layers(config: &RulesConfig, code: &str) -> Vec<String> {
+    match config
+        .rule_options
+        .get(code)
+        .and_then(|options| options.get(PUBLISHED_LAYERS_OPTION))
+        .and_then(Value::as_array)
+    {
+        Some(layers) => layers
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::to_owned)
+            .collect(),
+        None => DEFAULT_PUBLISHED_LAYERS.map(str::to_owned).to_vec(),
+    }
+}
+
+/// The parts of a `<domain>__<layer>__<entity>[__<qualifier>]` model name.
+struct PublishedName {
+    domain: String,
+    layer: String,
+    subject: String,
+    source: Option<String>,
+    is_view: bool,
+}
+
+fn published_name(name: &str) -> Option<PublishedName> {
+    let parts = parse_name(name)?;
+    Some(PublishedName {
+        domain: parts.domain,
+        layer: parts.layer,
+        subject: parts.subject,
+        source: parts.source,
+        is_view: parts.is_view,
+    })
+}
+
+/// One published model and its parsed name.
+struct Published<'a> {
+    model: &'a Model,
+    name: PublishedName,
+}
+
+fn published<'a>(model: &'a Model, layers: &[String]) -> Option<Published<'a>> {
+    let name: PublishedName = published_name(&model.name)?;
+    layers
+        .contains(&name.layer)
+        .then_some(Published { model, name })
+}
+
+/// Flag every read of a same-domain published model, except a view of its own entity.
+pub(crate) fn same_domain_published_reads(
+    request: &EvaluateRequest,
+    rule: &RuleMetadata,
+    faults: &FaultCollector,
+) {
+    let layers: Vec<String> = published_layers(&request.config, &rule.code);
+    for model in &request.models {
+        let Some(consumer) = published(model, &layers) else {
+            continue;
+        };
+        let mut reported: BTreeSet<&str> = BTreeSet::new();
+        for reference in &model.references {
+            if reference.ref_kind != REFERENCE_KIND || !reported.insert(&reference.ref_name) {
+                continue;
+            }
+            let Some(producer) = published_name(&reference.ref_name) else {
+                continue;
+            };
+            if producer.domain != consumer.name.domain
+                || !layers.contains(&producer.layer)
+                || is_view_of_own_entity(&consumer.name, &producer)
+            {
+                continue;
+            }
+            faults.push(path_fault(
+                rule,
+                &model.relative_path,
+                format!(
+                    "{} reads {}; published models must not read published models of their own \
+                     domain",
+                    model.name, reference.ref_name
+                ),
+                read_remediation(&consumer),
+            ));
+        }
+    }
+}
+
+/// `X__<layer>_v__<entity>[__<qualifier>]` reading `X__<layer>__<entity>` or the same qualifier.
+fn is_view_of_own_entity(consumer: &PublishedName, producer: &PublishedName) -> bool {
+    consumer.is_view
+        && !producer.is_view
+        && (producer.source.is_none() || producer.source == consumer.source)
+        && consumer.subject == producer.subject
+        && consumer.layer == format!("{}_v", producer.layer)
+}
+
+fn read_remediation(consumer: &Published<'_>) -> String {
+    let domain: &str = &consumer.name.domain;
+    let mut remediation: String = format!(
+        "Move the shared logic into a {domain}__int_* model that both published models read, or \
+         move this model into the domain that consumes it."
+    );
+    if let Some(command) = intermediate_move(consumer) {
+        remediation.push_str(&format!(" To move it into intermediate: {command}"));
+    }
+    remediation
+}
+
+/// `sqb mv` into the domain's intermediate layer, when the model lives in a `mart` folder.
+fn intermediate_move(model: &Published<'_>) -> Option<String> {
+    let layer: &str = if model.name.is_view {
+        "int_v"
+    } else {
+        "int_enriched"
+    };
+    let mut name: String = format!("{}__{layer}__{}", model.name.domain, model.name.subject);
+    if let Some(qualifier) = &model.name.source {
+        name.push_str("__");
+        name.push_str(qualifier);
+    }
+    let parts: Vec<&str> = model.model.relative_path.split('/').collect();
+    let (_, folders) = parts.split_last()?;
+    let mart: usize = folders
+        .iter()
+        .position(|part| *part == MART_LAYER_DIRECTORY)?;
+    let mut target: Vec<&str> = folders[..mart].to_vec();
+    target.push(INTERMEDIATE_FOLDER);
+    target.extend(&folders[mart + 1..]);
+    Some(format!(
+        "sqb mv {} {}/{name}{MODEL_FILE_SUFFIX}",
+        model.model.name,
+        target.join("/")
+    ))
+}
+
+/// One literal qualifier that does not count towards a domain's name shape.
+struct AllowedQualifier {
+    domain: Option<String>,
+    qualifier: String,
+}
+
+fn allowed_qualifiers(config: &RulesConfig, code: &str) -> Vec<AllowedQualifier> {
+    let Some(entries) = config
+        .rule_options
+        .get(code)
+        .and_then(|options| options.get(ALLOWED_QUALIFIERS_OPTION))
+        .and_then(Value::as_array)
+    else {
+        return Vec::new();
+    };
+    entries
+        .iter()
+        .filter_map(Value::as_object)
+        .filter_map(|entry| {
+            Some(AllowedQualifier {
+                domain: entry
+                    .get("domain")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned),
+                qualifier: entry.get("qualifier")?.as_str()?.to_owned(),
+            })
+        })
+        .collect()
+}
+
+fn allowlisted(allowed: &[AllowedQualifier], name: &PublishedName) -> bool {
+    name.source.as_ref().is_some_and(|qualifier| {
+        allowed.iter().any(|entry| {
+            entry.qualifier == *qualifier
+                && entry
+                    .domain
+                    .as_ref()
+                    .is_none_or(|domain| *domain == name.domain)
+        })
+    })
+}
+
+/// Flag published models whose name shape differs from their domain's majority shape.
+pub(crate) fn published_name_shapes(
+    request: &EvaluateRequest,
+    rule: &RuleMetadata,
+    faults: &FaultCollector,
+) {
+    let layers: Vec<String> = published_layers(&request.config, &rule.code);
+    let allowed: Vec<AllowedQualifier> = allowed_qualifiers(&request.config, &rule.code);
+    let mut domains: BTreeMap<String, Vec<Published<'_>>> = BTreeMap::new();
+    for model in &request.models {
+        let Some(entry) = published(model, &layers) else {
+            continue;
+        };
+        if allowlisted(&allowed, &entry.name) {
+            continue;
+        }
+        domains
+            .entry(entry.name.domain.clone())
+            .or_default()
+            .push(entry);
+    }
+    for (domain, models) in &domains {
+        let qualified: usize = models
+            .iter()
+            .filter(|entry| entry.name.source.is_some())
+            .count();
+        let entities: usize = models.len() - qualified;
+        if qualified == 0 || entities == 0 {
+            continue;
+        }
+        let majority_qualified: bool = qualified > entities;
+        let shape = DomainShape {
+            domain,
+            entities,
+            qualified,
+            family: models
+                .iter()
+                .filter(|entry| entry.name.source.is_some() == majority_qualified)
+                .collect(),
+        };
+        for entry in models
+            .iter()
+            .filter(|entry| entry.name.source.is_some() != majority_qualified)
+        {
+            faults.push(shape_fault(rule, entry, &shape));
+        }
+    }
+}
+
+/// One domain's published name shapes: how many models use each, and the majority family.
+struct DomainShape<'a> {
+    domain: &'a str,
+    entities: usize,
+    qualified: usize,
+    family: Vec<&'a Published<'a>>,
+}
+
+fn shape_fault(rule: &RuleMetadata, entry: &Published<'_>, shape: &DomainShape<'_>) -> Fault {
+    let majority: &str = if entry.name.source.is_some() {
+        ENTITY_SHAPE
+    } else {
+        QUALIFIED_SHAPE
+    };
+    let message: String = format!(
+        "domain {} publishes {} {} as {ENTITY_SHAPE} and {} as {QUALIFIED_SHAPE}; {} does not \
+         fit the majority shape {majority}",
+        shape.domain,
+        shape.entities,
+        if shape.entities == 1 {
+            "model"
+        } else {
+            "models"
+        },
+        shape.qualified,
+        entry.model.name
+    );
+    path_fault(
+        rule,
+        &entry.model.relative_path,
+        message,
+        shape_remediation(rule, entry, &shape.family),
+    )
+}
+
+fn shape_remediation(
+    rule: &RuleMetadata,
+    entry: &Published<'_>,
+    family: &[&Published<'_>],
+) -> String {
+    let domain: &str = &entry.name.domain;
+    let mut steps: Vec<String> = Vec::new();
+    match &entry.name.source {
+        Some(qualifier) => {
+            let mut adapt: String = format!(
+                "If {} adapts another published model, move that logic into {domain}__int_* or \
+                 into the consuming domain",
+                entry.model.name
+            );
+            if let Some(command) = intermediate_move(entry) {
+                adapt.push_str(&format!(" ({command})"));
+            }
+            steps.push(adapt);
+            let mut split: String = format!(
+                "If {domain} really is published once per qualifier, rename its models without \
+                 one into the family"
+            );
+            if let Some(model) = family.first() {
+                split.push_str(&format!(
+                    " (for example: sqb rename {} {}__core)",
+                    model.model.name, model.model.name
+                ));
+            }
+            steps.push(split);
+            steps.push(allowlist_step(rule, domain, qualifier));
+        }
+        None => {
+            steps.push(format!(
+                "If the models with a qualifier adapt this one, move their logic into \
+                 {domain}__int_* or into the consuming domain"
+            ));
+            steps.push(format!(
+                "If {domain} really is published once per qualifier, rename this model into the \
+                 family (for example: sqb rename {} {}__core)",
+                entry.model.name, entry.model.name
+            ));
+            if let Some(qualifier) = family.first().and_then(|model| model.name.source.as_ref()) {
+                steps.push(allowlist_step(rule, domain, qualifier));
+            }
+        }
+    }
+    steps
+        .iter()
+        .enumerate()
+        .map(|(index, step)| format!("{}. {step}.", index + 1))
+        .collect::<Vec<String>>()
+        .join(" ")
+}
+
+fn allowlist_step(rule: &RuleMetadata, domain: &str, qualifier: &str) -> String {
+    format!(
+        "If {qualifier} is an intentional, structural qualifier, allowlist it with a reason in \
+         {PROJECT_CONFIG_FILENAME}: [rules.rule_options.{}] {ALLOWED_QUALIFIERS_OPTION} = \
+         [{{ domain = \"{domain}\", qualifier = \"{qualifier}\", reason = \"<why>\" }}]",
+        rule.code
+    )
 }

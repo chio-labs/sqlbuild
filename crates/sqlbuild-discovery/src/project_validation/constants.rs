@@ -8,3 +8,7 @@ pub(crate) const CURRENT_DIRECTORY: &str = ".";
 pub(crate) const KNOWN_FOLDER_LIMIT: usize = 5;
 /// Model names SQLBuild reserves for compiled output structure.
 pub(crate) const RESERVED_MODEL_NAMES: [&str; 1] = ["_chain_"];
+/// The first seed read, grown until the header and two data rows are seen or the file ends.
+pub(crate) const INITIAL_SEED_READ_BYTES: u64 = 64 * 1024;
+/// A header and two data rows: enough to know a seed holds more than one data row.
+pub(crate) const RECORDS_FOR_MANY_ROWS: usize = 3;

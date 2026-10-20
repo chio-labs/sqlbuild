@@ -11,7 +11,7 @@ from sqlbuild._native import (
     LintRunResult,
     LintSeverity,
     LintViolation,
-    apply_lint_suppressions,
+    reject_lint_suppressions,
     run_lint,
 )
 from tests.unit.src.sqlbuild.lint._test_types import (
@@ -19,6 +19,7 @@ from tests.unit.src.sqlbuild.lint._test_types import (
     FormatDescriptionResolutionTestCase,
     FormatNewlineTestCase,
     FormatProjectTestCase,
+    InlineDirectiveTestCase,
     LintBehaviorTestCase,
     LintProjectTestCase,
 )
@@ -409,119 +410,66 @@ def test_given_fixture_ceremony_variants_when_formatting_and_linting_then_forms_
 
 @pytest.mark.parametrize(
     "test_case",
-    [LintBehaviorTestCase(description="reasoned matching local suppression", expected_value=())],
+    [
+        InlineDirectiveTestCase(
+            description="matching directive keeps the finding and fails",
+            query="SELECT value FROM items LIMIT 1\n",
+            expected_violations=(("SQBRSQL000", 2, "fault"), ("SQBRSQL004", 3, "warning")),
+        ),
+        InlineDirectiveTestCase(
+            description="directive without a finding still fails",
+            query="SELECT value FROM items ORDER BY value LIMIT 1\n",
+            expected_violations=(("SQBRSQL000", 2, "fault"),),
+        ),
+    ],
     ids=lambda case: case.description,
 )
-def test_given_reasoned_local_suppression_when_linting_then_matching_warning_is_removed(
-    test_case: LintBehaviorTestCase,
+def test_given_inline_directive_when_linting_then_it_is_a_fault_printing_the_exception_entry(
+    test_case: InlineDirectiveTestCase,
     tmp_path: Path,
 ) -> None:
-    _ = test_case
     _ = (tmp_path / "sqlbuild_project.toml").write_text(PROJECT_TOML, encoding="utf-8")
     target: Path = tmp_path / "models" / "sample.sql"
     target.parent.mkdir()
     _ = target.write_text(
         'MODEL (description "ok");\n'
         "-- sqb: ignore SQBRSQL004 because this fixture intentionally samples one row\n"
-        "SELECT value FROM items LIMIT 1\n",
+        f"{test_case.query}",
         encoding="utf-8",
     )
 
     result: LintRunResult = run_lint(
         project_dir=tmp_path,
         config=LintConfig(dialect="duckdb"),
-    )
-
-    assert result.violations == test_case.expected_value
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        LintBehaviorTestCase(
-            description="forbidden suppression keeps the finding and fails",
-            expected_value=(("SQBRSQL000", 2, "fault"), ("SQBRSQL004", 3, "warning")),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_suppressions_forbidden_when_linting_then_directive_is_a_fault_and_suppresses_nothing(
-    test_case: LintBehaviorTestCase,
-    tmp_path: Path,
-) -> None:
-    _ = (tmp_path / "sqlbuild_project.toml").write_text(PROJECT_TOML, encoding="utf-8")
-    target: Path = tmp_path / "models" / "sample.sql"
-    target.parent.mkdir()
-    _ = target.write_text(
-        'MODEL (description "ok");\n'
-        "-- sqb: ignore SQBRSQL004 because this fixture intentionally samples one row\n"
-        "SELECT value FROM items LIMIT 1\n",
-        encoding="utf-8",
-    )
-
-    result: LintRunResult = run_lint(
-        project_dir=tmp_path,
-        config=LintConfig(dialect="duckdb", allow_suppressions=False),
     )
 
     assert (
         tuple((item.code, item.line, str(item.severity)) for item in result.violations)
-        == test_case.expected_value
+        == test_case.expected_violations
     )
     remediation: str = result.violations[0].remediation or ""
-    assert "sqlbuild_project.toml sets [rules] allow_exceptions = false" in remediation
-    assert "[rules]\n            allow_exceptions = true" in remediation
+    assert (
+        "[[rules.rule_exceptions]]\n"
+        '            rule = "SQBRSQL004"\n'
+        '            path = "models/sample.sql"\n'
+        '            reason = "this fixture intentionally samples one row"'
+    ) in remediation
 
 
 @pytest.mark.parametrize(
     "test_case",
     [
         LintBehaviorTestCase(
-            description="unused local suppression",
-            expected_value="Unused suppression for SQBRSQL004",
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_unused_local_suppression_when_linting_then_reports_suppression_warning(
-    test_case: LintBehaviorTestCase,
-    tmp_path: Path,
-) -> None:
-    _ = test_case
-    _ = (tmp_path / "sqlbuild_project.toml").write_text(PROJECT_TOML, encoding="utf-8")
-    target: Path = tmp_path / "models" / "ordered.sql"
-    target.parent.mkdir()
-    _ = target.write_text(
-        'MODEL (description "ok");\n'
-        "-- sqb: ignore SQBRSQL004 because this query used to sample one row\n"
-        "SELECT value FROM items ORDER BY value LIMIT 1\n",
-        encoding="utf-8",
-    )
-
-    result: LintRunResult = run_lint(
-        project_dir=tmp_path,
-        config=LintConfig(dialect="duckdb"),
-    )
-
-    assert tuple(item.code for item in result.violations) == ("SQBRSQL000",)
-    assert result.violations[0].message == test_case.expected_value
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        LintBehaviorTestCase(
-            description="mandatory fault suppression attempt",
+            description="mandatory fault directive",
             expected_value={"SQBRSQL000", "description-present"},
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_header_fault_suppression_when_linting_then_mandatory_fault_remains(
+def test_given_header_fault_directive_when_rejecting_then_mandatory_fault_remains(
     test_case: LintBehaviorTestCase,
     tmp_path: Path,
 ) -> None:
-    _ = test_case
     target: Path = tmp_path / "models" / "missing_description.sql"
     contents: str = (
         "-- sqb: ignore description-present because this must not bypass compiler policy\n"
@@ -537,6 +485,10 @@ def test_given_header_fault_suppression_when_linting_then_mandatory_fault_remain
         engine=LINT_ENGINE_SQLBUILD,
     )
 
-    result: list[LintViolation] = apply_lint_suppressions([mandatory], {target: contents}, True)
+    result: list[LintViolation] = reject_lint_suppressions(
+        [mandatory], {target: contents}, tmp_path
+    )
+
+    assert {item.code for item in result} == test_case.expected_value
 
     assert {item.code for item in result} == test_case.expected_value

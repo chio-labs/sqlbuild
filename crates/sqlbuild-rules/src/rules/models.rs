@@ -76,8 +76,10 @@ impl FaultCollector {
 pub enum BuiltinOptionKind {
     /// A boolean defaulting to false.
     Boolean,
-    /// A list of strings defaulting to empty.
-    StringList,
+    /// A list of strings with the given default.
+    StringList(&'static [&'static str]),
+    /// A list of tables, each checked by the rule's own configuration validation.
+    TableList,
 }
 
 /// One option a built-in rule declares.

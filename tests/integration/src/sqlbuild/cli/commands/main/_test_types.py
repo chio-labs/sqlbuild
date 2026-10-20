@@ -983,7 +983,7 @@ class WarmTargetProjectConfigEditTestCase:
 
 @dataclass(frozen=True)
 class RuleExceptionPolicyTestCase:
-    """One `[rules] allow_exceptions` value with one escape hatch, compiled through the CLI."""
+    """One Rule exception mechanism, compiled through the CLI."""
 
     description: str
     rules_toml: str
@@ -994,7 +994,7 @@ class RuleExceptionPolicyTestCase:
 
 @dataclass(frozen=True)
 class FormatExceptionPolicyTestCase:
-    """One `[rules] allow_exceptions` value read by `sqb format`."""
+    """One exception-policy case read by `sqb format`."""
 
     description: str
     setting: str

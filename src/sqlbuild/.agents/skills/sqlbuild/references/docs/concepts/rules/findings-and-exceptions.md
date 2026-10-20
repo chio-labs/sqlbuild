@@ -6,8 +6,22 @@
 
 Online: https://sqlbuild.com/docs/concepts/rules/findings-and-exceptions/
 
+## Contents
+
+- Exact exceptions
+- Relation-level exceptions
+- Path- and resource-scoped ignores
+- No inline suppressions
+- Removed settings
+- Mandatory correctness
+- Machine-readable findings
+
 A Rule finding identifies an exact code, project-relative path, line, column, message, and
 remediation. Error findings make compilation fail and prevent artifact completion.
+
+Every deliberate deviation from a selected Rule lives in `sqlbuild_project.toml`, never in SQL
+comments. A change to the project file is something a reviewer stops to look at; a comment in a
+large SQL diff is not.
 
 ## Exact exceptions
 
@@ -22,6 +36,38 @@ reason = "This example intentionally demonstrates one sampled row."
 
 An exception refers to one exact Rule code and path. If the finding disappears, SQLBuild reports
 the stale exception so obsolete configuration does not accumulate silently.
+
+## Relation-level exceptions
+
+A file-wide exception for a deliberate cartesian product would also hide any accidental cross join
+added to the same file later. `SQBRSQL038` findings name the joined relation and, inside a CTE,
+that CTE, so an exception can cover exactly one join:
+
+```toml
+[[rules.rule_exceptions]]
+rule = "SQBRSQL038"
+path = "models/orders/order_checks.sql"
+relation = "order_policy"
+cte = "policy_checks"   # optional: only the join inside this top-level CTE
+reason = "Every order is evaluated against every policy check."
+```
+
+`relation` is the joined relation as written, with `__ref`, `__seed` and `__source` calls resolved
+to the referenced name. Without `cte`, the exception covers that relation anywhere in the file.
+Relation-level exceptions are stale-checked like exact exceptions: an entry that matches no finding
+fails compilation. `relation` is accepted only for `SQBRSQL038`, and a file-wide exception cannot be
+combined with relation-level exceptions for the same code and path.
+
+A join that reads no named relation, such as `CROSS JOIN UNNEST(...)` or `CROSS JOIN LATERAL`, has
+no relation to name. Its finding says so and prints the file-wide exception (rule and path) that is
+the only way to cover it.
+
+`SQBRSQL038` does not report a cross join when either side provably holds at most one row, so most
+intentional cross joins need no exception at all. SQLBuild infers this from the query, never from a
+declaration: a seed whose CSV has one data row (adding a second row brings the finding back), an
+aggregate without `GROUP BY`, a one-row `VALUES`, `LIMIT 1`, or `QUALIFY ROW_NUMBER() OVER (...) = 1`
+without a partition, carried through CTEs and subqueries that only filter or project. A join,
+`UNNEST`/`FLATTEN`, set operation or `GROUP BY` in between stops the proof, and the join is reported.
 
 ## Path- and resource-scoped ignores
 
@@ -59,36 +105,35 @@ reason = "These intermediate SQL files intentionally preserve upstream columns."
 
 `paths` and `selectors` may be combined in one scoped ignore. Both forms require a reason.
 
-## Inline suppressions
+To turn a Rule off for the whole project, add its code to `[rules] ignore`.
 
-Suppress one SQL Rule finding on the next SQL line with a reasoned comment:
+## No inline suppressions
 
-```sql
--- sqb: ignore SQBRSQL004 because the sample intentionally keeps one row
-SELECT customer_id FROM customers LIMIT 1
+SQLBuild has no inline suppression comment. An `-- sqb: ignore ...` or `/* sqb: ignore ... */`
+comment is a `SQBRSQL000` error that suppresses nothing, so the finding it was meant to hide is reported too. The error prints the
+exact entry to add instead:
+
+```text
+error[SQBRSQL000]: Inline Rule suppressions are not supported; declare the exception in sqlbuild_project.toml
+  --> models/orders/order_checks.sql:4:1
+  = help: Remove this comment, then fix the SQBRSQL038 finding, or record it as a reviewed exception in sqlbuild_project.toml:
+            [[rules.rule_exceptions]]
+            rule = "SQBRSQL038"
+            path = "models/orders/order_checks.sql"
+            relation = "order_policy"
+            reason = "every order meets every policy"
 ```
 
-A directive without a reason, or one that no longer matches a finding, is reported as
-`SQBRSQL000`.
+Copy the entry into `sqlbuild_project.toml`, adjust the reason for a reviewer, and delete the
+comment.
 
-## Forbidding exceptions
+## Removed settings
 
-Set `allow_exceptions = false` to require that every selected Rule passes everywhere:
-
-```toml
-[rules]
-select = ["SQBRSQL", "SQBRMODEL"]
-ignore = ["SQBRSQL004"]
-allow_exceptions = false   # default true
-```
-
-With exceptions forbidden, any `[[rules.rule_exceptions]]` or `[[rules.rule_ignores]]` entry fails
-configuration loading with an error that counts the entries and shows the setting to change, so
-`sqb compile` and `sqb rules run` stop before evaluating Rules. Each inline `-- sqb: ignore`
-directive becomes a `SQBRSQL000` error at the directive and suppresses nothing, so the finding it
-was hiding is reported too. The project-wide `ignore` list stays allowed: it is the adoption switch
-for a Rule across the whole project, not a scoped escape hatch. `[[rules.graph_edge_exceptions]]`,
-`[[rules.select_star_allow]]` and `[[rules.threshold_overrides]]` are not affected.
+`[rules] allow_exceptions` was removed. Configured exceptions are always allowed because the project
+file is the review gate, and inline suppressions no longer exist. A project that still sets
+`allow_exceptions` fails configuration loading with an error that explains the removal: delete the
+line, keep reviewed deviations as `[[rules.rule_exceptions]]` entries, and use `[rules] ignore` to
+turn a Rule off for the whole project.
 
 ## Mandatory correctness
 
