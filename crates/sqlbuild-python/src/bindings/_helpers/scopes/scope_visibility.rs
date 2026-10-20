@@ -6,6 +6,7 @@ use pyo3::prelude::{
 use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_scopes::scope_index::main::normalize_scope_path::normalize_scope_path;
+use sqlbuild_scopes::scope_index::main::rejected_path_message::rejected_path_message;
 use sqlbuild_scopes::scope_index::models::{
     OwnershipRoot, OwnershipRootKind, RejectedPath, ResourceIdentity, ResourceKind, ResourceRecord,
 };
@@ -14,7 +15,7 @@ use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::scopes::scope_lookup::{
-    NativeScopeLookup, ResolvedRows, TargetRows, path_message, scope_path_error,
+    NativeScopeLookup, ResolvedRows, TargetRows, scope_path_error,
 };
 use crate::bindings::_helpers::scopes::scope_objects::{
     ScopeClasses, qualified_row, read_resource, tuple_attribute,
@@ -217,7 +218,7 @@ fn scope_resolve_path_visibility(
                 failure,
                 path: text,
             };
-            return Err(scope_path_error(py, path_message(&rejected))?);
+            return Err(scope_path_error(py, rejected_path_message(&rejected))?);
         }
     };
     let resource: ResourceRecord = ResourceRecord {

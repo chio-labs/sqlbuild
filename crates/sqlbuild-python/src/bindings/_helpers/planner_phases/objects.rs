@@ -3,7 +3,7 @@
 use sqlbuild_host::entries::models::HostId;
 
 use crate::bindings::_helpers::boundary::python_calls::{call_with, keywords};
-use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
+use crate::bindings::_helpers::model_config::typed_config::{config_text, model_values};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
@@ -159,12 +159,7 @@ pub(crate) fn by_name<'py>(
 
 /// A model config value as text, `None` when absent or not text.
 pub(crate) fn config_str(model: &Bound<'_, PyAny>, key: &str) -> PyResult<Option<String>> {
-    authored_config_str(
-        &native_field(&native_field(model, "config")?, "values")?,
-        key,
-    )?
-    .map(|value| value.extract())
-    .transpose()
+    config_text(model.py(), &model_values(model)?, key)
 }
 
 /// The compiled object key of the model `name`.

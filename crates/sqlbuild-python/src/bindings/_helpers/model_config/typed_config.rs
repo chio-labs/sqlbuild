@@ -1,0 +1,163 @@
+//! Model config values read as typed config nodes, each key converted on first read and kept.
+
+use std::sync::{Arc, Mutex};
+
+use pyo3::exceptions::PyRuntimeError;
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::pyclass;
+use sqlbuild_model_config::config_values::errors::ConfigTypeError;
+use sqlbuild_model_config::config_values::main::checked_text::checked_text;
+use sqlbuild_model_config::config_values::models::ConfigNode;
+
+use crate::bindings::_helpers::compile_driver::stage_work::{TYPED_CONFIG_READS, count_stage};
+use crate::bindings::_helpers::model_config::config_nodes::{
+    HostHandle, PyConfigNode, config_node, config_object,
+};
+use crate::bindings::_helpers::model_config::config_values::config_value_type_error;
+use crate::bindings::_helpers::records::fields::{
+    cached_value, field as native_field, mapping_get, store_cached,
+};
+use crate::bindings::_helpers::records::models::NativeRecord;
+
+const CONFIG_FIELD: &str = "config";
+const VALUES_FIELD: &str = "values";
+/// The config record's cache slot holding its typed values; no Python attribute reads it.
+const TYPED_VALUES_SLOT: &str = "__typed_values__";
+const POISONED: &str = "typed config values cache is poisoned";
+
+/// The typed nodes of a config record's values read so far, by key.
+#[pyclass(module = "sqlbuild._native", frozen)]
+pub(crate) struct TypedConfigValues {
+    read: Mutex<Vec<(String, Arc<PyConfigNode>)>>,
+}
+
+/// A config record's values and the typed nodes read of them, each key converted on first read.
+pub(crate) type ConfigValues<'py> = (Bound<'py, PyAny>, Bound<'py, TypedConfigValues>);
+
+/// `values.get(key)` as a typed node, `None` when absent; each key is converted once.
+fn node(values: &ConfigValues<'_>, key: &str) -> PyResult<Arc<PyConfigNode>> {
+    let (mapping, typed) = values;
+    let py: Python<'_> = mapping.py();
+    let read: &Mutex<Vec<(String, Arc<PyConfigNode>)>> = &typed.get().read;
+    let poisoned = || PyRuntimeError::new_err(POISONED);
+    let found: Option<Arc<PyConfigNode>> = read
+        .lock()
+        .map_err(|_| poisoned())?
+        .iter()
+        .find(|(name, _)| name == key)
+        .map(|(_, node)| Arc::clone(node));
+    if let Some(node) = found {
+        return Ok(node);
+    }
+    let node: Arc<PyConfigNode> = Arc::new(config_node(&mapping_get(mapping, key)?)?);
+    count_stage(py, TYPED_CONFIG_READS, 1)?;
+    read.lock()
+        .map_err(|_| poisoned())?
+        .push((key.to_owned(), Arc::clone(&node)));
+    Ok(node)
+}
+
+/// A config record's values, their typed nodes kept on the record so each key converts once.
+pub(crate) fn typed_values<'py>(config: &Bound<'py, PyAny>) -> PyResult<ConfigValues<'py>> {
+    let py: Python<'py> = config.py();
+    let values: Bound<'py, PyAny> = native_field(config, VALUES_FIELD)?;
+    let fresh = || {
+        Bound::new(
+            py,
+            TypedConfigValues {
+                read: Mutex::new(Vec::new()),
+            },
+        )
+    };
+    let Ok(record) = config.cast::<NativeRecord>() else {
+        let typed: Bound<'py, TypedConfigValues> = fresh()?;
+        return Ok((values, typed));
+    };
+    let typed: Bound<'py, TypedConfigValues> = match cached_value(record, TYPED_VALUES_SLOT)? {
+        Some(typed) => typed.into_bound(py).cast_into()?,
+        None => {
+            let typed: Bound<'py, TypedConfigValues> = fresh()?;
+            store_cached(
+                record,
+                TYPED_VALUES_SLOT,
+                &typed.clone().into_any().unbind(),
+            )?;
+            typed
+        }
+    };
+    Ok((values, typed))
+}
+
+/// A model's config values as typed nodes, read key by key.
+pub(crate) fn model_values<'py>(model: &Bound<'py, PyAny>) -> PyResult<ConfigValues<'py>> {
+    typed_values(&native_field(model, CONFIG_FIELD)?)
+}
+
+/// The `ConfigValueTypeError` a typed read raises, naming the value's Python type.
+pub(crate) fn type_error(py: Python<'_>, error: &ConfigTypeError<'_, HostHandle>) -> PyErr {
+    let raised = || -> PyResult<PyErr> {
+        let actual_type = config_object(py, error.value)?.get_type().into_any();
+        Ok(PyErr::from_value(config_value_type_error(
+            &error.key,
+            error.expected,
+            &actual_type,
+        )?))
+    };
+    raised().unwrap_or_else(|error| error)
+}
+
+/// The exact text of a string node; a string Python cannot encode raises as reading it does.
+pub(crate) fn node_text(py: Python<'_>, node: &PyConfigNode) -> PyResult<String> {
+    match node {
+        ConfigNode::Str(text) => Ok(text.clone()),
+        ConfigNode::Host(host) if host.facts.strict_text => {
+            Ok(host.facts.text.clone().unwrap_or_default())
+        }
+        _ => config_object(py, node)?.extract(),
+    }
+}
+
+/// `key`'s string value, or `None` when absent or `None`.
+pub(crate) fn config_text(
+    py: Python<'_>,
+    values: &ConfigValues<'_>,
+    key: &str,
+) -> PyResult<Option<String>> {
+    let node: Arc<PyConfigNode> = node(values, key)?;
+    checked_text(key, Some(&node))
+        .map_err(|error| type_error(py, &error))?
+        .map(|value| node_text(py, value))
+        .transpose()
+}
+
+/// `key`'s string value as its Python object, or `None` when absent or `None`.
+pub(crate) fn config_text_object<'py>(
+    py: Python<'py>,
+    values: &ConfigValues<'_>,
+    key: &str,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let node: Arc<PyConfigNode> = node(values, key)?;
+    checked_text(key, Some(&node))
+        .map_err(|error| type_error(py, &error))?
+        .map(|value| config_object(py, value))
+        .transpose()
+}
+
+/// Whether `key` holds a string equal to `expected`, as Python's `==` compares them.
+pub(crate) fn config_text_is(
+    py: Python<'_>,
+    values: &ConfigValues<'_>,
+    key: &str,
+    expected: &str,
+) -> PyResult<bool> {
+    let node: Arc<PyConfigNode> = node(values, key)?;
+    let text: Option<&PyConfigNode> =
+        checked_text(key, Some(&node)).map_err(|error| type_error(py, &error))?;
+    Ok(match text {
+        Some(ConfigNode::Str(text)) => text == expected,
+        Some(ConfigNode::Host(host)) if host.facts.strict_text => {
+            host.facts.text.as_deref() == Some(expected)
+        }
+        _ => false,
+    })
+}

@@ -4,17 +4,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use pyo3::prelude::PyResult;
-
 use sqlbuild_analysis::assembly::analysis_session::models::{RelationTables, SessionRequest};
 use sqlbuild_cache::project_reuse::types::ImageSections;
+use sqlbuild_discovery::header_changes::types::HeaderKeys;
 use sqlbuild_rules::engine::main::retained_request::retained_request;
 use sqlbuild_rules::models::{EvaluateRequest, RetainedRows};
 
 /// Whether edits that report or raise errors compile as deltas; until then they fall back.
 pub(crate) const ERRORS_ON_DELTA_PATH: bool = true;
-
-/// One model's header keys with the digest of each authored value, sorted by key.
-pub(crate) type HeaderKeys = Vec<(String, String)>;
 
 /// What one model contributes to the partial-check reasons, apart from its dependencies.
 #[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

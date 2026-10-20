@@ -1,4 +1,4 @@
-//! Header key sets as the sorted lists native discovery options take.
+//! Header key sets as the sorted lists the discovery options take.
 
 /// A header key set as owned keys, sorted by code point as Python sorts them.
 pub(crate) fn sorted_keys(keys: &[&str]) -> Vec<String> {

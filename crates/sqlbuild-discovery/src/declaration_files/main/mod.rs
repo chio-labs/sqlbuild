@@ -1,4 +1,5 @@
 pub(crate) mod bare_number_failure;
+pub mod declaration_file_options;
 pub mod discover_declaration_collection;
 pub mod parse_declaration_text;
 pub mod python_function_files;

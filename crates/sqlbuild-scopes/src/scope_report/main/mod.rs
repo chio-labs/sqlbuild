@@ -1,5 +1,10 @@
 pub mod browse_scope_folders;
 pub mod build_scope_report;
+pub mod cached_completeness;
+pub mod cached_declaration_values;
+pub mod cached_diagnostic_facts;
+pub mod cached_projection_index;
+pub mod cached_report_records;
 pub mod explain_scope_declaration;
 pub mod list_scope_declarations;
 pub mod preview_scope_move;

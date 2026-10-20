@@ -15,6 +15,9 @@ use sqlbuild_model_config::header_metadata::main::parse_header_metadata::parse_h
 use sqlbuild_model_config::header_metadata::models::{DynamicFamily, ParsedColumn};
 use sqlbuild_model_config::model_validation::models::ColumnMigration;
 
+use crate::bindings::_helpers::compile_driver::stage_work::{
+    NATIVE_HEADER_COLUMNS, PARSED_HEADER_COLUMNS, count_stage,
+};
 use crate::bindings::_helpers::compiled_project::schema_facts::family_fact;
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::input_loops::model_loop::{
@@ -107,6 +110,13 @@ pub(crate) fn header_schema<'py>(
     let node = |value: Option<Bound<'py, PyAny>>| PyNode(value.unwrap_or_else(|| none.clone()));
     let model: (&str, &str) = (source.name, source.relative_path);
     let native: Option<&[NativeColumn]> = native_columns(context, source, columns.as_ref())?;
+    if columns.is_some() {
+        let stage = match native {
+            Some(_) => NATIVE_HEADER_COLUMNS,
+            None => PARSED_HEADER_COLUMNS,
+        };
+        count_stage(py, stage, 1)?;
+    }
     let python_columns: Option<Bound<'py, PyAny>> = if native.is_some() { None } else { columns };
     let metadata =
         parse_header_metadata(&node(python_columns), &node(audits), source.relative_path);

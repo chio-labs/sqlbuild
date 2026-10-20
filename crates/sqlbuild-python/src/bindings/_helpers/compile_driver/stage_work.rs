@@ -26,6 +26,12 @@ pub(crate) const FORMAT_LINT_FILES: &str = "format_lint_files";
 pub(crate) const SQL_TEST_ARTIFACT_PLANS: &str = "plan_compiled_sql_test_artifacts";
 pub(crate) const SQL_TEST_MODEL_CHAINS: &str = "sql_test_model_chain_names_by_key";
 pub(crate) const BACKGROUND_SQL_TEST_PLANS: &str = "background_sql_test_plans";
+/// Models whose header columns are reused from the native header parse.
+pub(crate) const NATIVE_HEADER_COLUMNS: &str = "native_header_columns";
+/// Models whose header columns are parsed again from their config values.
+pub(crate) const PARSED_HEADER_COLUMNS: &str = "parsed_header_columns";
+/// Config values converted into typed nodes for a key a reader asked for.
+pub(crate) const TYPED_CONFIG_READS: &str = "typed_config_reads";
 
 /// Compile stage runs since the last reset, by stage.
 #[pyclass]

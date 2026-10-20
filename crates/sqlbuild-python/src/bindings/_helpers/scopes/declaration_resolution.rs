@@ -7,6 +7,8 @@ use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{FromPyObject, intern};
 use sqlbuild_scopes::scope_index::main::normalize_scope_path::normalize_scope_path;
 use sqlbuild_scopes::scope_index::main::parse_identity::parse_identity;
+use sqlbuild_scopes::scope_index::main::posix_parent_text::posix_parent_text;
+use sqlbuild_scopes::scope_index::main::posix_path_text::posix_path_text;
 use sqlbuild_scopes::scope_index::models::{
     DeclarationIdentity, IdentityFailure, QualifiedIdentity, ResourceIdentity, ScopePathFailure,
 };
@@ -82,7 +84,10 @@ impl NativeDeclarationContexts {
                 native_field(record, "ownership_root")?.getattr(intern!(py, "path"))?;
             let key: Bound<'py, PyTuple> = PyTuple::new(
                 py,
-                [PyString::new(py, &posix_parent(&path)).into_any(), root],
+                [
+                    PyString::new(py, &posix_parent_text(&path)).into_any(),
+                    root,
+                ],
             )?;
             if let Some(cached) = cache.get_item(&key)? {
                 let consumer: Bound<'py, PyAny> = native_field(record, "identity")?;
@@ -187,7 +192,7 @@ impl NativeDeclarationContexts {
             let owner: String = owning_path
                 .filter(|path| !path.is_empty())
                 .unwrap_or_else(|| CURRENT_FOLDER.to_owned());
-            return Ok(posix_path(&format!(
+            return Ok(posix_path_text(&format!(
                 "{owner}{POSIX_SEPARATOR}{DECLARATION_STEM}"
             )));
         }
@@ -339,28 +344,6 @@ fn target_path(resolver: &Bound<'_, PyAny>, file_path: &str) -> PyResult<String>
         Ok(relative) => relative.to_string_lossy().into_owned(),
         Err(_) => file_path.to_owned(),
     })
-}
-
-/// `Path(path).parent.as_posix()` of a normalized relative path.
-fn posix_parent(path: &str) -> String {
-    match path.rfind(POSIX_SEPARATOR) {
-        Some(index) => posix_path(&path[..index]),
-        None => CURRENT_FOLDER.to_owned(),
-    }
-}
-
-/// `Path(path).as_posix()`: empty and `.` components dropped.
-fn posix_path(path: &str) -> String {
-    let absolute: bool = path.starts_with(POSIX_SEPARATOR);
-    let parts: Vec<&str> = path
-        .split(POSIX_SEPARATOR)
-        .filter(|part| !part.is_empty() && *part != CURRENT_FOLDER)
-        .collect();
-    match (absolute, parts.is_empty()) {
-        (true, _) => format!("{POSIX_SEPARATOR}{}", parts.join("/")),
-        (false, true) => CURRENT_FOLDER.to_owned(),
-        (false, false) => parts.join("/"),
-    }
 }
 
 fn raised(class: &Bound<'_, PyAny>, message: &str) -> PyErr {

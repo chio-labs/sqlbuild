@@ -8,6 +8,7 @@ use pyo3::types::{
     PyTypeMethods,
 };
 use sqlbuild_core::json::models::{JsonInteger, JsonValue};
+use sqlbuild_scopes::scope_report::main::cached_diagnostic_facts::cached_diagnostic_facts;
 use sqlbuild_scopes::scope_report::models::{
     BrowseResult, DeclarationReport, DeclarationTarget, Explanation, ListResult, MovePreview,
     Provenance, QueryTarget, ReportDiagnostic, ReportFilters, ResourceReport, ScopeChainEntry,
@@ -17,8 +18,7 @@ use sqlbuild_scopes::scope_report::models::{
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::scopes::scope_objects::{
-    ScopeClasses, diagnostic_facts, field, optional_item, read_declaration_identity,
-    read_diagnostic, read_qualified,
+    ScopeClasses, field, optional_item, read_declaration_identity, read_diagnostic, read_qualified,
 };
 
 type PyObject = Py<PyAny>;
@@ -553,9 +553,9 @@ fn read_diagnostics(item: &Bound<'_, PyAny>) -> PyResult<Vec<ReportDiagnostic>> 
     native_field(item, "diagnostics")?
         .try_iter()?
         .map(|diagnostic| {
-            Ok(ReportDiagnostic::Raised(diagnostic_facts(read_diagnostic(
-                &diagnostic?,
-            )?)))
+            Ok(ReportDiagnostic::Raised(cached_diagnostic_facts(
+                read_diagnostic(&diagnostic?)?,
+            )))
         })
         .collect()
 }

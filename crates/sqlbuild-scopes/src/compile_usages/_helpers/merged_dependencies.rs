@@ -7,7 +7,7 @@ use crate::compile_usages::models::DependencySource;
 
 /// Per declaration, `None` without macro metadata, else own then consumed dependencies, deduped.
 #[must_use]
-pub fn merged_dependencies<K: Hash + Eq>(
+pub(crate) fn merged_dependencies<K: Hash + Eq>(
     declarations: &[(K, Option<Vec<K>>)],
     usages: &[(Option<K>, K)],
 ) -> Vec<Option<Vec<DependencySource>>> {

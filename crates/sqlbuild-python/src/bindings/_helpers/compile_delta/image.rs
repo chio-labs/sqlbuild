@@ -7,13 +7,13 @@ use sqlbuild_analysis::assembly::analysis_session::types::Shapes;
 use sqlbuild_cache::project_reuse::types::ImageSections;
 use sqlbuild_rules::models::RetainedRows;
 
-use crate::bindings::_helpers::compile_context::delta::HeaderKeys;
 use crate::bindings::_helpers::compile_context::delta::ModelCoverage;
 use crate::bindings::_helpers::compile_context::delta::{BaseRules, PendingRules};
 use crate::bindings::_helpers::compile_context::delta::{
     CapturedDiagnostic, CapturedModel, CapturedTest, ImageCapture, ModelShape,
 };
 use crate::bindings::_helpers::compile_context::image_codec::{Decoder, Encoder};
+use sqlbuild_discovery::header_changes::types::HeaderKeys;
 
 /// Changes whenever the image's meaning changes, so an older image is never read.
 pub(crate) const IMAGE_FORMAT: &str = "sqlbuild-project-image-v8";

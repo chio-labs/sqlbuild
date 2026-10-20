@@ -10,6 +10,8 @@ mod macro_source_digest;
 mod parse_identity;
 #[path = "tests/test_path_visible.rs"]
 mod path_visible;
+#[path = "tests/test_posix_path_text.rs"]
+mod posix_path_text;
 #[path = "tests/test_relationship_grants.rs"]
 mod relationship_grants;
 #[path = "tests/test_report_lookup.rs"]

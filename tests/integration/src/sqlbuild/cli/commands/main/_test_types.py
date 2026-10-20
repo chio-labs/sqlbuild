@@ -1199,3 +1199,12 @@ class CustomHostOutcomeTestCase:
     rule_body: str
     expected_exit_code: int
     expected_messages: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TypedConfigReadsTestCase:
+    """Config keys planning never reads, added to every model of a planned project."""
+
+    description: str
+    unread_keys: str
+    expected_same_reads: bool

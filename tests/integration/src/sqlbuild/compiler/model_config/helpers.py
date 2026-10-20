@@ -6,8 +6,9 @@ import random
 import re
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, fields, replace
+from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeGuard, cast
+from typing import TYPE_CHECKING, ClassVar, TypeGuard, cast
 
 import pytest
 
@@ -29,7 +30,7 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
 
-    from sqlbuild._native import CompileInputsView
+    from sqlbuild._native import CompileInputsView, CompileModelConfig
 
 _TEXTS: tuple[object, ...] = (
     "INTEGER",
@@ -533,3 +534,201 @@ def column_metadata_outcome(*, project_dir: Path, header_column: str) -> tuple[o
         tuple[object, ...], _entry_metadata(inputs.model_inputs[0].schema_entry)[0]
     )
     return getattr(columns[0], "type", None), None
+
+
+CONFIG_VALUE_PROJECT: dict[str, str] = {
+    "sqlbuild_project.toml": (
+        'name = "orders"\nadapter = "duckdb"\ndefault_target = "dev"\n\n'
+        '[connections.local]\ndatabase = "orders.duckdb"\n\n'
+        '[vars]\nregion = "north"\nratio = "0.5"\n\n'
+        '[defaults]\nmaterialized = "table"\ncontract = "enforced"\ntags = ["core"]\n\n'
+        '[path_defaults."marts"]\nrow_diff_exclude_columns = ["loaded_at"]\ntags = ["mart"]\n\n'
+        '[targets.dev]\nconnection = "local"\nschema = "${region}_${CTX:model.name}"\n'
+    ),
+    "models/marts/orders.sql": 'MODEL (description "Orders.");\n\nSELECT 1 AS order_id\n',
+}
+
+
+class Severity(StrEnum):
+    """A string enum whose members config values and keys hold as themselves."""
+
+    WARN = "warn"
+
+
+class TagList(list[object]):
+    """A list subclass a Python caller may pass as a config value."""
+
+
+class SettingMap(dict[str, object]):
+    """A dict subclass a Python caller may pass as a config value."""
+
+
+class Marker:
+    """An opaque object the build carries through without reading it."""
+
+    def __repr__(self) -> str:
+        return "Marker()"
+
+
+MARKER: Marker = Marker()
+
+
+def config_value_inputs(
+    *, project_dir: Path, header: dict[object, object], cli_vars: dict[str, object] | None = None
+) -> CompileInputsView:
+    """Build compile inputs for the config value project with its one model's header replaced."""
+
+    for relative_path, contents in CONFIG_VALUE_PROJECT.items():
+        path: Path = project_dir / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents, encoding="utf-8")
+    discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
+    model_file: DiscoveredSqlModelFile = discovered.model_files[0]
+    given: DiscoveredSqlModelFile = DiscoveredSqlModelFile(
+        file_path=model_file.file_path,
+        relative_path=model_file.relative_path,
+        contents=model_file.contents,
+        header_values=cast("dict[str, object]", header),
+        header_column_locations={},
+        output_column_locations={},
+        query_sql=model_file.query_sql,
+    )
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    return build_compile_inputs(
+        discovered_inputs=replace(discovered, model_files=(given,)),
+        adapter_context=CompileAdapterContext(
+            value_renderer=adapter,
+            collection_rendering=resolve_effective_collection_rendering(
+                project_config=discovered.project_config, declaration_override=None
+            ),
+            python_functions_inherit_default_namespace=(
+                adapter.python_functions_inherit_default_namespace()
+            ),
+            sql_lexical_syntax=adapter.sql_lexical_syntax,
+        ),
+        cli_vars=cli_vars,
+        run_id="20261007T000000Z_orders",
+        resolved_connection={},
+        no_sql_validation=True,
+        defer_model_sql_validation=True,
+        no_cache=True,
+    )
+
+
+def config_value_outcome(
+    *, project_dir: Path, header: dict[object, object]
+) -> tuple[tuple[tuple[str, str, str], ...], tuple[str, ...]]:
+    """The model's config values as `(key repr, value type, value repr)` and its header keys."""
+
+    config: CompileModelConfig = (
+        config_value_inputs(project_dir=project_dir, header=header).model_inputs[0].config
+    )
+    return (
+        tuple(
+            (repr(key), type(value).__name__, repr(value)) for key, value in config.values.items()
+        ),
+        config.model_header_keys,
+    )
+
+
+def marker_kept(*, project_dir: Path, header: dict[object, object], key: object) -> bool:
+    """Whether the opaque value under `key` reaches the model's config values as the same object."""
+
+    config: CompileModelConfig = (
+        config_value_inputs(project_dir=project_dir, header=header).model_inputs[0].config
+    )
+    return config.values[cast("str", key)] is MARKER
+
+
+def header_column_paths(*, project_dir: Path, headers: tuple[str, ...]) -> tuple[int, int]:
+    """How many models reuse their natively parsed header columns, and how many reparse them."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": CONFIG_VALUE_PROJECT["sqlbuild_project.toml"],
+        **{
+            f"models/marts/orders_{index}.sql": f"MODEL ({header});\n\nSELECT 1 AS order_id\n"
+            for index, header in enumerate(headers)
+        },
+    }
+    for relative_path, contents in files.items():
+        path: Path = project_dir / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents, encoding="utf-8")
+    discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    _ = _native.compile_stage_work_info(reset=True)
+    _ = build_compile_inputs(
+        discovered_inputs=discovered,
+        adapter_context=CompileAdapterContext(
+            value_renderer=adapter,
+            collection_rendering=resolve_effective_collection_rendering(
+                project_config=discovered.project_config, declaration_override=None
+            ),
+            python_functions_inherit_default_namespace=(
+                adapter.python_functions_inherit_default_namespace()
+            ),
+            sql_lexical_syntax=adapter.sql_lexical_syntax,
+        ),
+        run_id="20261007T000000Z_orders",
+        resolved_connection={},
+        no_sql_validation=True,
+        defer_model_sql_validation=True,
+        no_cache=True,
+    )
+    work: dict[str, int] = _native.compile_stage_work_info(reset=True)
+    return (work.get("native_header_columns", 0), work.get("parsed_header_columns", 0))
+
+
+class Exploding:
+    """An opaque value whose `str()` and `repr()` raise and count each call."""
+
+    calls: ClassVar[list[str]] = []
+
+    def __str__(self) -> str:
+        Exploding.calls.append("str")
+        raise ValueError("no str")
+
+    def __repr__(self) -> str:
+        Exploding.calls.append("repr")
+        raise ValueError("no repr")
+
+
+class ExplodingText(str):
+    """A string whose `str()` raises, which config unions print."""
+
+    __slots__ = ()
+
+    def __str__(self) -> str:
+        raise ValueError("no str")
+
+
+def templated_alias(
+    *, project_dir: Path, header: dict[object, object], cli_vars: dict[str, object]
+) -> tuple[str, str]:
+    """The model's built alias as `("alias", text)`, or the raised error as `(type, message)`."""
+
+    try:
+        config: CompileModelConfig = (
+            config_value_inputs(project_dir=project_dir, header=header, cli_vars=cli_vars)
+            .model_inputs[0]
+            .config
+        )
+    except Exception as error:
+        return (type(error).__name__, str(error))
+    return ("alias", str(config.values.get("alias")))
+
+
+def opaque_reads(*, project_dir: Path) -> tuple[bool, tuple[str, ...]]:
+    """Whether an opaque header value reaches the config, and which of its texts compiling read."""
+
+    Exploding.calls.clear()
+    marker: Exploding = Exploding()
+    config: CompileModelConfig = (
+        config_value_inputs(
+            project_dir=project_dir,
+            header={"description": "x", "alias": "${region}", Severity.WARN: marker},
+        )
+        .model_inputs[0]
+        .config
+    )
+    return (config.values[cast("str", Severity.WARN)] is marker, tuple(Exploding.calls))

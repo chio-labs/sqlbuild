@@ -15,7 +15,7 @@ use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::cursor::scalars::{parse_value, render_value};
-use crate::bindings::_helpers::model_config::config_values::config_str;
+use crate::bindings::_helpers::model_config::typed_config::{config_text_object, model_values};
 use crate::bindings::_helpers::records::construct::{enum_from_value, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
@@ -238,8 +238,8 @@ fn ordering(left: &Bound<'_, PyAny>, right: &Bound<'_, PyAny>) -> PyResult<Order
 /// The cursor type and timestamp grain a model's config declares.
 fn model_cursor<'py>(model: &Bound<'py, PyAny>) -> PyResult<ModelCursor<'py>> {
     let py = model.py();
-    let values = native_field(&native_field(model, "config")?, "values")?;
-    let declared = config_str(&values, "cursor_type")?.filter(|value| {
+    let values = model_values(model)?;
+    let declared = config_text_object(py, &values, "cursor_type")?.filter(|value| {
         value
             .extract::<String>()
             .is_ok_and(|value| !value.is_empty())
@@ -248,7 +248,7 @@ fn model_cursor<'py>(model: &Bound<'py, PyAny>) -> PyResult<ModelCursor<'py>> {
         declared.unwrap_or_else(|| PyString::new(py, TIMESTAMP_CURSOR_TYPE).into_any()),
     ))?;
     let type_name: String = native_field(&cursor_type, "value")?.extract()?;
-    let grain = match config_str(&values, "cursor_grain")? {
+    let grain = match config_text_object(py, &values, "cursor_grain")? {
         Some(grain) if type_name == TIMESTAMP_CURSOR_TYPE => {
             let grain = enum_from_value(py, RecordId::CursorGrain, grain)?;
             let session = CursorSession::new(py)?;
