@@ -1,4 +1,5 @@
-use crate::config_values::models::{ConfigNode, HostChildren, HostFacts, HostValue};
+use crate::config_values::errors::ConfigTypeError;
+use crate::config_values::models::{ConfigNode, CursorBound, HostChildren, HostFacts, HostValue};
 use crate::config_values::tests::test_types::Node;
 use crate::types::NodeKind;
 
@@ -30,4 +31,55 @@ pub(super) fn host_text(value: &str) -> Node {
 /// A list of string nodes.
 pub(super) fn texts(values: &[&str]) -> Node {
     ConfigNode::List(values.iter().map(|value| text(value)).collect())
+}
+
+/// A `datetime.date` host value.
+pub(super) fn host_date() -> Node {
+    ConfigNode::Host(Box::new(HostValue {
+        handle: 2,
+        facts: HostFacts {
+            kind: NodeKind::Other,
+            text: None,
+            strict_text: false,
+            integer: None,
+            number: None,
+            python_str: "2024-01-02".to_owned(),
+            strict_str: true,
+            python_repr: "datetime.date(2024, 1, 2)".to_owned(),
+            date_like: true,
+            hook_entry: false,
+        },
+        children: HostChildren::None,
+    }))
+}
+
+/// `value`, `none`, or the expected kind of a typed read's outcome.
+pub(super) fn outcome<T>(result: Result<Option<T>, ConfigTypeError<'_, u8>>) -> String {
+    result.map_or_else(
+        |error| error.expected.to_owned(),
+        |value| value.map_or("none", |_| "value").to_owned(),
+    )
+}
+
+/// `dated`, `stringified`, `none`, or the expected kind of a cursor bound read.
+pub(super) fn cursor_outcome(
+    result: Result<Option<CursorBound<'_, u8>>, ConfigTypeError<'_, u8>>,
+) -> String {
+    result.map_or_else(
+        |error| error.expected.to_owned(),
+        |bound| {
+            let kinds = [
+                ("dated", matches!(bound, Some(CursorBound::Dated(_)))),
+                (
+                    "stringified",
+                    matches!(bound, Some(CursorBound::Stringified(_))),
+                ),
+            ];
+            kinds
+                .iter()
+                .find(|(_, found)| *found)
+                .map_or("none", |(kind, _)| kind)
+                .to_owned()
+        },
+    )
 }

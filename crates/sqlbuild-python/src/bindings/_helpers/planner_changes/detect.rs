@@ -4,7 +4,7 @@ use sqlbuild_host::entries::models::{ExecutorHost, UserCodeHost};
 
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::contracts::spec_resolution::matching_dynamic_families;
-use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
+use crate::bindings::_helpers::model_config::typed_config::{config_text, model_values};
 use crate::bindings::_helpers::planner_changes::results::native_enum;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -437,12 +437,7 @@ pub(crate) fn model_change<'py>(
 /// The model's resolved `replay_on_change` policy.
 fn replay_policy(model: &Bound<'_, PyAny>) -> PyResult<Backfill> {
     let py: Python<'_> = model.py();
-    let raw: Option<String> = authored_config_str(
-        &native_field(&native_field(model, "config")?, "values")?,
-        REPLAY_CONFIG_KEY,
-    )?
-    .map(|value| value.extract())
-    .transpose()?;
+    let raw: Option<String> = config_text(py, &model_values(model)?, REPLAY_CONFIG_KEY)?;
     resolve_replay_on_change(raw.as_deref()).map_err(|error| replay_policy_error(py, error))
 }
 

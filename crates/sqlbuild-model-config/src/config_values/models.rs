@@ -62,3 +62,10 @@ pub struct LayeredConfig<H> {
     /// The keys both layers set whose merged value is a union of the two.
     pub unioned_keys: Vec<&'static str>,
 }
+
+/// How a cursor bound reads as text: its `str()`, or its `isoformat()` for a date or datetime.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum CursorBound<'a, H> {
+    Stringified(&'a ConfigNode<H>),
+    Dated(&'a ConfigNode<H>),
+}

@@ -1,7 +1,7 @@
 //! Boundary conversions for the column migration planner.
 
 use crate::bindings::_helpers::compiled_views::model_reads;
-use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
+use crate::bindings::_helpers::model_config::typed_config::{config_text_object, model_values};
 use crate::bindings::_helpers::planner_identity::hashing::model_definition_hash;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::records::construct::new_record_with;
@@ -47,11 +47,9 @@ pub(super) fn native<'py>(
 }
 
 pub(super) fn config<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
-    Ok(authored_config_str(
-        &native_field(&native_field(model, "config")?, "values")?,
-        key,
-    )?
-    .unwrap_or_else(|| model.py().None().into_bound(model.py())))
+    let py = model.py();
+    Ok(config_text_object(py, &model_values(model)?, key)?
+        .unwrap_or_else(|| py.None().into_bound(py)))
 }
 
 pub(super) fn definition_hash<'py>(

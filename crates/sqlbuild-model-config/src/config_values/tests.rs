@@ -1,3 +1,5 @@
+#[path = "tests/test_checked_reads.rs"]
+mod checked_reads;
 #[path = "tests/test_config_entry.rs"]
 mod config_entry;
 #[path = "tests/helpers.rs"]

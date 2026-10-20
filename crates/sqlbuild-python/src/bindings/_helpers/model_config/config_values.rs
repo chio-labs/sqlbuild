@@ -1,29 +1,23 @@
 //! Typed values read from raw authored configuration mappings, rejecting the wrong types.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult};
-use pyo3::types::{PyBool, PyInt, PyList, PyString, PyTuple};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
+use pyo3::types::{PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_model_config::config_values::main::checked_cursor_bound::checked_cursor_bound;
+use sqlbuild_model_config::config_values::main::checked_flag::checked_flag;
+use sqlbuild_model_config::config_values::main::checked_integer::checked_integer;
+use sqlbuild_model_config::config_values::main::checked_text::checked_text;
+use sqlbuild_model_config::config_values::main::checked_texts::checked_texts;
+use sqlbuild_model_config::config_values::models::CursorBound;
 
-use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
+use crate::bindings::_helpers::boundary::python_calls::call_with;
+use crate::bindings::_helpers::model_config::config_nodes::{PyConfigNode, config_node};
+use crate::bindings::_helpers::model_config::typed_config::type_error;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::ErrorId;
 
-const DATETIME_MODULE: &str = "datetime";
-
-/// `values.get(key)`, or `None` when the value is absent or `None`.
-fn authored<'py>(values: &Bound<'py, PyAny>, key: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let value: Bound<'py, PyAny> = mapping_get(values, key)?;
-    Ok(Some(value).filter(|value| !value.is_none()))
-}
-
-/// `ConfigValueTypeError(key=key, expected=expected, actual_type=type(value))`.
-fn wrong_type(key: &str, expected: &str, value: &Bound<'_, PyAny>) -> PyErr {
-    match config_value_type_error(key, expected, &value.get_type().into_any()) {
-        Ok(error) => PyErr::from_value(error),
-        Err(error) => error,
-    }
-}
+const ISOFORMAT_METHOD: &str = "isoformat";
 
 /// The `ConfigValueTypeError` naming `key`, the `expected` kind and the value's `actual_type`.
 pub(crate) fn config_value_type_error<'py>(
@@ -51,6 +45,15 @@ pub(crate) fn config_value_type_error<'py>(
     )
 }
 
+/// `values.get(key)` as a config node.
+fn authored_node<'py>(
+    values: &Bound<'py, PyAny>,
+    key: &str,
+) -> PyResult<(PyConfigNode, Bound<'py, PyAny>)> {
+    let value = mapping_get(values, key)?;
+    Ok((config_node(&value)?, value))
+}
+
 /// An authored string, preserving a present empty string.
 #[pyfunction(name = "get_config_str")]
 #[pyo3(signature = (*, values, key))]
@@ -58,13 +61,10 @@ pub(crate) fn config_str<'py>(
     values: &Bound<'py, PyAny>,
     key: &str,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let Some(value) = authored(values, key)? else {
-        return Ok(None);
-    };
-    if !value.is_instance_of::<PyString>() {
-        return Err(wrong_type(key, "a string", &value));
-    }
-    Ok(Some(value))
+    let (node, value) = authored_node(values, key)?;
+    let checked =
+        checked_text(key, Some(&node)).map_err(|error| type_error(values.py(), &error))?;
+    Ok(checked.map(|_| value))
 }
 
 /// An authored boolean, or `None` when the key is absent or `None`.
@@ -74,13 +74,10 @@ pub(crate) fn config_bool<'py>(
     values: &Bound<'py, PyAny>,
     key: &str,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let Some(value) = authored(values, key)? else {
-        return Ok(None);
-    };
-    if !value.is_instance_of::<PyBool>() {
-        return Err(wrong_type(key, "a boolean", &value));
-    }
-    Ok(Some(value))
+    let (node, value) = authored_node(values, key)?;
+    let checked =
+        checked_flag(key, Some(&node)).map_err(|error| type_error(values.py(), &error))?;
+    Ok(checked.map(|_| value))
 }
 
 /// An authored sequence of strings as a tuple, or `None` when absent or `None`.
@@ -90,16 +87,13 @@ pub(crate) fn config_string_tuple<'py>(
     values: &Bound<'py, PyAny>,
     key: &str,
 ) -> PyResult<Option<Bound<'py, PyTuple>>> {
-    let Some(value) = authored(values, key)? else {
+    let (node, value) = authored_node(values, key)?;
+    let checked =
+        checked_texts(key, Some(&node)).map_err(|error| type_error(values.py(), &error))?;
+    if checked.is_none() {
         return Ok(None);
-    };
-    if !(value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>()) {
-        return Err(wrong_type(key, "a list or tuple of strings", &value));
     }
     let items: Vec<Bound<'py, PyAny>> = value.try_iter()?.collect::<PyResult<_>>()?;
-    if !items.iter().all(|item| item.is_instance_of::<PyString>()) {
-        return Err(wrong_type(key, "a list or tuple of strings", &value));
-    }
     PyTuple::new(values.py(), items).map(Some)
 }
 
@@ -110,13 +104,10 @@ pub(crate) fn config_int<'py>(
     values: &Bound<'py, PyAny>,
     key: &str,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let Some(value) = authored(values, key)? else {
-        return Ok(None);
-    };
-    if value.is_instance_of::<PyBool>() || !value.is_instance_of::<PyInt>() {
-        return Err(wrong_type(key, "an integer", &value));
-    }
-    Ok(Some(value))
+    let (node, value) = authored_node(values, key)?;
+    let checked =
+        checked_integer(key, Some(&node)).map_err(|error| type_error(values.py(), &error))?;
+    Ok(checked.map(|_| value))
 }
 
 /// A cursor bound as text from a string, integer, date or datetime.
@@ -126,26 +117,14 @@ pub(crate) fn config_cursor_bound<'py>(
     values: &Bound<'py, PyAny>,
     key: &str,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let Some(value) = authored(values, key)? else {
-        return Ok(None);
-    };
-    let py = values.py();
-    let date: Bound<'py, PyAny> = imported(py, DATETIME_MODULE, "date")?;
-    let datetime: Bound<'py, PyAny> = imported(py, DATETIME_MODULE, "datetime")?;
-    let dated: bool = value.is_instance(&date)? || value.is_instance(&datetime)?;
-    if value.is_instance_of::<PyBool>()
-        || !(dated || value.is_instance_of::<PyString>() || value.is_instance_of::<PyInt>())
-    {
-        return Err(wrong_type(
-            key,
-            "a string, integer, date, or datetime",
-            &value,
-        ));
-    }
-    if dated {
-        return value.call_method0("isoformat").map(Some);
-    }
-    value.str().map(|text| Some(text.into_any()))
+    let (node, value) = authored_node(values, key)?;
+    let checked =
+        checked_cursor_bound(key, Some(&node)).map_err(|error| type_error(values.py(), &error))?;
+    Ok(match checked {
+        None => None,
+        Some(CursorBound::Dated(_)) => Some(value.call_method0(ISOFORMAT_METHOD)?),
+        Some(CursorBound::Stringified(_)) => Some(value.str()?.into_any()),
+    })
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

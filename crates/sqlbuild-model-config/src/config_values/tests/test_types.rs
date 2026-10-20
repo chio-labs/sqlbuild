@@ -24,3 +24,14 @@ pub(super) struct ConfigEntryTestCase {
     pub(super) key: &'static str,
     pub(super) expected_value: Option<Node>,
 }
+
+/// One config value and how each typed reader reads it: `value`, `none`, or the expected kind.
+pub(super) struct CheckedReadTestCase {
+    pub(super) description: &'static str,
+    pub(super) value: Option<Node>,
+    pub(super) expected_text: &'static str,
+    pub(super) expected_flag: &'static str,
+    pub(super) expected_integer: &'static str,
+    pub(super) expected_texts: &'static str,
+    pub(super) expected_cursor_bound: &'static str,
+}
