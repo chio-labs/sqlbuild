@@ -985,3 +985,26 @@ def diagnostics_by_model(diagnostics: list[dict[str, object]]) -> dict[str, str]
         name: str = cast(str, item["resource_name"])
         by_model[name] = json.dumps(item, sort_keys=True).replace(name, "<model>")
     return by_model
+
+
+def typed_config_reads(*, project_dir: Path, extra_header: str) -> int:
+    """How many config values planning converted into typed nodes for three cursor models."""
+
+    project_dir.mkdir(parents=True)
+    (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\ndefault_target = "dev"\n\n'
+        '[connections.local]\ndatabase = ":memory:"\n\n[targets.dev]\nschema = "main"\n',
+        encoding="utf-8",
+    )
+    models_dir: Path = project_dir / "models"
+    models_dir.mkdir()
+    for index in range(3):
+        (models_dir / f"orders_{index}.sql").write_text(
+            f'MODEL (description "Orders.", materialized table, tags ["daily"]{extra_header});\n\n'
+            f"SELECT {index} AS order_id, 1 AS loaded_at\n",
+            encoding="utf-8",
+        )
+    _ = native_module.compile_stage_work_info(reset=True)
+    exit_code: int = main(["--project-dir", str(project_dir), "plan", "--json", "--no-cache"])
+    assert exit_code == 0
+    return native_module.compile_stage_work_info(reset=True).get("typed_config_reads", 0)

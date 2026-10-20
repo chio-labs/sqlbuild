@@ -14,7 +14,7 @@ use sqlbuild_analysis::planner_strategy::types::ReferenceGraph;
 
 use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;
 use crate::bindings::_helpers::compiled_views::model_reads;
-use crate::bindings::_helpers::model_config::typed_config::{config_text, model_values};
+use crate::bindings::_helpers::model_config::typed_config::{config_text_is, model_values};
 use crate::bindings::_helpers::planner_strategy::microbatches::{
     CAP_ACTIONS, microbatch_limit_config,
 };
@@ -49,8 +49,12 @@ fn references<'py>(owner: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>
 
 /// Whether a model's `incremental_mode` is microbatch.
 fn microbatch_flag(model: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let mode: Option<String> = config_text(model.py(), &model_values(model)?, "incremental_mode")?;
-    Ok(mode.as_deref() == Some(MICROBATCH_MODE))
+    config_text_is(
+        model.py(),
+        &model_values(model)?,
+        "incremental_mode",
+        MICROBATCH_MODE,
+    )
 }
 
 /// A model's watermark input names.

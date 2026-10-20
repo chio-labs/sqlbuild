@@ -30,6 +30,8 @@ pub(crate) const BACKGROUND_SQL_TEST_PLANS: &str = "background_sql_test_plans";
 pub(crate) const NATIVE_HEADER_COLUMNS: &str = "native_header_columns";
 /// Models whose header columns are parsed again from their config values.
 pub(crate) const PARSED_HEADER_COLUMNS: &str = "parsed_header_columns";
+/// Config values converted into typed nodes for a key a reader asked for.
+pub(crate) const TYPED_CONFIG_READS: &str = "typed_config_reads";
 
 /// Compile stage runs since the last reset, by stage.
 #[pyclass]
