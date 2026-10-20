@@ -21,8 +21,8 @@ A self-hosted web app for your SQLBuild project:
 
 ## Later
 
-- Moving BigQuery, Databricks and SQL Server from beta to supported.
-- More warehouses, such as ClickHouse, Redshift and Trino.
+- Moving BigQuery, ClickHouse, Databricks, SQLite and SQL Server from beta to supported.
+- More warehouses, such as Redshift and Trino.
 
 ## Not planned
 

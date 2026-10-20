@@ -15,6 +15,7 @@ Online: https://sqlbuild.com/docs/concepts/adapters/sqlite/
 - Capabilities
 - Scenarios
 - Limits
+- Recall store
 
 SQLite uses the `sqlite3` module that ships with Python. No extra installation is needed.
 SQLBuild requires SQLite 3.44 or newer; Python builds installed by `uv` bundle a recent version.
@@ -130,3 +131,9 @@ as `datetime(ordered_at, 'start of day')`, have no DuckDB translation and fail l
 | SQLite older than 3.44 | `A701` |
 | Another process holds the write lock beyond `busy_timeout` | `A702` |
 | Concurrent microbatch writes: one file has one writer | refused at plan time |
+
+## Recall store
+
+[Recall](../observability/recall.md) keeps its local history in a SQLite file,
+`logs/recall.sqlite3`, for every project, whichever adapter it builds with. Point
+`[recall] connection` at a `sqlite` connection to put the file somewhere else.

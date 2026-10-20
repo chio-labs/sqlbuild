@@ -118,11 +118,11 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | Feature | SQLBuild | dbt | SQLMesh |
 |---------|----------|-----|---------|
 | Reference syntax | `__ref()` - parses as valid SQL | `{{ ref() }}` - Jinja template | `model_name` with dependency tracking |
-| Adapters | DuckDB, MotherDuck, Snowflake, BigQuery, Databricks, PostgreSQL, SQL Server | 30+ (community adapters) | DuckDB, Snowflake, BigQuery, Databricks, Spark, Redshift, Postgres, Trino, MySQL |
+| Adapters | DuckDB, MotherDuck, Snowflake, BigQuery, Databricks, PostgreSQL, SQL Server, ClickHouse, SQLite | 30+ (community adapters) | DuckDB, Snowflake, BigQuery, Databricks, Spark, Redshift, Postgres, Trino, MySQL |
 | State requirements | Stateless by default | manifest.json + target/ | Requires state store (local database or PostgreSQL for production) |
 | Playground | `sqb playground` | Clone example repo | Example project |
 | AI agent skills | General guidance with `sqb skills`; Rules guidance with `sqb rules skills` | No | No |
-| Execution observability | Immutable schema-versioned lifecycle facts, invocation-local ordering, orchestration context, and typed project sinks | Events/artifacts plus external observability | Plans, state, and external observability |
+| Execution observability | Recall: every command's statements, SQL, audit results and output, queryable with SQL locally or in ClickHouse; immutable schema-versioned lifecycle facts and typed project sinks | Events/artifacts plus external observability | Plans, state, and external observability |
 
 ## Where each tool fits
 
@@ -134,4 +134,4 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 
 ## Not yet in SQLBuild
 
-- **Broader adapter support** - ClickHouse, Redshift, Trino, Spark, Athena
+- **Broader adapter support** - Redshift, Trino, Spark, Athena

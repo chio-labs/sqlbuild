@@ -362,12 +362,45 @@ lifetime_orders
 <span class="ok">Relations to archive</span>
   prod.weekly_revenue  -&gt;  prod._sqb_archive__20260925t155417z__weekly_revenue  <span class="dim">…</span></pre>
 						</div>
+						<p class="step-group">After production changes</p>
+						<div class="step">
+							<div class="step-text">
+								<span class="num">09 · Investigate</span>
+								<h3>Find out what happened, then check what's true now</h3>
+								<p>
+									Every run is recorded: what ran, the SQL it executed, audit results and everything it printed. Agents and people ask in SQL, then check live state with the same command.
+								</p>
+							</div>
+<pre class="terminal"><span class="cmd">sqb recall query &quot;SELECT substr(invocation_started_at, 1, 16) AS run, outcome,
+  violation_count FROM audit_results WHERE audit_name = 'revenue_is_non_negative'
+  ORDER BY run DESC LIMIT 3&quot;</span>
+run               <span class="dim">|</span> outcome <span class="dim">|</span> violation_count
+2026-10-20T00:01  <span class="dim">|</span> <span class="warn">warn</span>    <span class="dim">|</span> <span class="warn">1</span>
+2026-10-20T00:00  <span class="dim">|</span> <span class="ok">pass</span>    <span class="dim">|</span> 0
+2026-10-19T23:59  <span class="dim">|</span> <span class="ok">pass</span>    <span class="dim">|</span> 0
+
+<span class="cmd">sqb recall output last --tail 4</span>
+  daily_revenue
+    audit revenue_is_non_negative returned 1 row
+<span class="warn strong">✓ Completed with warnings</span>  PASS=89  WARN=1  FAIL=0  <span class="dim">…</span>
+
+<span class="cmd">sqb recall query --backend warehouse &quot;SELECT r.revenue_date, r.total_revenue_cents,
+  p.payment_id, p.amount_cents FROM prod.daily_revenue r JOIN prod.stg_payments p
+  ON CAST(p.paid_at AS DATE) = r.revenue_date WHERE p.amount_cents &lt; 0&quot;</span>
+revenue_date <span class="dim">|</span> total_revenue_cents <span class="dim">|</span> payment_id <span class="dim">|</span> amount_cents
+2026-04-03   <span class="dim">|</span> <span class="warn">-1250</span>               <span class="dim">|</span> 9          <span class="dim">|</span> <span class="warn">-2200</span></pre>
+						</div>
 					</div>
 					<p class="caption">
 						Real output from SQLBuild's example project, trimmed to the relevant lines. During a migration the old
 						table is never modified, archives can be renamed back until they expire, and every move is recorded.
+						In step 09 the audit started warning on the latest run, the build still finished, and the bad
+						row is still in prod: a refund recorded as a negative payment. Three queries, no log digging.
+						History stays in a SQLite file in your project, or in ClickHouse for a team. No service, no
+						account, no paid tier.
 						<a href="/docs/concepts/models/migrations/">How migrations work</a> ·
-						<a href="/docs/cli/janitor/">How the janitor works</a>
+						<a href="/docs/cli/janitor/">How the janitor works</a> ·
+						<a href="/docs/concepts/observability/recall/">How Recall works</a>
 					</p>
 				</div>
 			</section>
