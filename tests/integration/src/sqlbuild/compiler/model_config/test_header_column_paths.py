@@ -25,6 +25,12 @@ from tests.integration.src.sqlbuild.compiler.model_config.helpers import header_
             expected_native=3,
             expected_parsed=0,
         ),
+        HeaderColumnPathTestCase(
+            description="columns in a model whose other config values hold templates",
+            headers=('alias "orders_${region}", columns (order_id (type INTEGER))',),
+            expected_native=1,
+            expected_parsed=0,
+        ),
     ],
     ids=lambda case: case.description,
 )

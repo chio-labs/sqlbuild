@@ -174,6 +174,18 @@ fn convert(value: &Bound<'_, PyAny>, open: &[usize]) -> PyResult<Option<PyConfig
     }))
 }
 
+/// An exact `list`, `tuple` or `dict` carried as its own object, its items never converted.
+pub(crate) fn opaque_container(value: &Bound<'_, PyAny>) -> PyResult<PyConfigNode> {
+    host(value, HostChildren::None)
+}
+
+/// Whether `value` is an exact `list`, `tuple` or `dict`.
+pub(crate) fn is_exact_container(value: &Bound<'_, PyAny>) -> bool {
+    value.is_exact_instance_of::<PyList>()
+        || value.is_exact_instance_of::<PyTuple>()
+        || value.is_exact_instance_of::<PyDict>()
+}
+
 /// One Python config value as a `ConfigNode`; a value that holds itself stays opaque whole.
 pub(crate) fn config_node(value: &Bound<'_, PyAny>) -> PyResult<PyConfigNode> {
     match convert(value, &[])? {

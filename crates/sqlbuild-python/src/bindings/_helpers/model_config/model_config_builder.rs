@@ -5,6 +5,7 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple};
 use pyo3::{PyErr, pyclass, pymethods};
 use sqlbuild_discovery::model_files::models::{EntryFacts, HeaderFacts};
+use sqlbuild_model_config::config_presence::models::MacroPath;
 use sqlbuild_model_config::config_values::models::ConfigNode;
 use sqlbuild_model_config::errors::ConfigError;
 use sqlbuild_model_config::model_config_build::main::build_model_config::build_model_config;
@@ -25,7 +26,7 @@ use crate::bindings::_helpers::model_config::config_errors::config_exception;
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 use crate::bindings::_helpers::model_config::config_nodes::{
     HostHandle, PyConfigEntries, PyConfigNode, config_dict, config_entries, config_node,
-    config_object, hook_entry,
+    config_object, hook_entry, is_exact_container, opaque_container,
 };
 use crate::bindings::_helpers::model_config::errors::NativeConfigError;
 use crate::bindings::_helpers::model_config::project_defaults::project_defaults_mapping;
@@ -125,6 +126,46 @@ impl ConfigBuildHost for PythonConfigHost<'_> {
     fn typed_hook_entry(&self, value: &PyConfigNode) -> PyResult<bool> {
         hook_entry(&config_object(self.environment.py(), value)?)
     }
+}
+
+/// Header keys whose values the build reads item by item, which are always converted.
+const INSPECTED_KEYS: [&str; 7] = [
+    "tags",
+    "row_diff_exclude_columns",
+    "row_diff_tolerances",
+    "pre_hooks",
+    "post_hooks",
+    "time_travel_retention",
+    "table_type",
+];
+
+/// Whether `key`'s container may be carried whole: no template or macro in it, items never read.
+fn carried_whole(key: &str, facts: Option<&[(String, HeaderEntryFacts)]>) -> bool {
+    !INSPECTED_KEYS.contains(&key)
+        && facts
+            .and_then(|facts| facts.iter().find(|(name, _)| name == key))
+            .is_some_and(|(_, facts)| !facts.template && facts.macro_path == MacroPath::Absent)
+}
+
+/// A header's entries as config nodes; containers the build never looks into stay opaque.
+fn header_entries(
+    header: &Bound<'_, PyDict>,
+    facts: Option<&[(String, HeaderEntryFacts)]>,
+) -> PyResult<PyConfigEntries> {
+    let mut entries: PyConfigEntries = Vec::with_capacity(header.len());
+    for (key, value) in header.iter() {
+        let whole: bool = is_exact_container(&value)
+            && key
+                .downcast_exact::<PyString>()
+                .is_ok_and(|key| key.to_str().is_ok_and(|key| carried_whole(key, facts)));
+        let node: PyConfigNode = if whole {
+            opaque_container(&value)?
+        } else {
+            config_node(&value)?
+        };
+        entries.push((config_node(&key)?, node));
+    }
+    Ok(entries)
 }
 
 /// One header entry's parsed facts as the build reads them.
@@ -300,9 +341,9 @@ impl NativeModelConfigBuilder {
         matched_path_default: Option<&str>,
         model_name: &str,
     ) -> PyResult<ConfigBuild<'py>> {
-        let entries: PyConfigEntries = config_entries(header)?;
         let facts: Option<Vec<(String, HeaderEntryFacts)>> =
             facts.map(|facts| facts.entries.iter().map(entry_facts).collect());
+        let entries: PyConfigEntries = header_entries(header, facts.as_deref())?;
         let model_header = ModelHeader {
             entries: &entries,
             facts: facts.as_deref(),
