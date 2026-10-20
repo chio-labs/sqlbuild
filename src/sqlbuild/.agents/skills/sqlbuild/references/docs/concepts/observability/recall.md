@@ -182,9 +182,14 @@ notice and records nothing.
 
 ## Sharing history in ClickHouse
 
-Point `connection` at a ClickHouse connection to keep one history for a whole team. The connection
-needs `adapter = "clickhouse"` when the project uses another adapter, and its `database` must
-already exist; Recall never creates databases.
+Point `connection` at a ClickHouse connection to keep one history for a whole team. Every machine
+that writes to it, including CI and scheduled production runs, becomes queryable from anywhere:
+see what last night's production build ran and printed without access to the machine, find the
+first run where an audit started failing across everyone's runs, or compare a production run with
+your own by `target`, `git_revision` or `sqlbuild_version`.
+
+The connection needs `adapter = "clickhouse"` when the project uses another adapter, and its
+`database` must already exist; Recall never creates databases.
 
 ```toml
 [connections.history]
