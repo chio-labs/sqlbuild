@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from threading import Event
+from threading import Event, Timer, current_thread
 
 import pytest
 
@@ -31,10 +31,13 @@ from tests.unit.src.sqlbuild.runtime.event_exporting.classes.helpers import (
 
 @pytest.mark.parametrize(
     "test_case",
-    (EventExporterTeardownTestCase("deferred provider teardown", 1),),
+    (
+        EventExporterTeardownTestCase("sink returns during the idle wait", 1, 0.1, 0.08, 0.9),
+        EventExporterTeardownTestCase("sink still hung after the idle wait", 1, 30.0, 0.9, 3.0),
+    ),
     ids=lambda case: case.description,
 )
-def test_given_live_timed_out_exporter_when_scope_closes_then_provider_waits_for_invocation(
+def test_given_live_timed_out_exporter_when_scope_closes_then_provider_tears_down_on_closing_thread(
     test_case: EventExporterTeardownTestCase,
     tmp_path: Path,
 ) -> None:
@@ -54,16 +57,19 @@ def test_given_live_timed_out_exporter_when_scope_closes_then_provider_waits_for
     )
     dispatcher.enqueue(lifecycle_event())
     assert BlockingProvider.entered.wait(timeout=0.2)
+    release: Timer = Timer(test_case.release_after_seconds, BlockingProvider.release_export.set)
+    release.start()
     started: float = time.monotonic()
 
     summary: EventExportSummary = scope.close()
 
-    assert time.monotonic() - started < 0.2
-    assert summary.failed == 1
-    assert BlockingProvider.teardown_count == 0
+    elapsed: float = time.monotonic() - started
+    release.cancel()
     BlockingProvider.release_export.set()
-    assert BlockingProvider.teardown_finished.wait(timeout=0.2)
+    assert test_case.min_close_seconds <= elapsed < test_case.max_close_seconds
+    assert summary.failed == 1
     assert BlockingProvider.teardown_count == test_case.expected_teardown_count
+    assert BlockingProvider.teardown_threads == [current_thread().name]
     _ = scope.close()
     assert BlockingProvider.teardown_count == test_case.expected_teardown_count
 

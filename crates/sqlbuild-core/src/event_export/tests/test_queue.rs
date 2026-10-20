@@ -1,8 +1,107 @@
 use crate::event_export::main::queue_lifecycle_event::queue_lifecycle_event;
+use crate::event_export::main::retain_outcome_events::retain_outcome_events;
 use crate::event_export::main::take_lifecycle_event::take_lifecycle_event;
 use crate::event_export::models::EventQueue;
-use crate::event_export::tests::helpers::queued;
-use crate::event_export::tests::test_types::{DeliveryOrderTestCase, DisplacementTestCase};
+use crate::event_export::tests::helpers::{event, queued, sequences};
+use crate::event_export::tests::test_types::{
+    DeliveryOrderTestCase, DisplacementTestCase, OutcomeAdmissionTestCase, OutcomeReserveTestCase,
+};
+
+#[test]
+fn given_full_queue_when_outcome_or_other_event_arrives_then_outcomes_are_admitted_and_kept() {
+    let test_cases = [
+        OutcomeAdmissionTestCase {
+            description: "outcome displaces an equal-priority event",
+            queued: &[(2, false), (2, false)],
+            incoming: (2, true),
+            expected_inserted: true,
+            expected_displaced: Some(0),
+            expected_sequences: &[1, 2],
+        },
+        OutcomeAdmissionTestCase {
+            description: "outcome displaces a higher-priority event when nothing lower is queued",
+            queued: &[(3, false), (2, true)],
+            incoming: (0, true),
+            expected_inserted: true,
+            expected_displaced: Some(0),
+            expected_sequences: &[1, 2],
+        },
+        OutcomeAdmissionTestCase {
+            description: "outcome exceeds capacity when only outcomes are queued",
+            queued: &[(2, true), (0, true)],
+            incoming: (2, true),
+            expected_inserted: true,
+            expected_displaced: None,
+            expected_sequences: &[0, 1, 2],
+        },
+        OutcomeAdmissionTestCase {
+            description: "failure never displaces a queued outcome",
+            queued: &[(2, true), (0, true)],
+            incoming: (3, false),
+            expected_inserted: false,
+            expected_displaced: None,
+            expected_sequences: &[0, 1],
+        },
+    ];
+
+    for test_case in test_cases {
+        let mut queue: EventQueue<()> = EventQueue::new(test_case.queued.len());
+        for (sequence, dimensions) in (0_u64..).zip(test_case.queued) {
+            queue = queue_lifecycle_event(queue, event(*dimensions, sequence)).queue;
+        }
+        let incoming_sequence: u64 = u64::try_from(test_case.queued.len()).unwrap_or(u64::MAX);
+        let outcome = queue_lifecycle_event(queue, event(test_case.incoming, incoming_sequence));
+        assert_eq!(
+            (
+                outcome.inserted,
+                outcome.displaced.as_ref().map(|event| event.sequence),
+                sequences(&outcome.queue),
+            ),
+            (
+                test_case.expected_inserted,
+                test_case.expected_displaced,
+                test_case.expected_sequences.to_vec(),
+            ),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_mixed_backlog_when_reserve_begins_then_only_outcome_events_remain() {
+    let test_cases = [OutcomeReserveTestCase {
+        description: "other events are handed back for accounting",
+        queued: &[(2, false), (2, true), (0, false), (2, true)],
+        expected_kept: &[1, 3],
+        expected_dropped: &[0, 2],
+    }];
+
+    for test_case in test_cases {
+        let mut queue: EventQueue<()> = EventQueue::new(8);
+        for (sequence, dimensions) in (0_u64..).zip(test_case.queued) {
+            queue = queue_lifecycle_event(queue, event(*dimensions, sequence)).queue;
+        }
+
+        let (kept, dropped) = retain_outcome_events(queue);
+
+        assert_eq!(
+            (
+                sequences(&kept),
+                dropped
+                    .iter()
+                    .map(|item| item.sequence)
+                    .collect::<Vec<u64>>()
+            ),
+            (
+                test_case.expected_kept.to_vec(),
+                test_case.expected_dropped.to_vec()
+            ),
+            "{}",
+            test_case.description
+        );
+    }
+}
 
 #[test]
 fn given_full_queue_when_priority_pair_arrives_then_displacement_policy_is_exact() {

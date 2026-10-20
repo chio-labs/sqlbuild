@@ -295,7 +295,7 @@ note = "Rule 3 facade: reads the decorator's definition off a user function; re-
 [[stays]]
 path = "runtime/event_exporting/main/_invoke_lifecycle_event_sink.py"
 rule = 2
-note = "Rule 2 shim: the daemon delivery thread's target that calls one user lifecycle sink and reports how it ended to the native dispatcher, so user code never runs above native frames that interpreter finalization would abort (event_exporting/workers.rs)."
+note = "Rule 2 shim: target of each lifecycle sink's long-lived daemon delivery thread; claims each queued call in a shared dict (atomic under the GIL, so the dispatcher counts a cancellation as dropped only when the call can never run), calls the user sink in order and reports how each call ended through a Python queue, so user code never runs above native frames that interpreter finalization would abort (event_exporting/workers.rs)."
 
 [[stays]]
 path = "runtime/event_exporting/main/_run_command_output_sinks.py"

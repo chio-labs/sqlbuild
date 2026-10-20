@@ -3212,9 +3212,6 @@ class EventExporterDispatcher:
 class DispatcherWorker:
     def __call__(self) -> None: ...
 
-class InvocationCompletion:
-    def __call__(self, error: BaseException | None, /) -> None: ...
-
 def stop_event_exporter_threads() -> None: ...
 
 class EventExporterCommandScope:

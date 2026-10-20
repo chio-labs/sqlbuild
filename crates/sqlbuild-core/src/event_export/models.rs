@@ -44,6 +44,8 @@ pub struct QueuedEvent<T> {
     pub priority: u8,
     /// Whether the event ends the invocation and so waits behind every other queued event.
     pub invocation_terminal: bool,
+    /// Whether the event reports a run or invocation outcome, which the queue always admits.
+    pub outcome: bool,
     pub eligible_exporters: Vec<usize>,
 }
 
