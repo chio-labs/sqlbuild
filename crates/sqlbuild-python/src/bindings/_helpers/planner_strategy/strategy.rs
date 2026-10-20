@@ -1,6 +1,6 @@
 //! Per-model plan actions, schema actions and plan warnings.
 
-use crate::bindings::_helpers::compiled_project::model_reads;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::planner_changes::results::native_enum;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};

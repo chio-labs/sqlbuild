@@ -108,11 +108,6 @@ crates/sqlbuild-python/src/bindings/_helpers/compile_command/reuse_recording.rs	
 crates/sqlbuild-python/src/bindings/_helpers/compile_command/reuse_recording.rs	CompileReuseAttempt.entry_path
 crates/sqlbuild-python/src/bindings/_helpers/compile_command/reuse_recording.rs	CompileReuseAttempt.native
 crates/sqlbuild-python/src/bindings/_helpers/compile_command/reuse_recording.rs	CompileReuseAttempt.outcome
-crates/sqlbuild-python/src/bindings/_helpers/compiled_project/attachment.rs	ResourceKind.value
-crates/sqlbuild-python/src/bindings/_helpers/compiled_project/loop_classes.rs	DeclarationKind.value
-crates/sqlbuild-python/src/bindings/_helpers/compiled_project/model_loop_macros.rs	MacroArgumentError.offset
-crates/sqlbuild-python/src/bindings/_helpers/compiled_project/model_loop_named.rs	ScopeKind.value
-crates/sqlbuild-python/src/bindings/_helpers/compiled_project/records.rs	CollectionRendering.value
 crates/sqlbuild-python/src/bindings/_helpers/compiled_project/values.rs	LayoutConfig.__dataclass_fields__
 crates/sqlbuild-python/src/bindings/_helpers/compiled_project/values.rs	LayoutConfig.__dict__
 crates/sqlbuild-python/src/bindings/_helpers/compiled_project/values.rs	PythonHookEntry.__dataclass_fields__
@@ -154,6 +149,7 @@ crates/sqlbuild-python/src/bindings/_helpers/compile_driver/phases.rs	CompileInp
 crates/sqlbuild-python/src/bindings/_helpers/compile_driver/phases.rs	PreparedCompileArtifacts.publish
 crates/sqlbuild-python/src/bindings/_helpers/compile_driver/python_plan_entries.rs	PythonNodeGraph.selected_sql_refs
 crates/sqlbuild-python/src/bindings/_helpers/compile_driver/selection_phases.rs	PlannerScopeResolution.stale_warning_scope
+crates/sqlbuild-python/src/bindings/_helpers/compiled_views/records.rs	CollectionRendering.value
 crates/sqlbuild-python/src/bindings/_helpers/contract_command/command.rs	ConnectionProgressReporter.on_connection_complete
 crates/sqlbuild-python/src/bindings/_helpers/dag_artifact/rows.rs	SqlValueKind.value
 crates/sqlbuild-python/src/bindings/_helpers/dbt_command/auto_init.rs	DbtInitProgressReporter.complete
@@ -235,6 +231,10 @@ crates/sqlbuild-python/src/bindings/_helpers/frontier/encoder.rs	UsageKind.name
 crates/sqlbuild-python/src/bindings/_helpers/frontier/encoder.rs	VisibilityReason.name
 crates/sqlbuild-python/src/bindings/_helpers/frontier/stage_capture.rs	CompilerStage.value
 crates/sqlbuild-python/src/bindings/_helpers/graph/python_node_graph.rs	SourceWriteStrategy.value
+crates/sqlbuild-python/src/bindings/_helpers/input_loops/attachment.rs	ResourceKind.value
+crates/sqlbuild-python/src/bindings/_helpers/input_loops/loop_classes.rs	DeclarationKind.value
+crates/sqlbuild-python/src/bindings/_helpers/input_loops/model_loop_macros.rs	MacroArgumentError.offset
+crates/sqlbuild-python/src/bindings/_helpers/input_loops/model_loop_named.rs	ScopeKind.value
 crates/sqlbuild-python/src/bindings/_helpers/janitor/janitor_old_names.rs	OldNameViewHistory.status
 crates/sqlbuild-python/src/bindings/_helpers/lineage/lineage_command.rs	ColumnLineageMode.value
 crates/sqlbuild-python/src/bindings/_helpers/lineage/lineage_command.rs	PlannerInputError.code

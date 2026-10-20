@@ -12,7 +12,7 @@ use sqlbuild_analysis::compiler::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::value_error;
-use crate::bindings::_helpers::compiled_project::model_reads;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 use crate::bindings::types::CompilerDetach;

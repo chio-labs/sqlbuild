@@ -33,27 +33,27 @@ use crate::bindings::_helpers::compiled_project::attachment_inputs::SourceSettin
 use crate::bindings::_helpers::compiled_project::attachment_inputs::SqlTestSettings;
 use crate::bindings::_helpers::compiled_project::attachment_inputs::TestFileRow;
 use crate::bindings::_helpers::compiled_project::attachment_inputs::resource_attachment;
-use crate::bindings::_helpers::compiled_project::audit_views::{
+use crate::bindings::_helpers::compiled_project::values::{object_value, plain_value};
+use crate::bindings::_helpers::compiled_views::audit_views::{
     AttachedAudit, AuditRecord, NativeAuditInput, NativeCompiledAudit,
 };
-use crate::bindings::_helpers::compiled_project::compiled_model_view::{
+use crate::bindings::_helpers::compiled_views::compiled_model_view::{
     CompiledViewClasses, InferredRow, NativeCompiledModel,
 };
-use crate::bindings::_helpers::compiled_project::function_views::{
+use crate::bindings::_helpers::compiled_views::function_views::{
     AttachedFunction, FunctionRecord, NativeCompiledFunction, NativeFunctionInput, ObjectKeyRow,
 };
-use crate::bindings::_helpers::compiled_project::inputs_view::NativeInputsView;
-use crate::bindings::_helpers::compiled_project::model_input_view::{
+use crate::bindings::_helpers::compiled_views::inputs_view::NativeInputsView;
+use crate::bindings::_helpers::compiled_views::model_input_view::{
     ModelInputRecord, NativeModelInput,
 };
-use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView;
-use crate::bindings::_helpers::compiled_project::seed_views::{
+use crate::bindings::_helpers::compiled_views::project_view::NativeProjectView;
+use crate::bindings::_helpers::compiled_views::seed_views::{
     NativeCompiledSeed, NativeSeedInput, SeedNamespace, SeedRecord, paired_seeds,
 };
-use crate::bindings::_helpers::compiled_project::source_views::{
+use crate::bindings::_helpers::compiled_views::source_views::{
     NativeCompiledSource, NativeSourceInput, SourceNamespace, SourceRecord,
 };
-use crate::bindings::_helpers::compiled_project::values::{object_value, plain_value};
 use crate::bindings::_helpers::render::declaration_values::ConstantRendering;
 
 pub(crate) const CONTRACT_KEY: &str = "contract";

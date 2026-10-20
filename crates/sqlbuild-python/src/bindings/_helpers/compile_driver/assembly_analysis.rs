@@ -24,8 +24,8 @@ use crate::bindings::_helpers::compile_driver::assembly::{AssemblyRequest, Assem
 use crate::bindings::_helpers::compile_driver::stage_work::{
     EXPRESSION_SHAPES, MODEL_ANALYSIS, count_stage,
 };
-use crate::bindings::_helpers::compiled_project::model_input_view::attached_schema;
-use crate::bindings::_helpers::compiled_project::source_views::read_source_view;
+use crate::bindings::_helpers::compiled_views::model_input_view::attached_schema;
+use crate::bindings::_helpers::compiled_views::source_views::read_source_view;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::project_assembly::declared_relations::{

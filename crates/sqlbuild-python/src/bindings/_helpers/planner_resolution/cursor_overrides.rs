@@ -1,7 +1,7 @@
 //! Selected-model inspection and untyped override conversion.
 
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
-use crate::bindings::_helpers::compiled_project::model_reads;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_resolution::values::{method, string};
 use crate::bindings::_helpers::records::construct::enum_from_value;

@@ -15,7 +15,7 @@ use sqlbuild_analysis::planner_identity::main::model_local_identity_hash::model_
 use sqlbuild_analysis::planner_identity::models::{GraphKey, IdentityGraph, IdentityNode};
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
-use crate::bindings::_helpers::compiled_project::model_reads;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::planner_identity::hashing::{graph_key, model_query_hash};

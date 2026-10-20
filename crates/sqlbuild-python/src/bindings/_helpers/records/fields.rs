@@ -617,3 +617,16 @@ pub(crate) fn path_posix_text(path: &Bound<'_, PyAny>) -> PyResult<String> {
     let text: Bound<'_, PyString> = path.str()?;
     Ok(text.to_str()?.replace(std::path::MAIN_SEPARATOR, "/"))
 }
+
+/// `{item.<attribute>: item for item in items}`.
+pub(crate) fn by_attribute<'py>(
+    items: &Bound<'py, PyAny>,
+    attribute: &str,
+) -> PyResult<Bound<'py, PyDict>> {
+    let keyed: Bound<'py, PyDict> = PyDict::new(items.py());
+    for item in items.try_iter()? {
+        let item: Bound<'py, PyAny> = item?;
+        keyed.set_item(field(&item, attribute)?, item)?;
+    }
+    Ok(keyed)
+}

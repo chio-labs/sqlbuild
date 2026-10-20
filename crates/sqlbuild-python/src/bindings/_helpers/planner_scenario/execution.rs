@@ -2,9 +2,8 @@
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
-use crate::bindings::_helpers::compiled_project::loop_classes::by_attribute;
-use crate::bindings::_helpers::compiled_project::model_reads;
-use crate::bindings::_helpers::compiled_project::records::compiled_model_record;
+use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::records::compiled_model_record;
 use crate::bindings::_helpers::discovery::constants::{
     SCENARIO_EXPECTED_COLUMNS_ALL, SCENARIO_EXPECTED_COLUMNS_KEY,
 };
@@ -28,6 +27,7 @@ use crate::bindings::_helpers::planner_scenario::{
 use crate::bindings::_helpers::planner_strategy::fixture_completion::complete_fixtures as complete_relation_fixtures;
 use crate::bindings::_helpers::planner_strategy::fixture_context::planning_context;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
+use crate::bindings::_helpers::records::fields::by_attribute;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::replaced_keywords;

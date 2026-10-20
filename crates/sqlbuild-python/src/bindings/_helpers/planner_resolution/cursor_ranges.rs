@@ -2,7 +2,7 @@
 
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
-use crate::bindings::_helpers::compiled_project::model_reads;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::cursor::scalars::{parse_value, sentinel_to_token};
 use crate::bindings::_helpers::cursor::values::{local_date_time, replaced};

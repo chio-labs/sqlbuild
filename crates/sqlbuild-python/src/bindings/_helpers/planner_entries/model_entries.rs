@@ -2,7 +2,7 @@
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
-use crate::bindings::_helpers::compiled_project::model_reads;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::discovery::guidance::microbatch_guidance;
 use crate::bindings::_helpers::planner_changes::actions::replaces_incremental_relation;
 use crate::bindings::_helpers::planner_changes::detect::detect_model_changes;

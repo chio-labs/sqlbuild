@@ -25,7 +25,7 @@ use crate::bindings::_helpers::records::models::{
     RecordAttribute, RecordSpec,
 };
 use crate::bindings::_helpers::{
-    analysis, analysis_session, build_progress, compile_command, compile_context, compiled_project,
+    analysis, analysis_session, build_progress, compile_command, compile_context, compiled_views,
     compute_logs, dbt_events, dbt_interop, diagnostics, discovery, event_exporting,
     execution_history, graph, model_config, planner_entries, planner_migrations, planner_phases,
     presentation_text, project_assembly, result_output, rules, scopes,
@@ -38,7 +38,7 @@ static GETTER_TABLES: &[&[GetterEntry]] = &[
     build_progress::getters::GETTERS,
     compile_command::getters::GETTERS,
     compile_context::getters::GETTERS,
-    compiled_project::getters::GETTERS,
+    compiled_views::getters::GETTERS,
     compute_logs::getters::GETTERS,
     dbt_events::getters::GETTERS,
     dbt_interop::getters::GETTERS,

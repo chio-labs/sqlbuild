@@ -2,7 +2,7 @@
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, within};
-use crate::bindings::_helpers::compiled_project::model_reads;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::freshness::planning::{
     build_direct_source_freshness_planning_result, build_direct_source_freshness_propagation_result,
 };

@@ -19,7 +19,7 @@ use crate::bindings::_helpers::compile_context::compile_timings::{
     add_compile_timing, record_compile_metric, record_compile_timing,
 };
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
-use crate::bindings::_helpers::compiled_project::records::{
+use crate::bindings::_helpers::compiled_views::records::{
     compiled_project_facts, record_model_analyses,
 };
 use crate::bindings::_helpers::records::fields::field;

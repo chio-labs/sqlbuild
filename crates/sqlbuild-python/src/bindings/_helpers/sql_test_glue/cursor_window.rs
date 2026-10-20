@@ -12,7 +12,7 @@ use crate::bindings::_helpers::attachments::cursor_intrinsics::{
     compile_input_error, resolve_cursor_intrinsics,
 };
 use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
-use crate::bindings::_helpers::compiled_project::model_reads;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::cursor::scalars::{parse_value, render_value};
 use crate::bindings::_helpers::model_config::config_values::config_str;

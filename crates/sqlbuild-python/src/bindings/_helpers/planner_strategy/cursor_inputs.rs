@@ -9,7 +9,7 @@ use sqlbuild_analysis::planner_strategy::models::{CursorInputColumnCheck, Cursor
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;
-use crate::bindings::_helpers::compiled_project::model_reads;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::cursor::scalars::parse_value;
 use crate::bindings::_helpers::model_config::config_values::{config_cursor_bound, config_str};
 use crate::bindings::_helpers::planner_identity::metadata::or_empty;

@@ -14,7 +14,7 @@ use sqlbuild_rules::lint_text::main::neutralize_interpolation::neutralize_interp
 
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
-use crate::bindings::_helpers::compiled_project::model_reads;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::planner_identity::hashing::model_query_hash;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;

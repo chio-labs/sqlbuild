@@ -1,6 +1,6 @@
 //! Display-only plans for external plan surfaces when warehouse planning cannot resolve.
 
-use crate::bindings::_helpers::compiled_project::model_reads;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_entries::values::{
     boolean, native, none, planner_model, planner_type, string,

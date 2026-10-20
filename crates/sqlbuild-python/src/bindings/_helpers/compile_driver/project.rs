@@ -25,7 +25,7 @@ use crate::bindings::_helpers::compile_driver::selection_phases::resolve_analysi
 use crate::bindings::_helpers::compile_driver::stage_work::{
     PROJECT_GRAPHS, PROMOTION_CONFLICTS, count_stage,
 };
-use crate::bindings::_helpers::compiled_project::records::project_with;
+use crate::bindings::_helpers::compiled_views::records::project_with;
 use crate::bindings::_helpers::contracts::contract_diagnostics::promotion_conflict_diagnostics;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_collection_rendering;

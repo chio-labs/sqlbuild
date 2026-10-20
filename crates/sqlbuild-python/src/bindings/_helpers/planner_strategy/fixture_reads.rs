@@ -14,8 +14,8 @@ use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 use std::collections::{HashMap, HashSet};
 
 use crate::bindings::_helpers::boundary::panics::value_error;
-use crate::bindings::_helpers::compiled_project::model_reads;
-use crate::bindings::_helpers::compiled_project::model_reads::{
+use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::model_reads::{
     LineageFactRow, lineage_facts, proven_inputs, star_flags,
 };
 use crate::bindings::_helpers::planner_strategy::constants::HIGH_CONFIDENCE;

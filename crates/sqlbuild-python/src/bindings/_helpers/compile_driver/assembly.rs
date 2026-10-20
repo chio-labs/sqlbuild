@@ -12,8 +12,8 @@ use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_w
 use crate::bindings::_helpers::compile_context::diagnostic_collector::collect_compile_diagnostics;
 use crate::bindings::_helpers::compile_driver::assembly_project::assembled_project;
 use crate::bindings::_helpers::compile_driver::project::lineage_mode;
-use crate::bindings::_helpers::compiled_project::records::project_with;
-use crate::bindings::_helpers::compiled_project::records::record_model_analyses;
+use crate::bindings::_helpers::compiled_views::records::project_with;
+use crate::bindings::_helpers::compiled_views::records::record_model_analyses;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;

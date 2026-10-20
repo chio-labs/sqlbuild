@@ -1,7 +1,7 @@
 //! Warehouse-aware time-travel retention and Snowflake table-type planning.
 
 use crate::bindings::_helpers::boundary::python_calls::call_with;
-use crate::bindings::_helpers::compiled_project::model_reads;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;

@@ -13,7 +13,7 @@ use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 use sqlbuild_core::panics::main::native_failure::native_failure;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
-use crate::bindings::_helpers::compiled_project::model_loop_prepass::pooled;
+use crate::bindings::_helpers::input_loops::model_loop_prepass::pooled;
 use crate::bindings::types::CompilerDetach;
 
 const SYNTAX_CHECK_CONTEXT: &str = "native SQL syntax check";

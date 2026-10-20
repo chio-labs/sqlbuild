@@ -1,6 +1,6 @@
 //! Validate reliable watermark column contracts before warehouse inspection.
 
-use crate::bindings::_helpers::compiled_project::model_reads;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::objects::{config_str, planner_error, text};
 use crate::bindings::_helpers::planner_strategy::cursor_types::classify_cursor_sql_type;

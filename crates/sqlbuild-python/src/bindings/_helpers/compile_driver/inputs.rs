@@ -13,10 +13,10 @@ use crate::bindings::_helpers::compile_attachment::effective_config::{
 };
 use crate::bindings::_helpers::compile_attachment::model_inputs::build_model_inputs;
 use crate::bindings::_helpers::compile_context::diagnostic_collector::collect_compile_diagnostics;
-use crate::bindings::_helpers::compiled_project::attachment::{attach_checks, attach_resources};
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
-use crate::bindings::_helpers::compiled_project::records::{compile_inputs_view, inputs_with};
+use crate::bindings::_helpers::compiled_views::records::{compile_inputs_view, inputs_with};
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
+use crate::bindings::_helpers::input_loops::attachment::{attach_checks, attach_resources};
 use crate::bindings::_helpers::model_config::template_data::run_id;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;

@@ -36,7 +36,7 @@ use crate::bindings::_helpers::compile_outputs::artifacts::{
 use crate::bindings::_helpers::compile_outputs::runtime_target::{
     compiled_sql_test_path, planned_sql_test_path,
 };
-use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
+use crate::bindings::_helpers::compiled_views::compiled_model_view::NativeCompiledModel;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_entries::plan_output::sql_test_model_chain_names_by_key;

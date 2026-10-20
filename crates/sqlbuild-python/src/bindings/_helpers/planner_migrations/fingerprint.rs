@@ -1,7 +1,7 @@
 //! Migration identity binding with unchanged metadata and hash format.
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
-use crate::bindings::_helpers::compiled_project::model_reads;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use pyo3::exceptions::PyValueError;

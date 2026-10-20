@@ -16,7 +16,7 @@ use sqlbuild_rules::fix_verification::models::{FixEdit, FixEligibility};
 
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, keywords};
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
-use crate::bindings::_helpers::compiled_project::relation_keys::{
+use crate::bindings::_helpers::compiled_views::relation_keys::{
     RelationKeys, project_relation_keys,
 };
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;

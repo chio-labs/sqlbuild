@@ -2,7 +2,7 @@
 
 use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
-use crate::bindings::_helpers::compiled_project::model_reads;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::planner_migrations::column_objects::{
     config, definition_hash, lower, native, replace,
 };

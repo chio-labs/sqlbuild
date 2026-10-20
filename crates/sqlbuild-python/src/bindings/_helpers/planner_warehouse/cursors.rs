@@ -2,7 +2,7 @@
 
 use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;
-use crate::bindings::_helpers::compiled_project::model_reads;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::cursor::intervals::partition;
 use crate::bindings::_helpers::cursor::scalars;
 use crate::bindings::_helpers::cursor::scalars::compare_values;

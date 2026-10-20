@@ -19,7 +19,7 @@ use crate::bindings::_helpers::compile_driver::assembly_models::{
 };
 use crate::bindings::_helpers::compile_driver::assembly_sql_tests::assembled_sql_tests;
 use crate::bindings::_helpers::compile_driver::stage_work::{SEMANTIC_COMPLETION, count_stage};
-use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
+use crate::bindings::_helpers::compiled_views::compiled_model_view::NativeCompiledModel;
 use crate::bindings::_helpers::contracts::spec_resolution::{
     resolve_effective_adapter_name, resolve_effective_scenario_config,
 };

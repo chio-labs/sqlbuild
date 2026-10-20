@@ -9,10 +9,10 @@ use pyo3::prelude::{Bound, Py, PyAny, PyResult, Python};
 use pyo3::types::{PyDict, PyString};
 
 use crate::bindings::_helpers::cache::sql_test_scan_store::SqlTestScanStore;
-use crate::bindings::_helpers::compiled_project::audit_views::NativeAuditInput;
-use crate::bindings::_helpers::compiled_project::function_views::NativeFunctionInput;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
-use crate::bindings::_helpers::compiled_project::source_views::NativeSourceInput;
+use crate::bindings::_helpers::compiled_views::audit_views::NativeAuditInput;
+use crate::bindings::_helpers::compiled_views::function_views::NativeFunctionInput;
+use crate::bindings::_helpers::compiled_views::source_views::NativeSourceInput;
 
 const ATTACHMENT_UNINSTALLED: &str = "the native module registered no resource attachment";
 

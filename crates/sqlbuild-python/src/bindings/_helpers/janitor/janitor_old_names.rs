@@ -9,7 +9,7 @@ use sqlbuild_analysis::janitor_planning::main::old_name_request_matches::old_nam
 
 use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
-use crate::bindings::_helpers::compiled_project::model_reads;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::janitor::janitor_facts::{
     SchemaRelations, Warehouse, model_destinations,
 };

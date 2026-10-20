@@ -8,11 +8,11 @@ use sqlbuild_analysis::assembly::project::main::sql_analysis_opt_out_help::sql_a
 use crate::bindings::_helpers::attachments::cursor_intrinsics::reserved_cursor_markers;
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
 use crate::bindings::_helpers::compile_attachment::model_config::native_model_config_session;
-use crate::bindings::_helpers::compiled_project::loop_classes::model_loop_classes;
-use crate::bindings::_helpers::compiled_project::model_input_view::NativeModelInput;
-use crate::bindings::_helpers::compiled_project::model_loop::{LoopSwitches, NativeModelLoop};
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::compiled_views::model_input_view::NativeModelInput;
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
+use crate::bindings::_helpers::input_loops::loop_classes::model_loop_classes;
+use crate::bindings::_helpers::input_loops::model_loop::{LoopSwitches, NativeModelLoop};
 use crate::bindings::_helpers::model_config::contract_classes::contract_classes;
 use crate::bindings::_helpers::model_config::model_validator::NativeModelValidator;
 use crate::bindings::_helpers::model_config::unicode_environment::unicode_environment;
@@ -264,7 +264,7 @@ pub(crate) fn build_model_inputs<'py>(
     )?;
     let syntax: Bound<'py, PyAny> = native_field(context, "sql_lexical_syntax")?;
     let native_loop: Bound<'py, PyAny> =
-        crate::bindings::_helpers::compiled_project::model_loop::NativeModelLoop::new(
+        crate::bindings::_helpers::input_loops::model_loop::NativeModelLoop::new(
             (
                 validator.unbind(),
                 contract_classes(py)?.unbind(),

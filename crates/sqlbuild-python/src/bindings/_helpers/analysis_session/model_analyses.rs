@@ -22,11 +22,11 @@ use crate::bindings::_helpers::cache::native_store::{content_digest, current_cod
 use crate::bindings::_helpers::compile_driver::analysis_cache::{
     AnalysisCacheCounts, record_analysis_cache_metrics,
 };
-use crate::bindings::_helpers::compiled_project::model_input_view::{
+use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
+use crate::bindings::_helpers::compiled_views::model_input_view::{
     AttachedSchema, NativeModelInput, attached_schema, input_model_name, input_query_sql,
     input_reference_rows,
 };
-use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::enum_member;

@@ -19,11 +19,11 @@ use sqlbuild_rules::rule_results::models::RuleFinding;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::boundary::python_calls::{imported, keywords};
-use crate::bindings::_helpers::compiled_project::compiled_model_view::{
+use crate::bindings::_helpers::compiled_views::compiled_model_view::{
     NativeCompiledModel, SqlRuleInputs, SqlRuleKey,
 };
-use crate::bindings::_helpers::compiled_project::model_reads::output_proven;
-use crate::bindings::_helpers::compiled_project::relation_keys::project_relation_keys;
+use crate::bindings::_helpers::compiled_views::model_reads::output_proven;
+use crate::bindings::_helpers::compiled_views::relation_keys::project_relation_keys;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field;

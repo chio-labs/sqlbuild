@@ -22,8 +22,8 @@ use sqlbuild_rules::rules::main::selected_sql_codes::selected_sql_codes;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compile_attachment::sql_expansion_context::present;
-use crate::bindings::_helpers::compiled_project::relation_keys::model_key_row;
-use crate::bindings::_helpers::compiled_project::relation_keys::{
+use crate::bindings::_helpers::compiled_views::relation_keys::model_key_row;
+use crate::bindings::_helpers::compiled_views::relation_keys::{
     RelationKeyRow, RelationKeys, one_row_seed_names, relation_keys, source_key_input,
 };
 use crate::bindings::_helpers::native_threads::interruptible_join::{Joined, join_interruptibly};
