@@ -4,5 +4,6 @@ pub(crate) mod locations;
 pub(crate) mod pool;
 pub(crate) mod reading;
 pub(crate) mod scoped_paths;
+pub(crate) mod sorted_keys;
 pub(crate) mod statement_headers;
 pub(crate) mod suggestions;

@@ -10,15 +10,14 @@ use sqlbuild_discovery::models::{DiscoveredFile, FileOutcome, StageFailure};
 use std::path::Path;
 
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, imported};
-use crate::bindings::_helpers::discovery::constants;
 use crate::bindings::_helpers::discovery::faults::{FileFaults, record_tuple};
 use crate::bindings::_helpers::discovery::model_file_record::DiscoveredPaths;
 use crate::bindings::_helpers::discovery::project_files::{model_record, path_object};
 use crate::bindings::_helpers::discovery::raised::{failure_error, read_error, stage_error};
 use crate::bindings::_helpers::discovery::snapshot::{in_snapshot, project_root, project_tree};
-use crate::bindings::_helpers::discovery::sorted_keys::sorted_keys;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::models::NativeProjectTree;
+use sqlbuild_discovery::model_files::main::model_file_options::model_file_options;
 
 const PATHLIB_MODULE: &str = "pathlib";
 const STEM_ATTRIBUTE: &str = "stem";
@@ -106,17 +105,6 @@ pub(crate) struct ModelFileSelection<'py> {
     pub(crate) on_fault: Option<Bound<'py, PyAny>>,
 }
 
-/// The options model discovery parses headers with.
-pub(crate) fn model_file_options() -> ModelFileOptions {
-    ModelFileOptions {
-        supported_keys: sorted_keys(&constants::SQL_MODEL_HEADER_KEYS),
-        removed_keys: sorted_keys(&constants::REMOVED_SQL_MODEL_HEADER_KEYS),
-        extract_implicit_alias_columns: false,
-        extract_output_column_locations: false,
-        path_filter: None,
-    }
-}
-
 /// The (selected) model files; `extraction` is `(implicit alias columns, output locations)`.
 pub(crate) fn discovered_model_files<'py>(
     project_dir: &Bound<'py, PyAny>,
@@ -124,15 +112,11 @@ pub(crate) fn discovered_model_files<'py>(
     selection: ModelFileSelection<'py>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = project_dir.py();
-    let (extract_implicit_alias_columns, extract_output_column_locations) = extraction;
-    let options = ModelFileOptions {
-        supported_keys: sorted_keys(&constants::SQL_MODEL_HEADER_KEYS),
-        removed_keys: sorted_keys(&constants::REMOVED_SQL_MODEL_HEADER_KEYS),
-        extract_implicit_alias_columns,
-        extract_output_column_locations,
-        path_filter: crate::bindings::_helpers::compile_context::delta::injection()
+    let options: ModelFileOptions = model_file_options(
+        extraction,
+        crate::bindings::_helpers::compile_context::delta::injection()
             .map(|injection| std::sync::Arc::new(injection.model_paths.clone())),
-    };
+    );
     let items: Vec<ModelItem<'py>> = model_items(project_dir, &options)?;
     let faults = FileFaults {
         project_dir: project_dir.clone(),

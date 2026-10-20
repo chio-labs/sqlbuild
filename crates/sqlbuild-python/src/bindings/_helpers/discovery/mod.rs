@@ -29,7 +29,6 @@ pub(crate) mod raised;
 pub(crate) mod registration;
 pub(crate) mod scope_snapshot;
 pub(crate) mod snapshot;
-pub(crate) mod sorted_keys;
 pub(crate) mod sql_test_blocks;
 pub(crate) mod sql_test_records;
 pub(crate) mod yaml_entries;

@@ -33,10 +33,10 @@ use crate::bindings::_helpers::compile_driver::command::{
     PhasesOutcome, resolved_request, unrecorded_compile,
 };
 use crate::bindings::_helpers::compile_outputs::reuse::NativeReuseAttempt;
-use crate::bindings::_helpers::discovery::header_keys::{
-    HeaderChange, custom_rule_reads, header_change,
-};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use sqlbuild_discovery::header_changes::main::custom_rule_reads::custom_rule_reads;
+use sqlbuild_discovery::header_changes::main::header_change::header_change;
+use sqlbuild_discovery::header_changes::models::HeaderChange;
 
 /// Set to `1` to always compile the whole project.
 pub(crate) const DELTA_DISABLE_ENV_VAR: &str = "SQLBUILD_DISABLE_DELTA_COMPILE";

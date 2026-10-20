@@ -4,9 +4,6 @@ use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::compiled_views::records::compiled_model_record;
-use crate::bindings::_helpers::discovery::constants::{
-    SCENARIO_EXPECTED_COLUMNS_ALL, SCENARIO_EXPECTED_COLUMNS_KEY,
-};
 use crate::bindings::_helpers::planner_entries::model_entries::plan_model;
 use crate::bindings::_helpers::planner_entries::models::ModelPlanContext;
 use crate::bindings::_helpers::planner_identity::graph::build_execution_upstream_deps;
@@ -37,6 +34,7 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PyTuple};
 use sqlbuild_analysis::compiler::main::scenario_expected_column_message::scenario_expected_column_message;
 use sqlbuild_analysis::compiler::main::scenario_expected_columns::scenario_expected_columns;
 use sqlbuild_analysis::compiler::main::scenario_reader_sql::scenario_reader_sql;
+use sqlbuild_discovery::constants::{SCENARIO_EXPECTED_COLUMNS_ALL, SCENARIO_EXPECTED_COLUMNS_KEY};
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]

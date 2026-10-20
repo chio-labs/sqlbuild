@@ -17,14 +17,12 @@ use sqlbuild_discovery::tree::models::ProjectTree;
 use sqlbuild_model_config::execution_limits::main::parse_execution_limit::parse_execution_limit;
 
 use crate::bindings::_helpers::boundary::python_calls::imported;
-use crate::bindings::_helpers::discovery::constants;
 use crate::bindings::_helpers::discovery::faults::{FileFaults, record_tuple};
 use crate::bindings::_helpers::discovery::project_files::path_object;
 use crate::bindings::_helpers::discovery::raised::{
     discovery_error, failure_error, read_error, stage_error,
 };
 use crate::bindings::_helpers::discovery::snapshot::{in_snapshot, project_root, project_tree};
-use crate::bindings::_helpers::discovery::sorted_keys::sorted_keys;
 use crate::bindings::_helpers::discovery::sql_test_blocks::{
     sql_test_block_records, validate_block_names,
 };
@@ -33,6 +31,8 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::sqltext::authored_values::map_to_python;
 use crate::bindings::models::NativeProjectTree;
+use sqlbuild_discovery::constants;
+use sqlbuild_discovery::sql_tests::main::sql_test_file_options::sql_test_file_options;
 
 const SQL_TESTS_OWNERSHIP_ROOT: &str = "tests/unit";
 const SQL_SCENARIOS_OWNERSHIP_ROOT: &str = "tests/scenarios";
@@ -54,12 +54,10 @@ type RecordBuilder<'py, T> =
     fn((&Bound<'py, PyAny>, &Bound<'py, PyAny>), T) -> PyResult<Bound<'py, PyAny>>;
 
 fn options() -> PyResult<SqlTestFileOptions> {
-    Ok(SqlTestFileOptions {
-        test_keys: sorted_keys(&constants::SQL_TEST_HEADER_KEYS),
-        scenario_keys: sorted_keys(&constants::SQL_SCENARIO_HEADER_KEYS),
-        path_filter: crate::bindings::_helpers::compile_context::delta::injection()
+    Ok(sql_test_file_options(
+        crate::bindings::_helpers::compile_context::delta::injection()
             .map(|injection| std::sync::Arc::new(injection.test_paths.clone())),
-    })
+    ))
 }
 
 fn path_class(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {

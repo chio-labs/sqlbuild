@@ -1279,6 +1279,7 @@ version = "0.164.0"
 dependencies = [
  "junction",
  "rayon",
+ "sqlbuild-cache",
  "sqlbuild-config",
  "sqlbuild-core",
  "sqlbuild-model-config",
