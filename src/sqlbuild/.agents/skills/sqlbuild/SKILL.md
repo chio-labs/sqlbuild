@@ -1,6 +1,6 @@
 ---
 name: sqlbuild
-description: ALWAYS load this skill when doing ANY SQLBuild work - models, sources, seeds, macros, enums, constants, tests, audits, scenarios, incremental and microbatch models, configuration, CLI, adapters, or dbt interop. Covers the verify loop (compile, plan, build), comparing data or two queries with sqb diff, inspecting macro/enum/constant visibility with sqb scope, impact analysis with sqb lineage, renaming or moving models and columns with sqb rename and sqb mv, and where to find exact syntax.
+description: ALWAYS load this skill when doing ANY SQLBuild work - models, sources, seeds, macros, enums, constants, tests, audits, scenarios, incremental and microbatch models, configuration, CLI, adapters, or dbt interop. Covers the verify loop (compile, plan, build), comparing data or two queries with sqb diff, inspecting macro/enum/constant visibility with sqb scope, impact analysis with sqb lineage, renaming or moving models and columns with sqb rename and sqb mv, investigating what past runs did (statements, SQL, audit results, errors, output), locally or across a team's shared history, with sqb recall, and where to find exact syntax.
 ---
 
 # SQLBuild
@@ -70,6 +70,27 @@ JOIN __ref("stg_payments") p USING (order_id)
 When something fails, run `sqb debug` first. It separates configuration, authentication and
 connection problems from command-specific errors. `sqb debug --no-connection` checks config only.
 
+To find out what an earlier command did, query its recorded history with `sqb recall` instead of
+rerunning it or hunting for log files. Recall is on by default and records every command: its
+statements and SQL, audit results, errors, timing and exact output. `sqb recall schema` lists the
+views (`invocations`, `statements`, `audit_results`, `artifacts` and more); `sqb recall query
+"SELECT ..."` runs SQL over them; `sqb recall output last --tail 50` prints what the latest command
+printed. Add `--backend warehouse` to check live warehouse state with the same command.
+
+Check `[recall] connection` in the project config to see which store you are reading:
+
+- **Local (the default).** A SQLite file, `logs/recall.sqlite3`, holding this checkout's own runs.
+  Use it for "what did my last build do?" and to compare runs during your session.
+- **Shared ClickHouse store.** One history for every machine that writes to it: teammates, CI, and
+  scheduled or orchestrated production runs. This is far more powerful: you can see what prod
+  actually ran and printed last night without access to the machine, find the first run where an
+  audit started failing or a statement slowed down across all runs, and compare a production run
+  with yours by `target`, `git_revision`, `sqlbuild_version` or `host_token`. Queries use
+  ClickHouse SQL, and `--json` reports `rows_read` and `bytes_read`; filter by time and keep a
+  `LIMIT` on large stores.
+
+Read [references/docs/concepts/observability/recall.md](references/docs/concepts/observability/recall.md).
+
 ## Reach for these tools
 
 These are SQLBuild's highest-leverage features and the ones most often missed. Use them whenever
@@ -86,6 +107,8 @@ the trigger applies.
 | Find what a model depends on, or what breaks if it changes | `sqb lineage <model> --direction both` |
 | Trace where a column comes from, or who consumes it before renaming or dropping it | `sqb lineage <model>.<column> --direction downstream` |
 | See which intermediate models a SQL test will really execute | `sqb test <model> --inspect` |
+| Find out what a past run did: which models ran, their SQL, audit results, errors and timing | `sqb recall query "SELECT ... FROM statements"` (views: `sqb recall schema`) |
+| See exactly what an earlier command printed, including a scheduled run | `sqb recall output last --tail 50` or `sqb recall output <invocation_id>` |
 | Inspect the full graph as data | `sqb dag --json`, `sqb plan --json`, `sqb compile --json` |
 | Adopt an existing warehouse table's columns into a contract | `sqb contract generate --from <target> --select <model>` |
 | Try syntax safely in a throwaway DuckDB project | `sqb playground /tmp/sqb-sandbox` |
