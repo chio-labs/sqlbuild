@@ -9,11 +9,7 @@ from sqlbuild._native import shared_transient_line_coordinator
 
 
 class DynamicStderrHandler(logging.StreamHandler):
-    """Stream handler that follows the current stderr object at emit time.
-
-    Writes go through the shared transient line coordinator, which clears a live progress line
-    before the record and redraws it afterwards.
-    """
+    """Stream handler that follows the current stderr and keeps clear of live progress lines."""
 
     def emit(self, record: logging.LogRecord) -> None:
         self.stream = sys.stderr

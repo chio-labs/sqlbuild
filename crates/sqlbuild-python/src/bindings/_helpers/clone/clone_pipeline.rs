@@ -34,38 +34,25 @@ pub(crate) struct ClonePipeline<'py> {
     pub(crate) resolver: Bound<'py, PyAny>,
 }
 
-/// The structural compiled project of each target environment a clone reads, compiled once each.
-///
-/// Clone reads relation names, the dependency graph, configuration and rendered view and
-/// function SQL. Compile produces them without SQL validation or column inference, and clone
-/// reports no compile diagnostics, so both are skipped.
-struct Environments<'a, 'py> {
-    pipeline: &'a ClonePipeline<'py>,
-    compiled: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)>,
-}
+/// Compiled environments by target name, so each target a clone reads compiles once.
+type Environments<'py> = Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)>;
 
-impl<'py> Environments<'_, 'py> {
-    /// The compiled project of `target_name`, compiling it on first use.
-    fn project(&mut self, target_name: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-        for (name, project) in &self.compiled {
-            if name.eq(target_name)? {
-                return Ok(project.clone());
-            }
+/// The compiled project of `target_name` among `compiled`.
+fn environment<'py>(
+    compiled: &Environments<'py>,
+    target_name: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    for (name, project) in compiled {
+        if name.eq(target_name)? {
+            return Ok(project.clone());
         }
-        let project: Bound<'py, PyAny> = compiled_environment(self.pipeline, target_name)?;
-        self.compiled.push((target_name.clone(), project.clone()));
-        Ok(project)
     }
-
-    /// The project a target's sources are read from: its `defer_sources_to`, or itself.
-    fn source_project(&mut self, target_name: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-        let read_target: Bound<'py, PyAny> =
-            read_target_name(&self.pipeline.discovered, target_name)?;
-        self.project(&read_target)
-    }
+    Err(pyo3::exceptions::PyKeyError::new_err(
+        target_name.clone().unbind(),
+    ))
 }
 
-/// The structural compiled project of one target environment.
+/// One target's compiled project without SQL validation or column inference, which clone never reads.
 fn compiled_environment<'py>(
     pipeline: &ClonePipeline<'py>,
     target_name: &Bound<'py, PyAny>,
@@ -127,15 +114,24 @@ pub(crate) fn prepared_clone_pipeline<'py>(
     (origin_target, destination_target): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = origin_target.py();
-    let mut environments: Environments<'_, 'py> = Environments {
-        pipeline,
-        compiled: Vec::new(),
-    };
-    let origin_project: Bound<'py, PyAny> = environments.project(origin_target)?;
-    let destination_project: Bound<'py, PyAny> = environments.project(destination_target)?;
-    let origin_source_project: Bound<'py, PyAny> = environments.source_project(origin_target)?;
-    let destination_source_project: Bound<'py, PyAny> =
-        environments.source_project(destination_target)?;
+    let origin_reads: Bound<'py, PyAny> = read_target_name(&pipeline.discovered, origin_target)?;
+    let destination_reads: Bound<'py, PyAny> =
+        read_target_name(&pipeline.discovered, destination_target)?;
+    let mut compiled: Environments<'py> = Vec::new();
+    for target in [
+        origin_target,
+        destination_target,
+        &origin_reads,
+        &destination_reads,
+    ] {
+        if environment(&compiled, target).is_err() {
+            compiled.push((target.clone(), compiled_environment(pipeline, target)?));
+        }
+    }
+    let origin_project: Bound<'py, PyAny> = environment(&compiled, origin_target)?;
+    let destination_project: Bound<'py, PyAny> = environment(&compiled, destination_target)?;
+    let origin_source_project: Bound<'py, PyAny> = environment(&compiled, &origin_reads)?;
+    let destination_source_project: Bound<'py, PyAny> = environment(&compiled, &destination_reads)?;
     let planned: Bound<'py, PyTuple> = run_clone_planning(
         py,
         Some(keywords(

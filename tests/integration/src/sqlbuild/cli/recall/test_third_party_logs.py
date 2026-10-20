@@ -31,13 +31,13 @@ TRACEBACK: str = "Traceback (most recent call last):"
     (
         ThirdPartyLogTestCase(
             description="normal output hides INFO and shows the warning as one line",
-            debug=False,
+            build_arguments=("build",),
             expected_present=("[warning] vendor.client token refresh failed",),
             expected_absent=("connecting to the orders service", TRACEBACK, "token expired"),
         ),
         ThirdPartyLogTestCase(
             description="debug output shows every record with its traceback",
-            debug=True,
+            build_arguments=("--debug", "build"),
             expected_present=(
                 "[info] vendor.client connecting to the orders service",
                 "[warning] vendor.client token refresh failed",
@@ -55,9 +55,7 @@ def test_given_library_logs_during_build_when_running_then_console_is_quiet_and_
     project_dir: Path = write_project(tmp_path / "orders_shop")
     (project_dir / "python" / "tasks" / "emit.py").write_text(VENDOR_TASK, encoding="utf-8")
 
-    built: subprocess.CompletedProcess[bytes] = run(
-        project_dir, *(("--debug",) if test_case.debug else ()), "build"
-    )
+    built: subprocess.CompletedProcess[bytes] = run(project_dir, *test_case.build_arguments)
 
     stderr: str = built.stderr.decode(errors="replace")
     assert built.returncode == 0, stderr

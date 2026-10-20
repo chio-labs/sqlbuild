@@ -44,6 +44,7 @@ class ThirdPartyConsoleTestCase:
     description: str
     debug: bool
     expected_console_lines: tuple[str, ...]
+    expected_absent: tuple[str, ...]
     expected_traceback_count: int
 
 

@@ -106,9 +106,7 @@ fn recreated_view(model: &Bound<'_, PyAny>, selected: &Bound<'_, PyAny>) -> PyRe
         && materialization_of(model)?.eq(VIEW_MATERIALIZATION)?)
 }
 
-/// The entries of the sources that recreated views and functions read directly.
-///
-/// Only their SQL is resolved against warehouse columns, so other sources need no inspection.
+/// The entries of the sources whose columns recreated view and function SQL resolves against.
 fn resolved_source_entries<'py>(
     (project, plan): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
     source_project: &Bound<'py, PyAny>,

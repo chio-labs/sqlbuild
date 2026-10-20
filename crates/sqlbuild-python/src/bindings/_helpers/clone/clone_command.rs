@@ -242,7 +242,7 @@ fn prepare<'py>(
     let py: Python<'py> = request.py();
     let progress: Bound<'py, PyAny> = progress_reporter(&invocation.stream, invocation.style)?;
     let started: Instant = Instant::now();
-    let prepared: PyResult<Bound<'py, PyAny>> =
+    let pipeline: Bound<'py, PyAny> =
         within(&lifecycle(py, ("project", "project_compile"))?, |_| {
             progress.call_method1("on_progress", ("Preparing clone plan...",))?;
             let resolver: Bound<'py, PyAny> = resolve_external_sql_reference_resolver(
@@ -288,12 +288,7 @@ fn prepare<'py>(
                 ),),
             )?;
             Ok(pipeline)
-        });
-    if prepared.is_err() {
-        // Stop the spinner before the error is reported; the preparation error takes precedence.
-        let _ = progress.call_method0("finish");
-    }
-    let pipeline: Bound<'py, PyAny> = prepared?;
+        })?;
     if destination_entry_count(&pipeline)? == 0 {
         return Err(user_error(py, NOTHING_TO_CLONE));
     }

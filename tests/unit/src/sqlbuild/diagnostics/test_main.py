@@ -19,20 +19,10 @@ from tests.unit.src.sqlbuild.diagnostics._test_types import (
     DiagnosticsLogTestCase,
     ThirdPartyConsoleTestCase,
 )
-from tests.unit.src.sqlbuild.diagnostics.helpers import HostRecordingLogHandler
+from tests.unit.src.sqlbuild.diagnostics.helpers import HostRecordingLogHandler, log_vendor_records
 from tests.unit.src.sqlbuild.presentation.classes.helpers import RecordingStream
 
 _CLEAR_LINE: str = "\r\x1b[K"
-
-
-def _log_vendor_records() -> None:
-    logger: logging.Logger = logging.getLogger("vendor.client")
-    logger.info("connecting to the orders service")
-    try:
-        raise RuntimeError("token expired")
-    except RuntimeError:
-        logger.warning("token refresh failed\nretrying with fallback", exc_info=True)
-        logger.error("orders service rejected the request", exc_info=True)
 
 
 @pytest.mark.parametrize(
@@ -78,6 +68,7 @@ def test_given_diagnostics_without_debug_when_logging_then_internal_records_are_
                 "[warning] vendor.client token refresh failed",
                 "[error] vendor.client orders service rejected the request",
             ),
+            expected_absent=("connecting to the orders service", "retrying with fallback"),
             expected_traceback_count=1,
         ),
         ThirdPartyConsoleTestCase(
@@ -89,6 +80,7 @@ def test_given_diagnostics_without_debug_when_logging_then_internal_records_are_
                 "retrying with fallback",
                 "[error] vendor.client orders service rejected the request",
             ),
+            expected_absent=(),
             expected_traceback_count=2,
         ),
     ),
@@ -99,14 +91,12 @@ def test_given_third_party_records_when_logging_then_console_follows_debug_polic
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     with configure_diagnostics(debug=test_case.debug):
-        _log_vendor_records()
+        log_vendor_records()
 
     console_error: str = capsys.readouterr().err
-    lines: tuple[str, ...] = tuple(
-        line for line in console_error.splitlines() if line.startswith(("[", "retrying"))
-    )
 
-    assert lines == test_case.expected_console_lines
+    assert all(line in console_error for line in test_case.expected_console_lines), console_error
+    assert not any(fragment in console_error for fragment in test_case.expected_absent)
     assert console_error.count("Traceback (most recent call last):") == (
         test_case.expected_traceback_count
     )

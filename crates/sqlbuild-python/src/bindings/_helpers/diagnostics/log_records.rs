@@ -172,20 +172,23 @@ fn exception_text(record: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
 }
 
 /// A redacted copy of `record.__dict__` for one destination, or `None` when it does not belong.
-///
-/// With `summarize_third_party`, records from other libraries follow the non-debug console
-/// policy: errors in full, warnings as their first line without a traceback, nothing below.
 #[pyfunction]
-#[pyo3(signature = (
-    *, record, internal_only, allow_internal, include_sql_text, summarize_third_party = false
-))]
+#[pyo3(signature = (**request))]
 fn route_diagnostic_log_record<'py>(
-    record: &Bound<'py, PyAny>,
-    internal_only: bool,
-    allow_internal: bool,
-    include_sql_text: bool,
-    summarize_third_party: bool,
+    request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Option<Bound<'py, PyDict>>> {
+    let request: Request<'_, 'py> = Request::new("route_diagnostic_log_record", request)?;
+    let record: &Bound<'py, PyAny> = &request.get("record")?;
+    let flag = |name: &str| -> PyResult<bool> { request.get(name)?.extract() };
+    let options = RouteOptions {
+        internal_only: flag("internal_only")?,
+        allow_internal: flag("allow_internal")?,
+        include_sql_text: flag("include_sql_text")?,
+    };
+    let summarize_third_party: bool = match request.optional("summarize_third_party")? {
+        Some(value) => value.extract()?,
+        None => false,
+    };
     let py: Python<'py> = record.py();
     let values: Bound<'py, PyDict> = record_values(record)?;
     let facts = RecordFacts {
@@ -193,11 +196,6 @@ fn route_diagnostic_log_record<'py>(
         level: native_field(record, "levelno")?.extract()?,
         has_sql_digest: values.contains(SQL_DIGEST_FIELD)?,
         has_sql_text: values.contains(SQL_TEXT_FIELD)?,
-    };
-    let options = RouteOptions {
-        internal_only,
-        allow_internal,
-        include_sql_text,
     };
     if !route_admits(options, facts) {
         return Ok(None);
@@ -234,7 +232,7 @@ fn route_diagnostic_log_record<'py>(
             copied.set_item(&name, redacted_value(&name, &value)?)?;
         }
     }
-    if !include_sql_text && copied.contains(SQL_TEXT_FIELD)? {
+    if !options.include_sql_text && copied.contains(SQL_TEXT_FIELD)? {
         copied.del_item(SQL_TEXT_FIELD)?;
     }
     Ok(Some(copied))

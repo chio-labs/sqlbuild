@@ -196,6 +196,6 @@ class SlowReplacementTestCase:
 @dataclass(frozen=True)
 class ThirdPartyLogTestCase:
     description: str
-    debug: bool
+    build_arguments: tuple[str, ...]
     expected_present: tuple[str, ...]
     expected_absent: tuple[str, ...]
