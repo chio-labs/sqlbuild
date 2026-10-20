@@ -8,6 +8,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use pyo3::exceptions::PyOSError;
 use pyo3::prelude::{Bound, PyAny, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+
+use crate::bindings::_helpers::format_command::stages::on_format_workers;
 
 const LINE_FEED: &str = "\n";
 const CARRIAGE_RETURN_LINE_FEED: &str = "\r\n";
@@ -51,7 +54,8 @@ fn temporary_path(path: &Path) -> PathBuf {
     path.with_file_name(format!(".{name}.{}{nanos:x}", std::process::id()))
 }
 
-fn write_replacing(path: &Path, temporary: &Path, contents: &str) -> std::io::Result<()> {
+/// Write and sync `contents` to a new `temporary` beside `path`, with its permissions.
+fn stage_replacement(path: &Path, temporary: &Path, contents: &str) -> std::io::Result<()> {
     let permissions: fs::Permissions = fs::metadata(path)?.permissions();
     let mut handle: File = OpenOptions::new()
         .write(true)
@@ -59,16 +63,45 @@ fn write_replacing(path: &Path, temporary: &Path, contents: &str) -> std::io::Re
         .open(temporary)?;
     handle.set_permissions(permissions)?;
     handle.write_all(contents.as_bytes())?;
-    handle.sync_all()?;
-    fs::rename(temporary, path)
+    handle.sync_all()
+}
+
+fn write_failure(path: &Path, error: &std::io::Error) -> String {
+    format!("{}: {error}", path.display())
 }
 
 /// Replace a text file atomically, keeping its permissions.
 fn write_atomically(path: &Path, contents: &str) -> PyResult<()> {
     let temporary: PathBuf = temporary_path(path);
-    let written: std::io::Result<()> = write_replacing(path, &temporary, contents);
+    let written: std::io::Result<()> =
+        stage_replacement(path, &temporary, contents).and_then(|()| fs::rename(&temporary, path));
     let _ = fs::remove_file(&temporary);
-    written.map_err(|error| PyOSError::new_err(format!("{}: {error}", path.display())))
+    written.map_err(|error| PyOSError::new_err(write_failure(path, &error)))
+}
+
+/// Replace `files` in order after staging all in parallel; the earliest failure stops the rest.
+fn replace_in_order(files: &[(&Path, &str)]) -> Result<(), String> {
+    let temporaries: Vec<PathBuf> = files.iter().map(|(path, _)| temporary_path(path)).collect();
+    let staged: Vec<std::io::Result<()>> = on_format_workers(|| {
+        Ok(files
+            .par_iter()
+            .zip(temporaries.par_iter())
+            .map(|((path, contents), temporary)| stage_replacement(path, temporary, contents))
+            .collect())
+    })?;
+    let mut outcome: Result<(), String> = Ok(());
+    let mut renamed: usize = 0;
+    for (((path, _), temporary), staging) in files.iter().zip(&temporaries).zip(staged) {
+        if let Err(error) = staging.and_then(|()| fs::rename(temporary, path)) {
+            outcome = Err(write_failure(path, &error));
+            break;
+        }
+        renamed += 1;
+    }
+    for temporary in &temporaries[renamed..] {
+        let _ = fs::remove_file(temporary);
+    }
+    outcome
 }
 
 /// `write_atomically(*, path, contents)`: replace a text file atomically, keeping its mode.
@@ -82,28 +115,37 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(write_file_atomically, module)?)
 }
 
-/// The changed files of `writes` in order, written one by one when `write` is set.
+/// The changed files of `writes` in order, replaced in that order when `write` is set.
 pub(crate) fn persist_changes<'py>(
     py: Python<'py>,
     writes: &[PendingWrite<'_>],
     write: bool,
 ) -> PyResult<Vec<FormatChange<'py>>> {
-    let mut changes: Vec<FormatChange<'py>> = Vec::new();
-    for pending in writes {
-        let after: String = with_newline_style(pending.contents, pending.newline);
-        let before: String = with_newline_style(pending.authored, pending.newline);
-        if after == before {
-            continue;
-        }
-        if write {
-            write_atomically(pending.path, &after)?;
-        }
-        changes.push(FormatChange {
-            path: pending.path.into_pyobject(py)?.into_any(),
-            entry: pending.entry,
-            before,
-            after,
-        });
+    let changed: Vec<(&PendingWrite<'_>, String, String)> = writes
+        .iter()
+        .filter_map(|pending| {
+            let after: String = with_newline_style(pending.contents, pending.newline);
+            let before: String = with_newline_style(pending.authored, pending.newline);
+            (after != before).then_some((pending, before, after))
+        })
+        .collect();
+    if write {
+        let files: Vec<(&Path, &str)> = changed
+            .iter()
+            .map(|(pending, _, after)| (pending.path, after.as_str()))
+            .collect();
+        py.detach(|| replace_in_order(&files))
+            .map_err(PyOSError::new_err)?;
     }
-    Ok(changes)
+    changed
+        .into_iter()
+        .map(|(pending, before, after)| {
+            Ok(FormatChange {
+                path: pending.path.into_pyobject(py)?.into_any(),
+                entry: pending.entry,
+                before,
+                after,
+            })
+        })
+        .collect()
 }

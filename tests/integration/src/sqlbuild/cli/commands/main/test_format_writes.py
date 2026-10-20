@@ -29,12 +29,21 @@ _UNFORMATTED_SQL: str = (
     "test_case",
     [
         FormatWriteFailureTestCase(
-            description="a failed write stops before later files are replaced",
+            description="a failed first write leaves every later file as authored",
+            directories=("a_locked", "b_open"),
             locked_directory="a_locked",
-            later_directory="b_open",
+            expected_replaced=(False, False),
             expected_error=OSError,
             expected_status="Formatting SQL  ERROR",
-        )
+        ),
+        FormatWriteFailureTestCase(
+            description="files before a failed write are replaced and later ones are not",
+            directories=("a_open", "b_locked", "c_open", "d_open"),
+            locked_directory="b_locked",
+            expected_replaced=(True, False, False, False),
+            expected_error=OSError,
+            expected_status="Formatting SQL  ERROR",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -46,13 +55,14 @@ def test_given_unwritable_file_when_formatting_then_later_files_are_left_as_auth
     (tmp_path / "sqlbuild_project.toml").write_text(
         'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
     )
+    files: list[Path] = []
+    directory: str
+    for directory in test_case.directories:
+        (tmp_path / "models" / directory).mkdir(parents=True)
+        model: Path = tmp_path / "models" / directory / "orders.sql"
+        model.write_text(_UNFORMATTED_SQL, encoding="utf-8")
+        files.append(model)
     locked: Path = tmp_path / "models" / test_case.locked_directory
-    later: Path = tmp_path / "models" / test_case.later_directory
-    locked.mkdir(parents=True)
-    later.mkdir()
-    (locked / "orders.sql").write_text(_UNFORMATTED_SQL, encoding="utf-8")
-    later_file: Path = later / "orders_copy.sql"
-    later_file.write_text(_UNFORMATTED_SQL, encoding="utf-8")
     locked.chmod(stat.S_IRUSR | stat.S_IXUSR)
     try:
         with pytest.raises(test_case.expected_error, match=re.escape(str(locked / "orders.sql"))):
@@ -61,8 +71,11 @@ def test_given_unwritable_file_when_formatting_then_later_files_are_left_as_auth
         locked.chmod(stat.S_IRWXU)
 
     assert test_case.expected_status in capsys.readouterr().err
-    assert later_file.read_text(encoding="utf-8") == _UNFORMATTED_SQL
-    assert (locked / "orders.sql").read_text(encoding="utf-8") == _UNFORMATTED_SQL
+    assert (
+        tuple(path.read_text(encoding="utf-8") != _UNFORMATTED_SQL for path in files)
+        == test_case.expected_replaced
+    )
+    assert [path.name for path in (tmp_path / "models").rglob(".*")] == []
 
 
 if __name__ == "__main__":

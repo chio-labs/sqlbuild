@@ -1249,10 +1249,11 @@ class FormatCacheFaultTestCase:
 
 @dataclass(frozen=True)
 class FormatWriteFailureTestCase:
-    """A write that fails part-way through a format run and the files left as authored."""
+    """A write that fails part-way through a format run and which files it replaced."""
 
     description: str
+    directories: tuple[str, ...]
     locked_directory: str
-    later_directory: str
+    expected_replaced: tuple[bool, ...]
     expected_error: type[BaseException]
     expected_status: str
