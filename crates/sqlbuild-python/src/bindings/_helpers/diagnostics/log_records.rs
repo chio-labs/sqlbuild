@@ -14,11 +14,13 @@ use sqlbuild_core::diagnostic_routing::constants::{
     SQL_TEXT_FIELD, UNFORMATTABLE_MESSAGE,
 };
 use sqlbuild_core::diagnostic_routing::main::compute_log_admits::compute_log_admits;
+use sqlbuild_core::diagnostic_routing::main::console_summary_line::console_summary_line;
 use sqlbuild_core::diagnostic_routing::main::diagnostic_severity::diagnostic_severity;
 use sqlbuild_core::diagnostic_routing::main::internal_logger::internal_logger;
 use sqlbuild_core::diagnostic_routing::main::route_admits::route_admits;
 use sqlbuild_core::diagnostic_routing::main::sql_digest::sql_digest;
-use sqlbuild_core::diagnostic_routing::models::{RecordFacts, RouteOptions};
+use sqlbuild_core::diagnostic_routing::main::third_party_console_form::third_party_console_form;
+use sqlbuild_core::diagnostic_routing::models::{RecordFacts, RouteOptions, ThirdPartyConsoleForm};
 use sqlbuild_core::redaction::main::redact_text::redact_text;
 use sqlbuild_host::entries::models::ExecutorHost;
 
@@ -154,14 +156,35 @@ fn redacted_message(record: &Bound<'_, PyAny>) -> PyResult<String> {
     ))
 }
 
+/// The redacted formatted traceback of a record's `exc_info`, if it has one that formats.
+fn exception_text(record: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
+    let py: Python<'_> = record.py();
+    let exc_info: Bound<'_, PyAny> = native_field(record, "exc_info")?;
+    if exc_info.is_none() {
+        return Ok(None);
+    }
+    let formatted: PyResult<String> = imported(py, "logging", "Formatter")
+        .and_then(|formatter| formatter.call0())
+        .and_then(|formatter| formatter.call_method1("formatException", (exc_info,)))
+        .and_then(|text| text.extract::<String>())
+        .map(|text| redact_text(&text));
+    swallowed(py, formatted)
+}
+
 /// A redacted copy of `record.__dict__` for one destination, or `None` when it does not belong.
+///
+/// With `summarize_third_party`, records from other libraries follow the non-debug console
+/// policy: errors in full, warnings as their first line without a traceback, nothing below.
 #[pyfunction]
-#[pyo3(signature = (*, record, internal_only, allow_internal, include_sql_text))]
+#[pyo3(signature = (
+    *, record, internal_only, allow_internal, include_sql_text, summarize_third_party = false
+))]
 fn route_diagnostic_log_record<'py>(
     record: &Bound<'py, PyAny>,
     internal_only: bool,
     allow_internal: bool,
     include_sql_text: bool,
+    summarize_third_party: bool,
 ) -> PyResult<Option<Bound<'py, PyDict>>> {
     let py: Python<'py> = record.py();
     let values: Bound<'py, PyDict> = record_values(record)?;
@@ -179,6 +202,14 @@ fn route_diagnostic_log_record<'py>(
     if !route_admits(options, facts) {
         return Ok(None);
     }
+    let form: ThirdPartyConsoleForm = if summarize_third_party && !facts.internal {
+        third_party_console_form(facts.level)
+    } else {
+        ThirdPartyConsoleForm::Full
+    };
+    if form == ThirdPartyConsoleForm::Hidden {
+        return Ok(None);
+    }
     let copied: Bound<'py, PyDict> = values.copy()?;
     let mut message: String = swallowed(py, redacted_message(record))?
         .unwrap_or_else(|| UNFORMATTABLE_MESSAGE.to_owned());
@@ -186,16 +217,13 @@ fn route_diagnostic_log_record<'py>(
     if facts.has_sql_digest {
         REDACTED_SQL_LOG_MESSAGE.clone_into(&mut message);
     }
-    let exc_info: Bound<'py, PyAny> = native_field(record, "exc_info")?;
-    if !exc_info.is_none() {
-        let formatted: PyResult<String> = imported(py, "logging", "Formatter")
-            .and_then(|formatter| formatter.call0())
-            .and_then(|formatter| formatter.call_method1("formatException", (exc_info,)))
-            .and_then(|text| text.extract::<String>())
-            .map(|text| redact_text(&text));
-        if let Some(exception_text) = swallowed(py, formatted)? {
-            message = format!("{message}\n{exception_text}");
-        }
+    if form == ThirdPartyConsoleForm::Summary {
+        message = console_summary_line(&message).to_owned();
+        copied.set_item("stack_info", py.None())?;
+    } else if let Some(exception_text) = exception_text(record)? {
+        message = format!("{message}\n{exception_text}");
+    }
+    if !native_field(record, "exc_info")?.is_none() {
         copied.set_item("exc_info", py.None())?;
         copied.set_item("exc_text", py.None())?;
     }
@@ -267,10 +295,13 @@ fn retained<'py>(
     let py: Python<'py> = record.py();
     let contains_sql: bool = facts.has_sql_digest || facts.has_sql_text;
     if !contains_sql {
-        let message: String = redacted_message(record)?;
+        let mut message: String = redacted_message(record)?;
         let fields: Bound<'py, PyDict> = if facts.internal {
             fields
         } else {
+            if let Some(exception_text) = exception_text(record)? {
+                message = format!("{message}\n{exception_text}");
+            }
             extra_fields(record)?
         };
         return Ok((message, native_field(record, "name")?, fields));

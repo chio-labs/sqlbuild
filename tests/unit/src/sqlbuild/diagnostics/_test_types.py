@@ -37,3 +37,18 @@ class ConsoleDurationTestCase:
     subject: object
     duration_ms: object
     expected_line: str
+
+
+@dataclass(frozen=True)
+class ThirdPartyConsoleTestCase:
+    description: str
+    debug: bool
+    expected_console_lines: tuple[str, ...]
+    expected_traceback_count: int
+
+
+@dataclass(frozen=True)
+class ConsoleProgressLineTestCase:
+    description: str
+    message: str
+    expected_log_line: str

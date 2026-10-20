@@ -169,11 +169,10 @@ fn model_entry<'py>(
 
 fn clone_model_entries<'py>(
     (project, plan): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
-    (adapter, connection): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
-    source_project: &Bound<'py, PyAny>,
+    adapter: &Bound<'py, PyAny>,
+    resolution: &CloneResolution<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = project.py();
-    let resolution = clone_resolution(project, source_project, (adapter, connection))?;
     let selected = native_field(plan, "selected_keys")?;
     let entries = PyDict::new(py);
     for model in native_field(project, "models")?.try_iter()? {
@@ -297,11 +296,10 @@ fn clone_source_entries<'py>(
 
 fn clone_function_entries<'py>(
     (project, plan): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
-    (adapter, connection): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
-    source_project: &Bound<'py, PyAny>,
+    adapter: &Bound<'py, PyAny>,
+    resolution: &CloneResolution<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = project.py();
-    let resolution = clone_resolution(project, source_project, (adapter, connection))?;
     let selected = native_field(plan, "selected_keys")?;
     let entries = PyDict::new(py);
     for function in native_field(project, "functions")?.try_iter()? {
@@ -479,17 +477,10 @@ pub(crate) fn run_clone_planning<'py>(
     let connection = args.value("connection")?;
     let destination_sources = args.value("destination_source_project")?;
     let plan = clone_plan_output(&project, &args.value("select")?, &args.value("exclude")?)?;
-    let models = clone_model_entries(
-        (&project, &plan),
-        (&adapter, &connection),
-        &destination_sources,
-    )?;
+    let resolution = clone_resolution(&project, &destination_sources, (&adapter, &connection))?;
+    let models = clone_model_entries((&project, &plan), &adapter, &resolution)?;
     let seeds = seed_entries(&project, "key", &native_field(&plan, "selected_keys")?)?;
-    let functions = clone_function_entries(
-        (&project, &plan),
-        (&adapter, &connection),
-        &destination_sources,
-    )?;
+    let functions = clone_function_entries((&project, &plan), &adapter, &resolution)?;
     let mut sources = PyTuple::empty(py).into_any();
     if native_field(&destination_sources, "effective_target_name")?
         .eq(native_field(&project, "effective_target_name")?)?

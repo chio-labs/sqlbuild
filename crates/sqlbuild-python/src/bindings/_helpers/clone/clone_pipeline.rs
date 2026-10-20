@@ -1,7 +1,7 @@
 //! Compile the origin and destination environments of a clone and plan it.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyTuple};
+use pyo3::types::{PyBool, PyDict, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
@@ -34,7 +34,37 @@ pub(crate) struct ClonePipeline<'py> {
     pub(crate) resolver: Bound<'py, PyAny>,
 }
 
-/// The compiled project of one target environment.
+/// The structural compiled project of each target environment a clone reads, compiled once each.
+///
+/// Clone reads relation names, the dependency graph, configuration and rendered view and
+/// function SQL, which compile produces without SQL analysis, so column inference is skipped.
+struct Environments<'a, 'py> {
+    pipeline: &'a ClonePipeline<'py>,
+    compiled: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)>,
+}
+
+impl<'py> Environments<'_, 'py> {
+    /// The compiled project of `target_name`, compiling it on first use.
+    fn project(&mut self, target_name: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+        for (name, project) in &self.compiled {
+            if name.eq(target_name)? {
+                return Ok(project.clone());
+            }
+        }
+        let project: Bound<'py, PyAny> = compiled_environment(self.pipeline, target_name)?;
+        self.compiled.push((target_name.clone(), project.clone()));
+        Ok(project)
+    }
+
+    /// The project a target's sources are read from: its `defer_sources_to`, or itself.
+    fn source_project(&mut self, target_name: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+        let read_target: Bound<'py, PyAny> =
+            read_target_name(&self.pipeline.discovered, target_name)?;
+        self.project(&read_target)
+    }
+}
+
+/// The structural compiled project of one target environment.
 fn compiled_environment<'py>(
     pipeline: &ClonePipeline<'py>,
     target_name: &Bound<'py, PyAny>,
@@ -56,6 +86,10 @@ fn compiled_environment<'py>(
                 (
                     "no_sql_validation",
                     native_field(options, "no_sql_validation")?,
+                ),
+                (
+                    "skip_column_inference",
+                    PyBool::new(py, true).to_owned().into_any(),
                 ),
                 (
                     "analysis_selection",
@@ -91,32 +125,21 @@ fn read_target_name<'py>(
     Ok(target_name.clone())
 }
 
-/// The project its sources are read from: `project` itself unless sources defer elsewhere.
-fn source_project<'py>(
-    pipeline: &ClonePipeline<'py>,
-    project: &Bound<'py, PyAny>,
-    target_name: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let read_target: Bound<'py, PyAny> = read_target_name(&pipeline.discovered, target_name)?;
-    if read_target.eq(target_name)? {
-        return Ok(project.clone());
-    }
-    compiled_environment(pipeline, &read_target)
-}
-
 /// Compile both environments, plan the clone and return the `ClonePipelineResult`.
 pub(crate) fn prepared_clone_pipeline<'py>(
     pipeline: &ClonePipeline<'py>,
     (origin_target, destination_target): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = origin_target.py();
-    let origin_project: Bound<'py, PyAny> = compiled_environment(pipeline, origin_target)?;
-    let destination_project: Bound<'py, PyAny> =
-        compiled_environment(pipeline, destination_target)?;
-    let origin_source_project: Bound<'py, PyAny> =
-        source_project(pipeline, &origin_project, origin_target)?;
+    let mut environments: Environments<'_, 'py> = Environments {
+        pipeline,
+        compiled: Vec::new(),
+    };
+    let origin_project: Bound<'py, PyAny> = environments.project(origin_target)?;
+    let destination_project: Bound<'py, PyAny> = environments.project(destination_target)?;
+    let origin_source_project: Bound<'py, PyAny> = environments.source_project(origin_target)?;
     let destination_source_project: Bound<'py, PyAny> =
-        source_project(pipeline, &destination_project, destination_target)?;
+        environments.source_project(destination_target)?;
     let planned: Bound<'py, PyTuple> = run_clone_planning(
         py,
         Some(keywords(

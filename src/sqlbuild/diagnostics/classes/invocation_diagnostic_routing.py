@@ -147,6 +147,7 @@ class InvocationDiagnosticRouting:
                 internal_only=False,
                 allow_internal=self._options.debug_console,
                 include_sql_text=False,
+                summarize_third_party=not self._options.debug_console,
             )
         )
         handlers.append(console_handler)

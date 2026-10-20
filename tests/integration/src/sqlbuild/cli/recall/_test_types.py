@@ -191,3 +191,11 @@ class SlowReplacementTestCase:
     shutdown_seconds: float
     sink_sleep_seconds: str
     expected_max_seconds: float
+
+
+@dataclass(frozen=True)
+class ThirdPartyLogTestCase:
+    description: str
+    debug: bool
+    expected_present: tuple[str, ...]
+    expected_absent: tuple[str, ...]

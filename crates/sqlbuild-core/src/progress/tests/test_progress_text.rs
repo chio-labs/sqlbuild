@@ -25,6 +25,16 @@ fn given_planning_message_when_classifying_then_completions_are_recognized() {
             expected_is_completion: true,
         },
         CompletionMessageTestCase {
+            description: "a prepared clone plan completes",
+            message: "Prepared clone plan. (0.10s)",
+            expected_is_completion: true,
+        },
+        CompletionMessageTestCase {
+            description: "an ongoing clone preparation does not complete",
+            message: "Preparing clone plan...",
+            expected_is_completion: false,
+        },
+        CompletionMessageTestCase {
             description: "a finalized dbt run completes",
             message: "Finalized dbt run.",
             expected_is_completion: true,

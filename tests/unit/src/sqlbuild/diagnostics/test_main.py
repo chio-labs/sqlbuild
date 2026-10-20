@@ -3,19 +3,36 @@
 from __future__ import annotations
 
 import logging
+import sys
 from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import TransientStatusReporter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.diagnostics.main.log_sql import log_sql
 from tests.unit.src.sqlbuild.diagnostics._test_types import (
+    ConsoleProgressLineTestCase,
     DiagnosticsContextualSqlTestCase,
     DiagnosticsLogTestCase,
+    ThirdPartyConsoleTestCase,
 )
 from tests.unit.src.sqlbuild.diagnostics.helpers import HostRecordingLogHandler
+from tests.unit.src.sqlbuild.presentation.classes.helpers import RecordingStream
+
+_CLEAR_LINE: str = "\r\x1b[K"
+
+
+def _log_vendor_records() -> None:
+    logger: logging.Logger = logging.getLogger("vendor.client")
+    logger.info("connecting to the orders service")
+    try:
+        raise RuntimeError("token expired")
+    except RuntimeError:
+        logger.warning("token refresh failed\nretrying with fallback", exc_info=True)
+        logger.error("orders service rejected the request", exc_info=True)
 
 
 @pytest.mark.parametrize(
@@ -49,6 +66,84 @@ def test_given_diagnostics_without_debug_when_logging_then_internal_records_are_
     absent_fragment: str
     for absent_fragment in test_case.expected_absent_console_fragments:
         assert absent_fragment not in console_error
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ThirdPartyConsoleTestCase(
+            description="normal console hides INFO and shows WARNING as one line",
+            debug=False,
+            expected_console_lines=(
+                "[warning] vendor.client token refresh failed",
+                "[error] vendor.client orders service rejected the request",
+            ),
+            expected_traceback_count=1,
+        ),
+        ThirdPartyConsoleTestCase(
+            description="debug console shows every record with tracebacks",
+            debug=True,
+            expected_console_lines=(
+                "[info] vendor.client connecting to the orders service",
+                "[warning] vendor.client token refresh failed",
+                "retrying with fallback",
+                "[error] vendor.client orders service rejected the request",
+            ),
+            expected_traceback_count=2,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_third_party_records_when_logging_then_console_follows_debug_policy(
+    test_case: ThirdPartyConsoleTestCase,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with configure_diagnostics(debug=test_case.debug):
+        _log_vendor_records()
+
+    console_error: str = capsys.readouterr().err
+    lines: tuple[str, ...] = tuple(
+        line for line in console_error.splitlines() if line.startswith(("[", "retrying"))
+    )
+
+    assert lines == test_case.expected_console_lines
+    assert console_error.count("Traceback (most recent call last):") == (
+        test_case.expected_traceback_count
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ConsoleProgressLineTestCase(
+            description="warning clears the live status line and redraws it afterwards",
+            message="Preparing clone plan...",
+            expected_log_line="[warning] vendor.client token refresh failed\n",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_live_status_line_when_logging_then_line_is_cleared_before_record(
+    test_case: ConsoleProgressLineTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("SQLBUILD_NO_PROGRESS", raising=False)
+    events: list[str] = []
+    stream: RecordingStream = RecordingStream(events=events, tty=True)
+    monkeypatch.setattr(sys, "stderr", stream)
+    reporter: TransientStatusReporter = TransientStatusReporter(stream=stream, use_color=False)
+    reporter.start(test_case.message)
+    try:
+        with configure_diagnostics(debug=False):
+            logging.getLogger("vendor.client").warning("token refresh failed")
+    finally:
+        reporter.close()
+
+    log_index: int = events.index(f"write:{test_case.expected_log_line}")
+    assert any(
+        event.startswith(f"write:{_CLEAR_LINE}") for event in events[log_index - 2 : log_index]
+    ), events
+    assert any(test_case.message in event for event in events[log_index + 1 :]), events
 
 
 @pytest.mark.parametrize(

@@ -6413,6 +6413,7 @@ def route_diagnostic_log_record(
     internal_only: bool,
     allow_internal: bool,
     include_sql_text: bool,
+    summarize_third_party: bool = False,
 ) -> dict[str, object] | None: ...
 def safe_diagnostic_extra_fields(record: logging.LogRecord) -> dict[str, object]: ...
 def compute_diagnostic_log_fields(
