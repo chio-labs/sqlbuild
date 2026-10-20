@@ -33,3 +33,32 @@ class ColumnMetadataExpansionTestCase:
     header_column: str
     expected_type: str | None
     expected_error: str | None
+
+
+@dataclass(frozen=True)
+class ConfigValueBuildTestCase:
+    """A Python-given MODEL header and the config values the build gives the model."""
+
+    description: str
+    header: dict[object, object]
+    expected_values: tuple[tuple[str, str, str], ...]
+    expected_header_keys: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ConfigValueRejectionTestCase:
+    """A Python-given MODEL header the config build rejects, and the error it raises."""
+
+    description: str
+    header: dict[object, object]
+    expected_error: tuple[str, str]
+
+
+@dataclass(frozen=True)
+class OpaqueConfigValueTestCase:
+    """A MODEL header holding an opaque value under `key`, which reaches the config unchanged."""
+
+    description: str
+    header: dict[object, object]
+    key: object
+    expected_same_object: bool

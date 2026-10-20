@@ -17,7 +17,7 @@ pub enum ConfigNode<H> {
     /// A `dict`'s entries in insertion order.
     Map(Vec<(Self, Self)>),
     /// Any other value, carried by its host handle and read through the facts taken from it.
-    Host(HostValue<H>),
+    Host(Box<HostValue<H>>),
 }
 
 /// An opaque value: its host handle, what it reads as, and its items when it is a container.

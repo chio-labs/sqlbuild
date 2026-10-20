@@ -6,6 +6,7 @@ import random
 import re
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, fields, replace
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeGuard, cast
 
@@ -29,7 +30,7 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
 
-    from sqlbuild._native import CompileInputsView
+    from sqlbuild._native import CompileInputsView, CompileModelConfig
 
 _TEXTS: tuple[object, ...] = (
     "INTEGER",
@@ -533,3 +534,104 @@ def column_metadata_outcome(*, project_dir: Path, header_column: str) -> tuple[o
         tuple[object, ...], _entry_metadata(inputs.model_inputs[0].schema_entry)[0]
     )
     return getattr(columns[0], "type", None), None
+
+
+CONFIG_VALUE_PROJECT: dict[str, str] = {
+    "sqlbuild_project.toml": (
+        'name = "orders"\nadapter = "duckdb"\ndefault_target = "dev"\n\n'
+        '[connections.local]\ndatabase = "orders.duckdb"\n\n'
+        '[vars]\nregion = "north"\nratio = "0.5"\n\n'
+        '[defaults]\nmaterialized = "table"\ncontract = "enforced"\ntags = ["core"]\n\n'
+        '[path_defaults."marts"]\nrow_diff_exclude_columns = ["loaded_at"]\ntags = ["mart"]\n\n'
+        '[targets.dev]\nconnection = "local"\nschema = "${region}_${CTX:model.name}"\n'
+    ),
+    "models/marts/orders.sql": 'MODEL (description "Orders.");\n\nSELECT 1 AS order_id\n',
+}
+
+
+class Severity(StrEnum):
+    """A string enum whose members config values and keys hold as themselves."""
+
+    WARN = "warn"
+
+
+class TagList(list[object]):
+    """A list subclass a Python caller may pass as a config value."""
+
+
+class SettingMap(dict[str, object]):
+    """A dict subclass a Python caller may pass as a config value."""
+
+
+class Marker:
+    """An opaque object the build carries through without reading it."""
+
+    def __repr__(self) -> str:
+        return "Marker()"
+
+
+MARKER: Marker = Marker()
+
+
+def config_value_inputs(*, project_dir: Path, header: dict[object, object]) -> CompileInputsView:
+    """Build compile inputs for the config value project with its one model's header replaced."""
+
+    for relative_path, contents in CONFIG_VALUE_PROJECT.items():
+        path: Path = project_dir / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents, encoding="utf-8")
+    discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
+    model_file: DiscoveredSqlModelFile = discovered.model_files[0]
+    given: DiscoveredSqlModelFile = DiscoveredSqlModelFile(
+        file_path=model_file.file_path,
+        relative_path=model_file.relative_path,
+        contents=model_file.contents,
+        header_values=cast("dict[str, object]", header),
+        header_column_locations={},
+        output_column_locations={},
+        query_sql=model_file.query_sql,
+    )
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    return build_compile_inputs(
+        discovered_inputs=replace(discovered, model_files=(given,)),
+        adapter_context=CompileAdapterContext(
+            value_renderer=adapter,
+            collection_rendering=resolve_effective_collection_rendering(
+                project_config=discovered.project_config, declaration_override=None
+            ),
+            python_functions_inherit_default_namespace=(
+                adapter.python_functions_inherit_default_namespace()
+            ),
+            sql_lexical_syntax=adapter.sql_lexical_syntax,
+        ),
+        run_id="20261007T000000Z_orders",
+        resolved_connection={},
+        no_sql_validation=True,
+        defer_model_sql_validation=True,
+        no_cache=True,
+    )
+
+
+def config_value_outcome(
+    *, project_dir: Path, header: dict[object, object]
+) -> tuple[tuple[tuple[str, str, str], ...], tuple[str, ...]]:
+    """The model's config values as `(key repr, value type, value repr)` and its header keys."""
+
+    config: CompileModelConfig = (
+        config_value_inputs(project_dir=project_dir, header=header).model_inputs[0].config
+    )
+    return (
+        tuple(
+            (repr(key), type(value).__name__, repr(value)) for key, value in config.values.items()
+        ),
+        config.model_header_keys,
+    )
+
+
+def marker_kept(*, project_dir: Path, header: dict[object, object], key: object) -> bool:
+    """Whether the opaque value under `key` reaches the model's config values as the same object."""
+
+    config: CompileModelConfig = (
+        config_value_inputs(project_dir=project_dir, header=header).model_inputs[0].config
+    )
+    return config.values[cast("str", key)] is MARKER

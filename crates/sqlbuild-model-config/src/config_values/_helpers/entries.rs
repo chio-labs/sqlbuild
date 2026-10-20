@@ -3,21 +3,25 @@
 use crate::config_values::models::ConfigNode;
 use crate::types::{AuthoredNode, NodeKind};
 
-/// Python's `==` between two dict keys: equal text, equal numbers, or equal tuples.
-pub(crate) fn same_key<H: Clone>(left: &ConfigNode<H>, right: &ConfigNode<H>) -> bool {
-    let text = |node: &ConfigNode<H>| match node {
-        ConfigNode::Str(text) => Some(text.as_str().to_owned()),
+/// The exact text of a string key, borrowed.
+fn key_text<H>(node: &ConfigNode<H>) -> Option<&str> {
+    match node {
+        ConfigNode::Str(text) => Some(text),
         ConfigNode::Host(host) if host.facts.kind == NodeKind::Str && host.facts.strict_text => {
-            host.facts.text.clone()
+            host.facts.text.as_deref()
         }
         _ => None,
-    };
+    }
+}
+
+/// Python's `==` between two dict keys: equal text, equal numbers, or equal tuples.
+pub(crate) fn same_key<H: Clone>(left: &ConfigNode<H>, right: &ConfigNode<H>) -> bool {
     match (left, right) {
         (ConfigNode::Null, ConfigNode::Null) => true,
         (ConfigNode::Tuple(left), ConfigNode::Tuple(right)) => {
             left.len() == right.len() && left.iter().zip(right).all(|(a, b)| same_key(a, b))
         }
-        _ => match (text(left), text(right)) {
+        _ => match (key_text(left), key_text(right)) {
             (Some(left), Some(right)) => left == right,
             (None, None) => match (numeric(left), numeric(right)) {
                 (Some(left), Some(right)) => left == right,
@@ -42,10 +46,9 @@ pub(crate) fn entry<'a, H: Clone>(
     entries: &'a [(ConfigNode<H>, ConfigNode<H>)],
     key: &str,
 ) -> Option<&'a ConfigNode<H>> {
-    let key: ConfigNode<H> = ConfigNode::Str(key.to_owned());
     entries
         .iter()
-        .find(|(name, _)| same_key(name, &key))
+        .find(|(name, _)| key_text(name) == Some(key))
         .map(|(_, value)| value)
 }
 

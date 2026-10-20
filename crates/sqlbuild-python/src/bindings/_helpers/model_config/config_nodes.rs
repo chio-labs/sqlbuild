@@ -66,7 +66,7 @@ fn host(value: &Bound<'_, PyAny>, children: HostChildren<HostHandle>) -> PyResul
         Ok(text) => utf8_text(text)?,
         Err(_) => false,
     };
-    Ok(ConfigNode::Host(HostValue {
+    Ok(ConfigNode::Host(Box::new(HostValue {
         handle: Arc::new(value.clone().unbind()),
         facts: HostFacts {
             kind: node.kind(),
@@ -81,7 +81,7 @@ fn host(value: &Bound<'_, PyAny>, children: HostChildren<HostHandle>) -> PyResul
             hook_entry: hook_entry(value)?,
         },
         children,
-    }))
+    })))
 }
 
 /// Converted items, or `None` when a container holds itself; `open` holds the enclosing containers.

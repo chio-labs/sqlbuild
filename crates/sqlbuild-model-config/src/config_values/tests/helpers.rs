@@ -9,7 +9,7 @@ pub(super) fn text(value: &str) -> Node {
 
 /// A `StrEnum`-like host value whose text is `value`.
 pub(super) fn host_text(value: &str) -> Node {
-    ConfigNode::Host(HostValue {
+    ConfigNode::Host(Box::new(HostValue {
         handle: 1,
         facts: HostFacts {
             kind: NodeKind::Str,
@@ -24,7 +24,7 @@ pub(super) fn host_text(value: &str) -> Node {
             hook_entry: false,
         },
         children: HostChildren::None,
-    })
+    }))
 }
 
 /// A list of string nodes.
