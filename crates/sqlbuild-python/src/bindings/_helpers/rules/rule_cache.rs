@@ -41,7 +41,6 @@ pub(crate) fn settings_lint_key(settings: &LintSettings) -> String {
         max_literal_length: settings.sql.max_literal_length,
         max_ranking_order_by: settings.sql.max_ranking_order_by,
         relation_keys: settings.relation_keys.clone(),
-        allow_suppressions: settings.allow_suppressions,
     })
 }
 

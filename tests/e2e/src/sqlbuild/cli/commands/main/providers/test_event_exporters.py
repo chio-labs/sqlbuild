@@ -15,6 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.providers._test_types import (
     FilteredSinkFailureE2ETestCase,
     NoExporterCommandE2ETestCase,
     ReadOnlyProviderE2ETestCase,
+    SlowSinkExitE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 
@@ -421,3 +422,115 @@ def test_given_filtered_and_failing_sinks_when_build_fails_then_delivery_and_war
     assert errors_only == test_case.expected_errors_only
     assert test_case.expected_warning.format(accepted=accepted) in result.stderr
     assert "destination detail" not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SlowSinkExitE2ETestCase(
+            description="sink call in flight when the shutdown budget ends",
+            command=("audit",),
+            expected_marker_entries=("teardown started", "teardown finished"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_sink_call_in_flight_at_shutdown_when_process_exits_then_teardown_completes_without_abort(
+    test_case: SlowSinkExitE2ETestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marker_path: Path = tmp_path / "teardown.txt"
+    monkeypatch.setenv("TEARDOWN_MARKER_PATH", str(marker_path))
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="slow_sink_exit_project",
+        repo_files={
+            "sqlbuild_project.toml": dedent(
+                """
+                name = "slow_sink_exit_project"
+                adapter = "duckdb"
+
+                [connection]
+                database = "slow_sink_exit_project.duckdb"
+
+                [sinks.lifecycle]
+                shutdown_timeout = "0s"
+                """
+            ).lstrip(),
+            "providers/destination.py": dedent(
+                """
+                import os
+                import sys
+                import time
+                import types
+                from pathlib import Path
+
+                from sqlbuild.providers import Provider
+
+
+                class _SlowInterpreterExit:
+                    def __del__(self, _time=time):
+                        _time.sleep(1.0)
+
+
+                _holder = types.ModuleType("slow_interpreter_exit")
+                _holder.finalizer = _SlowInterpreterExit()
+                sys.modules["slow_interpreter_exit"] = _holder
+
+
+                class Destination(Provider):
+                    '''Destination whose publishes and flush are slow.'''
+
+                    def publish(self) -> None:
+                        time.sleep(0.05)
+
+                    def teardown(self) -> None:
+                        path = Path(os.environ["TEARDOWN_MARKER_PATH"])
+                        with path.open("a", encoding="utf-8") as stream:
+                            stream.write("teardown started\\n")
+                        time.sleep(0.5)
+                        with path.open("a", encoding="utf-8") as stream:
+                            stream.write("teardown finished\\n")
+                """
+            ).lstrip(),
+            "sinks/publish.py": dedent(
+                """
+                from providers.destination import Destination
+                from sqlbuild.sinks import LifecycleEvent, lifecycle_event_sink
+
+
+                @lifecycle_event_sink
+                def publish_lifecycle(event: LifecycleEvent, destination: Destination) -> None:
+                    del event
+                    destination.publish()
+                """
+            ).lstrip(),
+            "models/orders.sql": dedent(
+                """
+                MODEL (
+                  description "Test model orders.",
+                  materialized table,
+                  columns (order_id (audits [not_null, unique]))
+                );
+
+                SELECT range AS order_id FROM range(10)
+                """
+            ).lstrip(),
+        },
+    )
+    built: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert built.returncode == 0, built.stdout + built.stderr
+    marker_path.unlink()
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", *test_case.command), project_dir=project_dir
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (
+        tuple(marker_path.read_text(encoding="utf-8").splitlines())
+        == test_case.expected_marker_entries
+    )

@@ -1,15 +1,19 @@
 use std::str::FromStr;
 
 use polyglot_sql::{Dialect, DialectType};
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use crate::sql_lint::main::batch_formatter::format_batch_json;
 use crate::sql_lint::main::engine::lint_json;
 use crate::sql_lint::main::formatter::format_json;
+use crate::sql_lint::tests::test_types::CrossJoinTestCase;
 use sqlbuild_analysis::sql_tokens::constants::CALL_SYNTAX_FUNCTIONS;
 use sqlbuild_analysis::sql_tokens::main::builtin_function_names::builtin_function_names;
 use sqlbuild_analysis::sql_tokens::main::canonical_tokens::canonical_tokens;
 use sqlbuild_analysis::sql_tokens::main::query_fingerprint::query_fingerprint;
+
+/// The dependency sentinel the cross join cases name `order_policy`.
+pub(crate) const POLICY_SENTINEL: &str = "__sqb_lint_7__";
 
 pub(crate) fn nested_function_sql(depth: usize) -> String {
     format!("SELECT {}1{}", "F(".repeat(depth), ")".repeat(depth))
@@ -252,4 +256,41 @@ fn is_tight_call(name: &str, sql: &str, arguments: &str) -> bool {
         && !sql
             .to_ascii_uppercase()
             .contains(&format!("{} (", name.to_ascii_uppercase()))
+}
+
+/// The `SQBRSQL038` messages for one cross join case.
+pub(crate) fn cross_join_messages(test_case: &CrossJoinTestCase) -> Result<Vec<String>, String> {
+    cross_join_texts(test_case, "message")
+}
+
+/// The `SQBRSQL038` remediations for one cross join case.
+pub(crate) fn cross_join_remediations(
+    test_case: &CrossJoinTestCase,
+) -> Result<Vec<String>, String> {
+    cross_join_texts(test_case, "remediation")
+}
+
+fn cross_join_texts(test_case: &CrossJoinTestCase, field: &str) -> Result<Vec<String>, String> {
+    let keys: Map<String, Value> = test_case
+        .one_row_relations
+        .iter()
+        .map(|name| ((*name).to_owned(), json!([[]])))
+        .collect();
+    let request = json!({
+        "version": 1,
+        "sql": test_case.sql,
+        "dialect": test_case.dialect,
+        "enabled_rules": ["SQBRSQL038"],
+        "relation_keys": keys,
+        "relation_names": { POLICY_SENTINEL: "order_policy" },
+    });
+    let response: Value = serde_json::from_str(&lint_json(&request.to_string())?)
+        .map_err(|error| error.to_string())?;
+    Ok(response["diagnostics"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .map(|diagnostic| diagnostic[field].as_str().unwrap_or_default().to_owned())
+        .collect())
 }

@@ -26,22 +26,24 @@ pub(crate) const LINT_SITE_PATTERN: &str =
     r"^(?:@@|\$\{|@|(?:__dbt_ref|__ref|__seed|__source|__table_fn|__udf)\()";
 pub(crate) const FORMAT_SITE_PATTERN: &str = r"(?i)^(?:@@|\$\{|@|(?:__cursor_end|__cursor_start|__dbt_ref|__empty_fixture|__ref|__seed|__source|__table_fn|__udf)\s*\()";
 
-/// Diagnostic code of every suppression finding.
+/// Diagnostic code of every inline suppression directive finding.
 pub const SUPPRESSION_CODE: &str = "SQBRSQL000";
-pub(crate) const SUPPRESSION_PREFIX: &str = "sqb: ignore";
-pub(crate) const SUPPRESSION_PATTERN: &str =
-    r"^\s*--\s*sqb:\s*ignore\s+(?P<code>[A-Za-z0-9_-]+)\s+because\s+(?P<reason>\S.*)\s*$";
-pub(crate) const NATIVE_RULE_PREFIX: &str = "SQBRSQL";
-pub(crate) const INVALID_MESSAGE: &str = "Suppression directive is invalid";
-pub(crate) const INVALID_REMEDIATION: &str = "Use '-- sqb: ignore CODE because <reason>'.";
-pub(crate) const UNUSED_REMEDIATION: &str = "Remove the stale suppression directive.";
-pub(crate) const FORBIDDEN_MESSAGE: &str =
-    "Inline Rule suppressions are not allowed in this project";
-pub(crate) const FORBIDDEN_REMEDIATION: &str = "Remove the directive and fix the finding it suppresses; sqlbuild_project.toml sets [rules] allow_exceptions = false. To allow inline suppressions, set this in sqlbuild_project.toml:\n            [rules]\n            allow_exceptions = true";
-pub(crate) const FORBIDDEN_FIX_REASON: &str =
-    "removing the directive exposes the finding it suppresses";
-pub(crate) const REASON_REQUIRED_FIX_REASON: &str =
-    "a valid suppression reason requires user intent";
+/// Text every directive contains, checked before scanning a file's comments.
+pub(crate) const DIRECTIVE_MARKER: &[u8] = b"sqb:";
+pub(crate) const BLOCK_COMMENT_OPENER: &str = "/*";
+pub(crate) const BLOCK_COMMENT_CLOSER: &str = "*/";
+/// Both comment openers are two bytes long.
+pub(crate) const COMMENT_OPENER_BYTES: usize = 2;
+pub(crate) const DIRECTIVE_PATTERN: &str =
+    r"(?i)sqb:\s*ignore\b\s*(?P<code>[A-Za-z0-9_-]*)(?:\s+because\s+(?P<reason>.*\S))?";
+pub(crate) const CROSS_JOIN_CODE: &str = "SQBRSQL038";
+pub(crate) const CROSS_JOIN_RELATION_PATTERN: &str = r#"(?i)\bcross\s+join\s+(?:__(?:ref|seed|source)\s*\(\s*['"](?P<dependency>[^'"]+)['"]\s*\)|(?P<identifier>[A-Za-z_][A-Za-z0-9_$.]*))"#;
+pub(crate) const DIRECTIVE_MESSAGE: &str =
+    "Inline Rule suppressions are not supported; declare the exception in sqlbuild_project.toml";
+pub(crate) const RULE_PLACEHOLDER: &str = "<rule code>";
+pub(crate) const REASON_PLACEHOLDER: &str = "<why this deviation is intentional>";
+pub(crate) const DIRECTIVE_FIX_REASON: &str =
+    "moving an exception into sqlbuild_project.toml requires review";
 
 pub(crate) const FIXTURE_TYPED_NULL_PATTERN: &str = r"(?i)(?:CAST\s*\(\s*NULL\s+AS\b|NULL\s*::)";
 pub(crate) const MODEL_FIXTURE_PATTERN: &str =
@@ -162,3 +164,5 @@ pub(crate) const GROUPED_NAMED_ROLE_KINDS: [(&[&str], &str); 9] = [
     (&["hooks", "python"], "python_hook"),
     (&["_hooks", "python"], "python_hook"),
 ];
+/// The keyword whose presence makes a lint request carry relation names.
+pub(crate) const CROSS_KEYWORD: &[u8] = b"cross";

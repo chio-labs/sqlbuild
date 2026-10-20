@@ -1,5 +1,6 @@
 //! Write-hash reconciliation and plan entry construction.
 
+use crate::bindings::_helpers::command_runtime::concurrency::resolve_configured_concurrency;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::planner_entries::contexts::default_microbatch_limit_action;
 use crate::bindings::_helpers::planner_entries::model_entries::plan_entries;
@@ -63,6 +64,26 @@ fn config_or<'py>(
         value = native_field(&value, name)?;
     }
     Ok(value)
+}
+
+/// The concurrency execution will use; without configs, the request or the compiled setting.
+fn planned_concurrency(
+    requested: &Bound<'_, PyAny>,
+    (project_config, local_config): (&Bound<'_, PyAny>, &Bound<'_, PyAny>),
+    project: &Bound<'_, PyAny>,
+) -> PyResult<i64> {
+    if project_config.is_none() || local_config.is_none() {
+        if !requested.is_none() {
+            return requested.extract();
+        }
+        return native_field(&native_field(project, "settings")?, "concurrency")?.extract();
+    }
+    Ok(resolve_configured_concurrency(
+        requested,
+        (project_config, local_config),
+        &native_field(project, "effective_target_name")?,
+    )?
+    .limit)
 }
 
 /// Model plan entries for the pruned execution scope, with the freshness and override inputs they need.
@@ -133,6 +154,14 @@ pub(crate) fn build_planner_entry_results<'py>(
         },
     )?
     .into_any();
+    let concurrency: i64 = planned_concurrency(
+        &native_field(overrides, "concurrency")?,
+        (
+            &config,
+            &runtime_field(runtime, |runtime| &runtime.local_config)?,
+        ),
+        &project,
+    )?;
     plan_entries(PlanEntriesRequest {
         project,
         adapter: runtime_field(runtime, |runtime| &runtime.adapter)?,
@@ -143,5 +172,6 @@ pub(crate) fn build_planner_entry_results<'py>(
         cursor_overrides: native_field(overrides, "cursor_overrides")?,
         full_refresh: native_field(overrides, "full_refresh")?.is_truthy()?,
         build_inputs,
+        concurrency,
     })
 }

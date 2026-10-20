@@ -48,7 +48,8 @@ pub(crate) const CHECK_STATUSES: [&str; 5] = ["error", "fail", "insufficient", "
 pub(crate) const CHECK_NON_FAIL_STATUSES: [&str; 2] = ["insufficient", "pass"];
 /// `AuditSeverity` values, in declaration order.
 pub(crate) const AUDIT_SEVERITIES: [&str; 2] = ["warn", "error"];
-pub(crate) const CHECK_ATTACHMENT_KINDS: [&str; 3] = ["end", "model", "source"];
+/// Every audit attachment kind: model, source and seed attachments, and end-of-run audits.
+pub(crate) const CHECK_ATTACHMENT_KINDS: [&str; 4] = ["end", "model", "seed", "source"];
 pub(crate) const CHECK_RUN_SCOPE_PHASES: [&str; 2] = ["delta_and_final", "final"];
 pub(crate) const EVALUATION_MODES: [&str; 2] = ["violations", "measurement"];
 pub(crate) const BOUND_OPERATORS: [&str; 2] = ["below", "above"];

@@ -84,7 +84,7 @@ pub(crate) fn diagnostics(
         if exceeds {
             found.push(LintDiagnostic {
                 code: RANKING_SORT_CAP.code,
-                message: RANKING_SORT_CAP.message,
+                message: Cow::Borrowed(RANKING_SORT_CAP.message),
                 remediation: Cow::Owned(sort_cap_remediation(
                     order.len(),
                     request.max_ranking_order_by,
@@ -98,7 +98,7 @@ pub(crate) fn diagnostics(
         if unproven {
             found.push(LintDiagnostic {
                 code: UNSTABLE_ROW_NUMBER_CODE,
-                message: UNPROVEN_RANKING_MESSAGE,
+                message: Cow::Borrowed(UNPROVEN_RANKING_MESSAGE),
                 remediation: Cow::Borrowed(UNPROVEN_RANKING_REMEDIATION),
                 start,
                 end,

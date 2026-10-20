@@ -324,7 +324,6 @@ const R_LINT_CONFIG: RecordSpec = RecordSpec {
         FieldSpec::new("header_rules_enabled", FieldDefault::True),
         FieldSpec::new("max_literal_length", FieldDefault::Int(100)),
         FieldSpec::new("max_ranking_order_by", FieldDefault::Int(5)),
-        FieldSpec::new("allow_suppressions", FieldDefault::True),
         FieldSpec {
             name: "relation_keys",
             default: FieldDefault::EmptyDict,
@@ -395,6 +394,7 @@ const R_COMPILE_PIPELINE_OPTIONS: RecordSpec = RecordSpec {
         FieldSpec::new("resolve_python_run_selectors", FieldDefault::False),
         FieldSpec::new("no_cache", FieldDefault::False),
         FieldSpec::new("max_microbatches", FieldDefault::None),
+        FieldSpec::new("concurrency", FieldDefault::None),
         FieldSpec::new("selection_diagnostics", FieldDefault::False),
         FieldSpec::new("plan_sql_tests", FieldDefault::True),
         FieldSpec::new("record_migration_fingerprints", FieldDefault::True),

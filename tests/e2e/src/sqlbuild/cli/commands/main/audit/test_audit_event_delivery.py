@@ -111,7 +111,14 @@ def test_given_many_audits_when_running_then_audit_completed_events_arrive_durin
 
 @pytest.mark.parametrize(
     "test_case",
-    (SlowSinkDropE2ETestCase("zero drain drops queued events", "0s", 13),),
+    (
+        SlowSinkDropE2ETestCase(
+            "zero drain drops queued events",
+            "0s",
+            13,
+            "sqb audit completed successfully; only its lifecycle event export is affected.",
+        ),
+    ),
     ids=lambda case: case.description,
 )
 def test_given_slow_sink_and_zero_drain_when_auditing_then_warns_with_counts_and_succeeds(
@@ -161,6 +168,7 @@ def test_given_slow_sink_and_zero_drain_when_auditing_then_warns_with_counts_and
     assert test_case.expected_accepted - dropped - failed <= delivered_lines
     assert delivered_lines <= test_case.expected_accepted - dropped
     assert result.stderr.count("event export was incomplete") == 1
+    assert result.stderr.splitlines()[-1] == test_case.expected_last_line
 
 
 @pytest.mark.parametrize(

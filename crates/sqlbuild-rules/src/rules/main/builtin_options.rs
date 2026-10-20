@@ -1,5 +1,8 @@
 //! `builtin_options`: the options each built-in rule declares.
 
+use crate::constants::{
+    ALLOWED_QUALIFIERS_OPTION, DEFAULT_PUBLISHED_LAYERS, PUBLISHED_LAYERS_OPTION,
+};
 use crate::rules::models::{BuiltinOption, BuiltinOptionKind};
 
 const fn boolean(name: &'static str, description: &'static str) -> BuiltinOption {
@@ -7,6 +10,14 @@ const fn boolean(name: &'static str, description: &'static str) -> BuiltinOption
         kind: BuiltinOptionKind::Boolean,
         name,
         description,
+    }
+}
+
+const fn published_layers() -> BuiltinOption {
+    BuiltinOption {
+        kind: BuiltinOptionKind::StringList(&DEFAULT_PUBLISHED_LAYERS),
+        name: PUBLISHED_LAYERS_OPTION,
+        description: "Model name layers that form each domain's published interface.",
     }
 }
 
@@ -42,8 +53,18 @@ pub fn builtin_options(code: &str) -> Vec<BuiltinOption> {
                 "Accept string or variant encoded date values.",
             ),
         ],
+        "SQBRGRAPH103" => vec![published_layers()],
+        "SQBRPROJECT107" => vec![
+            published_layers(),
+            BuiltinOption {
+                kind: BuiltinOptionKind::TableList,
+                name: ALLOWED_QUALIFIERS_OPTION,
+                description: "Literal qualifiers that do not count towards a domain's name \
+                              shape, as { qualifier, reason } tables with an optional domain.",
+            },
+        ],
         "SQBRTEST203" => vec![BuiltinOption {
-            kind: BuiltinOptionKind::StringList,
+            kind: BuiltinOptionKind::StringList(&[]),
             name: "allowed_tests",
             description: "Reviewed SQL test names that may assert only that empty inputs produce \
                           no rows; listed tests count toward min_tests_per_model.",

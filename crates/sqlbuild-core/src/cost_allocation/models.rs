@@ -63,12 +63,12 @@ pub struct RunAllocation {
     pub limitations: Vec<String>,
 }
 
-/// The time window and classified query IDs of one query-history read.
+/// One query-history read's window and the run whose CREATE text it requests by query tag.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QueryHistoryWindow<'a> {
     pub database: Option<&'a str>,
     pub start: &'a str,
     pub end: Option<&'a str>,
-    pub classification_query_ids: &'a [String],
+    pub text_run_id: Option<&'a str>,
     pub result_limit: usize,
 }

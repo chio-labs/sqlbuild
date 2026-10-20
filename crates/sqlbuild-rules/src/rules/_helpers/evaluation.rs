@@ -1,9 +1,11 @@
 use crate::configuration::main::setting_help::setting_help;
 use crate::configuration::main::toml_string_array::toml_string_array;
-use crate::constants::MIN_CUSTOM_RULE_TEST_CASES_KEY;
 use crate::constants::{
     DECLARATION_DOMAIN_COMPONENTS, ENFORCED_CONTRACT, REFERENCE_KIND, SOURCE_REFERENCE_KIND,
     VIEW_MATERIALIZATION,
+};
+use crate::constants::{
+    MIN_CUSTOM_RULE_TEST_CASES_KEY, MODEL_NAME_LAYERS, PUBLISHED_READ_CODE, PUBLISHED_SHAPE_CODE,
 };
 use crate::models::{Declaration, EvaluateRequest, Fault, Model, RuleMetadata, RulesConfig};
 use crate::query_facts::main::dependency_texts::dependency_texts;
@@ -261,6 +263,12 @@ pub(crate) fn evaluate_project_rules(request: &ProjectEvaluationRequest<'_>) -> 
     let faults = FaultCollector::default();
     if let Some(rule) = request.selected.get("SQBRGRAPH101") {
         model_layers::internal_forward_refs(request, rule, &faults);
+    }
+    if let Some(rule) = request.selected.get(PUBLISHED_READ_CODE) {
+        model_layers::same_domain_published_reads(request.request, rule, &faults);
+    }
+    if let Some(rule) = request.selected.get(PUBLISHED_SHAPE_CODE) {
+        model_layers::published_name_shapes(request.request, rule, &faults);
     }
     if let Some(rule) = request.selected.get("SQBRDECLARATION201") {
         duplicate_enums(request.request, rule, &faults);
@@ -528,11 +536,11 @@ fn select_star(
 
 #[derive(Clone)]
 pub(super) struct NameParts {
-    domain: String,
+    pub(super) domain: String,
     pub(super) layer: String,
-    subject: String,
-    source: Option<String>,
-    is_view: bool,
+    pub(super) subject: String,
+    pub(super) source: Option<String>,
+    pub(super) is_view: bool,
 }
 
 pub(super) fn parse_name(name: &str) -> Option<NameParts> {
@@ -540,17 +548,8 @@ pub(super) fn parse_name(name: &str) -> Option<NameParts> {
     if !(3..=4).contains(&parts.len()) {
         return None;
     }
-    let layers = [
-        "stg",
-        "stg_v",
-        "int_clean",
-        "int_v",
-        "int_enriched",
-        "mart",
-        "mart_v",
-    ];
     if !is_lowercase_identifier(parts[0])
-        || !layers.contains(&parts[1])
+        || !MODEL_NAME_LAYERS.contains(&parts[1])
         || !is_lowercase_identifier(parts[2])
         || parts
             .get(3)

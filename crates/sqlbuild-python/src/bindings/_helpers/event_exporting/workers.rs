@@ -1,28 +1,30 @@
-//! The dispatcher's delivery, notification, health and per-invocation thread targets.
+//! The dispatcher's delivery, notification and health thread targets, and each exporter's delivery lane.
 
-use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::collections::VecDeque;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
-use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python, pyclass, pymethods};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString};
 use sqlbuild_core::event_export::constants::TIMEOUT_ERROR_TYPE;
 use sqlbuild_core::event_export::main::drop_lifecycle_attempts::drop_lifecycle_attempts;
+use sqlbuild_core::event_export::main::retain_outcome_events::retain_outcome_events;
 use sqlbuild_core::event_export::main::take_lifecycle_event::take_lifecycle_event;
-use sqlbuild_core::event_export::models::{EventQueue, ExportSnapshot, QueuedEvent};
+use sqlbuild_core::event_export::models::{
+    EventQueue, ExportSeverity, ExportSnapshot, QueuedEvent,
+};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::event_exporting::constants::{
-    INVOCATION_THREAD_PREFIX, NO_SECONDS, POLL_SECONDS,
+    INVOCATION_THREAD_PREFIX, LANE_WINDOW, NO_SECONDS, POLL_SECONDS,
 };
-use crate::bindings::_helpers::event_exporting::dispatcher::{Exporter, Queued, Shared};
+use crate::bindings::_helpers::event_exporting::dispatcher::{Exporter, Queued, Shared, State};
 use crate::bindings::_helpers::event_exporting::models::{
     EventExportSummary, EventExporterFailure,
 };
 use crate::bindings::_helpers::event_exporting::values::error_type_of;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
-use crate::bindings::_helpers::native_threads::exit_signal::interpreter_exiting;
 
 /// Which long-lived dispatcher thread a worker runs.
 #[derive(Clone, Copy)]
@@ -39,19 +41,28 @@ pub(crate) struct DispatcherWorker {
     role: WorkerRole,
 }
 
-/// Whether an invocation finished, and the sanitized type of what it raised.
-#[derive(Default)]
-struct Completion {
-    done: bool,
-    error_type: Option<String>,
+/// One attempt handed to a lane and not yet reported.
+pub(crate) struct Attempt {
+    token: u64,
+    kind: String,
+    severity: ExportSeverity,
+    outcome: bool,
 }
 
-/// Reports how one sink call on its own daemon thread ended.
-#[pyclass(module = "sqlbuild._native", frozen)]
-pub(crate) struct InvocationCompletion {
-    shared: Arc<Shared>,
-    invocation: u64,
-    completion: Arc<Mutex<Completion>>,
+/// One exporter's long-lived delivery thread, its call queue and the attempts it still owes.
+pub(crate) struct Lane {
+    calls: Py<PyAny>,
+    thread: Py<PyAny>,
+    pending: VecDeque<Attempt>,
+    /// When the attempt at the front of `pending` began, approximately.
+    head_started: Instant,
+}
+
+/// What one dispatch round reads from the dispatcher besides its state.
+#[derive(Clone, Copy)]
+pub(crate) struct Round<'a> {
+    shared: &'a Shared,
+    diagnostics: Option<usize>,
 }
 
 /// The next thing the notification thread delivers.
@@ -62,12 +73,308 @@ enum Notification {
     Stop,
 }
 
-/// Whether the call finished, and the sanitized type of what it raised.
-fn completion_state(completion: &Mutex<Completion>) -> PyResult<(bool, Option<String>)> {
-    let completion = completion
-        .lock()
-        .map_err(|_| PyRuntimeError::new_err("event exporter invocation lock is poisoned"))?;
-    Ok((completion.done, completion.error_type.clone()))
+impl Lane {
+    /// Start `exporter`'s delivery thread, which claims each call in `claims` and reports to `results`.
+    fn start(py: Python<'_>, exporter: &Exporter, round: Round<'_>) -> PyResult<Self> {
+        let calls: Bound<'_, PyAny> = imported(py, "queue", "SimpleQueue")?.call0()?;
+        let arguments = PyDict::new(py);
+        arguments.set_item("calls", &calls)?;
+        arguments.set_item("results", round.shared.results.bind(py))?;
+        arguments.set_item("claims", round.shared.claims.bind(py))?;
+        let thread = call_with(
+            &imported(py, "threading", "Thread")?,
+            &[
+                (
+                    "target",
+                    host::entry(py, UserCodeHost::InvokeLifecycleEventSink)?,
+                ),
+                ("kwargs", arguments.into_any()),
+                (
+                    "name",
+                    PyString::new(py, &format!("{INVOCATION_THREAD_PREFIX}{}", exporter.name))
+                        .into_any(),
+                ),
+                ("daemon", PyBool::new(py, true).to_owned().into_any()),
+            ],
+        )?;
+        thread.call_method0("start")?;
+        Ok(Self {
+            calls: calls.unbind(),
+            thread: thread.unbind(),
+            pending: VecDeque::new(),
+            head_started: Instant::now(),
+        })
+    }
+
+    /// The lane's delivery thread.
+    pub(crate) fn thread(&self) -> &Py<PyAny> {
+        &self.thread
+    }
+
+    /// Queue `None` so the thread ends after the calls queued before it.
+    fn retire(&self, py: Python<'_>) -> PyResult<()> {
+        self.calls.bind(py).call_method1("put", (py.None(),))?;
+        Ok(())
+    }
+}
+
+impl State {
+    /// Account reported attempts against their lanes, returning whether a diagnostic was queued.
+    fn record_reports(
+        &mut self,
+        py: Python<'_>,
+        reports: Vec<(u64, Option<String>)>,
+        round: Round<'_>,
+    ) -> PyResult<bool> {
+        let claims: &Bound<'_, PyDict> = round.shared.claims.bind(py);
+        let mut notify: bool = false;
+        for (token, error_type) in reports {
+            if claims.contains(token)? {
+                claims.del_item(token)?;
+            }
+            let Some(index) = self.tokens.remove(&token) else {
+                continue;
+            };
+            let Some(lane) = self.lanes.get_mut(index).and_then(Option::as_mut) else {
+                continue;
+            };
+            let Some(position) = lane
+                .pending
+                .iter()
+                .position(|attempt| attempt.token == token)
+            else {
+                continue;
+            };
+            let Some(attempt) = lane.pending.remove(position) else {
+                continue;
+            };
+            lane.head_started = Instant::now();
+            match error_type {
+                Some(error_type) => {
+                    notify |= self.note_failure(
+                        round.diagnostics,
+                        (index, &attempt.kind, attempt.severity),
+                        error_type,
+                    );
+                }
+                None => {
+                    if let Some(counts) = self.counts.get_mut(index) {
+                        counts.delivered += 1;
+                    }
+                }
+            }
+        }
+        Ok(notify)
+    }
+
+    /// Cancel `attempts` the delivery thread has not claimed (checked and marked under the GIL), counting each dropped; returns the claimed.
+    fn cancel_unclaimed(
+        &mut self,
+        py: Python<'_>,
+        index: usize,
+        attempts: impl IntoIterator<Item = Attempt>,
+        claims: &Py<PyDict>,
+    ) -> PyResult<Vec<Attempt>> {
+        let claims: &Bound<'_, PyDict> = claims.bind(py);
+        let mut claimed: Vec<Attempt> = Vec::new();
+        for attempt in attempts {
+            let already_claimed: bool = match claims.get_item(attempt.token)? {
+                Some(claim) => claim.is_truthy()?,
+                None => false,
+            };
+            if already_claimed {
+                claimed.push(attempt);
+                continue;
+            }
+            claims.set_item(attempt.token, false)?;
+            self.tokens.remove(&attempt.token);
+            self.counts = drop_lifecycle_attempts(std::mem::take(&mut self.counts), &[index]);
+        }
+        Ok(claimed)
+    }
+
+    /// Retire `index`'s lane: calls it already claimed fail as timed out and the rest are dropped.
+    fn abandon_lane(&mut self, py: Python<'_>, index: usize, round: Round<'_>) -> PyResult<bool> {
+        let Some(mut lane) = self.lanes.get_mut(index).and_then(Option::take) else {
+            return Ok(false);
+        };
+        let attempts: VecDeque<Attempt> = std::mem::take(&mut lane.pending);
+        let claimed: Vec<Attempt> =
+            self.cancel_unclaimed(py, index, attempts, &round.shared.claims)?;
+        let claims: &Bound<'_, PyDict> = round.shared.claims.bind(py);
+        let mut notify: bool = false;
+        for running in claimed {
+            claims.del_item(running.token)?;
+            self.tokens.remove(&running.token);
+            self.blocked.insert(index);
+            self.abandoned_calls = true;
+            notify |= self.note_failure(
+                round.diagnostics,
+                (index, &running.kind, running.severity),
+                TIMEOUT_ERROR_TYPE.to_owned(),
+            );
+        }
+        lane.retire(py)?;
+        self.retired.push(lane);
+        Ok(notify)
+    }
+
+    /// Abandon every lane whose current sink call outlived `timeout`.
+    fn expire_lanes(
+        &mut self,
+        py: Python<'_>,
+        timeout: Duration,
+        round: Round<'_>,
+    ) -> PyResult<bool> {
+        let mut notify: bool = false;
+        for index in 0..self.lanes.len() {
+            let expired: bool = self.lanes[index].as_ref().is_some_and(|lane| {
+                !lane.pending.is_empty() && lane.head_started.elapsed() >= timeout
+            });
+            if expired {
+                notify |= self.abandon_lane(py, index, round)?;
+            }
+        }
+        Ok(notify)
+    }
+
+    /// Drop every queued and lane-waiting event that is not an outcome, counting each attempt.
+    fn reserve_for_outcomes(&mut self, py: Python<'_>, claims: &Py<PyDict>) -> PyResult<()> {
+        let capacity: usize = self.queue.capacity;
+        let (queue, dropped) = retain_outcome_events(std::mem::replace(
+            &mut self.queue,
+            EventQueue::new(capacity),
+        ));
+        self.queue = queue;
+        for item in &dropped {
+            self.counts =
+                drop_lifecycle_attempts(std::mem::take(&mut self.counts), &item.eligible_exporters);
+        }
+        for index in 0..self.lanes.len() {
+            let Some(lane) = self.lanes[index].as_mut() else {
+                continue;
+            };
+            let (kept, skipped): (VecDeque<Attempt>, VecDeque<Attempt>) =
+                lane.pending.drain(..).partition(|attempt| attempt.outcome);
+            let claimed: Vec<Attempt> = self.cancel_unclaimed(py, index, skipped, claims)?;
+            let Some(lane) = self.lanes[index].as_mut() else {
+                continue;
+            };
+            let mut pending: Vec<Attempt> = claimed.into_iter().chain(kept).collect();
+            pending.sort_by_key(|attempt| attempt.token);
+            lane.pending = pending.into();
+        }
+        drop(dropped);
+        Ok(())
+    }
+
+    /// Move queued events onto exporter lanes while every eligible lane has room.
+    fn feed(&mut self, py: Python<'_>, round: Round<'_>) -> PyResult<bool> {
+        let mut notify: bool = false;
+        while !self.queue.items.is_empty() {
+            let capacity: usize = self.queue.capacity;
+            let (queue, next) = take_lifecycle_event(std::mem::replace(
+                &mut self.queue,
+                EventQueue::new(capacity),
+            ));
+            self.queue = queue;
+            let Some(item) = next else {
+                break;
+            };
+            let full: bool = item.eligible_exporters.iter().any(|index| {
+                !self.blocked.contains(index)
+                    && self
+                        .lanes
+                        .get(*index)
+                        .and_then(Option::as_ref)
+                        .is_some_and(|lane| lane.pending.len() >= LANE_WINDOW.min(capacity))
+            });
+            if full {
+                self.queue.items.push(item);
+                break;
+            }
+            for index in &item.eligible_exporters {
+                if self.blocked.contains(index) {
+                    self.counts =
+                        drop_lifecycle_attempts(std::mem::take(&mut self.counts), &[*index]);
+                    continue;
+                }
+                notify |= self.offer(py, *index, &item, round)?;
+            }
+        }
+        Ok(notify)
+    }
+
+    /// Queue one attempt on `index`'s lane, starting the lane's thread on first use.
+    fn offer(
+        &mut self,
+        py: Python<'_>,
+        index: usize,
+        item: &QueuedEvent<Queued>,
+        round: Round<'_>,
+    ) -> PyResult<bool> {
+        let Some(exporter) = self.exporters.get(index).map(Arc::clone) else {
+            return Ok(false);
+        };
+        if self.lanes.len() <= index {
+            self.lanes.resize_with(index + 1, || None);
+        }
+        if self.lanes[index].is_none() {
+            match Lane::start(py, &exporter, round) {
+                Ok(lane) => self.lanes[index] = Some(lane),
+                Err(error) => {
+                    return Ok(self.note_failure(
+                        round.diagnostics,
+                        (index, &item.item.kind, item.item.severity),
+                        error_type_of(py, &error),
+                    ));
+                }
+            }
+        }
+        let token: u64 = self.next_token;
+        self.next_token += 1;
+        let Some(lane) = self.lanes[index].as_mut() else {
+            return Ok(false);
+        };
+        lane.calls.bind(py).call_method1(
+            "put",
+            ((
+                exporter.function.bind(py),
+                exporter.provider_arguments.bind(py),
+                item.item.event.bind(py),
+                token,
+            ),),
+        )?;
+        if lane.pending.is_empty() {
+            lane.head_started = Instant::now();
+        }
+        lane.pending.push_back(Attempt {
+            token,
+            kind: item.item.kind.clone(),
+            severity: item.item.severity,
+            outcome: item.outcome,
+        });
+        self.tokens.insert(token, index);
+        Ok(false)
+    }
+
+    /// Whether any lane still owes a reported attempt.
+    fn busy(&self) -> bool {
+        self.lanes
+            .iter()
+            .flatten()
+            .any(|lane| !lane.pending.is_empty())
+    }
+
+    /// End every lane once it has run what was queued before, keeping its thread to join.
+    fn retire_lanes(&mut self, py: Python<'_>) -> PyResult<()> {
+        let lanes: Vec<Lane> = self.lanes.drain(..).flatten().collect();
+        for lane in lanes {
+            lane.retire(py)?;
+            self.retired.push(lane);
+        }
+        Ok(())
+    }
 }
 
 impl DispatcherWorker {
@@ -97,12 +404,35 @@ impl DispatcherWorker {
         }
     }
 
-    /// The next queued event, `Ok(None)` to keep polling and `Err(())` once delivery stops.
-    fn next_event(&self, py: Python<'_>) -> PyResult<Result<Option<QueuedEvent<Queued>>, ()>> {
+    fn run_dispatch(&self, py: Python<'_>) -> PyResult<()> {
+        let result = (|| -> PyResult<()> {
+            if !self.await_bound(py)? {
+                return Ok(());
+            }
+            while self.dispatch_round(py)? {}
+            Ok(())
+        })();
+        let retired: PyResult<()> = (|| {
+            let _held = self.shared.hold(py)?;
+            self.shared.locked()?.retire_lanes(py)
+        })();
+        self.shared.dispatcher_finished(py)?;
+        retired?;
+        result
+    }
+
+    /// Record reported outcomes, expire, trim and feed lanes, then wait; `false` once delivery stops.
+    fn dispatch_round(&self, py: Python<'_>) -> PyResult<bool> {
         let shared = &self.shared;
+        let round = Round {
+            shared,
+            diagnostics: shared.diagnostics(),
+        };
         let _held = shared.hold(py)?;
+        let reports: Vec<(u64, Option<String>)> = self.reported(py)?;
         let mut state = shared.locked()?;
-        if Shared::past_deadline(&state) || state.force_stop {
+        let mut notify: bool = state.record_reports(py, reports, round)?;
+        let stopped: bool = if Shared::past_deadline(&state) || state.force_stop {
             let drained: Vec<QueuedEvent<Queued>> = std::mem::take(&mut state.queue.items);
             for item in &drained {
                 state.counts = drop_lifecycle_attempts(
@@ -110,152 +440,42 @@ impl DispatcherWorker {
                     &item.eligible_exporters,
                 );
             }
-            drop(state);
+            for index in 0..state.lanes.len() {
+                notify |= state.abandon_lane(py, index, round)?;
+            }
             drop(drained);
-            return Ok(Err(()));
+            true
+        } else {
+            notify |= state.expire_lanes(py, shared.invocation_timeout, round)?;
+            if !state.reserved && state.reserve_at.is_some_and(|at| Instant::now() >= at) {
+                state.reserved = true;
+                state.reserve_for_outcomes(py, &shared.claims)?;
+            }
+            notify |= state.feed(py, round)?;
+            state.stopping && !state.busy() && state.queue.items.is_empty()
+        };
+        drop(state);
+        if notify {
+            shared.notify_all(py)?;
         }
-        if state.queue.items.is_empty() {
-            drop(state);
+        if !stopped {
             shared.wait(py, POLL_SECONDS)?;
-            state = shared.locked()?;
         }
-        let capacity: usize = state.queue.capacity;
-        let (queue, next) = take_lifecycle_event(std::mem::replace(
-            &mut state.queue,
-            EventQueue::new(capacity),
-        ));
-        state.queue = queue;
-        match next {
-            Some(item) => Ok(Ok(Some(item))),
-            None if state.stopping => Ok(Err(())),
-            None => Ok(Ok(None)),
-        }
+        Ok(!stopped)
     }
 
-    fn run_dispatch(&self, py: Python<'_>) -> PyResult<()> {
-        let result = (|| -> PyResult<()> {
-            if !self.await_bound(py)? {
-                return Ok(());
-            }
-            while let Ok(item) = self.next_event(py)? {
-                if let Some(item) = item {
-                    self.deliver(py, &item)?;
-                }
-            }
-            Ok(())
-        })();
-        self.shared.dispatcher_finished(py)?;
-        result
-    }
-
-    /// Offer one event to each eligible exporter in order, before the drain deadline.
-    fn deliver(&self, py: Python<'_>, item: &QueuedEvent<Queued>) -> PyResult<()> {
-        let shared = &self.shared;
-        for (position, index) in item.eligible_exporters.iter().enumerate() {
-            let exporter: Arc<Exporter> = {
-                let _held = shared.hold(py)?;
-                let mut state = shared.locked()?;
-                if Shared::past_deadline(&state) {
-                    state.counts = drop_lifecycle_attempts(
-                        std::mem::take(&mut state.counts),
-                        &item.eligible_exporters[position..],
-                    );
-                    return Ok(());
-                }
-                if state.blocked.contains(index) {
-                    state.counts =
-                        drop_lifecycle_attempts(std::mem::take(&mut state.counts), &[*index]);
-                    continue;
-                }
-                let Some(exporter) = state.exporters.get(*index) else {
-                    continue;
-                };
-                Arc::clone(exporter)
-            };
-            self.invoke(py, (*index, exporter), item)?;
+    /// Every `(token, sanitized error type)` delivery threads reported since the last round.
+    fn reported(&self, py: Python<'_>) -> PyResult<Vec<(u64, Option<String>)>> {
+        let results: &Bound<'_, PyAny> = self.shared.results.bind(py);
+        let mut reports: Vec<(u64, Option<String>)> = Vec::new();
+        while !results.call_method0("empty")?.is_truthy()? {
+            let (token, error): (u64, Bound<'_, PyAny>) =
+                results.call_method0("get_nowait")?.extract()?;
+            let error_type: Option<String> =
+                (!error.is_none()).then(|| error_type_of(py, &PyErr::from_value(error)));
+            reports.push((token, error_type));
         }
-        Ok(())
-    }
-
-    /// Call one exporter on its own daemon thread and account for its outcome.
-    fn invoke(
-        &self,
-        py: Python<'_>,
-        (index, exporter): (usize, Arc<Exporter>),
-        item: &QueuedEvent<Queued>,
-    ) -> PyResult<()> {
-        let shared = &self.shared;
-        let failure = (index, item.item.kind.as_str(), item.item.severity);
-        let completion: Arc<Mutex<Completion>> = Arc::new(Mutex::new(Completion::default()));
-        let name: String = format!("{INVOCATION_THREAD_PREFIX}{}", exporter.name);
-        let invocation: u64 = shared.begin_invocation(py)?;
-        let reporter = InvocationCompletion::new(Arc::clone(shared), invocation, &completion);
-        let started = Py::new(py, reporter).and_then(|reporter| {
-            let arguments = PyDict::new(py);
-            arguments.set_item("function", exporter.function.bind(py))?;
-            arguments.set_item("provider_arguments", exporter.provider_arguments.bind(py))?;
-            arguments.set_item("event", item.item.event.bind(py))?;
-            arguments.set_item("completion", reporter)?;
-            let thread = call_with(
-                &imported(py, "threading", "Thread")?,
-                &[
-                    (
-                        "target",
-                        host::entry(py, UserCodeHost::InvokeLifecycleEventSink)?,
-                    ),
-                    ("kwargs", arguments.into_any()),
-                    ("name", PyString::new(py, &name).into_any()),
-                    ("daemon", PyBool::new(py, true).to_owned().into_any()),
-                ],
-            )?;
-            thread.call_method0("start")
-        });
-        if let Err(error) = started {
-            shared.invocation_finished(py, invocation)?;
-            return shared.record_failure(py, failure, error_type_of(py, &error));
-        }
-        let completed: bool = self.await_invocation(py, &completion)?;
-        let (_, error_type) = completion_state(&completion)?;
-        if !completed {
-            {
-                let _held = shared.hold(py)?;
-                shared.locked()?.blocked.insert(index);
-            }
-            return shared.record_failure(py, failure, TIMEOUT_ERROR_TYPE.to_owned());
-        }
-        if let Some(error_type) = error_type {
-            return shared.record_failure(py, failure, error_type);
-        }
-        let _held = shared.hold(py)?;
-        if let Some(counts) = shared.locked()?.counts.get_mut(index) {
-            counts.delivered += 1;
-        }
-        Ok(())
-    }
-
-    /// Wait for an invocation until its own timeout or the drain deadline, whichever is first.
-    fn await_invocation(&self, py: Python<'_>, completion: &Mutex<Completion>) -> PyResult<bool> {
-        let shared = &self.shared;
-        let invocation_deadline: Instant = Instant::now() + shared.invocation_timeout;
-        let _held = shared.hold(py)?;
-        loop {
-            let state = shared.locked()?;
-            let effective: Instant = state.deadline.map_or(invocation_deadline, |deadline| {
-                deadline.min(invocation_deadline)
-            });
-            let force_stop: bool = state.force_stop || interpreter_exiting(py)?;
-            drop(state);
-            let remaining: f64 = effective
-                .saturating_duration_since(Instant::now())
-                .as_secs_f64();
-            if remaining <= NO_SECONDS || force_stop {
-                return Ok(completion_state(completion)?.0);
-            }
-            shared.wait(py, remaining.min(POLL_SECONDS))?;
-            if completion_state(completion)?.0 {
-                return Ok(true);
-            }
-        }
+        Ok(reports)
     }
 
     fn next_notification(&self, py: Python<'_>) -> PyResult<Notification> {
@@ -374,36 +594,5 @@ impl DispatcherWorker {
             WorkerRole::Notify => self.run_notifications(py),
             WorkerRole::Health => self.run_health(py),
         }
-    }
-}
-
-impl InvocationCompletion {
-    /// A reporter that records into `completion` and ends `invocation`.
-    fn new(shared: Arc<Shared>, invocation: u64, completion: &Arc<Mutex<Completion>>) -> Self {
-        Self {
-            shared,
-            invocation,
-            completion: Arc::clone(completion),
-        }
-    }
-}
-
-#[pymethods]
-impl InvocationCompletion {
-    #[pyo3(signature = (error, /))]
-    fn __call__(&self, py: Python<'_>, error: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
-        if let Some(error) = error {
-            let error_type: String = error_type_of(py, &PyErr::from_value(error.clone()));
-            if let Ok(mut completion) = self.completion.lock() {
-                completion.error_type = Some(error_type);
-            }
-        }
-        let finished = self.shared.invocation_finished(py, self.invocation);
-        let _held = self.shared.hold(py)?;
-        if let Ok(mut completion) = self.completion.lock() {
-            completion.done = true;
-        }
-        self.shared.notify_all(py)?;
-        finished
     }
 }

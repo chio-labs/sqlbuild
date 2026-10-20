@@ -35,6 +35,7 @@ class SlowSinkDropE2ETestCase:
     description: str
     shutdown_timeout: str
     expected_accepted: int
+    expected_last_line: str
 
 
 @dataclass(frozen=True)

@@ -95,7 +95,7 @@ fn scope_diagnostics(
         let (start, end) = function_span(tokens, second);
         found.push(LintDiagnostic {
             code: REPEATED_JSON_PARSE.code,
-            message: REPEATED_JSON_PARSE.message,
+            message: Cow::Borrowed(REPEATED_JSON_PARSE.message),
             remediation: Cow::Owned(remediation(second, group.len(), quote)),
             start,
             end,

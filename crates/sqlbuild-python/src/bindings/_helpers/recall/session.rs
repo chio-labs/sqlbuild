@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use sqlbuild_cli::dispatch::main::closing_status::closing_status;
 use sqlbuild_cli::dispatch::models::CommandFacts;
 use sqlbuild_recall::records::main::format_timestamp::format_timestamp;
 use sqlbuild_recall::records::main::sha256_hex::sha256_hex;
@@ -33,7 +34,7 @@ use crate::bindings::_helpers::recall::clickhouse_store::{
 use crate::bindings::_helpers::recall::console::write_stderr;
 use crate::bindings::_helpers::recall::constants::{
     CLOSE_POLL_MS, DDL_NOTICE_PREFIX, HEARTBEAT_ENVIRONMENT, HOST_TOKEN_LENGTH,
-    MINIMUM_HEARTBEAT_SECONDS, NOTICE_INTERVAL_SECONDS, QUARANTINE_START_WAIT_MS,
+    MINIMUM_HEARTBEAT_SECONDS, NOTICE_INTERVAL_SECONDS, QUARANTINE_START_WAIT_MS, RECALL_HISTORY,
     STDOUT_STREAM_INDEX,
 };
 use crate::bindings::_helpers::recall::events::escaped_text;
@@ -382,17 +383,6 @@ pub(crate) fn start_invocation_recall(
     })
 }
 
-/// The closing sentence after a Recall notice, so the command's own outcome stays the last word.
-fn final_status(command: &str, exit_code: Option<i64>) -> String {
-    match exit_code {
-        Some(0) => {
-            format!("sqb {command} completed successfully; only its Recall history is affected.\n")
-        }
-        Some(code) => format!("sqb {command} failed with exit code {code}.\n"),
-        None => format!("sqb {command} failed.\n"),
-    }
-}
-
 /// What Recall must tell the user about this run once delivery has finished.
 fn closing_notices(recall: &InvocationRecall, session: &RecallSession) -> Vec<String> {
     let mut notices: Vec<String> = session
@@ -447,7 +437,7 @@ pub(crate) fn finish_invocation_recall(
     if !notices.is_empty() {
         notify(
             py,
-            Some(notices.concat() + &final_status(&recall.command, exit_code)),
+            Some(notices.concat() + &closing_status(&recall.command, exit_code, RECALL_HISTORY)),
         );
     }
     Ok(())

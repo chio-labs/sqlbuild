@@ -156,16 +156,21 @@ pub(crate) fn column_name(column: &Bound<'_, PyAny>) -> PyResult<String> {
     native_field(column, "name")?.extract()
 }
 
-fn seed_entry_fact(py: Python<'_>, entry: &Bound<'_, PyAny>) -> PyResult<SeedEntryFact> {
+/// The CSV reader settings a seed declaration authors, without the dialect check.
+pub(crate) fn seed_csv_settings(entry: &Bound<'_, PyAny>) -> PyResult<CsvSettings> {
     let settings: Bound<'_, PyAny> = native_field(entry, "csv_settings")?;
-    let mut csv: CsvSettings = CsvSettings {
+    Ok(CsvSettings {
         delimiter: optional_text(&settings, "delimiter")?,
         quotechar: optional_text(&settings, "quotechar")?,
         escapechar: optional_text(&settings, "escapechar")?,
         doublequote: native_field(&settings, "doublequote")?.extract()?,
         skipinitialspace: native_field(&settings, "skipinitialspace")?.extract()?,
         dialect_error: None,
-    };
+    })
+}
+
+fn seed_entry_fact(py: Python<'_>, entry: &Bound<'_, PyAny>) -> PyResult<SeedEntryFact> {
+    let mut csv: CsvSettings = seed_csv_settings(entry)?;
     csv.dialect_error = csv_dialect_error(py, &csv)?;
     Ok(SeedEntryFact {
         name: column_name(entry)?,

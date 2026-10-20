@@ -17,6 +17,7 @@ use sqlbuild_core::seed_command::models::SeedRow;
 use crate::bindings::_helpers::cli::progress::current_native_progress_projector;
 use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
 use crate::bindings::_helpers::cli::progress_text::write_execution_header;
+use crate::bindings::_helpers::command_runtime::concurrency::resolve_concurrency;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_command_invocation;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::build_static_pipeline_result;
 use crate::bindings::_helpers::compile_driver::plan_result::connection_with_hooks;
@@ -437,16 +438,12 @@ pub(crate) fn run_seed_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> Py
     let invocation: Bound<'_, PyAny> =
         resolve_command_invocation(request, &record_class(py, RecordId::SeedInvocation)?)?;
     let pipeline: Bound<'_, PyAny> = compile_seeds(request, &invocation)?;
-    let requested: Bound<'_, PyAny> = native_field(request, "concurrency")?;
-    let concurrency: i64 = if requested.is_none() {
-        native_field(
-            &native_field(&native_field(&pipeline, "project")?, "settings")?,
-            "concurrency",
-        )?
-        .extract::<i64>()?
-    } else {
-        requested.extract::<i64>()?
-    }
+    let concurrency: i64 = resolve_concurrency(
+        &native_field(request, "concurrency")?,
+        &native_field(&invocation, "discovered_inputs")?,
+        &native_field(request, "selected_target")?,
+    )?
+    .limit
     .max(1);
     write_header(&invocation, &pipeline, concurrency)?;
     let started: Instant = Instant::now();

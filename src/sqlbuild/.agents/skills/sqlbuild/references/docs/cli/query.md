@@ -30,6 +30,8 @@ sqb --project-dir <path> query --file my_query.sql
 
 File paths are resolved from the current working directory.
 
+`sqb query` reads only `sqlbuild_project.toml` and `sqlbuild_local.toml` to connect. It does not parse models or import project Python, so it starts quickly in large projects and still runs when a model or Python file is broken. The SQL runs as written: SQLBuild does not resolve model names in it.
+
 ## Flags
 
 | Flag | Description |

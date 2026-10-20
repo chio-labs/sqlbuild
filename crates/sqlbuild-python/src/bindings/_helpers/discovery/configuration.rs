@@ -3,6 +3,9 @@
 use pyo3::prelude::{Bound, PyAny, PyResult, Python};
 use pyo3::types::PyString;
 
+use crate::bindings::_helpers::compile_driver::config_validation::{
+    ProjectConfiguration, reject_invalid_connection_configuration,
+};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
 use crate::bindings::_helpers::contracts::project_config::{
     load_local_config_file, load_project_config_file,
@@ -17,6 +20,22 @@ pub(crate) fn discover_project_configuration<'py>(
     py: Python<'py>,
     project_dir: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
+    configuration_inputs(py, project_dir, false)
+}
+
+/// `discover_project_configuration` with the target warehouses and connections validated.
+pub(crate) fn discover_connection_configuration<'py>(
+    py: Python<'py>,
+    project_dir: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    configuration_inputs(py, project_dir, true)
+}
+
+fn configuration_inputs<'py>(
+    py: Python<'py>,
+    project_dir: &Bound<'py, PyAny>,
+    validate_connections: bool,
+) -> PyResult<Bound<'py, PyAny>> {
     let lifecycle: Bound<'py, PyAny> = call_with(
         &host::entry(py, ExecutorHost::OperationLifecycle)?,
         &[
@@ -28,19 +47,24 @@ pub(crate) fn discover_project_configuration<'py>(
         ],
     )?;
     within(&lifecycle, |_| {
+        let project_config: Bound<'py, PyAny> =
+            load_project_config_file(py, project_dir)?.into_bound(py);
+        let local_config: Bound<'py, PyAny> =
+            load_local_config_file(py, project_dir)?.into_bound(py);
+        if validate_connections {
+            reject_invalid_connection_configuration(&ProjectConfiguration {
+                project_dir,
+                project_config: &project_config,
+                local_config: &local_config,
+            })?;
+        }
         new_record_with(
             py,
             RecordId::DiscoveredProjectInputs,
             &[
                 ("project_dir", project_dir.clone()),
-                (
-                    "project_config",
-                    load_project_config_file(py, project_dir)?.into_bound(py),
-                ),
-                (
-                    "local_config",
-                    load_local_config_file(py, project_dir)?.into_bound(py),
-                ),
+                ("project_config", project_config),
+                ("local_config", local_config),
             ],
         )
     })

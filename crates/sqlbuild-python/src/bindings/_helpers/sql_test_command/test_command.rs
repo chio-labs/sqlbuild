@@ -30,6 +30,7 @@ use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReport
 use crate::bindings::_helpers::cli::progress_text::{
     format_expectation_detail, format_expectation_name, write_execution_header,
 };
+use crate::bindings::_helpers::command_runtime::concurrency::resolve_concurrency;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_reported_command_invocation;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::build_static_pipeline_result;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
@@ -674,16 +675,12 @@ pub(crate) fn run_test_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> Py
     if inspect_only {
         return inspect(&stream, &pipeline.getattr("plan_output")?);
     }
-    let requested: Bound<'_, PyAny> = request.getattr("concurrency")?;
-    let concurrency: i64 = if requested.is_none() {
-        native_field(
-            &native_field(&native_field(&pipeline, "project")?, "settings")?,
-            "concurrency",
-        )?
-        .extract()?
-    } else {
-        requested.extract()?
-    };
+    let concurrency: i64 = resolve_concurrency(
+        &request.getattr("concurrency")?,
+        &native_field(&invocation, "discovered_inputs")?,
+        &request.getattr("selected_target")?,
+    )?
+    .limit;
     stream.call_method1("write", ("\n",))?;
     let header: Bound<'_, PyDict> = PyDict::new(py);
     header.set_item("stream", &stream)?;

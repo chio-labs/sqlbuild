@@ -1,8 +1,10 @@
 //! Prepare build execution, run the build pipeline and the post-build Python checks.
 
+use pyo3::IntoPyObject;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
+use sqlbuild_config::effective::models::EffectiveConcurrency;
 use sqlbuild_core::build_command::main::render_run_context::render_run_context;
 use sqlbuild_core::build_command::models::{RunContextFacts, SelectorFileFact};
 use sqlbuild_core::cli_text::models::CliStyle;
@@ -81,7 +83,7 @@ fn validated_date(py: Python<'_>, value: Option<Bound<'_, PyAny>>) -> PyResult<O
 fn run_context_facts(
     context: &BuildContext<'_>,
     pipeline: &Bound<'_, PyAny>,
-    concurrency: &Bound<'_, PyAny>,
+    concurrency: &EffectiveConcurrency,
 ) -> PyResult<RunContextFacts> {
     let py: Python<'_> = context.py();
     let project: Bound<'_, PyAny> = native_field(pipeline, "project")?;
@@ -142,7 +144,8 @@ fn run_context_facts(
         database: display_text(&native_field(&project, "effective_target_database")?)?,
         schema: display_text(&native_field(&project, "effective_target_schema")?)?,
         warehouse,
-        concurrency: concurrency.extract()?,
+        concurrency: concurrency.limit,
+        concurrency_source: concurrency.source.to_string(),
         full_refresh: context.request_flag("full_refresh")?,
         selected_count,
         total_count,
@@ -159,7 +162,7 @@ pub(crate) fn write_run_context(
     context: &BuildContext<'_>,
     pipeline: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
-    let concurrency: Bound<'_, PyAny> = context.concurrency(&native_field(pipeline, "project")?)?;
+    let concurrency: EffectiveConcurrency = context.concurrency()?;
     let facts: RunContextFacts = run_context_facts(context, pipeline, &concurrency)?;
     emit(
         &context.stream,
@@ -220,8 +223,7 @@ pub(crate) fn prepare_build_execution<'py>(
     )
     .and_then(|value| pyo3::Bound::new(py, value))
     .map(pyo3::Bound::into_any)?;
-    let concurrency: Bound<'py, PyAny> =
-        context.concurrency(&native_field(pipeline, "project")?)?;
+    let concurrency: Bound<'py, PyAny> = context.concurrency()?.limit.into_pyobject(py)?.into_any();
     if context.verbose {
         write_run_context(context, pipeline)?;
     } else {

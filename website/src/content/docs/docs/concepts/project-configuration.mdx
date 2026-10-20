@@ -163,6 +163,7 @@ A target is a named build context - the database and schema you build into, plus
 | `clone` | Clone policy (see below) |
 | `missing_migration_origin` | What a build does when a declared `migrate_from` origin does not exist in this target: `allow` (default), `require_confirmation`, or `deny` (see below) |
 | `warehouses` | Default Snowflake warehouse per command group, `build` and `query` (see below) |
+| `concurrency` | Worker limit for commands run against this target, replacing `[settings] concurrency` (see below) |
 
 ```toml
 [connections.warehouse]
@@ -229,6 +230,33 @@ password = "${ENV:SNOWFLAKE_PASSWORD}"
 
 Commands then use `dev` automatically. An explicit command such as `sqb build --target prod`
 still takes precedence for that invocation.
+
+### Target concurrency
+
+Targets often run on very different warehouses. A target can set its own worker limit, so local
+and CI runs use many workers while production stays within what its warehouse runs without
+queuing:
+
+```toml
+[settings]
+concurrency = 16
+
+[targets.prod]
+concurrency = 8
+```
+
+`sqb build`, `sqb test`, `sqb audit`, `sqb seed`, `sqb load`, and `sqb scenario test` use the first
+value set in this order:
+
+1. `--concurrency` on the command line, for that invocation only
+2. The selected target's `concurrency`, from `[targets.<name>]` in either file
+3. `[settings] concurrency` in `sqlbuild_local.toml`
+4. `[settings] concurrency` in `sqlbuild_project.toml` (default `1`)
+
+The value must be an integer of at least `1`; anything else fails with `D001`. `sqb build
+--verbose` shows the effective limit and the setting it came from, for example
+`8 configured limit (targets.prod.concurrency)`. `sqb scenario test` has no `--target` option and
+uses the active target's value.
 
 ### Command-group warehouses
 
@@ -638,7 +666,7 @@ delta_compile = true
 | `require_sql_analysis` | `false` | Allow `sql_analysis false` (in a MODEL header or a `[path_defaults]` entry) only on models whose SQL the parser cannot read, and reject `[settings] sql_analysis = false` in `sqlbuild_local.toml`. Project file only. See [SQL analysis](/docs/concepts/models/configuration#sql-analysis). |
 | `query_change_tracking` | `true` | Track query fingerprints for change detection. A fingerprint covers the SQL tokens of the compiled query and ignores whitespace, comments, and the letter case of reserved keywords and built-in function names, so formatting-only edits do not rebuild. Every other word, including non-reserved keywords, identifiers, aliases, JSON path keys and user-defined function names, counts exactly, as do string literals, quoted identifiers, numbers, and optimizer hints. |
 | `column_contract_mode` | `implicit` | Controls whether column declarations on models without a `contract` declaration activate static shape/nullability validation. `implicit` preserves that validation; `explicit` treats columns as metadata and audit attachment unless the model declares `contract enforced`. Model-level `contract enforced` and `contract none` override this setting. Explicit type enforcement remains independent. See [Contracts](/docs/concepts/models/contracts). |
-| `concurrency` | `1` | Default number of worker connections for commands that run resources in parallel, such as `sqb build`, `sqb test`, `sqb audit`, and `sqb seed`; `--concurrency` overrides it |
+| `concurrency` | `1` | Default number of worker connections for commands that run resources in parallel, such as `sqb build`, `sqb test`, `sqb audit`, and `sqb seed`; a target's `concurrency` and `--concurrency` override it (see [Target concurrency](#target-concurrency)) |
 | `microbatch_concurrency` | `false` | Explicitly permit models with `batch_concurrency > 1`; concurrent batches use immutable coordination facts |
 | `auto_load_sources` | `true` | Automatically run source loaders before building dependent models during `sqb build`. See [Loaders](/docs/concepts/python-nodes/loaders). |
 | `table_promotion_mode` | adapter default | `staged` (CTAS to staging, audit, then promote) or `immediate` (CTAS directly to target, then audit) |
@@ -690,11 +718,16 @@ select = ["SQBRSQL", "SQBRGRAPH", "XSQBRARCH"]
 
 Rules are opt-in. Exact codes activate individual checks and prefixes activate a family. Built-in
 codes begin with `SQBR`; repository-defined codes begin with `XSQBR`. See
-[Compiler-integrated Rules](/docs/concepts/rules) for configuration, authoring, and suppressions.
+[Compiler-integrated Rules](/docs/concepts/rules) for configuration, authoring, and exceptions.
 
-| Key | Default | Description |
-| --- | --- | --- |
-| `allow_exceptions` | `true` | When `false`, `[[rules.rule_exceptions]]` and `[[rules.rule_ignores]]` entries are configuration errors and inline `-- sqb: ignore` directives are `SQBRSQL000` errors. The project-wide `ignore` list stays allowed. See [Forbidding exceptions](/docs/concepts/rules/findings-and-exceptions#forbidding-exceptions). |
+| Key | Description |
+| --- | --- |
+| `ignore` | Rule codes or families turned off for the whole project. |
+| `[[rules.rule_exceptions]]` | One reviewed exception: `rule`, `path` and `reason`, plus `relation` and optional `cte` for relation-level Rules such as `SQBRSQL038`. Stale entries fail compilation. See [Findings and exceptions](/docs/concepts/rules/findings-and-exceptions). |
+| `[[rules.rule_ignores]]` | Rules turned off for `paths` or `selectors`, with a `reason`. |
+
+Rule exceptions live only in this file. Inline `-- sqb: ignore` comments are `SQBRSQL000` errors
+that print the entry to add, and the former `allow_exceptions` setting is a configuration error.
 
 ## Scopes
 

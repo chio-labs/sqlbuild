@@ -50,3 +50,40 @@ pub(super) fn orders_asset(status: &str) -> JsonValue {
         ("microbatch", object(vec![("run_type", text("normal"))])),
     ])
 }
+
+/// A completed audit record whose single check carries the given attachment kind.
+pub(super) fn audit_check_record(attachment_kind: &str) -> JsonValue {
+    object(vec![
+        ("schema_version", integer(1)),
+        ("record_kind", text("integration_result")),
+        ("event_id", text("e1")),
+        ("event_sequence", integer(0)),
+        ("event_type", text("resource_attempt_completed")),
+        ("occurred_at", text("2026-09-02T12:00:00Z")),
+        ("invocation_id", text("i1")),
+        ("run_id", text("r1")),
+        ("resource_id", text("audit:not_null:orders")),
+        ("resource_attempt_id", text("a1")),
+        ("operation_id", JsonValue::Null),
+        ("statement_id", JsonValue::Null),
+        ("resource_kind", text("audit")),
+        ("resource_name", text("not_null")),
+        ("attempt_number", integer(1)),
+        ("duration_ms", integer(3)),
+        ("output_kind", text("check")),
+        ("command", text("audit")),
+        ("asset", JsonValue::Null),
+        (
+            "checks",
+            JsonValue::Array(vec![object(vec![
+                ("kind", text("audit")),
+                ("name", text("not_null")),
+                ("check_id", text("audit:not_null:orders")),
+                ("passed", JsonValue::Bool(true)),
+                ("status", text("pass")),
+                ("attachment_kind", text(attachment_kind)),
+                ("audit_definition_name", text("not_null")),
+            ])]),
+        ),
+    ])
+}

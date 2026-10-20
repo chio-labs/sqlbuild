@@ -19,6 +19,17 @@ pub const EVENT_EXPORT_KINDS: [&str; 8] = [
 /// Invocation terminals, delivered only after every other queued event.
 pub const INVOCATION_TERMINAL_EVENT_TYPES: [&str; 2] =
     ["invocation_completed", "invocation_failed"];
+/// Run and invocation outcomes: always admitted, and the only events delivered in the shutdown reserve.
+pub const OUTCOME_EVENT_TYPES: [&str; 6] = [
+    "invocation_started",
+    "invocation_completed",
+    "invocation_failed",
+    "run_started",
+    "run_completed",
+    "run_failed",
+];
+/// The final share of the shutdown budget kept for outcome events once other backlog is dropped.
+pub const OUTCOME_RESERVE_FRACTION: f64 = 0.25;
 pub const RETRY_EVENT_TYPE: &str = "retry_scheduled";
 pub const RETRY_EVENT_KIND: &str = "retry";
 pub const RESOURCE_EVENT_PREFIX: &str = "resource";

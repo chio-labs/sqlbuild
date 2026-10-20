@@ -12,7 +12,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::dag_artifact::artifact::build_dag_json;
 use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
-use crate::bindings::_helpers::query_command::project::{ProjectAdapter, project_adapter};
+use crate::bindings::_helpers::query_command::project::{
+    ProjectAdapter, ProjectInputs, project_adapter,
+};
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 fn array_length(document: &serde_json::Value, key: &str) -> PyResult<usize> {
@@ -47,7 +49,7 @@ pub(crate) fn run_dag_command<'py>(
         project_dir,
         discovered,
         adapter,
-    } = project_adapter(py, project_dir)?;
+    } = project_adapter(py, project_dir, ProjectInputs::Discovered)?;
     let resolver: Bound<'py, PyAny> =
         resolve_external_sql_reference_resolver(project_dir, discovered.clone())?;
     let graph: Bound<'py, PyAny> = build_project_graph(

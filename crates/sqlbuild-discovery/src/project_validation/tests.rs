@@ -1,3 +1,5 @@
+#[path = "tests/test_at_most_one_csv_data_row.rs"]
+mod at_most_one_csv_data_row;
 #[path = "tests/test_csv_header.rs"]
 mod csv_header;
 #[path = "tests/helpers.rs"]

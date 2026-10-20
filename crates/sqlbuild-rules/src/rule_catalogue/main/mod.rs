@@ -5,3 +5,4 @@ pub mod render_skills_body;
 pub mod ruleset_fingerprint;
 pub mod skill_lock_name;
 pub mod sorted_catalogue_order;
+pub mod string_tuple_repr;

@@ -6,3 +6,9 @@ pub(super) struct NormalizeTestCase {
     pub(super) expected_error: Option<&'static str>,
     pub(super) expected_encoded: Option<&'static str>,
 }
+
+pub(super) struct AttachmentKindTestCase {
+    pub(super) description: &'static str,
+    pub(super) attachment_kind: &'static str,
+    pub(super) expected_error: Option<&'static str>,
+}

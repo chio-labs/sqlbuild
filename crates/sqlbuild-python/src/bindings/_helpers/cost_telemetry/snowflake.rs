@@ -3,8 +3,10 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use pyo3::exceptions::{PyTimeoutError, PyValueError};
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyList, PyListMethods, PyString, PyTuple};
+use pyo3::prelude::{
+    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
+use pyo3::types::{PyDict, PyList, PyListMethods, PyString, PyStringMethods, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::snowflake_cost::main::metadata_only_statement::metadata_only_statement;
 use sqlbuild_analysis::snowflake_cost::main::sqlbuild_query_tag::sqlbuild_query_tag;
@@ -25,8 +27,13 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
 
-const DEADLINE_SECONDS: f64 = 10.0;
-const QUERY_TIMEOUT_SECONDS: &str = "5";
+/// Default budget of one collection, which the at-exit collection keeps short.
+const DEADLINE_SECONDS: f64 = 30.0;
+/// Statement timeout of one query-history read.
+const QUERY_TIMEOUT_SECONDS: &str = "10";
+/// Narrowest slice still split in half after a statement timeout.
+const MIN_TIMEOUT_SPLIT_SECONDS: i64 = 60;
+const STATEMENT_TIMEOUT_CODE: &str = "000630";
 const RUNNING_STATUS: &str = "RUNNING";
 const HOOK_RESOURCE_TYPE: &str = "hook";
 const ROW_WIDTH: usize = 14;
@@ -43,11 +50,12 @@ const PARTIAL_STATUS: &str = "PARTIAL";
 const COMPLETE_STATUS: &str = "COMPLETE";
 const UNAVAILABLE_STATUS: &str = "UNAVAILABLE";
 
-/// The connection, window inputs and deadline every query-history read shares.
+/// Connection, window inputs and deadline of every read; text is kept only for classified IDs.
 struct History<'py> {
     connection: Bound<'py, PyAny>,
     database: Option<String>,
-    classification_query_ids: Vec<String>,
+    text_run_id: Option<String>,
+    classification_query_ids: HashSet<String>,
     deadline: f64,
     result_limit: usize,
 }
@@ -92,7 +100,7 @@ fn history_rows<'py>(
         database: history.database.as_deref(),
         start: &start_text,
         end: end_text.as_deref(),
-        classification_query_ids: &history.classification_query_ids,
+        text_run_id: history.text_run_id.as_deref(),
         result_limit: history.result_limit,
     });
     let parameters: Bound<'py, PyDict> = PyDict::new(py);
@@ -134,20 +142,46 @@ fn merged_rows<'py>(
     Ok(by_query_id.into_values().collect())
 }
 
-/// End-time-bounded rows, halving the window while a read reaches the result limit.
+/// Whether a query-history read failed on Snowflake's statement timeout.
+pub(crate) fn statement_timeout(py: Python<'_>, error: &PyErr) -> bool {
+    error
+        .value(py)
+        .str()
+        .is_ok_and(|text| text.to_string_lossy().contains(STATEMENT_TIMEOUT_CODE))
+}
+
+/// End-time-bounded rows, halving the window while a read reaches the result limit or times out.
 fn bounded_rows<'py>(
     history: &History<'py>,
     (start, end): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<(Vec<Bound<'py, PyAny>>, bool)> {
     let py: Python<'py> = start.py();
-    let rows: Vec<Bound<'py, PyAny>> = history_rows(history, (start, Some(end)))?;
+    let width: Bound<'py, PyAny> = end.sub(start)?;
+    let rows: Vec<Bound<'py, PyAny>> = match history_rows(history, (start, Some(end))) {
+        Ok(rows) => rows,
+        Err(error)
+            if statement_timeout(py, &error)
+                && width.gt(timedelta(py, ("seconds", MIN_TIMEOUT_SPLIT_SECONDS))?)? =>
+        {
+            return split_rows(history, (start, end), &width);
+        }
+        Err(error) => return Err(error),
+    };
     if rows.len() < history.result_limit {
         return Ok((rows, false));
     }
-    let width: Bound<'py, PyAny> = end.sub(start)?;
     if width.le(timedelta(py, ("milliseconds", 1))?)? {
         return Ok((rows, true));
     }
+    split_rows(history, (start, end), &width)
+}
+
+/// Rows of both halves of a bounded window, merged by query ID.
+fn split_rows<'py>(
+    history: &History<'py>,
+    (start, end): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    width: &Bound<'py, PyAny>,
+) -> PyResult<(Vec<Bound<'py, PyAny>>, bool)> {
     let midpoint: Bound<'py, PyAny> = start.add(width.div(2)?)?;
     let (left, left_saturated) = bounded_rows(history, (start, &midpoint))?;
     let (right, right_saturated) = bounded_rows(history, (&midpoint, end))?;
@@ -194,7 +228,7 @@ fn optional_str<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 /// A history row as an observation, or the reason it carries no attributable compute.
 fn row_observation<'py>(
     row: &Bound<'py, PyAny>,
-    require_complete: bool,
+    (require_complete, classify): (bool, bool),
 ) -> PyResult<Result<Bound<'py, PyAny>, &'static str>> {
     let py: Python<'py> = row.py();
     let fields: Vec<Bound<'py, PyAny>> = unpacked(row)?;
@@ -224,7 +258,7 @@ fn row_observation<'py>(
     } else {
         String::new()
     };
-    let query_text: Option<String> = if query_text.is_instance_of::<PyString>() {
+    let query_text: Option<String> = if classify && query_text.is_instance_of::<PyString>() {
         Some(query_text.extract()?)
     } else {
         None
@@ -288,7 +322,36 @@ fn row_observation<'py>(
     Ok(Ok(observation))
 }
 
-/// Observations of the run window: open-ended history, bounded windows when saturated.
+/// Open-ended rows from `start`, which include running queries, or bounded windows if saturated.
+fn open_rows<'py>(
+    history: &History<'py>,
+    (start, window_end): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+) -> PyResult<(Vec<Bound<'py, PyAny>>, bool)> {
+    let py: Python<'py> = start.py();
+    let open_rows: Vec<Bound<'py, PyAny>> = match history_rows(history, (start, None)) {
+        Ok(rows) => rows,
+        Err(error) if statement_timeout(py, &error) => {
+            return bounded_rows(history, (start, window_end));
+        }
+        Err(error) => return Err(error),
+    };
+    if open_rows.len() < history.result_limit {
+        return Ok((open_rows, false));
+    }
+    let (bounded, bounded_saturated) = bounded_rows(history, (start, window_end))?;
+    let mut still_running: Vec<Bound<'py, PyAny>> = Vec::new();
+    for row in open_rows {
+        if running(&row.get_item(7)?, &row.get_item(10)?)? {
+            still_running.push(row);
+        }
+    }
+    Ok((
+        merged_rows(still_running.into_iter().chain(bounded))?,
+        bounded_saturated,
+    ))
+}
+
+/// Observations of the run window: one open read, halved windows when saturated or timed out.
 fn query_observations<'py>(
     history: &History<'py>,
     (started_at, completed_at): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
@@ -297,29 +360,16 @@ fn query_observations<'py>(
     let py: Python<'py> = started_at.py();
     let skew: Bound<'py, PyAny> = timedelta(py, ("minutes", 10))?;
     let window_start: Bound<'py, PyAny> = started_at.sub(&skew)?;
-    let open_rows: Vec<Bound<'py, PyAny>> = history_rows(history, (&window_start, None))?;
-    let mut saturated: bool = open_rows.len() >= history.result_limit;
-    let rows: Vec<Bound<'py, PyAny>> = if saturated {
-        let (bounded, bounded_saturated) =
-            bounded_rows(history, (&window_start, &completed_at.add(&skew)?))?;
-        let mut still_running: Vec<Bound<'py, PyAny>> = Vec::new();
-        for row in open_rows {
-            if running(&row.get_item(7)?, &row.get_item(10)?)? {
-                still_running.push(row);
-            }
-        }
-        saturated = bounded_saturated;
-        merged_rows(still_running.into_iter().chain(bounded))?
-    } else {
-        open_rows
-    };
+    let window_end: Bound<'py, PyAny> = completed_at.add(&skew)?;
+    let (rows, saturated) = open_rows(history, (&window_start, &window_end))?;
     let observations: Bound<'py, PyList> = PyList::empty(py);
     let mut observed: HashSet<String> = HashSet::new();
     let mut skipped: Vec<(String, &'static str)> = Vec::new();
     for row in rows {
         let id: String = query_id(&row)?;
         observed.insert(id.clone());
-        match row_observation(&row, expected.contains(&id))? {
+        let classify: bool = history.classification_query_ids.contains(&id);
+        match row_observation(&row, (expected.contains(&id), classify))? {
             Ok(observation) => observations.append(observation)?,
             Err(reason) => match skipped.iter_mut().find(|(skipped_id, _)| *skipped_id == id) {
                 Some(entry) => entry.1 = reason,
@@ -338,6 +388,43 @@ fn query_observations<'py>(
         skipped,
         saturated,
     })
+}
+
+/// The budget a query-history read exhausted, or `None` for any other failure.
+fn budget_exhausted(py: Python<'_>, error: &PyErr, budget_seconds: f64) -> Option<String> {
+    if error.is_instance_of::<PyTimeoutError>(py)
+        && error
+            .value(py)
+            .str()
+            .is_ok_and(|text| text.to_string_lossy() == DEADLINE_MESSAGE)
+    {
+        return Some(format!(
+            "{budget_seconds:.0}-second collection deadline exceeded"
+        ));
+    }
+    statement_timeout(py, error).then(|| {
+        format!("query-history read reached its {QUERY_TIMEOUT_SECONDS}-second statement timeout")
+    })
+}
+
+/// A pending summary for a run whose history did not return within the collection budget.
+fn budget_pending(
+    (run_id, cause): (&str, &str),
+    statement_count: usize,
+    failure: Option<&str>,
+) -> Summary {
+    let mut pending: Summary = with_ledger_failure(
+        partial(&format!(
+            "Snowflake query history did not return within the cost collection budget \
+({cause}). Run `sqb cost {run_id}` to retry."
+        )),
+        failure,
+    );
+    if failure.is_none() {
+        pending.state.status = PENDING_STATUS;
+    }
+    pending.state.counts = [statement_count, 0, statement_count, 0];
+    pending
 }
 
 /// A collected summary: the allocation it prices, if any, and its derived fields.
@@ -465,6 +552,7 @@ struct Collection<'py> {
     rate_source: Bound<'py, PyAny>,
     attempts: i64,
     retry_delay_seconds: f64,
+    budget_seconds: f64,
 }
 
 fn collect<'py>(
@@ -473,7 +561,7 @@ fn collect<'py>(
     ledger_path: &Bound<'py, PyAny>,
 ) -> PyResult<Summary> {
     let py: Python<'py> = ledger_path.py();
-    history.deadline = monotonic(py)? + DEADLINE_SECONDS;
+    history.deadline = monotonic(py)? + collection.budget_seconds;
     let run_id: String = collection.run_id.extract()?;
     let ledger: Vec<Bound<'py, PyAny>> = read_ledger(ledger_path, &collection.run_id)?;
     let failure: Option<String> = consume_ledger_failure(py, &run_id)?;
@@ -485,14 +573,15 @@ fn collect<'py>(
         }
     }
     let mut expected_ids: HashSet<String> = HashSet::new();
-    let mut classification: Vec<String> = Vec::new();
+    let mut classification: HashSet<String> = HashSet::new();
     for (id, entry) in pyo3::types::PyDictMethods::iter(&by_query_id) {
         let id: String = id.extract()?;
         if !native_field(&entry, "resource_type")?.eq(HOOK_RESOURCE_TYPE)? {
-            classification.push(id.clone());
+            classification.insert(id.clone());
         }
         expected_ids.insert(id);
     }
+    history.text_run_id = (!classification.is_empty()).then(|| run_id.clone());
     history.classification_query_ids = classification;
     if !ledger.is_empty() && expected_ids.is_empty() {
         let mut summary: Summary = with_ledger_failure(
@@ -514,11 +603,26 @@ fn collect<'py>(
         saturated: false,
     };
     for attempt in 0..collection.attempts {
-        observed = query_observations(
+        observed = match query_observations(
             &history,
             (&collection.started_at, &collection.completed_at),
             &expected_ids,
-        )?;
+        ) {
+            Ok(observed) => observed,
+            Err(error) => {
+                let Some(cause) = budget_exhausted(py, &error, collection.budget_seconds) else {
+                    return Err(error);
+                };
+                if summary.is_some() {
+                    break;
+                }
+                return Ok(budget_pending(
+                    (&run_id, &cause),
+                    ledger.len(),
+                    failure.as_deref(),
+                ));
+            }
+        };
         let attributed: Vec<Bound<'py, PyAny>> = observed
             .observations
             .iter()
@@ -621,6 +725,7 @@ fn collect_snowflake_cost<'py>(
                 "attempts",
                 "retry_delay_seconds",
                 "result_limit",
+                "budget_seconds",
             ],
         ),
     )?;
@@ -640,11 +745,15 @@ fn collect_snowflake_cost<'py>(
         attempts: optional("attempts", 3_i64.into_bound_py_any(py)?)?.extract()?,
         retry_delay_seconds: optional("retry_delay_seconds", 1.0_f64.into_bound_py_any(py)?)?
             .extract()?,
+        budget_seconds: optional("budget_seconds", py.None().into_bound(py))?
+            .extract::<Option<f64>>()?
+            .unwrap_or(DEADLINE_SECONDS),
     };
     let history: History<'py> = History {
         connection: arguments.value("connection")?,
         database: arguments.value("database")?.extract()?,
-        classification_query_ids: Vec::new(),
+        text_run_id: None,
+        classification_query_ids: HashSet::new(),
         deadline: 0.0,
         result_limit: optional(
             "result_limit",
@@ -684,14 +793,23 @@ fn snowflake_query_observations<'py>(
                 "classification_query_ids",
                 "deadline",
             ],
-            &["database", "result_limit"],
+            &["database", "result_limit", "run_id"],
         ),
     )?;
     let result_limit: Bound<'py, PyAny> = arguments.value("result_limit")?;
+    let classification_query_ids: HashSet<String> =
+        strings(&arguments.value("classification_query_ids")?)?
+            .into_iter()
+            .collect();
     let history: History<'py> = History {
         connection: arguments.value("connection")?,
         database: arguments.value("database")?.extract()?,
-        classification_query_ids: strings(&arguments.value("classification_query_ids")?)?,
+        text_run_id: if classification_query_ids.is_empty() {
+            None
+        } else {
+            arguments.value("run_id")?.extract()?
+        },
+        classification_query_ids,
         deadline: arguments.value("deadline")?.extract()?,
         result_limit: if result_limit.is_none() {
             QUERY_HISTORY_RESULT_LIMIT
@@ -737,8 +855,8 @@ fn render_snowflake_query_history_sql(
         "render_snowflake_query_history_sql",
         options,
         (
-            &["started_at", "classification_query_ids"],
-            &["database", "completed_at", "result_limit"],
+            &["started_at"],
+            &["database", "completed_at", "result_limit", "run_id"],
         ),
     )?;
     let start: String = arguments
@@ -753,11 +871,12 @@ fn render_snowflake_query_history_sql(
     };
     let result_limit: Bound<'_, PyAny> = arguments.value("result_limit")?;
     let database: Option<String> = arguments.value("database")?.extract()?;
+    let run_id: Option<String> = arguments.value("run_id")?.extract()?;
     Ok(query_history_sql(&QueryHistoryWindow {
         database: database.as_deref(),
         start: &start,
         end: end.as_deref(),
-        classification_query_ids: &strings(&arguments.value("classification_query_ids")?)?,
+        text_run_id: run_id.as_deref(),
         result_limit: if result_limit.is_none() {
             QUERY_HISTORY_RESULT_LIMIT
         } else {
