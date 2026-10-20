@@ -42,3 +42,10 @@ pub(super) fn csv_error(message: &str) -> Result<Vec<String>, String> {
 pub(super) fn failure(kind: FailureKind, message: &str) -> Result<(), String> {
     Err(format!("{kind:?}: {message}"))
 }
+
+pub(crate) struct OneDataRowTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) text: String,
+    pub(crate) settings: CsvSettings,
+    pub(crate) expected_one_row: bool,
+}

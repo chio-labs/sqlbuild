@@ -2,15 +2,30 @@
 
 use crate::event_export::models::{EventQueue, QueueOutcome, QueuedEvent};
 
-/// Queue `event`, or reject it when every queued event has at least its priority.
+/// Queue `event` or reject it when full of events at least its priority; outcome events are never displaced and always admitted.
 pub fn queue_lifecycle_event<T>(
     mut queue: EventQueue<T>,
     event: QueuedEvent<T>,
 ) -> QueueOutcome<T> {
     let mut displaced: Option<QueuedEvent<T>> = None;
     if queue.items.len() >= queue.capacity {
-        let lowest: Option<u8> = queue.items.iter().map(|queued| queued.priority).min();
-        let Some(lowest) = lowest.filter(|lowest| *lowest < event.priority) else {
+        let lowest: Option<u8> = queue
+            .items
+            .iter()
+            .filter(|queued| !queued.outcome)
+            .map(|queued| queued.priority)
+            .min();
+        let displaceable = lowest.filter(|lowest| event.outcome || *lowest < event.priority);
+        let Some(lowest) = displaceable else {
+            if event.outcome {
+                queue.items.push(event);
+                return QueueOutcome {
+                    queue,
+                    inserted: true,
+                    displaced: None,
+                    rejected: None,
+                };
+            }
             return QueueOutcome {
                 queue,
                 inserted: false,
@@ -22,7 +37,7 @@ pub fn queue_lifecycle_event<T>(
             .items
             .iter()
             .enumerate()
-            .filter(|(_, queued)| queued.priority == lowest)
+            .filter(|(_, queued)| !queued.outcome && queued.priority == lowest)
             .min_by_key(|(_, queued)| queued.sequence)
             .map(|(position, _)| position);
         displaced = position.map(|position| queue.items.remove(position));

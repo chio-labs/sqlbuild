@@ -1,3 +1,5 @@
+#[path = "tests/test_closing_status.rs"]
+mod closing_status;
 #[path = "tests/test_command_dispatch.rs"]
 mod command_dispatch;
 #[path = "tests/test_event_export_warning.rs"]

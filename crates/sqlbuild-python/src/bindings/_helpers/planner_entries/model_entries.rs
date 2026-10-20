@@ -304,6 +304,7 @@ fn check_microbatch_concurrency<'py>(
     project: &Bound<'py, PyAny>,
     adapter: &Bound<'py, PyAny>,
     entries: &[Bound<'py, PyAny>],
+    concurrency: i64,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
     let py = project.py();
     let skip = planner_type(py, RecordId::PlanAction, "SKIP")?;
@@ -353,7 +354,7 @@ fn check_microbatch_concurrency<'py>(
             concurrent.push(entry);
         }
     }
-    if concurrent.is_empty() || !native_field(&settings, "concurrency")?.gt(1)? {
+    if concurrent.is_empty() || concurrency <= 1 {
         return Ok(None);
     }
     let count = concurrent.len();
@@ -404,6 +405,7 @@ pub(crate) fn plan_entries<'py>(
         cursor_overrides,
         full_refresh,
         build_inputs: inputs,
+        concurrency,
     } = request;
     let py = project.py();
     let inputs = if inputs.is_none() {
@@ -532,7 +534,8 @@ pub(crate) fn plan_entries<'py>(
             warnings.push(warning?);
         }
     }
-    if let Some(warning) = check_microbatch_concurrency(&project, &adapter, &entries)? {
+    if let Some(warning) = check_microbatch_concurrency(&project, &adapter, &entries, concurrency)?
+    {
         warnings.push(warning);
     }
     Ok(ModelEntryResults { entries, warnings })

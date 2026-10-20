@@ -1,8 +1,10 @@
 use crate::integration_results::main::encode_integration_value::encode_integration_value;
 use crate::integration_results::main::normalize_integration_record::normalize_integration_record;
 use crate::integration_results::main::strip_optional_enrichment::strip_optional_enrichment;
-use crate::integration_results::tests::helpers::{integer, object, orders_asset, record, text};
-use crate::integration_results::tests::test_types::NormalizeTestCase;
+use crate::integration_results::tests::helpers::{
+    audit_check_record, integer, object, orders_asset, record, text,
+};
+use crate::integration_results::tests::test_types::{AttachmentKindTestCase, NormalizeTestCase};
 use crate::json::models::JsonValue;
 
 #[test]
@@ -94,6 +96,49 @@ fn given_newer_enrichment_when_stripping_then_record_keeps_core_fields() {
         assert_eq!(
             (error.as_deref(), microbatch.as_deref()),
             (test_case.expected_error, test_case.expected_encoded),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_every_audit_attachment_kind_when_normalizing_check_then_it_is_supported() {
+    let test_cases = [
+        AttachmentKindTestCase {
+            description: "a model audit check is supported",
+            attachment_kind: "model",
+            expected_error: None,
+        },
+        AttachmentKindTestCase {
+            description: "a source audit check is supported",
+            attachment_kind: "source",
+            expected_error: None,
+        },
+        AttachmentKindTestCase {
+            description: "a seed audit check is supported",
+            attachment_kind: "seed",
+            expected_error: None,
+        },
+        AttachmentKindTestCase {
+            description: "an end-of-run audit check is supported",
+            attachment_kind: "end",
+            expected_error: None,
+        },
+        AttachmentKindTestCase {
+            description: "an unknown attachment kind is rejected",
+            attachment_kind: "warehouse",
+            expected_error: Some("integration check attachment_kind is unsupported"),
+        },
+    ];
+
+    for test_case in test_cases {
+        let normalized =
+            normalize_integration_record(audit_check_record(test_case.attachment_kind));
+        let error: Option<String> = normalized.as_ref().err().map(|error| error.message.clone());
+        assert_eq!(
+            error.as_deref(),
+            test_case.expected_error,
             "{}",
             test_case.description
         );

@@ -3,12 +3,12 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use sqlbuild_rules::configuration::main::forbidden_exceptions::forbidden_exceptions;
 use sqlbuild_rules::configuration::main::load_rules_config::load_rules_config;
 use sqlbuild_rules::models::{RuleMetadata, RulesConfig};
 use sqlbuild_rules::rule_catalogue::main::format_rule_text::format_rule_text;
 use sqlbuild_rules::rule_catalogue::main::render_rule_list::render_rule_list;
 use sqlbuild_rules::rule_catalogue::main::sorted_catalogue_order::sorted_catalogue_order;
+use sqlbuild_rules::rule_catalogue::main::string_tuple_repr::string_tuple_repr;
 use sqlbuild_rules::rule_catalogue::models::{
     CatalogueRule, OptionKind, OptionSpec, OptionText, OptionValue, RuleListing, RuleText,
 };
@@ -18,20 +18,30 @@ use sqlbuild_rules::rules::models::{BuiltinOption, BuiltinOptionKind};
 
 use crate::native_commands::_helpers::project_facts::has_custom_rules;
 use crate::native_commands::constants::{
-    EMPTY_TUPLE_REPR, FALSE_REPR, FAMILY_SUFFIX_LENGTH, MODEL_SUBJECT, PROJECT_SUBJECT,
-    RULE_SELECTOR_REQUIRED, RULES_USAGE_EXIT_CODE, UNKNOWN_RULE_PREFIX,
+    DICT_TYPE_NAME, EMPTY_TUPLE_REPR, FALSE_REPR, FAMILY_SUFFIX_LENGTH, MODEL_SUBJECT,
+    PROJECT_SUBJECT, RULE_SELECTOR_REQUIRED, RULES_USAGE_EXIT_CODE, UNKNOWN_RULE_PREFIX,
 };
 use crate::native_commands::errors::PythonNeeded;
 use crate::native_commands::models::{CommandOutput, RulesAction, RulesOptions};
 
-/// `RuleOption.boolean(...)` or `RuleOption.string_list(...)` as the catalogue validates it.
+/// `RuleOption.boolean(...)`, `.string_list(...)` or a table list, as the catalogue validates it.
 fn option_spec(option: &BuiltinOption) -> OptionSpec {
     let (value_type, default, item_type) = match option.kind {
         BuiltinOptionKind::Boolean => (OptionKind::Bool, OptionValue::Bool(false), None),
-        BuiltinOptionKind::StringList => (
+        BuiltinOptionKind::StringList(defaults) => (
+            OptionKind::Tuple,
+            OptionValue::Tuple(
+                defaults
+                    .iter()
+                    .map(|item| OptionValue::Str((*item).to_owned()))
+                    .collect(),
+            ),
+            Some(OptionKind::Str),
+        ),
+        BuiltinOptionKind::TableList => (
             OptionKind::Tuple,
             OptionValue::Tuple(Vec::new()),
-            Some(OptionKind::Str),
+            Some(OptionKind::Other(DICT_TYPE_NAME.to_owned())),
         ),
     };
     OptionSpec {
@@ -49,15 +59,16 @@ fn option_spec(option: &BuiltinOption) -> OptionSpec {
 
 /// The option as `rules show` prints it: the `repr` of its default, which is also effective.
 fn option_text(option: &BuiltinOption) -> OptionText {
-    let default_repr: &str = match option.kind {
-        BuiltinOptionKind::Boolean => FALSE_REPR,
-        BuiltinOptionKind::StringList => EMPTY_TUPLE_REPR,
+    let default_repr: String = match option.kind {
+        BuiltinOptionKind::Boolean => FALSE_REPR.to_owned(),
+        BuiltinOptionKind::StringList(defaults) => string_tuple_repr(defaults),
+        BuiltinOptionKind::TableList => EMPTY_TUPLE_REPR.to_owned(),
     };
     OptionText {
         name: option.name.to_owned(),
         description: option.description.to_owned(),
-        default_repr: default_repr.to_owned(),
-        effective_repr: default_repr.to_owned(),
+        effective_repr: default_repr.clone(),
+        default_repr,
     }
 }
 
@@ -155,7 +166,7 @@ pub(crate) fn run_rules(
         return Err(PythonNeeded::Project);
     }
     let config: RulesConfig = load_rules_config(project_dir).map_err(|_| PythonNeeded::Failure)?;
-    if forbidden_exceptions(&config).is_some() || !config.rule_options.is_empty() {
+    if !config.rule_options.is_empty() {
         return Err(PythonNeeded::Project);
     }
     let rules: Vec<RuleMetadata> = sorted_catalogue()?;

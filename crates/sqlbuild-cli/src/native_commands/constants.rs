@@ -63,6 +63,8 @@ pub(crate) const PROJECT_SUBJECT: &str = "project";
 /// Python `repr` of the built-in option defaults: `False` and `()`.
 pub(crate) const FALSE_REPR: &str = "False";
 pub(crate) const EMPTY_TUPLE_REPR: &str = "()";
+/// The Python type name of each `allowed_qualifiers`-style table option item.
+pub(crate) const DICT_TYPE_NAME: &str = "dict";
 pub(crate) const UNKNOWN_RULE_PREFIX: &str = "Unknown rule: ";
 /// The whitespace `int()` strips once other spaces are ASCII spaces.
 pub(crate) const INT_ASCII_SPACES: &str = " \t\n\x0b\x0c\r";

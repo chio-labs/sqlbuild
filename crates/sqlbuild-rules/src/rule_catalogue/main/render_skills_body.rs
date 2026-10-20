@@ -16,6 +16,7 @@ pub fn render_skills_body(rules: &[RuleText], config: &RulesConfig) -> String {
         "",
         "Rules enforce SQL model architecture and never modifies SQL files.",
         "Run `sqb rules run SQBR` before handing off model changes.",
+        "Fix findings in SQL. A deliberate deviation is a reviewed [[rules.rule_exceptions]] entry with a reason in sqlbuild_project.toml; inline `-- sqb: ignore` comments are errors.",
         "",
         "## Active Rules",
     ]
@@ -48,8 +49,13 @@ pub fn render_skills_body(rules: &[RuleText], config: &RulesConfig) -> String {
     {
         body.extend([String::new(), "## Scoped Deviations".into(), String::new()]);
         for entry in &config.rule_exceptions {
+            let scope: String = match (&entry.relation, &entry.cte) {
+                (Some(relation), Some(cte)) => format!(" (relation `{relation}` in CTE `{cte}`)"),
+                (Some(relation), None) => format!(" (relation `{relation}`)"),
+                _ => String::new(),
+            };
             body.push(format!(
-                "- Exception `{}` at `{}`: {}",
+                "- Exception `{}` at `{}`{scope}: {}",
                 entry.rule, entry.path, entry.reason
             ));
         }

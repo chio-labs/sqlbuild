@@ -118,6 +118,7 @@
 					"docs/concepts/rules",
 					"docs/concepts/rules/configuration-and-selection",
 					"docs/concepts/rules/findings-and-exceptions",
+					"docs/concepts/rules/published-layer-rules",
 					"docs/concepts/rules/execution-and-caching"
 				]
 			},

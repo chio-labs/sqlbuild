@@ -10,7 +10,7 @@ use crate::bindings::_helpers::event_exporting::models::{
     BoundEventExporter, EventExportSummary, EventExporterAccounting, EventExporterCounts,
     EventExporterFailure,
 };
-use crate::bindings::_helpers::event_exporting::workers::{DispatcherWorker, InvocationCompletion};
+use crate::bindings::_helpers::event_exporting::workers::DispatcherWorker;
 use crate::bindings::_helpers::event_exporting::{policy, scope};
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -21,7 +21,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<BoundEventExporter>()?;
     module.add_class::<EventExporterDispatcher>()?;
     module.add_class::<DispatcherWorker>()?;
-    module.add_class::<InvocationCompletion>()?;
     let hook = wrap_pyfunction!(stop_event_exporter_threads, module)?;
     module.add_function(hook.clone())?;
     imported(module.py(), "atexit", "register")?.call1((hook,))?;

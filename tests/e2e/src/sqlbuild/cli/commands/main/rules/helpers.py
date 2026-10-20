@@ -626,3 +626,52 @@ def write_bulk_rules_cache(*, root: Path, file_name: str, text: str) -> None:
     _ = rules_bulk_cache_path(project_dir=root, file_name=file_name).write_text(
         text, encoding="utf-8"
     )
+
+
+def compile_diagnostics(result: subprocess.CompletedProcess[str]) -> list[dict[str, Any]]:
+    """Return every diagnostic of one `sqb compile --json` result."""
+
+    return list(json.loads(result.stdout)["diagnostics"])
+
+
+def diagnostic_messages(result: subprocess.CompletedProcess[str], code: str) -> tuple[str, ...]:
+    """Return the messages of one code's diagnostics, in report order."""
+
+    return tuple(
+        str(item["message"])
+        for item in filter(lambda item: item["code"] == code, compile_diagnostics(result))
+    )
+
+
+def diagnostic_text(result: subprocess.CompletedProcess[str]) -> str:
+    """Return every diagnostic message and help, followed by stderr."""
+
+    lines: list[str] = [
+        f"{item['message']}\n{item.get('help', '')}" for item in compile_diagnostics(result)
+    ]
+    return "\n".join((*lines, result.stderr))
+
+
+def write_one_row_cross_join_project(
+    *, project_dir: Path, toml: str, seed_rows: tuple[str, ...], files: tuple[tuple[str, str], ...]
+) -> Path:
+    """Write a project with the `order_policy` seed and model files; return the seed CSV."""
+
+    (project_dir / "sqlbuild_project.toml").write_text(toml, encoding="utf-8")
+    for relative, text in files:
+        path: Path = project_dir / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    seed: Path = project_dir / "seeds" / "order_policy.csv"
+    seed.write_text("max_amount\n" + "".join(f"{row}\n" for row in seed_rows), encoding="utf-8")
+    return seed
+
+
+def write_model_files(*, project_dir: Path, toml: str, files: tuple[tuple[str, str], ...]) -> None:
+    """Write `sqlbuild_project.toml` and each `(relative path, text)` file."""
+
+    (project_dir / "sqlbuild_project.toml").write_text(toml, encoding="utf-8")
+    for relative, text in files:
+        path: Path = project_dir / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")

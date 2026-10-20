@@ -1151,3 +1151,85 @@ def order_totals_model_sql(*, materialized: str) -> str:
         f"MODEL (description 'Order totals.', materialized {materialized});\n\n"
         "SELECT 1 AS order_id, 250 AS total_cents\n"
     )
+
+
+def target_concurrency_project_files(
+    *, target_concurrency: str, local_settings: str
+) -> dict[str, str]:
+    """A DuckDB project with `[settings] concurrency = 2` and a `ci` target with extra lines."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "target_concurrency"\n'
+            'adapter = "duckdb"\n'
+            'default_target = "dev"\n\n'
+            "[connection]\n"
+            'database = "warehouse.duckdb"\n\n'
+            "[settings]\n"
+            "concurrency = 2\n\n"
+            "[targets.dev]\n"
+            'schema = "main"\n\n'
+            "[targets.ci]\n"
+            'schema = "main"\n'
+            f"{target_concurrency}"
+        ),
+        "sqlbuild_local.toml": local_settings,
+        "seeds/products.csv": "product_id\n1\n2\n",
+        "seeds/products.yml": (
+            "seeds:\n"
+            "  - name: products\n"
+            "    description: Products.\n"
+            "    columns:\n"
+            "      - name: product_id\n"
+            "        type: INTEGER\n"
+        ),
+        "models/orders.sql": (
+            "MODEL (description 'Orders.', materialized table);\n\nSELECT 1 AS order_id\n"
+        ),
+    }
+
+
+def target_concurrency_microbatch_files() -> dict[str, str]:
+    """A project whose `ci` target raises concurrency above `[settings]` for a microbatch model."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "target_microbatch"\n'
+            'adapter = "duckdb"\n'
+            'default_target = "dev"\n\n'
+            "[connection]\n"
+            'database = "warehouse.duckdb"\n\n'
+            "[settings]\n"
+            "concurrency = 1\n"
+            "microbatch_concurrency = true\n\n"
+            "[targets.dev]\n"
+            'schema = "main"\n\n'
+            "[targets.ci]\n"
+            'schema = "main"\n'
+            "concurrency = 3\n"
+        ),
+        "sources/raw.yml": (
+            "sources:\n"
+            "  - name: raw_events\n"
+            "    description: Raw events.\n"
+            "    schema: main\n"
+            "    table: raw_events\n"
+        ),
+        "models/orders.sql": (
+            'MODEL (description "Orders.",\n'
+            "  materialized incremental,\n"
+            "  incremental_strategy delete_insert,\n"
+            "  incremental_mode microbatch,\n"
+            "  microbatch_strategy watermark,\n"
+            "  cursor_watermark_mode all,\n"
+            "  cursor event_time,\n"
+            "  cursor_type timestamp,\n"
+            "  cursor_grain hour,\n"
+            "  cursor_inputs (raw_events (column event_time, roles [filter, watermark])),\n"
+            "  batch_size 1h,\n"
+            "  batch_concurrency 3,\n"
+            ");\n\n"
+            'SELECT id, event_time FROM __source("raw_events")\n'
+            "WHERE event_time >= __cursor_start() AND event_time < __cursor_end()\n"
+        ),
+    }

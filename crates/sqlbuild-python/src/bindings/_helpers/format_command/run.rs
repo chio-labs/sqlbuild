@@ -25,8 +25,8 @@ use crate::bindings::_helpers::rules::dsl_headers::safe_format_files;
 use crate::bindings::_helpers::rules::dsl_headers::{header_violations, rules_config};
 use crate::bindings::_helpers::rules::fixture_formatting::format_redundant_fixture_nulls;
 use crate::bindings::_helpers::rules::lint_pipeline::{LintViolationRow, ViolationClasses};
-use crate::bindings::_helpers::rules::lint_text::apply_lint_suppressions;
 use crate::bindings::_helpers::rules::lint_text::format_lint_sql_bodies;
+use crate::bindings::_helpers::rules::lint_text::reject_lint_suppressions;
 use sqlbuild_rules::dsl_headers::main::scan_headers::scan_headers;
 use sqlbuild_rules::dsl_headers::models::{HeaderRulesConfig, HeaderViolation};
 
@@ -303,9 +303,12 @@ pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<Form
     let violations: Vec<Bound<'py, PyAny>> =
         drop_resolved_description_faults(request.project_dir, violations)?;
     let final_contents: Bound<'py, PyDict> = overlaid(&files, &updated)?;
-    let allow_suppressions: bool = native_field(request.config, "allow_suppressions")?.extract()?;
-    let violations: Vec<Bound<'py, PyAny>> =
-        apply_lint_suppressions(py, violations, final_contents.clone(), allow_suppressions)?;
+    let violations: Vec<Bound<'py, PyAny>> = reject_lint_suppressions(
+        py,
+        violations,
+        final_contents.clone(),
+        request.project_dir.extract()?,
+    )?;
     Ok(FormatOutcome {
         files_checked,
         violations,

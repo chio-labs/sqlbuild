@@ -1,9 +1,9 @@
 use crate::configuration::main::validate as config;
-use crate::constants::{API_VERSION, NATIVE_BUILD_IDENTITY};
+use crate::constants::{API_VERSION, NATIVE_BUILD_IDENTITY, RELATION_EXCEPTION_RULES};
 use crate::engine::_helpers::cache::{Cache, PendingBucketWrite, RuleCacheEntry};
 use crate::models::{
-    EvaluateRequest, EvaluateResponse, Fault, Model, RuleMetadata, RuleScope, RulesCodeGrammar,
-    RulesConfig,
+    EvaluateRequest, EvaluateResponse, Fault, Model, RuleException, RuleMetadata, RuleScope,
+    RulesCodeGrammar, RulesConfig,
 };
 use crate::rules::main::{
     assemble_catalogue, evaluate as rules, evaluate_project, fingerprint,
@@ -12,6 +12,7 @@ use crate::rules::main::{
 use crate::rules::models::{
     ModelEvaluationRequest, ProjectEvaluationRequest, QueryShapes, ResolvedThresholdOverride,
 };
+use crate::sql_lint::main::cross_join_subject::cross_join_subject;
 use fensu_policy::apply_suppressions;
 use fensu_policy::lifecycle::errors::LifecycleError;
 use fensu_policy::lifecycle::models::{
@@ -580,18 +581,17 @@ fn apply_fault_policy(
             )
         })
         .collect();
+    let exceptions: &[RuleException] = &request.config.rule_exceptions;
     let findings = faults
         .into_iter()
-        .map(fault_to_finding)
+        .map(|fault| fault_to_finding(fault, exceptions))
         .collect::<Result<Vec<_>, _>>()?;
-    let suppressions = request
-        .config
-        .rule_exceptions
+    let suppressions = exceptions
         .iter()
         .map(|entry| ExactSuppression {
             code: entry.rule.clone(),
             path: entry.path.clone(),
-            symbol: None,
+            symbol: exception_symbol(entry),
             reason: entry.reason.clone(),
         })
         .collect::<Vec<_>>();
@@ -629,13 +629,71 @@ fn apply_fault_policy(
         .collect())
 }
 
-fn fault_to_finding(fault: Fault) -> Result<Finding, String> {
+/// The symbol a relation-level exception and the findings it covers share.
+fn relation_symbol(relation: &str, cte: Option<&str>) -> String {
+    let relation: String = relation.to_lowercase();
+    match cte {
+        Some(cte) => format!("relation {relation} in CTE {}", cte.to_lowercase()),
+        None => format!("relation {relation}"),
+    }
+}
+
+/// The symbol a relation-level exception covers, `None` for a file-wide exception.
+fn exception_symbol(entry: &RuleException) -> Option<String> {
+    let relation: &str = entry.relation.as_deref()?;
+    Some(relation_symbol(relation, entry.cte.as_deref()))
+}
+
+/// The relation-level exception symbol that covers `fault`: the CTE-scoped one first.
+fn covering_symbol(fault: &Fault, exceptions: &[RuleException]) -> Option<String> {
+    if !RELATION_EXCEPTION_RULES.contains(&fault.code.as_str()) {
+        return None;
+    }
+    let scoped: Vec<&RuleException> = exceptions
+        .iter()
+        .filter(|entry| {
+            entry.rule == fault.code && entry.path == fault.path && entry.relation.is_some()
+        })
+        .collect();
+    if scoped.is_empty() {
+        return None;
+    }
+    let (relation, cte) = cross_join_subject(&fault.message)?;
+    let matches = |entry: &&RuleException, cte: Option<&str>| {
+        entry
+            .relation
+            .as_deref()
+            .is_some_and(|named| named.eq_ignore_ascii_case(&relation))
+            && match (entry.cte.as_deref(), cte) {
+                (Some(named), Some(found)) => named.eq_ignore_ascii_case(found),
+                (None, _) => true,
+                (Some(_), None) => false,
+            }
+    };
+    scoped
+        .iter()
+        .find(|entry| entry.cte.is_some() && matches(entry, cte.as_deref()))
+        .or_else(|| {
+            scoped
+                .iter()
+                .find(|entry| entry.cte.is_none() && matches(entry, None))
+        })
+        .map(|entry| {
+            relation_symbol(
+                entry.relation.as_deref().unwrap_or_default(),
+                entry.cte.as_deref(),
+            )
+        })
+}
+
+fn fault_to_finding(fault: Fault, exceptions: &[RuleException]) -> Result<Finding, String> {
+    let symbol: Option<String> = covering_symbol(&fault, exceptions);
     Ok(Finding {
         code: fault.code,
         path: fault.path,
         line: Some(u32::try_from(fault.line).map_err(|_| "rule finding line exceeds u32")?),
         column: Some(u32::try_from(fault.column).map_err(|_| "rule finding column exceeds u32")?),
-        symbol: None,
+        symbol,
         message: fault.message,
         remediation: Some(fault.remediation),
         severity: FindingSeverity::Blocking,
@@ -656,6 +714,12 @@ fn finding_to_fault(finding: Finding) -> Fault {
 
 fn lifecycle_error(error: LifecycleError) -> String {
     match error {
+        LifecycleError::StaleSuppression {
+            code,
+            path,
+            symbol: Some(symbol),
+            ..
+        } => format!("stale rule exception suppresses no finding: {code} at {path} ({symbol})"),
         LifecycleError::StaleSuppression { code, path, .. } => {
             format!("stale rule exception suppresses no finding: {code} at {path}")
         }

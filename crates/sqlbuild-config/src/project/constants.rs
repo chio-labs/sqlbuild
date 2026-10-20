@@ -171,7 +171,7 @@ pub(crate) const MODEL_HEADER_KEYS: [&str; 73] = [
     "valid_from_column",
     "valid_to_column",
 ];
-pub(crate) const TARGET_KEYS: [&str; 19] = [
+pub(crate) const TARGET_KEYS: [&str; 20] = [
     "connection",
     "vars",
     "database",
@@ -191,6 +191,7 @@ pub(crate) const TARGET_KEYS: [&str; 19] = [
     "diff",
     "warehouses",
     "recall",
+    "concurrency",
 ];
 pub(crate) const CLONE_KEYS: [&str; 2] = ["allow_as_clone_origin", "allow_as_clone_destination"];
 pub(crate) const EXECUTION_LIMIT_KEYS: [&str; 5] = [

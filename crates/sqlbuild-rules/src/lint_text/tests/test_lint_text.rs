@@ -1,27 +1,24 @@
 use crate::lint_text::_helpers::sites::site_pattern;
-use crate::lint_text::constants::{
-    FORBIDDEN_FIX_REASON, FORBIDDEN_MESSAGE, FORBIDDEN_REMEDIATION, INVALID_MESSAGE,
-    INVALID_REMEDIATION, REASON_REQUIRED_FIX_REASON, SITE_START_BYTES, UNUSED_REMEDIATION,
-};
+use crate::lint_text::constants::SITE_START_BYTES;
 use crate::lint_text::errors::LintTextError;
-use crate::lint_text::main::apply_suppressions::apply_suppressions;
 use crate::lint_text::main::format_sql_bodies::format_sql_bodies;
 use crate::lint_text::main::interpolation_text_at::interpolation_text_at;
 use crate::lint_text::main::lint_sql_bodies::lint_sql_bodies;
 use crate::lint_text::main::neutralize_audit_parameters::neutralize_audit_parameters;
 use crate::lint_text::main::neutralize_context_interpolation::neutralize_context_interpolation;
 use crate::lint_text::main::neutralize_interpolation::neutralize_interpolation;
+use crate::lint_text::main::reject_inline_suppressions::reject_inline_suppressions;
 use crate::lint_text::main::restore_interpolation::restore_interpolation;
-use crate::lint_text::models::{
-    ExpansionSpan, FormatFile, LintSqlBody, LintSqlOptions, RetainedViolation,
-    SuppressibleViolation, SuppressionFinding,
-};
+use crate::lint_text::models::{ExpansionSpan, FormatFile, LintSqlBody, LintSqlOptions};
+use crate::lint_text::tests::helpers::directive_finding;
 use crate::lint_text::tests::test_types::{
     Finding, FormatBodiesTestCase, LintBodiesTestCase, NeutralizeTestCase, ParameterTestCase,
     RestoreTestCase, SitePatternTestCase, SuppressionTestCase, TokenAtTestCase,
 };
 
-const SUPPRESSED_FILE: &str = "-- sqb: ignore SQBRSQL005 because kept\n\n-- note\nselect 1\n-- sqb: ignore X because y\n-- sqb: ignore nope\nselect 2\n";
+const SUPPRESSED_FILE: &str =
+    "-- sqb: ignore SQBRSQL005 because kept\n\n-- note\nselect 1\n-- sqb: ignore nope\nselect 2\n";
+const CROSS_JOIN_FILE: &str = "select o.order_id\nfrom orders as o\n-- sqb: ignore SQBRSQL038 because every order meets every policy\ncross join __seed(\"order_policy\") as p\n";
 
 #[test]
 fn given_site_patterns_when_text_opens_with_another_byte_then_no_site_starts_there()
@@ -227,72 +224,91 @@ fn given_character_offset_when_reading_token_then_only_site_starts_have_tokens()
 }
 
 #[test]
-fn given_suppression_directives_when_applying_then_matching_findings_are_removed()
+fn given_inline_directives_when_rejecting_then_each_prints_its_configured_exception()
 -> Result<(), LintTextError> {
     let test_cases = [
         SuppressionTestCase {
-            description: "a used, an unused and an invalid directive",
+            description: "a reasoned directive and one without a reason",
             contents: SUPPRESSED_FILE,
-            violations: vec![(4, "SQBRSQL005"), (7, "SQBRSQL034")],
-            allow: true,
-            expected_retained: vec![
-                RetainedViolation::Existing(1),
-                RetainedViolation::Added(SuppressionFinding {
-                    file: 0,
-                    line: 6,
-                    message: INVALID_MESSAGE.to_string(),
-                    remediation: INVALID_REMEDIATION,
-                    fault: false,
-                    fix: None,
-                    fix_unavailable_reason: Some(REASON_REQUIRED_FIX_REASON),
-                }),
-                RetainedViolation::Added(SuppressionFinding {
-                    file: 0,
-                    line: 5,
-                    message: "Unused suppression for X".to_string(),
-                    remediation: UNUSED_REMEDIATION,
-                    fault: false,
-                    fix: Some((57, 84)),
-                    fix_unavailable_reason: None,
-                }),
+            expected_findings: vec![
+                directive_finding(
+                    1,
+                    "SQBRSQL005",
+                    &[
+                        "rule = \"SQBRSQL005\"",
+                        "path = \"models/orders.sql\"",
+                        "reason = \"kept\"",
+                    ],
+                ),
+                directive_finding(
+                    5,
+                    "nope",
+                    &[
+                        "rule = \"nope\"",
+                        "path = \"models/orders.sql\"",
+                        "reason = \"<why this deviation is intentional>\"",
+                    ],
+                ),
             ],
         },
         SuppressionTestCase {
-            description: "suppressions forbidden by the project",
-            contents: "select 1\n-- sqb: ignore nope\n",
-            violations: vec![(1, "SQBRSQL005")],
-            allow: false,
-            expected_retained: vec![
-                RetainedViolation::Existing(0),
-                RetainedViolation::Added(SuppressionFinding {
-                    file: 0,
-                    line: 2,
-                    message: FORBIDDEN_MESSAGE.to_string(),
-                    remediation: FORBIDDEN_REMEDIATION,
-                    fault: true,
-                    fix: None,
-                    fix_unavailable_reason: Some(FORBIDDEN_FIX_REASON),
-                }),
-            ],
+            description: "a cross join directive names the joined dependency",
+            contents: CROSS_JOIN_FILE,
+            expected_findings: vec![directive_finding(
+                3,
+                "SQBRSQL038",
+                &[
+                    "rule = \"SQBRSQL038\"",
+                    "path = \"models/orders.sql\"",
+                    "relation = \"order_policy\"",
+                    "reason = \"every order meets every policy\"",
+                ],
+            )],
+        },
+        SuppressionTestCase {
+            description: "a string literal mentioning a directive is not one",
+            contents: "select '-- sqb: ignore SQBRSQL004 because text' as note, 'sqb: ignore' as other\n",
+            expected_findings: vec![],
+        },
+        SuppressionTestCase {
+            description: "a trailing directive after code names the join on its line",
+            contents: "select o.order_id\nfrom orders as o\ncross join customers as c -- sqb: ignore SQBRSQL038 because deliberate\n",
+            expected_findings: vec![directive_finding(
+                3,
+                "SQBRSQL038",
+                &[
+                    "rule = \"SQBRSQL038\"",
+                    "path = \"models/orders.sql\"",
+                    "relation = \"customers\"",
+                    "reason = \"deliberate\"",
+                ],
+            )],
+        },
+        SuppressionTestCase {
+            description: "a directive in a block comment",
+            contents: "select 1\n/* sqb: ignore SQBRSQL005 because kept */\nselect 2\n",
+            expected_findings: vec![directive_finding(
+                2,
+                "SQBRSQL005",
+                &[
+                    "rule = \"SQBRSQL005\"",
+                    "path = \"models/orders.sql\"",
+                    "reason = \"kept\"",
+                ],
+            )],
+        },
+        SuppressionTestCase {
+            description: "a file without directives",
+            contents: "select 1\n-- a plain comment\n",
+            expected_findings: vec![],
         },
     ];
 
     for test_case in test_cases {
-        let violations: Vec<SuppressibleViolation> = test_case
-            .violations
-            .iter()
-            .map(|(line, code)| SuppressibleViolation {
-                file: 0,
-                line: *line,
-                code: (*code).to_string(),
-                native: true,
-            })
-            .collect();
-
-        let retained = apply_suppressions(&[test_case.contents], &violations, test_case.allow)?;
+        let findings = reject_inline_suppressions(&[("models/orders.sql", test_case.contents)])?;
 
         assert_eq!(
-            retained, test_case.expected_retained,
+            findings, test_case.expected_findings,
             "{}",
             test_case.description
         );

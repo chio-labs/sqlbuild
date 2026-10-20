@@ -8,7 +8,7 @@ use pyo3::prelude::{
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{IntoPyObjectExt, Py, pyfunction, wrap_pyfunction};
 use serde_json::Value;
-use sqlbuild_rules::configuration::main::forbidden_exceptions::forbidden_exceptions;
+use sqlbuild_rules::configuration::errors::RulesConfigLoadError;
 use sqlbuild_rules::configuration::main::load_rules_config::load_rules_config as load_config;
 use sqlbuild_rules::models::RulesConfig;
 
@@ -137,6 +137,8 @@ fn config_object<'py>(py: Python<'py>, config: &RulesConfig) -> PyResult<Bound<'
                 ("rule", text(py, &item.rule)?),
                 ("path", text(py, &item.path)?),
                 ("reason", text(py, &item.reason)?),
+                ("relation", item.relation.clone().into_bound_py_any(py)?),
+                ("cte", item.cte.clone().into_bound_py_any(py)?),
             ],
         )
     })?;
@@ -186,10 +188,6 @@ fn config_object<'py>(py: Python<'py>, config: &RulesConfig) -> PyResult<Bound<'
             ("rule_exceptions", rule_exceptions),
             ("graph_edge_exceptions", graph_edge_exceptions),
             ("rule_ignores", rule_ignores),
-            (
-                "allow_exceptions",
-                config.allow_exceptions.into_bound_py_any(py)?,
-            ),
             ("select_star_allow", select_star_allow),
             ("domains", strings(py, &config.domains)?),
             (
@@ -253,7 +251,7 @@ pub(crate) fn load_rules_config(py: Python<'_>, project_dir: PathBuf) -> PyResul
 pub(crate) enum InvalidRulesConfig {
     /// The configuration could not be read: a `RulesError`.
     Unreadable(String),
-    /// It allows exceptions it may not: a `RulesConfigError` with help.
+    /// It uses a setting SQLBuild rejects: a `RulesConfigError` with help.
     Forbidden { message: String, help: String },
 }
 
@@ -275,17 +273,16 @@ pub(crate) fn rules_config_of(
     let project_dir: PathBuf = project_dir
         .canonicalize()
         .or_else(|_| std::path::absolute(project_dir))?;
-    let config: RulesConfig = match compiler_guard(|| Ok(load_config(&project_dir)))? {
-        Ok(config) => config,
-        Err(message) => return Ok(Err(InvalidRulesConfig::Unreadable(message))),
-    };
-    if let Some(error) = forbidden_exceptions(&config) {
-        return Ok(Err(InvalidRulesConfig::Forbidden {
+    match compiler_guard(|| Ok(load_config(&project_dir)))? {
+        Ok(config) => Ok(Ok(config)),
+        Err(RulesConfigLoadError::Invalid(message)) => {
+            Ok(Err(InvalidRulesConfig::Unreadable(message)))
+        }
+        Err(RulesConfigLoadError::Policy(error)) => Ok(Err(InvalidRulesConfig::Forbidden {
             message: error.message,
             help: error.help,
-        }));
+        })),
     }
-    Ok(Ok(config))
 }
 
 /// The project's rules configuration, or `None` when it is invalid and the rules phase reports it.

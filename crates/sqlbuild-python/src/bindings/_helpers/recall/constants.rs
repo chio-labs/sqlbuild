@@ -9,6 +9,8 @@ pub(crate) const NOTICE_INTERVAL_SECONDS: u64 = 24 * 60 * 60;
 pub(crate) const HOST_TOKEN_LENGTH: usize = 16;
 /// The shortest heartbeat interval the test environment variable may request.
 pub(crate) const MINIMUM_HEARTBEAT_SECONDS: f64 = 0.01;
+/// What a Recall closing notice says is the only thing affected.
+pub(crate) const RECALL_HISTORY: &str = "Recall history";
 /// The compute-log stream index of stdout; every other output index is stderr.
 pub(crate) const STDOUT_STREAM_INDEX: usize = 0;
 pub(crate) const RECALL_DISABLED_CODE: &str = "C970";

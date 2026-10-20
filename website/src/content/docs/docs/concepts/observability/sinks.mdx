@@ -79,7 +79,10 @@ min_severity = "warning"
 `shutdown_timeout` sets how long a command waits at exit for lifecycle sinks to drain queued
 events. It is a fixed duration from `"0s"` to `"10m"`, defaults to `"2s"`, and is accepted only
 under `[sinks.lifecycle]`, not per named sink. `"0s"` drops anything still queued at exit. The
-setting does not change the one-second timeout for each sink call.
+final quarter of the budget is reserved for run and invocation outcomes: when it begins, other
+queued events are dropped and counted so the outcomes still arrive. The setting does not change the one-second timeout for each sink call. A sink call still running when
+the budget ends gets up to that one second to return before providers are torn down; teardown
+always runs on the command's own thread.
 
 ```toml
 [sinks.lifecycle]
@@ -92,15 +95,21 @@ durability. SQLBuild core does not provide a Kafka or ClickHouse implementation.
 
 ## Delivery behavior
 
-- Lifecycle dispatch prioritizes failures and terminal facts, remaining FIFO within equal priority.
+- Each sink receives events in order on its own long-lived delivery thread.
+- Lifecycle dispatch prioritizes failures and terminal facts, remaining FIFO within equal priority;
+  `invocation_completed` and `invocation_failed` come after every other queued event.
 - Queue overflow can displace or drop lower-priority records and is reflected in sink accounting.
+  Run and invocation outcomes (`run_started`, `run_completed`, `run_failed`, `invocation_started`,
+  `invocation_completed`, `invocation_failed`) are always admitted and never displaced.
 - A failing or timed-out sink is isolated from command correctness.
 - `audit_completed` facts are published as each audit finishes (model audits in `sqb build` when
   their model finishes), not in one burst at the end of the run.
 - When lifecycle events are dropped or fail, the command prints one warning to stderr with the
   counts and affected sinks, for example
   `Warning: command completed successfully, but lifecycle event export was incomplete: 140 of 248 events dropped, 0 failed (sink 'orders_events'). Increase sinks.lifecycle.shutdown_timeout or check sink health.`
-  The exit code and stdout, including `--json` output, are unchanged.
+  A successful command then ends with
+  `sqb audit completed successfully; only its lifecycle event export is affected.` The exit code
+  and stdout, including `--json` output, are unchanged.
 - Provider setup and declaration errors fail before execution because the project configuration is
   invalid.
 - Providers shared by multiple sinks are set up and torn down once per command.

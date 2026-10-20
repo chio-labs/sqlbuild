@@ -66,6 +66,7 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [Overview](concepts/rules.md) (`concepts/rules`) - Turn repeated SQL and project review decisions into compiler-enforced requirements.
 - [Configuration and selection](concepts/rules/configuration-and-selection.md) (`concepts/rules/configuration-and-selection`) - Select built-in and custom Rules by exact code or family prefix.
 - [Findings and exceptions](concepts/rules/findings-and-exceptions.md) (`concepts/rules/findings-and-exceptions`) - Understand Rule diagnostics and record intentional exceptions safely.
+- [Published-layer Rules](concepts/rules/published-layer-rules.md) (`concepts/rules/published-layer-rules`) - Keep each domain's published layer free of consumer-specific variants.
 - [Execution and caching](concepts/rules/execution-and-caching.md) (`concepts/rules/execution-and-caching`) - Understand Rule enforcement order, focused runs, and dependency-aware reuse.
 - [Testing](concepts/testing.md) (`concepts/testing`) - SQL unit tests and multi-model tests with macro support, assertions, and model chaining.
 - [Scenarios](concepts/scenarios.md) (`concepts/scenarios`) - End-to-end tests that build real project graphs against coherent fixture data.

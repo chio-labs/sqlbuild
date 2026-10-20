@@ -23,7 +23,7 @@ pub(crate) fn diagnostics(request: &QualityRequest<'_>) -> Vec<LintDiagnostic> {
             let length: usize = token.text.chars().count();
             (length > request.max_literal_length).then(|| LintDiagnostic {
                 code: LONG_LITERAL.code,
-                message: LONG_LITERAL.message,
+                message: Cow::Borrowed(LONG_LITERAL.message),
                 remediation: Cow::Owned(remediation(length, request.max_literal_length)),
                 start: token.span.start,
                 end: token.span.end,

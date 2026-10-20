@@ -25,7 +25,11 @@ from tests.unit.src.sqlbuild.runtime.event_exporting.classes.helpers import Bloc
         PriorityPairTestCase(
             "3 then 2", "operation_failed", "statement_completed", ("event-1",), 1
         ),
-        PriorityPairTestCase("3 then 3", "operation_failed", "run_failed", ("event-1",), 1),
+        PriorityPairTestCase("3 then 3", "operation_failed", "statement_failed", ("event-1",), 1),
+        PriorityPairTestCase("3 then outcome 3", "operation_failed", "run_failed", ("event-2",), 1),
+        PriorityPairTestCase(
+            "outcome 2 then 3", "run_completed", "operation_failed", ("event-1",), 1
+        ),
     ),
     ids=lambda case: case.description,
 )

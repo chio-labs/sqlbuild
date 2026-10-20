@@ -1,7 +1,8 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
-use polyglot_sql::tokens::Span;
+use polyglot_sql::Expression;
+use polyglot_sql::tokens::{Span, Token};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default)]
@@ -80,6 +81,8 @@ pub(crate) struct LintRequest {
     pub max_ranking_order_by: Option<usize>,
     #[serde(default)]
     pub relation_keys: HashMap<String, Vec<Vec<String>>>,
+    #[serde(default)]
+    pub relation_names: HashMap<String, String>,
 }
 
 #[derive(Debug)]
@@ -100,7 +103,7 @@ pub(crate) struct LintResponse {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct LintDiagnostic {
     pub code: &'static str,
-    pub message: &'static str,
+    pub message: Cow<'static, str>,
     pub remediation: Cow<'static, str>,
     pub start: usize,
     pub end: usize,
@@ -146,4 +149,16 @@ pub(crate) struct FormatResponse {
     pub formatted: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+}
+
+/// One lint request's explicit cross joins, with what is known about the relations they read.
+#[derive(Debug)]
+pub(crate) struct CrossJoinRequest<'a> {
+    pub(crate) statements: &'a [Expression],
+    pub(crate) tokens: &'a [Token],
+    pub(crate) cross_spans: &'a [Span],
+    /// Declared keys by dependency sentinel; the empty key proves at most one row.
+    pub(crate) relation_keys: &'a HashMap<String, Vec<Vec<String>>>,
+    /// The relation name each dependency sentinel stands for.
+    pub(crate) relation_names: &'a HashMap<String, String>,
 }

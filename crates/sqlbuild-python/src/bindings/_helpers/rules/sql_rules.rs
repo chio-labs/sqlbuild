@@ -126,10 +126,7 @@ pub(crate) fn run_planned_sql_rules<'py>(
             Some(value) => value.extract(),
             None => Ok(None),
         },
-        (
-            project_relation_keys(&field(&graph, "project")?)?,
-            field(&effective_config, "allow_exceptions")?.is_truthy()?,
-        ),
+        project_relation_keys(&field(&graph, "project")?)?,
     )?;
     let early_lint: Bound<'py, PyAny> = options.get("early_lint")?;
     let run = SqlRun {

@@ -13,13 +13,12 @@ use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::rules::rules_config::load_rules_config;
 
-/// Format settings and whether lint suppressions are allowed.
+/// Format settings resolved for one run.
 pub(crate) struct FormatConfig {
     pub(crate) settings: FormatSettings,
-    pub(crate) allow_suppressions: bool,
 }
 
-/// Resolve the settings, loading the rules configuration when the project file exists.
+/// Resolve the settings, validating the rules configuration when the project file exists.
 pub(crate) fn format_config(
     py: Python<'_>,
     project_dir: &Bound<'_, PyAny>,
@@ -27,23 +26,15 @@ pub(crate) fn format_config(
     let directory: std::path::PathBuf = project_dir.extract()?;
     let settings: FormatSettings =
         resolve_format_settings(Path::new(&directory)).map_err(PyValueError::new_err)?;
-    let allow_suppressions: bool = if settings.has_project_config {
-        load_rules_config(
+    if settings.has_project_config {
+        let _ = load_rules_config(
             py,
             project_dir
                 .call_method0("resolve")?
                 .extract::<std::path::PathBuf>()?,
-        )
-        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
-        .getattr("allow_exceptions")?
-        .extract()?
-    } else {
-        true
-    };
-    Ok(FormatConfig {
-        settings,
-        allow_suppressions,
-    })
+        )?;
+    }
+    Ok(FormatConfig { settings })
 }
 
 /// The Python `LintConfig` of `config`, linting as `dialect`.
@@ -73,12 +64,6 @@ pub(crate) fn lint_config<'py>(
             (
                 "max_ranking_order_by",
                 settings.max_ranking_order_by.into_pyobject(py)?.into_any(),
-            ),
-            (
-                "allow_suppressions",
-                pyo3::types::PyBool::new(py, config.allow_suppressions)
-                    .to_owned()
-                    .into_any(),
             ),
         ],
     )

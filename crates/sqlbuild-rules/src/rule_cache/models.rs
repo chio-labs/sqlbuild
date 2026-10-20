@@ -8,7 +8,6 @@ pub struct LintKeyInput {
     pub max_ranking_order_by: i64,
     /// Each relation and its key column sets, in any order.
     pub relation_keys: Vec<(String, Vec<Vec<String>>)>,
-    pub allow_suppressions: bool,
 }
 
 /// One model's SQL rule inputs.

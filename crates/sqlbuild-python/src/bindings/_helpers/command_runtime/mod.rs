@@ -1,4 +1,5 @@
 pub(crate) mod adapters;
+pub(crate) mod concurrency;
 pub(crate) mod connection;
 pub(crate) mod invocation;
 pub(crate) mod preview_target;

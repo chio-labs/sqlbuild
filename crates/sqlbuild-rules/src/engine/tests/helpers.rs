@@ -12,12 +12,14 @@ use crate::engine::main::discard_speculative_rows::discard_speculative_rows;
 use crate::engine::main::retained_request::retained_request;
 use crate::models::{
     Column, Declaration, DeclarationMember, DynamicColumnFamily, EvaluateRequest, Fault, Model,
-    Reference, RetainedRows, RowsEvaluation, RowsRequest, SpeculativeAnswer, SpeculativeRows,
+    Reference, RetainedRows, RowsEvaluation, RowsRequest, RulesConfig, SpeculativeAnswer,
+    SpeculativeRows,
 };
 
 use crate::engine::_helpers::evaluation::evaluate_json;
 use crate::engine::_helpers::evaluation::evaluate_request as evaluate_parsed;
 use crate::engine::_helpers::evaluation::parse_parts;
+use crate::engine::main::finalize_rows::finalize_rows;
 use crate::engine::tests::test_types;
 
 pub(crate) fn request(project_dir: &TempDir, config: &Value) -> String {
@@ -734,4 +736,99 @@ pub(crate) fn without_sql(models: Vec<Model>) -> Value {
         })
         .collect();
     serde_json::to_value(stripped).unwrap_or_default()
+}
+
+/// One published model JSON row, stored under its domain's `mart` folder.
+fn published_model(name: &str, references: &[&str]) -> Value {
+    let domain: &str = name.split("__").next().unwrap_or_default();
+    json!({
+        "name": name,
+        "relative_path": format!("models/{domain}/mart/{name}.sql"),
+        "query_sql": "SELECT 1",
+        "authored_sql": "SELECT 1",
+        "references": references
+            .iter()
+            .map(|reference| json!({"ref_kind": "ref", "ref_name": reference}))
+            .collect::<Vec<Value>>(),
+    })
+}
+
+/// `(path, message and remediation)` of every fault the case's published models raise.
+pub(crate) fn published_layer_faults(
+    test_case: &test_types::PublishedLayerTestCase,
+) -> Result<Vec<(String, String)>, String> {
+    let project_dir = TempDir::new().map_err(|error| error.to_string())?;
+    let config = json!({
+        "select": [test_case.code],
+        "rule_options": {test_case.code: test_case.options},
+        "cache": {"enabled": false}
+    });
+    let mut request: Value =
+        serde_json::from_str(&request(&project_dir, &config)).map_err(|error| error.to_string())?;
+    request["models"] = test_case
+        .models
+        .iter()
+        .map(|(name, references)| published_model(name, references))
+        .collect();
+    let result: Value = serde_json::from_str(&evaluate_json(&request.to_string())?)
+        .map_err(|error| error.to_string())?;
+    Ok(result["faults"]
+        .as_array()
+        .ok_or("faults must be an array")?
+        .iter()
+        .map(|fault| {
+            (
+                fault["path"].as_str().unwrap_or_default().to_owned(),
+                format!(
+                    "{}\n{}",
+                    fault["message"].as_str().unwrap_or_default(),
+                    fault["remediation"].as_str().unwrap_or_default()
+                ),
+            )
+        })
+        .collect())
+}
+
+/// The model path the relation-exception cases use.
+pub(crate) const CROSS_JOIN_MODEL_PATH: &str = "models/orders.sql";
+/// The Rule whose findings name a joined relation.
+pub(crate) const CROSS_JOIN_CODE: &str = "SQBRSQL038";
+
+fn cross_join_fault(message: &str, line: u64) -> Fault {
+    Fault {
+        unevaluated: false,
+        code: CROSS_JOIN_CODE.to_owned(),
+        path: CROSS_JOIN_MODEL_PATH.to_owned(),
+        line,
+        column: 1,
+        message: message.to_owned(),
+        remediation: String::new(),
+    }
+}
+
+/// Finalize a top-level `order_policy` join and a `customers` join in CTE `checks`.
+pub(crate) fn finalize_cross_joins(exceptions: Value) -> Result<Vec<Fault>, String> {
+    let project_dir = TempDir::new().map_err(|error| error.to_string())?;
+    std::fs::create_dir_all(project_dir.path().join("models"))
+        .map_err(|error| error.to_string())?;
+    std::fs::write(project_dir.path().join(CROSS_JOIN_MODEL_PATH), "SELECT 1")
+        .map_err(|error| error.to_string())?;
+    let config: RulesConfig = serde_json::from_value(json!({"rule_exceptions": exceptions}))
+        .map_err(|error| error.to_string())?;
+    let findings: Vec<Fault> = vec![
+        cross_join_fault(
+            "CROSS JOIN with `order_policy` creates an explicit cartesian product",
+            3,
+        ),
+        cross_join_fault(
+            "CROSS JOIN with `customers` in CTE `checks` creates an explicit cartesian product",
+            7,
+        ),
+    ];
+    finalize_rows(
+        project_dir.path().to_string_lossy().into_owned(),
+        config,
+        &[CROSS_JOIN_CODE.to_owned()],
+        findings,
+    )
 }

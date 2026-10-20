@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 from pathlib import Path
-from threading import Event
+from threading import Event, current_thread
 from typing import ClassVar
 
 from sqlbuild._native import (
@@ -19,6 +19,7 @@ class BlockingProvider(Provider):
     release_export: ClassVar[Event] = Event()
     teardown_finished: ClassVar[Event] = Event()
     teardown_count: ClassVar[int] = 0
+    teardown_threads: ClassVar[list[str]] = []
 
     @classmethod
     def reset(cls) -> None:
@@ -26,6 +27,7 @@ class BlockingProvider(Provider):
         cls.release_export.clear()
         cls.teardown_finished.clear()
         cls.teardown_count = 0
+        cls.teardown_threads = []
 
     def export(self) -> None:
         self.entered.set()
@@ -33,6 +35,7 @@ class BlockingProvider(Provider):
 
     def teardown(self) -> None:
         type(self).teardown_count += 1
+        type(self).teardown_threads.append(current_thread().name)
         self.teardown_finished.set()
 
 

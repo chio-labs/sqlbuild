@@ -15,7 +15,7 @@ use crate::project::_helpers::keys::{
 use crate::project::_helpers::sections::{fixed_duration_seconds, item_timeout};
 use crate::project::_helpers::values::{int_below, is_int};
 use crate::project::constants::{
-    CLONE_KEYS, CONFIRMATION_POLICIES, EXECUTION_LIMIT_KEYS, MAX_FULL_ROWS_KEY,
+    CLONE_KEYS, CONCURRENCY_KEY, CONFIRMATION_POLICIES, EXECUTION_LIMIT_KEYS, MAX_FULL_ROWS_KEY,
     RETENTION_MATERIALIZATIONS, TARGET_KEYS, UNLIMITED_DIFF_FULL_ROWS, WAREHOUSE_GROUPS,
 };
 use crate::project::errors::ConfigFailure;
@@ -125,6 +125,24 @@ pub(crate) fn seconds_value(seconds: &str) -> ConfigValue {
         |_| ConfigValue::BigInteger(seconds.to_owned()),
         ConfigValue::Integer,
     )
+}
+
+/// A target's worker limit, which overrides `[settings] concurrency` for that target.
+fn target_concurrency(mapping: &Entries, target: TargetPlace<'_>) -> Loaded<Built> {
+    let invalid = || {
+        ConfigFailure::at(
+            target.file,
+            format!(
+                "targets.{}.concurrency must be an integer >= 1",
+                target.name
+            ),
+        )
+    };
+    let value = optional_strict_int(mapping, CONCURRENCY_KEY).map_err(|_| invalid())?;
+    if value.as_ref().is_some_and(|number| int_below(number, 1)) {
+        return Err(invalid());
+    }
+    Ok(value_or_none(value))
 }
 
 fn target_connection(mapping: &Entries, target: TargetPlace<'_>) -> Loaded<(Built, Built)> {
@@ -396,6 +414,7 @@ fn local_target(payload: &ConfigValue, target: TargetPlace<'_>) -> Loaded<Fields
         .map(|key| keyed(key, optional_nullable_bool(clone, key).map(bool_or_none)))
         .collect::<Loaded<Fields>>()?;
     fields.push(("clone", object("LocalClonePolicy", clone_fields)));
+    fields.push(("concurrency", target_concurrency(mapping, target)?));
     Ok(fields)
 }
 

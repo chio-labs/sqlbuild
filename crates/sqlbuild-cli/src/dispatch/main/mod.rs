@@ -1,3 +1,4 @@
+pub mod closing_status;
 pub mod command_dispatch;
 pub mod event_export_warning;
 pub mod failure_report;

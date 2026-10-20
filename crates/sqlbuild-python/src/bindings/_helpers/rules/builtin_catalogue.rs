@@ -33,7 +33,25 @@ fn option<'py>(
     let py: Python<'py> = option_class.py();
     let (factory, default): (&str, Bound<'py, PyAny>) = match declared.kind {
         BuiltinOptionKind::Boolean => ("boolean", PyBool::new(py, false).to_owned().into_any()),
-        BuiltinOptionKind::StringList => ("string_list", PyTuple::empty(py).into_any()),
+        BuiltinOptionKind::StringList(defaults) => {
+            ("string_list", PyTuple::new(py, defaults)?.into_any())
+        }
+        BuiltinOptionKind::TableList => {
+            let arguments = keywords(
+                py,
+                vec![
+                    ("name", PyString::new(py, declared.name).into_any()),
+                    ("value_type", py.get_type::<PyTuple>().into_any()),
+                    ("default", PyTuple::empty(py).into_any()),
+                    (
+                        "description",
+                        PyString::new(py, declared.description).into_any(),
+                    ),
+                    ("item_type", py.get_type::<PyDict>().into_any()),
+                ],
+            )?;
+            return new_record(py, RecordId::RuleOption, (), Some(&arguments));
+        }
     };
     let arguments = keywords(
         py,

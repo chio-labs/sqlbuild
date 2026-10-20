@@ -40,40 +40,16 @@ pub struct Neutralized {
     pub sites: Vec<InterpolationSite>,
 }
 
-/// The identity of one existing violation that a suppression can remove.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SuppressibleViolation {
-    pub file: usize,
-    pub line: usize,
-    pub code: String,
-    pub native: bool,
-}
-
-/// One valid directive: its code, its line and the line it suppresses.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SuppressionDirective {
-    pub code: String,
-    pub line: usize,
-    pub target: usize,
-}
-
-/// A suppression finding on one directive line; offsets are character positions.
+/// The rejection finding on one inline directive line; offsets are character positions.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SuppressionFinding {
     pub file: usize,
     pub line: usize,
     pub message: String,
-    pub remediation: &'static str,
+    pub remediation: String,
     pub fault: bool,
     pub fix: Option<(usize, usize)>,
     pub fix_unavailable_reason: Option<&'static str>,
-}
-
-/// One retained violation: an input violation by index, or a new suppression finding.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RetainedViolation {
-    Existing(usize),
-    Added(SuppressionFinding),
 }
 
 /// SQL-test files that may hold removable typed nulls, and the models their fixtures stand in for.
@@ -139,6 +115,8 @@ pub struct LintSqlBody {
     pub allows_dynamic_output_star: bool,
     pub allows_empty_fixture_star: bool,
     pub relation_keys: Vec<(String, Vec<Vec<String>>)>,
+    /// The relation name each dependency sentinel stands for.
+    pub relation_names: Vec<(String, String)>,
 }
 
 /// The rule selection and thresholds of one SQL lint run.

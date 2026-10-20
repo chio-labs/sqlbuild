@@ -118,6 +118,7 @@ from sqlbuild.adapter.type_system.main.conditional_result_nullability import (
 from sqlbuild.adapter.type_system.main.first_arg_nullability import first_arg_nullability
 from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize_numeric_family
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
+from sqlbuild.adapters.snowflake._helpers.cost import cost_failure_cause
 from sqlbuild.adapters.snowflake._helpers.grants import (
     render_snowflake_view_grants,
     render_snowflake_view_revokes,
@@ -168,6 +169,8 @@ _EXACT_COLUMN_INSPECTION_LIMIT: int = 32
 _STATE_TABLE_RETENTION_ATTRIBUTE: str = "_state_table_retention_fallbacks_state"
 _METADATA_INSPECTION_CONCURRENCY: int = 8
 _SHOW_RESULT_LIMIT: int = 10_000
+_COST_LOGIN_TIMEOUT_SECONDS: int = 5
+_COST_NETWORK_TIMEOUT_SECONDS: int = 15
 _SHOW_COLUMN_KIND: str = "COLUMN"
 _SHOW_COLUMN_KINDS: frozenset[str] = frozenset({_SHOW_COLUMN_KIND, "VIRTUAL_COLUMN"})
 _UNRESOLVED: object = object()
@@ -355,10 +358,11 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         statement_ledger_path: Path,
         usd_per_credit: Decimal,
         rate_source: str,
+        budget_seconds: float | None = None,
     ) -> RunCostSummary:
         telemetry_connection_config: dict[str, object] = dict(connection_config)
-        telemetry_connection_config["login_timeout"] = 5
-        telemetry_connection_config["network_timeout"] = 5
+        telemetry_connection_config["login_timeout"] = _COST_LOGIN_TIMEOUT_SECONDS
+        telemetry_connection_config["network_timeout"] = _COST_NETWORK_TIMEOUT_SECONDS
         try:
             connection: Any = self.connect(telemetry_connection_config)
         except Exception as error:
@@ -378,13 +382,14 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 statement_ledger_path=statement_ledger_path,
                 usd_per_credit=usd_per_credit,
                 rate_source=rate_source,
+                budget_seconds=budget_seconds,
             )
         except Exception as error:
             summary = RunCostSummary(
                 status=CostStatus.COLLECTION_FAILED,
                 usd_per_credit=usd_per_credit,
                 rate_source=rate_source,
-                message=f"Snowflake cost collection failed ({type(error).__name__}).",
+                message=f"Snowflake cost collection failed ({cost_failure_cause(error)}).",
             )
         finally:
             try:

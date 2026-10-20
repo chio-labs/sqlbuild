@@ -4,7 +4,7 @@ use crate::sql_quality::constants::{RELATION_KIND_REF, RELATION_KIND_SEED};
 use crate::sql_quality::declared_keys::{non_null_unique_columns, trusted_unique_key};
 use crate::sql_quality::models::DeclaredRelation;
 
-/// Keys that prove one row per key, by `kind:name` identity; seeds are also keyed as refs.
+/// Keys proving one row per key by `kind:name`; seeds are also refs, one-row relations key `[]`.
 pub fn declared_relation_keys(
     relations: &[DeclaredRelation],
 ) -> BTreeMap<String, Vec<Vec<String>>> {
@@ -13,6 +13,9 @@ pub fn declared_relation_keys(
         let mut found: Vec<Vec<String>> = trusted_unique_key(relation);
         for column in non_null_unique_columns(relation) {
             found.push(vec![column]);
+        }
+        if relation.at_most_one_row {
+            found.push(Vec::new());
         }
         if found.is_empty() {
             continue;

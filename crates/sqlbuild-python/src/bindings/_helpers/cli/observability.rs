@@ -9,6 +9,7 @@ use pyo3::prelude::{
 };
 use pyo3::types::{PyBool, PyString, PyTuple, PyTupleMethods};
 use pyo3::{IntoPyObjectExt, pyclass, pyfunction, pymethods, wrap_pyfunction};
+use sqlbuild_cli::dispatch::main::closing_status::closing_status;
 use sqlbuild_cli::dispatch::main::event_export_warning::event_export_warning;
 use sqlbuild_cli::dispatch::models::{ExportSummary, ExporterLoss};
 use sqlbuild_core::event_export::constants::DEFAULT_EVENT_EXPORT_SHUTDOWN_TIMEOUT_SECONDS;
@@ -24,6 +25,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::recall::console::write_stderr;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::result_output::terminal_index::TerminalEventIndex;
 use crate::bindings::_helpers::result_output::terminal_index::terminal_event_index_scope;
@@ -33,6 +35,8 @@ const DEBUG_COMMAND: &str = "debug";
 const LINEAGE_COMMAND: &str = "lineage";
 const INVOCATION_COMPLETED: &str = "invocation_completed";
 const INVOCATION_FAILED: &str = "invocation_failed";
+/// What an incomplete-export notice says is the only thing affected.
+const LIFECYCLE_EVENT_EXPORT: &str = "lifecycle event export";
 const SUMMARY_FIELDS: [&str; 3] = ["queue_depth", "queue_capacity", "flush_complete"];
 const COUNT_FIELDS: [&str; 5] = ["accepted", "filtered", "delivered", "failed", "dropped"];
 
@@ -154,6 +158,8 @@ struct Observed {
     recall_sinks: Option<(Py<PyAny>, Py<PyAny>)>,
     /// Context managers entered, innermost last.
     entered: Vec<Py<PyAny>>,
+    /// The command name a closing status line reports.
+    command: String,
 }
 
 /// Log a cleanup failure without letting logging fail the command.
@@ -197,18 +203,20 @@ fn export_summary(summary: &Bound<'_, PyAny>) -> PyResult<ExportSummary> {
     })
 }
 
-/// Print the incomplete-export warning to stderr when events were dropped or failed.
-fn warn_incomplete_export(summary: &Bound<'_, PyAny>, command_succeeded: bool) -> PyResult<()> {
-    let py: Python<'_> = summary.py();
+/// Print the incomplete-export warning to stderr, closed by the command's success, ignoring write failures.
+fn warn_incomplete_export(
+    summary: &Bound<'_, PyAny>,
+    (command, command_succeeded): (&str, bool),
+) -> PyResult<()> {
     let Some(message) = event_export_warning(&export_summary(summary)?, command_succeeded) else {
         return Ok(());
     };
-    let options = pyo3::types::PyDict::new(py);
-    pyo3::types::PyDictMethods::set_item(&options, "file", py.import("sys")?.getattr("stderr")?)?;
-    pyo3::types::PyDictMethods::set_item(&options, "flush", true)?;
-    py.import("builtins")?
-        .getattr("print")?
-        .call((message,), Some(&options))?;
+    let closing: String = if command_succeeded {
+        closing_status(command, Some(0), LIFECYCLE_EVENT_EXPORT)
+    } else {
+        String::new()
+    };
+    drop(write_stderr(summary.py(), &format!("{message}\n{closing}")));
     Ok(())
 }
 
@@ -295,7 +303,7 @@ impl Observed {
             let succeeded: bool = self.outcome.get().succeeded.load(Ordering::SeqCst);
             run_cleanup(
                 py,
-                warn_incomplete_export(&summary, succeeded),
+                warn_incomplete_export(&summary, (&self.command, succeeded)),
                 "event_exporter_warning",
             );
         }
@@ -539,6 +547,9 @@ impl CliObservabilityScope {
             unsubscribe_outcome: None,
             recall_sinks: None,
             entered: Vec::new(),
+            command: native_field(args, "command")?
+                .extract::<Option<String>>()?
+                .unwrap_or_default(),
         };
         if let Err(error) = observed.install(py, (args, self.project_dir.bind(py)), &terminal_index)
         {

@@ -65,6 +65,12 @@ pub struct RuleException {
     pub rule: String,
     pub path: String,
     pub reason: String,
+    /// The joined relation a relation-level exception covers, for Rules that report one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relation: Option<String>,
+    /// The top-level CTE that contains the covered relation, when the exception is that narrow.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cte: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, Ord, PartialEq, PartialOrd)]
@@ -147,7 +153,6 @@ pub struct RulesConfig {
     pub rule_exceptions: Vec<RuleException>,
     pub graph_edge_exceptions: Vec<GraphEdgeException>,
     pub rule_ignores: Vec<RuleIgnore>,
-    pub allow_exceptions: bool,
     pub select_star_allow: Vec<SelectStarAllow>,
     pub domains: Vec<String>,
     pub approved_source_tokens: Vec<String>,
@@ -168,7 +173,6 @@ impl Default for RulesConfig {
             rule_exceptions: vec![],
             graph_edge_exceptions: vec![],
             rule_ignores: vec![],
-            allow_exceptions: true,
             select_star_allow: vec![],
             domains: vec![],
             approved_source_tokens: vec![],

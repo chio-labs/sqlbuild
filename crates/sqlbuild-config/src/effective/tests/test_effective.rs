@@ -1,17 +1,18 @@
 use crate::effective::errors::EffectiveConfigError;
 use crate::effective::main::default_connection_name::default_connection_name;
+use crate::effective::main::effective_concurrency::effective_concurrency;
 use crate::effective::main::effective_connection::effective_connection;
 use crate::effective::main::effective_settings::effective_settings;
 use crate::effective::main::effective_target_name::effective_target_name;
 use crate::effective::main::effective_vars::effective_vars;
 use crate::effective::main::merged_target::merged_target;
 use crate::effective::models::{
-    ConnectionChoice, ConnectionLayers, FieldValue, TargetChoice, TargetLayer,
+    ConcurrencyLayers, ConnectionChoice, ConnectionLayers, FieldValue, TargetChoice, TargetLayer,
 };
 use crate::effective::tests::helpers::{entries, field_value, local_layer, project_layer};
 use crate::effective::tests::test_types::{
-    ConnectionTestCase, DefaultConnectionTestCase, MergeTestCase, MessageTestCase, Pairs,
-    TargetNameTestCase, UnionTestCase,
+    ConcurrencyTestCase, ConnectionTestCase, DefaultConnectionTestCase, MergeTestCase,
+    MessageTestCase, Pairs, TargetNameTestCase, UnionTestCase,
 };
 use crate::effective::types::Entries;
 
@@ -290,6 +291,63 @@ fn given_ambiguous_connection_when_rendering_then_names_join_into_the_python_mes
         assert_eq!(
             error.message(),
             test_case.expected_message,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_concurrency_layers_when_resolving_then_cli_beats_target_beats_settings() {
+    let test_cases = [
+        ConcurrencyTestCase {
+            description: "the command line beats the target",
+            requested: Some(2),
+            target: Some(("prod", 8)),
+            settings: 16,
+            local_override: true,
+            expected_limit: 2,
+            expected_source: "--concurrency",
+        },
+        ConcurrencyTestCase {
+            description: "the target beats a local settings override",
+            requested: None,
+            target: Some(("prod", 8)),
+            settings: 4,
+            local_override: true,
+            expected_limit: 8,
+            expected_source: "targets.prod.concurrency",
+        },
+        ConcurrencyTestCase {
+            description: "a local settings override applies without a target value",
+            requested: None,
+            target: None,
+            settings: 4,
+            local_override: true,
+            expected_limit: 4,
+            expected_source: "sqlbuild_local.toml settings.concurrency",
+        },
+        ConcurrencyTestCase {
+            description: "the project setting is the default",
+            requested: None,
+            target: None,
+            settings: 16,
+            local_override: false,
+            expected_limit: 16,
+            expected_source: "settings.concurrency",
+        },
+    ];
+
+    for test_case in test_cases {
+        let resolved = effective_concurrency(&ConcurrencyLayers {
+            requested: test_case.requested,
+            target: test_case.target,
+            settings: test_case.settings,
+            local_override: test_case.local_override,
+        });
+        assert_eq!(
+            (resolved.limit, resolved.source.to_string().as_str()),
+            (test_case.expected_limit, test_case.expected_source),
             "{}",
             test_case.description
         );

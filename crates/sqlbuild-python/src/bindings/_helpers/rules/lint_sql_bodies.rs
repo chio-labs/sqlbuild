@@ -11,7 +11,9 @@ use sqlbuild_rules::lint_text::models::{
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
-use crate::bindings::_helpers::rules::lint_pipeline::{LintViolationRow, ViolationClasses};
+use crate::bindings::_helpers::rules::lint_pipeline::{
+    LintViolationRow, ViolationClasses, relation_names as sentinel_relation_names,
+};
 use crate::bindings::types::CompilerDetach;
 
 fn spans(passes: &Bound<'_, PyAny>) -> PyResult<Vec<Vec<ExpansionSpan>>> {
@@ -48,6 +50,15 @@ fn relation_keys(
     Ok(keys)
 }
 
+/// The relation name each dependency sentinel of one body stands for.
+fn relation_names(body: &Bound<'_, PyAny>) -> PyResult<Vec<(String, String)>> {
+    let mut relations: Vec<(String, String)> = Vec::new();
+    for relation in native_field(body, "dependency_relations")?.try_iter()? {
+        relations.push(relation?.extract()?);
+    }
+    Ok(sentinel_relation_names(&relations))
+}
+
 fn lint_body(
     body: &Bound<'_, PyAny>,
     index_by_path: &Bound<'_, PyDict>,
@@ -69,6 +80,7 @@ fn lint_body(
         allows_dynamic_output_star: native_field(body, "allows_dynamic_output_star")?.extract()?,
         allows_empty_fixture_star: native_field(body, "allows_empty_fixture_star")?.extract()?,
         relation_keys: relation_keys(body, declared)?,
+        relation_names: relation_names(body)?,
     })
 }
 

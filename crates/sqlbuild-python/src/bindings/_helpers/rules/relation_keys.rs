@@ -1,16 +1,20 @@
 //! Declared unique keys of project relations, derived natively from their key facts.
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::compiled_project::models::SchemaColumnFact;
+use sqlbuild_discovery::project_validation::main::at_most_one_csv_data_row::at_most_one_csv_data_row;
+use sqlbuild_discovery::project_validation::models::CsvSettings;
 use sqlbuild_rules::sql_quality::main::declared_relation_keys::declared_relation_keys as derive_keys;
 use sqlbuild_rules::sql_quality::models::{DeclaredKeyColumn, DeclaredRelation};
 
 use crate::bindings::_helpers::compiled_project::schema_facts::python_column_facts;
 use crate::bindings::_helpers::compiled_project::source_views::{SourceKeyFacts, read_source_view};
+use crate::bindings::_helpers::discovery::project_facts::seed_csv_settings;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::rules::lint_inputs::model_key_row;
 
@@ -187,11 +191,36 @@ fn declared_specs<'py>(entry: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<
 /// Declared keys by `kind:name` identity, in identity order.
 pub(crate) type RelationKeys = Vec<(String, Vec<Vec<String>>)>;
 
-/// Keys that prove one row per key, by `kind:name` identity, from model rows, seeds and sources.
+/// Names of the seeds whose CSV holds at most one data row, from `seed_file` and `schema_entry`.
+pub(crate) fn one_row_seed_names(seeds: &[Bound<'_, PyAny>]) -> PyResult<Vec<String>> {
+    let mut candidates: Vec<(String, PathBuf, CsvSettings)> = Vec::with_capacity(seeds.len());
+    for seed in seeds {
+        let entry: Bound<'_, PyAny> = native_field(seed, "schema_entry")?;
+        candidates.push((
+            native_field(&entry, "name")?.extract()?,
+            native_field(&native_field(seed, "seed_file")?, "file_path")?.extract()?,
+            seed_csv_settings(&entry)?,
+        ));
+    }
+    let py: Python<'_> = match seeds.first() {
+        Some(seed) => seed.py(),
+        None => return Ok(Vec::new()),
+    };
+    Ok(py.detach(|| {
+        candidates
+            .into_iter()
+            .filter(|(_, path, settings)| at_most_one_csv_data_row(path, settings))
+            .map(|(name, _, _)| name)
+            .collect()
+    }))
+}
+
+/// Keys proving one row per key by `kind:name`; seeds in `one_row_seeds` also get the empty key.
 pub(crate) fn relation_keys<'py>(
     py: Python<'py>,
     mut rows: Vec<RelationKeyRow>,
     (seeds, sources): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    one_row_seeds: &[String],
 ) -> PyResult<RelationKeys> {
     for (kind, entries) in [(RELATION_KIND_SEED, seeds), (RELATION_KIND_SOURCE, sources)] {
         for entry in entries.try_iter()? {
@@ -209,7 +238,11 @@ pub(crate) fn relation_keys<'py>(
             )?);
         }
     }
-    let relations: Vec<DeclaredRelation> = rows.into_iter().map(declared_relation).collect();
+    let mut relations: Vec<DeclaredRelation> = rows.into_iter().map(declared_relation).collect();
+    for relation in &mut relations {
+        relation.at_most_one_row =
+            relation.kind == RELATION_KIND_SEED && one_row_seeds.contains(&relation.name);
+    }
     let keys: BTreeMap<String, Vec<Vec<String>>> = py.detach(|| derive_keys(&relations));
     Ok(keys.into_iter().collect())
 }
@@ -236,7 +269,7 @@ fn declared_relation_keys<'py>(
     seeds: &Bound<'py, PyAny>,
     sources: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
-    keys_dict(py, relation_keys(py, model_rows, (seeds, sources))?)
+    keys_dict(py, relation_keys(py, model_rows, (seeds, sources), &[])?)
 }
 
 /// Declared keys of a compiled project's models, seeds and sources.
@@ -246,9 +279,13 @@ pub(crate) fn project_relation_keys(project: &Bound<'_, PyAny>) -> PyResult<Rela
     for model in native_field(project, "models")?.try_iter()? {
         rows.push(model_key_row(&model?)?);
     }
+    let compiled_seeds: Vec<Bound<'_, PyAny>> = native_field(project, "seeds")?
+        .try_iter()?
+        .collect::<PyResult<_>>()?;
+    let one_row_seeds: Vec<String> = one_row_seed_names(&compiled_seeds)?;
     let mut seeds: Vec<Bound<'_, PyAny>> = Vec::new();
-    for seed in native_field(project, "seeds")?.try_iter()? {
-        seeds.push(native_field(&seed?, "schema_entry")?);
+    for seed in &compiled_seeds {
+        seeds.push(native_field(seed, "schema_entry")?);
     }
     let mut sources: Vec<Bound<'_, PyAny>> = Vec::new();
     for source in native_field(project, "sources")?.try_iter()? {
@@ -261,6 +298,7 @@ pub(crate) fn project_relation_keys(project: &Bound<'_, PyAny>) -> PyResult<Rela
             PyTuple::new(py, seeds)?.as_any(),
             PyTuple::new(py, sources)?.as_any(),
         ),
+        &one_row_seeds,
     )
 }
 
@@ -299,6 +337,7 @@ fn declared_relation(row: RelationKeyRow) -> DeclaredRelation {
             })
             .collect(),
         audits,
+        at_most_one_row: false,
     }
 }
 

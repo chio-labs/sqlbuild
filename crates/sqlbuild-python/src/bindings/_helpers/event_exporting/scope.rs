@@ -41,7 +41,7 @@ pub(crate) struct EventExporterCommandScope {
     state: Mutex<ScopeState>,
 }
 
-/// Releases and force-closes a provider session once sink delivery is idle.
+/// Releases and force-closes a provider session on the closing thread once sink delivery is idle.
 #[pyclass(module = "sqlbuild._native", frozen)]
 pub(crate) struct ProviderSessionCloser {
     session: Py<PyAny>,

@@ -33,7 +33,9 @@ macro_rules! rule {
                     | "SQBRPROJECT202"
                     | "SQBRPROJECT203"
                     | "SQBRPROJECT204"
+                    | "SQBRPROJECT107"
                     | "SQBRGRAPH101"
+                    | "SQBRGRAPH103"
                     | "SQBRTEST101"
                     | "SQBRTEST102"
                     | "SQBRTEST103"
@@ -96,6 +98,22 @@ pub(crate) fn catalogue() -> Vec<RuleMetadata> {
             "declared-table-references",
             "table dependencies must use __ref or __source",
             "Replace this qualified table with __ref(\"<model>\") or __source(\"<source>\") so it participates in the DAG.",
+        ),
+        rule!(
+            "SQBRGRAPH103",
+            RuleScope::Project,
+            "graph",
+            "published-domain-isolation",
+            "published models must not read published models of their own domain",
+            "Move logic shared within a domain into its intermediate layer, or move a consumer-specific model into the consuming domain. A <domain>__mart_v__<entity> view may read <domain>__mart__<entity>.",
+        ),
+        rule!(
+            "SQBRPROJECT107",
+            RuleScope::Project,
+            "repository",
+            "published-name-shape",
+            "each domain's published models must share one name shape",
+            "Name every published model of a domain either <domain>__<layer>__<entity> or <domain>__<layer>__<entity>__<qualifier>. Move consumer-specific variants into intermediate or the consuming domain, rename models into the family, or allowlist an intentional qualifier with a reason.",
         ),
         rule!(
             "SQBRPROJECT101",

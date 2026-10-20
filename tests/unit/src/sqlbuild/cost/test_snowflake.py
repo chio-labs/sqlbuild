@@ -75,8 +75,10 @@ class _SequencedConnection:
                 "RESULT_LIMIT => 10000",
                 "EXECUTION_STATUS",
                 "QUERY_TYPE",
-                "CASE WHEN QUERY_ID IN ('q-create') AND (QUERY_TYPE = 'CREATE' OR QUERY_TYPE LIKE "
-                "'CREATE_%') THEN QUERY_TEXT END AS QUERY_TEXT",
+                "CASE WHEN (QUERY_TYPE = 'CREATE' OR QUERY_TYPE LIKE 'CREATE_%') "
+                'AND QUERY_TAG LIKE \'%"run_id":"run-1"%\' '
+                'AND QUERY_TAG NOT LIKE \'%"resource_type":"hook"%\' '
+                "THEN QUERY_TEXT END AS QUERY_TEXT",
                 "CURRENT_TIMESTAMP()",
             ),
             expected_excluded_fragment="WHERE EXECUTION_STATUS = 'SUCCESS'",
@@ -91,7 +93,7 @@ def test_given_time_range_when_rendering_query_history_then_uses_valid_bounded_t
         database="analytics",
         started_at=datetime(2026, 8, 23, 10, 0, tzinfo=UTC),
         completed_at=datetime(2026, 8, 23, 10, 5, tzinfo=UTC),
-        classification_query_ids=frozenset({"q-create"}),
+        run_id="run-1",
     )
 
     for fragment in test_case.expected_fragments:
@@ -110,8 +112,10 @@ def test_given_time_range_when_rendering_query_history_then_uses_valid_bounded_t
                 "RESULT_LIMIT => 10000",
                 "EXECUTION_STATUS",
                 "QUERY_TYPE",
-                "CASE WHEN QUERY_ID IN ('q-create') AND (QUERY_TYPE = 'CREATE' OR QUERY_TYPE LIKE "
-                "'CREATE_%') THEN QUERY_TEXT END AS QUERY_TEXT",
+                "CASE WHEN (QUERY_TYPE = 'CREATE' OR QUERY_TYPE LIKE 'CREATE_%') "
+                'AND QUERY_TAG LIKE \'%"run_id":"run-1"%\' '
+                'AND QUERY_TAG NOT LIKE \'%"resource_type":"hook"%\' '
+                "THEN QUERY_TEXT END AS QUERY_TEXT",
                 "CURRENT_TIMESTAMP()",
             ),
             expected_excluded_fragment="END_TIME_RANGE_END",
@@ -125,7 +129,7 @@ def test_given_start_time_when_rendering_open_history_then_running_queries_are_r
     sql: str = render_snowflake_query_history_sql(
         database="analytics",
         started_at=datetime(2026, 8, 23, 10, 0, tzinfo=UTC),
-        classification_query_ids=frozenset({"q-create"}),
+        run_id="run-1",
     )
 
     for fragment in test_case.expected_fragments:
@@ -149,7 +153,6 @@ def test_given_no_classifiable_create_ids_when_rendering_history_then_query_text
 ) -> None:
     sql: str = render_snowflake_query_history_sql(
         started_at=datetime(2026, 8, 23, 10, 0, tzinfo=UTC),
-        classification_query_ids=frozenset(),
     )
 
     for fragment in test_case.expected_fragments:
@@ -161,9 +164,9 @@ def test_given_no_classifiable_create_ids_when_rendering_history_then_query_text
     "test_case",
     [
         RenderQueryHistorySqlTestCase(
-            description="exact create hook is omitted from query text allowlist",
+            description="a run of only hooks requests no query text",
             expected_fragments=("NULL AS QUERY_TEXT",),
-            expected_excluded_fragment="q-hook",
+            expected_excluded_fragment="THEN QUERY_TEXT",
         )
     ],
     ids=lambda case: case.description,
@@ -865,7 +868,7 @@ def test_given_retry_delay_exceeds_remaining_deadline_when_collecting_then_parti
         None,
         origin + timedelta(seconds=1),
     )
-    monotonic_values: Iterator[float] = iter((0.0, 0.0, 0.0, 0.0, 9.5))
+    monotonic_values: Iterator[float] = iter((0.0, 0.0, 0.0, 0.0, 29.5))
     monkeypatch.setattr(
         "time.monotonic",
         lambda: next(monotonic_values),

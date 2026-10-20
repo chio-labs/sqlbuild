@@ -1,22 +1,28 @@
-"""Call one lifecycle-event sink on its delivery thread."""
+"""Call one lifecycle-event sink on its long-lived delivery thread."""
 
 from collections.abc import Callable, Mapping
+from queue import SimpleQueue
 
 from sqlbuild.runtime.observability.models import LifecycleEvent
 
 
 def invoke_lifecycle_event_sink(
     *,
-    function: Callable[..., object],
-    provider_arguments: Mapping[str, object],
-    event: LifecycleEvent,
-    completion: Callable[[BaseException | None], None],
+    calls: SimpleQueue[
+        tuple[Callable[..., object], Mapping[str, object], LifecycleEvent, int] | None
+    ],
+    results: SimpleQueue[tuple[int, BaseException | None]],
+    claims: dict[int, bool],
 ) -> None:
-    """Call a user sink with one event, then report how the call ended."""
+    """Claim and call the sink with each queued event in order and report how each call ended."""
 
-    try:
-        _ = function(event=event, **provider_arguments)
-    except BaseException as error:
-        _ = completion(error)
-        return
-    _ = completion(None)
+    for function, provider_arguments, event, token in iter(calls.get, None):
+        if not claims.setdefault(token, True):
+            del claims[token]
+            continue
+        try:
+            _ = function(event=event, **provider_arguments)
+        except BaseException as error:
+            results.put((token, error))
+        else:
+            results.put((token, None))
