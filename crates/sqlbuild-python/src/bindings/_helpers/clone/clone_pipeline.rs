@@ -37,7 +37,8 @@ pub(crate) struct ClonePipeline<'py> {
 /// The structural compiled project of each target environment a clone reads, compiled once each.
 ///
 /// Clone reads relation names, the dependency graph, configuration and rendered view and
-/// function SQL, which compile produces without SQL analysis, so column inference is skipped.
+/// function SQL. Compile produces them without SQL validation or column inference, and clone
+/// reports no compile diagnostics, so both are skipped.
 struct Environments<'a, 'py> {
     pipeline: &'a ClonePipeline<'py>,
     compiled: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)>,
@@ -71,6 +72,7 @@ fn compiled_environment<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = target_name.py();
     let options: &Bound<'py, PyAny> = &pipeline.options;
+    let structural: Bound<'py, PyAny> = PyBool::new(py, true).to_owned().into_any();
     build_compiled_project(
         py,
         Some(keywords(
@@ -83,14 +85,8 @@ fn compiled_environment<'py>(
                     "resolved_connection",
                     native_field(&pipeline.connection, "config")?,
                 ),
-                (
-                    "no_sql_validation",
-                    native_field(options, "no_sql_validation")?,
-                ),
-                (
-                    "skip_column_inference",
-                    PyBool::new(py, true).to_owned().into_any(),
-                ),
+                ("no_sql_validation", structural.clone()),
+                ("skip_column_inference", structural),
                 (
                     "analysis_selection",
                     new_record_with(
