@@ -1,6 +1,6 @@
 //! `EventExporterDispatcher`: bounded priority delivery of lifecycle events on Python daemon threads.
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -8,12 +8,13 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyResult, Python, pyclass, pyfunction, pymethods,
 };
-use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyString};
+use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PySet, PyString};
 use sqlbuild_core::command_output::constants::COMMAND_OUTPUT_RECORD_TYPE;
 use sqlbuild_core::event_export::constants::{
     DEFAULT_EVENT_EXPORT_HEALTH_INTERVAL_SECONDS, DEFAULT_EVENT_EXPORT_INVOCATION_TIMEOUT_SECONDS,
     DEFAULT_EVENT_EXPORT_NOTIFICATION_QUEUE_CAPACITY, DEFAULT_EVENT_EXPORT_QUEUE_CAPACITY,
     DEFAULT_EVENT_EXPORT_SHUTDOWN_TIMEOUT_SECONDS, INVOCATION_TERMINAL_EVENT_TYPES,
+    OUTCOME_EVENT_TYPES, OUTCOME_RESERVE_FRACTION,
 };
 use sqlbuild_core::event_export::main::drop_lifecycle_attempts::drop_lifecycle_attempts;
 use sqlbuild_core::event_export::main::export_snapshot::export_snapshot;
@@ -38,7 +39,7 @@ use crate::bindings::_helpers::event_exporting::models::{
 use crate::bindings::_helpers::event_exporting::values::{
     export_policy, input_error, severity_from, state_error,
 };
-use crate::bindings::_helpers::event_exporting::workers::{DispatcherWorker, WorkerRole};
+use crate::bindings::_helpers::event_exporting::workers::{DispatcherWorker, Lane, WorkerRole};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::native_threads::constants::OUTPUT_SUPPRESSED_ATTRIBUTE;
@@ -81,6 +82,18 @@ pub(crate) struct State {
     sequence: u64,
     accepting: bool,
     pub(crate) deadline: Option<Instant>,
+    /// When only outcome events remain deliverable, ahead of the deadline.
+    pub(crate) reserve_at: Option<Instant>,
+    pub(crate) reserved: bool,
+    /// Each exporter's long-lived delivery thread, once started and until retired.
+    pub(crate) lanes: Vec<Option<Lane>>,
+    /// The exporter each delivered-but-unreported attempt token belongs to.
+    pub(crate) tokens: HashMap<u64, usize>,
+    pub(crate) next_token: u64,
+    /// Retired lanes, whose threads are joined before finalizers run.
+    pub(crate) retired: Vec<Lane>,
+    /// Whether a timed-out sink call may still be running.
+    pub(crate) abandoned_calls: bool,
     pub(crate) stopping: bool,
     pub(crate) force_stop: bool,
     pub(crate) blocked: HashSet<usize>,
@@ -103,6 +116,10 @@ pub(crate) struct State {
 /// What the dispatcher and its threads share.
 pub(crate) struct Shared {
     condition: Py<PyAny>,
+    /// The `SimpleQueue` every delivery thread reports `(token, error)` outcomes to.
+    pub(crate) results: Py<PyAny>,
+    /// The Python set of attempt tokens delivery threads must skip.
+    pub(crate) cancelled: Py<PyAny>,
     state: Mutex<State>,
     pub(crate) invocation_timeout: Duration,
     shutdown_timeout: Duration,
@@ -331,6 +348,34 @@ pub(crate) fn stop_event_exporter_threads(py: Python<'_>) -> PyResult<()> {
     Ok(())
 }
 
+impl State {
+    /// Count one failed attempt and queue its sanitized diagnostic, returning whether one was queued.
+    pub(crate) fn note_failure(
+        &mut self,
+        diagnostics: Option<usize>,
+        (index, kind, severity): (usize, &str, ExportSeverity),
+        error_type: String,
+    ) -> bool {
+        let mut exporter_name: String = String::new();
+        if let Some(counts) = self.counts.get_mut(index) {
+            counts.failed += 1;
+        }
+        if let Some(exporter) = self.exporters.get(index) {
+            exporter_name.clone_from(&exporter.name);
+        }
+        if diagnostics.is_none_or(|capacity| self.failures.len() >= capacity) {
+            return false;
+        }
+        self.failures.push_back(EventExporterFailure {
+            exporter_name,
+            error_type,
+            event_kind: kind.to_owned(),
+            event_severity: severity,
+        });
+        true
+    }
+}
+
 impl Shared {
     pub(crate) fn hold<'py>(&self, py: Python<'py>) -> PyResult<Held<'py>> {
         let condition = self.condition.bind(py).clone();
@@ -378,7 +423,8 @@ impl Shared {
             queue_capacity: state.queue.capacity,
             drained: final_snapshot
                 && !state.dispatcher_running
-                && state.live_invocations.is_empty(),
+                && state.live_invocations.is_empty()
+                && !state.abandoned_calls,
         })
     }
 
@@ -388,40 +434,14 @@ impl Shared {
         Ok(Self::snapshot(&*self.locked()?, false))
     }
 
-    /// Count one failed attempt and queue its sanitized diagnostic.
-    pub(crate) fn record_failure(
-        &self,
-        py: Python<'_>,
-        (index, kind, severity): (usize, &str, ExportSeverity),
-        error_type: String,
-    ) -> PyResult<()> {
-        let _held = self.hold(py)?;
-        let mut state = self.locked()?;
-        let mut exporter_name: String = String::new();
-        if let Some(counts) = state.counts.get_mut(index) {
-            counts.failed += 1;
-        }
-        if let Some(exporter) = state.exporters.get(index) {
-            exporter_name.clone_from(&exporter.name);
-        }
-        if !self.notifications
-            || self.failure_callback.is_none()
-            || state.failures.len() >= self.notification_capacity
-        {
-            return Ok(());
-        }
-        state.failures.push_back(EventExporterFailure {
-            exporter_name,
-            error_type,
-            event_kind: kind.to_owned(),
-            event_severity: severity,
-        });
-        drop(state);
-        self.notify_all(py)
+    /// The diagnostic queue capacity when failures are reported, else `None`.
+    pub(crate) fn diagnostics(&self) -> Option<usize> {
+        (self.notifications && self.failure_callback.is_some())
+            .then_some(self.notification_capacity)
     }
 
     /// Forget one finished invocation and wake a caller waiting for delivery to become idle.
-    pub(crate) fn invocation_finished(&self, py: Python<'_>, invocation: u64) -> PyResult<()> {
+    fn invocation_finished(&self, py: Python<'_>, invocation: u64) -> PyResult<()> {
         let retired: Option<Py<PyAny>> = {
             let _held = self.hold(py)?;
             let mut state = self.locked()?;
@@ -450,25 +470,40 @@ impl Shared {
         state.live_invocations.is_empty() && !state.dispatcher_running
     }
 
-    /// Wait until delivery is idle, the idle wait ends or interpreter exit begins.
+    /// Wait until delivery and every sink call are idle, the idle wait ends or interpreter exit begins.
     fn await_idle(&self, py: Python<'_>) -> PyResult<()> {
         let deadline: Instant =
             Instant::now() + self.invocation_timeout.min(seconds(IDLE_WAIT_SECONDS));
-        let _held = self.hold(py)?;
-        loop {
-            if Self::idle(&*self.locked()?) || interpreter_exiting(py)? {
-                return Ok(());
+        let threads: Vec<Py<PyAny>> = {
+            let _held = self.hold(py)?;
+            loop {
+                if interpreter_exiting(py)? {
+                    return Ok(());
+                }
+                let state = self.locked()?;
+                if Self::idle(&state) {
+                    break state
+                        .retired
+                        .iter()
+                        .map(|lane| lane.thread().clone_ref(py))
+                        .collect();
+                }
+                drop(state);
+                let remaining: f64 = remaining_seconds(deadline);
+                if remaining <= NO_SECONDS {
+                    return Ok(());
+                }
+                self.wait(py, remaining.min(POLL_SECONDS))?;
             }
-            let remaining: f64 = remaining_seconds(deadline);
-            if remaining <= NO_SECONDS {
-                return Ok(());
-            }
-            self.wait(py, remaining.min(POLL_SECONDS))?;
+        };
+        for thread in threads {
+            join(thread.bind(py), remaining_seconds(deadline))?;
         }
+        Ok(())
     }
 
     /// Register a running invocation, returning its identity.
-    pub(crate) fn begin_invocation(&self, py: Python<'_>) -> PyResult<u64> {
+    fn begin_invocation(&self, py: Python<'_>) -> PyResult<u64> {
         let _held = self.hold(py)?;
         let mut state = self.locked()?;
         state.next_invocation += 1;
@@ -643,6 +678,8 @@ impl EventExporterDispatcher {
         let has_summary: bool = summary_callback.is_some();
         let shared = Arc::new(Shared {
             condition: imported(py, "threading", "Condition")?.call0()?.unbind(),
+            results: imported(py, "queue", "SimpleQueue")?.call0()?.unbind(),
+            cancelled: PySet::empty(py)?.into_any().unbind(),
             state: Mutex::new(State {
                 bound: !exporters.is_none(),
                 counts: vec![ExporterCounts::default(); bound_exporters.len()],
@@ -654,6 +691,13 @@ impl EventExporterDispatcher {
                 sequence: 0,
                 accepting: true,
                 deadline: None,
+                reserve_at: None,
+                reserved: false,
+                lanes: Vec::new(),
+                tokens: HashMap::new(),
+                next_token: 0,
+                retired: Vec::new(),
+                abandoned_calls: false,
                 stopping: false,
                 force_stop: false,
                 blocked: HashSet::new(),
@@ -757,6 +801,7 @@ impl EventExporterDispatcher {
                 },
                 priority: policy.priority,
                 invocation_terminal: INVOCATION_TERMINAL_EVENT_TYPES.contains(&event_type.as_str()),
+                outcome: OUTCOME_EVENT_TYPES.contains(&event_type.as_str()),
                 eligible_exporters: eligible,
             },
         );
@@ -860,7 +905,14 @@ impl EventExporterDispatcher {
             if owns {
                 state.shutdown_started = true;
                 state.accepting = false;
-                state.deadline = Some(Instant::now() + shared.shutdown_timeout);
+                let started: Instant = Instant::now();
+                state.deadline = Some(started + shared.shutdown_timeout);
+                state.reserve_at = Some(
+                    started
+                        + shared
+                            .shutdown_timeout
+                            .mul_f64(1.0 - OUTCOME_RESERVE_FRACTION),
+                );
                 state.stopping = true;
                 state.health_stopping = true;
             }

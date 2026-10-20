@@ -58,3 +58,21 @@ pub(crate) struct SnapshotTestCase {
     pub(crate) expected_accepted: u64,
     pub(crate) expected_flush_complete: bool,
 }
+
+/// A full queue of `(priority, outcome)` events receiving one more, and what it keeps.
+pub(crate) struct OutcomeAdmissionTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) queued: &'static [(u8, bool)],
+    pub(crate) incoming: (u8, bool),
+    pub(crate) expected_inserted: bool,
+    pub(crate) expected_displaced: Option<u64>,
+    pub(crate) expected_sequences: &'static [u64],
+}
+
+/// Queued `(priority, outcome)` events and what the shutdown reserve keeps and drops, by sequence.
+pub(crate) struct OutcomeReserveTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) queued: &'static [(u8, bool)],
+    pub(crate) expected_kept: &'static [u64],
+    pub(crate) expected_dropped: &'static [u64],
+}

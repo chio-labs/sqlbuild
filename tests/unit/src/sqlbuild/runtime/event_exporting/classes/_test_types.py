@@ -51,3 +51,13 @@ class InterpreterExitTestCase:
     script: str
     expected_returncode: int
     expected_stderr: str = ""
+
+
+@dataclass(frozen=True)
+class OutcomeDeliveryTestCase:
+    description: str
+    queue_capacity: int
+    backlog: int
+    sink_seconds: float
+    shutdown_timeout_seconds: float
+    expected_outcomes: tuple[str, ...]

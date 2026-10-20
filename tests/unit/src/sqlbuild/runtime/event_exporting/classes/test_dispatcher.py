@@ -23,8 +23,12 @@ from sqlbuild.sinks import CommandOutputRecord, CommandOutputStream
 from tests.unit.src.sqlbuild.runtime.event_exporting.classes._test_types import (
     EventExporterDispatcherTestCase,
     HealthIntervalTestCase,
+    OutcomeDeliveryTestCase,
 )
-from tests.unit.src.sqlbuild.runtime.event_exporting.classes.helpers import lifecycle_event
+from tests.unit.src.sqlbuild.runtime.event_exporting.classes.helpers import (
+    correlated_event,
+    lifecycle_event,
+)
 
 
 @pytest.mark.parametrize(
@@ -118,7 +122,7 @@ def test_given_slow_exporter_when_enqueuing_then_execution_thread_is_not_blocked
     (EventExporterDispatcherTestCase("failure isolation", 1),),
     ids=lambda case: case.description,
 )
-def test_given_multiple_exporters_when_one_fails_then_later_exporter_runs_in_order(
+def test_given_multiple_exporters_when_one_fails_then_the_other_exporter_still_runs(
     test_case: EventExporterDispatcherTestCase,
 ) -> None:
     calls: list[str] = []
@@ -142,7 +146,7 @@ def test_given_multiple_exporters_when_one_fails_then_later_exporter_runs_in_ord
 
     summary: EventExportSummary = dispatcher.shutdown()
 
-    assert calls == ["first", "second"]
+    assert sorted(calls) == ["first", "second"]
     assert summary.delivered == test_case.expected_delivered
     assert summary.failed == 1
     assert summary.accepted == summary.delivered + summary.failed + summary.dropped
@@ -243,7 +247,7 @@ def test_given_full_queue_when_enqueuing_then_overflow_is_counted_per_exporter(
         invocation_timeout_seconds=0.2,
     )
     for index in range(100):
-        dispatcher.enqueue(lifecycle_event(index))
+        dispatcher.enqueue(correlated_event(index, "statement_submitted"))
     time.sleep(0.02)
     release.set()
 
@@ -506,19 +510,19 @@ def test_given_mixed_eligible_queue_when_high_priority_displaces_then_attempts_c
         queue_capacity=1,
         invocation_timeout_seconds=1,
     )
-    dispatcher.enqueue(lifecycle_event(1))
+    dispatcher.enqueue(correlated_event(1, "statement_submitted"))
     assert entered.wait(timeout=0.2)
-    dispatcher.enqueue(lifecycle_event(2))
-    dispatcher.enqueue(lifecycle_event(3, "invocation_failed"))
+    dispatcher.enqueue(correlated_event(2, "statement_submitted"))
+    dispatcher.enqueue(correlated_event(3, "operation_failed"))
     release.set()
 
     summary: EventExportSummary = dispatcher.shutdown()
 
     assert len(calls) == test_case.expected_delivered
-    assert calls == [
-        ("first", "invocation_started"),
-        ("first", "invocation_failed"),
-        ("second", "invocation_failed"),
+    assert sorted(calls) == [
+        ("first", "operation_failed"),
+        ("first", "statement_submitted"),
+        ("second", "operation_failed"),
     ]
     first_counts: EventExporterCounts = summary.per_exporter[0].counts
     second_counts: EventExporterCounts = summary.per_exporter[1].counts
@@ -568,18 +572,24 @@ def test_given_sensitive_exporter_exception_when_reporting_then_only_safe_dimens
     test_case: EventExporterDispatcherTestCase,
 ) -> None:
     failures: list[object] = []
+    reported: threading.Event = threading.Event()
 
     def failing(*, event: LifecycleEvent) -> None:
         del event
         raise RuntimeError("password=secret sql=select-sensitive destination=broker")
 
+    def report(failure: object) -> None:
+        failures.append(failure)
+        reported.set()
+
     dispatcher: EventExporterDispatcher = EventExporterDispatcher(
         exporters=(BoundEventExporter("safe_name", failing, {}),),
-        failure_callback=failures.append,
+        failure_callback=report,
     )
     dispatcher.enqueue(lifecycle_event())
     dispatcher.shutdown()
 
+    assert reported.wait(timeout=1.0)
     assert len(failures) == test_case.expected_delivered
     rendered: str = repr(failures[0])
     assert "RuntimeError" in rendered
@@ -741,3 +751,63 @@ def test_given_periodic_health_callback_when_published_then_it_never_reenters_ex
     assert len(exported) == test_case.expected_delivered
     assert summaries[0].accepted == 1
     dispatcher.shutdown()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        OutcomeDeliveryTestCase(
+            "saturated queue still admits outcomes",
+            queue_capacity=4,
+            backlog=100,
+            sink_seconds=0.0,
+            shutdown_timeout_seconds=5.0,
+            expected_outcomes=("run_completed", "invocation_completed"),
+        ),
+        OutcomeDeliveryTestCase(
+            "tight budget drops backlog for outcomes",
+            queue_capacity=1024,
+            backlog=300,
+            sink_seconds=0.02,
+            shutdown_timeout_seconds=0.4,
+            expected_outcomes=("run_completed", "invocation_completed"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_backlog_when_shutting_down_then_outcome_events_arrive_and_backlog_is_dropped(
+    test_case: OutcomeDeliveryTestCase,
+) -> None:
+    held: threading.Event = threading.Event()
+    release: threading.Event = threading.Event()
+    delivered: list[str] = []
+
+    def record(*, event: LifecycleEvent) -> None:
+        delivered.append(event.event_type)
+        held.set()
+        _ = release.wait()
+        time.sleep(test_case.sink_seconds)
+
+    dispatcher: EventExporterDispatcher = EventExporterDispatcher(
+        exporters=(BoundEventExporter("recorder", record, {}),),
+        queue_capacity=test_case.queue_capacity,
+        shutdown_timeout_seconds=test_case.shutdown_timeout_seconds,
+        invocation_timeout_seconds=5.0,
+    )
+    dispatcher.enqueue(correlated_event(0, "run_started"))
+    assert held.wait(timeout=1.0)
+    for index in range(test_case.backlog):
+        dispatcher.enqueue(correlated_event(index + 1, "statement_completed"))
+    for offset, event_type in enumerate(test_case.expected_outcomes):
+        dispatcher.enqueue(correlated_event(test_case.backlog + 1 + offset, event_type))
+    release.set()
+
+    summary: EventExportSummary = dispatcher.shutdown()
+
+    assert (
+        tuple(filter(test_case.expected_outcomes.__contains__, delivered))
+        == test_case.expected_outcomes
+    )
+    assert delivered[-1] == "invocation_completed"
+    assert summary.dropped > 0
+    assert summary.delivered + summary.dropped + summary.failed == summary.accepted
