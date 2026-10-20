@@ -35,6 +35,13 @@ crates/sqlbuild-python/src/bindings/_helpers/build_command/policies.rs	ColumnMig
 crates/sqlbuild-python/src/bindings/_helpers/build_progress/audit_progress.rs	TransientLineCoordinator.lock
 crates/sqlbuild-python/src/bindings/_helpers/build_progress/build_callbacks.rs	TransientLineCoordinator.lock
 crates/sqlbuild-python/src/bindings/_helpers/build_progress/nested_progress.rs	TransientLineCoordinator.lock
+crates/sqlbuild-python/src/bindings/_helpers/build_progress/progress.rs	CliNamespace.command
+crates/sqlbuild-python/src/bindings/_helpers/build_progress/progress.rs	CliNamespace.dbt_args
+crates/sqlbuild-python/src/bindings/_helpers/build_progress/progress.rs	CliNamespace.json
+crates/sqlbuild-python/src/bindings/_helpers/build_progress/progress.rs	CliNamespace.lineage_format
+crates/sqlbuild-python/src/bindings/_helpers/build_progress/progress.rs	CliNamespace.query_format
+crates/sqlbuild-python/src/bindings/_helpers/build_progress/progress.rs	TransientLineCoordinator.lock
+crates/sqlbuild-python/src/bindings/_helpers/build_progress/progress_text.rs	VerboseInspectionWriter.write
 crates/sqlbuild-python/src/bindings/_helpers/build_progress/terminal.rs	BuildProgressCallbacks._spin_until_stopped
 crates/sqlbuild-python/src/bindings/_helpers/build_progress/terminal.rs	NestedCommandProgressCallbacks._spin_until_stopped
 crates/sqlbuild-python/src/bindings/_helpers/build_progress/terminal.rs	TransientStatusReporter._spin_until_stopped
@@ -86,13 +93,6 @@ crates/sqlbuild-python/src/bindings/_helpers/cli/observability.rs	EventExporterD
 crates/sqlbuild-python/src/bindings/_helpers/cli/observability.rs	InvocationOutcome.consume
 crates/sqlbuild-python/src/bindings/_helpers/cli/observability.rs	NativeProgressProjector.consume
 crates/sqlbuild-python/src/bindings/_helpers/cli/observability.rs	TerminalEventIndex.consume
-crates/sqlbuild-python/src/bindings/_helpers/cli/progress.rs	CliNamespace.command
-crates/sqlbuild-python/src/bindings/_helpers/cli/progress.rs	CliNamespace.dbt_args
-crates/sqlbuild-python/src/bindings/_helpers/cli/progress.rs	CliNamespace.json
-crates/sqlbuild-python/src/bindings/_helpers/cli/progress.rs	CliNamespace.lineage_format
-crates/sqlbuild-python/src/bindings/_helpers/cli/progress.rs	CliNamespace.query_format
-crates/sqlbuild-python/src/bindings/_helpers/cli/progress.rs	TransientLineCoordinator.lock
-crates/sqlbuild-python/src/bindings/_helpers/cli/progress_text.rs	VerboseInspectionWriter.write
 crates/sqlbuild-python/src/bindings/_helpers/command_runtime/warehouses.rs	WarehouseGroup.value
 crates/sqlbuild-python/src/bindings/_helpers/compile_attachment/declaration_scope.rs	NativeScopeIndex.grant_relationships
 crates/sqlbuild-python/src/bindings/_helpers/compile_attachment/model_inputs.rs	DbtCompileReferenceResolver.validate_model_names
