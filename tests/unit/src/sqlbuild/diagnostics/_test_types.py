@@ -53,3 +53,10 @@ class ConsoleProgressLineTestCase:
     description: str
     message: str
     expected_log_line: str
+
+
+@dataclass(frozen=True)
+class SpinnerReuseTestCase:
+    description: str
+    record_count: int
+    expected_spinner_threads: int

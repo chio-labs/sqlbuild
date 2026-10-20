@@ -43,3 +43,9 @@ pub(super) struct SummaryLineTestCase {
     pub(super) message: &'static str,
     pub(super) expected_line: &'static str,
 }
+
+pub(super) struct ProjectSourceTestCase {
+    pub(super) description: &'static str,
+    pub(super) pathname: &'static str,
+    pub(super) expected_project: bool,
+}

@@ -4,13 +4,14 @@ use crate::diagnostic_routing::main::compute_log_admits::compute_log_admits;
 use crate::diagnostic_routing::main::console_summary_line::console_summary_line;
 use crate::diagnostic_routing::main::diagnostic_severity::diagnostic_severity;
 use crate::diagnostic_routing::main::internal_logger::internal_logger;
+use crate::diagnostic_routing::main::project_source_path::project_source_path;
 use crate::diagnostic_routing::main::route_admits::route_admits;
 use crate::diagnostic_routing::main::sql_digest::sql_digest;
 use crate::diagnostic_routing::main::third_party_console_form::third_party_console_form;
 use crate::diagnostic_routing::models::{RecordFacts, RouteOptions, ThirdPartyConsoleForm};
 use crate::diagnostic_routing::tests::test_types::{
-    ComputeLogTestCase, ConsoleFormTestCase, DigestTestCase, InternalLoggerTestCase, RouteTestCase,
-    SeverityTestCase, SummaryLineTestCase,
+    ComputeLogTestCase, ConsoleFormTestCase, DigestTestCase, InternalLoggerTestCase,
+    ProjectSourceTestCase, RouteTestCase, SeverityTestCase, SummaryLineTestCase,
 };
 
 const EXTERNAL_DEBUG: RecordFacts = RecordFacts {
@@ -256,6 +257,42 @@ fn given_messages_when_summarizing_then_first_line_remains() {
         assert_eq!(
             console_summary_line(test_case.message),
             test_case.expected_line,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_record_paths_when_classifying_then_only_project_files_outside_packages_are_project() {
+    let roots: Vec<String> = vec!["/work/orders_shop".to_owned()];
+    let test_cases = [
+        ProjectSourceTestCase {
+            description: "a project hook file is project code",
+            pathname: "/work/orders_shop/hooks/python/logs.py",
+            expected_project: true,
+        },
+        ProjectSourceTestCase {
+            description: "a package in a project virtual environment is a library",
+            pathname: "/work/orders_shop/.venv/lib/python3.12/site-packages/vendor/client.py",
+            expected_project: false,
+        },
+        ProjectSourceTestCase {
+            description: "a sibling directory sharing the prefix is outside the project",
+            pathname: "/work/orders_shop_tools/client.py",
+            expected_project: false,
+        },
+        ProjectSourceTestCase {
+            description: "the standard library is outside the project",
+            pathname: "/usr/lib/python3.12/logging/__init__.py",
+            expected_project: false,
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            project_source_path(test_case.pathname, &roots),
+            test_case.expected_project,
             "{}",
             test_case.description
         );

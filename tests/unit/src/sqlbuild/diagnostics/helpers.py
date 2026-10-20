@@ -1,4 +1,5 @@
 import logging
+import threading
 
 
 class HostRecordingLogHandler(logging.Handler):
@@ -25,3 +26,12 @@ def log_vendor_records() -> None:
     except RuntimeError:
         logger.warning("token refresh failed\nretrying with fallback", exc_info=True)
         logger.error("orders service rejected the request", exc_info=True)
+
+
+SPINNER_THREAD_NAME: str = "sqlbuild-progress-spinner"
+
+
+def spinner_threads() -> list[threading.Thread]:
+    """The live progress spinner threads."""
+
+    return list(filter(lambda thread: thread.name == SPINNER_THREAD_NAME, threading.enumerate()))

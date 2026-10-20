@@ -17,6 +17,7 @@ use sqlbuild_core::diagnostic_routing::main::compute_log_admits::compute_log_adm
 use sqlbuild_core::diagnostic_routing::main::console_summary_line::console_summary_line;
 use sqlbuild_core::diagnostic_routing::main::diagnostic_severity::diagnostic_severity;
 use sqlbuild_core::diagnostic_routing::main::internal_logger::internal_logger;
+use sqlbuild_core::diagnostic_routing::main::project_source_path::project_source_path;
 use sqlbuild_core::diagnostic_routing::main::route_admits::route_admits;
 use sqlbuild_core::diagnostic_routing::main::sql_digest::sql_digest;
 use sqlbuild_core::diagnostic_routing::main::third_party_console_form::third_party_console_form;
@@ -171,6 +172,20 @@ fn exception_text(record: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
     swallowed(py, formatted)
 }
 
+/// Whether the record's logging call is in a file under one of the project roots.
+fn project_record(record: &Bound<'_, PyAny>, roots: Option<Bound<'_, PyAny>>) -> PyResult<bool> {
+    let Some(roots) = roots.filter(|roots| !roots.is_none()) else {
+        return Ok(false);
+    };
+    let Ok(pathname) = native_field(record, "pathname")?.extract::<String>() else {
+        return Ok(false);
+    };
+    Ok(project_source_path(
+        &pathname,
+        &roots.extract::<Vec<String>>()?,
+    ))
+}
+
 /// A redacted copy of `record.__dict__` for one destination, or `None` when it does not belong.
 #[pyfunction]
 #[pyo3(signature = (**request))]
@@ -200,7 +215,10 @@ fn route_diagnostic_log_record<'py>(
     if !route_admits(options, facts) {
         return Ok(None);
     }
-    let form: ThirdPartyConsoleForm = if summarize_third_party && !facts.internal {
+    let form: ThirdPartyConsoleForm = if summarize_third_party
+        && !facts.internal
+        && !project_record(record, request.optional("project_roots")?)?
+    {
         third_party_console_form(facts.level)
     } else {
         ThirdPartyConsoleForm::Full

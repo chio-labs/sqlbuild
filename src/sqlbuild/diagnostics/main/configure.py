@@ -11,6 +11,7 @@ def configure_diagnostics(
     debug: bool,
     use_color: bool = False,
     invocation_id: str = "programmatic",
+    project_roots: tuple[str, ...] = (),
 ) -> InvocationDiagnosticRouting:
     """Create an explicit scoped diagnostic routing context."""
 
@@ -19,5 +20,6 @@ def configure_diagnostics(
         options=DiagnosticRoutingOptions(
             debug_console=debug,
             use_color=use_color,
+            project_roots=project_roots,
         ),
     )

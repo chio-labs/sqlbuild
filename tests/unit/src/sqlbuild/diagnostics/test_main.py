@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -17,9 +18,14 @@ from tests.unit.src.sqlbuild.diagnostics._test_types import (
     ConsoleProgressLineTestCase,
     DiagnosticsContextualSqlTestCase,
     DiagnosticsLogTestCase,
+    SpinnerReuseTestCase,
     ThirdPartyConsoleTestCase,
 )
-from tests.unit.src.sqlbuild.diagnostics.helpers import HostRecordingLogHandler, log_vendor_records
+from tests.unit.src.sqlbuild.diagnostics.helpers import (
+    HostRecordingLogHandler,
+    log_vendor_records,
+    spinner_threads,
+)
 from tests.unit.src.sqlbuild.presentation.classes.helpers import RecordingStream
 
 _CLEAR_LINE: str = "\r\x1b[K"
@@ -134,6 +140,40 @@ def test_given_live_status_line_when_logging_then_line_is_cleared_before_record(
         event.startswith(f"write:{_CLEAR_LINE}") for event in events[log_index - 2 : log_index]
     ), events
     assert any(test_case.message in event for event in events[log_index + 1 :]), events
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SpinnerReuseTestCase(
+            description="debug records around one status line reuse its spinner thread",
+            record_count=200,
+            expected_spinner_threads=1,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_many_records_during_status_line_when_logging_then_one_spinner_thread_runs(
+    test_case: SpinnerReuseTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("SQLBUILD_NO_PROGRESS", raising=False)
+    stream: RecordingStream = RecordingStream(events=[], tty=True)
+    monkeypatch.setattr(sys, "stderr", stream)
+    reporter: TransientStatusReporter = TransientStatusReporter(stream=stream, use_color=False)
+    seen: list[threading.Thread] = []
+    reporter.start("Preparing clone plan...")
+    try:
+        with configure_diagnostics(debug=True):
+            for index in range(test_case.record_count):
+                logging.getLogger("vendor.client").warning("retrying request %d", index)
+                seen.extend(spinner_threads())
+    finally:
+        reporter.close()
+
+    assert len({id(thread) for thread in seen}) == test_case.expected_spinner_threads
+    assert spinner_threads() == []
+    assert stream.getvalue().count("retrying request") == test_case.record_count
 
 
 @pytest.mark.parametrize(

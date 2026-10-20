@@ -199,3 +199,4 @@ class ThirdPartyLogTestCase:
     build_arguments: tuple[str, ...]
     expected_present: tuple[str, ...]
     expected_absent: tuple[str, ...]
+    expected_traceback_count: int
