@@ -5,7 +5,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::analysis::binding_catalog::{
-    BindingCatalog, CASE_SENSITIVE_BINDING_DIALECTS,
+    BindingCatalog, CASE_SENSITIVE_BINDING_DIALECTS, CatalogKey,
 };
 use crate::bindings::_helpers::analysis::model_reads::{
     declared_rows, dynamic_columns_declared, inferred_rows, star_flags, unchecked_columns,
@@ -74,7 +74,7 @@ fn model_relation_names(model: &Bound<'_, PyAny>) -> PyResult<(Vec<String>, bool
         let referenced: bool = !rows.is_empty();
         let names: Vec<String> = relation_names(
             rows.into_iter()
-                .map(|(kind, name, _, _)| (kind, name))
+                .map(|ReferenceRow { kind, name, .. }| (kind, name))
                 .collect(),
         );
         return Ok((names, referenced));
@@ -155,12 +155,12 @@ fn binding_shape<'py>(
     if !catalog.is_truthy()? {
         let created: BindingCatalog = BindingCatalog::create(
             py,
-            (
-                or_generic(&dialect)?.extract()?,
-                false,
-                native_field(profile, "semantic_known_functions")?.extract()?,
-                native_field(profile, "semantic_known_types")?.extract()?,
-            ),
+            CatalogKey {
+                dialect: or_generic(&dialect)?.extract()?,
+                quoted_ignore_case: false,
+                known_functions: native_field(profile, "semantic_known_functions")?.extract()?,
+                known_types: native_field(profile, "semantic_known_types")?.extract()?,
+            },
             inputs.as_any(),
         )?;
         catalog = Bound::new(py, created)?.into_any();

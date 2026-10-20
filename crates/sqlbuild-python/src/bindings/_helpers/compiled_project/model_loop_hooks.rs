@@ -23,7 +23,9 @@ use crate::bindings::_helpers::compiled_project::model_loop::{
     LoopContext, NativeModelLoop, VisibleDeclarations, compile_error, record_reads,
     validation_outcome,
 };
-use crate::bindings::_helpers::compiled_project::model_loop_calls::report_invalid_calls;
+use crate::bindings::_helpers::compiled_project::model_loop_calls::{
+    CallOrigin, report_invalid_calls,
+};
 use crate::bindings::_helpers::compiled_project::model_loop_external::external_errors;
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::{
@@ -145,7 +147,9 @@ pub(crate) fn expanded_hooks<'py>(
     let rows: Vec<(&str, &str, bool)> = references
         .iter()
         .zip(&external)
-        .map(|((kind, name, _, _), error)| (kind.as_str(), name.as_str(), error.is_some()))
+        .map(|(ReferenceRow { kind, name, .. }, error)| {
+            (kind.as_str(), name.as_str(), error.is_some())
+        })
         .collect();
     let outcome: Bound<'py, PyAny> = model_loop
         .validator
@@ -448,12 +452,12 @@ impl<'py> HookRun<'_, '_, 'py> {
             self.context,
             &self.model_loop.syntax,
             &scanned.invalid_calls,
-            (
-                Some(self.model.name),
-                self.model.relative_path,
-                self.model.file_path,
-                self.model.contents,
-            ),
+            CallOrigin {
+                name: Some(self.model.name),
+                relative_path: self.model.relative_path,
+                file_path: self.model.file_path,
+                contents: self.model.contents,
+            },
         )?;
         self.references
             .borrow_mut()
@@ -496,7 +500,7 @@ impl<'py> HookRun<'_, '_, 'py> {
         let py: Python<'py> = hooks.explicit_kinds.py();
         let mut seen: Vec<(String, String)> = Vec::new();
         let mut reads: Vec<Bound<'py, PyAny>> = Vec::new();
-        for (kind, name, _, _) in self.references.borrow().iter().skip(start) {
+        for ReferenceRow { kind, name, .. } in self.references.borrow().iter().skip(start) {
             let Some(resource_kind) = hooks.explicit_kinds.get_item(kind)? else {
                 continue;
             };

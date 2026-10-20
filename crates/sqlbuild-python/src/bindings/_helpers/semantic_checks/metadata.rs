@@ -16,7 +16,9 @@ use sqlbuild_analysis::semantic_validation::models as validation;
 
 use crate::bindings::_helpers::analysis::model_reads::binding_validated;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
-use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
+use crate::bindings::_helpers::compiled_project::compiled_model_view::{
+    ModelMetadataTexts, NativeCompiledModel,
+};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
@@ -282,7 +284,12 @@ fn model_diagnostics<'py>(
         } else {
             &classes.warning
         };
-        let row: FindingRow<'_> = (&audit.code, &audit.message, audit.line, audit.column);
+        let row: FindingRow<'_> = FindingRow {
+            code: &audit.code,
+            message: &audit.message,
+            line: audit.line,
+            column: audit.column,
+        };
         diagnostics.push(model_error(classes, model, &row, severity)?);
     }
     for finding in findings.references {
@@ -340,17 +347,32 @@ fn pairs(mapping: &Bound<'_, PyAny>) -> PyResult<Vec<(String, String)>> {
         .collect()
 }
 
-/// `(code, message, line, column)`.
-type FindingRow<'a> = (&'a str, &'a str, i64, i64);
+/// The code, message, line and column of one finding.
+struct FindingRow<'a> {
+    code: &'a str,
+    message: &'a str,
+    line: i64,
+    column: i64,
+}
 
 fn finding_row(finding: &MetadataFinding) -> FindingRow<'_> {
-    (finding.code, &finding.message, finding.line, finding.column)
+    FindingRow {
+        code: finding.code,
+        message: &finding.message,
+        line: finding.line,
+        column: finding.column,
+    }
 }
 
 fn model_error<'py>(
     classes: &StageClasses<'py>,
     model: &Bound<'py, PyAny>,
-    &(code, message, line, column): &FindingRow<'_>,
+    &FindingRow {
+        code,
+        message,
+        line,
+        column,
+    }: &FindingRow<'_>,
     severity: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = classes.py();
@@ -446,8 +468,12 @@ fn metadata_model(classes: &StageClasses<'_>, model: &Bound<'_, PyAny>) -> PyRes
             upstreams.push((upstream.str()?.extract()?, column_names(&columns)?));
         }
     }
-    let (name, query_sql, authored_sql, calls_functions) = match model.cast::<NativeCompiledModel>()
-    {
+    let ModelMetadataTexts {
+        name,
+        query_sql,
+        authored_sql,
+        calls_functions,
+    } = match model.cast::<NativeCompiledModel>() {
         Ok(native) => native
             .get()
             .metadata_texts(model.py(), &FUNCTION_REFERENCE_KINDS)?,
@@ -460,12 +486,12 @@ fn metadata_model(classes: &StageClasses<'_>, model: &Bound<'_, PyAny>) -> PyRes
                     break;
                 }
             }
-            (
-                native_field(model, "name")?.extract()?,
-                native_field(model, "query_sql")?.extract()?,
-                native_field(model, "authored_sql")?.extract()?,
+            ModelMetadataTexts {
+                name: native_field(model, "name")?.extract()?,
+                query_sql: native_field(model, "query_sql")?.extract()?,
+                authored_sql: native_field(model, "authored_sql")?.extract()?,
                 calls_functions,
-            )
+            }
         }
     };
     Ok(MetadataModel {

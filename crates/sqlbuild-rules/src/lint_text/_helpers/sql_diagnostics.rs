@@ -217,11 +217,20 @@ fn keepends_lengths(text: &str) -> Vec<i64> {
         .collect()
 }
 
+/// The fields of one native diagnostic, its span in lint-text characters.
+struct DiagnosticFields {
+    code: String,
+    message: String,
+    remediation: String,
+    start: i64,
+    end: i64,
+}
+
 /// The fields of one diagnostic: code, message, remediation, start and end.
 fn diagnostic_fields(
     diagnostic: &Map<String, Value>,
     body_length: i64,
-) -> Result<(String, String, String, i64, i64), String> {
+) -> Result<DiagnosticFields, String> {
     let text = |key: &str| {
         diagnostic
             .get(key)
@@ -242,7 +251,13 @@ fn diagnostic_fields(
     if start < 0 || end < start || end > body_length {
         return Err(INVALID_DIAGNOSTIC.to_string());
     }
-    Ok((code, message, remediation, start, end))
+    Ok(DiagnosticFields {
+        code,
+        message,
+        remediation,
+        start,
+        end,
+    })
 }
 
 /// Map one native diagnostic onto authored source, or drop it when it belongs to generated SQL.
@@ -255,7 +270,13 @@ pub(crate) fn authored_diagnostic(
         return Err(NOT_AN_OBJECT.to_string());
     };
     let body_length: i64 = body.lint_text.chars().count() as i64;
-    let (code, message, remediation, start, end) = diagnostic_fields(diagnostic, body_length)?;
+    let DiagnosticFields {
+        code,
+        message,
+        remediation,
+        start,
+        end,
+    } = diagnostic_fields(diagnostic, body_length)?;
     let reason: Option<String> = match diagnostic.get("fix_unavailable_reason") {
         None | Some(Value::Null) => None,
         Some(Value::String(reason)) => Some(reason.clone()),

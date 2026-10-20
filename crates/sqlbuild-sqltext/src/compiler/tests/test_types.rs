@@ -1,5 +1,5 @@
 use crate::compiler::models::{InterpolationRead, NestingFailure};
-use crate::compiler::types::{CharSpan, InterpolationHost};
+use crate::compiler::types::InterpolationHost;
 use std::collections::BTreeMap;
 
 pub(crate) struct ModelHeaderTokenizationTestCase {
@@ -51,7 +51,7 @@ pub(crate) struct InterpolationTestCase {
 pub(crate) struct InterpolationFactsTestCase {
     pub(crate) description: &'static str,
     pub(crate) sql: &'static str,
-    pub(crate) expected_spans: Vec<CharSpan>,
+    pub(crate) expected_spans: Vec<[usize; 4]>,
     pub(crate) expected_reads: Vec<InterpolationRead>,
 }
 

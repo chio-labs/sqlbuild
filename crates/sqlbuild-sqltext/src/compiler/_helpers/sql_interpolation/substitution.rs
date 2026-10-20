@@ -1,7 +1,8 @@
 //! `@@name`, `@@ENV:NAME` and `@@CTX:name` interpolation of authored SQL.
 
+use crate::compiler::models::CharSpan;
 use crate::compiler::models::{InterpolatedSql, InterpolationFailure, InterpolationRead};
-use crate::compiler::types::{CharSpan, InterpolationHost};
+use crate::compiler::types::InterpolationHost;
 use crate::sql_scan::main::non_code_end::non_code_end;
 use crate::sql_scan::models::{QuotePolicy, Unclosed};
 use sqlbuild_core::text::main::is_letter::is_letter;
@@ -11,8 +12,13 @@ const TOKEN: &str = "@@";
 const ENVIRONMENT_PREFIX: &str = "ENV:";
 const CONTEXT_PREFIX: &str = "CTX:";
 
-/// One substitution in byte offsets: `(source start, source end, output start, output end)`.
-type ByteSpan = (usize, usize, usize, usize);
+/// One substitution in bytes: source start and end, output start and end.
+struct ByteSpan {
+    source_start: usize,
+    source_end: usize,
+    output_start: usize,
+    output_end: usize,
+}
 
 struct Interpolation<'run, H: InterpolationHost> {
     host: &'run H,
@@ -112,8 +118,12 @@ impl<H: InterpolationHost> Interpolation<'_, H> {
         let text = &sql[..limit];
         let output_start = self.output.len();
         let end = self.rendered_token(text, start)?;
-        self.spans
-            .push((start, end, output_start, self.output.len()));
+        self.spans.push(ByteSpan {
+            source_start: start,
+            source_end: end,
+            output_start,
+            output_end: self.output.len(),
+        });
         Ok(end)
     }
 
@@ -256,13 +266,11 @@ fn character_spans(source: &str, output: &str, spans: &[ByteSpan]) -> Vec<CharSp
     let output_chars = char_offsets(output);
     spans
         .iter()
-        .map(|(source_start, source_end, output_start, output_end)| {
-            (
-                source_chars[*source_start],
-                source_chars[*source_end],
-                output_chars[*output_start],
-                output_chars[*output_end],
-            )
+        .map(|span| CharSpan {
+            source_start: source_chars[span.source_start],
+            source_end: source_chars[span.source_end],
+            output_start: output_chars[span.output_start],
+            output_end: output_chars[span.output_end],
         })
         .collect()
 }

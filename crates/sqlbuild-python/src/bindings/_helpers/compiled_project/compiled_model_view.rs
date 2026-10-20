@@ -161,6 +161,14 @@ impl Default for ViewProjections {
     }
 }
 
+/// A model's name, compiled query, authored file, and whether it calls a function.
+pub(crate) struct ModelMetadataTexts {
+    pub(crate) name: String,
+    pub(crate) query_sql: String,
+    pub(crate) authored_sql: String,
+    pub(crate) calls_functions: bool,
+}
+
 /// Deps, session analysis, failed analysis's columns, standalone proof, and macro deps.
 #[derive(FromPyObject)]
 pub(crate) struct CompiledArguments(
@@ -444,17 +452,17 @@ impl NativeCompiledModel {
         &self,
         py: Python<'_>,
         function_kinds: &[&str],
-    ) -> PyResult<(String, String, String, bool)> {
+    ) -> PyResult<ModelMetadataTexts> {
         self.read(py, |record, _| {
-            Ok((
-                model_name(record),
-                record.query_sql.to_string(),
-                record.model_file.get().contents_text().to_string(),
-                record
+            Ok(ModelMetadataTexts {
+                name: model_name(record),
+                query_sql: record.query_sql.to_string(),
+                authored_sql: record.model_file.get().contents_text().to_string(),
+                calls_functions: record
                     .references
                     .iter()
-                    .any(|(kind, _, _, _)| function_kinds.contains(&kind.as_str())),
-            ))
+                    .any(|reference| function_kinds.contains(&reference.kind.as_str())),
+            })
         })
     }
 
@@ -904,12 +912,12 @@ pub(crate) fn model_graph_row(
             }
         }
         let folder: String = record.model_file.get().folder(py)?;
-        Ok((
-            (MODEL_RESOURCE.to_owned(), model_name(record)),
-            compiled.deps.clone(),
+        Ok(ResourceRow {
+            key: (MODEL_RESOURCE.to_owned(), model_name(record)),
+            deps: compiled.deps.clone(),
             tags,
-            Some(folder),
-        ))
+            folder: Some(folder),
+        })
     })
 }
 

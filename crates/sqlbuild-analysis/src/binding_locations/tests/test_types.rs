@@ -1,4 +1,4 @@
-use crate::semantic_validation::types::DiagnosticRow;
+use crate::semantic_validation::models::DiagnosticRow;
 
 /// `(code, line, column, (line, column, end line, end column))` of one reported diagnostic.
 pub(super) type LocatedCase = (

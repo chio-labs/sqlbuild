@@ -1,4 +1,4 @@
-use crate::semantic_validation::types::DiagnosticRow;
+use crate::semantic_validation::models::DiagnosticRow;
 
 pub(super) const MODEL: &str =
     "MODEL (\n  description \"Orders\"\n);\n\nSELECT o.amount, o.missing\nFROM orders AS o";
@@ -11,15 +11,15 @@ fn row(
     span: (Option<usize>, Option<usize>),
     severity: &str,
 ) -> DiagnosticRow {
-    (
-        code.to_owned(),
-        message.to_owned(),
-        position.0,
-        position.1,
-        span.0,
-        span.1,
-        severity.to_owned(),
-    )
+    DiagnosticRow {
+        code: code.to_owned(),
+        message: message.to_owned(),
+        line: position.0,
+        column: position.1,
+        start: span.0,
+        end: span.1,
+        severity: severity.to_owned(),
+    }
 }
 
 fn missing_column() -> DiagnosticRow {

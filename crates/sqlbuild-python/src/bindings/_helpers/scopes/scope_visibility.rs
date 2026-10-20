@@ -47,8 +47,12 @@ fn target_query<'py>(
     } else {
         None
     };
-    let (declarations, positions, identity_error, path_error): TargetRows =
-        native_lookup(lookup)?.get().target(row, &raw)?;
+    let TargetRows {
+        declarations,
+        positions,
+        identity_error,
+        path_error,
+    }: TargetRows = native_lookup(lookup)?.get().target(row, &raw)?;
     if let Some(message) = identity_error {
         return Err(PyErr::from_value(
             error_class(py, ErrorId::InvalidQualifiedIdentity)?.call1((message,))?,

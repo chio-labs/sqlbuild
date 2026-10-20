@@ -125,15 +125,6 @@ ADAPTER_IMPLEMENTATION_PATH_MARKERS: tuple[str, str] = ("/adapters/", "/classes/
 ADAPTER_ROOT_PARTS: tuple[str, ...] = ("src", "sqlbuild", "adapter")
 ADAPTERS_ROOT_PARTS: tuple[str, ...] = ("src", "sqlbuild", "adapters")
 ADAPTER_PACKAGE_IMPORT_PREFIX: str = "sqlbuild.adapters."
-ADAPTER_CONTRACT_CLASS_IMPORT_PREFIX: tuple[str, ...] = (
-    "sqlbuild",
-    "adapter",
-    "contract",
-    "classes",
-)
-ADAPTER_CONTRACT_BASE_CLASS_NAMES: frozenset[str] = frozenset(
-    {"BaseAdapter", "DuckDbBackedAdapter", "StrictAdapter"}
-)
 ADAPTER_CONTRACT_BASE_SYMBOLS: frozenset[tuple[str, ...]] = frozenset(
     {
         (
@@ -185,7 +176,6 @@ NESTED_HELPER_MODULE_MIN_PARTS: int = 5
 PLANNER_PATH_PREFIX: str = "src/sqlbuild/compiler/planner/"
 POLICY_EVALUATION_SCOPES: frozenset[str] = frozenset({"root", "tooling"})
 POLICY_IMPLEMENTATION_PATH_PREFIX: str = "scripts/fensu_policy/"
-PROVIDER_CLASS_NAME: str = "Provider"
 PROVIDER_MODULE_PARTS: tuple[str, ...] = ("src", "sqlbuild", "providers.py")
 PUBLIC_EXPORT_ASSIGNMENT_TARGETS: tuple[str, ...] = ("__all__",)
 ROOT_SCOPE_NAME: str = "root"
@@ -279,10 +269,6 @@ DIAGNOSTIC_LOG_CLASS_NAME: str = "DiagnosticLog"
 LIFECYCLE_EVENT_FACTORY_NAME: str = "create_lifecycle_event"
 EVENT_EXPORTER_DECORATOR_NAMES: frozenset[str] = frozenset(
     {"lifecycle_event_sink", "command_output_sink"}
-)
-OBSERVABILITY_MODULE_PREFIXES: tuple[tuple[str, ...], ...] = (
-    ("sqlbuild", "observability"),
-    ("sqlbuild", "runtime", "observability"),
 )
 OBSERVABILITY_LIFECYCLE_EVENT_MODULES: tuple[tuple[str, ...], ...] = (
     ("sqlbuild", "observability"),

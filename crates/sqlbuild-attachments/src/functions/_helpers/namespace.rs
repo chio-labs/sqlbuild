@@ -1,13 +1,14 @@
 //! One of database or schema of a function namespace.
 
-pub(crate) type Part = (
-    Option<String>,
-    Option<String>,
-    Option<String>,
-    Option<String>,
-);
+/// The physical, logical and fingerprint names of one of database or schema.
+pub(crate) struct Part {
+    pub(crate) physical: Option<String>,
+    pub(crate) logical: Option<String>,
+    pub(crate) fingerprint: Option<String>,
+    pub(crate) fingerprint_logical: Option<String>,
+}
 
-/// `(physical, logical, fingerprint, fingerprint logical)` for one of database or schema.
+/// The physical, logical, fingerprint and fingerprint logical names of one namespace part.
 pub(crate) fn part(
     header: Option<&String>,
     default: Option<&String>,
@@ -26,5 +27,10 @@ pub(crate) fn part(
     };
     let fingerprint_logical: Option<String> = header.or(default).cloned();
     let fingerprint: Option<String> = target.cloned().or_else(|| fingerprint_logical.clone());
-    (physical, logical, fingerprint, fingerprint_logical)
+    Part {
+        physical,
+        logical,
+        fingerprint,
+        fingerprint_logical,
+    }
 }

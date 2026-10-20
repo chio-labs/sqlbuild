@@ -51,7 +51,7 @@ pub fn compare(
             .iter()
             .filter_map(|(identity, count)| {
                 (*count > *diagnostic.before.get(identity).unwrap_or(&0))
-                    .then_some(identity.0.as_str())
+                    .then_some(identity.code.as_str())
             })
             .collect();
         if !codes.is_empty() {

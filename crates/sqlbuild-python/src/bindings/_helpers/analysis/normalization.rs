@@ -5,7 +5,9 @@ use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::analysis::normalization_results::normalization_results;
 use crate::bindings::_helpers::boundary::panics::value_error;
+use crate::bindings::models::Positional;
 use crate::bindings::types::CompilerDetach;
+use sqlbuild_analysis::semantic_validation::models::DiagnosticRow;
 
 #[pyfunction]
 pub(crate) fn normalize_analysis_sql(
@@ -52,13 +54,15 @@ fn binding_diagnostics(
     py: Python<'_>,
     sql: &str,
     dialect: &str,
-    rows: Vec<sqlbuild_analysis::semantic_validation::types::DiagnosticRow>,
-) -> PyResult<Vec<sqlbuild_analysis::semantic_validation::types::DiagnosticRow>> {
+    rows: Vec<Positional<DiagnosticRow>>,
+) -> PyResult<Vec<Positional<DiagnosticRow>>> {
+    let rows: Vec<DiagnosticRow> = Positional::unwrap_all(rows);
     py.compiler_detach(|| {
         sqlbuild_analysis::semantic_validation::main::diagnostics::binding_diagnostics(
             sql, dialect, rows,
         )
     })
+    .map(Positional::wrap_all)
     .map_err(value_error)
 }
 

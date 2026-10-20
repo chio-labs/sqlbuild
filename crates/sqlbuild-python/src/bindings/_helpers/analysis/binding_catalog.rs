@@ -9,7 +9,10 @@ use pyo3::prelude::{
 use pyo3::types::{PyBool, PyDict, PyMapping, PyTuple};
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_analysis::semantic_validation::models as validation;
-use sqlbuild_analysis::semantic_validation::types::{BindingRequest, DiagnosticRow, Relations};
+use sqlbuild_analysis::semantic_validation::models::DiagnosticRow;
+
+use crate::bindings::types::IntoPositional;
+use sqlbuild_analysis::semantic_validation::types::{BindingRequest, Relations};
 
 use crate::bindings::_helpers::analysis::conversions;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
@@ -57,7 +60,13 @@ pub(crate) struct BindingCatalog {
 }
 
 /// A catalog's dialect, case mode, known functions and known types.
-pub(crate) type CatalogKey = (String, bool, Vec<String>, Vec<String>);
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct CatalogKey {
+    pub(crate) dialect: String,
+    pub(crate) quoted_ignore_case: bool,
+    pub(crate) known_functions: Vec<String>,
+    pub(crate) known_types: Vec<String>,
+}
 
 impl BindingCatalog {
     /// Whether `schemas` holds exactly the relations it was created with and later given.
@@ -68,9 +77,15 @@ impl BindingCatalog {
     /// A catalog for `key` that starts with `relations`.
     pub(crate) fn create(
         py: Python<'_>,
-        (dialect, quoted_ignore_case, known_functions, known_types): CatalogKey,
+        key: CatalogKey,
         relations: &Bound<'_, PyAny>,
     ) -> PyResult<Self> {
+        let CatalogKey {
+            dialect,
+            quoted_ignore_case,
+            known_functions,
+            known_types,
+        } = key;
         let input: CatalogInput = CatalogInput {
             dialect: dialect.clone(),
             quoted_ignore_case,
@@ -160,12 +175,12 @@ impl BindingCatalog {
                 ))
             })
         };
-        let key: CatalogKey = (
-            field("dialect")?.extract()?,
-            field("quoted_ignore_case")?.extract()?,
-            field("known_functions")?.extract()?,
-            field("known_types")?.extract()?,
-        );
+        let key: CatalogKey = CatalogKey {
+            dialect: field("dialect")?.extract()?,
+            quoted_ignore_case: field("quoted_ignore_case")?.extract()?,
+            known_functions: field("known_functions")?.extract()?,
+            known_types: field("known_types")?.extract()?,
+        };
         Self::create(py, key, &field("relations")?)
     }
 
@@ -309,12 +324,13 @@ pub(crate) fn schema_validations<'py>(
     let mut created: Vec<(CatalogKey, Py<BindingCatalog>)> = Vec::new();
     let mut groups: Vec<(Py<BindingCatalog>, bool, Vec<usize>)> = Vec::new();
     for (index, request) in requests.iter().enumerate() {
-        let key: CatalogKey = (
-            native_dialect(&native_field(request, "dialect")?)?,
-            native_field(request, "quoted_identifiers_ignore_case")?.extract()?,
-            native_field(request, "known_functions")?.extract()?,
-            native_field(request, "known_types")?.extract()?,
-        );
+        let key: CatalogKey = CatalogKey {
+            dialect: native_dialect(&native_field(request, "dialect")?)?,
+            quoted_ignore_case: native_field(request, "quoted_identifiers_ignore_case")?
+                .extract()?,
+            known_functions: native_field(request, "known_functions")?.extract()?,
+            known_types: native_field(request, "known_types")?.extract()?,
+        };
         let explicit: Bound<'py, PyAny> = native_field(request, "catalog")?;
         let own: bool = !explicit.is_none();
         let catalog: Py<BindingCatalog> = if own {
@@ -363,7 +379,14 @@ pub(crate) fn schema_validations<'py>(
         for (index, diagnostics) in members.into_iter().zip(rows) {
             let built: Vec<Bound<'py, PyAny>> = diagnostics
                 .into_iter()
-                .map(|row| new_record(py, RecordId::SqlBindingDiagnostic, row, None))
+                .map(|row| {
+                    new_record(
+                        py,
+                        RecordId::SqlBindingDiagnostic,
+                        row.into_positional(py)?,
+                        None,
+                    )
+                })
                 .collect::<PyResult<_>>()?;
             let keywords: Bound<'py, PyDict> = PyDict::new(py);
             keywords.set_item("diagnostics", PyTuple::new(py, built)?)?;

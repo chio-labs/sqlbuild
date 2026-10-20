@@ -2,9 +2,12 @@
 
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{FromPyObject, pyfunction, wrap_pyfunction};
+use sqlbuild_rules::lint_text::models::InterpolationSite;
+use sqlbuild_rules::sql_lint::types::PreparedSql;
 
 use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
 use crate::bindings::_helpers::rules::relation_keys;
+use crate::bindings::models::Positional;
 use crate::bindings::types::CompilerDetach;
 
 #[pyfunction]
@@ -23,20 +26,31 @@ struct LintPreparationRequest {
     dialect: String,
 }
 
+/// [`PreparedSql`] as Python reads it, each site a positional tuple.
+type PreparedLintSql = (String, Vec<Positional<InterpolationSite>>, Vec<String>);
+
 #[pyfunction]
 fn prepare_lint_sql(
     py: Python<'_>,
     request: LintPreparationRequest,
-) -> PyResult<Option<sqlbuild_rules::sql_lint::types::PreparedSql>> {
-    py.compiler_detach(|| {
-        sqlbuild_rules::sql_lint::main::preparation::prepare(
-            &request.expanded,
-            &request.before_expansion,
-            &request.prior_sites,
-            &request.dialect,
+) -> PyResult<Option<PreparedLintSql>> {
+    let prepared: Option<PreparedSql> = py
+        .compiler_detach(|| {
+            sqlbuild_rules::sql_lint::main::preparation::prepare(
+                &request.expanded,
+                &request.before_expansion,
+                &request.prior_sites,
+                &request.dialect,
+            )
+        })
+        .map_err(value_error)?;
+    Ok(prepared.map(|(text, sites, referenced)| {
+        (
+            text,
+            sites.into_iter().map(Positional).collect(),
+            referenced,
         )
-    })
-    .map_err(value_error)
+    }))
 }
 
 #[pyfunction]

@@ -103,7 +103,14 @@ fn source_locations<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = relative_path.py();
     let locations: Bound<'py, PyDict> = PyDict::new(py);
-    for (name, line, column, end_line, end_column) in rows {
+    for ColumnLocation {
+        name,
+        line,
+        column,
+        end_line,
+        end_column,
+    } in rows
+    {
         let arguments: Bound<'py, PyDict> = PyDict::new(py);
         arguments.set_item("path", relative_path)?;
         arguments.set_item("line", line)?;

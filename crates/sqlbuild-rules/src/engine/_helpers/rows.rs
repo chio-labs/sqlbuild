@@ -68,9 +68,14 @@ fn build_model(row: ModelRow, inputs: &ModelInputs<'_, '_>) -> Result<Model, Str
         .dynamic_proof
         .as_ref()
         .is_some_and(|proof| proof.bare_dynamic_pivot);
-    let (columns, dynamic_columns, dynamic_columns_proven, schema_audit_count) = match &row.schema {
+    let SchemaFacts {
+        columns,
+        dynamic_columns,
+        dynamic_columns_proven,
+        audit_count: schema_audit_count,
+    } = match &row.schema {
         Some(schema) => schema_facts(&row, schema, inputs)?,
-        None => (Vec::new(), Vec::new(), false, 0),
+        None => SchemaFacts::default(),
     };
     Ok(Model {
         sql_analysis_disabled,
@@ -97,7 +102,14 @@ fn build_model(row: ModelRow, inputs: &ModelInputs<'_, '_>) -> Result<Model, Str
     })
 }
 
-type SchemaFacts = (Vec<Column>, Vec<DynamicColumnFamily>, bool, u32);
+/// A model's declared columns and dynamic families with their proofs and audit count.
+#[derive(Default)]
+struct SchemaFacts {
+    columns: Vec<Column>,
+    dynamic_columns: Vec<DynamicColumnFamily>,
+    dynamic_columns_proven: bool,
+    audit_count: u32,
+}
 
 fn schema_facts(
     row: &ModelRow,
@@ -141,7 +153,12 @@ fn schema_facts(
             .map(|column| column.audit_count)
             .sum::<u32>();
     if schema.dynamic_columns.is_empty() {
-        return Ok((columns, Vec::new(), false, audit_count));
+        return Ok(SchemaFacts {
+            columns,
+            dynamic_columns: Vec::new(),
+            dynamic_columns_proven: false,
+            audit_count,
+        });
     }
     let proof_types: HashMap<&str, Option<&str>> = row
         .dynamic_proof
@@ -172,7 +189,12 @@ fn schema_facts(
         .dynamic_proof
         .as_ref()
         .is_some_and(|proof| proof.output_proven);
-    Ok((columns, dynamic_columns, proven, audit_count))
+    Ok(SchemaFacts {
+        columns,
+        dynamic_columns,
+        dynamic_columns_proven: proven,
+        audit_count,
+    })
 }
 
 /// Python's `types_equal`, normalizing each type once; Python raises what normalization rejects.

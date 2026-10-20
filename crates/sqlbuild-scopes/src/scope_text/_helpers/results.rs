@@ -80,28 +80,47 @@ fn chain_lines(
     lines
 }
 
+/// One availability section: its title, declarations, report section name and whether optional.
+struct AvailabilityGroup<'a> {
+    title: &'a str,
+    declarations: &'a [DeclarationReport],
+    name: &'a str,
+    optional: bool,
+}
+
 fn availability_lines(
     (style, request): (CliStyle, &ScopeTextRequest),
     report: &ScopeReport,
     used: &HashSet<String>,
 ) -> Vec<String> {
-    let groups: [(&str, &[DeclarationReport], &str, bool); 3] = [
-        ("Available", &report.available, "available", false),
-        (
-            "Relationship grants",
-            &report.relationship_scope,
-            "relationship_scope",
-            true,
-        ),
-        (
-            "Nearby unavailable",
-            &report.nearby_unavailable,
-            "nearby_unavailable",
-            true,
-        ),
+    let groups: [AvailabilityGroup<'_>; 3] = [
+        AvailabilityGroup {
+            title: "Available",
+            declarations: &report.available,
+            name: "available",
+            optional: false,
+        },
+        AvailabilityGroup {
+            title: "Relationship grants",
+            declarations: &report.relationship_scope,
+            name: "relationship_scope",
+            optional: true,
+        },
+        AvailabilityGroup {
+            title: "Nearby unavailable",
+            declarations: &report.nearby_unavailable,
+            name: "nearby_unavailable",
+            optional: true,
+        },
     ];
     let mut lines: Vec<String> = Vec::new();
-    for (title, declarations, name, optional) in groups {
+    for AvailabilityGroup {
+        title,
+        declarations,
+        name,
+        optional,
+    } in groups
+    {
         let section: Option<&ScopeSection> = report_section(report, name);
         let collapsed_count: i64 = section.map_or(0, |section| section.collapsed_count);
         if optional && !request.verbose && declarations.is_empty() && collapsed_count == 0 {

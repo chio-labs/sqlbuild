@@ -17,7 +17,7 @@ use crate::bindings::_helpers::result_output::documents::format_scenario_snapsho
 use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
 use crate::bindings::_helpers::scenario_command::conversions::succeeded;
 use crate::bindings::_helpers::scenario_command::presentation::{
-    CompletionKind, SectionStatus, begin_section, connection_hooks, progress_relay,
+    CompletionKind, RelayContext, SectionStatus, begin_section, connection_hooks, progress_relay,
 };
 use crate::bindings::_helpers::scenario_command::setup::{
     CompileInputs, boolean, capture_limits, capture_settings, compile, flush, optional_text,
@@ -161,12 +161,12 @@ pub(crate) fn sync_local_snapshots<'py>(
     let relay = progress_relay(
         &run.stream,
         &section,
-        (
-            &run.project.project_dir,
-            &run.project_adapter,
-            CompletionKind::Sync { refresh },
-            run.style,
-        ),
+        RelayContext {
+            project_dir: &run.project.project_dir,
+            adapter: &run.project_adapter,
+            kind: CompletionKind::Sync { refresh },
+            style: run.style,
+        },
     )?;
     let settings: Bound<'py, PyAny> = capture_settings(
         py,

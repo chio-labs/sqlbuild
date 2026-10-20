@@ -29,7 +29,12 @@ use crate::bindings::types::CompilerDetach;
 const TYPES_MODULE: &str = "types";
 
 /// `(declarations, canonical positions)` matched, else identity and path error messages.
-pub(crate) type TargetRows = (bool, Vec<usize>, Option<String>, Option<String>);
+pub(crate) struct TargetRows {
+    pub(crate) declarations: bool,
+    pub(crate) positions: Vec<usize>,
+    pub(crate) identity_error: Option<String>,
+    pub(crate) path_error: Option<String>,
+}
 /// Visible `(position, reason, grant)`, inaccessible `(position, reason)`, else the path error.
 pub(crate) type ResolvedRows = (
     Vec<(usize, &'static str, Option<usize>)>,
@@ -119,27 +124,30 @@ impl NativeScopeLookup {
             None => ReportTarget::Text(text.to_owned()),
         };
         Ok(match report_target(&self.records, &self.lookup, &target) {
-            Ok(TargetMatch::Resources(positions)) => (
-                false,
-                canonical(&self.canonical.resources, positions),
-                None,
-                None,
-            ),
-            Ok(TargetMatch::Declarations(positions)) => (
-                true,
-                canonical(&self.canonical.declarations, positions),
-                None,
-                None,
-            ),
-            Err(TargetFailure::Identity(failure)) => (
-                false,
-                Vec::new(),
-                Some(identity_message(&failure, text)),
-                None,
-            ),
-            Err(TargetFailure::Path(rejected)) => {
-                (false, Vec::new(), None, Some(path_message(&rejected)))
-            }
+            Ok(TargetMatch::Resources(positions)) => TargetRows {
+                declarations: false,
+                positions: canonical(&self.canonical.resources, positions),
+                identity_error: None,
+                path_error: None,
+            },
+            Ok(TargetMatch::Declarations(positions)) => TargetRows {
+                declarations: true,
+                positions: canonical(&self.canonical.declarations, positions),
+                identity_error: None,
+                path_error: None,
+            },
+            Err(TargetFailure::Identity(failure)) => TargetRows {
+                declarations: false,
+                positions: Vec::new(),
+                identity_error: Some(identity_message(&failure, text)),
+                path_error: None,
+            },
+            Err(TargetFailure::Path(rejected)) => TargetRows {
+                declarations: false,
+                positions: Vec::new(),
+                identity_error: None,
+                path_error: Some(path_message(&rejected)),
+            },
         })
     }
 

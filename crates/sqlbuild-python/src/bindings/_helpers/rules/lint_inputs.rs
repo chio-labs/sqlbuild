@@ -12,6 +12,7 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
 };
 use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::render::macro_call_rows::SpanRow;
 use crate::bindings::_helpers::rules::lint_pipeline::{
     CompiledExpansion, CompiledSource, span_pass,
 };
@@ -39,10 +40,7 @@ fn record_path(record: &ModelInputRecord) -> PathBuf {
 }
 
 /// The record's shared texts with the given passes, read only when their file is linted.
-fn expansion(
-    expansion: &ExpansionRecord,
-    passes: &[&Vec<(usize, usize, usize, usize)>],
-) -> CompiledSource {
+fn expansion(expansion: &ExpansionRecord, passes: &[&Vec<SpanRow>]) -> CompiledSource {
     CompiledSource::Shared {
         authored_sql: Arc::clone(&expansion.authored_sql),
         expanded_sql: Arc::clone(&expansion.expanded_sql),

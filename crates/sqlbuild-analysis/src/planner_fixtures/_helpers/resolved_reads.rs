@@ -25,9 +25,9 @@ pub(crate) fn resolved_reads(
     let references: Vec<ReferenceInput> = key
         .references
         .iter()
-        .map(|(kind, name, _, _)| ReferenceInput {
-            kind: kind.clone(),
-            name: name.clone(),
+        .map(|reference| ReferenceInput {
+            kind: reference.kind.clone(),
+            name: reference.name.clone(),
         })
         .collect();
     cache.misses += 1;

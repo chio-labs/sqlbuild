@@ -49,23 +49,9 @@ ASSET_SELECTION_COMMANDS: frozenset[str] = frozenset(
 CLONE_COMMAND: str = "clone"
 CHECK_COMMAND: str = "check"
 STANDALONE_CHECK_COMMANDS: frozenset[str] = frozenset({"audit", CHECK_COMMAND, "test"})
-EVENT_OUTPUT_FLAG: str = "--event-output"
 LIVE_EVENT_COMMANDS: frozenset[str] = ASSET_SELECTION_COMMANDS
 EXPLICIT_SELECTION_FLAGS: frozenset[str] = frozenset({"--select", "-s", "--select-file"})
-JSON_OUTPUT_FLAGS: frozenset[str] = frozenset({"--json", "--json-output"})
-JSON_OUTPUT_FLAG: str = "--json-output"
-SELECT_FILE_FLAG: str = "--select-file"
-SCENARIO_TEST_COMMAND: tuple[str, str] = ("scenario", "test")
 SCENARIO_CHECK_KIND: str = NodeKind.SCENARIO.value
-SCENARIO_VALUE_FLAGS: frozenset[str] = frozenset(
-    {
-        "--max-snapshot-rows",
-        "--max-snapshot-total-rows",
-        "--max-snapshot-bytes",
-        "--max-snapshot-total-bytes",
-    }
-)
-LOAD_COMMAND: str = "load"
 LOAD_SELECTABLE_NODE_KIND_MEMBERS: frozenset[NodeKind] = frozenset(
     {NodeKind.SOURCE, NodeKind.LOADER}
 )
@@ -146,7 +132,6 @@ COMPLETED_EXECUTION_STATUSES: frozenset[str] = frozenset(
 )
 SUCCESS_EXECUTION_STATUS: str = ExecutionStatus.SUCCESS.value
 FAILED_EXECUTION_STATUS: str = ExecutionStatus.FAILED.value
-CHECK_NAME_SEPARATOR_CHARACTER: str = "_"
 CHECK_METADATA_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {"passed", "steps", "expected_results", "assertion_results"}
 )

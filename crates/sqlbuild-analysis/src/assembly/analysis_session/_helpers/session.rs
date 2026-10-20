@@ -36,8 +36,8 @@ use crate::assembly::analysis_session::models::{
     RelationTables, SessionModelFacts, SessionOutcome, SessionRequest, SessionStep,
 };
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
+use crate::semantic_validation::models::DiagnosticRow;
 use crate::semantic_validation::models::ProjectCatalog;
-use crate::semantic_validation::types::DiagnosticRow;
 
 /// What an internal native failure of the session names.
 const SESSION_CONTEXT: &str = "native model analysis";

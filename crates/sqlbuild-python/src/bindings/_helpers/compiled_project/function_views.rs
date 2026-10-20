@@ -38,13 +38,16 @@ pub(crate) struct FunctionClasses<'py> {
 /// `(name, type)` of an argument or return column, its types template-expanded.
 pub(crate) type NamedTypeRow = (String, String);
 
-/// `(node type, name, tags, references as (kind, name, package))`.
-pub(crate) type FunctionAssemblyRow = (
-    &'static str,
-    String,
-    Vec<String>,
-    Vec<(String, String, Option<String>)>,
-);
+positional_record! {
+    into;
+    /// `(node type, name, tags, references as (kind, name, package))`.
+    pub(crate) struct FunctionAssemblyRow {
+        node_type: &'static str,
+        name: String,
+        tags: Vec<String>,
+        references: Vec<(String, String, Option<String>)>,
+    }
+}
 
 /// `(kind, name)` of a compiled object key.
 pub(crate) type ObjectKeyRow = (String, String);
@@ -396,16 +399,23 @@ function_getters!(NativeFunctionInput, {
     pub(crate) fn assembly_row(&self, py: Python<'_>) -> PyResult<FunctionAssemblyRow> {
         read_function(&self.owner, self.index, py, |function, _| {
             let attached: &AttachedFunction = &function.attached;
-            Ok((
-                attached.node_type(),
-                attached.name.clone(),
-                attached.tags.clone(),
-                attached
+            Ok(FunctionAssemblyRow {
+                node_type: attached.node_type(),
+                name: attached.name.clone(),
+                tags: attached.tags.clone(),
+                references: attached
                     .references
                     .iter()
-                    .map(|(kind, name, package, _)| (kind.clone(), name.clone(), package.clone()))
+                    .map(
+                        |ReferenceRow {
+                             kind,
+                             name,
+                             package,
+                             ..
+                         }| (kind.clone(), name.clone(), package.clone()),
+                    )
                     .collect(),
-            ))
+            })
         })
     }
 });
@@ -433,15 +443,15 @@ impl NativeCompiledFunction {
                 .deps
                 .as_deref()
                 .ok_or_else(|| PyRuntimeError::new_err(NOT_ASSEMBLED))?;
-            Ok((
-                (
+            Ok(ResourceRow {
+                key: (
                     function.attached.node_type().to_owned(),
                     function.attached.name.clone(),
                 ),
-                deps.to_vec(),
-                function.attached.tags.clone(),
-                None,
-            ))
+                deps: deps.to_vec(),
+                tags: function.attached.tags.clone(),
+                folder: None,
+            })
         })
     }
 

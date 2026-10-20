@@ -56,10 +56,16 @@ fn output_column_location<'py>(
     }
     let implicit: bool = native_field(model, "extract_implicit_alias_columns")?.is_truthy()?;
     let rows: Vec<ColumnLocation> = location_rows(model_output_columns(&authored, implicit));
-    let Some((_, line, column, end_line, end_column)) = rows
+    let Some(ColumnLocation {
+        line,
+        column,
+        end_line,
+        end_column,
+        ..
+    }) = rows
         .into_iter()
         .rev()
-        .find(|(name, ..)| name == column_name)
+        .find(|location| location.name == column_name)
     else {
         return Ok(None);
     };
@@ -126,7 +132,16 @@ fn contract_diagnostic<'py>(
     row: DiagnosticRow,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = model.py();
-    let (code, is_error, message, column_name, declared_index, output_column, related, help) = row;
+    let DiagnosticRow {
+        code,
+        is_error,
+        message,
+        column_name,
+        declared_index,
+        output_column,
+        related,
+        help,
+    } = row;
     let severity: &str = if is_error { "error" } else { "warning" };
     keyword_call(
         &record_class(py, RecordId::CompilerDiagnostic)?,
@@ -228,7 +243,14 @@ pub(crate) fn promotion_conflict_diagnostics<'py>(
     let diagnostic_type: Bound<'py, PyAny> = record_class(py, RecordId::CompilerDiagnostic)?;
     let path_type: Bound<'py, PyAny> = py.import(PATHLIB_MODULE)?.getattr("Path")?;
     let mut diagnostics: Vec<Bound<'py, PyAny>> = Vec::with_capacity(conflicts.len());
-    for (name, relative_path, code, message, help) in conflicts {
+    for ConflictRow {
+        name,
+        relative_path,
+        code,
+        message,
+        help,
+    } in conflicts
+    {
         diagnostics.push(keyword_call(
             &diagnostic_type,
             vec![

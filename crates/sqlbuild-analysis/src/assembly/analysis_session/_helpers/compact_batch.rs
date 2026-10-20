@@ -23,7 +23,8 @@ use crate::assembly::analysis_session::constants::{
 use crate::assembly::analysis_session::models::{ColumnFact, LineageRow};
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::main::diagnostics::binding_diagnostics;
-use crate::semantic_validation::types::{DiagnosticRow, NormalizationRequest, Relations};
+use crate::semantic_validation::models::DiagnosticRow;
+use crate::semantic_validation::types::{NormalizationRequest, Relations};
 
 const INVALID_BATCH: &str = "native compact query analysis returned an invalid batch response";
 const INVALID_TEMPLATE: &str = "native compact query analysis returned an invalid template";
@@ -1424,15 +1425,15 @@ fn diagnostic_row(error: &Value) -> Result<Option<DiagnosticRow>, String> {
         Some(Value::String(message)) if !message.is_empty() => message.clone(),
         _ => DEFAULT_BINDING_MESSAGE.to_owned(),
     };
-    Ok(Some((
-        code.to_owned(),
+    Ok(Some(DiagnosticRow {
+        code: code.to_owned(),
         message,
-        position(error, "line")?,
-        position(error, "column")?,
-        position(error, "start")?,
-        position(error, "end")?,
-        severity.to_owned(),
-    )))
+        line: position(error, "line")?,
+        column: position(error, "column")?,
+        start: position(error, "start")?,
+        end: position(error, "end")?,
+        severity: severity.to_owned(),
+    }))
 }
 
 fn position(error: &Value, key: &str) -> Result<Option<usize>, String> {

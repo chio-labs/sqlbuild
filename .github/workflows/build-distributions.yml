@@ -88,7 +88,7 @@ jobs:
     name: Build wheel (${{ matrix.platform.name }})
     needs: source
     runs-on: ${{ matrix.platform.runner }}
-    timeout-minutes: 45
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:

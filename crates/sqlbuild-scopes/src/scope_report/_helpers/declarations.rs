@@ -14,7 +14,12 @@ use crate::scope_report::models::{
 };
 
 /// `_declaration_container`: role, visibility label, role root and bucket path.
-pub(crate) type Container = (Option<String>, &'static str, Option<String>, Option<String>);
+pub(crate) struct Container {
+    pub(crate) role: Option<String>,
+    pub(crate) visibility: &'static str,
+    pub(crate) role_root: Option<String>,
+    pub(crate) bucket: Option<String>,
+}
 
 pub(crate) fn declaration_text(record: &DeclarationRecord) -> String {
     format_identity(&QualifiedIdentity::Declaration(record.identity.clone()))
@@ -50,7 +55,12 @@ fn visibility_label(scope: ScopeKind) -> &'static str {
 pub(crate) fn container(record: &DeclarationRecord) -> Container {
     let visibility: &'static str = visibility_label(record.scope);
     if record.scope == ScopeKind::Private {
-        return (None, visibility, None, None);
+        return Container {
+            role: None,
+            visibility,
+            role_root: None,
+            bucket: None,
+        };
     }
     let role_parts: &[&str] = record.identity.kind.role_parts();
     let safe: String = safe_scope_path(&record.path);
@@ -65,12 +75,12 @@ pub(crate) fn container(record: &DeclarationRecord) -> Container {
     let role_end: usize = (role_index + role_parts.len()).min(parts.len());
     let bucket_end: usize = parts.len().saturating_sub(1).max(role_end);
     let bucket: String = parts[role_end..bucket_end].join("/");
-    (
-        Some(role_parts.join("/")),
+    Container {
+        role: Some(role_parts.join("/")),
         visibility,
-        Some(parts[..role_end].join("/")),
-        (!bucket.is_empty()).then_some(bucket),
-    )
+        role_root: Some(parts[..role_end].join("/")),
+        bucket: (!bucket.is_empty()).then_some(bucket),
+    }
 }
 
 /// The report metadata of one declaration's values and container.
@@ -112,7 +122,12 @@ fn metadata(values: Option<&DeclarationValues>, container: Container) -> Vec<(St
             push("render_as", optional_text(constant.render_as.as_deref()));
         }
     }
-    let (role, visibility, role_root, bucket) = container;
+    let Container {
+        role,
+        visibility,
+        role_root,
+        bucket,
+    } = container;
     push("role", optional_text(role.as_deref()));
     push("visibility_label", text(visibility));
     push("role_root", optional_text(role_root.as_deref()));

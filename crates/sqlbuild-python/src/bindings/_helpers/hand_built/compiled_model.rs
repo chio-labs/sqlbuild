@@ -1,15 +1,19 @@
 //! A `CompiledModel` for a model input built outside the native compile-input stage.
 
-use crate::bindings::_helpers::analysis::binding_locations::locate_model_binding_diagnostics;
+use crate::bindings::_helpers::analysis::binding_locations::{
+    ExpansionRow, LocatedRow, locate_model_binding_diagnostics,
+};
 use crate::bindings::_helpers::analysis_session::outcome_objects::dynamic_contract_proof;
 use crate::bindings::_helpers::analysis_session::outcome_objects::session_outcome_analysis;
 use crate::bindings::_helpers::records::construct::{enum_from_value, enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::models::Positional;
+use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyList, PyString, PyTuple};
-use sqlbuild_analysis::semantic_validation::types::{DiagnosticRow, Expansion};
+use sqlbuild_analysis::semantic_validation::models::DiagnosticRow;
 
 type Object<'py> = Bound<'py, PyAny>;
 
@@ -264,53 +268,43 @@ fn located<'py>(
         )?
         .into_any()
     };
-    let located: Object<'py> = locate_model_binding_diagnostics(
-        PyList::new(py, rows)?.extract::<Vec<DiagnosticRow>>()?,
+    let located: Vec<LocatedRow> = locate_model_binding_diagnostics(
+        PyList::new(py, rows)?.extract::<Vec<Positional<DiagnosticRow>>>()?,
         texts.extract::<(String, String, String)>()?,
-        expansion_row.extract::<Option<(String, Vec<Vec<Expansion>>)>>()?,
-    )
-    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
+        expansion_row.extract::<ExpansionRow>()?,
+    )?;
     let diagnostic_class: Object<'py> = record_class(py, RecordId::CompilerDiagnostic)?;
     let location_class: Object<'py> = record_class(py, RecordId::SourceLocation)?;
     let phase: Object<'py> = enum_member(py, RecordId::DiagnosticPhase, "COMPILE")?;
     let model: Object<'py> = enum_member(py, RecordId::CompiledResourceType, "MODEL")?;
     let name: Object<'py> = native_field(&model_file, "file_path")?.getattr("stem")?;
     let mut built: Vec<Object<'py>> = Vec::new();
-    for row in located.try_iter()? {
-        let (code, message, severity, line, column, span): (
-            Object<'py>,
-            Object<'py>,
-            Object<'py>,
-            Object<'py>,
-            Object<'py>,
-            Object<'py>,
-        ) = row?.extract()?;
-        let location: Object<'py> = if span.is_none() {
-            span
-        } else {
-            call(
+    for row in located {
+        let location: Object<'py> = match row.span {
+            None => py.None().into_bound(py),
+            Some(Positional(span)) => call(
                 &location_class,
                 &[
                     ("path", path.clone()),
-                    ("line", span.get_item(0)?),
-                    ("column", span.get_item(1)?),
-                    ("end_line", span.get_item(2)?),
-                    ("end_column", span.get_item(3)?),
+                    ("line", span.line.into_bound_py_any(py)?),
+                    ("column", span.column.into_bound_py_any(py)?),
+                    ("end_line", span.end_line.into_bound_py_any(py)?),
+                    ("end_column", span.end_column.into_bound_py_any(py)?),
                 ],
-            )?
+            )?,
         };
         built.push(call(
             &diagnostic_class,
             &[
                 ("phase", phase.clone()),
-                ("severity", severity),
-                ("code", code),
-                ("message", message),
+                ("severity", row.severity.into_bound_py_any(py)?),
+                ("code", row.code.into_bound_py_any(py)?),
+                ("message", row.message.into_bound_py_any(py)?),
                 ("resource_type", model.clone()),
                 ("resource_name", name.clone()),
                 ("path", path.clone()),
-                ("line", line),
-                ("column", column),
+                ("line", row.line.into_bound_py_any(py)?),
+                ("column", row.column.into_bound_py_any(py)?),
                 ("location", location),
             ],
         )?);

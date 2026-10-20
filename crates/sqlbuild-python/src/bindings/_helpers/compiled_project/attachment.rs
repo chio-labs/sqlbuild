@@ -12,7 +12,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::compiled_project::audit_loop::{AuditBlockRow, AuditFileRow};
-use crate::bindings::_helpers::compiled_project::function_loop::FunctionRow;
+use crate::bindings::_helpers::compiled_project::function_loop::{FunctionRow, FunctionSettings};
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::compiled_project::resource_diagnostics::{
     DiagnosticSettings, LoaderRow, resource_diagnostics,
@@ -92,19 +92,19 @@ fn function_rows(
     items(discovered, field)?
         .into_iter()
         .map(|file| {
-            Ok((
-                text(&file, "file_path")?,
-                text(&file, "relative_path")?,
-                stem(&file, "file_path")?,
-                file.clone().unbind(),
-                attr(&file, "header_values")?,
-                attr(&file, body)?,
-                if python {
+            Ok(FunctionRow {
+                file_path: text(&file, "file_path")?,
+                relative_path: text(&file, "relative_path")?,
+                name: stem(&file, "file_path")?,
+                function_file: file.clone().unbind(),
+                header_values: attr(&file, "header_values")?,
+                body: attr(&file, body)?,
+                contents: if python {
                     None
                 } else {
                     Some(attr(&file, "contents")?)
                 },
-            ))
+            })
         })
         .collect()
 }
@@ -187,17 +187,17 @@ pub(crate) fn attach_resources<'py>(
                 true,
             )?,
         ),
-        (
+        FunctionSettings {
             adapter_name,
             validate,
-            (
+            defaults: (
                 either(&defaults, ("function_database", "database"))?,
                 either(&defaults, ("function_schema", "schema"))?,
             ),
-            target_namespace(&target_config)?,
-            python_functions_inherit_default_namespace,
-            function_kind.unbind(),
-        ),
+            target: target_namespace(&target_config)?,
+            inherit: python_functions_inherit_default_namespace,
+            kind: function_kind.unbind(),
+        },
     )?;
     let mut source_rows: Vec<SourceRow> = Vec::new();
     for source_file in items(discovered_inputs, "source_files")? {
@@ -241,46 +241,46 @@ fn test_case_row(case: Bound<'_, PyAny>) -> PyResult<TestCaseRow> {
 }
 
 fn test_block_row(block: Bound<'_, PyAny>) -> PyResult<TestBlockRow> {
-    Ok((
-        block.clone().unbind(),
-        attr(&block, "name")?,
-        attr(&block, "sql_body")?,
-        attr(&native_field(&block, "mode")?, "value")?,
-        items(&block, "parameters")?
+    Ok(TestBlockRow {
+        block: block.clone().unbind(),
+        name: attr(&block, "name")?,
+        sql_body: attr(&block, "sql_body")?,
+        mode: attr(&native_field(&block, "mode")?, "value")?,
+        parameters: items(&block, "parameters")?
             .iter()
             .map(|parameter| attr(parameter, "name"))
             .collect::<PyResult<_>>()?,
-        items(&block, "cases")?
+        cases: items(&block, "cases")?
             .into_iter()
             .map(test_case_row)
             .collect::<PyResult<_>>()?,
-        attr(&block, "sql_body_span")?,
-    ))
+        sql_body_span: attr(&block, "sql_body_span")?,
+    })
 }
 
 fn test_file_row(file: Bound<'_, PyAny>) -> PyResult<TestFileRow> {
-    Ok((
-        text(&file, "file_path")?,
-        text(&file, "relative_path")?,
-        stem(&file, "relative_path")?,
-        file.clone().unbind(),
-        attr(&file, "contents")?,
-        items(&file, "blocks")?
+    Ok(TestFileRow {
+        file_path: text(&file, "file_path")?,
+        relative_path: text(&file, "relative_path")?,
+        stem: stem(&file, "relative_path")?,
+        file: file.clone().unbind(),
+        contents: attr(&file, "contents")?,
+        blocks: items(&file, "blocks")?
             .into_iter()
             .map(test_block_row)
             .collect::<PyResult<_>>()?,
-    ))
+    })
 }
 
 fn scenario_row(scenario: Bound<'_, PyAny>) -> PyResult<ScenarioRow> {
-    Ok((
-        text(&scenario, "file_path")?,
-        text(&scenario, "relative_path")?,
-        scenario.clone().unbind(),
-        attr(&scenario, "contents")?,
-        attr(&scenario, "sql_body")?,
-        attr(&scenario, "name")?,
-    ))
+    Ok(ScenarioRow {
+        file_path: text(&scenario, "file_path")?,
+        relative_path: text(&scenario, "relative_path")?,
+        scenario_file: scenario.clone().unbind(),
+        contents: attr(&scenario, "contents")?,
+        sql_body: attr(&scenario, "sql_body")?,
+        name: attr(&scenario, "name")?,
+    })
 }
 
 /// The adapter's typed scalar renderer as `(text, None)`, or `(None, error)` for a bad value.
@@ -378,31 +378,31 @@ fn audit_block_row(block: Bound<'_, PyAny>) -> PyResult<AuditBlockRow> {
     let py: Python<'_> = block.py();
     let measurement: Bound<'_, PyAny> =
         host::entry(py, FacadeHost::AuditEvaluationMode)?.getattr(MEASUREMENT_MODE)?;
-    Ok((
-        block.clone().unbind(),
-        attr(&block, "name")?,
-        attr(&block, "sql_body")?,
-        attr(&block, "evidence_sql")?,
-        native_field(&block, "evaluation_mode")?.eq(measurement)?,
-        attr(&block, "header_values")?,
-    ))
+    Ok(AuditBlockRow {
+        block: block.clone().unbind(),
+        name: attr(&block, "name")?,
+        sql_body: attr(&block, "sql_body")?,
+        evidence_sql: attr(&block, "evidence_sql")?,
+        measurement: native_field(&block, "evaluation_mode")?.eq(measurement)?,
+        header: attr(&block, "header_values")?,
+    })
 }
 
 fn audit_file_row(file: Bound<'_, PyAny>) -> PyResult<AuditFileRow> {
     let py: Python<'_> = file.py();
     let generic: Bound<'_, PyAny> = enum_member(py, RecordId::DeclarationKind, "AUDIT")?;
-    Ok((
-        text(&file, "file_path")?,
-        text(&file, "relative_path")?,
-        stem(&file, "file_path")?,
-        file.clone().unbind(),
-        native_field(&file, "declaration_kind")?.is(&generic),
-        attr(&file, "contents")?,
-        items(&file, "blocks")?
+    Ok(AuditFileRow {
+        file_path: text(&file, "file_path")?,
+        relative_path: text(&file, "relative_path")?,
+        stem: stem(&file, "file_path")?,
+        file: file.clone().unbind(),
+        generic: native_field(&file, "declaration_kind")?.is(&generic),
+        contents: attr(&file, "contents")?,
+        blocks: items(&file, "blocks")?
             .into_iter()
             .map(audit_block_row)
             .collect::<PyResult<_>>()?,
-    ))
+    })
 }
 
 /// The discovered file of one built-in generic audit, as project discovery would describe it.

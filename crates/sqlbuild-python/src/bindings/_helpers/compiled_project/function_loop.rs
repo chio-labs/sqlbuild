@@ -38,7 +38,9 @@ use crate::bindings::_helpers::compiled_project::function_views::{
 use crate::bindings::_helpers::compiled_project::model_loop::{
     LoopContext, NativeModelLoop, compile_error,
 };
-use crate::bindings::_helpers::compiled_project::model_loop_calls::report_invalid_calls;
+use crate::bindings::_helpers::compiled_project::model_loop_calls::{
+    CallOrigin, report_invalid_calls,
+};
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::reference_row;
 use crate::bindings::_helpers::compiled_project::source_loop::{
@@ -55,26 +57,32 @@ const SCHEMA_KEY: &str = "schema";
 /// The reference kind of a source.
 const SOURCE_KIND: &str = "source";
 
-/// A function's paths, stem, discovered file, header values, body and SQL file contents.
-pub(crate) type FunctionRow = (
-    String,
-    String,
-    String,
-    Py<PyAny>,
-    Py<PyDict>,
-    String,
-    Option<String>,
-);
+positional_record! {
+    extract;
+    /// A function's paths, stem, discovered file, header values, body and SQL file contents.
+    pub(crate) struct FunctionRow {
+        pub(crate) file_path: String,
+        pub(crate) relative_path: String,
+        pub(crate) name: String,
+        pub(crate) function_file: Py<PyAny>,
+        pub(crate) header_values: Py<PyDict>,
+        pub(crate) body: String,
+        pub(crate) contents: Option<String>,
+    }
+}
 
-/// Adapter, validation, raw default and target namespaces, inheritance and resource kind.
-pub(crate) type FunctionSettings = (
-    String,
-    bool,
-    (Option<String>, Option<String>),
-    Option<(Option<String>, Option<String>)>,
-    bool,
-    Py<PyAny>,
-);
+positional_record! {
+    extract;
+    /// Adapter, validation, raw default and target namespaces, inheritance and resource kind.
+    pub(crate) struct FunctionSettings {
+        pub(crate) adapter_name: String,
+        pub(crate) validate: bool,
+        pub(crate) defaults: (Option<String>, Option<String>),
+        pub(crate) target: Option<(Option<String>, Option<String>)>,
+        pub(crate) inherit: bool,
+        pub(crate) kind: Py<PyAny>,
+    }
+}
 
 /// What every function in one compile resolves against.
 struct FunctionScope<'a, 'py> {
@@ -97,8 +105,14 @@ pub(crate) fn attached_functions<'py>(
     settings: FunctionSettings,
 ) -> PyResult<Vec<AttachedFunction>> {
     let py: Python<'py> = context.host.py();
-    let (adapter_name, validate, (default_database, default_schema), target, inherit, kind) =
-        settings;
+    let FunctionSettings {
+        adapter_name,
+        validate,
+        defaults: (default_database, default_schema),
+        target,
+        inherit,
+        kind,
+    } = settings;
     let defaults = (
         optional_template(context, default_database, "default function database")?,
         optional_template(context, default_schema, "default function schema")?,
@@ -130,15 +144,15 @@ pub(crate) fn attached_functions<'py>(
     let mut attached: Vec<AttachedFunction> =
         Vec::with_capacity(sql_rows.len() + python_rows.len());
     for row in sql_rows {
-        if !names.insert(row.2.clone()) {
-            let message: String = format!("Duplicate SQL function name '{}'", row.2);
+        if !names.insert(row.name.clone()) {
+            let message: String = format!("Duplicate SQL function name '{}'", row.name);
             return Err(compile_error(context.classes, &message, None));
         }
         attached.push(sql_function(&scope, row)?);
     }
     for row in python_rows {
-        if !names.insert(row.2.clone()) {
-            let message: String = format!("Duplicate function name '{}'", row.2);
+        if !names.insert(row.name.clone()) {
+            let message: String = format!("Duplicate function name '{}'", row.name);
             return Err(compile_error(context.classes, &message, None));
         }
         attached.push(python_function(&scope, row)?);
@@ -150,7 +164,15 @@ pub(crate) fn attached_functions<'py>(
 fn sql_function(scope: &FunctionScope<'_, '_>, row: FunctionRow) -> PyResult<AttachedFunction> {
     let context: &LoopContext<'_, '_> = scope.context;
     let py: Python<'_> = context.host.py();
-    let (file_path, relative_path, name, function_file, header_values, body, contents) = row;
+    let FunctionRow {
+        file_path,
+        relative_path,
+        name,
+        function_file,
+        header_values,
+        body,
+        contents,
+    } = row;
     let header_values: Bound<'_, PyDict> = header_values.into_bound(py);
     let label: String = format!("SQL function {relative_path}");
     let header: FunctionHeader =
@@ -238,7 +260,14 @@ fn sql_function(scope: &FunctionScope<'_, '_>, row: FunctionRow) -> PyResult<Att
 fn python_function(scope: &FunctionScope<'_, '_>, row: FunctionRow) -> PyResult<AttachedFunction> {
     let context: &LoopContext<'_, '_> = scope.context;
     let py: Python<'_> = context.host.py();
-    let (_, relative_path, name, function_file, header_values, body, _) = row;
+    let FunctionRow {
+        relative_path,
+        name,
+        function_file,
+        header_values,
+        body,
+        ..
+    } = row;
     let header_values: Bound<'_, PyDict> = header_values.into_bound(py);
     let label: String = format!("Python function {relative_path}");
     let header: FunctionHeader =
@@ -505,7 +534,12 @@ fn function_references(
         context,
         syntax,
         &scanned.invalid_calls,
-        (None, relative_path, file_path, contents),
+        CallOrigin {
+            name: None,
+            relative_path,
+            file_path,
+            contents,
+        },
     )?;
     let references: Vec<ReferenceRow> = merge_call_site_references(
         scanned.references.iter().map(reference_row).collect(),
@@ -520,7 +554,7 @@ fn function_references(
     let known: KnownResources<'_> = validator.get().known_resources();
     let calls: Vec<(&str, &str)> = references
         .iter()
-        .map(|(kind, name, _, _)| (kind.as_str(), name.as_str()))
+        .map(|ReferenceRow { kind, name, .. }| (kind.as_str(), name.as_str()))
         .collect();
     record_source_reads(
         calls
@@ -585,7 +619,14 @@ pub(crate) fn checked_table_function_arities(
     for (owner, references) in owners {
         let calls: Vec<(&str, &str, Option<usize>)> = references
             .iter()
-            .map(|(kind, name, _, count)| (kind.as_str(), name.as_str(), *count))
+            .map(
+                |ReferenceRow {
+                     kind,
+                     name,
+                     call_argument_count: count,
+                     ..
+                 }| (kind.as_str(), name.as_str(), *count),
+            )
             .collect();
         if let Some(message) = table_function_arity_error(&owner, &calls, &counts) {
             return Err(compile_error(context.classes, &message, None));

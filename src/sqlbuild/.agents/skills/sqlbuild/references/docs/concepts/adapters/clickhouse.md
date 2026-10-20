@@ -114,13 +114,15 @@ MODEL (
 
 | Field | Value | Default |
 |-------|-------|---------|
-| `engine` | A single-server MergeTree-family engine, with its arguments | `MergeTree` |
+| `engine` | A non-replicated MergeTree-family engine, with its arguments | `MergeTree` |
 | `order_by` | A sorting expression, or a list of them | `tuple()` (unsorted) |
 | `partition_by` | A partitioning expression | No partitioning |
 | `primary_key` | A prefix of `order_by` | The sorting key |
 | `table_settings` | Setting names mapped to strings, integers or booleans | None |
 
-Quote expressions that are not plain column names. Compile rejects malformed values, replicated and shared engines, and these fields on views and snapshots; other adapters reject them with `A011` when planning.
+Quote expressions that are not plain column names. Compile rejects malformed values, `Replicated*` engines, and these fields on views and snapshots; other adapters reject them with `A011` when planning.
+
+ClickHouse Cloud's `Shared*` engines (`SharedMergeTree`, `SharedReplacingMergeTree` and the other `SharedMergeTree` variants) are accepted and handled like their `MergeTree` counterparts. Support is best effort: SQLBuild is not tested on ClickHouse Cloud. ClickHouse Cloud already creates a `MergeTree` table as `SharedMergeTree`, so naming the plain engine works there too.
 
 The fields are part of the model's version, so `sqb plan` reports a changed layout as a config change. A table model is rebuilt with the new layout. An incremental model keeps writing into its existing table with the old layout, and `sqb plan` warns with `PHYSICAL_LAYOUT_PENDING` until a full refresh (`sqb build <model> --full-refresh`, with `--start-cursor-ts` and `--end-cursor-ts` for a cursor model) rebuilds the table with the new layout.
 
@@ -182,7 +184,7 @@ ClickHouse returns a type's default value (`0`, the epoch, an empty string) from
 
 ## Limits
 
-- Single server only. `ON CLUSTER`, `ReplicatedMergeTree` and `Distributed` tables are not managed.
+- Single server only. `ON CLUSTER`, `ReplicatedMergeTree` and `Distributed` tables are not managed. ClickHouse Cloud and its `Shared*` engines are best effort and untested.
 - No transactions. Each step above is designed so a rerun converges instead.
 - Concurrent `sqb` processes writing the same model can lose rows; see [One writer per model](#one-writer-per-model).
 - Snapshots always use an unsorted `MergeTree` table.

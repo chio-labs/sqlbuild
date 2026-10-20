@@ -17,7 +17,7 @@ use crate::bindings::_helpers::compiled_project::schema_facts::python_column_fac
 use crate::bindings::_helpers::discovery::model_file_record::{NativeModelFile, projected_text};
 use crate::bindings::_helpers::model_config::header_metadata::HeaderColumns;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::render::declaration_expansion::SpanRow;
+use crate::bindings::_helpers::render::macro_call_rows::SpanRow;
 use crate::bindings::_helpers::rules::relation_keys::{RelationKeyRow, relation_key_row};
 
 const MODEL_RELATION_KIND: &str = "ref";
@@ -382,7 +382,13 @@ pub(crate) fn reference_tuple(
     cache
         .get_or_try_init(py, || {
             let mut references: Vec<Bound<'_, PyAny>> = Vec::with_capacity(rows.len());
-            for (kind, name, package, count) in rows {
+            for ReferenceRow {
+                kind,
+                name,
+                package,
+                call_argument_count: count,
+            } in rows
+            {
                 let fields: Bound<'_, PyDict> = PyDict::new(py);
                 fields.set_item("ref_kind", classes.reference_kind.call1((kind,))?)?;
                 fields.set_item("ref_name", name)?;
@@ -561,10 +567,10 @@ pub(crate) fn input_reference_rows(model_input: &Bound<'_, PyAny>) -> PyResult<V
 
 /// One `CompileSqlReference` record as its row.
 fn reference_row_of(reference: &Bound<'_, PyAny>) -> PyResult<ReferenceRow> {
-    Ok((
-        native_field(reference, "ref_kind")?.str()?.extract()?,
-        native_field(reference, "ref_name")?.extract()?,
-        native_field(reference, "ref_package")?.extract()?,
-        native_field(reference, "call_argument_count")?.extract()?,
-    ))
+    Ok(ReferenceRow {
+        kind: native_field(reference, "ref_kind")?.str()?.extract()?,
+        name: native_field(reference, "ref_name")?.extract()?,
+        package: native_field(reference, "ref_package")?.extract()?,
+        call_argument_count: native_field(reference, "call_argument_count")?.extract()?,
+    })
 }

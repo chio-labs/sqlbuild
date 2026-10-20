@@ -7,7 +7,8 @@ use polyglot_sql::{
     ValidationSchema, analyze_query, analyze_query_for_project_projections,
 };
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use serde::{Deserialize, Serialize};
+use serde::ser::SerializeTuple;
+use serde::{Deserialize, Serialize, Serializer};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, PoisonError};
@@ -1128,7 +1129,29 @@ fn analyze_project_result(request: ProjectAnalysisRequest) -> Result<ProjectAnal
     }))
 }
 
-type CompactProjectColumn = (usize, Option<usize>, u8, u8, u8, Vec<(usize, usize, usize)>);
+/// One interned column fact; it serializes as the positional array the batch reader expects.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct CompactProjectColumn {
+    name: usize,
+    data_type: Option<usize>,
+    nullability: u8,
+    transform: u8,
+    confidence: u8,
+    upstream: Vec<(usize, usize, usize)>,
+}
+
+impl Serialize for CompactProjectColumn {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut fields = serializer.serialize_tuple(6)?;
+        fields.serialize_element(&self.name)?;
+        fields.serialize_element(&self.data_type)?;
+        fields.serialize_element(&self.nullability)?;
+        fields.serialize_element(&self.transform)?;
+        fields.serialize_element(&self.confidence)?;
+        fields.serialize_element(&self.upstream)?;
+        fields.end()
+    }
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1222,14 +1245,14 @@ impl CompactProjectAccumulator {
                     )
                 })
                 .collect();
-            let fact = (
-                self.interner.intern(column.name),
-                column.data_type.map(|value| self.interner.intern(value)),
-                nullability_code(column.nullability),
-                transform_code(lineage.transform_kind),
-                confidence_code(lineage.confidence),
+            let fact = CompactProjectColumn {
+                name: self.interner.intern(column.name),
+                data_type: column.data_type.map(|value| self.interner.intern(value)),
+                nullability: nullability_code(column.nullability),
+                transform: transform_code(lineage.transform_kind),
+                confidence: confidence_code(lineage.confidence),
                 upstream,
-            );
+            };
             let next_index = self.facts.len();
             let fact_index = *self.fact_indexes.entry(fact.clone()).or_insert_with(|| {
                 self.facts.push(fact);

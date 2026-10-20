@@ -224,7 +224,7 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             raw_connection=raw_connection, path=path, busy_timeout_seconds=busy_timeout
         )
         if path != MEMORY_DATABASE_PATH and not read_only:
-            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute_as_writer("PRAGMA journal_mode=WAL")
         connection.execute(f"PRAGMA busy_timeout={int(busy_timeout * 1000)}")
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA legacy_alter_table=ON")

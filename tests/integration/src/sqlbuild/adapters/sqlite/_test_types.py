@@ -124,6 +124,14 @@ class SqliteInProcessWritersTestCase:
 
 
 @dataclass(frozen=True)
+class SqliteConcurrentConnectTestCase:
+    description: str
+    connections: int
+    attempts: int
+    expected_open_connections: int
+
+
+@dataclass(frozen=True)
 class SqliteKilledWriterTestCase:
     description: str
     expected_rows: tuple[tuple[object, ...], ...]

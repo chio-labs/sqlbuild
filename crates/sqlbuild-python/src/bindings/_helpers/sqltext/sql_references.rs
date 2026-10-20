@@ -23,10 +23,29 @@ use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 
 const REFERENCE_CALL_SYNTAX_CODE: &str = "P012";
 
-/// `(kind, name, package, call_argument_count)` for one reference.
-type ReferenceRow = (&'static str, String, Option<String>, Option<usize>);
-/// `(kind, call, start, message, help, corrected_call)` for one rejected call.
-type InvalidCallRow = (&'static str, String, usize, String, String, String);
+positional_record! {
+    into;
+    /// `(kind, name, package, call_argument_count)` for one reference.
+    struct ReferenceRow {
+        kind: &'static str,
+        name: String,
+        package: Option<String>,
+        call_argument_count: Option<usize>,
+    }
+}
+
+positional_record! {
+    into;
+    /// `(kind, call, start, message, help, corrected_call)` for one rejected call.
+    struct InvalidCallRow {
+        kind: &'static str,
+        call: String,
+        start: usize,
+        message: String,
+        help: String,
+        corrected_call: String,
+    }
+}
 /// Python references and rejected calls of one scan.
 type ScannedObjects<'py> = (Vec<Bound<'py, PyAny>>, Vec<Bound<'py, PyAny>>);
 /// The references and rejected calls, or the scan error and its start.
@@ -73,23 +92,23 @@ impl SqlReferenceScanner {
 }
 
 fn reference_row(reference: SqlReference) -> ReferenceRow {
-    (
-        reference.kind,
-        reference.name,
-        reference.package,
-        reference.call_argument_count,
-    )
+    ReferenceRow {
+        kind: reference.kind,
+        name: reference.name,
+        package: reference.package,
+        call_argument_count: reference.call_argument_count,
+    }
 }
 
 fn invalid_call_row(call: InvalidReferenceCall) -> InvalidCallRow {
-    (
-        call.kind,
-        call.call,
-        call.start,
-        call.message,
-        call.help,
-        call.corrected_call,
-    )
+    InvalidCallRow {
+        kind: call.kind,
+        call: call.call,
+        start: call.start,
+        message: call.message,
+        help: call.help,
+        corrected_call: call.corrected_call,
+    }
 }
 
 fn text<'py>(py: Python<'py>, value: impl IntoPyObject<'py>) -> PyResult<Bound<'py, PyAny>> {

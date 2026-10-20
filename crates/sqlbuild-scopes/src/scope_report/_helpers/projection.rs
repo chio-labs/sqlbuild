@@ -6,7 +6,9 @@ use crate::scope_index::main::format_identity::format_identity;
 use crate::scope_index::models::{
     DeclarationIdentity, DeclarationRecord, QualifiedIdentity, ResourceIdentity,
 };
-use crate::scope_report::_helpers::declarations::{container, integer, optional_text, text, texts};
+use crate::scope_report::_helpers::declarations::{
+    Container, container, integer, optional_text, text, texts,
+};
 use crate::scope_report::_helpers::json::{diagnostic_json, object};
 use crate::scope_report::_helpers::paths::safe_scope_path;
 use crate::scope_report::constants::METADATA_SCHEMA_VERSION;
@@ -91,7 +93,12 @@ fn declaration_projection(
     record: &DeclarationRecord,
     values: Option<&DeclarationValues>,
 ) -> JsonValue {
-    let (role, visibility, role_root, bucket) = container(record);
+    let Container {
+        role,
+        visibility,
+        role_root,
+        bucket,
+    } = container(record);
     object(vec![
         ("identity", text(&declaration_key(&record.identity))),
         ("kind", text(record.identity.kind.as_str())),

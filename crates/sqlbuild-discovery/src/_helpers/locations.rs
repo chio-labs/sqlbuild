@@ -18,7 +18,13 @@ pub(crate) fn header_column_locations(
     let header: Vec<char> = contents[header_start..header_end].chars().collect();
     relative_locations(&header, offsets)
         .into_iter()
-        .map(|(name, relative_line, relative_column, length)| {
+        .map(|location| {
+            let RelativeLocation {
+                name,
+                line: relative_line,
+                column: relative_column,
+                length,
+            } = location;
             let line = header_line + relative_line - 1;
             let column = relative_column
                 + if relative_line == 1 {
@@ -39,11 +45,19 @@ pub(crate) fn header_column_locations(
         .collect()
 }
 
+/// One header column key's line and column relative to the header, and its length.
+struct RelativeLocation {
+    name: String,
+    line: usize,
+    column: usize,
+    length: usize,
+}
+
 /// Python's `_header_column_relative_locations`, including its forward-only cursor.
 fn relative_locations(
     header: &[char],
     offsets: &[(String, usize, usize)],
-) -> Vec<(String, usize, usize, usize)> {
+) -> Vec<RelativeLocation> {
     let mut locations = Vec::with_capacity(offsets.len());
     let (mut line, mut column, mut cursor) = (1, 1, 0);
     for (name, position, length) in offsets {
@@ -63,7 +77,12 @@ fn relative_locations(
                 }
             }
         }
-        locations.push((name.clone(), line, column, *length));
+        locations.push(RelativeLocation {
+            name: name.clone(),
+            line,
+            column,
+            length: *length,
+        });
     }
     locations
 }

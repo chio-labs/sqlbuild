@@ -12,7 +12,7 @@ use std::mem::Discriminant;
 use std::sync::{LazyLock, OnceLock, PoisonError};
 
 const UNKNOWN_FUNCTION: &str = "B101";
-const SNOWFLAKE_FUNCTIONS: &str = include_str!("../../../function_names/snowflake.txt");
+const SNOWFLAKE_FUNCTIONS: &str = include_str!("snowflake_functions.txt");
 const DUCKDB_CATALOG: &str = "duckdb";
 const PROBE_PREFIX: &str = "SELECT ";
 const TYPE_POSITION_KEYWORD: &str = "AS";

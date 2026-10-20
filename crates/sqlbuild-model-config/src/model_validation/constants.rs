@@ -300,5 +300,5 @@ pub const PHYSICAL_STORAGE_KEYS: [&str; 5] = [
 pub const PHYSICAL_STORAGE_MATERIALIZATIONS: [&str; 2] = ["table", "incremental"];
 /// The name suffix every supported table engine shares.
 pub const ENGINE_FAMILY_SUFFIX: &str = "MergeTree";
-/// Engine name prefixes of replicated and shared engines, which need a cluster.
-pub const UNSUPPORTED_ENGINE_PREFIXES: [&str; 2] = ["Replicated", "Shared"];
+/// Engine name prefixes of replicated engines, which need a cluster.
+pub const UNSUPPORTED_ENGINE_PREFIXES: [&str; 1] = ["Replicated"];

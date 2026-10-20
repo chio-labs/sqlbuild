@@ -142,11 +142,11 @@ pub(crate) fn build_execution_upstream_deps<'py>(
     let (gates, hooks): (Vec<GateRow>, Vec<HookRow>) = native_execution_gate_edges(project)?;
     let cache: KeyCache<'py> = KeyCache::new(py)?;
     let mut extra: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)> = Vec::new();
-    for (_, _, gated, read) in &gates {
-        extra.push((cache.key(gated)?, cache.key(read)?));
+    for gate in &gates {
+        extra.push((cache.key(&gate.gated)?, cache.key(&gate.read)?));
     }
-    for (_, gated, read, _, _) in &hooks {
-        extra.push((cache.key(gated)?, cache.key(read)?));
+    for hook in &hooks {
+        extra.push((cache.key(&hook.gated)?, cache.key(&hook.read)?));
     }
     for (gated, read) in extra {
         let gated_upstream: Bound<'py, PyAny> =
@@ -192,7 +192,13 @@ pub(crate) fn build_execution_edge_origins<'py>(
             .call_method1("upstream", (gated.clone(),))?
             .contains(read.clone())
     };
-    for (audit_name, target, gated, read) in &gates {
+    for GateRow {
+        audit_name,
+        target,
+        gated,
+        read,
+    } in &gates
+    {
         if is_lineage(gated, read)? {
             continue;
         }
@@ -204,7 +210,14 @@ pub(crate) fn build_execution_edge_origins<'py>(
             ),
         )?;
     }
-    for (hook_name, gated, read, kind, _) in &hooks {
+    for HookRow {
+        hook_name,
+        gated,
+        read,
+        hook_type: kind,
+        ..
+    } in &hooks
+    {
         if is_lineage(gated, read)? {
             continue;
         }

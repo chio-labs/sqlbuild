@@ -41,15 +41,3 @@ def translate_sqlbuild_dag(
         )
 
     return {**dag, "nodes": translated_nodes, "checks": translated_checks}
-
-
-def is_dagster_asset_enabled(node: Mapping[str, Any]) -> bool:
-    """Return whether a translated DAG node is owned by the SQLBuild asset definition."""
-
-    return bool(node.get(DAGSTER_ASSET_ENABLED_FIELD, True))
-
-
-def is_dagster_check_enabled(check: Mapping[str, Any]) -> bool:
-    """Return whether a translated DAG check is owned by the SQLBuild asset definition."""
-
-    return bool(check.get(DAGSTER_CHECK_ENABLED_FIELD, True))

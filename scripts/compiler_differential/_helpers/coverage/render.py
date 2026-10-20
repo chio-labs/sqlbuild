@@ -8,6 +8,7 @@ import re
 from collections.abc import Iterator
 from pathlib import Path, PurePosixPath
 
+from scripts.compiler_differential._helpers.comparing.capture_text import expand_capture_text
 from scripts.compiler_differential._helpers.comparing.compare import as_json_object
 from scripts.compiler_differential._helpers.coverage.capture_values import (
     capture_problems,
@@ -20,7 +21,6 @@ from scripts.compiler_differential._helpers.coverage.macro_sources import (
     macro_function_source,
     takes_typed_reference,
 )
-from scripts.compiler_differential.classes.capture_file import expand_capture_text
 from scripts.compiler_differential.constants import (
     BUILT_IN_AUDIT_NAMES,
     COMPILE_INPUTS_CAPTURE_TYPE,

@@ -233,16 +233,24 @@ pub(crate) fn begin_section<'py>(
     })
 }
 
+/// The project directory, adapter, completion kind and style a progress relay reports with.
+pub(crate) struct RelayContext<'a, 'py> {
+    pub(crate) project_dir: &'a Bound<'py, PyAny>,
+    pub(crate) adapter: &'a Bound<'py, PyAny>,
+    pub(crate) kind: CompletionKind,
+    pub(crate) style: CliStyle,
+}
+
 /// The relay reporting one section's scenarios.
 pub(crate) fn progress_relay<'py>(
     stream: &Bound<'py, PyAny>,
     section: &SectionStatus<'py>,
-    (project_dir, adapter, kind, style): (
-        &Bound<'py, PyAny>,
-        &Bound<'py, PyAny>,
-        CompletionKind,
-        CliStyle,
-    ),
+    RelayContext {
+        project_dir,
+        adapter,
+        kind,
+        style,
+    }: RelayContext<'_, 'py>,
 ) -> PyResult<Bound<'py, ScenarioProgressRelay>> {
     Bound::new(
         stream.py(),

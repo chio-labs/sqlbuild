@@ -443,13 +443,13 @@ fn python_entry_json<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAn
     Ok(item.into_any())
 }
 
-/// One provider usage: `(provider, kind, name, parameter, annotation class, annotation module)`.
-type Usage<'py> = (
-    String,
-    (String, String, String),
-    Bound<'py, PyAny>,
-    Bound<'py, PyAny>,
-);
+/// One provider usage: provider, `(kind, name, parameter)` consumer, annotation class and module.
+struct Usage<'py> {
+    provider: String,
+    consumer: (String, String, String),
+    class_name: Bound<'py, PyAny>,
+    module: Bound<'py, PyAny>,
+}
 
 fn providers_json<'py>(
     plan: &Bound<'py, PyAny>,
@@ -458,37 +458,45 @@ fn providers_json<'py>(
     let py: Python<'py> = plan.py();
     let mut usages: Vec<Usage<'py>> = Vec::new();
     for usage in items(&native_field(plan, "provider_usages")?)? {
-        usages.push((
-            text(&native_field(&usage, "provider_name")?)?,
-            (
+        usages.push(Usage {
+            provider: text(&native_field(&usage, "provider_name")?)?,
+            consumer: (
                 text(&native_field(&usage, "consumer_kind")?)?,
                 text(&native_field(&usage, "consumer_name")?)?,
                 text(&native_field(&usage, "parameter_name")?)?,
             ),
-            native_field(&usage, "annotation_class_name")?,
-            native_field(&usage, "annotation_module")?,
-        ));
+            class_name: native_field(&usage, "annotation_class_name")?,
+            module: native_field(&usage, "annotation_module")?,
+        });
     }
     for entry in python_entries {
         let kind: String = text(&enum_value(entry, "kind")?)?;
         let name: String = text(&native_field(entry, "name")?)?;
         for usage in items(&native_field(entry, "provider_usages")?)? {
-            usages.push((
-                text(&native_field(&usage, "provider_name")?)?,
-                (
+            usages.push(Usage {
+                provider: text(&native_field(&usage, "provider_name")?)?,
+                consumer: (
                     kind.clone(),
                     name.clone(),
                     text(&native_field(&usage, "parameter_name")?)?,
                 ),
-                native_field(&usage, "annotation_class_name")?,
-                native_field(&usage, "annotation_module")?,
-            ));
+                class_name: native_field(&usage, "annotation_class_name")?,
+                module: native_field(&usage, "annotation_module")?,
+            });
         }
     }
-    usages.sort_by(|left, right| (&left.0, &left.1).cmp(&(&right.0, &right.1)));
+    usages.sort_by(|left, right| {
+        (&left.provider, &left.consumer).cmp(&(&right.provider, &right.consumer))
+    });
     let providers: Bound<'py, PyList> = PyList::empty(py);
     let mut current: Option<(String, Bound<'py, PyList>)> = None;
-    for (provider, (kind, name, parameter), class_name, module) in usages {
+    for Usage {
+        provider,
+        consumer: (kind, name, parameter),
+        class_name,
+        module,
+    } in usages
+    {
         if current.as_ref().is_none_or(|(open, _)| *open != provider) {
             let used_by: Bound<'py, PyList> = PyList::empty(py);
             providers.append(dict(

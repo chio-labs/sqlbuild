@@ -23,6 +23,9 @@ use crate::bindings::_helpers::planner_phases::identities::{
 use crate::bindings::_helpers::planner_phases::models::PlannerIdentityContext;
 use crate::bindings::_helpers::planner_phases::models::PlannerRuntime;
 use crate::bindings::_helpers::planner_phases::models::PlannerScopeResolution;
+use crate::bindings::_helpers::planner_phases::models::{
+    PlanOutputContext, PlanWarningContext, PlannedModelEntries, StoragePolicyContext,
+};
 use crate::bindings::_helpers::planner_phases::output_assembly::{
     add_plan_metadata, add_plan_warnings, add_storage_policies, base_plan_output,
 };
@@ -158,19 +161,37 @@ fn planned_output<'py>(
     )?;
     let planned_sql_tests = test_planning.result(py)?.into_bound(py);
     let output = base_plan_output(
-        (runtime, &warehouse, &identities, overrides),
-        (
-            &inspection_scope,
-            &reconciliation,
+        PlanOutputContext {
+            runtime,
+            warehouse: &warehouse,
+            identities: &identities,
+            overrides,
+        },
+        PlannedModelEntries {
+            execution_scope: &inspection_scope,
+            reconciliation: &reconciliation,
             entries,
-            &source_freshness,
-        ),
+            source_freshness: &source_freshness,
+        },
         &planned_sql_tests,
     )?;
-    let output = add_storage_policies(output, (runtime, &warehouse, scopes, &policies))?;
+    let output = add_storage_policies(
+        output,
+        StoragePolicyContext {
+            runtime,
+            warehouse: &warehouse,
+            scopes,
+            policies: &policies,
+        },
+    )?;
     let output = add_plan_warnings(
         output,
-        (scopes, &warehouse, &identities, &stale_warning_changes),
+        PlanWarningContext {
+            scopes,
+            warehouse: &warehouse,
+            identities: &identities,
+            stale_warning_changes: &stale_warning_changes,
+        },
         (&source_freshness, &policies),
     )?;
     let plan_output = add_plan_metadata(output, &source_freshness, &policies)?.build(py)?;

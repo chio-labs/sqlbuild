@@ -4,8 +4,8 @@ use crate::semantic_validation::_helpers::catalog::diagnostic_row;
 use crate::semantic_validation::_helpers::function_names;
 use crate::semantic_validation::_helpers::truth_tests;
 use crate::semantic_validation::_helpers::type_locations::locate_type_findings;
+use crate::semantic_validation::models::DiagnosticRow;
 use crate::semantic_validation::models::FunctionProbes;
-use crate::semantic_validation::types::DiagnosticRow;
 use polyglot_sql::expressions::Select;
 use polyglot_sql::{
     Dialect, DialectType, Expression, ExpressionWalk, ValidationError, ValidationResult,
@@ -393,21 +393,19 @@ pub(crate) fn binding_diagnostics(
 ) -> Result<Vec<DiagnosticRow>, String> {
     let errors: Vec<ValidationError> = rows
         .into_iter()
-        .map(
-            |(code, message, line, column, start, end, severity)| ValidationError {
-                code,
-                message,
-                line,
-                column,
-                start,
-                end,
-                severity: if severity == ERROR {
-                    ValidationSeverity::Error
-                } else {
-                    ValidationSeverity::Warning
-                },
+        .map(|row| ValidationError {
+            code: row.code,
+            message: row.message,
+            line: row.line,
+            column: row.column,
+            start: row.start,
+            end: row.end,
+            severity: if row.severity == ERROR {
+                ValidationSeverity::Error
+            } else {
+                ValidationSeverity::Warning
             },
-        )
+        })
         .collect();
     let result = map_diagnostics(
         sql,

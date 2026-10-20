@@ -26,14 +26,14 @@ pub fn required_columns(
     let mut result = FixtureReadRequirements::default();
     for model in models {
         let mut reads = model.high_confidence.clone();
-        if model.key.references.iter().any(|(kind, name, _, _)| {
-            let resource_type = match kind.as_str() {
+        if model.key.references.iter().any(|reference| {
+            let resource_type = match reference.kind.as_str() {
                 "ref" => "model",
                 "source" => "source",
                 "seed" => "seed",
                 _ => return false,
             };
-            fixture_keys.contains(&(resource_type.to_owned(), name.clone()))
+            fixture_keys.contains(&(resource_type.to_owned(), reference.name.clone()))
         }) {
             let (updated, resolved) = resolved_reads(cache, &model.key);
             cache = updated;

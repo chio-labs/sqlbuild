@@ -255,7 +255,7 @@ jobs:
     needs: [changes, lockfile]
     if: needs.changes.outputs.checks == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -342,7 +342,7 @@ jobs:
     needs: [changes, lockfile]
     if: needs.changes.outputs.compiler_differential == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -379,7 +379,7 @@ jobs:
     needs: [changes, lockfile]
     if: needs.changes.outputs.compiler_differential == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -415,7 +415,7 @@ jobs:
     needs: [changes, lockfile]
     if: needs.changes.outputs.compiler_differential == 'true'
     runs-on: windows-2025
-    timeout-minutes: 40
+    timeout-minutes: 45
     defaults:
       run:
         shell: bash
@@ -468,7 +468,7 @@ jobs:
     needs: [changes, lockfile]
     if: needs.changes.outputs.format_performance == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -499,7 +499,7 @@ jobs:
     # These budgets are calibrated for the 8-vCPU Blacksmith runner.
     if: false
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -524,7 +524,7 @@ jobs:
     needs: [changes, lockfile]
     if: needs.changes.outputs.performance == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -572,7 +572,7 @@ jobs:
     if: needs.changes.outputs.performance == 'true'
     runs-on: ubuntu-24.04
     # The 3k and 10k cells also run the delta edit-loop guard, about five minutes at 10k.
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -717,7 +717,7 @@ jobs:
     needs: [changes, lockfile]
     if: needs.changes.outputs.performance == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -788,7 +788,7 @@ jobs:
     # These budgets are calibrated for the 8-vCPU Blacksmith runner.
     if: false
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5

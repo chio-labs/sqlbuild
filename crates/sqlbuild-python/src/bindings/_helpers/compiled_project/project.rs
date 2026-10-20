@@ -49,7 +49,7 @@ use crate::bindings::_helpers::compiled_project::model_loop::NativeModelLoop;
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView;
 use crate::bindings::_helpers::compiled_project::seed_views::{
-    NativeCompiledSeed, NativeSeedInput, SeedNamespace, SeedRecord, paired_seeds,
+    NativeCompiledSeed, NativeSeedInput, SeedNamespace, SeedParts, SeedRecord, paired_seeds,
 };
 use crate::bindings::_helpers::compiled_project::source_loop::{SourceRow, SourceSettings};
 use crate::bindings::_helpers::compiled_project::source_views::{
@@ -70,11 +70,42 @@ const MATERIALIZED_KEY: &str = "materialized";
 const TABLE_MATERIALIZATION: &str = "table";
 
 /// `(name, type)`.
-type NamedType = (String, Option<String>);
-/// `(output proven, bare dynamic pivot, (family key, inferred type), failure, (family, type))`.
-type ProofPy = (bool, bool, Vec<NamedType>, Option<String>, Vec<NamedType>);
-/// `(inferred, (name, type), nullable per column, has star, unchecked output columns)`.
-type AnalysisPy = (bool, Vec<NamedType>, Vec<bool>, bool, Vec<String>);
+pub(crate) type NamedType = (String, Option<String>);
+positional_record! {
+    extract;
+    /// `(output proven, bare dynamic pivot, (family key, inferred type), failure, (family, type))`.
+    pub(crate) struct ProofPy {
+        pub(crate) output_proven: bool,
+        pub(crate) bare_dynamic_pivot: bool,
+        pub(crate) families: Vec<NamedType>,
+        pub(crate) failure_reason: Option<String>,
+        pub(crate) named_families: Vec<NamedType>,
+    }
+}
+
+positional_record! {
+    extract;
+    /// `(inferred, (name, type), nullable per column, has star, unchecked output columns)`.
+    pub(crate) struct AnalysisPy {
+        pub(crate) inferred: bool,
+        pub(crate) inferred_columns: Vec<NamedType>,
+        pub(crate) nullable_columns: Vec<bool>,
+        pub(crate) fast_lineage_has_star: bool,
+        pub(crate) unchecked: Vec<String>,
+    }
+}
+
+positional_record! {
+    extract;
+    /// A model's name, relative path, compiled and authored queries, and authored SQL file.
+    pub(crate) struct ModelTextsPy {
+        name: String,
+        relative_path: String,
+        query_sql: String,
+        authored_query_sql: String,
+        authored_sql: String,
+    }
+}
 
 /// Encoded config values and the encoder's error, if any.
 pub(crate) type ConfigValues = (BTreeMap<String, Value>, Option<String>);
@@ -82,7 +113,7 @@ pub(crate) type ConfigValues = (BTreeMap<String, Value>, Option<String>);
 /// One model as the compile-input stage produced it.
 #[derive(FromPyObject)]
 pub(crate) struct ModelInputPy<'py>(
-    (String, String, String, String, String),
+    ModelTextsPy,
     (Bound<'py, PyDict>, Vec<String>, Option<String>),
     Vec<(String, String, Option<String>)>,
     Vec<String>,
@@ -194,7 +225,12 @@ impl NativeCompiledProject {
             )?);
         }
         for seed in &self.seeds {
-            let (name, seed_file, schema_entry, schema_file) = seed.parts();
+            let SeedParts {
+                name,
+                seed_file,
+                schema_entry,
+                schema_file,
+            } = seed.parts();
             let schema_entry: &Bound<'py, PyAny> = schema_entry.bind(py);
             owners.push(resource_owner(
                 SEED_OWNER,
@@ -335,19 +371,28 @@ impl NativeCompiledProject {
         columns: AnalysisPy,
         dynamic_proof: Option<ProofPy>,
     ) -> bool {
-        let (inferred, inferred_columns, nullable_columns, fast_lineage_has_star, unchecked) =
-            columns;
+        let AnalysisPy {
+            inferred,
+            inferred_columns,
+            nullable_columns,
+            fast_lineage_has_star,
+            unchecked,
+        } = columns;
         let analysis: ModelAnalysisFact = ModelAnalysisFact {
             inferred_columns,
             dynamic_proof: dynamic_proof.map(
-                |(output_proven, bare_dynamic_pivot, families, failure_reason, named_families)| {
-                    DynamicProofFact {
-                        output_proven,
-                        bare_dynamic_pivot,
-                        families,
-                        failure_reason,
-                        named_families,
-                    }
+                |ProofPy {
+                     output_proven,
+                     bare_dynamic_pivot,
+                     families,
+                     failure_reason,
+                     named_families,
+                 }| DynamicProofFact {
+                    output_proven,
+                    bare_dynamic_pivot,
+                    families,
+                    failure_reason,
+                    named_families,
                 },
             ),
             inferred,
@@ -620,7 +665,13 @@ impl NativeCompiledProject {
 
 pub(crate) fn model_facts(model: ModelInputPy<'_>) -> PyResult<CompiledModelFacts> {
     let ModelInputPy(
-        (name, relative_path, query_sql, authored_query_sql, authored_sql),
+        ModelTextsPy {
+            name,
+            relative_path,
+            query_sql,
+            authored_query_sql,
+            authored_sql,
+        },
         (values, header_keys, layer_schema),
         references,
         enum_columns,

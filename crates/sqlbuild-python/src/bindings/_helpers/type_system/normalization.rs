@@ -10,14 +10,17 @@ use sqlbuild_analysis::type_system::models::{NormalizedType, TypeNormalization};
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
-/// `(name, family, precision, scale, length)` of one normalized type.
-type NormalizedRow = (
-    String,
-    &'static str,
-    Option<String>,
-    Option<String>,
-    Option<String>,
-);
+positional_record! {
+    into;
+    /// `(name, family, precision, scale, length)` of one normalized type.
+    struct NormalizedRow {
+        name: String,
+        family: &'static str,
+        precision: Option<String>,
+        scale: Option<String>,
+        length: Option<String>,
+    }
+}
 
 /// Normalize one type: `(normalized row, Polyglot parse error)`, or Python's exception.
 #[pyfunction]
@@ -51,13 +54,13 @@ pub(crate) fn normalization_error(python: Python<'_>, error: &TypeNormalizationE
 }
 
 fn normalized_row(normalized: NormalizedType) -> NormalizedRow {
-    (
-        normalized.normalized_name,
-        normalized.family.as_str(),
-        normalized.precision.map(|value| value.as_str().to_owned()),
-        normalized.scale.map(|value| value.as_str().to_owned()),
-        normalized.length.map(|value| value.as_str().to_owned()),
-    )
+    NormalizedRow {
+        name: normalized.normalized_name,
+        family: normalized.family.as_str(),
+        precision: normalized.precision.map(|value| value.as_str().to_owned()),
+        scale: normalized.scale.map(|value| value.as_str().to_owned()),
+        length: normalized.length.map(|value| value.as_str().to_owned()),
+    }
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

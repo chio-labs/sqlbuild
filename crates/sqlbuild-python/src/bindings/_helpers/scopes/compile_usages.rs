@@ -33,21 +33,30 @@ type IdentityRow = (String, String);
 /// A declaration's kind, name and private owner; a resource's kind and name with no owner.
 type QualifiedRow = (String, String, Option<IdentityRow>);
 /// Consumer, declaration, usage kind, what it is used through, and the enum member.
-pub(crate) type UsageRow = (
-    QualifiedRow,
-    QualifiedRow,
-    String,
-    Option<QualifiedRow>,
-    Option<String>,
-);
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub(crate) struct UsageRow {
+    pub(crate) consumer: QualifiedRow,
+    pub(crate) declaration: QualifiedRow,
+    pub(crate) kind: String,
+    pub(crate) through: Option<QualifiedRow>,
+    pub(crate) enum_member: Option<String>,
+}
 /// Path, scope, private owner, owning path and ownership root path of a named record.
-type RecordRow = (String, String, Option<IdentityRow>, Option<String>, String);
+struct RecordRow {
+    path: String,
+    scope: String,
+    owner: Option<IdentityRow>,
+    owning_path: Option<String>,
+    ownership_root: String,
+}
 /// Name, the schema it extends, and each column's name and type.
 type SchemaRow = (String, Option<String>, Vec<(String, Option<String>)>);
-/// Report key, message, path and help of one S006.
-type DiagnosticRow = (Vec<String>, String, String, String);
 /// Usages as `(consumer, declaration)` record positions, S006s, else a scope path error.
-type SchemaUsageRows = (Vec<(usize, usize)>, Vec<DiagnosticRow>, Option<String>);
+type SchemaUsageRows = (
+    Vec<(usize, usize)>,
+    Vec<InaccessibleDiagnostic>,
+    Option<String>,
+);
 /// `(own, position)`: an own dependency's position, else a distinct usage's.
 pub(crate) type SourceRow = (bool, usize);
 /// Distinct collected positions, merged sources per declaration, and final usage positions.
@@ -58,7 +67,13 @@ fn invalid(what: &str) -> pyo3::PyErr {
 }
 
 fn named_record(handle: usize, row: RecordRow) -> PyResult<NamedRecord> {
-    let (path, scope, owner, owning_path, ownership_root) = row;
+    let RecordRow {
+        path,
+        scope,
+        owner,
+        owning_path,
+        ownership_root,
+    } = row;
     let owner: Option<ResourceIdentity> = match owner {
         None => None,
         Some((kind, name)) => Some(ResourceIdentity {
@@ -76,15 +91,6 @@ fn named_record(handle: usize, row: RecordRow) -> PyResult<NamedRecord> {
         },
         ownership_root,
     })
-}
-
-fn diagnostic_row(diagnostic: InaccessibleDiagnostic) -> DiagnosticRow {
-    (
-        diagnostic.key,
-        diagnostic.message,
-        diagnostic.path,
-        diagnostic.help,
-    )
 }
 
 /// `model_schema_scope_usages`: each schema's parent and enum `UsageRecord`s; S006s are reported.
@@ -163,10 +169,10 @@ pub(crate) fn model_schema_scope_usages<'py>(
 fn record_row(record: &Bound<'_, PyAny>) -> PyResult<RecordRow> {
     let identity: Bound<'_, PyAny> = native_field(record, "identity")?;
     let owner: Bound<'_, PyAny> = native_field(&identity, "owner")?;
-    Ok((
-        native_field(record, "path")?.extract()?,
-        native_field(&native_field(record, "scope")?, "value")?.extract()?,
-        if owner.is_none() {
+    Ok(RecordRow {
+        path: native_field(record, "path")?.extract()?,
+        scope: native_field(&native_field(record, "scope")?, "value")?.extract()?,
+        owner: if owner.is_none() {
             None
         } else {
             Some((
@@ -174,18 +180,25 @@ fn record_row(record: &Bound<'_, PyAny>) -> PyResult<RecordRow> {
                 native_field(&owner, "name")?.extract()?,
             ))
         },
-        native_field(record, "owning_path")?.extract()?,
-        native_field(&native_field(record, "ownership_root")?, "path")?.extract()?,
-    ))
+        owning_path: native_field(record, "owning_path")?.extract()?,
+        ownership_root: native_field(&native_field(record, "ownership_root")?, "path")?
+            .extract()?,
+    })
 }
 
 /// Report each S006 through the active compile diagnostic collector.
-fn report_inaccessible(py: Python<'_>, diagnostics: Vec<DiagnosticRow>) -> PyResult<()> {
+fn report_inaccessible(py: Python<'_>, diagnostics: Vec<InaccessibleDiagnostic>) -> PyResult<()> {
     if diagnostics.is_empty() {
         return Ok(());
     }
     let path_class = py.import("pathlib")?.getattr("Path")?;
-    for (key, message, path, help) in diagnostics {
+    for InaccessibleDiagnostic {
+        key,
+        message,
+        path,
+        help,
+    } in diagnostics
+    {
         let fields: Bound<'_, PyDict> = PyDict::new(py);
         fields.set_item("phase", "compile")?;
         fields.set_item("severity", "error")?;
@@ -230,11 +243,7 @@ fn scope_schema_usages(
             Ok(SchemaUsages {
                 usages,
                 diagnostics,
-            }) => (
-                usages,
-                diagnostics.into_iter().map(diagnostic_row).collect(),
-                None,
-            ),
+            }) => (usages, diagnostics, None),
             Err(rejected) => (
                 Vec::new(),
                 Vec::new(),
@@ -265,7 +274,11 @@ pub(crate) fn merged_usage_rows(
     let mut consumed: Vec<(Option<QualifiedRow>, QualifiedRow)> =
         Vec::with_capacity(distinct.len());
     for position in &distinct {
-        let (consumer, declaration, _, _, _) = &collected[*position];
+        let UsageRow {
+            consumer,
+            declaration,
+            ..
+        } = &collected[*position];
         let by_declaration: Option<QualifiedRow> = DeclarationKind::parse(&consumer.0)
             .is_some()
             .then(|| consumer.clone());

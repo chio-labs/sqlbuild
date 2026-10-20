@@ -21,8 +21,8 @@ use crate::bindings::_helpers::records::construct::{new_record, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::scopes::placement::{
-    IdentityRow, QualifiedRow, RootRow, declaration_identity, declaration_record, ownership_root,
-    qualified_identity, resource_identity,
+    DeclarationRow, IdentityRow, QualifiedRow, RootRow, declaration_identity, declaration_record,
+    ownership_root, qualified_identity, resource_identity,
 };
 use crate::bindings::_helpers::scopes::scope_lookup::grant_kind;
 
@@ -179,15 +179,15 @@ fn read_constant(facts: &Bound<'_, PyAny>) -> PyResult<ConstantFacts> {
 /// One `DeclarationRecord` with its value metadata.
 pub(crate) fn read_declaration(record: &Bound<'_, PyAny>) -> PyResult<CachedDeclaration> {
     Ok(CachedDeclaration {
-        record: declaration_record((
-            qualified_row(&native_field(record, "identity")?)?,
-            field(record, "path")?,
-            field(record, "line")?,
-            field(record, "column")?,
-            value_of(record, "scope")?,
-            root_row(&native_field(record, "ownership_root")?)?,
-            field(record, "owning_path")?,
-        ))?,
+        record: declaration_record(DeclarationRow {
+            identity: qualified_row(&native_field(record, "identity")?)?,
+            path: field(record, "path")?,
+            line: field(record, "line")?,
+            column: field(record, "column")?,
+            scope: value_of(record, "scope")?,
+            root: root_row(&native_field(record, "ownership_root")?)?,
+            owning_path: field(record, "owning_path")?,
+        })?,
         macro_facts: optional_item(record, "macro")?
             .map(|facts| read_macro(&facts))
             .transpose()?,

@@ -52,6 +52,17 @@ fn sql_rule_lint_key(config: &Bound<'_, PyAny>) -> PyResult<String> {
     Ok(settings_lint_key(&LintSettings::from_record(config)?))
 }
 
+positional_record! {
+    extract;
+    /// One model's path, authored SQL, query SQL and contract.
+    pub(crate) struct ModelRuleRow {
+        pub(crate) path: String,
+        pub(crate) authored_sql: String,
+        pub(crate) query_sql: String,
+        pub(crate) contract: Option<String>,
+    }
+}
+
 /// Each model path's SQL rule cache key from `(path, authored_sql, query_sql, contract)`.
 #[pyfunction]
 #[pyo3(signature = (*, lint_key, codes, models))]
@@ -59,7 +70,7 @@ fn sql_model_rule_keys(
     py: Python<'_>,
     lint_key: &str,
     codes: Vec<String>,
-    models: Vec<(String, String, String, Option<String>)>,
+    models: Vec<ModelRuleRow>,
 ) -> BTreeMap<String, String> {
     model_rule_keys(py, lint_key, &codes, &models)
 }
@@ -69,20 +80,20 @@ pub(crate) fn model_rule_keys(
     py: Python<'_>,
     lint_key: &str,
     codes: &[String],
-    models: &[(String, String, String, Option<String>)],
+    models: &[ModelRuleRow],
 ) -> BTreeMap<String, String> {
     let inputs: Vec<ModelKeyInput<'_>> = models
         .iter()
-        .map(|(_, authored_sql, query_sql, contract)| ModelKeyInput {
-            authored_sql,
-            query_sql,
-            contract: contract.as_deref(),
+        .map(|model| ModelKeyInput {
+            authored_sql: &model.authored_sql,
+            query_sql: &model.query_sql,
+            contract: model.contract.as_deref(),
         })
         .collect();
     let keys: Vec<String> = py.detach(|| parallel_model_rule_keys(lint_key, codes, &inputs));
     models
         .iter()
-        .map(|(path, ..)| path.clone())
+        .map(|model| model.path.clone())
         .zip(keys)
         .collect()
 }

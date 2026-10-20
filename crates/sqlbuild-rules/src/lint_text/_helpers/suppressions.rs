@@ -54,6 +54,14 @@ fn skippable(line: &str) -> bool {
     stripped.is_empty() || stripped.starts_with("--")
 }
 
+/// Where a retained violation sits, its code and whether a native rule reported it.
+struct SuppressedTarget<'a> {
+    file: usize,
+    line: usize,
+    code: &'a str,
+    native: bool,
+}
+
 /// Whether a retained violation is the native finding one directive suppresses.
 pub(crate) fn matches_directive(
     item: &RetainedViolation,
@@ -61,23 +69,28 @@ pub(crate) fn matches_directive(
     file: usize,
     directive: &SuppressionDirective,
 ) -> bool {
-    let (item_file, line, code, native): (usize, usize, &str, bool) = match item {
+    let target: SuppressedTarget<'_> = match item {
         RetainedViolation::Existing(index) => {
             let violation: &SuppressibleViolation = &violations[*index];
-            (
-                violation.file,
-                violation.line,
-                &violation.code,
-                violation.native,
-            )
+            SuppressedTarget {
+                file: violation.file,
+                line: violation.line,
+                code: &violation.code,
+                native: violation.native,
+            }
         }
-        RetainedViolation::Added(finding) => (finding.file, finding.line, SUPPRESSION_CODE, true),
+        RetainedViolation::Added(finding) => SuppressedTarget {
+            file: finding.file,
+            line: finding.line,
+            code: SUPPRESSION_CODE,
+            native: true,
+        },
     };
-    item_file == file
-        && line == directive.target
-        && code == directive.code
-        && native
-        && code.starts_with(NATIVE_RULE_PREFIX)
+    target.file == file
+        && target.line == directive.target
+        && target.code == directive.code
+        && target.native
+        && target.code.starts_with(NATIVE_RULE_PREFIX)
 }
 
 /// Findings for every directive line when the project forbids suppressions.

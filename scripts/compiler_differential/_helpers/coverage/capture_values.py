@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator
 
+from scripts.compiler_differential._helpers.comparing.capture_text import expand_capture_text
 from scripts.compiler_differential._helpers.comparing.compare import as_json_object
-from scripts.compiler_differential.classes.capture_file import expand_capture_text
 from scripts.compiler_differential.constants import (
     CALLABLE_MARKER,
     COLLECTION_CAPTURE_MARKERS,

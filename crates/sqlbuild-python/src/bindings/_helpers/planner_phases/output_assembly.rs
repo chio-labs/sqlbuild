@@ -10,7 +10,8 @@ use crate::bindings::_helpers::planner_phases::contexts::class_field;
 use crate::bindings::_helpers::planner_phases::models::PlannerIdentityContext;
 use crate::bindings::_helpers::planner_phases::models::PlannerScopeResolution;
 use crate::bindings::_helpers::planner_phases::models::{
-    ChangeReconciliation, ModelEntryResults, PlanOutputFields,
+    PlanOutputContext, PlanOutputFields, PlanWarningContext, PlannedModelEntries,
+    StoragePolicyContext,
 };
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::objects::{
@@ -69,18 +70,18 @@ impl<'py> PlanOutputFields<'py> {
 
 /// The plan output's base fields from the planned entries, relations and source freshness.
 pub(crate) fn base_plan_output<'py>(
-    (runtime, warehouse, identities, overrides): (
-        &Bound<'py, PyAny>,
-        &Bound<'py, PyAny>,
-        &Bound<'py, PyAny>,
-        &Bound<'py, PyAny>,
-    ),
-    (execution_scope, reconciliation, entries, source_freshness): (
-        &Bound<'py, PyAny>,
-        &ChangeReconciliation<'py>,
-        ModelEntryResults<'py>,
-        &Bound<'py, PyAny>,
-    ),
+    PlanOutputContext {
+        runtime,
+        warehouse,
+        identities,
+        overrides,
+    }: PlanOutputContext<'_, 'py>,
+    PlannedModelEntries {
+        execution_scope,
+        reconciliation,
+        entries,
+        source_freshness,
+    }: PlannedModelEntries<'_, 'py>,
     planned_sql_tests: &Bound<'py, PyAny>,
 ) -> PyResult<PlanOutputFields<'py>> {
     let py = runtime.py();
@@ -163,12 +164,12 @@ pub(crate) fn with_column_rename_hints<'py>(
 /// Add migration fingerprints, rename hints, migration, table-type and retention entries.
 pub(crate) fn add_storage_policies<'py>(
     mut output: PlanOutputFields<'py>,
-    (runtime, warehouse, scopes, policies): (
-        &Bound<'py, PyAny>,
-        &Bound<'py, PyAny>,
-        &Bound<'py, PyAny>,
-        &Bound<'py, PyAny>,
-    ),
+    StoragePolicyContext {
+        runtime,
+        warehouse,
+        scopes,
+        policies,
+    }: StoragePolicyContext<'_, 'py>,
 ) -> PyResult<PlanOutputFields<'py>> {
     let py = runtime.py();
     let mut entries = output.field("model_entries")?;
@@ -242,12 +243,12 @@ pub(crate) fn add_storage_policies<'py>(
 /// Add unknown source freshness warnings and, with selection diagnostics, stale-selection warnings.
 pub(crate) fn add_plan_warnings<'py>(
     mut output: PlanOutputFields<'py>,
-    (scopes, warehouse, identities, stale_warning_changes): (
-        &Bound<'py, PyAny>,
-        &Bound<'py, PyAny>,
-        &Bound<'py, PyAny>,
-        &Bound<'py, PyAny>,
-    ),
+    PlanWarningContext {
+        scopes,
+        warehouse,
+        identities,
+        stale_warning_changes,
+    }: PlanWarningContext<'_, 'py>,
     (source_freshness, policies): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<PlanOutputFields<'py>> {
     let py = scopes.py();

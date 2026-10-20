@@ -70,16 +70,27 @@ pub(crate) fn facts_resource_name(
     Ok(resource_name(instance, &index)?.unbind())
 }
 
+positional_record! {
+    extract;
+    /// One compact lineage row: output name index, transform and confidence codes, sources.
+    struct CompactColumnRow<'py> {
+        name_index: Bound<'py, PyAny>,
+        transform_code: usize,
+        confidence_code: usize,
+        sources: Bound<'py, PyAny>,
+    }
+}
+
 /// One compact row projected to a `CompiledLineageColumnFact`.
 fn project_row(facts: &Bound<'_, PyAny>, row: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     let py: Python<'_> = facts.py();
     let pool: Bound<'_, PyAny> = native_field(facts, "string_pool")?;
-    let (name_index, transform_code, confidence_code, sources): (
-        Bound<'_, PyAny>,
-        usize,
-        usize,
-        Bound<'_, PyAny>,
-    ) = row.extract()?;
+    let CompactColumnRow {
+        name_index,
+        transform_code,
+        confidence_code,
+        sources,
+    }: CompactColumnRow<'_> = row.extract()?;
     let mut upstream: Vec<Bound<'_, PyAny>> = Vec::new();
     for source in sources.try_iter()? {
         let source: Bound<'_, PyTuple> = source?.cast_into::<PyTuple>()?;

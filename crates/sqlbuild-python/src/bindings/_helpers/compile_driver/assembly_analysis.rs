@@ -7,7 +7,9 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple,
 use sqlbuild_analysis::assembly::analysis_session::main::native_dialect::native_dialect;
 use sqlbuild_analysis::assembly::analysis_session::types::Pairs;
 
-use crate::bindings::_helpers::analysis::binding_catalog::{BindingCatalog, ignores_quoted_case};
+use crate::bindings::_helpers::analysis::binding_catalog::{
+    BindingCatalog, CatalogKey, ignores_quoted_case,
+};
 use crate::bindings::_helpers::analysis_session::model_analyses::{
     ModelAnalyses, ModelAnalysisRequest, analyze_models,
 };
@@ -93,8 +95,12 @@ pub(crate) fn analysis_context<'py>(
         &native_field(inputs, "effective_settings")?.getattr("sql_analysis")?,
         request.skip_column_inference.bind(py),
     )?;
-    let (column_types, nullability, complete_schemas, declared): DeclaredRelations<'py> =
-        declared_relations(inputs.clone())?;
+    let DeclaredRelations {
+        column_types,
+        nullability,
+        complete_schemas,
+        declared,
+    }: DeclaredRelations<'py> = declared_relations(inputs.clone())?;
     let (column_types, nullability, complete_schemas): (
         Bound<'py, PyAny>,
         Bound<'py, PyAny>,
@@ -218,12 +224,13 @@ fn profile_with_catalog<'py>(
         py,
         BindingCatalog::create(
             py,
-            (
+            CatalogKey {
                 dialect,
-                native_field(&profile, "quoted_identifiers_ignore_case")?.extract()?,
-                native_field(&profile, "semantic_known_functions")?.extract()?,
-                native_field(&profile, "semantic_known_types")?.extract()?,
-            ),
+                quoted_ignore_case: native_field(&profile, "quoted_identifiers_ignore_case")?
+                    .extract()?,
+                known_functions: native_field(&profile, "semantic_known_functions")?.extract()?,
+                known_types: native_field(&profile, "semantic_known_types")?.extract()?,
+            },
             PyDict::new(py).as_any(),
         )?,
     )?

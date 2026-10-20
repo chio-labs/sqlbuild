@@ -24,17 +24,28 @@ use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::graph::views::lineage_graph_views;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
-/// `(key, deps, tags, model folder)`.
-pub(crate) type ResourceRow = (ObjectKey, Vec<ObjectKey>, Vec<String>, Option<String>);
+positional_record! {
+    extract;
+    /// `(key, deps, tags, model folder)`.
+    pub(crate) struct ResourceRow {
+        pub(crate) key: ObjectKey,
+        pub(crate) deps: Vec<ObjectKey>,
+        pub(crate) tags: Vec<String>,
+        pub(crate) folder: Option<String>,
+    }
+}
 type Edges = Vec<(ObjectKey, Vec<ObjectKey>)>;
-/// `(names, upstream, downstream, tags, paths)` in Python's dict order.
-type IndexesRow = (
-    Vec<(String, ObjectKey)>,
-    Edges,
-    Edges,
-    Vec<(String, Vec<ObjectKey>)>,
-    Vec<(ObjectKey, String)>,
-);
+positional_record! {
+    extract, into;
+    /// `(names, upstream, downstream, tags, paths)` in Python's dict order.
+    struct IndexesRow {
+        names: Vec<(String, ObjectKey)>,
+        upstream: Edges,
+        downstream: Edges,
+        tags: Vec<(String, Vec<ObjectKey>)>,
+        paths: Vec<(ObjectKey, String)>,
+    }
+}
 /// `(unique id, neighbour unique ids)` in graph order.
 type UniqueIdMap = Vec<(String, Vec<String>)>;
 /// `PlannerInputError`'s `(code, message, help)`.
@@ -167,12 +178,19 @@ pub(crate) fn project_graph(resources: Vec<ResourceRow>) -> PyResult<NativeProje
     compiler_guard(|| {
         let resources: Vec<GraphResource> = resources
             .into_iter()
-            .map(|(key, deps, tags, folder)| GraphResource {
-                key,
-                deps,
-                tags,
-                folder,
-            })
+            .map(
+                |ResourceRow {
+                     key,
+                     deps,
+                     tags,
+                     folder,
+                 }| GraphResource {
+                    key,
+                    deps,
+                    tags,
+                    folder,
+                },
+            )
             .collect();
         Ok(NativeProjectGraph::new(build_project_graph(&resources)))
     })
@@ -190,7 +208,13 @@ impl NativeProjectGraph {
     #[staticmethod]
     fn from_indexes(indexes: IndexesRow) -> PyResult<Self> {
         compiler_guard(|| {
-            let (names, upstream, downstream, tags, paths) = indexes;
+            let IndexesRow {
+                names,
+                upstream,
+                downstream,
+                tags,
+                paths,
+            } = indexes;
             Ok(Self::new(graph_from_indexes(GraphIndexes {
                 names,
                 upstream,
@@ -204,13 +228,13 @@ impl NativeProjectGraph {
     /// `(names, upstream, downstream, tags, paths)` for Python's `ProjectGraph`.
     fn indexes(&self) -> IndexesRow {
         let graph: &ProjectGraph = &self.graph;
-        (
-            graph.names.clone(),
-            graph.upstream.clone(),
-            graph.downstream.clone(),
-            graph.tags.clone(),
-            graph.paths.clone(),
-        )
+        IndexesRow {
+            names: graph.names.clone(),
+            upstream: graph.upstream.clone(),
+            downstream: graph.downstream.clone(),
+            tags: graph.tags.clone(),
+            paths: graph.paths.clone(),
+        }
     }
 
     /// The key's direct upstream lineage keys, in authored dependency order.

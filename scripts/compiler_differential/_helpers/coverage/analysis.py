@@ -7,6 +7,7 @@ import re
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 
+from scripts.compiler_differential._helpers.comparing.capture_text import expand_capture_text
 from scripts.compiler_differential._helpers.comparing.compare import as_json_object
 from scripts.compiler_differential._helpers.coverage.capture_values import (
     capture_problems,
@@ -15,7 +16,6 @@ from scripts.compiler_differential._helpers.coverage.capture_values import (
     has_content,
     records,
 )
-from scripts.compiler_differential.classes.capture_file import expand_capture_text
 from scripts.compiler_differential.constants import (
     ANALYSIS_CALLABLE_CAPTURE_FIELDS,
     ANALYSIS_DETAIL_KINDS,

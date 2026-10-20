@@ -14,6 +14,7 @@ use sqlbuild_core::panics::main::native_failure::native_failure;
 
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::compiled_project::model_input_view::NativeModelInput;
+use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::records::fields::{
     field as native_field, path_posix_text, path_stem,
 };
@@ -26,19 +27,11 @@ const INTERNAL_FAILURE: &str = "internal";
 const DECIMAL_OVERFLOW: &str = "decimal_overflow";
 const SQL_TEST_ASSEMBLY_CONTEXT: &str = "native SQL test assembly";
 
-/// `(line, column, end line, end column, message, help)` of one P013 diagnostic.
-pub(crate) type DiagnosticRow = (usize, usize, usize, usize, String, String);
-/// `(name, scope deps, target models, case fingerprint, diagnostic resource, diagnostics)`.
-pub(crate) type FactsRow = (
-    String,
-    Vec<(&'static str, String)>,
-    Vec<String>,
-    Option<String>,
-    String,
-    Vec<DiagnosticRow>,
-);
 /// The test's facts, and the `(kind, message)` of the error its assembly raises, if any.
-pub(crate) type AssemblyRow = (Option<FactsRow>, Option<(&'static str, String)>);
+pub(crate) type AssemblyRow = (
+    Option<AssembledSqlTestFacts>,
+    Option<(&'static str, String)>,
+);
 
 /// The compile inputs assembly reads: model inputs, SQL test inputs and lexical rules.
 pub(crate) struct AssemblyRequest<'py> {
@@ -86,11 +79,18 @@ fn assembly_model(model: &Bound<'_, PyAny>) -> PyResult<SqlTestAssemblyModel> {
                 references: record
                     .references
                     .iter()
-                    .map(|(kind, name, package, _)| SqlTestAssemblyReference {
-                        kind: kind.clone(),
-                        name: name.clone(),
-                        package: package.clone(),
-                    })
+                    .map(
+                        |ReferenceRow {
+                             kind,
+                             name,
+                             package,
+                             ..
+                         }| SqlTestAssemblyReference {
+                            kind: kind.clone(),
+                            name: name.clone(),
+                            package: package.clone(),
+                        },
+                    )
                     .collect(),
             })
         });
@@ -240,11 +240,10 @@ fn parameter_values(items: &Bound<'_, PyAny>) -> PyResult<Vec<SqlTestParameterVa
 
 fn assembly_row(outcome: SqlTestAssemblyOutcome) -> AssemblyRow {
     match outcome {
-        SqlTestAssemblyOutcome::Assembled(facts) => (Some(facts_row(facts)), None),
-        SqlTestAssemblyOutcome::FingerprintOverflow(facts) => (
-            Some(facts_row(facts)),
-            Some((DECIMAL_OVERFLOW, String::new())),
-        ),
+        SqlTestAssemblyOutcome::Assembled(facts) => (Some(facts), None),
+        SqlTestAssemblyOutcome::FingerprintOverflow(facts) => {
+            (Some(facts), Some((DECIMAL_OVERFLOW, String::new())))
+        }
         SqlTestAssemblyOutcome::Failed(SqlTestAssemblyFailure::Input(message)) => {
             (None, Some((INPUT_FAILURE, message)))
         }
@@ -256,28 +255,4 @@ fn assembly_row(outcome: SqlTestAssemblyOutcome) -> AssemblyRow {
             )),
         ),
     }
-}
-
-fn facts_row(facts: AssembledSqlTestFacts) -> FactsRow {
-    (
-        facts.name,
-        facts.scope_deps,
-        facts.target_model_names,
-        facts.case_fingerprint,
-        facts.diagnostic_resource_name,
-        facts
-            .diagnostics
-            .into_iter()
-            .map(|diagnostic| {
-                (
-                    diagnostic.line,
-                    diagnostic.column,
-                    diagnostic.end_line,
-                    diagnostic.end_column,
-                    diagnostic.message,
-                    diagnostic.help,
-                )
-            })
-            .collect(),
-    )
 }

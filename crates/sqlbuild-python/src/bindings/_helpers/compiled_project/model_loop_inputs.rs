@@ -68,15 +68,22 @@ pub(crate) fn stripped_values<'py>(
 }
 
 pub(crate) fn reference_row(reference: &SqlReference) -> ReferenceRow {
-    (
-        reference.kind.to_owned(),
-        reference.name.clone(),
-        reference.package.clone(),
-        reference.call_argument_count,
-    )
+    ReferenceRow {
+        kind: reference.kind.to_owned(),
+        name: reference.name.clone(),
+        package: reference.package.clone(),
+        call_argument_count: reference.call_argument_count,
+    }
 }
 
-pub(crate) fn reference_fact((kind, name, package, _): ReferenceRow) -> ModelReferenceFact {
+pub(crate) fn reference_fact(
+    ReferenceRow {
+        kind,
+        name,
+        package,
+        ..
+    }: ReferenceRow,
+) -> ModelReferenceFact {
     ModelReferenceFact {
         kind,
         name,

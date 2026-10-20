@@ -16,7 +16,7 @@ use crate::assembly::analysis_session::models::{
     LineageRow, ModelAnalysis, ModelOutcome, ModelRequest, SessionRequest,
 };
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
-use crate::semantic_validation::types::DiagnosticRow;
+use crate::semantic_validation::models::DiagnosticRow;
 
 const LINEAGE_NATIVE: u64 = 0;
 const LINEAGE_FACTS: u64 = 1;
@@ -454,7 +454,16 @@ pub(crate) fn encode_outcome(
     encoder.flag(analysis.has_star);
     encoder.flag(analysis.star_resolved);
     encoder.uint(analysis.binding_diagnostics.len() as u64);
-    for (code, message, line, column, start, end, severity) in &analysis.binding_diagnostics {
+    for DiagnosticRow {
+        code,
+        message,
+        line,
+        column,
+        start,
+        end,
+        severity,
+    } in &analysis.binding_diagnostics
+    {
         encoder.text(code);
         encoder.text(message);
         for position in [line, column, start, end] {
@@ -529,15 +538,15 @@ pub(crate) fn decode_outcome(
     let diagnostic_count: usize = decoder.index()?;
     let mut binding_diagnostics: Vec<DiagnosticRow> = Vec::new();
     for _ in 0..diagnostic_count {
-        binding_diagnostics.push((
-            decoder.text()?,
-            decoder.text()?,
-            decoder.optional_index()?,
-            decoder.optional_index()?,
-            decoder.optional_index()?,
-            decoder.optional_index()?,
-            decoder.text()?,
-        ));
+        binding_diagnostics.push(DiagnosticRow {
+            code: decoder.text()?,
+            message: decoder.text()?,
+            line: decoder.optional_index()?,
+            column: decoder.optional_index()?,
+            start: decoder.optional_index()?,
+            end: decoder.optional_index()?,
+            severity: decoder.text()?,
+        });
     }
     let binding_validated: bool = decoder.flag()?;
     decoder.finish()?;

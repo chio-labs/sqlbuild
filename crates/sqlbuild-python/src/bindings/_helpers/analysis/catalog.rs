@@ -3,6 +3,7 @@
 use crate::bindings::_helpers::analysis::conversions;
 use crate::bindings::_helpers::analysis::normalization_results::normalization_results;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::models::Positional;
 use crate::bindings::models::{CatalogInput, CompactAnalysisJob, ProjectCatalog};
 use crate::bindings::types::CompilerDetach;
 use pyo3::exceptions::PyValueError;
@@ -10,8 +11,9 @@ use pyo3::prelude::{Bound, Py, PyAny, PyResult, Python};
 use pyo3::pymethods;
 use pyo3::types::PyBytes;
 use sqlbuild_analysis::semantic_validation::models as validation;
+use sqlbuild_analysis::semantic_validation::models::DiagnosticRow;
 use sqlbuild_analysis::semantic_validation::types::{
-    BindingRequest, DiagnosticRow, NormalizationRequest, Relations,
+    BindingRequest, NormalizationRequest, Relations,
 };
 use std::collections::HashMap;
 
@@ -90,9 +92,11 @@ impl ProjectCatalog {
         &self,
         py: Python<'_>,
         #[pyo3(from_py_with = conversions::binding_requests)] requests: Vec<BindingRequest>,
-    ) -> PyResult<Vec<Vec<DiagnosticRow>>> {
-        py.compiler_detach(|| self.inner.binding_results(requests))
-            .map_err(compiler_error)
+    ) -> PyResult<Vec<Vec<Positional<DiagnosticRow>>>> {
+        let rows: Vec<Vec<DiagnosticRow>> = py
+            .compiler_detach(|| self.inner.binding_results(requests))
+            .map_err(compiler_error)?;
+        Ok(rows.into_iter().map(Positional::wrap_all).collect())
     }
 
     /// Normalize a preparation batch on the idle analysis pool, else in turn, in one detached call.

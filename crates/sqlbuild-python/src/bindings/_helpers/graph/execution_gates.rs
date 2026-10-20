@@ -39,7 +39,13 @@ fn attached_audit_gate_edges<'py>(
     let cache: KeyCache<'py> = KeyCache::new(py)?;
     let edge_type: Bound<'py, PyAny> = record_class(py, RecordId::AttachedAuditGateEdge)?;
     let mut edges: Vec<Bound<'py, PyAny>> = Vec::with_capacity(gates.len());
-    for (audit_name, target, gated, read) in gates {
+    for GateRow {
+        audit_name,
+        target,
+        gated,
+        read,
+    } in gates
+    {
         edges.push(keyword_call(
             &edge_type,
             &[
@@ -65,7 +71,14 @@ fn hook_read_edges<'py>(
     let edge_type: Bound<'py, PyAny> = record_class(py, RecordId::HookReadEdge)?;
     let path_type: Bound<'py, PyAny> = py.import(PATHLIB_MODULE)?.getattr("Path")?;
     let mut edges: Vec<Bound<'py, PyAny>> = Vec::with_capacity(hooks.len());
-    for (hook_name, gated, read, kind, path) in hooks {
+    for HookRow {
+        hook_name,
+        gated,
+        read,
+        hook_type: kind,
+        path,
+    } in hooks
+    {
         let hook_path: Bound<'py, PyAny> = match path {
             None => py.None().into_bound(py),
             Some(path) => path_type.call1((path,))?,

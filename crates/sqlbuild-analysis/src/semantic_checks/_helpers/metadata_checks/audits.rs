@@ -13,8 +13,8 @@ use crate::semantic_checks::models::{
 };
 use crate::semantic_validation::main::diagnostics::binding_diagnostics;
 use crate::semantic_validation::main::validations_json;
-use crate::semantic_validation::models::{CatalogInput, Columns, ProjectCatalog};
-use crate::semantic_validation::types::{DiagnosticRow, Relations};
+use crate::semantic_validation::models::{CatalogInput, Columns, DiagnosticRow, ProjectCatalog};
+use crate::semantic_validation::types::Relations;
 
 const EXPRESSION_AUDIT: &str = "expression_is_true";
 const RELATIONSHIPS_AUDIT: &str = "relationships";
@@ -107,15 +107,15 @@ fn response_rows(response: &Value) -> Result<Vec<DiagnosticRow>, SemanticFailure
             Some(Value::String(text)) if !text.is_empty() => text.clone(),
             _ => DEFAULT_BINDING_MESSAGE.to_owned(),
         };
-        rows.push((
-            code.to_owned(),
+        rows.push(DiagnosticRow {
+            code: code.to_owned(),
             message,
-            optional_index(error.get("line")),
-            optional_index(error.get("column")),
-            optional_index(error.get("start")),
-            optional_index(error.get("end")),
-            severity.to_owned(),
-        ));
+            line: optional_index(error.get("line")),
+            column: optional_index(error.get("column")),
+            start: optional_index(error.get("start")),
+            end: optional_index(error.get("end")),
+            severity: severity.to_owned(),
+        });
     }
     Ok(rows)
 }
@@ -162,8 +162,13 @@ fn standalone_validation(
     binding_diagnostics(sql, &dialect, response_rows(response)?).map_err(internal)
 }
 
-/// One `(code, message, severity)` finding before it is located.
-type Unlocated = (String, String, String, String);
+/// One audit finding before it is located at the named column or field.
+struct Unlocated {
+    code: String,
+    message: String,
+    severity: String,
+    name: String,
+}
 
 fn expression_findings(
     expression: &str,
@@ -188,14 +193,12 @@ fn expression_findings(
         .unwrap_or_default();
     Ok(rows
         .into_iter()
-        .filter(|row| row.0 != UNKNOWN_TABLE_CODE)
-        .map(|row| {
-            (
-                row.0,
-                format!("{EXPRESSION_AUDIT}: {}", row.1),
-                row.6,
-                expression.to_owned(),
-            )
+        .filter(|row| row.code != UNKNOWN_TABLE_CODE)
+        .map(|row| Unlocated {
+            code: row.code,
+            message: format!("{EXPRESSION_AUDIT}: {}", row.message),
+            severity: row.severity,
+            name: expression.to_owned(),
         })
         .collect())
 }
@@ -203,17 +206,17 @@ fn expression_findings(
 fn typed_findings(rows: Vec<DiagnosticRow>, label: &str, column: &str) -> Vec<Unlocated> {
     rows.into_iter()
         .map(|row| {
-            let code = if row.6 == ERROR_SEVERITY {
+            let code = if row.severity == ERROR_SEVERITY {
                 AUDIT_TYPE_CODE.to_owned()
             } else {
-                row.0
+                row.code
             };
-            (
+            Unlocated {
                 code,
-                format!("{label}: {}", row.1),
-                row.6,
-                column.to_owned(),
-            )
+                message: format!("{label}: {}", row.message),
+                severity: row.severity,
+                name: column.to_owned(),
+            }
         })
         .collect()
 }
@@ -243,12 +246,12 @@ fn relationship_findings(
         if target_shape.is_empty() {
             return Ok(Vec::new());
         }
-        return Ok(vec![(
-            MISSING_TARGET_COLUMN_CODE.to_owned(),
-            format!("relationships target has no column '{}'", audit.field),
-            ERROR_SEVERITY.to_owned(),
-            audit.field.clone(),
-        )]);
+        return Ok(vec![Unlocated {
+            code: MISSING_TARGET_COLUMN_CODE.to_owned(),
+            message: format!("relationships target has no column '{}'", audit.field),
+            severity: ERROR_SEVERITY.to_owned(),
+            name: audit.field.clone(),
+        }]);
     };
     let Some((_, left)) = shape.iter().find(|(name, _)| name == column) else {
         return Ok(Vec::new());
@@ -337,7 +340,13 @@ pub(crate) fn audit_errors(
 ) -> Result<Vec<AuditFinding>, SemanticFailure> {
     let mut findings: Vec<AuditFinding> = Vec::new();
     for audit in &model.audits {
-        for (code, message, severity, name) in audit_findings(audit, shape, context)? {
+        for Unlocated {
+            code,
+            message,
+            severity,
+            name,
+        } in audit_findings(audit, shape, context)?
+        {
             let (line, column) = text_position(&model.authored_sql, &name, 0)?;
             findings.push(AuditFinding {
                 code,

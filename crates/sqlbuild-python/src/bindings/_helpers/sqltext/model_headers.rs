@@ -54,21 +54,29 @@ fn tokenize_model_header(header: &str) -> PyResult<Vec<(u8, String, usize)>> {
     })
 }
 
-pub(crate) type ColumnLocation = (String, usize, usize, usize, usize);
+positional_record! {
+    into;
+    /// A column name and its authored line, column, end line and end column.
+    pub(crate) struct ColumnLocation {
+        pub(crate) name: String,
+        pub(crate) line: usize,
+        pub(crate) column: usize,
+        pub(crate) end_line: usize,
+        pub(crate) end_column: usize,
+    }
+}
 
 pub(crate) fn location_rows(
     locations: Vec<(String, sqlbuild_sqltext::compiler::models::TextLocation)>,
 ) -> Vec<ColumnLocation> {
     locations
         .into_iter()
-        .map(|(name, location)| {
-            (
-                name,
-                location.line,
-                location.column,
-                location.end_line,
-                location.end_column,
-            )
+        .map(|(name, location)| ColumnLocation {
+            name,
+            line: location.line,
+            column: location.column,
+            end_line: location.end_line,
+            end_column: location.end_column,
         })
         .collect()
 }

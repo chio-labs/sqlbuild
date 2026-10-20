@@ -51,6 +51,40 @@ fn given_physical_layout_keys_when_validating_then_shapes_and_materializations_a
             expected_outcome: "model 'orders_daily': order_by is only valid for table and incremental models",
         },
         ValidateTestCase {
+            description: "a shared engine",
+            config: table(vec![("engine", Value::Str("SharedMergeTree"))]),
+            references: &[],
+            query_sql: "select 1",
+            expected_outcome: "accepted",
+        },
+        ValidateTestCase {
+            description: "a shared replacing engine with arguments",
+            config: table(vec![(
+                "engine",
+                Value::Str("SharedReplacingMergeTree(updated_at)"),
+            )]),
+            references: &[],
+            query_sql: "select 1",
+            expected_outcome: "accepted",
+        },
+        ValidateTestCase {
+            description: "a replicated replacing engine",
+            config: table(vec![(
+                "engine",
+                Value::Str("ReplicatedReplacingMergeTree(updated_at)"),
+            )]),
+            references: &[],
+            query_sql: "select 1",
+            expected_outcome: "model 'orders_daily': engine 'ReplicatedReplacingMergeTree(updated_at)' must be a non-replicated MergeTree-family table engine",
+        },
+        ValidateTestCase {
+            description: "a shared engine outside the MergeTree family",
+            config: table(vec![("engine", Value::Str("SharedSet"))]),
+            references: &[],
+            query_sql: "select 1",
+            expected_outcome: "model 'orders_daily': engine 'SharedSet' must be a non-replicated MergeTree-family table engine",
+        },
+        ValidateTestCase {
             description: "a replicated engine",
             config: table(vec![(
                 "engine",
@@ -58,14 +92,14 @@ fn given_physical_layout_keys_when_validating_then_shapes_and_materializations_a
             )]),
             references: &[],
             query_sql: "select 1",
-            expected_outcome: "model 'orders_daily': engine 'ReplicatedMergeTree('/tables/orders', '{replica}')' must be a single-server MergeTree-family table engine",
+            expected_outcome: "model 'orders_daily': engine 'ReplicatedMergeTree('/tables/orders', '{replica}')' must be a non-replicated MergeTree-family table engine",
         },
         ValidateTestCase {
             description: "an engine outside the MergeTree family",
             config: table(vec![("engine", Value::Str("Log"))]),
             references: &[],
             query_sql: "select 1",
-            expected_outcome: "model 'orders_daily': engine 'Log' must be a single-server MergeTree-family table engine",
+            expected_outcome: "model 'orders_daily': engine 'Log' must be a non-replicated MergeTree-family table engine",
         },
         ValidateTestCase {
             description: "a blank sorting expression",

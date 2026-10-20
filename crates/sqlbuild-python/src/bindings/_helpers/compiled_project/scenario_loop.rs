@@ -22,8 +22,18 @@ use crate::bindings::_helpers::compiled_project::sql_test_loop::{
     FileOrigin, TestScope, assertion_targets, checked_body, source_names, unique,
 };
 
-/// A scenario file's paths, discovered file, contents, SQL body and name.
-pub(crate) type ScenarioRow = (String, String, Py<PyAny>, String, String, String);
+positional_record! {
+    extract;
+    /// A scenario file's paths, discovered file, contents, SQL body and name.
+    pub(crate) struct ScenarioRow {
+        pub(crate) file_path: String,
+        pub(crate) relative_path: String,
+        pub(crate) scenario_file: Py<PyAny>,
+        pub(crate) contents: String,
+        pub(crate) sql_body: String,
+        pub(crate) name: String,
+    }
+}
 
 impl<'py> TestScope<'_, 'py> {
     /// Every scenario expanded, classified and checked, in discovery order.
@@ -33,7 +43,14 @@ impl<'py> TestScope<'_, 'py> {
 
     fn scenario(&self, row: &ScenarioRow) -> PyResult<Py<PyAny>> {
         let py: Python<'py> = self.context.host.py();
-        let (file_path, relative_path, scenario_file, contents, sql_body, name) = row;
+        let ScenarioRow {
+            file_path,
+            relative_path,
+            scenario_file,
+            contents,
+            sql_body,
+            name,
+        } = row;
         let resource: Bound<'py, PyAny> = self
             .context
             .classes

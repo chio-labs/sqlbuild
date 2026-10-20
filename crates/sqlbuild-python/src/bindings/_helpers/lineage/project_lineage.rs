@@ -237,7 +237,7 @@ fn fast_lineage<'py>(
                 if model.expands_star {
                     let star_columns: Vec<LineageColumn> = outcomes
                         .next()
-                        .map(|outcome| outcome.into_parts().1)
+                        .map(|outcome| outcome.into_parts().columns)
                         .unwrap_or_default();
                     let mut expanded: Vec<Bound<'py, PyAny>> =
                         columns.try_iter()?.collect::<PyResult<_>>()?;

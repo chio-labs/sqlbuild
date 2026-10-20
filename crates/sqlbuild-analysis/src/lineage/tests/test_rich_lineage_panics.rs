@@ -55,7 +55,7 @@ fn given_an_injected_panic_when_building_rich_lineage_then_the_request_fails() {
         let answered: Result<Vec<String>, String> = outcomes.map(|outcomes| {
             outcomes
                 .into_iter()
-                .map(|outcome| outcome.into_parts().3.unwrap_or_default())
+                .map(|outcome| outcome.into_parts().detail.unwrap_or_default())
                 .collect()
         });
         assert_eq!(

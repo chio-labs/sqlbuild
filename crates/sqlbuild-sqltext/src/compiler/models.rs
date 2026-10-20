@@ -115,11 +115,20 @@ pub enum InterpolationRead {
     Context(String),
 }
 
+/// One substitution in code points: source start and end, output start and end.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CharSpan {
+    pub source_start: usize,
+    pub source_end: usize,
+    pub output_start: usize,
+    pub output_end: usize,
+}
+
 /// Interpolated SQL (`None` when unchanged), its code-point substitution spans and its reads.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InterpolatedSql {
     pub sql: Option<String>,
-    pub spans: Vec<crate::compiler::types::CharSpan>,
+    pub spans: Vec<CharSpan>,
     pub reads: Vec<InterpolationRead>,
 }
 

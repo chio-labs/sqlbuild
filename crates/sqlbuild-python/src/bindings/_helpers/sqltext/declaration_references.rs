@@ -6,10 +6,17 @@ use sqlbuild_sqltext::compiler::models::{
     DeclarationReferenceStop,
 };
 
-/// `(kind code, name, member, start, end)`: kind 0 is an enum member, 1 a constant.
-type ReferenceRow = (u8, String, Option<String>, usize, usize);
+/// One natively scanned reference: kind 0 is an enum member, 1 a constant.
+#[derive(Clone)]
+pub(crate) struct ScannedReference {
+    pub(crate) kind: u8,
+    pub(crate) name: String,
+    pub(crate) member: Option<String>,
+    pub(crate) start: usize,
+    pub(crate) end: usize,
+}
 /// References and stop code: unclosed quote 0, block comment 1, invalid enum 2, constant 3.
-type ScanRow = (Vec<ReferenceRow>, Option<u8>);
+type ScanRow = (Vec<ScannedReference>, Option<u8>);
 
 /// One SQL string's references and stop code, scanned without walking past malformed ones.
 pub(crate) fn declaration_scan(sql: &str) -> ScanRow {
@@ -30,16 +37,16 @@ fn scan_row(scan: DeclarationReferenceScan) -> ScanRow {
     )
 }
 
-fn reference_row(reference: DeclarationReference) -> ReferenceRow {
+fn reference_row(reference: DeclarationReference) -> ScannedReference {
     let kind: u8 = match reference.kind {
         DeclarationReferenceKind::Enum => 0,
         DeclarationReferenceKind::Constant => 1,
     };
-    (
+    ScannedReference {
         kind,
-        reference.name,
-        reference.member,
-        reference.start,
-        reference.end,
-    )
+        name: reference.name,
+        member: reference.member,
+        start: reference.start,
+        end: reference.end,
+    }
 }

@@ -136,10 +136,10 @@ fn given_tokens_when_interpolating_then_spans_count_code_points_and_reads_keep_o
         description: "variables, environment, context and a bare @@ after non-ASCII text",
         sql: "SELECT 'ü', @@größe, @@ENV:REGION, @@CTX:this @@",
         expected_spans: vec![
-            (12, 19, 12, 17),
-            (21, 33, 19, 21),
-            (35, 45, 23, 29),
-            (46, 48, 30, 32),
+            [12, 19, 12, 17],
+            [21, 33, 19, 21],
+            [35, 45, 23, 29],
+            [46, 48, 30, 32],
         ],
         expected_reads: vec![
             InterpolationRead::Environment("REGION".to_owned()),

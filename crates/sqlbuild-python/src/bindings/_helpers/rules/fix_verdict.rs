@@ -6,7 +6,9 @@ use pyo3::prelude::{Bound, IntoPyObject, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 use sqlbuild_rules::fix_verification::main::compare::compare;
-use sqlbuild_rules::fix_verification::models::{DiagnosticComparison, ModelComparison};
+use sqlbuild_rules::fix_verification::models::{
+    DiagnosticComparison, DiagnosticIdentity, ModelComparison,
+};
 
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -107,8 +109,39 @@ fn lineage<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     }
 }
 
-fn counts(
-    value: Option<Bound<'_, PyAny>>,
-) -> PyResult<BTreeMap<(String, String, String, String), i64>> {
-    value.map_or_else(|| Ok(BTreeMap::new()), |value| value.extract())
+positional_record! {
+    extract;
+    /// The `(code, resource type, resource name, message)` key `compile_facts` counts.
+    #[derive(PartialEq, Eq, PartialOrd, Ord)]
+    struct IdentityKey {
+        code: String,
+        resource_type: String,
+        resource_name: String,
+        message: String,
+    }
+}
+
+fn counts(value: Option<Bound<'_, PyAny>>) -> PyResult<BTreeMap<DiagnosticIdentity, i64>> {
+    let Some(value) = value else {
+        return Ok(BTreeMap::new());
+    };
+    let counted: BTreeMap<IdentityKey, i64> = value.extract()?;
+    Ok(counted
+        .into_iter()
+        .map(|(key, count)| {
+            let IdentityKey {
+                code,
+                resource_type,
+                resource_name,
+                message,
+            } = key;
+            let identity = DiagnosticIdentity {
+                code,
+                resource_type,
+                resource_name,
+                message,
+            };
+            (identity, count)
+        })
+        .collect())
 }

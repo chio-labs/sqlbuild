@@ -40,11 +40,18 @@ class SqliteConnection:
     def execute_with(self, *, sql: str, parameters: Sequence[object]) -> ObservedCursor:
         return self._run(sql=sql, run=lambda cursor: cursor.execute(sql, parameters))
 
+    def execute_as_writer(self, sql: str) -> ObservedCursor:
+        """Run a statement that needs the writer gate, such as switching a new file to WAL."""
+
+        return self._run(sql=sql, run=lambda cursor: cursor.execute(sql), writes=True)
+
     def executemany(self, *, sql: str, rows: Iterable[Sequence[object]]) -> ObservedCursor:
         return self._run(sql=sql, run=lambda cursor: cursor.executemany(sql, rows))
 
-    def _run(self, *, sql: str, run: Callable[[ObservedCursor], object]) -> ObservedCursor:
-        self._enter(sql)
+    def _run(
+        self, *, sql: str, run: Callable[[ObservedCursor], object], writes: bool = False
+    ) -> ObservedCursor:
+        self._enter(sql=sql, writes=writes)
         cursor: ObservedCursor = self.cursor()
         try:
             run(cursor)
@@ -72,8 +79,8 @@ class SqliteConnection:
         finally:
             self._release()
 
-    def _enter(self, sql: str) -> None:
-        if self._holds_gate or leading_keyword(sql) in READ_STATEMENT_KEYWORDS:
+    def _enter(self, *, sql: str, writes: bool) -> None:
+        if self._holds_gate or (not writes and leading_keyword(sql) in READ_STATEMENT_KEYWORDS):
             return
         self._holds_gate = self._gate.acquire()
 

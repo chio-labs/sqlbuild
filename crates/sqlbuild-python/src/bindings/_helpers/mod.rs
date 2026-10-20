@@ -1,10 +1,12 @@
+#[macro_use]
+pub(crate) mod boundary;
+
 pub(crate) mod analysis;
 pub(crate) mod analysis_session;
 pub(crate) mod attachments;
 pub(crate) mod audit_command;
 pub(crate) mod auditing;
 pub(crate) mod authored_values;
-pub(crate) mod boundary;
 pub(crate) mod build_command;
 pub(crate) mod build_progress;
 pub(crate) mod cache;

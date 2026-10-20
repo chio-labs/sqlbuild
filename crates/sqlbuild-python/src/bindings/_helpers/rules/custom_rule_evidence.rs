@@ -102,13 +102,24 @@ pub(crate) fn custom_rule_implementation_fingerprint(
     Ok(implementation_fingerprint(&source, &closure, &root)?)
 }
 
+positional_record! {
+    into;
+    /// `(path, line, column, owner)` of one public-harness case.
+    struct EvidenceRow {
+        path: String,
+        line: usize,
+        column: usize,
+        owner: String,
+    }
+}
+
 /// `(path, line, column, owner)` of each public-harness case that statically evaluates the rule.
 #[pyfunction]
 #[pyo3(signature = (*, rule, project_dir))]
 fn custom_rule_test_evidence<'py>(
     rule: &Bound<'py, PyAny>,
     project_dir: &Bound<'py, PyAny>,
-) -> PyResult<Vec<(String, usize, usize, String)>> {
+) -> PyResult<Vec<EvidenceRow>> {
     let py: Python<'py> = rule.py();
     let Some(source) = resolved_source(rule)? else {
         return Ok(Vec::new());
@@ -128,7 +139,12 @@ fn custom_rule_test_evidence<'py>(
     };
     Ok(evidence
         .into_iter()
-        .map(|item: RuleTestEvidence| (item.path, item.line, item.column, item.owner))
+        .map(|item: RuleTestEvidence| EvidenceRow {
+            path: item.path,
+            line: item.line,
+            column: item.column,
+            owner: item.owner,
+        })
         .collect())
 }
 
