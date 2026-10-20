@@ -18,21 +18,24 @@ use crate::bindings::_helpers::compile_command::reuse_attempt::reuse_debug;
 use crate::bindings::_helpers::compile_command::reuse_recording::{
     RecordedCompileOutput, print_to,
 };
-use crate::bindings::_helpers::compile_delta::context::{
+use crate::bindings::_helpers::compile_context::delta::BaseRules;
+use crate::bindings::_helpers::compile_context::delta::ERRORS_ON_DELTA_PATH;
+use crate::bindings::_helpers::compile_context::delta::PendingRules;
+use crate::bindings::_helpers::compile_context::delta::{
     CapturedDiagnostic, CapturedModel, CapturedTest, DeltaInjection, ImageCapture, RecordMerge,
     start_capture, take_capture, take_delta_unsupported, with_injection,
 };
-use crate::bindings::_helpers::compile_delta::header_keys::{
-    HeaderChange, custom_rule_reads, header_change,
-};
 use crate::bindings::_helpers::compile_delta::image::{
-    BaseRules, ImageGate, ImageRelations, ImageRules, PendingRules, ProjectImage,
+    ImageGate, ImageRelations, ImageRules, ProjectImage,
 };
 use crate::bindings::_helpers::compile_delta::splice::{SpliceScope, spliced_report};
 use crate::bindings::_helpers::compile_driver::command::{
     PhasesOutcome, resolved_request, unrecorded_compile,
 };
 use crate::bindings::_helpers::compile_outputs::reuse::NativeReuseAttempt;
+use crate::bindings::_helpers::discovery::header_keys::{
+    HeaderChange, custom_rule_reads, header_change,
+};
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// Set to `1` to always compile the whole project.
@@ -43,8 +46,6 @@ const ENABLED_VALUE: &str = "1";
 /// Rerunning more models than this, or this share of the project, compiles the whole project.
 const MAX_RERUN_MODELS: usize = 500;
 const MAX_RERUN_PERCENT: usize = 5;
-/// Whether edits that report or raise errors compile as deltas; until then they fall back.
-pub(crate) const ERRORS_ON_DELTA_PATH: bool = true;
 /// How many times a changed relation shape may pull its dependents into the delta.
 const MAX_ROUNDS: usize = 4;
 const MODELS_ROOT: &str = "models/";
@@ -286,7 +287,7 @@ fn lent_injection(
         yaml_store: store_path
             .parent()
             .and_then(std::path::Path::parent)
-            .map(crate::bindings::_helpers::compile_delta::yaml_cache::yaml_store_path),
+            .map(crate::bindings::_helpers::compile_context::yaml_cache::yaml_store_path),
         project_dir,
         source_paths: image
             .models
@@ -1198,8 +1199,8 @@ pub(crate) fn commit(
     for line in &stderr_lines {
         print_to(py, STDERR, line.as_str())?;
     }
-    crate::bindings::_helpers::compile_delta::context::set_pending_image(image);
-    crate::bindings::_helpers::compile_delta::context::set_record_merge(Some(merge));
+    crate::bindings::_helpers::compile_context::delta::set_pending_image(image);
+    crate::bindings::_helpers::compile_context::delta::set_record_merge(Some(merge));
     crate::bindings::_helpers::compile_driver::command::store_and_print(
         (&request, attempt),
         &output,

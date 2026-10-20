@@ -1,6 +1,6 @@
 use sqlbuild_config::models::{ConfigDate, ConfigDateTime, ConfigTime, ConfigValue};
 
-use crate::bindings::_helpers::compile_delta::yaml_cache::{decoded_document, encoded_document};
+use crate::bindings::_helpers::compile_context::yaml_cache::{decoded_document, encoded_document};
 use crate::bindings::tests::helpers::text;
 use crate::bindings::tests::test_types::DocumentTestCase;
 

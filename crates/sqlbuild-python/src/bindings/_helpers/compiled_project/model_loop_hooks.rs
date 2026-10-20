@@ -27,7 +27,6 @@ use crate::bindings::_helpers::compiled_project::model_loop_calls::{
     CallOrigin, report_invalid_calls,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_external::external_errors;
-use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::{
     HOOK_KEYS, present, reference_row,
 };
@@ -38,6 +37,7 @@ use crate::bindings::_helpers::compiled_project::model_loop_named::{
     SQL_HOOK_DECLARATION, named_usages,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_visibility::ModelVisibility;
+use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::declaration_expansion::{
     DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer,

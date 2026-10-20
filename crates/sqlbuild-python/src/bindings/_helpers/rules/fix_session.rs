@@ -15,8 +15,10 @@ use sqlbuild_rules::fix_verification::main::with_edits::with_edits;
 use sqlbuild_rules::fix_verification::models::{FixEdit, FixEligibility};
 
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, keywords};
-use crate::bindings::_helpers::compile_attachment::sql_expansion_context::SqlExpansionInputs;
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
+use crate::bindings::_helpers::compiled_project::relation_keys::{
+    RelationKeys, project_relation_keys,
+};
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
@@ -25,6 +27,7 @@ use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::{field, replaced};
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::render::authored_sql::SqlExpansionInputs;
 use crate::bindings::_helpers::rules::constants::SAFE_RULE_FIX_CODES;
 use crate::bindings::_helpers::rules::fix_facts::compile_facts;
 use crate::bindings::_helpers::rules::fix_verdict::fix_verdict;
@@ -34,7 +37,6 @@ use crate::bindings::_helpers::rules::lint_expansion::{
 use crate::bindings::_helpers::rules::lint_pipeline::{
     LintFile, LintOutcome, LintRequest, LintSettings, ViolationClasses, lint, lint_sources,
 };
-use crate::bindings::_helpers::rules::relation_keys::{RelationKeys, project_relation_keys};
 use crate::bindings::_helpers::rules::run_lint::given_files;
 
 const VERIFICATION_FAILURE: &str =

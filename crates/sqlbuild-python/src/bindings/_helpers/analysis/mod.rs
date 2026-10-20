@@ -2,6 +2,7 @@ pub(crate) mod binding_catalog;
 pub(crate) mod binding_locations;
 mod catalog;
 pub(crate) mod conversions;
+pub(crate) mod getters;
 pub(crate) mod normalization;
 pub(crate) mod normalization_results;
 mod positions;

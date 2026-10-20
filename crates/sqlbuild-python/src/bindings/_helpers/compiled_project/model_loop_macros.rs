@@ -13,8 +13,8 @@ use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 use crate::bindings::_helpers::compiled_project::model_loop::{
     LoopContext, VisibleDeclarations, compile_error,
 };
-use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::reference_row;
+use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::macro_expansion::{
     ExpansionOutput, NativeMacroExpansion, StateInput, expanded,

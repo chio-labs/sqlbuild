@@ -1,6 +1,7 @@
 pub(crate) mod audit_progress;
 pub(crate) mod build_callbacks;
 pub(crate) mod footer;
+pub(crate) mod getters;
 pub(crate) mod nested_progress;
 pub(crate) mod plan_facts;
 pub(crate) mod progress;

@@ -13,6 +13,7 @@ mod discovery_models;
 mod discovery_requests;
 mod errors;
 pub(crate) mod fingerprint;
+pub(crate) mod getters;
 mod known_input_columns;
 mod matching;
 mod model_entries;

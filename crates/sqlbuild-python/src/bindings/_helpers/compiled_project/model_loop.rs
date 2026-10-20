@@ -1,18 +1,50 @@
 //! The compile-input model loop: each model's steps run in the attachment's order, natively.
 
-use crate::bindings::_helpers::compiled_project::audit_loop::{
-    AttachmentOwner, AuditFileRow, AuditSettings, attached_audits,
+use std::collections::{HashMap, HashSet};
+
+use pyo3::prelude::{
+    Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
+use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple};
+use pyo3::{FromPyObject, pyclass, pymethods};
+use sqlbuild_analysis::compiled_project::main::analysis_gate::analysis_gate;
+use sqlbuild_analysis::compiled_project::main::calls_macros::calls_macros;
+use sqlbuild_analysis::compiled_project::main::located_scan_error::located_scan_error;
+use sqlbuild_analysis::compiled_project::main::merge_call_site_references::merge_call_site_references;
+use sqlbuild_analysis::compiled_project::models::{
+    AnalysisGate, ModelLoopSettings, ScanFaultOrigin, SplicedSpan,
+};
+use sqlbuild_attachments::cursor_intrinsics::main::validated_model_intrinsics::validated_model_intrinsics;
+use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicModel;
+use sqlbuild_attachments::functions::models::KnownResources;
+use sqlbuild_attachments::test_targets::models::TargetCatalog;
+use sqlbuild_discovery::model_files::models::HeaderFacts;
+use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
+use sqlbuild_sqltext::sql_references::models::ReferenceExtraction;
+use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
+
+use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::AttachedSqlTests;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::AuditFileRow;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::AuditSettings;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::FunctionRow;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::FunctionSettings;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::ScenarioRow;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::SourceRow;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::SourceSettings;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::SqlTestSettings;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::TestFileRow;
+use crate::bindings::_helpers::compiled_project::audit_loop::{AttachmentOwner, attached_audits};
 use crate::bindings::_helpers::compiled_project::audit_views::AttachedAudit;
 use crate::bindings::_helpers::compiled_project::function_loop::{
-    FunctionRow, FunctionSettings, attached_functions, checked_table_function_arities,
+    attached_functions, checked_table_function_arities,
 };
 use crate::bindings::_helpers::compiled_project::function_views::AttachedFunction;
 use crate::bindings::_helpers::compiled_project::model_input_view::NativeModelInput;
 use crate::bindings::_helpers::compiled_project::model_loop_calls::{
     CallOrigin, report_invalid_calls,
 };
-use crate::bindings::_helpers::compiled_project::model_loop_config::{ConfigClasses, ModelConfigs};
+use crate::bindings::_helpers::compiled_project::model_loop_config::ModelConfigs;
 use crate::bindings::_helpers::compiled_project::model_loop_external::external_errors;
 use crate::bindings::_helpers::compiled_project::model_loop_header::{
     AttachedHeader, HeaderSource, header_schema,
@@ -22,7 +54,7 @@ use crate::bindings::_helpers::compiled_project::model_loop_hooks::{
 };
 use crate::bindings::_helpers::compiled_project::model_loop_host::{
     DeclarationScan, FinishedModel, InterpolationRow, ModelLoopRow, RecordClasses, RecordInputs,
-    ReferenceRow, finished_record,
+    finished_record,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::{
     analysis_override, hook_presence, reference_row,
@@ -49,17 +81,14 @@ use crate::bindings::_helpers::compiled_project::model_loop_visibility::{
     ModelVisibility, VisibilityClasses, VisibilityModel,
 };
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
-use crate::bindings::_helpers::compiled_project::scenario_loop::ScenarioRow;
-use crate::bindings::_helpers::compiled_project::source_loop::{
-    SourceRow, SourceSettings, attached_sources,
-};
+use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
+use crate::bindings::_helpers::compiled_project::source_loop::attached_sources;
 use crate::bindings::_helpers::compiled_project::source_views::{
     AttachedSource, NativeSourceInput, retain_sources,
 };
-use crate::bindings::_helpers::compiled_project::sql_test_loop::{
-    AttachedSqlTests, SqlTestSettings, TestFileRow, TestScope,
-};
+use crate::bindings::_helpers::compiled_project::sql_test_loop::TestScope;
 use crate::bindings::_helpers::discovery::model_file_record::{ModelFileTexts, NativeModelFile};
+use crate::bindings::_helpers::model_config::config_classes::ConfigClasses;
 use crate::bindings::_helpers::model_config::config_errors::raised_config_exception;
 use crate::bindings::_helpers::model_config::header_metadata::ContractClasses;
 use crate::bindings::_helpers::model_config::model_validator::NativeModelValidator;
@@ -76,29 +105,6 @@ use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 use crate::bindings::_helpers::sqltext::static_sql::{
     InterpolationRow as SqlInterpolationRow, InterpolationSources, interpolation_batch,
 };
-use pyo3::prelude::{
-    Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
-};
-use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple};
-use pyo3::{FromPyObject, pyclass, pymethods};
-use sqlbuild_analysis::compiled_project::main::analysis_gate::analysis_gate;
-use sqlbuild_analysis::compiled_project::main::calls_macros::calls_macros;
-use sqlbuild_analysis::compiled_project::main::located_scan_error::located_scan_error;
-use sqlbuild_analysis::compiled_project::main::merge_call_site_references::merge_call_site_references;
-use sqlbuild_analysis::compiled_project::models::{
-    AnalysisGate, ModelLoopSettings, ScanFaultOrigin, SplicedSpan,
-};
-use sqlbuild_attachments::cursor_intrinsics::main::validated_model_intrinsics::validated_model_intrinsics;
-use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicModel;
-use sqlbuild_attachments::functions::models::KnownResources;
-use sqlbuild_attachments::test_targets::models::TargetCatalog;
-use sqlbuild_discovery::model_files::models::HeaderFacts;
-use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
-use sqlbuild_sqltext::sql_references::models::ReferenceExtraction;
-use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
-use std::collections::{HashMap, HashSet};
-
-use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::types::CompilerDetach;
 
 const MATERIALIZED_KEY: &str = "materialized";
@@ -430,7 +436,7 @@ impl NativeModelLoop {
         }
         project
             .borrow_mut()
-            .keep_attachment_loop(slf.clone().unbind(), host.clone().unbind());
+            .keep_attachment_loop(slf.clone().unbind().into_any(), host.clone().unbind());
         slf.get().run_models(py, project, host, models)
     }
 

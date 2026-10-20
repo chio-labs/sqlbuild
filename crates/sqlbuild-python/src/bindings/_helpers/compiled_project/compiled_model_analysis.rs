@@ -23,9 +23,7 @@ use crate::bindings::_helpers::compiled_project::compiled_model_view::{
 };
 use crate::bindings::_helpers::compiled_project::model_input_view::ModelInputRecord;
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
-use crate::bindings::_helpers::record_behaviours::lineage_facts::{
-    confidence_member, transform_kind_member,
-};
+use crate::bindings::_helpers::lineage::lineage_facts::{confidence_member, transform_kind_member};
 
 const COMPILE_PHASE: &str = "compile";
 const MODEL_RESOURCE: &str = "model";

@@ -2,28 +2,11 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+use crate::bindings::_helpers::compile_context::delta::ModelCoverage;
+
 /// The reason a model that opts out of SQL analysis is partial.
 pub(crate) const ANALYSIS_DISABLED: &str = "SQL analysis disabled";
 const INVALID_DEPENDENCY: &str = "depends on invalid model";
-
-/// What one model contributes to the partial-check reasons, apart from its dependencies.
-#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub(crate) struct ModelCoverage {
-    pub(crate) name: String,
-    /// The model opts out of SQL analysis.
-    pub(crate) disabled: bool,
-    /// The model has a binding error, which makes every model reading it partial.
-    pub(crate) blocked: bool,
-    /// Its own reasons, sorted; those from invalid dependencies are derived.
-    pub(crate) partial: Vec<String>,
-}
-
-impl ModelCoverage {
-    /// Whether the model adds anything to the reasons.
-    pub(crate) fn notable(&self) -> bool {
-        self.disabled || self.blocked || !self.partial.is_empty()
-    }
-}
 
 /// Each model's partial-check reasons, in `order`, which pairs each model with its upstream.
 pub(crate) fn coverage_reasons(

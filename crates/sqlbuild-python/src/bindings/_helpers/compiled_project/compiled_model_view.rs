@@ -21,13 +21,13 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
     InputViewClasses, ModelInputRecord, model_relation_key_row, query_sql_text, read_input,
     read_input_with_owner, references, rejected_opt_out, schema_entry, view_classes,
 };
-use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::compiled_project::relation_keys::RelationKeyRow;
+use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::graph::project_graph::ResourceRow;
 use crate::bindings::_helpers::model_config::header_metadata::HeaderColumns;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::rules::relation_keys::RelationKeyRow;
 
 const DATABASE_KEY: &str = "database";
 const SCHEMA_KEY: &str = "schema";

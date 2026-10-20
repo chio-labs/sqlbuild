@@ -12,11 +12,11 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
     InputViewClasses, view_classes,
 };
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::compiled_project::relation_keys::audit_key_rows;
 use crate::bindings::_helpers::compiled_project::schema_facts::python_column_facts;
 use crate::bindings::_helpers::graph::project_graph::ResourceRow;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
-use crate::bindings::_helpers::rules::relation_keys::audit_key_rows;
 
 const SOURCE_RESOURCE: &str = "source";
 

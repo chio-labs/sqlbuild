@@ -14,18 +14,20 @@ use sqlbuild_scopes::compile_usages::main::schema_scope_usages::schema_scope_usa
 use sqlbuild_scopes::compile_usages::models::{
     DependencySource, InaccessibleDiagnostic, NamedRecord, SchemaDeclaration, SchemaUsages,
 };
+use sqlbuild_scopes::scope_index::main::normalize_scope_path::normalize_scope_path;
 use sqlbuild_scopes::scope_index::models::{
-    DeclarationKind, DeclaredScope, ResourceIdentity, ResourceKind, ScopeKind,
+    DeclarationKind, DeclaredScope, ResourceIdentity, ResourceKind, ScopeKind, ScopePathFailure,
 };
 
 use crate::bindings::_helpers::compile_context::diagnostic_collector::report_compile_diagnostic;
-use crate::bindings::_helpers::compiled_project::model_loop_named::scope_path_message;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 
+/// The folder a scope path is relative to when its owner names none.
+pub(crate) const CURRENT_FOLDER: &str = ".";
 const INACCESSIBLE_DECLARATION_CODE: &str = "S006";
 const SCHEMA_USAGE_KINDS: [&str; 2] = ["schema", "enum"];
 
@@ -297,4 +299,26 @@ pub(crate) fn merged_usage_rows(
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(model_schema_scope_usages, module)?)?;
     Ok(())
+}
+
+/// The `InvalidScopePathError` message of the first path Python's visibility check rejects.
+pub(crate) fn scope_path_message(declared: &DeclaredScope, label: &str) -> String {
+    let owner: &str = declared
+        .owning_path
+        .as_deref()
+        .filter(|path| !path.is_empty())
+        .unwrap_or(CURRENT_FOLDER);
+    let (path, failure) = match normalize_scope_path(label) {
+        Err(failure) => (label, failure),
+        Ok(_) => match normalize_scope_path(owner) {
+            Err(failure) => (owner, failure),
+            Ok(_) => (label, ScopePathFailure::NotProjectRelative),
+        },
+    };
+    match failure {
+        ScopePathFailure::NotProjectRelative => {
+            format!("Scope path must be project-relative: {path}")
+        }
+        ScopePathFailure::EscapesProject => format!("Scope path escapes the project: {path}"),
+    }
 }

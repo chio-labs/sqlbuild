@@ -1,14 +1,10 @@
 //! Compile-input diagnostics of the project's resources, read from the native owner.
 
-use pyo3::exceptions::PyValueError;
-use sqlbuild_discovery::yaml_files::main::yaml_entry_lines::yaml_entry_lines;
-use sqlbuild_pysource::definition_locations::main::decorator_location::decorator_location;
-use sqlbuild_sqltext::compiler::main::model_header_entry_span::model_header_entry_span;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
-use pyo3::FromPyObject;
-use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::exceptions::PyValueError;
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyStringMethods};
 use sqlbuild_analysis::compiled_project::main::text_position::text_position;
 use sqlbuild_analysis::compiled_project::models::TextPosition;
@@ -20,9 +16,16 @@ use sqlbuild_analysis::resource_diagnostics::main::header_help::header_help;
 use sqlbuild_analysis::resource_diagnostics::main::missing_description::missing_description;
 use sqlbuild_analysis::resource_diagnostics::main::yaml_help::yaml_help;
 use sqlbuild_analysis::resource_diagnostics::models::{CursorModel, HeaderHelp};
+use sqlbuild_discovery::yaml_files::main::yaml_entry_lines::yaml_entry_lines;
+use sqlbuild_pysource::definition_locations::main::decorator_location::decorator_location;
+use sqlbuild_sqltext::compiler::main::model_header_entry_span::model_header_entry_span;
 
-use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::{
+    DiagnosticSettings, HookDescriptionRow, LoaderRow, PythonResourceRow, ResourceDiagnostics,
+    ScenarioDescriptionRow,
+};
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::seed_views::SeedParts;
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -34,73 +37,6 @@ const AUDIT_FACTORIES_KEY: &str = "audit_factories";
 const CURSOR_KEY: &str = "cursor";
 const CURSOR_INPUTS_KEY: &str = "cursor_inputs";
 const PYTHON_UDF_DECORATOR: &str = "udf";
-
-/// A loader's description, relative path and whether that path is a YAML file.
-pub(crate) type LoaderRow = (Option<String>, String, bool);
-
-positional_record! {
-    extract;
-    /// A Python resource's kind, name, description (a `str` that may hold surrogates), location, help.
-    struct PythonResourceRow {
-        kind: String,
-        name: String,
-        description: Option<Py<PyString>>,
-        location: Py<PyAny>,
-        help: String,
-    }
-}
-
-positional_record! {
-    extract;
-    /// A scenario's name, relative path, contents and authored header description.
-    struct ScenarioDescriptionRow {
-        name: String,
-        path: String,
-        contents: String,
-        raw: Py<PyAny>,
-    }
-}
-
-positional_record! {
-    extract;
-    /// A SQL hook file's name, relative path, contents and description.
-    struct HookDescriptionRow {
-        name: String,
-        path: String,
-        contents: String,
-        description: Option<String>,
-    }
-}
-
-/// What the resource diagnostics read beyond the owner, and the Python values they build.
-#[derive(FromPyObject)]
-#[pyo3(from_item_all)]
-pub(crate) struct DiagnosticSettings {
-    /// `CompilerDiagnostic`, `SourceLocation`, `Path` and `CompileInputError`.
-    compiler_diagnostic: Py<PyAny>,
-    compile_error: Py<PyAny>,
-    source_location: Py<PyAny>,
-    path_class: Py<PyAny>,
-    /// Every discovered model file, whose headers attach audit factories.
-    model_files: Vec<Py<PyAny>>,
-    /// Each discovered audit factory's name, relative path and line.
-    audit_factories: Vec<(String, String, usize)>,
-    /// Each scenario's name, relative path, contents and authored header description.
-    scenarios: Vec<ScenarioDescriptionRow>,
-    /// Each SQL hook file's name, relative path, contents and description.
-    sql_hooks: Vec<HookDescriptionRow>,
-    /// Each loader by name.
-    loaders: HashMap<String, LoaderRow>,
-    /// Python-defined resources: kind, name, description, location and help, read by Python.
-    python_resources: Vec<PythonResourceRow>,
-}
-
-/// The orphaned audit factory warnings, then the missing descriptions, then the cursor errors.
-pub(crate) type ResourceDiagnostics<'py> = (
-    Vec<Bound<'py, PyAny>>,
-    Vec<Bound<'py, PyAny>>,
-    Vec<Bound<'py, PyAny>>,
-);
 
 struct Diagnostics<'a, 'py> {
     py: Python<'py>,

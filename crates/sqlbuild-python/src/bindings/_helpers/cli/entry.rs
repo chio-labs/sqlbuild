@@ -22,7 +22,7 @@ use crate::bindings::_helpers::cli::observability::{
     CliObservabilityScope, cli_observability_scope,
 };
 use crate::bindings::_helpers::compile_command::report::format_compile_error_json;
-use crate::bindings::_helpers::diff_report::registration::render_diff_error_json;
+use crate::bindings::_helpers::diff_report::output::render_diff_error_json;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;

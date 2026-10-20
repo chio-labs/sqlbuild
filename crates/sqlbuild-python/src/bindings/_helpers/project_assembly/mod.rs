@@ -1,4 +1,5 @@
 pub(crate) mod declared_relations;
+pub(crate) mod getters;
 pub(crate) mod models;
 pub(crate) mod native_resources;
 pub(crate) mod registration;

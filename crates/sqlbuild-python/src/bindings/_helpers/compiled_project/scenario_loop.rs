@@ -1,6 +1,5 @@
 //! `build_scenario_inputs`: SQL scenarios expanded, classified and checked natively.
 
-use crate::bindings::_helpers::compile_delta::context::record_test_source_reads;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use sqlbuild_analysis::compiler::main::scenario_helper_scope::scenario_helper_scope;
@@ -13,6 +12,8 @@ use sqlbuild_attachments::test_targets::main::scenario_source_violation::scenari
 use sqlbuild_attachments::test_targets::models::ScenarioCteSources;
 use sqlbuild_sqltext::sql_references::models::SqlReference;
 
+use crate::bindings::_helpers::compile_context::delta::record_test_source_reads;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::ScenarioRow;
 use crate::bindings::_helpers::compiled_project::model_loop::compile_error;
 use crate::bindings::_helpers::compiled_project::model_loop_calls::origin_references;
 use crate::bindings::_helpers::compiled_project::source_loop::{
@@ -21,19 +22,6 @@ use crate::bindings::_helpers::compiled_project::source_loop::{
 use crate::bindings::_helpers::compiled_project::sql_test_loop::{
     FileOrigin, TestScope, assertion_targets, checked_body, source_names, unique,
 };
-
-positional_record! {
-    extract;
-    /// A scenario file's paths, discovered file, contents, SQL body and name.
-    pub(crate) struct ScenarioRow {
-        pub(crate) file_path: String,
-        pub(crate) relative_path: String,
-        pub(crate) scenario_file: Py<PyAny>,
-        pub(crate) contents: String,
-        pub(crate) sql_body: String,
-        pub(crate) name: String,
-    }
-}
 
 impl<'py> TestScope<'_, 'py> {
     /// Every scenario expanded, classified and checked, in discovery order.

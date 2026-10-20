@@ -1,10 +1,8 @@
 //! `build_test_inputs`: SQL test blocks expanded, classified and checked natively.
 
-use crate::bindings::_helpers::compile_delta::context::record_test_source_reads;
 use std::collections::{HashMap, HashSet};
 use std::convert::Infallible;
 
-use pyo3::FromPyObject;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use sqlbuild_analysis::compiled_project::main::text_position::text_position;
@@ -38,6 +36,10 @@ use sqlbuild_sqltext::sql_references::models::{ReferenceExtraction, SqlReference
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::bindings::_helpers::cache::sql_test_scan_store::SqlTestScanStore;
+use crate::bindings::_helpers::compile_context::delta::record_test_source_reads;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::{
+    SqlTestSettings, TestBlockRow, TestCaseRow, TestFileRow,
+};
 use crate::bindings::_helpers::compiled_project::model_loop::{
     LoopContext, NativeModelLoop, compile_error, helped_compile_error,
 };
@@ -67,64 +69,6 @@ const CONSTANT_VISIBILITY: &str = "constant_visibility";
 const MACRO_RECORDS: &str = "macro_records";
 const MACRO_VISIBILITY: &str = "macro_visibility";
 
-/// A test case's discovered case, name and parameter values in authored order.
-pub(crate) type TestCaseRow = (Py<PyAny>, String, Vec<(String, Py<PyAny>)>);
-
-positional_record! {
-    extract;
-    /// A test block, its name, SQL, mode, declared parameter names, cases and authored SQL span.
-    pub(crate) struct TestBlockRow {
-        pub(crate) block: Py<PyAny>,
-        pub(crate) name: Option<String>,
-        pub(crate) sql_body: String,
-        pub(crate) mode: String,
-        pub(crate) parameters: Vec<String>,
-        pub(crate) cases: Vec<TestCaseRow>,
-        pub(crate) sql_body_span: Option<(usize, usize)>,
-    }
-}
-
-positional_record! {
-    extract;
-    /// A test file's paths, stem, discovered file, contents and blocks.
-    pub(crate) struct TestFileRow {
-        pub(crate) file_path: String,
-        pub(crate) relative_path: String,
-        pub(crate) stem: String,
-        pub(crate) file: Py<PyAny>,
-        pub(crate) contents: String,
-        pub(crate) blocks: Vec<TestBlockRow>,
-    }
-}
-
-/// What every SQL test and scenario of one compile resolves and records with.
-#[derive(FromPyObject)]
-#[pyo3(from_item_all)]
-pub(crate) struct SqlTestSettings {
-    /// `CompileSqlTestInput`, its model and direct payloads, and `CompileSqlTestCte`.
-    pub(crate) test_input: Py<PyAny>,
-    pub(crate) model_payload: Py<PyAny>,
-    pub(crate) direct_payload: Py<PyAny>,
-    pub(crate) test_cte: Py<PyAny>,
-    /// `CompileSqlScenarioInput` and `CompileSqlScenarioCte`.
-    pub(crate) scenario_input: Py<PyAny>,
-    pub(crate) scenario_cte: Py<PyAny>,
-    /// `SqlTestMode` by value.
-    pub(crate) modes: Py<PyDict>,
-    /// The `ResourceKind`s of tests and scenarios, and the runtime `UsageKind`.
-    pub(crate) test_kind: Py<PyAny>,
-    pub(crate) scenario_kind: Py<PyAny>,
-    pub(crate) runtime_usage: Py<PyAny>,
-    /// The adapter's typed scalar renderer, returning `(text, None)` or `(None, error)`.
-    pub(crate) render_parameter: Py<PyAny>,
-    pub(crate) adapter_name: String,
-    /// `SourceLocation`, for helper problems located natively.
-    pub(crate) source_location: Py<PyAny>,
-    /// The shared scan store with the scan algorithm and lexical rules keying it, if any.
-    pub(crate) scan_store: Option<Py<SqlTestScanStore>>,
-    pub(crate) scan_key: (String, String),
-}
-
 /// The loop, its context, the settings and the project names every test resolves against.
 pub(crate) struct TestScope<'a, 'py> {
     pub(crate) model_loop: &'a NativeModelLoop,
@@ -144,9 +88,6 @@ struct ExpandedTest<'a, 'py> {
     tested: Vec<String>,
     usages: Bound<'py, PyTuple>,
 }
-
-/// The attached SQL test inputs, then scenario inputs.
-pub(crate) type AttachedSqlTests = (Vec<Py<PyAny>>, Vec<Py<PyAny>>);
 
 /// `(file path, relative path, contents)` of an authored test or scenario file.
 pub(crate) type FileOrigin<'a> = (&'a str, &'a str, &'a str);

@@ -16,7 +16,7 @@ use sqlbuild_analysis::semantic_checks::models::{
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::compiled_project::audit_views::audit_reference_rows;
 use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
-use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
+use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;

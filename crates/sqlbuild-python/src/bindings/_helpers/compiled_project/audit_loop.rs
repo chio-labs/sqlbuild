@@ -1,11 +1,8 @@
 //! `build_project_audit_inputs`: singular and attached generic audits attached natively.
 
-use crate::bindings::_helpers::compile_delta::context::record_source_reads;
 use std::collections::{BTreeMap, HashMap};
 
-use crate::bindings::_helpers::model_config::header_metadata::HeaderColumns;
-use pyo3::FromPyObject;
-use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString, PyTuple, PyTupleMethods};
 use sqlbuild_analysis::compiled_project::main::merge_call_site_references::merge_call_site_references;
 use sqlbuild_analysis::compiled_project::models::SchemaColumnFact;
@@ -20,30 +17,35 @@ use sqlbuild_attachments::audits::models::{
 use sqlbuild_attachments::cursor_intrinsics::main::intrinsic_free::intrinsic_free;
 use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicCheck;
 use sqlbuild_attachments::functions::models::KnownResources;
+use sqlbuild_core::json::models::JsonValue;
+use sqlbuild_model_config::errors::ConfigError;
+use sqlbuild_model_config::header_metadata::main::parse_measurement_policy::parse_measurement_policy;
 use sqlbuild_sqltext::sql_references::models::SqlReference;
 
 use crate::bindings::_helpers::attachments::argument_values::argument_pairs;
+use crate::bindings::_helpers::compile_context::delta::record_source_reads;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::{
+    AuditBlockRow, AuditFileRow, AuditSettings,
+};
 use crate::bindings::_helpers::compiled_project::audit_views::{AttachedAudit, AttachedTarget};
 use crate::bindings::_helpers::compiled_project::model_loop::{
     LoopContext, NativeModelLoop, compile_error, helped_compile_error,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_calls::origin_references;
-use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::reference_row;
 use crate::bindings::_helpers::compiled_project::model_loop_named::{
     AUDIT_DECLARATION, resource_named_usages,
 };
+use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::source_loop::{
     AuthoredExpansion, expanded_authored_sql, file_declarations,
 };
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
+use crate::bindings::_helpers::model_config::header_metadata::HeaderColumns;
 use crate::bindings::_helpers::model_config::header_metadata::thresholds;
 use crate::bindings::_helpers::model_config::model_validator::NativeModelValidator;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::result_output::integration_values::json_value;
-use sqlbuild_core::json::models::JsonValue;
-use sqlbuild_model_config::errors::ConfigError;
-use sqlbuild_model_config::header_metadata::main::parse_measurement_policy::parse_measurement_policy;
 
 const THRESHOLDS_KEY: &str = "thresholds";
 const MINIMUM_SAMPLES_KEY: &str = "minimum_samples";
@@ -60,49 +62,6 @@ const AUDIT_RESOURCE_TYPE: &str = "audit";
 const MODEL_TARGET: &str = "model";
 const SOURCE_TARGET: &str = "source";
 const SEED_TARGET: &str = "seed";
-
-positional_record! {
-    extract, into;
-    /// An audit block, its name, SQL body, evidence SQL, measurement flag and header values.
-    pub(crate) struct AuditBlockRow {
-        pub(crate) block: Py<PyAny>,
-        pub(crate) name: Option<String>,
-        pub(crate) sql_body: String,
-        pub(crate) evidence_sql: Option<String>,
-        pub(crate) measurement: bool,
-        pub(crate) header: Py<PyDict>,
-    }
-}
-
-positional_record! {
-    extract, into;
-    /// An audit file's paths, stem, discovered file, generic flag, contents and blocks.
-    pub(crate) struct AuditFileRow {
-        pub(crate) file_path: String,
-        pub(crate) relative_path: String,
-        pub(crate) stem: String,
-        pub(crate) file: Py<PyAny>,
-        pub(crate) generic: bool,
-        pub(crate) contents: String,
-        pub(crate) blocks: Vec<AuditBlockRow>,
-    }
-}
-
-/// What every audit in one compile resolves against, and the Python values it builds with.
-#[derive(FromPyObject)]
-#[pyo3(from_item_all)]
-pub(crate) struct AuditSettings {
-    default_severity: Option<String>,
-    default_run_scope: Option<String>,
-    /// Built-in generic definitions as audit file rows, overridden by project definitions.
-    builtins: Vec<AuditFileRow>,
-    /// `DeclarationIdentity`, and the singular and generic audit `DeclarationKind`s.
-    declaration_identity: Py<PyAny>,
-    singular_kind: Py<PyAny>,
-    audit_kind: Py<PyAny>,
-    /// `ResourceKind` by value, for the resources singular audits read and attach to.
-    resource_kinds: Py<PyDict>,
-}
 
 /// Generic definitions by name, and the warnings for project ones overriding built-ins.
 type Definitions<'a, 'py> = (HashMap<String, Definition<'a>>, Vec<Bound<'py, PyAny>>);

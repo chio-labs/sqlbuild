@@ -265,7 +265,7 @@ pub(crate) fn compile_phases<'py>(
         .getattr("skip_write")?
         .is_truthy()?;
     let staging: bool =
-        !skip_write && crate::bindings::_helpers::compile_delta::context::injection().is_none();
+        !skip_write && crate::bindings::_helpers::compile_context::delta::injection().is_none();
     let (outcome, input_reads, artifact_writes): (
         CommandOutcome<'py>,
         Bound<'py, PyAny>,

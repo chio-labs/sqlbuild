@@ -3,12 +3,77 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
+use pyo3::prelude::PyResult;
+
 use sqlbuild_analysis::assembly::analysis_session::models::{RelationTables, SessionRequest};
 use sqlbuild_cache::project_reuse::types::ImageSections;
-use sqlbuild_rules::models::RetainedRows;
+use sqlbuild_rules::engine::main::retained_request::retained_request;
+use sqlbuild_rules::models::{EvaluateRequest, RetainedRows};
 
-use crate::bindings::_helpers::compile_delta::coverage::ModelCoverage;
-use crate::bindings::_helpers::compile_delta::image::PendingRules;
+/// Whether edits that report or raise errors compile as deltas; until then they fall back.
+pub(crate) const ERRORS_ON_DELTA_PATH: bool = true;
+
+/// One model's header keys with the digest of each authored value, sorted by key.
+pub(crate) type HeaderKeys = Vec<(String, String)>;
+
+/// What one model contributes to the partial-check reasons, apart from its dependencies.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct ModelCoverage {
+    pub(crate) name: String,
+    /// The model opts out of SQL analysis.
+    pub(crate) disabled: bool,
+    /// The model has a binding error, which makes every model reading it partial.
+    pub(crate) blocked: bool,
+    /// Its own reasons, sorted; those from invalid dependencies are derived.
+    pub(crate) partial: Vec<String>,
+}
+
+impl ModelCoverage {
+    /// Whether the model adds anything to the reasons.
+    pub(crate) fn notable(&self) -> bool {
+        self.disabled || self.blocked || !self.partial.is_empty()
+    }
+}
+
+/// A stored compile's built-in rules request, as decoded for a delta compile.
+#[derive(Clone, Debug)]
+pub(crate) struct BaseRules {
+    pub(crate) request: EvaluateRequest,
+    /// Each model's payload digest, which keys its cached findings, in model order.
+    pub(crate) digests: Vec<String>,
+}
+
+impl BaseRules {
+    /// The rows a compile retained, decoded.
+    pub(crate) fn decoded(retained: &RetainedRows) -> Option<Self> {
+        Some(Self {
+            request: retained_request(retained)?,
+            digests: retained.digests.clone(),
+        })
+    }
+}
+
+/// A stored rules request, decoding on its own thread or decoded already.
+#[derive(Debug)]
+pub(crate) enum PendingRules {
+    Decoding(std::thread::JoinHandle<Option<BaseRules>>),
+    Ready(Box<BaseRules>),
+}
+
+impl PendingRules {
+    /// The decoded request, or `None` when it could not be decoded.
+    pub(crate) fn resolved(self) -> Option<BaseRules> {
+        match self {
+            Self::Decoding(handle) => {
+                let Ok(rules) = handle.join() else {
+                    return None;
+                };
+                rules
+            }
+            Self::Ready(rules) => Some(*rules),
+        }
+    }
+}
 
 /// The facts a full compile leaves for its project image beyond its analysis record.
 #[derive(Debug, Default)]
@@ -40,8 +105,7 @@ pub(crate) struct ImageCapture {
     /// The template environment names the compile read.
     pub(crate) environment_names: Vec<String>,
     /// Each discovered model's header keys, by model file path.
-    pub(crate) header_keys:
-        BTreeMap<String, crate::bindings::_helpers::compile_delta::header_keys::HeaderKeys>,
+    pub(crate) header_keys: BTreeMap<String, HeaderKeys>,
     /// Each model file's SQL lint cache key, in project model order.
     pub(crate) lint_model_keys: Option<Vec<(String, String)>>,
     /// Each other SQL file's lint cache key, in walk order.
@@ -240,8 +304,7 @@ pub(crate) fn delta_unsupported(reason: &str) -> pyo3::PyErr {
 
 /// In a delta compile that leaves errors to full compiles, stop once `failed` reports one.
 pub(crate) fn stop_on_errors(failed: bool) -> pyo3::PyResult<()> {
-    let errors_on_delta_path: bool =
-        crate::bindings::_helpers::compile_delta::driver::ERRORS_ON_DELTA_PATH;
+    let errors_on_delta_path: bool = ERRORS_ON_DELTA_PATH;
     if failed && !errors_on_delta_path && injection().is_some() {
         return Err(delta_unsupported("the edit reports errors"));
     }
@@ -341,4 +404,15 @@ pub(crate) fn reset() {
     let _ = take_delta_unsupported();
     set_pending_image(None);
     set_record_merge(None);
+}
+
+/// Run a capture hook; a failure only rules the compile out as a delta base.
+pub(crate) fn guarded(hook: impl FnOnce() -> PyResult<()>) -> PyResult<()> {
+    if !capturing() {
+        return Ok(());
+    }
+    if let Err(error) = hook() {
+        capture_unsupported(&format!("an image fact could not be recorded: {error}"));
+    }
+    Ok(())
 }

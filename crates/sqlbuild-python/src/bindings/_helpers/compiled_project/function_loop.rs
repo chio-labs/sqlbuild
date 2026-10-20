@@ -1,10 +1,9 @@
 //! `build_sql_function_inputs`: every SQL and Python function attached natively.
 
-use crate::bindings::_helpers::compile_delta::context::record_source_reads;
 use std::collections::{HashMap, HashSet};
 
 use pyo3::exceptions::PyValueError;
-use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple};
 use sqlbuild_analysis::assembly::analysis_session::main::query_columns::query_columns;
 use sqlbuild_analysis::assembly::analysis_session::models::{
@@ -31,6 +30,10 @@ use sqlbuild_sqltext::sql_references::models::ReferenceExtraction;
 
 use crate::bindings::_helpers::analysis_session::query_columns::query_columns_error;
 use crate::bindings::_helpers::attachments::function_headers::parsed_header;
+use crate::bindings::_helpers::compile_context::delta::record_source_reads;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::{
+    FunctionRow, FunctionSettings,
+};
 use crate::bindings::_helpers::compiled_project::compiled_model_view::DestinationFact;
 use crate::bindings::_helpers::compiled_project::function_views::{
     AttachedFunction, NamedTypeRow, PythonRuntime,
@@ -41,8 +44,8 @@ use crate::bindings::_helpers::compiled_project::model_loop::{
 use crate::bindings::_helpers::compiled_project::model_loop_calls::{
     CallOrigin, report_invalid_calls,
 };
-use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::reference_row;
+use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::source_loop::{
     AuthoredExpansion, expanded_authored_sql, expanded_template, parse_checked, scoped_declarations,
 };
@@ -56,33 +59,6 @@ const SCHEMA_KEY: &str = "schema";
 
 /// The reference kind of a source.
 const SOURCE_KIND: &str = "source";
-
-positional_record! {
-    extract;
-    /// A function's paths, stem, discovered file, header values, body and SQL file contents.
-    pub(crate) struct FunctionRow {
-        pub(crate) file_path: String,
-        pub(crate) relative_path: String,
-        pub(crate) name: String,
-        pub(crate) function_file: Py<PyAny>,
-        pub(crate) header_values: Py<PyDict>,
-        pub(crate) body: String,
-        pub(crate) contents: Option<String>,
-    }
-}
-
-positional_record! {
-    extract;
-    /// Adapter, validation, raw default and target namespaces, inheritance and resource kind.
-    pub(crate) struct FunctionSettings {
-        pub(crate) adapter_name: String,
-        pub(crate) validate: bool,
-        pub(crate) defaults: (Option<String>, Option<String>),
-        pub(crate) target: Option<(Option<String>, Option<String>)>,
-        pub(crate) inherit: bool,
-        pub(crate) kind: Py<PyAny>,
-    }
-}
 
 /// What every function in one compile resolves against.
 struct FunctionScope<'a, 'py> {

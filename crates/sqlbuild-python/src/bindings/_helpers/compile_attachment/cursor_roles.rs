@@ -5,7 +5,7 @@ use pyo3::pyfunction;
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString};
 
 use crate::bindings::_helpers::compiled_project::model_input_view::input_reference_rows;
-use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
+use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;

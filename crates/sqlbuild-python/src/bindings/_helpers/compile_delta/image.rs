@@ -5,15 +5,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use sqlbuild_analysis::assembly::analysis_session::models::RelationTables;
 use sqlbuild_analysis::assembly::analysis_session::types::Shapes;
 use sqlbuild_cache::project_reuse::types::ImageSections;
-use sqlbuild_rules::engine::main::retained_request::retained_request;
-use sqlbuild_rules::models::{EvaluateRequest, RetainedRows};
+use sqlbuild_rules::models::RetainedRows;
 
-use crate::bindings::_helpers::compile_delta::context::{
+use crate::bindings::_helpers::compile_context::delta::HeaderKeys;
+use crate::bindings::_helpers::compile_context::delta::ModelCoverage;
+use crate::bindings::_helpers::compile_context::delta::{BaseRules, PendingRules};
+use crate::bindings::_helpers::compile_context::delta::{
     CapturedDiagnostic, CapturedModel, CapturedTest, ImageCapture, ModelShape,
 };
-use crate::bindings::_helpers::compile_delta::coverage::ModelCoverage;
-use crate::bindings::_helpers::compile_delta::header_keys::HeaderKeys;
-use crate::bindings::_helpers::compile_delta::image_codec::{Decoder, Encoder};
+use crate::bindings::_helpers::compile_context::image_codec::{Decoder, Encoder};
 
 /// Changes whenever the image's meaning changes, so an older image is never read.
 pub(crate) const IMAGE_FORMAT: &str = "sqlbuild-project-image-v8";
@@ -49,36 +49,11 @@ pub(crate) struct ProjectImage {
     pub(crate) rules: Option<ImageRules>,
 }
 
-/// A stored compile's built-in rules request, as decoded for a delta compile.
-#[derive(Clone, Debug)]
-pub(crate) struct BaseRules {
-    pub(crate) request: EvaluateRequest,
-    /// Each model's payload digest, which keys its cached findings, in model order.
-    pub(crate) digests: Vec<String>,
-}
-
-impl BaseRules {
-    /// The rows a compile retained, decoded.
-    pub(crate) fn decoded(retained: &RetainedRows) -> Option<Self> {
-        Some(Self {
-            request: retained_request(retained)?,
-            digests: retained.digests.clone(),
-        })
-    }
-}
-
 /// An image's rules request: decoding from a stored image, or as a compile just retained it.
 #[derive(Debug)]
 pub(crate) enum ImageRules {
     Decoding(PendingRules),
     Retained(RetainedRows),
-}
-
-/// A stored rules request, decoding on its own thread or decoded already.
-#[derive(Debug)]
-pub(crate) enum PendingRules {
-    Decoding(std::thread::JoinHandle<Option<BaseRules>>),
-    Ready(Box<BaseRules>),
 }
 
 impl ImageRules {
@@ -95,21 +70,6 @@ impl ImageRules {
         match self {
             Self::Retained(rules) => Some(rules),
             Self::Decoding(_) => None,
-        }
-    }
-}
-
-impl PendingRules {
-    /// The decoded request, or `None` when it could not be decoded.
-    pub(crate) fn resolved(self) -> Option<BaseRules> {
-        match self {
-            Self::Decoding(handle) => {
-                let Ok(rules) = handle.join() else {
-                    return None;
-                };
-                rules
-            }
-            Self::Ready(rules) => Some(*rules),
         }
     }
 }

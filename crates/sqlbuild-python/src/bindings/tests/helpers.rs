@@ -4,13 +4,15 @@ use sqlbuild_cache::project_reuse::types::ImageSections;
 use sqlbuild_config::models::ConfigValue;
 use sqlbuild_rules::models::{EvaluateRequest, RetainedRows};
 
-use crate::bindings::_helpers::compile_delta::context::{
+use crate::bindings::_helpers::compile_context::delta::BaseRules;
+use crate::bindings::_helpers::compile_context::delta::ModelCoverage;
+use crate::bindings::_helpers::compile_context::delta::PendingRules;
+use crate::bindings::_helpers::compile_context::delta::{
     CapturedDiagnostic, CapturedModel, CapturedTest,
 };
-use crate::bindings::_helpers::compile_delta::coverage::ModelCoverage;
 use crate::bindings::_helpers::compile_delta::image::{
-    BaseRules, FACTS_SECTION, GATE_SECTION, IMAGE_FORMAT, ImageRelations, ImageRules, PendingRules,
-    ProjectImage, RULE_DIGESTS_SECTION,
+    FACTS_SECTION, GATE_SECTION, IMAGE_FORMAT, ImageRelations, ImageRules, ProjectImage,
+    RULE_DIGESTS_SECTION,
 };
 
 /// The rows of a request without models: a zero model count.

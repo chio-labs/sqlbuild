@@ -250,7 +250,7 @@ fn assembled_inputs<'py>(
     )?
     .is_truthy()?
     {
-        crate::bindings::_helpers::compile_delta::context::stop_capture();
+        crate::bindings::_helpers::compile_context::delta::stop_capture();
     }
     let sql_analysis_override: &Bound<'py, PyAny> = request.sql_analysis_enabled_override.bind(py);
     let sql_analysis_enabled: Bound<'py, PyAny> = if !sql_analysis_override.is_none() {

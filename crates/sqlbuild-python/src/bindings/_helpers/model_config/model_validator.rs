@@ -72,7 +72,7 @@ fn discovered_names(inputs: &Bound<'_, PyAny>) -> PyResult<ResourceNames> {
     let mut models: HashSet<String> = each(inputs, "model_files", model_stem)?
         .into_iter()
         .collect();
-    if let Some(injection) = crate::bindings::_helpers::compile_delta::context::injection() {
+    if let Some(injection) = crate::bindings::_helpers::compile_context::delta::injection() {
         models.extend(injection.model_names.iter().cloned());
     }
     let mut seeds: HashSet<String> = HashSet::new();

@@ -6,9 +6,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::record_behaviours::lineage_facts::{
-    confidence_member, transform_kind_member,
-};
+use crate::bindings::_helpers::lineage::lineage_facts::{confidence_member, transform_kind_member};
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record, record_class};
 use crate::bindings::_helpers::records::ids::RecordId;
 

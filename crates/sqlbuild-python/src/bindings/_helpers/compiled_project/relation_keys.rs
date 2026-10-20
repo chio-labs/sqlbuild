@@ -12,11 +12,14 @@ use sqlbuild_discovery::project_validation::models::CsvSettings;
 use sqlbuild_rules::sql_quality::main::declared_relation_keys::declared_relation_keys as derive_keys;
 use sqlbuild_rules::sql_quality::models::{DeclaredKeyColumn, DeclaredRelation};
 
+use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
+use crate::bindings::_helpers::compiled_project::model_input_view::{
+    NativeModelInput, model_relation_key_row,
+};
 use crate::bindings::_helpers::compiled_project::schema_facts::python_column_facts;
 use crate::bindings::_helpers::compiled_project::source_views::{SourceKeyFacts, read_source_view};
 use crate::bindings::_helpers::discovery::project_facts::seed_csv_settings;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::rules::lint_inputs::model_key_row;
 
 const MATERIALIZED_CONFIG: &str = "materialized";
 const INCREMENTAL_MODE_CONFIG: &str = "incremental_mode";
@@ -345,4 +348,18 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(entry_relation_key_row, module)?)?;
     module.add_function(wrap_pyfunction!(declared_relation_keys, module)?)?;
     module.add_function(wrap_pyfunction!(compiled_relation_keys, module)?)
+}
+
+/// The declared key facts of a model input or compiled model.
+pub(crate) fn model_key_row(model: &Bound<'_, PyAny>) -> PyResult<RelationKeyRow> {
+    let py: Python<'_> = model.py();
+    if let Ok(input) = model.downcast::<NativeModelInput>() {
+        return input.get().read_with_owner(py, |owner, record| {
+            model_relation_key_row(owner, record, py)
+        });
+    }
+    if let Ok(compiled) = model.downcast::<NativeCompiledModel>() {
+        return compiled.get().relation_key_row(py);
+    }
+    native_field(model, "relation_key_row")?.extract()
 }

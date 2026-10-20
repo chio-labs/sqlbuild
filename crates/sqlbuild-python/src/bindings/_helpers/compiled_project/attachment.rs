@@ -1,25 +1,30 @@
 //! Seeds, functions, sources, SQL tests, scenarios and audits attached from discovered inputs.
 
+use std::collections::HashMap;
+
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyCFunction, PyDict, PyDictMethods, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
-use std::collections::HashMap;
-
 use sqlbuild_attachments::audits::constants::BUILTIN_AUDITS;
 
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
 use crate::bindings::_helpers::compile_context::compile_timings::record_compile_timing;
-use crate::bindings::_helpers::compiled_project::audit_loop::{AuditBlockRow, AuditFileRow};
-use crate::bindings::_helpers::compiled_project::function_loop::{FunctionRow, FunctionSettings};
+use crate::bindings::_helpers::compiled_project::attachment_inputs::AuditBlockRow;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::AuditFileRow;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::DiagnosticSettings;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::FunctionRow;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::FunctionSettings;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::LoaderRow;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::ScenarioRow;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::SourceRow;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::TestBlockRow;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::TestCaseRow;
+use crate::bindings::_helpers::compiled_project::attachment_inputs::TestFileRow;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
-use crate::bindings::_helpers::compiled_project::resource_diagnostics::{
-    DiagnosticSettings, LoaderRow, resource_diagnostics,
+use crate::bindings::_helpers::compiled_project::resource_attachment::{
+    attach_audits, attach_functions, attach_sources, attach_sql_tests,
 };
-use crate::bindings::_helpers::compiled_project::scenario_loop::ScenarioRow;
-use crate::bindings::_helpers::compiled_project::source_loop::SourceRow;
-use crate::bindings::_helpers::compiled_project::sql_test_loop::{
-    TestBlockRow, TestCaseRow, TestFileRow,
-};
+use crate::bindings::_helpers::compiled_project::resource_diagnostics::resource_diagnostics;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
@@ -175,7 +180,7 @@ pub(crate) fn attach_resources<'py>(
     let defaults: Bound<'py, PyAny> =
         native_field(discovered_inputs, "project_config")?.getattr("defaults")?;
     let function_kind: Bound<'py, PyAny> = enum_member(py, RecordId::ResourceKind, "FUNCTION")?;
-    let functions = NativeCompiledProject::attach_functions(
+    let functions = attach_functions(
         native_project,
         (
             function_rows(discovered_inputs, ("sql_function_files", "body_sql"), false)?,
@@ -208,7 +213,7 @@ pub(crate) fn attach_resources<'py>(
             ));
         }
     }
-    let sources = NativeCompiledProject::attach_sources(
+    let sources = attach_sources(
         native_project,
         source_rows,
         (
@@ -607,7 +612,7 @@ pub(crate) fn attach_checks<'py>(
     let scan_cache: &Bound<'py, PyAny> = &arguments.value("scan_cache")?;
     let source_inputs: &Bound<'py, PyAny> = &arguments.value("source_inputs")?;
     let (tests, scenarios) = record_compile_timing(TEST_TIMING_KEY, || {
-        let attached = NativeCompiledProject::attach_sql_tests(
+        let attached = attach_sql_tests(
             native_project,
             items(discovered_inputs, "test_files")?
                 .into_iter()
@@ -622,7 +627,7 @@ pub(crate) fn attach_checks<'py>(
         scan_cache.call_method0("save")?;
         Ok(attached)
     })?;
-    let (audits, audit_diagnostics) = NativeCompiledProject::attach_audits(
+    let (audits, audit_diagnostics) = attach_audits(
         native_project,
         items(discovered_inputs, "audit_files")?
             .into_iter()

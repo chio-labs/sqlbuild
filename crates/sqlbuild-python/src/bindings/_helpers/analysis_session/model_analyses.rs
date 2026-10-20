@@ -26,7 +26,7 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
     AttachedSchema, NativeModelInput, attached_schema, input_model_name, input_query_sql,
     input_reference_rows,
 };
-use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
+use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::enum_member;
@@ -224,7 +224,7 @@ fn run_session<'py>(
         .finished_session()
         .and_then(|finished| finished.relation_tables())
     {
-        crate::bindings::_helpers::compile_delta::context::capture(|capture| {
+        crate::bindings::_helpers::compile_context::delta::capture(|capture| {
             capture.relations = Some(tables.clone());
         });
     }

@@ -7,13 +7,14 @@ use sqlbuild_attachments::cursor_intrinsics::main::intrinsic_free::intrinsic_fre
 use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicCheck;
 use sqlbuild_model_config::templates::models::TemplateOptions;
 
+use crate::bindings::_helpers::compiled_project::attachment_inputs::{SourceRow, SourceSettings};
 use crate::bindings::_helpers::compiled_project::model_loop::{
     LoopContext, NativeModelLoop, compile_error, record_reads,
 };
-use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::model_loop_macros::{
     argument_references as macro_argument_references, expanded_with,
 };
+use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::source_views::{AttachedSource, replaced};
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 use crate::bindings::_helpers::model_config::config_errors::raised_config_exception;
@@ -39,12 +40,6 @@ const EXPRESSION_STATEMENTS: [&str; 3] = ["select", "with", "values"];
 
 /// The SQL parsed for an authored source expression and its syntax error message.
 type ParsedExpression = (String, PyResult<Option<String>>);
-
-/// One discovered source: its file's path, the discovered file and the entry.
-pub(crate) type SourceRow = (String, Py<PyAny>, Py<PyAny>);
-
-/// `(default contract, whether expressions are syntax-checked, source kind)`.
-pub(crate) type SourceSettings = (Option<String>, bool, Py<PyAny>);
 
 /// Attach every source in order, as `build_source_inputs` does.
 pub(crate) fn attached_sources<'py>(

@@ -9,7 +9,12 @@ use sqlbuild_config::models::{ConfigDate, ConfigDateTime, ConfigTime, ConfigValu
 use sqlbuild_core::text::main::decode_text::decode_text;
 use sqlbuild_discovery::yaml_files::models::YamlFileOutcome;
 
-use crate::bindings::_helpers::compile_delta::image_codec::{Decoder, Encoder};
+use crate::bindings::_helpers::compile_context::delta::injection;
+use crate::bindings::_helpers::compile_context::image_codec::{Decoder, Encoder};
+
+/// The source YAML key that lists sources, and the key naming each source.
+const SOURCES_KEY: &str = "sources";
+const NAME_KEY: &str = "name";
 
 /// The native store kind holding loaded YAML documents.
 pub(crate) const YAML_STORE_KIND: &str = "yaml-documents";
@@ -245,7 +250,7 @@ impl DocumentStore {
 
 /// In a delta compile, the document store beside its reuse slots, when it opens.
 pub(crate) fn open_documents(py: pyo3::Python<'_>) -> Option<DocumentStore> {
-    let path: PathBuf = crate::bindings::_helpers::compile_delta::context::injection()?
+    let path: PathBuf = crate::bindings::_helpers::compile_context::delta::injection()?
         .yaml_store
         .clone()?;
     match crate::bindings::_helpers::cache::native_store::open_store(
@@ -281,4 +286,50 @@ pub(crate) fn save_documents(py: pyo3::Python<'_>, documents: &DocumentStore) {
         &documents.path,
         &[],
     );
+}
+
+/// In a delta reading only some sources, drop every other loaded source YAML entry.
+pub(crate) fn retain_read_sources(
+    outcomes: &mut [sqlbuild_discovery::yaml_files::models::YamlFileOutcome],
+) {
+    use sqlbuild_config::models::ConfigValue;
+    use sqlbuild_discovery::yaml_files::models::YamlFileOutcome;
+    let Some(injection) = injection() else {
+        return;
+    };
+    let Some(read) = injection.source_names.as_ref() else {
+        return;
+    };
+    fn text(value: &ConfigValue) -> Option<&str> {
+        match value {
+            ConfigValue::String(text) => Some(text.as_str()),
+            _ => None,
+        }
+    }
+    for outcome in outcomes {
+        let YamlFileOutcome::Loaded {
+            value: ConfigValue::Map(entries),
+            ..
+        } = outcome
+        else {
+            continue;
+        };
+        for (key, value) in entries {
+            if text(key) != Some(SOURCES_KEY) {
+                continue;
+            }
+            let ConfigValue::List(sources) = value else {
+                continue;
+            };
+            sources.retain(|source| {
+                let name: Option<&str> = source.as_map().and_then(|entries| {
+                    entries
+                        .iter()
+                        .find(|(key, _)| text(key) == Some(NAME_KEY))
+                        .and_then(|(_, name)| text(name))
+                });
+                name.is_none_or(|name| read.contains(name))
+            });
+        }
+    }
 }

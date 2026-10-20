@@ -299,7 +299,7 @@ pub(crate) fn print_to<'py>(
 impl RecordedCompileOutput {
     /// Print one stderr result line, such as a note, and record it; a delta only records it.
     pub(crate) fn print_stderr_line(&self, line: Bound<'_, PyString>) -> PyResult<()> {
-        if crate::bindings::_helpers::compile_delta::context::injection().is_none() {
+        if crate::bindings::_helpers::compile_context::delta::injection().is_none() {
             print_to(line.py(), "stderr", &line)?;
         }
         self.locked().0.push(line.unbind());
@@ -525,7 +525,7 @@ fn record<'py>(facts: &CompileFacts<'py>) -> PyResult<bool> {
             ("rules", reuse_rules(py, true)?.into_any()),
         ],
     )?;
-    if let Some(mut capture) = crate::bindings::_helpers::compile_delta::context::take_capture() {
+    if let Some(mut capture) = crate::bindings::_helpers::compile_context::delta::take_capture() {
         capture.environment_names =
             native_field(&facts.input_reads, "environment_names")?.extract()?;
         let json_output: bool = facts.json_output.is_truthy()?;
@@ -538,7 +538,7 @@ fn record<'py>(facts: &CompileFacts<'py>) -> PyResult<bool> {
                 if let Ok(sections) = image.encode() {
                     pending = Some(sections);
                 }
-                crate::bindings::_helpers::compile_delta::context::set_pending_image(pending);
+                crate::bindings::_helpers::compile_context::delta::set_pending_image(pending);
             }
             Err(reason) => {
                 crate::bindings::_helpers::compile_command::reuse_attempt::reuse_debug(

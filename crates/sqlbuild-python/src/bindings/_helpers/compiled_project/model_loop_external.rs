@@ -4,7 +4,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::PyDict;
 
 use crate::bindings::_helpers::compiled_project::model_loop::{LoopContext, compile_error};
-use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
+use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 
 const DBT_REF_KIND: &str = "dbt_ref";
 const VALIDATE_METHOD: &str = "validate_reference";

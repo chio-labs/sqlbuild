@@ -4,10 +4,9 @@ use std::path::Path;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
-use sqlbuild_scopes::scope_index::main::normalize_scope_path::normalize_scope_path;
 use sqlbuild_scopes::scope_index::main::path_visible::path_visible;
 use sqlbuild_scopes::scope_index::models::{
-    DeclaredScope, ResourceIdentity, ResourceKind, ScopeKind, ScopePathFailure,
+    DeclaredScope, ResourceIdentity, ResourceKind, ScopeKind,
 };
 
 use crate::bindings::_helpers::compiled_project::model_loop::LoopContext;
@@ -24,7 +23,6 @@ const OWNING_PATH_FIELD: &str = "owning_path";
 const OWNERSHIP_ROOT_FIELD: &str = "ownership_root";
 const CONSUMER_FIELD: &str = "consumer";
 const DECLARATION_FIELD: &str = "declaration";
-const CURRENT_FOLDER: &str = ".";
 const INACCESSIBLE_CODE: &str = "S006";
 const MODEL_RESOURCE: &str = "model";
 
@@ -60,6 +58,7 @@ pub(crate) const AUDIT_DECLARATION: NamedKind = NamedKind {
     label: "Generic audit",
     role: "audits/generic",
 };
+use crate::bindings::_helpers::scopes::compile_usages::{CURRENT_FOLDER, scope_path_message};
 
 /// The usage of the indexed declaration `name`, if any, reporting S006 when it is hidden.
 pub(crate) fn named_usages<'py>(
@@ -119,28 +118,6 @@ fn path_error(context: &LoopContext<'_, '_>, declared: &DeclaredScope, label: &s
     {
         Ok(instance) => PyErr::from_value(instance),
         Err(failure) => failure,
-    }
-}
-
-/// The `InvalidScopePathError` message of the first path Python's visibility check rejects.
-pub(crate) fn scope_path_message(declared: &DeclaredScope, label: &str) -> String {
-    let owner: &str = declared
-        .owning_path
-        .as_deref()
-        .filter(|path| !path.is_empty())
-        .unwrap_or(CURRENT_FOLDER);
-    let (path, failure) = match normalize_scope_path(label) {
-        Err(failure) => (label, failure),
-        Ok(_) => match normalize_scope_path(owner) {
-            Err(failure) => (owner, failure),
-            Ok(_) => (label, ScopePathFailure::NotProjectRelative),
-        },
-    };
-    match failure {
-        ScopePathFailure::NotProjectRelative => {
-            format!("Scope path must be project-relative: {path}")
-        }
-        ScopePathFailure::EscapesProject => format!("Scope path escapes the project: {path}"),
     }
 }
 

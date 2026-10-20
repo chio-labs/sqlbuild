@@ -6,7 +6,7 @@ use sqlbuild_rules::lint_text::models::InterpolationSite;
 use sqlbuild_rules::sql_lint::types::PreparedSql;
 
 use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
-use crate::bindings::_helpers::rules::relation_keys;
+use crate::bindings::_helpers::compiled_project::relation_keys;
 use crate::bindings::models::Positional;
 use crate::bindings::types::CompilerDetach;
 

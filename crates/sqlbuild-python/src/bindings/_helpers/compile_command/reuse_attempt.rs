@@ -34,10 +34,11 @@ use crate::bindings::_helpers::compile_command::models::CompileReuseAttempt;
 use crate::bindings::_helpers::compile_command::runtime_identity::{
     invocation_identity, redirected_output_files, runtime_identity,
 };
+use crate::bindings::_helpers::compile_context::delta;
 use crate::bindings::_helpers::compile_delta::driver::{
     self, DELTA_VERIFY_ENV_VAR, DeltaOutcome, delta_enabled, env_enabled,
 };
-use crate::bindings::_helpers::compile_delta::{context, verify};
+use crate::bindings::_helpers::compile_delta::verify;
 use crate::bindings::_helpers::compile_driver::command::run_compile_command;
 use crate::bindings::_helpers::compile_driver::phases::{elapsed_ms, monotonic};
 use crate::bindings::_helpers::compile_outputs::json_report::plain_json;
@@ -513,7 +514,7 @@ pub(crate) fn run_compile<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'p
     } else {
         run_compile_command(py, request.clone(), Some(attempt))
     };
-    context::reset();
+    delta::reset();
     verify::disarm();
     code.and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))
 }
@@ -545,7 +546,7 @@ fn compiled_with_delta<'py>(
             None => Ok(()),
         }
     };
-    context::reset();
+    delta::reset();
     let project_dir: Bound<'py, PyAny> = native_field(attempt, "project_dir")?;
     let cache: Bound<'py, PyAny> = cache_directory(&project_dir)?;
     let compiled_root: PathBuf = std::path::absolute(
@@ -585,7 +586,7 @@ fn compiled_with_delta<'py>(
                     &format!("delta compile fell back: {reason}").into_bound_py_any(py)?,
                 )?;
             }
-            context::start_capture();
+            delta::start_capture();
             return run_compile_command(py, request.clone(), Some(attempt.clone()));
         }
         DeltaOutcome::Finished(finished) => verify::hold_expected(verify::Expected {
@@ -602,7 +603,7 @@ fn compiled_with_delta<'py>(
             ..verify::Expected::default()
         }),
     }
-    context::start_capture();
+    delta::start_capture();
     let full: PyResult<i64> = run_compile_command(py, request.clone(), Some(attempt.clone()));
     let raised: Option<String> = full.as_ref().err().map(ToString::to_string);
     let differences: Vec<String> = verify::differences(raised);

@@ -20,7 +20,7 @@ use crate::bindings::_helpers::authored_values::project_vars::project_var_text;
 use crate::bindings::_helpers::boundary::panics::{NativeCompilerError, compiler_error};
 use crate::bindings::_helpers::boundary::python_calls::{imported, keywords};
 use crate::bindings::_helpers::compiled_project::model_input_view::input_reference_rows;
-use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
+use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::model_config::template_data::record_reads;
 use crate::bindings::_helpers::project_assembly::models::{
     NativeProjectResources, NativeResourceFailure,

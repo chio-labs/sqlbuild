@@ -57,7 +57,7 @@ fn options() -> PyResult<SqlTestFileOptions> {
     Ok(SqlTestFileOptions {
         test_keys: sorted_keys(&constants::SQL_TEST_HEADER_KEYS),
         scenario_keys: sorted_keys(&constants::SQL_SCENARIO_HEADER_KEYS),
-        path_filter: crate::bindings::_helpers::compile_delta::context::injection()
+        path_filter: crate::bindings::_helpers::compile_context::delta::injection()
             .map(|injection| std::sync::Arc::new(injection.test_paths.clone())),
     })
 }

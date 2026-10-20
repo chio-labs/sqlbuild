@@ -9,6 +9,7 @@ use sqlbuild_analysis::compiled_project::main::plain_model_facts::plain_model_fa
 use sqlbuild_analysis::compiled_project::models::{
     CompiledModelFacts, ModelConfigFacts, PlainModel,
 };
+use sqlbuild_discovery::model_files::models::HeaderFacts;
 
 use crate::bindings::_helpers::compiled_project::model_input_view::{
     ExpansionRecord, InputProjections, ModelInputRecord, SchemaRecord,
@@ -23,13 +24,13 @@ use crate::bindings::_helpers::compiled_project::project::{
 use crate::bindings::_helpers::compiled_project::project::{
     DeclarationPy, config_values, declarations,
 };
+use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::discovery::model_file_record::{ModelFileTexts, NativeModelFile};
 use crate::bindings::_helpers::records::fields::{field as native_field, replaced_keywords};
 use crate::bindings::_helpers::render::declaration_expansion::{ExpandedDeclarations, span_rows};
 use crate::bindings::_helpers::render::macro_call_rows::{SpanRow, span_row};
 use crate::bindings::_helpers::render::macro_expansion::ExpansionOutput;
 use crate::bindings::_helpers::sqltext::declaration_references::ScannedReference;
-use sqlbuild_discovery::model_files::models::HeaderFacts;
 
 const HEADER_KEYS_ATTRIBUTE: &str = "model_header_keys";
 const LAYER_SCHEMA_ATTRIBUTE: &str = "layer_schema";
@@ -83,17 +84,6 @@ pub(crate) struct InterpolationRow {
     pub(crate) error: Option<String>,
     /// The substitution spans.
     pub(crate) spans: Vec<SpanRow>,
-}
-positional_record! {
-    extract, into;
-    /// `(kind, name, package, call argument count)`.
-    #[derive(Clone, Debug, PartialEq, Eq)]
-    pub(crate) struct ReferenceRow {
-        pub(crate) kind: String,
-        pub(crate) name: String,
-        pub(crate) package: Option<String>,
-        pub(crate) call_argument_count: Option<usize>,
-    }
 }
 
 /// One model the native loop finished, before the host builds its Python view.

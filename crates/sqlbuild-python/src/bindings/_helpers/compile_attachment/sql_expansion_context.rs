@@ -1,6 +1,6 @@
 //! The SQL expansion inputs lint uses to expand authored SQL outside a compile.
 
-use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
 
@@ -17,6 +17,7 @@ use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::render::authored_sql::SqlExpansionInputs;
 use crate::bindings::_helpers::render::declaration_indexes::public_declaration_indexes;
 use pyo3::IntoPyObjectExt;
 
@@ -78,69 +79,6 @@ fn local_declarations<'py>(discovered: &Bound<'py, PyAny>) -> PyResult<Bound<'py
         )?;
     }
     Ok(local)
-}
-
-/// The inputs authored SQL is expanded with outside a compile; the handles carry user values.
-pub(crate) struct SqlExpansionInputs {
-    pub(crate) effective_vars: Py<PyAny>,
-    pub(crate) loaded_macros: Py<PyAny>,
-    pub(crate) macro_context: Py<PyAny>,
-    pub(crate) enums: Py<PyAny>,
-    pub(crate) constants: Py<PyAny>,
-    pub(crate) value_renderer: Py<PyAny>,
-    pub(crate) collection_rendering: Py<PyAny>,
-    /// Each model file's own declarations, by file path.
-    pub(crate) local_declarations: Py<PyDict>,
-    pub(crate) declaration_resolver: Py<PyAny>,
-}
-
-impl SqlExpansionInputs {
-    /// The inputs a `SqlExpansionContext` record holds.
-    pub(crate) fn from_record(record: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let field =
-            |name: &str| -> PyResult<Py<PyAny>> { Ok(native_field(record, name)?.unbind()) };
-        Ok(Self {
-            effective_vars: field("effective_vars")?,
-            loaded_macros: field("loaded_macros")?,
-            macro_context: field("macro_context")?,
-            enums: field("enums")?,
-            constants: field("constants")?,
-            value_renderer: field("value_renderer")?,
-            collection_rendering: field("collection_rendering")?,
-            local_declarations: native_field(record, "local_declarations")?
-                .downcast_into::<PyDict>()?
-                .unbind(),
-            declaration_resolver: field("declaration_resolver")?,
-        })
-    }
-
-    /// These inputs as a `SqlExpansionContext` record.
-    pub(crate) fn record<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        new_record_with(
-            py,
-            RecordId::SqlExpansionContext,
-            &[
-                ("effective_vars", self.effective_vars.bind(py).clone()),
-                ("loaded_macros", self.loaded_macros.bind(py).clone()),
-                ("macro_context", self.macro_context.bind(py).clone()),
-                ("enums", self.enums.bind(py).clone()),
-                ("constants", self.constants.bind(py).clone()),
-                ("value_renderer", self.value_renderer.bind(py).clone()),
-                (
-                    "collection_rendering",
-                    self.collection_rendering.bind(py).clone(),
-                ),
-                (
-                    "local_declarations",
-                    self.local_declarations.bind(py).clone().into_any(),
-                ),
-                (
-                    "declaration_resolver",
-                    self.declaration_resolver.bind(py).clone(),
-                ),
-            ],
-        )
-    }
 }
 
 /// Where SQL expansion inputs come from: the project, its discovery and the scope to reuse.

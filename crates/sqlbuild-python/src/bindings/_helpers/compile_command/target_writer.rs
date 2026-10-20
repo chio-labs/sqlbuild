@@ -617,7 +617,7 @@ fn write_static_tests<'py>(
         }
     }
     let cache_dir: Bound<'py, PyAny> = native_field(project, "compile_cache_dir")?;
-    if crate::bindings::_helpers::compile_delta::context::injection().is_some() {
+    if crate::bindings::_helpers::compile_context::delta::injection().is_some() {
         let mut kept: HashMap<String, SqlTestArtifactRecord> = read_cache(&cache_dir)?;
         for (key, record) in records.drain(..) {
             kept.insert(key, record);
@@ -638,7 +638,7 @@ pub(crate) fn write_static_target<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = target_dir.py();
     let remove_stale_files: bool = prepared_target(target_dir)?
-        && crate::bindings::_helpers::compile_delta::context::injection().is_none();
+        && crate::bindings::_helpers::compile_context::delta::injection().is_none();
     let mut batch: ArtifactBatch = ArtifactBatch::new(remove_stale_files, prepared.recorder);
     let mut managed: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut managed_models: Vec<PathBuf> = Vec::new();

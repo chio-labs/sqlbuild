@@ -26,10 +26,10 @@ use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
 use crate::bindings::_helpers::diff_report::facts::diff_facts;
+use crate::bindings::_helpers::diff_report::output::publish_diff_output;
 use crate::bindings::_helpers::diff_report::query::{
     execute_query_diff, execution_options, prepare_query_diff, project_adapter,
 };
-use crate::bindings::_helpers::diff_report::registration::publish_diff_output;
 use crate::bindings::_helpers::diff_report::support::{
     call, caused, cli_error, error_text, is_exception, matches_class, matches_native, none, object,
     request_facts, user_error_parts,

@@ -1,6 +1,6 @@
 //! The facts cross-file validation reads, taken from Python's `DiscoveredProjectInputs`.
 
-use crate::bindings::_helpers::compile_delta::context::injection;
+use crate::bindings::_helpers::compile_context::delta::injection;
 use crate::bindings::_helpers::discovery::model_file_record::{ModelFileTexts, NativeModelFile};
 use crate::bindings::_helpers::records::fields::{field as native_field, path_stem};
 use pyo3::FromPyObject;

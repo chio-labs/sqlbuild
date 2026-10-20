@@ -1,7 +1,7 @@
 //! Hooks applied while building native records.
 
 use pyo3::prelude::{Bound, Py, PyAny, PyResult, Python};
-use pyo3::types::{PyDict, PyTuple};
+use pyo3::types::{PyDict, PyTuple, PyType};
 
 /// Normalizes the bound field values of one record before it is created.
 pub(crate) type RecordFinish = fn(Python<'_>, Vec<Py<PyAny>>) -> PyResult<Vec<Py<PyAny>>>;
@@ -15,3 +15,10 @@ pub(crate) type ClassMethod =
 
 /// Builds the default value of one record field.
 pub(crate) type RecordFactory = fn(Python<'_>) -> PyResult<Bound<'_, PyAny>>;
+
+/// Reads one `#[getter]` of a native pyclass instance by name, or `None` when the class has no such getter.
+pub(crate) type GetterRead =
+    for<'py> fn(&Bound<'py, PyAny>, &str) -> Option<PyResult<Bound<'py, PyAny>>>;
+
+/// The type object of one native pyclass.
+pub(crate) type GetterClass = for<'py> fn(Python<'py>) -> Bound<'py, PyType>;

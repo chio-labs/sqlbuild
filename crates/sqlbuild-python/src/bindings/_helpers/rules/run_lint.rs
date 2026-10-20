@@ -8,9 +8,8 @@ use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
-use crate::bindings::_helpers::compile_attachment::sql_expansion_context::{
-    SqlExpansionInputs, present,
-};
+use crate::bindings::_helpers::compile_attachment::sql_expansion_context::present;
+use crate::bindings::_helpers::render::authored_sql::SqlExpansionInputs;
 use crate::bindings::_helpers::rules::lint_expansion::{
     LintExpansionSources, lint_expansion_inputs,
 };

@@ -150,7 +150,7 @@ pub(crate) fn analyze<'py>(
     let selection: &Bound<'py, PyAny> = &options.analysis_selection;
     let enabled: bool = !(native_field(selection, "select")?.is_truthy()?
         || native_field(selection, "exclude")?.is_truthy()?)
-        && crate::bindings::_helpers::compile_delta::context::injection().is_none();
+        && crate::bindings::_helpers::compile_context::delta::injection().is_none();
     let early_lint: Bound<'py, EarlySqlLint> = Bound::new(py, EarlySqlLint::new(enabled))?;
     let early_rules: EarlyRulesScope = EarlyRulesScope::new();
     let analysis: PyResult<Bound<'py, PyAny>> =
@@ -210,7 +210,7 @@ fn analyzed<'py>(
         driver.graph((&discovered, &adapter), &lint_dialect)?;
     let project: Bound<'py, PyAny> = native_field(&graph, "project")?;
     let graph_failed: bool = any_error(&native_field(&project, "diagnostics")?)?;
-    crate::bindings::_helpers::compile_delta::context::stop_on_errors(graph_failed)?;
+    crate::bindings::_helpers::compile_context::delta::stop_on_errors(graph_failed)?;
     let mut early_lint_wait_ms: Bound<'py, PyAny> = 0_i64.into_pyobject(py)?.into_any();
     if graph_failed {
         if let Some(early_rules) = early_rules {
@@ -220,7 +220,7 @@ fn analyzed<'py>(
     }
     let (lineage, lineage_ms): (Bound<'py, PyAny>, u64) = driver.lineage(&graph, &dialect)?;
     let contracts: ContractPhase<'py> = driver.contracts(&project, &dialect)?;
-    crate::bindings::_helpers::compile_delta::context::stop_on_errors(any_error(&native_field(
+    crate::bindings::_helpers::compile_context::delta::stop_on_errors(any_error(&native_field(
         &contracts.result,
         "diagnostics",
     )?)?)?;

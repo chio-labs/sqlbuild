@@ -10,11 +10,9 @@ use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_
 use sqlbuild_sqltext::sql_references::models::ReferenceExtraction;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
-use crate::bindings::_helpers::compile_delta::context::{capture, capturing};
+use crate::bindings::_helpers::compile_context::delta::HeaderKeys;
+use crate::bindings::_helpers::compile_context::delta::{capture, capturing};
 use crate::bindings::_helpers::discovery::model_records::model_file_options;
-
-/// One model's header keys with the digest of each authored value, sorted by key.
-pub(crate) type HeaderKeys = Vec<(String, String)>;
 
 /// Header keys a delta compile recompiles the model for; any other changed key falls back.
 const PATCHED_KEYS: [&str; 6] = [

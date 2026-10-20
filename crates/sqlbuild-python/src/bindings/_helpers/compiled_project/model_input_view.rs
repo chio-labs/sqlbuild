@@ -11,14 +11,16 @@ use sqlbuild_analysis::compiled_project::models::SchemaColumnFact;
 use crate::bindings::_helpers::compiled_project::compiled_model_view::{
     CompiledArguments, CompiledRecord, CompiledViewClasses, NativeCompiledModel, compiled_record,
 };
-use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::compiled_project::relation_keys::{
+    RelationKeyRow, relation_key_row,
+};
+use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::schema_facts::python_column_facts;
 use crate::bindings::_helpers::discovery::model_file_record::{NativeModelFile, projected_text};
 use crate::bindings::_helpers::model_config::header_metadata::HeaderColumns;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::macro_call_rows::SpanRow;
-use crate::bindings::_helpers::rules::relation_keys::{RelationKeyRow, relation_key_row};
 
 const MODEL_RELATION_KIND: &str = "ref";
 
