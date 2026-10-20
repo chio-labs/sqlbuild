@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.164.1](https://github.com/chio-labs/sqlbuild/compare/v0.164.0...v0.164.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* speed up clone preparation and keep its console output clean ([#1180](https://github.com/chio-labs/sqlbuild/issues/1180)) ([f21d774](https://github.com/chio-labs/sqlbuild/commit/f21d7749138be0b01b705d4ed76170c851933f44))
+
+
+### Performance Improvements
+
+* build the sqb binary and the extension from one set of compiled dependencies ([#1179](https://github.com/chio-labs/sqlbuild/issues/1179)) ([b4620f4](https://github.com/chio-labs/sqlbuild/commit/b4620f41088363ea5142ee3b40ee2ebfa907fe31))
+
 ## [0.164.0](https://github.com/chio-labs/sqlbuild/compare/v0.163.0...v0.164.0) (2026-10-20)
 
 
