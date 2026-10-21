@@ -17,6 +17,12 @@ use crate::sql_lint::constants::{
 };
 use crate::sql_lint::models::{FormatRequest, FormatResponse};
 
+#[cfg(test)]
+thread_local! {
+    /// Idempotency re-prints on this thread, for tests that assert which bodies are re-printed.
+    pub(crate) static RELAYOUTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 const NOT_IDEMPOTENT_FAILURE: &str = "native formatter output is not idempotent";
 const UNSUPPORTED_SQL_FAILURE: &str =
     "native formatter could not safely restore literal or cast spelling";
@@ -156,6 +162,8 @@ fn relayout(
     oracle: Option<&OracleLayout>,
     layout: &Layout<'_>,
 ) -> Result<String, String> {
+    #[cfg(test)]
+    RELAYOUTS.with(|relayouts| relayouts.set(relayouts.get() + 1));
     let Some(oracle) = oracle.filter(|_| !tokens.is_empty()) else {
         return Ok(formatted.to_string());
     };
