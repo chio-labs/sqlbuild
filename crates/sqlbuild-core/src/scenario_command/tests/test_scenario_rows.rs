@@ -4,6 +4,7 @@ use crate::cli_text::models::CliStyle;
 use crate::scenario_command::main::build_local_runtime_artifacts::build_local_runtime_artifacts;
 use crate::scenario_command::main::build_runtime_artifacts::build_runtime_artifacts;
 use crate::scenario_command::main::render_capture_result::render_capture_result;
+use crate::scenario_command::main::render_scenario_failures::render_scenario_failures;
 use crate::scenario_command::main::render_scenario_result::render_scenario_result;
 use crate::scenario_command::main::render_snapshot_sync_result::render_snapshot_sync_result;
 use crate::scenario_command::models::{
@@ -16,7 +17,8 @@ use crate::scenario_command::tests::helpers::{
     statements, strings,
 };
 use crate::scenario_command::tests::test_types::{
-    CaptureRowTestCase, LocalArtifactsTestCase, ResultRowTestCase, WarehouseArtifactsTestCase,
+    CaptureRowTestCase, FailuresTestCase, LocalArtifactsTestCase, ResultRowTestCase,
+    WarehouseArtifactsTestCase,
 };
 
 const RA0: &str = "orders_paid                                                      FAIL  1.23s\n    error[X506]: expected comparison failed\n    second line\n      = help: Compare the CTE.\n    expect    expected fact_orders                               FAIL  2 mismatched, 1 missing\n              error[X506]: mismatch\n  = help: look\n    expect    expected dim_customers                             PASS\n    expect    assertion no_negative                              FAIL  1 row\n    expect    assertion few                                      FAIL  3 rows\n              plain error\n    expect    assertion ok                                       PASS\n    Retained relations:\n      source raw_orders -> main.__sqb_abc__source__raw_orders\n      model  fact_orders -> main.__sqb_abc__model__fact_orders\n    expected fact_orders: actual=3 expected=2 mismatched=2 missing=1\n    assertion no_negative: failing_rows=1\n    sample: (1, 'a', None)\n    assertion few: failing_rows=3\n";
@@ -355,6 +357,62 @@ fn given_local_replay_when_building_artifacts_then_writes_loads_functions_and_mo
         assert_eq!(
             artifact_pairs(build_local_runtime_artifacts(&test_case.inputs)),
             expected_pairs(&test_case.expected_artifacts),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_finished_scenarios_when_summarizing_then_lists_each_failure_with_its_first_line() {
+    let rows = [
+        ScenarioResultRow {
+            name: "orders_ok".to_owned(),
+            status: "PASS".to_owned(),
+            ..ScenarioResultRow::default()
+        },
+        ScenarioResultRow {
+            name: "orders_unmocked".to_owned(),
+            status: "FAIL".to_owned(),
+            error: coded(Some("S504"), "first line\nsecond line", None),
+            ..ScenarioResultRow::default()
+        },
+        ScenarioResultRow {
+            name: "orders_mismatch".to_owned(),
+            status: "FAIL".to_owned(),
+            expected: vec![ExpectedRow {
+                model_name: "fact_orders".to_owned(),
+                failed: true,
+                mismatched_row_count: Some(2),
+                missing_row_count: Some(1),
+                ..ExpectedRow::default()
+            }],
+            ..ScenarioResultRow::default()
+        },
+        ScenarioResultRow {
+            name: "orders_local".to_owned(),
+            status: "SKIP".to_owned(),
+            local: true,
+            ..ScenarioResultRow::default()
+        },
+    ];
+    let test_cases = [
+        FailuresTestCase {
+            description: "failed scenarios are listed with their first error line",
+            rows: rows.to_vec(),
+            expected_text: "\nFailures:\n\n  orders_unmocked\n    error[S504]: first line\n  orders_mismatch\n    expected fact_orders: 2 mismatched, 1 missing\n",
+        },
+        FailuresTestCase {
+            description: "no failures render nothing",
+            rows: rows[..1].to_vec(),
+            expected_text: "",
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            render_scenario_failures(&test_case.rows, CliStyle { use_color: false }),
+            test_case.expected_text,
             "{}",
             test_case.description
         );

@@ -47,6 +47,12 @@ pub(super) struct ResultRowTestCase {
     pub(super) expected_text: &'static str,
 }
 
+pub(super) struct FailuresTestCase {
+    pub(super) description: &'static str,
+    pub(super) rows: Vec<ScenarioResultRow>,
+    pub(super) expected_text: &'static str,
+}
+
 pub(super) struct CaptureRowTestCase {
     pub(super) description: &'static str,
     pub(super) row: CaptureRow,

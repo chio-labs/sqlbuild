@@ -296,3 +296,12 @@ class ScenarioHelperShadowingE2ETestCase:
     check_ctes: str
     expected_output_fragment: str
     unexpected_output_fragment: str
+
+
+@dataclass(frozen=True)
+class UnmockedInputScenarioE2ETestCase:
+    """A scenario that mocks one model input and leaves another, source-backed, real."""
+
+    description: str
+    expected_fragments: tuple[str, ...]
+    unexpected_fragment: str
