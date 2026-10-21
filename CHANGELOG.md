@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.165.0](https://github.com/chio-labs/sqlbuild/compare/v0.164.5...v0.165.0) (2026-10-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* projects whose audit attachments pass arguments the audit never reads must remove those arguments.
+
+### Bug Fixes
+
+* batch of refactor, sink, audit, CLI and rules fixes ([#1202](https://github.com/chio-labs/sqlbuild/issues/1202)) ([1ecc1d0](https://github.com/chio-labs/sqlbuild/commit/1ecc1d07498943ff8e148e5df0b166ca53b59050))
+
+
+### Performance Improvements
+
+* **compile:** delta-compile dynamic columns, audit factories and model rules ([#1201](https://github.com/chio-labs/sqlbuild/issues/1201)) ([b5bdb76](https://github.com/chio-labs/sqlbuild/commit/b5bdb7685c2ce268c85387c1ee8cf796eb1f5cc7))
+
 ## [0.164.5](https://github.com/chio-labs/sqlbuild/compare/v0.164.4...v0.164.5) (2026-10-21)
 
 
