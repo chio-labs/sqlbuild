@@ -54,10 +54,14 @@ fn leading_kind<'k>(text: &[char], index: usize, kinds: &[&'k str]) -> Option<(&
         start += 1;
     }
     kinds.iter().find_map(|kind| {
-        let keyword: Vec<char> = kind.chars().collect();
-        let end: usize = start + keyword.len();
-        (text[start..].starts_with(&keyword) && !text.get(end).is_some_and(|next| is_word(*next)))
-            .then_some((*kind, start))
+        let mut end: usize = start;
+        for expected in kind.chars() {
+            if text.get(end) != Some(&expected) {
+                return None;
+            }
+            end += 1;
+        }
+        (!text.get(end).is_some_and(|next| is_word(*next))).then_some((*kind, start))
     })
 }
 

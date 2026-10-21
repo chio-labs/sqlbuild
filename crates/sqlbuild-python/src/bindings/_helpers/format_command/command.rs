@@ -41,6 +41,7 @@ struct FormatFlags {
     fix: bool,
     json_output: bool,
     use_color: bool,
+    no_cache: bool,
 }
 
 /// The adapter, selected files and discovered inputs a run formats with.
@@ -227,6 +228,7 @@ fn run_command(
         fixtures_only: flags.fixtures_only,
         write: !(flags.check || flags.diff),
         fix: flags.fix,
+        cache: !(flags.no_cache || flags.fix),
     };
     let (outcome, status, elapsed) = format_with_status(py, &request, flags.use_color)?;
     let root: PathBuf = project_dir.extract()?;
@@ -279,6 +281,7 @@ pub(crate) fn run_format_command<'py>(
                 "fix",
                 "json_output",
                 "no_color",
+                "no_cache",
             ],
         ),
     )?;
@@ -296,6 +299,7 @@ pub(crate) fn run_format_command<'py>(
         fix: arguments.flag("fix")?,
         json_output: arguments.flag("json_output")?,
         use_color,
+        no_cache: arguments.flag("no_cache")?,
     };
     let select: Vec<String> = string_tuple(&arguments.value("select")?)?;
     let exclude: Vec<String> = string_tuple(&arguments.value("exclude")?)?;

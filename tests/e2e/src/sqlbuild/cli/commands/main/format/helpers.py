@@ -9,6 +9,7 @@ import sys
 import time
 from pathlib import Path
 
+from scripts.format_performance._helpers.model_project import write_model_format_project
 from sqlbuild._native import compute_query_hash
 
 _FORMAT_ELAPSED_PATTERN: re.Pattern[str] = re.compile(r"Formatting SQL  OK  \(([0-9.]+)s;")
@@ -131,3 +132,49 @@ def run_sqb(*, project_dir: Path, arguments: tuple[str, ...]) -> subprocess.Comp
         text=True,
         timeout=60,
     )
+
+
+FORMAT_CACHE_UNFORMATTED_ORDERS: str = (
+    'MODEL (description "Orders placed by customers.", materialized table);\n'
+    "select   order_id,   customer_id from __source('shop', 'orders')\n"
+)
+
+
+def write_mixed_format_project(*, project_dir: Path, model_count: int) -> None:
+    """Unformatted models plus files that fault, use CRLF line endings or carry a directive."""
+
+    write_model_format_project(project_dir=project_dir, model_count=model_count)
+    models_dir: Path = project_dir / "models"
+    path: Path
+    for path in sorted(models_dir.glob("*.sql")):
+        _ = path.write_text(
+            'MODEL (description "Generated order model.", materialized view);\n'
+            + path.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+    _ = (models_dir / "undescribed_orders.sql").write_text(
+        "MODEL (materialized view);\nselect 1 as order_id\n", encoding="utf-8"
+    )
+    _ = (models_dir / "broken_header.sql").write_text(
+        'MODEL (description "Broken.", materialized ((;\nselect 1 as order_id\n',
+        encoding="utf-8",
+    )
+    _ = (models_dir / "unsafe_body.sql").write_text(
+        'MODEL (description "Unsafe body.");\nselect (((( from where 1\n', encoding="utf-8"
+    )
+    _ = (models_dir / "windows_orders.sql").write_bytes(
+        b'MODEL (description "Windows line endings.");\r\nselect   1 as order_id\r\n'
+    )
+    _ = (models_dir / "suppressed_orders.sql").write_text(
+        'MODEL (description "Suppressed.");\n-- sqb: ignore some-rule\nselect 1 as order_id\n',
+        encoding="utf-8",
+    )
+
+
+def model_tree(*, project_dir: Path) -> dict[str, bytes]:
+    """The bytes of every model file, by project-relative path."""
+
+    return {
+        str(path.relative_to(project_dir)): path.read_bytes()
+        for path in sorted((project_dir / "models").rglob("*.sql"))
+    }

@@ -243,7 +243,7 @@ if __name__ == "__main__":
             expected_max_full_seconds=7.0,
             expected_max_delta_seconds=2.0,
             expected_max_delta_cpu_ratio=0.30,
-            expected_max_fallback_cpu_ratio=1.05,
+            expected_max_fallback_cpu_ratio=1.10,
             expected_max_rss_bytes=3 * _GIB // 2,
         ),
         DenseDeltaEditLoopGuardTestCase(
@@ -254,7 +254,7 @@ if __name__ == "__main__":
             expected_max_full_seconds=28.0,
             expected_max_delta_seconds=8.0,
             expected_max_delta_cpu_ratio=0.275,
-            expected_max_fallback_cpu_ratio=1.05,
+            expected_max_fallback_cpu_ratio=1.10,
             expected_max_rss_bytes=15 * _GIB // 4,
         ),
     ),

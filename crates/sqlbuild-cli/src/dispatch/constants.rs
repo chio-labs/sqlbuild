@@ -629,7 +629,7 @@ pub(crate) const SKILLS_ROUTE: Route = routed(
     },
 );
 
-const FORMAT_ARGUMENTS: [Field; 9] = [
+const FORMAT_ARGUMENTS: [Field; 10] = [
     PROJECT_DIR,
     field("select", Source::FormatSelect),
     EXCLUDE,
@@ -637,6 +637,7 @@ const FORMAT_ARGUMENTS: [Field; 9] = [
     attr("diff", "format_diff"),
     attr("fixtures_only", "format_fixtures_only"),
     attr("fix", "format_fix"),
+    same("no_cache"),
     JSON_OUTPUT,
     NO_COLOR,
 ];
