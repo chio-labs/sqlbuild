@@ -9,18 +9,22 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.refactor._test_types import (
     DeclarationMoveE2ETestCase,
+    DeclarationMoveRefusalE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
     CENTS_MACRO,
     ORDER_REFUNDS,
     ORDER_SHAPE,
     existing_files,
+    grouped_role_files,
+    project_text,
     relation_type,
     sqb,
     write_orders_project,
 )
 
 _CENTS: str = "models/staging/_sqlbuild/_macros/cents.py"
+_GROUPED_CENTS: str = "models/staging/_sqlbuild/_macros/money/cents.py"
 _PRIORITY_ENUM: dict[str, str] = {
     "models/marts/_sqlbuild/_enums/priority.sql": (
         "ENUM (\n  name priority,\n  members (LOW 1, HIGH 3),\n);\n"
@@ -62,6 +66,26 @@ _PRIORITY_ENUM: dict[str, str] = {
             destination="models/marts/",
             expected_moved={_CENTS: "macros/cents.py"},
         ),
+        DeclarationMoveE2ETestCase(
+            description="a grouped macro keeps its group in a grouped destination role",
+            model="stg_order_cents",
+            extra_files=grouped_role_files(
+                cents_path=_GROUPED_CENTS,
+                labels_path="models/staging/_sqlbuild/macros/text/labels.py",
+            ),
+            destination="models/staging/eu/",
+            expected_moved={_GROUPED_CENTS: "models/staging/_sqlbuild/macros/money/cents.py"},
+        ),
+        DeclarationMoveE2ETestCase(
+            description="a grouped macro drops its group in a direct destination role",
+            model="stg_order_cents",
+            extra_files=grouped_role_files(
+                cents_path=_GROUPED_CENTS,
+                labels_path="models/staging/_sqlbuild/macros/labels.py",
+            ),
+            destination="models/staging/eu/",
+            expected_moved={_GROUPED_CENTS: "models/staging/_sqlbuild/macros/cents.py"},
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -86,3 +110,37 @@ def test_given_scoped_declarations_when_moving_model_then_they_follow_placement_
     assert "error[S0" not in compiled.stdout + compiled.stderr
     assert built.returncode == 0, built.stdout + built.stderr
     assert relation_type(project_dir=project_dir, name=model) is not None
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DeclarationMoveRefusalE2ETestCase(
+            description="a direct macro cannot join a grouped destination role",
+            model="stg_order_cents",
+            extra_files=grouped_role_files(
+                cents_path=_CENTS, labels_path="models/staging/_sqlbuild/macros/text/labels.py"
+            ),
+            destination="models/staging/eu/",
+            expected_message=(
+                "macro:to_cents must move to models/staging/_sqlbuild/macros/, which keeps its "
+                f"files in group folders, but {_CENTS} is not in a group; move it into a group "
+                "folder of its current role first"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_direct_declaration_and_grouped_destination_role_when_moving_then_move_is_refused(
+    tmp_path: Path, test_case: DeclarationMoveRefusalE2ETestCase
+) -> None:
+    project_dir: Path = write_orders_project(tmp_path=tmp_path, files=test_case.extra_files)
+    before: dict[str, str] = project_text(project_dir)
+
+    moved: subprocess.CompletedProcess[str] = sqb(
+        project_dir, "mv", f"model:{test_case.model}", test_case.destination
+    )
+
+    assert moved.returncode == 1, moved.stdout + moved.stderr
+    assert test_case.expected_message in " ".join((moved.stdout + moved.stderr).split())
+    assert project_text(project_dir) == before

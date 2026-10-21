@@ -117,6 +117,62 @@ SPLIT_CENTS_MACROS: dict[str, str] = {
 }
 
 
+_LAYOUT_RULES: str = '\n[rules]\nselect = ["SQBRDECLARATION302"]\n'
+_LABEL_MACRO: str = 'def upper_label(expression: str) -> str:\n    return f"UPPER({expression})"\n'
+
+
+def grouped_role_files(*, cents_path: str, labels_path: str) -> dict[str, str]:
+    """Return the cents users with ``cents_path`` and a shared label macro at ``labels_path``.
+
+    Both cents users sit in ``models/staging``; the label macro is read there and from
+    ``models/staging/eu``, so it is descendant-public at ``models/staging``.
+    """
+
+    return {
+        "sqlbuild_project.toml": project_toml() + _LAYOUT_RULES,
+        cents_path: CENTS_MACRO["models/staging/_sqlbuild/_macros/cents.py"],
+        "models/staging/stg_order_cents.sql": CENTS_MACRO["models/staging/stg_order_cents.sql"],
+        "models/staging/stg_order_refunds.sql": ORDER_REFUNDS[
+            "models/staging/stg_order_refunds.sql"
+        ].replace("AS refund_cents\n", "AS refund_cents,\n  @upper_label(\"'refund'\") AS label\n"),
+        labels_path: _LABEL_MACRO,
+        "models/staging/eu/stg_order_labels.sql": _label_model("stg_order_labels"),
+    }
+
+
+def shared_cents_with_grouped_global_role() -> dict[str, str]:
+    """Return two staging users of a direct local cents macro beside a grouped ``macros/`` role.
+
+    Moving only one user to ``models/finance`` would carry cents to the grouped top-level role,
+    which a direct file cannot join; moving both leaves it local to ``models/finance``.
+    """
+
+    return {
+        "sqlbuild_project.toml": project_toml() + _LAYOUT_RULES,
+        **CENTS_MACRO,
+        **ORDER_REFUNDS,
+        "macros/text/labels.py": _LABEL_MACRO,
+        "models/staging/stg_order_labels.sql": _label_model("stg_order_labels"),
+        "models/marts/order_labels.sql": _label_model("order_labels"),
+    }
+
+
+def _label_model(name: str) -> str:
+    return (
+        f"MODEL (description 'Test model {name}.',\n  materialized view,\n);\n\n"
+        'SELECT\n  order_id,\n  @upper_label("\'order\'") AS label\nFROM __ref("stg_orders")\n'
+    )
+
+
+MOVE_FILE_PLACEHOLDER: str = "{move_file}"
+
+
+def with_move_file(arguments: tuple[str, ...], move_file: Path) -> tuple[str, ...]:
+    """Return ``arguments`` with the move-file placeholder replaced by ``move_file``."""
+
+    return tuple(argument.replace(MOVE_FILE_PLACEHOLDER, str(move_file)) for argument in arguments)
+
+
 def order_amount_union(*, first: str, second: str) -> dict[str, str]:
     """Return a view unioning amount from two models, and a view reading its output."""
 

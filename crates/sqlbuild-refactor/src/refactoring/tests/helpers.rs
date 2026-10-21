@@ -428,6 +428,7 @@ pub(super) fn relocated(label: &str, path: &str) -> RelocatedDeclaration {
     RelocatedDeclaration {
         key: label.to_owned(),
         path: path.to_owned(),
+        requires_group: false,
     }
 }
 

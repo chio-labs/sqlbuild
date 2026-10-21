@@ -99,6 +99,66 @@ pub(super) fn chained_macros() -> PlacementIndex {
     }
 }
 
+const SALES_GROUPED: (ScopeKind, Option<&str>) = (ScopeKind::Local, Some("models/sales"));
+const SALES_SHARED: (ScopeKind, Option<&str>) = (ScopeKind::Inherited, Some("models/sales"));
+
+/// Two sales models sharing a local `cents`, beside an optional descendant-public `labels`.
+fn shared_cents(cents_path: &str, labels_path: Option<&str>) -> PlacementIndex {
+    let mut declarations = vec![macro_record("cents", cents_path, SALES_GROUPED)];
+    declarations.extend(labels_path.map(|path| macro_record("labels", path, SALES_SHARED)));
+    PlacementIndex {
+        resources: vec![
+            model_record("orders", "models/sales/orders.sql"),
+            model_record("refunds", "models/sales/refunds.sql"),
+            model_record("customers", "models/sales/crm/customers.sql"),
+        ],
+        declarations,
+        usages: vec![
+            runtime("orders", "cents"),
+            runtime("refunds", "cents"),
+            runtime("refunds", "labels"),
+            runtime("customers", "labels"),
+        ],
+    }
+}
+
+/// A grouped `cents` and an empty descendant-public role.
+pub(super) fn grouped_cents_empty_role() -> PlacementIndex {
+    shared_cents("models/sales/_sqlbuild/_macros/money/cents.py", None)
+}
+
+/// A grouped `cents` and a descendant-public role keeping its files in groups.
+pub(super) fn grouped_cents_grouped_role() -> PlacementIndex {
+    shared_cents(
+        "models/sales/_sqlbuild/_macros/money/cents.py",
+        Some("models/sales/_sqlbuild/macros/text/labels.py"),
+    )
+}
+
+/// A direct `cents` and a descendant-public role keeping its files in groups.
+pub(super) fn direct_cents_grouped_role() -> PlacementIndex {
+    shared_cents(
+        "models/sales/_sqlbuild/_macros/cents.py",
+        Some("models/sales/_sqlbuild/macros/text/labels.py"),
+    )
+}
+
+/// A grouped `cents` and a descendant-public role keeping its files directly.
+pub(super) fn grouped_cents_direct_role() -> PlacementIndex {
+    shared_cents(
+        "models/sales/_sqlbuild/_macros/money/cents.py",
+        Some("models/sales/_sqlbuild/macros/labels.py"),
+    )
+}
+
+/// Owned `(model, destination)` moves.
+pub(super) fn owned_moves(moves: &[(&str, &str)]) -> Vec<(ResourceIdentity, String)> {
+    moves
+        .iter()
+        .map(|(name, destination)| (model(name), (*destination).to_owned()))
+        .collect()
+}
+
 /// Owned `(declaration, path, owning path)` rows of expected relocations.
 pub(super) fn owned_relocations(
     items: &[(usize, &str, Option<&str>)],

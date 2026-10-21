@@ -93,6 +93,15 @@ class DeclarationMoveE2ETestCase:
 
 
 @dataclass(frozen=True)
+class DeclarationMoveRefusalE2ETestCase:
+    description: str
+    model: str
+    extra_files: dict[str, str]
+    destination: str
+    expected_message: str
+
+
+@dataclass(frozen=True)
 class HiddenOriginE2ETestCase:
     description: str
     target_settings: str
@@ -157,3 +166,26 @@ class ScopedUnitTestMoveE2ETestCase:
     amount_sql: str
     expected_path: str
     expected_notes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class BatchMoveE2ETestCase:
+    description: str
+    arguments: tuple[str, ...]
+    move_file: str
+    expected_moved: dict[str, str]
+    expected_compiles: int
+
+
+@dataclass(frozen=True)
+class SingleMoveOfBatchE2ETestCase:
+    description: str
+    move: tuple[str, str]
+    expected_reason: str
+
+
+@dataclass(frozen=True)
+class BatchMoveConflictE2ETestCase:
+    description: str
+    arguments: tuple[str, ...]
+    expected_reason: str

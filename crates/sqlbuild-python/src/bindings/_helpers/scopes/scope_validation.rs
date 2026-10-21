@@ -8,7 +8,7 @@ use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_scopes::compile_usages::models::UsageKey;
 use sqlbuild_scopes::placement::main::diagnostic_order::diagnostic_order;
 use sqlbuild_scopes::placement::main::placement_diagnostics::placement_diagnostics;
-use sqlbuild_scopes::placement::main::relocate_for_resource_move::relocate_for_resource_move;
+use sqlbuild_scopes::placement::main::relocate_for_resource_moves::relocate_for_resource_moves;
 use sqlbuild_scopes::placement::models::{
     DiagnosticOrderKey, PlacementCode, PlacementDiagnostic, PlacementIndex, Relocation,
 };
@@ -285,34 +285,38 @@ pub(crate) fn scope_placement_validated_index(
     signature = (*, index, resource, destination)
 )]
 pub(crate) fn scope_relocated_declarations(
-    py: Python<'_>,
     index: &Bound<'_, PyAny>,
     resource: &Bound<'_, PyAny>,
     destination: &str,
 ) -> PyResult<Option<Py<PyTuple>>> {
+    let resource: ResourceIdentity = resource_identity(identity_row(resource)?)?;
+    let relocated = relocated_declarations(index, &[(resource, destination.to_owned())])?;
+    Ok(relocated.map(|(records, _)| records.unbind()))
+}
+
+/// Relocated records after every move in `moves`, and per record whether it lacks a needed group.
+pub(crate) fn relocated_declarations<'py>(
+    index: &Bound<'py, PyAny>,
+    moves: &[(ResourceIdentity, String)],
+) -> PyResult<Option<(Bound<'py, PyTuple>, Vec<bool>)>> {
+    let py: Python<'py> = index.py();
     if !read_completeness(index)?[RUNTIME_USAGE] {
         return Ok(None);
     }
     let placement: PlacementIndex = read_placement_index(index)?;
-    let resource: ResourceIdentity = resource_identity(identity_row(resource)?)?;
     let relocations: Option<Vec<Relocation>> = py
-        .compiler_detach(|| {
-            Ok(relocate_for_resource_move(
-                &placement,
-                &resource,
-                destination,
-            ))
-        })
+        .compiler_detach(|| Ok(relocate_for_resource_moves(&placement, moves)))
         .map_err(compiler_error)?;
     let Some(relocations) = relocations else {
         return Ok(None);
     };
     let classes: ScopeClasses<'_> = ScopeClasses::new(py)?;
     let records: Bound<'_, PyTuple> = tuple_attribute(index, "declarations")?;
-    let mut moved: Vec<Bound<'_, PyAny>> = Vec::with_capacity(relocations.len());
+    let mut moved: Vec<Bound<'py, PyAny>> = Vec::with_capacity(relocations.len());
+    let mut grouping: Vec<bool> = Vec::with_capacity(relocations.len());
     for item in relocations {
         let owning_path: Bound<'_, PyAny> = item.owning_path.into_bound_py_any(py)?;
-        moved.push(replace(
+        let record: Bound<'py, PyAny> = replace(
             &records.get_item(item.declaration)?,
             &[
                 ("path", item.path.into_bound_py_any(py)?),
@@ -326,9 +330,11 @@ pub(crate) fn scope_relocated_declarations(
                 ),
                 ("owning_path", owning_path),
             ],
-        )?);
+        )?;
+        moved.push(record);
+        grouping.push(item.requires_group);
     }
-    Ok(Some(PyTuple::new(py, moved)?.unbind()))
+    Ok(Some((PyTuple::new(py, moved)?, grouping)))
 }
 
 fn usage_records<'py>(records: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {

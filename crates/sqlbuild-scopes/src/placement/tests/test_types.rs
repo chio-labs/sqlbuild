@@ -28,6 +28,14 @@ pub(super) struct RelocationTestCase {
     pub(super) expected_relocations: Option<&'static [RelocationCase]>,
 }
 
+/// Resource moves applied together and each relocated `(declaration, path, requires_group)`.
+pub(super) struct CarriedLayoutTestCase {
+    pub(super) description: &'static str,
+    pub(super) index: fn() -> PlacementIndex,
+    pub(super) moves: &'static [(&'static str, &'static str)],
+    pub(super) expected_relocations: &'static [(usize, &'static str, bool)],
+}
+
 /// Diagnostic order keys and the stable order Python sorts them into.
 pub(super) struct DiagnosticOrderTestCase {
     pub(super) description: &'static str,

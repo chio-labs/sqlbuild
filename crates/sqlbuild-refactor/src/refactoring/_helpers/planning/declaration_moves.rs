@@ -47,6 +47,19 @@ pub(crate) fn declaration_moves(
             ));
             continue;
         }
+        if record.requires_group {
+            blocking.push(blocker(
+                original,
+                format!(
+                    "{} must move to {}/, which keeps its files in group folders, but {} is \
+                     not in a group; move it into a group folder of its current role first",
+                    original.label,
+                    parent(&record.path),
+                    original.path
+                ),
+            ));
+            continue;
+        }
         let planned: &String = destinations
             .entry(original.path.clone())
             .or_insert_with(|| record.path.clone());

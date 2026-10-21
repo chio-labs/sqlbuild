@@ -81,6 +81,8 @@ pub struct Relocation {
     pub scope: ScopeKind,
     pub ownership_root: OwnershipRoot,
     pub owning_path: Option<String>,
+    /// The destination role keeps its files in groups, but this file has none to keep.
+    pub requires_group: bool,
 }
 
 /// The fields Python orders scope diagnostics by.

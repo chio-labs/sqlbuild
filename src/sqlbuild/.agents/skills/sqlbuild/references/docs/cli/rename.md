@@ -79,6 +79,8 @@ Moving a model to another folder also moves the macros, enums, constants, reusab
 - a declaration other resources still use moves to the lowest folder they share, for example `models/staging/_sqlbuild/macros/`;
 - when that folder would be an authored root such as `models/`, or the users span resource trees such as models and tests, it moves to the top-level role (`macros/`, `enums/`, `constants/`, `schemas/`, ...).
 
+A moved declaration file takes the shape of the role folder it lands in. In an empty role it keeps its group folder, such as `money/` in `_macros/money/cents.py`, or stays direct if it had none. In a role whose files all sit in group folders it keeps its group, and a file without a group is refused: move it into a group folder of its current role first. In a role whose files sit directly in it, the group folder is dropped. Python imports of a moved Python macro file are not rewritten; verification refuses the move when one breaks.
+
 Declarations are moved, never copied. Folders the move leaves empty are removed.
 
 Renaming a column rewrites the model that produces it and every query that reads it:
@@ -106,6 +108,7 @@ The command refuses a rename while the model, or the column, still declares `mig
 The command refuses, and writes nothing, when:
 
 - the new name already belongs to another model or column, or the destination file exists;
+- a moved declaration file is not in a group folder, but the role folder it must move to keeps its files in group folders;
 - a declaration a moved model uses must change folder, but its file also holds declarations that must stay, or it is not an authored project file, or a file with its name already exists at the new folder;
 - a move would leave no model in the old schema, so the old relation could not be found;
 - a reference is produced by a macro, or a column is read inside SQL that a macro generates;
