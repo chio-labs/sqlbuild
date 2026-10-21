@@ -14,7 +14,9 @@ use crate::bindings::_helpers::build_command::policies::enforce_plan_safety_poli
 use crate::bindings::_helpers::build_command::support::{
     boolean, emit, joined, keyword_relay, none, text, tuple,
 };
-use crate::bindings::_helpers::build_progress::build_callbacks::BuildProgressCallbacks;
+use crate::bindings::_helpers::build_progress::build_callbacks::{
+    BuildProgressCallbacks, batch_complete_callback,
+};
 use crate::bindings::_helpers::build_progress::footer::format_build_footer;
 use crate::bindings::_helpers::build_progress::progress_reporters::ConnectionProgressReporter;
 use crate::bindings::_helpers::build_progress::progress_text::format_execution_header;
@@ -202,6 +204,7 @@ pub(crate) fn execute_dbt_sqlbuild_work<'py>(
                 "on_sub_progress",
                 native_field(&callbacks, "on_sub_progress")?,
             ),
+            ("on_batch_complete", batch_complete_callback(&callbacks)?),
             (
                 "on_connection_start",
                 native_field(&connection, "on_connection_start")?,

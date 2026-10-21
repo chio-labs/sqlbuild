@@ -18,7 +18,9 @@ use crate::bindings::_helpers::build_command::lifecycle::{
 use crate::bindings::_helpers::build_command::support::{
     boolean, display_text, emit, frozenset, joined, keyword_relay, line_writer, none, text, tuple,
 };
-use crate::bindings::_helpers::build_progress::build_callbacks::BuildProgressCallbacks;
+use crate::bindings::_helpers::build_progress::build_callbacks::{
+    BuildProgressCallbacks, batch_complete_callback,
+};
 use crate::bindings::_helpers::build_progress::progress_reporters::ConnectionProgressReporter;
 use crate::bindings::_helpers::build_progress::progress_text::write_execution_header;
 use crate::bindings::_helpers::check::check_core::{
@@ -376,6 +378,7 @@ pub(crate) fn execute_build_plan<'py>(
                 "on_sub_progress",
                 native_field(callbacks, "on_sub_progress")?,
             ),
+            ("on_batch_complete", batch_complete_callback(callbacks)?),
             (
                 "on_connection_start",
                 native_field(connection, "on_connection_start")?,

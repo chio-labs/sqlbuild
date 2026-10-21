@@ -5,8 +5,9 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Instant;
 
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods};
+use pyo3::types::{PyCFunction, PyDict, PyDictMethods, PyTuple, PyTupleMethods};
 use pyo3::{pyclass, pymethods};
+use sqlbuild_core::build_progress::main::batch_progress_message::batch_progress_message;
 use sqlbuild_core::build_progress::main::query_diagnostic_message::query_diagnostic_message;
 use sqlbuild_core::build_progress::main::render_build_spinner_line::render_build_spinner_line;
 use sqlbuild_core::build_progress::main::render_failed_test_result::render_failed_test_result;
@@ -15,8 +16,8 @@ use sqlbuild_core::build_progress::main::render_resource_result::render_resource
 use sqlbuild_core::build_progress::main::runtime_diagnostic_summary::runtime_diagnostic_summary;
 use sqlbuild_core::build_progress::main::scheduler_diagnostic_message::scheduler_diagnostic_message;
 use sqlbuild_core::build_progress::models::{
-    ModelRowFacts, ProgressLayout, ResourceResult, SchedulerStateText, SpinnerRow, StatementText,
-    TestResultText,
+    BatchProgressText, ModelRowFacts, ProgressLayout, ResourceResult, SchedulerStateText,
+    SpinnerRow, StatementText, TestResultText,
 };
 use sqlbuild_core::cli_text::models::CliStyle;
 
@@ -132,7 +133,7 @@ struct CallbackState {
     scheduler_count: usize,
     scheduler_omitted: usize,
     last_scheduler: Option<SchedulerStateText>,
-    query_count: usize,
+    query_counts: HashMap<String, usize>,
     query_omitted: usize,
     last_query: Option<StatementText>,
 }
@@ -253,6 +254,11 @@ impl BuildProgressCallbacks {
         if self.debug {
             return Ok(());
         }
+        self.write_persistent(py, message)
+    }
+
+    /// Write one permanent line through the shared line coordinator.
+    fn write_persistent(&self, py: Python<'_>, message: &str) -> PyResult<()> {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("stream", self.stream.bind(py))?;
         options.set_item("text", format!("{message}\n"))?;
@@ -260,6 +266,22 @@ impl BuildProgressCallbacks {
             .bind(py)
             .call_method("write_persistent", (), Some(&options))?;
         Ok(())
+    }
+
+    /// Keep a line per completed microbatch when no live spinner row shows batch progress.
+    fn write_batch_complete(&self, py: Python<'_>, progress: &Bound<'_, PyAny>) -> PyResult<()> {
+        if self.is_tty {
+            return Ok(());
+        }
+        let batch: BatchProgressText = BatchProgressText {
+            model_name: text(progress, "model_name")?,
+            batch_number: native_field(progress, "batch_number")?.extract()?,
+            batch_count: native_field(progress, "batch_count")?.extract()?,
+            window: text(progress, "window")?,
+            rows_affected: native_field(progress, "rows_affected")?.extract()?,
+            elapsed_seconds: native_field(progress, "elapsed_seconds")?.extract()?,
+        };
+        self.write_persistent(py, &batch_progress_message(&batch))
     }
 
     fn write_node_result(
@@ -505,6 +527,11 @@ impl BuildProgressCallbacks {
         Ok(())
     }
 
+    /// Keep a line per completed microbatch when no live spinner row shows batch progress.
+    fn on_batch_complete(&self, py: Python<'_>, progress: &Bound<'_, PyAny>) -> PyResult<()> {
+        self.write_batch_complete(py, progress)
+    }
+
     /// Report one deduplicated concurrent scheduler state transition.
     fn on_scheduler_state(&self, py: Python<'_>, state: &Bound<'_, PyAny>) -> PyResult<()> {
         let state: SchedulerStateText = scheduler_state(state)?;
@@ -525,8 +552,12 @@ impl BuildProgressCallbacks {
         let telemetry: StatementText = statement(telemetry)?;
         {
             let mut state = self.state();
-            state.query_count += 1;
-            if state.query_count > QUERY_DIAGNOSTIC_LIMIT {
+            let count: &mut usize = state
+                .query_counts
+                .entry(telemetry.resource_name.clone())
+                .or_default();
+            *count += 1;
+            if *count > QUERY_DIAGNOSTIC_LIMIT {
                 state.query_omitted += 1;
                 state.last_query = Some(telemetry);
                 return Ok(());
@@ -609,6 +640,24 @@ impl BuildProgressCallbacks {
         }
         Ok(())
     }
+}
+
+/// A callable that forwards each completed microbatch to `callbacks`, built without a Python lookup.
+pub(crate) fn batch_complete_callback<'py>(
+    callbacks: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let owned: Py<BuildProgressCallbacks> = callbacks
+        .downcast::<BuildProgressCallbacks>()?
+        .clone()
+        .unbind();
+    let forward = move |arguments: &Bound<'_, PyTuple>,
+                        _keywords: Option<&Bound<'_, PyDict>>|
+          -> PyResult<()> {
+        owned
+            .get()
+            .write_batch_complete(arguments.py(), &arguments.get_item(0)?)
+    };
+    Ok(PyCFunction::new_closure(callbacks.py(), None, None, forward)?.into_any())
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
