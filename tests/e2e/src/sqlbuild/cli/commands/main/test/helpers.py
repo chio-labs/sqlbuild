@@ -2113,3 +2113,40 @@ def order_totals_test_files(total_sql: str) -> dict[str, str]:
             "__expected__order_totals AS (\n  SELECT 1 AS order_id\n)\nSELECT 1\n"
         ),
     }
+
+
+def build_shared_partial_fixture_project_files(
+    *, enriched_column: str, report_column: str
+) -> dict[str, str]:
+    """Build a test chain whose two real models read one partial mock."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "shared_partial_fixture"\nadapter = "duckdb"\n\n'
+            '[connection]\ndatabase = "shared_partial_fixture.duckdb"\n'
+        ),
+        "models/order_lines.sql": (
+            'MODEL (description "Test model order_lines.");\n\n'
+            "SELECT 1 AS order_id, CAST(1.5 AS DOUBLE) AS amount, CAST(2.5 AS DOUBLE) AS discount\n"
+        ),
+        "models/enriched_lines.sql": (
+            'MODEL (description "Test model enriched_lines.");\n\n'
+            f'SELECT order_id, amount, {enriched_column} FROM __ref("order_lines")\n'
+        ),
+        "models/line_report.sql": (
+            'MODEL (description "Test model line_report.");\n\n'
+            f"SELECT e.order_id, e.amount, l.{report_column} AS line_discount\n"
+            'FROM __ref("enriched_lines") AS e\n'
+            'JOIN __ref("order_lines") AS l ON e.order_id = l.order_id\n'
+        ),
+        "tests/unit/test_line_report.sql": (
+            "TEST();\n\n"
+            "WITH\n"
+            "__ref__order_lines AS (SELECT 1 AS order_id, CAST(1.5 AS DOUBLE) AS amount),\n"
+            "__expected__line_report AS (\n"
+            "  SELECT 1 AS order_id, CAST(1.5 AS DOUBLE) AS amount,"
+            " CAST(NULL AS DOUBLE) AS line_discount\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }
