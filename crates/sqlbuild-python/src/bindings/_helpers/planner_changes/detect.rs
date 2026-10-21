@@ -2,6 +2,7 @@
 
 use sqlbuild_host::entries::models::{ExecutorHost, UserCodeHost};
 
+use crate::bindings::_helpers::compiled_views::function_reads;
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::contracts::spec_resolution::matching_dynamic_families;
@@ -110,13 +111,13 @@ pub(crate) fn detect_changes<'py>(
     let dialect: Option<String> = native_field(snapshot, "column_dialect")?.extract()?;
     for function in project_reads::functions(project)?.try_iter()? {
         let function: Bound<'py, PyAny> = function?;
-        let name: Bound<'py, PyAny> = native_field(&function, "name")?;
+        let name: Bound<'py, PyAny> = function_reads::name(&function)?;
         let fingerprint_sql: String = compiled_function_fingerprint_sql(&function)?;
         let mut arguments: Vec<(&str, Bound<'py, PyAny>)> = vec![(
             "fingerprint_sql",
             PyString::new(py, &fingerprint_sql).into_any(),
         )];
-        if selected.contains(native_field(&function, "key")?)? {
+        if selected.contains(function_reads::key(&function)?)? {
             let reason: &str = if full_refresh {
                 "full_refresh"
             } else {
@@ -129,7 +130,7 @@ pub(crate) fn detect_changes<'py>(
                         &name.extract::<String>()?,
                         (
                             &fingerprint_sql,
-                            &native_field(&function, "language")?
+                            &function_reads::language(&function)?
                                 .str()?
                                 .extract::<String>()?,
                             dialect.as_deref(),
