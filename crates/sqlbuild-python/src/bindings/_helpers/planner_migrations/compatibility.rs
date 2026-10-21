@@ -4,6 +4,7 @@ use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::compiled_views::model_reads::inferred_rows;
+use crate::bindings::_helpers::model_config::typed_config::{config_value, model_values};
 use crate::bindings::_helpers::planner_changes::detect::detect_model_changes;
 use crate::bindings::_helpers::planner_migrations::models::{
     CompatibilityCheck, MigrationCompatibilityResult,
@@ -19,9 +20,7 @@ use sqlbuild_analysis::planner_migrations::main::compatibility_findings::compati
 use sqlbuild_analysis::planner_migrations::models::CompatibilityFinding;
 
 fn config(model: &Bound<'_, PyAny>, key: &str) -> PyResult<Option<String>> {
-    native_field(&native_field(model, "config")?, "values")?
-        .call_method1("get", (key,))?
-        .extract()
+    config_value(model.py(), &model_values(model)?, key)?.extract()
 }
 
 /// The schema findings that block migrating one model's history; `snapshots_config` is given for snapshots.

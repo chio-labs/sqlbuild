@@ -17,6 +17,7 @@ use sqlbuild_analysis::planner_identity::models::FunctionFingerprintFields;
 use crate::bindings::_helpers::boundary::python_calls::{imported, keywords, within};
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::discovery::hook_entries::hook_entries;
+use crate::bindings::_helpers::model_config::typed_config::{config_value, model_values};
 use crate::bindings::_helpers::planner_identity::hashing::function_definition_hash;
 use crate::bindings::_helpers::planner_identity::json_values::{COMPACT, SPACED, sorted_dumps};
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -250,8 +251,7 @@ pub(crate) fn model_declared_columns_hash(model: &Bound<'_, PyAny>) -> PyResult<
     let payload: Bound<'_, PyDict> = PyDict::new(py);
     payload.set_item(
         "contract",
-        native_field(&native_field(model, "config")?, "values")?
-            .call_method1("get", (CONTRACT_CONFIG_KEY,))?,
+        config_value(py, &model_values(model)?, CONTRACT_CONFIG_KEY)?,
     )?;
     let columns: Bound<'_, PyList> = PyList::empty(py);
     let mut families: Bound<'_, PyList> = PyList::empty(py);
