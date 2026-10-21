@@ -28,9 +28,9 @@ Cold, SQLBuild used 30 s of CPU and 3.1 GiB at peak; dbt used 167 s and 4.7 GiB.
   and their descendants: 1.6 s for the edited model and 47 descendants, against SQLBuild's 2.4 s for
   a report on the whole project. With 100 edited files it falls back to a full parse and takes 60.7 s.
 
-## All variants
+## All variants, 10,000 models
 
-Wall time in seconds. CPU and memory for every cell are in the run's `summary.md`.
+Wall time in seconds on the same 10,000-model project. CPU and memory for every cell are in the run's `summary.md`.
 
 | Variant | Cold | Unchanged | 1 edit | 100 edits |
 |---|---:|---:|---:|---:|
