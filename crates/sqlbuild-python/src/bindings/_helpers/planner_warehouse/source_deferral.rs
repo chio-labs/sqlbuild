@@ -8,6 +8,7 @@ use crate::bindings::_helpers::compiled_views::audit_reads;
 use crate::bindings::_helpers::compiled_views::function_reads;
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::compiled_views::project_reads;
+use crate::bindings::_helpers::compiled_views::source_reads;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::model_config::typed_config::{config_value, model_values};
 use crate::bindings::_helpers::native_host::host;
@@ -31,7 +32,7 @@ use std::collections::BTreeSet;
 fn managed_names(project: &Bound<'_, PyAny>) -> PyResult<BTreeSet<String>> {
     let mut names: BTreeSet<_> = BTreeSet::new();
     for source in project_reads::sources(project)?.try_iter()? {
-        let entry = native_field(&source?, "source_entry")?;
+        let entry = source_reads::source_entry(&source?)?;
         if !native_field(&entry, "loader")?.is_none() {
             names.insert(native_field(&entry, "name")?.extract()?);
         }
@@ -172,11 +173,9 @@ fn source_target_name<'py>(
 }
 
 fn raw_source_entry<'py>(source: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let declared = native_field(source, "source_entry")?;
+    let declared = source_reads::source_entry(source)?;
     let name = native_field(&declared, "name")?;
-    for entry in
-        native_field(&native_field(source, "source_file")?, "source_entries")?.try_iter()?
-    {
+    for entry in native_field(&source_reads::source_file(source)?, "source_entries")?.try_iter()? {
         let entry = entry?;
         if native_field(&entry, "name")?.eq(&name)? {
             return Ok(entry);
@@ -312,7 +311,7 @@ pub(crate) fn build_source_read_map<'py>(
     for source in project_reads::sources(project)?.try_iter()? {
         let source = source?;
         let name: String =
-            native_field(&native_field(&source, "source_entry")?, "name")?.extract()?;
+            native_field(&source_reads::source_entry(&source)?, "name")?.extract()?;
         if !selected.contains(&name) {
             continue;
         }
@@ -345,7 +344,7 @@ pub(crate) fn with_declared_source_reads<'py>(
     }
     let result = source_map.copy()?;
     for source in project_reads::sources(project)?.try_iter()? {
-        let entry = native_field(&source?, "source_entry")?;
+        let entry = source_reads::source_entry(&source?)?;
         let name: String = native_field(&entry, "name")?.extract()?;
         if missing.contains(&name) {
             result.set_item(name, entry)?;

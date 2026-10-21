@@ -21,6 +21,7 @@ use sqlbuild_analysis::planner_identity::models::{AvailableUpstreams, GraphKey, 
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compiled_views::project_reads;
+use crate::bindings::_helpers::compiled_views::resource_reads;
 use crate::bindings::_helpers::graph::algorithms::{closure, inverted};
 use crate::bindings::_helpers::graph::keys::KeyCache;
 use crate::bindings::_helpers::planner_identity::hashing::graph_key;
@@ -100,10 +101,10 @@ pub(crate) fn build_execution_upstream_deps<'py>(
         for resource in collection.try_iter()? {
             let resource: Bound<'py, PyAny> = resource?;
             upstream.set_item(
-                native_field(&resource, "key")?,
+                resource_reads::key(&resource)?,
                 PyList::new(
                     py,
-                    native_field(&resource, "deps")?
+                    resource_reads::deps(&resource)?
                         .try_iter()?
                         .collect::<PyResult<Vec<_>>>()?,
                 )?,

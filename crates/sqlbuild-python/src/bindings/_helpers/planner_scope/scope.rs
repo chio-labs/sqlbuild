@@ -3,6 +3,7 @@
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::compiled_views::project_reads;
+use crate::bindings::_helpers::compiled_views::source_reads;
 use crate::bindings::_helpers::graph::keys::KeyCache;
 use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
 use crate::bindings::_helpers::graph::views::lineage_graph_names;
@@ -37,8 +38,8 @@ pub(crate) fn managed_source_upstream_keys<'py>(
     let mut managed: HashSet<String> = HashSet::new();
     for source in project_reads::sources(project)?.try_iter()? {
         let source = source?;
-        if !native_field(&native_field(&source, "source_entry")?, "loader")?.is_none() {
-            managed.insert(native_field(&source, "name")?.extract()?);
+        if !native_field(&source_reads::source_entry(&source)?, "loader")?.is_none() {
+            managed.insert(source_reads::name(&source)?.extract()?);
         }
     }
     let selected = managed_sources(&keys(selected_keys)?, &edges(upstream_deps)?, &managed);

@@ -2,8 +2,11 @@
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::compiled_views::function_reads;
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::compiled_views::project_reads;
+use crate::bindings::_helpers::compiled_views::seed_reads;
+use crate::bindings::_helpers::compiled_views::source_reads;
 use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
 use crate::bindings::_helpers::model_config::typed_config::{config_node_of, model_values};
 use crate::bindings::_helpers::planner_entries::models::ModelPlanContext;
@@ -130,7 +133,7 @@ fn resolved_source_entries<'py>(
     }
     for function in project_reads::functions(project)?.try_iter()? {
         let function = function?;
-        if selected.contains(native_field(&function, "key")?)? {
+        if selected.contains(function_reads::key(&function)?)? {
             readers.push(function);
         }
     }
@@ -145,8 +148,8 @@ fn resolved_source_entries<'py>(
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
     for source in native_field(source_project, "sources")?.try_iter()? {
         let source = source?;
-        if read.contains(native_field(&source, "name")?)? {
-            entries.push(native_field(&source, "source_entry")?);
+        if read.contains(source_reads::name(&source)?)? {
+            entries.push(source_reads::source_entry(&source)?);
         }
     }
     tuple_of(py, entries)
@@ -168,8 +171,8 @@ fn clone_resolution<'py>(
     for source in native_field(source_project, "sources")?.try_iter()? {
         let source = source?;
         source_map.set_item(
-            native_field(&source, "name")?,
-            native_field(&source, "source_entry")?,
+            source_reads::name(&source)?,
+            source_reads::source_entry(&source)?,
         )?;
     }
     let source_warehouse_columns = object(
@@ -240,7 +243,7 @@ fn clone_model_entries<'py>(
             let functions = PyDict::new(py);
             for function in project_reads::functions(project)?.try_iter()? {
                 let function = function?;
-                functions.set_item(native_field(&function, "name")?, function)?;
+                functions.set_item(function_reads::name(&function)?, function)?;
             }
             let context = Bound::new(
                 py,
@@ -301,8 +304,8 @@ fn clone_source_entries<'py>(
     let entries = PyDict::new(py);
     for source in project_reads::sources(project)?.try_iter()? {
         let source = source?;
-        let entry = native_field(&source, "source_entry")?;
-        if !selected.contains(native_field(&source, "key")?)?
+        let entry = source_reads::source_entry(&source)?;
+        if !selected.contains(source_reads::key(&source)?)?
             || !native_field(&entry, "managed")?.is_truthy()?
             || native_field(&entry, "loader")?.is_none()
             || !native_field(&entry, "expression")?.is_none()
@@ -334,13 +337,13 @@ fn clone_source_entries<'py>(
             }),
         )?;
         entries.set_item(
-            native_field(&source, "key")?,
+            source_reads::key(&source)?,
             planner_model(
                 py,
                 RecordId::CloneSourcePlanEntry,
                 &[
-                    ("key", native_field(&source, "key")?),
-                    ("name", native_field(&source, "name")?),
+                    ("key", source_reads::key(&source)?),
+                    ("name", source_reads::name(&source)?),
                     ("destination", destination),
                 ],
             )?,
@@ -359,7 +362,7 @@ fn clone_function_entries<'py>(
     let entries = PyDict::new(py);
     for function in project_reads::functions(project)?.try_iter()? {
         let function = function?;
-        if !selected.contains(native_field(&function, "key")?)? {
+        if !selected.contains(function_reads::key(&function)?)? {
             continue;
         }
         let body_sql = resolve_function_sql(
@@ -409,7 +412,7 @@ fn clone_function_entries<'py>(
                 ("packages", field("packages")?),
             ],
         )?;
-        entries.set_item(native_field(&function, "key")?, entry)?;
+        entries.set_item(function_reads::key(&function)?, entry)?;
     }
     in_order(&entries, &native_field(plan, "execution_order")?)
 }
@@ -420,17 +423,17 @@ fn seed_entry<'py>(seed: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         py,
         RecordId::SeedPlanEntry,
         &[
-            ("key", native_field(seed, "key")?),
-            ("name", native_field(seed, "name")?),
-            ("destination", native_field(seed, "destination")?),
+            ("key", seed_reads::key(seed)?),
+            ("name", seed_reads::name(seed)?),
+            ("destination", seed_reads::destination(seed)?),
             (
                 "file_path",
-                native_field(&native_field(seed, "seed_file")?, "file_path")?,
+                native_field(&seed_reads::seed_file(seed)?, "file_path")?,
             ),
             ("columns", PyTuple::empty(py).into_any()),
             (
                 "csv_settings",
-                native_field(&native_field(seed, "schema_entry")?, "csv_settings")?,
+                native_field(&seed_reads::schema_entry(seed)?, "csv_settings")?,
             ),
         ],
     )
@@ -487,10 +490,10 @@ fn origin_source_entries<'py>(
     let mut order: Vec<Bound<'py, PyAny>> = Vec::new();
     for source in project_reads::sources(project)?.try_iter()? {
         let source = source?;
-        if selected_names.contains(native_field(&source, "name")?)? {
-            keys.push(native_field(&source, "key")?);
+        if selected_names.contains(source_reads::name(&source)?)? {
+            keys.push(source_reads::key(&source)?);
         }
-        order.push(native_field(&source, "key")?);
+        order.push(source_reads::key(&source)?);
     }
     clone_source_entries(
         project,

@@ -5,6 +5,9 @@ use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::compiled_views::project_reads;
+use crate::bindings::_helpers::compiled_views::resource_reads;
+use crate::bindings::_helpers::compiled_views::seed_reads;
+use crate::bindings::_helpers::compiled_views::source_reads;
 use crate::bindings::_helpers::fingerprints::latest_rows::select_latest_fingerprints;
 use crate::bindings::_helpers::fingerprints::storage_io::read_latest_fingerprints;
 use crate::bindings::_helpers::graph::algorithms::transitive_closure_many;
@@ -90,7 +93,7 @@ pub(crate) fn destination_nodes<'py>(
 }
 
 fn selected_node(selected: &Bound<'_, PyAny>, node: &Bound<'_, PyAny>) -> PyResult<bool> {
-    Ok(selected.is_none() || selected.contains(native_field(node, "key")?)?)
+    Ok(selected.is_none() || selected.contains(resource_reads::key(node)?)?)
 }
 
 fn relevant_state_keys<'py>(
@@ -113,7 +116,7 @@ fn resolve_database<'py>(
         if !selected_node(selected, &node)? {
             continue;
         }
-        let database = native_field(&native_field(&node, "destination")?, "database")?;
+        let database = native_field(&resource_reads::destination(&node)?, "database")?;
         if !database.is_none() {
             return Ok(database);
         }
@@ -130,7 +133,7 @@ fn target_schemas(
         if !selected_node(selected, &node)? {
             continue;
         }
-        let schema = native_field(&native_field(&node, "destination")?, "schema")?;
+        let schema = native_field(&resource_reads::destination(&node)?, "schema")?;
         if !schema.is_none() {
             schemas.insert(schema.extract()?);
         }
@@ -196,7 +199,7 @@ fn metadata_name_filter(
         let seeds = by_name(project, "seeds")?;
         let sources = PyDict::new(py);
         for source in project_reads::sources(project)?.try_iter()? {
-            let entry = native_field(&source?, "source_entry")?;
+            let entry = source_reads::source_entry(&source?)?;
             sources.set_item(native_field(&entry, "name")?, entry)?;
         }
         for key in selected.try_iter()? {
@@ -209,8 +212,7 @@ fn metadata_name_filter(
                     &selected_names,
                 )?);
             } else if let Some(seed) = seeds.get_item(&name)? {
-                names
-                    .insert(native_field(&native_field(&seed, "destination")?, "name")?.extract()?);
+                names.insert(native_field(&seed_reads::destination(&seed)?, "name")?.extract()?);
             } else if let Some(entry) = sources.get_item(&name)? {
                 names.insert(source_table_name(&entry)?);
             }
@@ -279,8 +281,8 @@ fn prefetch_schemas<'py>(
     }
     for source in project_reads::sources(&request.project)?.try_iter()? {
         let source = source?;
-        let entry = native_field(&source, "source_entry")?;
-        if (!relevant.is_none() && !relevant.contains(native_field(&source, "key")?)?)
+        let entry = source_reads::source_entry(&source)?;
+        if (!relevant.is_none() && !relevant.contains(source_reads::key(&source)?)?)
             || !native_field(&entry, "expression")?.is_none()
             || native_field(&entry, "schema")?.is_none()
         {
@@ -380,8 +382,8 @@ fn gather_relations<'py>(
     let logical = PyDict::new(py);
     for node in destination_nodes(&request.project)? {
         logical.set_item(
-            location_identity(&native_field(&node, "destination")?)?,
-            native_field(&node, "name")?,
+            location_identity(&resource_reads::destination(&node)?)?,
+            resource_reads::name(&node)?,
         )?;
     }
     let result = PyDict::new(py);
@@ -431,7 +433,7 @@ fn gather_columns<'py>(
     let py = request.project.py();
     let mut node_names: HashSet<String> = HashSet::new();
     for node in destination_nodes(&request.project)? {
-        node_names.insert(native_field(&node, "name")?.extract()?);
+        node_names.insert(resource_reads::name(&node)?.extract()?);
     }
     let mut needed: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)> = Vec::new();
     for (logical, relation) in relations.iter() {

@@ -3,6 +3,7 @@
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compiled_views::project_reads;
+use crate::bindings::_helpers::compiled_views::seed_reads;
 use crate::bindings::_helpers::planner_identity::metadata::build_compiled_function_fingerprint_sql;
 use crate::bindings::_helpers::planner_resolution::orchestration::resolve_function_sql;
 use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_UNKNOWN_SEED;
@@ -52,17 +53,17 @@ pub(super) fn seed_entries<'py>(
             py,
             RecordId::SeedPlanEntry,
             &[
-                ("key", native_field(&seed, "key")?),
-                ("name", native_field(&seed, "name")?),
+                ("key", seed_reads::key(&seed)?),
+                ("name", seed_reads::name(&seed)?),
                 ("destination", destination),
                 (
                     "file_path",
-                    native_field(&native_field(&seed, "seed_file")?, "file_path")?,
+                    native_field(&seed_reads::seed_file(&seed)?, "file_path")?,
                 ),
                 ("columns", extract_seed_columns(&seed)?.into_any()),
                 (
                     "csv_settings",
-                    native_field(&native_field(&seed, "schema_entry")?, "csv_settings")?,
+                    native_field(&seed_reads::schema_entry(&seed)?, "csv_settings")?,
                 ),
             ],
         )?);

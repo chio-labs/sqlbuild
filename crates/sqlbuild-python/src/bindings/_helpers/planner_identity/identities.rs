@@ -18,6 +18,7 @@ use sqlbuild_host::entries::models::UserCodeHost;
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compiled_views::function_reads;
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::seed_reads;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_identity::hashing::{graph_key, model_query_hash};
 use crate::bindings::_helpers::planner_identity::metadata::{
@@ -122,7 +123,7 @@ pub(crate) fn direct_model_version_identities<'py>(
         for seed in seeds.try_iter()? {
             let seed: Bound<'py, PyAny> = seed?;
             let (seed_hash, metadata_json): (String, String) = seed_identity(&seed)?;
-            let name: Bound<'py, PyAny> = native_field(&seed, "name")?;
+            let name: Bound<'py, PyAny> = seed_reads::name(&seed)?;
             seed_hashes.set_item(&name, &seed_hash)?;
             seed_metadata.set_item(&name, metadata_json)?;
         }

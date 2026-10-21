@@ -1,6 +1,8 @@
 //! Validate reliable watermark column contracts before warehouse inspection.
 
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::seed_reads;
+use crate::bindings::_helpers::compiled_views::source_reads;
 use crate::bindings::_helpers::model_config::typed_config::{config_value, model_values};
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::objects::{config_str, planner_error, text};
@@ -109,7 +111,7 @@ pub(crate) fn validate_watermark_column<'py>(
         let Some(source) = sources.get_item(&ref_name)? else {
             return Ok(());
         };
-        let entry = native_field(&source, "source_entry")?;
+        let entry = source_reads::source_entry(&source)?;
         if !native_field(&entry, "contract")?.eq("enforced")? {
             return Ok(());
         }
@@ -118,10 +120,7 @@ pub(crate) fn validate_watermark_column<'py>(
         let Some(seed) = seeds.get_item(&ref_name)? else {
             return Ok(());
         };
-        declared_columns(&native_field(
-            &native_field(&seed, "schema_entry")?,
-            "columns",
-        )?)?
+        declared_columns(&native_field(&seed_reads::schema_entry(&seed)?, "columns")?)?
     } else {
         return Ok(());
     };

@@ -4,6 +4,7 @@ use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compiled_views::function_reads;
 use crate::bindings::_helpers::compiled_views::project_reads;
+use crate::bindings::_helpers::compiled_views::seed_reads;
 use crate::bindings::_helpers::planner_entries::model_entries::scope_overlaps;
 use crate::bindings::_helpers::planner_entries::models::PlanOutputInputs;
 use crate::bindings::_helpers::planner_entries::values::{
@@ -108,25 +109,25 @@ fn seed_entries<'py>(
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
     for seed in project_reads::seeds(project)?.try_iter()? {
         let seed = seed?;
-        if !selected_keys.contains(native_field(&seed, "key")?)? {
+        if !selected_keys.contains(seed_reads::key(&seed)?)? {
             continue;
         }
-        let name = native_field(&seed, "name")?;
+        let name = seed_reads::name(&seed)?;
         entries.push(planner_model(
             py,
             RecordId::SeedPlanEntry,
             &[
-                ("key", native_field(&seed, "key")?),
+                ("key", seed_reads::key(&seed)?),
                 ("name", name.clone()),
-                ("destination", native_field(&seed, "destination")?),
+                ("destination", seed_reads::destination(&seed)?),
                 (
                     "file_path",
-                    native_field(&native_field(&seed, "seed_file")?, "file_path")?,
+                    native_field(&seed_reads::seed_file(&seed)?, "file_path")?,
                 ),
                 ("columns", object(py, extract_seed_columns(&seed)?)?),
                 (
                     "csv_settings",
-                    native_field(&native_field(&seed, "schema_entry")?, "csv_settings")?,
+                    native_field(&seed_reads::schema_entry(&seed)?, "csv_settings")?,
                 ),
                 (
                     "fingerprint_definition",
