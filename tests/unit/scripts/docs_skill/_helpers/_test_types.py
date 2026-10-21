@@ -25,4 +25,4 @@ class RecallViewsSectionTestCase:
     description: str
     guide: str
     views: str
-    expected: str
+    expected_guide: str

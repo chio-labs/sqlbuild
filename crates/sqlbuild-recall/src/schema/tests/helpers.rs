@@ -1,8 +1,11 @@
-use crate::schema::constants::VIEW_NAMES;
+use std::collections::BTreeSet;
+
+use crate::schema::constants::{ALL_TABLES, VIEW_NAMES};
 use crate::schema::main::ddl_script::ddl_script;
 use crate::schema::main::sqlite_retention_sql::sqlite_retention_sql;
+use crate::schema::main::table_columns::table_columns;
 use crate::schema::main::table_statements::table_statements;
-use crate::schema::models::{DdlOptions, Dialect};
+use crate::schema::models::{DdlOptions, Dialect, ObservedSchema, Table};
 
 /// Options rendering into `observability` with 14-day retention, optionally on `cluster`.
 pub(crate) fn options(cluster: Option<&str>) -> DdlOptions {
@@ -65,4 +68,32 @@ pub(crate) fn sqlite_schema_after(runs: usize) -> (usize, Vec<String>) {
         )
         .expect("the count query runs");
     (usize::try_from(count).unwrap_or_default(), failures)
+}
+
+/// A store at `version` holding every table, column and view of this build, less `without_column` and `without_view`.
+pub(crate) fn observed_store(
+    version: Option<i64>,
+    without_column: (Table, &str),
+    without_view: &str,
+) -> ObservedSchema {
+    ObservedSchema {
+        tables: ALL_TABLES
+            .iter()
+            .map(|table| (*table, present_columns(*table, without_column)))
+            .collect(),
+        views: VIEW_NAMES
+            .iter()
+            .filter(|name| **name != without_view)
+            .map(|name| (*name).to_owned())
+            .collect(),
+        version,
+    }
+}
+
+fn present_columns(table: Table, (without_table, without_name): (Table, &str)) -> BTreeSet<String> {
+    table_columns(table)
+        .into_iter()
+        .filter(|column| (table, column.name) != (without_table, without_name))
+        .map(|column| column.name.to_owned())
+        .collect()
 }

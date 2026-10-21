@@ -484,9 +484,7 @@ def apply_script(*, config: dict[str, object], script: str) -> None:
     execute_clickhouse_sql(
         config=config,
         statements=tuple(
-            statement.strip().removesuffix(";")
-            for statement in script.split(";\n\n")
-            if statement.strip()
+            statement.strip().removesuffix(";") for statement in script.split(";\n\n")
         ),
     )
 

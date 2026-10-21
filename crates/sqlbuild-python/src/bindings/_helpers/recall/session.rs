@@ -131,18 +131,19 @@ fn git_revision(project_dir: &Path) -> Option<String> {
             return Some(revision.trim().to_owned());
         }
     }
-    [&git, &common]
-        .into_iter()
-        .filter_map(|directory| file_text(&directory.join("packed-refs")))
-        .flat_map(|packed| {
-            packed
-                .lines()
-                .filter_map(|line| line.split_once(' '))
-                .filter(|(_, name)| *name == reference)
-                .map(|(revision, _)| revision.to_owned())
-                .collect::<Vec<_>>()
-        })
-        .next()
+    for directory in [&git, &common] {
+        let Some(packed) = file_text(&directory.join("packed-refs")) else {
+            continue;
+        };
+        let found = packed
+            .lines()
+            .filter_map(|line| line.split_once(' '))
+            .find(|(_, name)| *name == reference);
+        if let Some((revision, _)) = found {
+            return Some(revision.to_owned());
+        }
+    }
+    None
 }
 
 /// The revision a deployment sets in [`GIT_REVISION_ENVIRONMENT`], else the one the repository's files name.

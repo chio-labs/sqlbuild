@@ -25,7 +25,7 @@ use sqlbuild_recall::schema::constants::{
 };
 use sqlbuild_recall::schema::main::add_column_statement::add_column_statement;
 use sqlbuild_recall::schema::main::clickhouse_relation::clickhouse_relation;
-use sqlbuild_recall::schema::main::ddl_script::render_script;
+use sqlbuild_recall::schema::main::render_script::render_script;
 use sqlbuild_recall::schema::main::retention_fix_statements::retention_fix_statements;
 use sqlbuild_recall::schema::main::table_columns::table_columns;
 use sqlbuild_recall::schema::main::table_spec::table_spec;
@@ -228,23 +228,21 @@ impl ClickHouseStore {
 
     /// What the store holds, from its read columns, `views` and recorded `version`.
     fn observed(&self, views: &HashSet<String>, version: i64) -> ObservedSchema {
-        ObservedSchema {
-            tables: self
-                .columns
-                .iter()
-                .map(|(table, columns)| {
-                    (
-                        *table,
-                        columns.iter().map(|column| column.name.clone()).collect(),
-                    )
-                })
-                .collect(),
+        let mut observed = ObservedSchema {
             views: views.iter().cloned().collect(),
             version: (version > 0).then_some(version),
+            ..ObservedSchema::default()
+        };
+        for (table, columns) in &self.columns {
+            let names = observed.tables.entry(*table).or_default();
+            for column in columns {
+                names.insert(column.name.clone());
+            }
         }
+        observed
     }
 
-    /// Create a store whose tables are missing. On existing tables add missing columns, create missing views, and replace views on a version upgrade; a user who may not run that DDL writes the columns that exist and gets the statements an administrator must run.
+    /// Create a store whose tables are missing. On existing tables add missing columns, create missing views, and replace views on a version upgrade or when the version row expired with retention (version 0), since the views may then be from any earlier version. A user who may not run that DDL writes the columns that exist and gets the statements an administrator must run; after an expired version row it stays quiet. A version is recorded only once the views are current.
     fn ensure_schema(
         &mut self,
         py: Python<'_>,
@@ -273,7 +271,6 @@ impl ClickHouseStore {
                 tables,
             });
         }
-        // A version of 0 means the version row expired with retention: the views may be from any earlier version, so they are replaced too.
         let upgrade: bool = version < RECALL_SCHEMA_VERSION;
         for (name, statement) in view_statements(Dialect::ClickHouse, &self.location.options) {
             let statement: String = if upgrade {
@@ -286,7 +283,6 @@ impl ClickHouseStore {
             match self.command(py, &statement, "create the Recall views") {
                 Ok(()) => {}
                 Err(error) if error.kind == StoreErrorKind::Permission => {
-                    // An expired version row says nothing about the views, so stay quiet, but never record a version the views may not have.
                     let behind: Vec<String> = if version == 0 {
                         Vec::new()
                     } else {
@@ -645,7 +641,7 @@ impl ClickHouseReader {
         self.store.location.database()
     }
 
-    /// At most `limit` rows of a read-only query, with the server's statistics.
+    /// At most `limit` rows of a read-only query, with the server's statistics. A failure on a store that is not created yet is a store failure (C971), not an invalid query.
     pub(crate) fn query(
         &self,
         py: Python<'_>,
@@ -663,7 +659,6 @@ impl ClickHouseReader {
             "run the Recall query",
         )
         .map_err(|failure| {
-            // A store not created yet is a store failure (C971), not a missing invocation.
             match self.require_store(py) {
                 Err(missing) if missing.kind == StoreErrorKind::NotFound => {
                     return StoreError {

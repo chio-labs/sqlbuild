@@ -7,7 +7,9 @@ use pyo3::exceptions::PySystemExit;
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyCFunction, PyDict, PyDictMethods, PyInt, PyList, PyString, PyTuple};
+use pyo3::types::{
+    PyCFunction, PyDict, PyDictMethods, PyInt, PyList, PyString, PyStringMethods, PyTuple,
+};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_cli::dispatch::main::failure_report::failure_report;
 use sqlbuild_cli::dispatch::main::invocation_policy::invocation_policy;
@@ -29,6 +31,7 @@ use crate::bindings::_helpers::diff_report::output::render_diff_error_json;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::output_capture::records::invocation_context;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::recall::constants::JSON_FORMAT;
 use crate::bindings::_helpers::recall::events::escaped_text;
 use crate::bindings::_helpers::recall::session::{
     InvocationRecall, finish_invocation_recall, start_invocation_recall,
@@ -208,11 +211,12 @@ fn write_machine_error(
     fallback_code: &str,
 ) -> PyResult<()> {
     let json_output: bool = if invocation.command_is("recall") {
-        invocation
+        let format: Option<String> = invocation
             .args
             .getattr_opt("recall_format")?
-            .and_then(|format| format.extract::<String>().ok())
-            .is_some_and(|format| format == "json")
+            .map(|format| format.extract())
+            .transpose()?;
+        format.as_deref() == Some(JSON_FORMAT)
     } else {
         invocation.command_is("plan") && invocation.flag("json")?
     };
@@ -556,16 +560,15 @@ fn observed_dispatch<'py>(
                 payload.set_item("duration_ms", elapsed(started)?)?;
                 payload.set_item("error_type", error.get_type(py).getattr("__name__")?)?;
                 let value: Bound<'py, PyAny> = error.value(py).clone().into_any();
-                if let Some(code) = value.getattr_opt("code")?
-                    && let Ok(code) = code.extract::<String>()
-                {
+                let (code, message, _) = error_parts(&value, "")?;
+                let code: String = code.str()?.to_string_lossy().into_owned();
+                if !code.is_empty() && !error.is_instance_of::<PySystemExit>(py) {
                     payload.set_item("error_code", code)?;
                 }
-                let message: String = match value.getattr_opt("message")? {
-                    Some(message) if !message.is_none() => message.str()?.to_string(),
-                    _ => value.str()?.to_string(),
-                };
-                payload.set_item("error_message", short_message(&message))?;
+                payload.set_item(
+                    "error_message",
+                    short_message(&message.str()?.to_string_lossy()),
+                )?;
                 publish(lifecycle_event(py, "invocation_failed", payload)?)?;
                 Err(error)
             }
@@ -684,7 +687,7 @@ fn parsed_invocation<'py>(
             ],
         )
     } else {
-        operation.call0()
+        call_with(&operation.into_any(), &[])
     };
     let exit_status: Option<i64> = match &dispatched {
         Ok(code) if code.is_instance_of::<PyInt>() => Some(code.extract().unwrap_or(1)),

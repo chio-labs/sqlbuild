@@ -7,6 +7,7 @@ use crate::schema::main::table_spec::table_spec;
 use crate::schema::models::ObservedSchema;
 use crate::store::_helpers::schema::stored_columns;
 use crate::store::_helpers::sqlite::{checked, stored_schema_version};
+use crate::store::constants::SQLITE_VIEW_TYPE;
 use crate::store::errors::StoreError;
 use crate::store::models::SqliteStore;
 
@@ -25,7 +26,7 @@ pub fn observe_sqlite_schema(store: &SqliteStore) -> Result<ObservedSchema, Stor
     )?;
     let mut observed = ObservedSchema::default();
     for (kind, name) in objects {
-        if kind == "view" {
+        if kind == SQLITE_VIEW_TYPE {
             observed.views.insert(name);
         } else if let Some(table) = ALL_TABLES
             .iter()

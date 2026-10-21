@@ -22,7 +22,7 @@ def generate_docs_skill(argv: list[str] | None = None) -> int:
     if args.investigation_guide is not None:
         guide: str = args.investigation_guide.read_text(encoding="utf-8")
         _ = args.investigation_guide.write_text(
-            with_recall_views(guide, render_recall_views()), encoding="utf-8"
+            with_recall_views(guide=guide, views=render_recall_views()), encoding="utf-8"
         )
     return 0
 

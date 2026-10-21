@@ -7,6 +7,7 @@ import operator
 import os
 import re
 import signal
+import sqlite3
 import stat
 import subprocess
 import sys
@@ -466,3 +467,101 @@ def logged_event_types(project_dir: Path, dropped_prefix: str) -> tuple[list[str
     )
     dropped: operator.methodcaller = operator.methodcaller("startswith", dropped_prefix)
     return logged, list(itertools.filterfalse(dropped, logged))
+
+
+DEPLOYED_REVISION: str = "4f1c2e9"
+SHARED_STORE_TOML: str = (
+    '\n[connections.history]\nadapter = "sqlite"\npath = "{path}"\n\n[recall]\n{keys}'
+)
+
+
+def shared_store_project(*, parent: Path, store: Path, keys: str) -> Path:
+    """A project whose Recall settings set `keys` for the SQLite connection `history` at `store`."""
+
+    return write_project(
+        parent / "orders_shop",
+        extra_toml=SHARED_STORE_TOML.format(path=store.as_posix(), keys=keys),
+    )
+
+
+def store_schema(store: Path) -> list[tuple[object, ...]]:
+    """Every table and view of a SQLite store with its columns, to show reads changed nothing."""
+
+    with sqlite3.connect(store) as connection:
+        return connection.execute(
+            "SELECT m.type, m.name, p.name FROM sqlite_schema AS m "
+            "LEFT JOIN pragma_table_xinfo(m.name) AS p ORDER BY m.type, m.name, p.cid"
+        ).fetchall()
+
+
+def make_store_behind(store: Path) -> None:
+    """Make a store look written by an older version: no newer column, views or version row."""
+
+    with sqlite3.connect(store) as connection:
+        views: list[str] = [
+            row[0]
+            for row in connection.execute("SELECT name FROM sqlite_schema WHERE type = 'view'")
+        ]
+        connection.executescript(
+            "".join(f'DROP VIEW "{view}";' for view in views)
+            + 'ALTER TABLE "recall_heartbeats" DROP COLUMN "subcommand";'
+            + "DELETE FROM recall_meta WHERE component = 'schema';"
+        )
+    connection.close()
+
+
+def drop_store_views(store: Path) -> None:
+    """Drop every view of a SQLite store, as a store whose creation is still under way has none."""
+
+    with sqlite3.connect(store) as connection:
+        views: list[str] = [
+            row[0]
+            for row in connection.execute("SELECT name FROM sqlite_schema WHERE type = 'view'")
+        ]
+        connection.executescript("".join(f'DROP VIEW "{view}";' for view in views))
+    connection.close()
+
+
+def git(directory: Path, *args: str) -> str:
+    """Run git with a fixed synthetic identity and return its stdout."""
+
+    completed: subprocess.CompletedProcess[str] = subprocess.run(
+        ["git", "-c", "user.name=Orders", "-c", "user.email=orders@example.com", *args],
+        cwd=directory,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    return completed.stdout.strip()
+
+
+def committed_repository(parent: Path) -> tuple[Path, str]:
+    """A git repository at `parent / "repository"` holding the project, and its commit."""
+
+    repository: Path = parent / "repository"
+    _ = write_project(repository / "orders_shop")
+    _ = git(repository, "init", "-q", "-b", "main")
+    _ = git(repository, "add", ".")
+    _ = git(repository, "commit", "-q", "-m", "orders")
+    return repository, git(repository, "rev-parse", "HEAD")
+
+
+def deployed_project(parent: Path) -> tuple[Path, str]:
+    """A project outside any repository, and the revision its deployment sets in the environment."""
+
+    return write_project(parent / "orders_shop"), DEPLOYED_REVISION
+
+
+def checkout_project(parent: Path) -> tuple[Path, str]:
+    """A project in a plain checkout, and the commit HEAD names."""
+
+    repository, revision = committed_repository(parent)
+    return repository / "orders_shop", revision
+
+
+def worktree_project(parent: Path) -> tuple[Path, str]:
+    """A project in a linked git worktree, whose `.git` is a file, and the commit HEAD names."""
+
+    repository, revision = committed_repository(parent)
+    _ = git(repository, "worktree", "add", "-q", "-b", "orders", str(parent / "linked"))
+    return parent / "linked" / "orders_shop", revision

@@ -13,7 +13,7 @@ _PROJECT_TOML: str = 'name = "orders_shop"\nadapter = "duckdb"\n'
 _TABLE_MARKER: str = " (table)"
 
 
-def _sqb(project_dir: Path, *args: str) -> str:
+def _sqb(*, project_dir: Path, args: tuple[str, ...]) -> str:
     home: Path = project_dir / "home"
     completed: subprocess.CompletedProcess[str] = subprocess.run(
         [str(Path(sys.executable).with_name("sqlbuild-python")), *args],
@@ -38,12 +38,12 @@ def render_recall_views() -> str:
     with tempfile.TemporaryDirectory() as directory:
         project_dir: Path = Path(directory)
         (project_dir / "sqlbuild_project.toml").write_text(_PROJECT_TOML, encoding="utf-8")
-        script: str = _sqb(project_dir, "recall", "schema", "--ddl")
+        script: str = _sqb(project_dir=project_dir, args=("recall", "schema", "--ddl"))
         (project_dir / "logs").mkdir()
         with sqlite3.connect(project_dir / "logs" / "recall.sqlite3") as connection:
             connection.executescript(script)
         connection.close()
-        described: list[str] = _sqb(project_dir, "recall", "schema").splitlines()
+        described: list[str] = _sqb(project_dir=project_dir, args=("recall", "schema")).splitlines()
     views: list[str] = []
     for line in described[1:]:
         if _TABLE_MARKER in line and not line.startswith(" "):
@@ -52,7 +52,7 @@ def render_recall_views() -> str:
     return "\n".join(views).strip() + "\n"
 
 
-def with_recall_views(guide: str, views: str) -> str:
+def with_recall_views(*, guide: str, views: str) -> str:
     """`guide` with its generated schema section replaced by `views`."""
 
     start: int = guide.index(SCHEMA_SECTION_START) + len(SCHEMA_SECTION_START)

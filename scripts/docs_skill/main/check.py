@@ -22,7 +22,7 @@ def check_docs_skill(argv: list[str] | None = None) -> int:
     )
     if args.investigation_guide is not None:
         guide: str = args.investigation_guide.read_text(encoding="utf-8")
-        if with_recall_views(guide, render_recall_views()) != guide:
+        if with_recall_views(guide=guide, views=render_recall_views()) != guide:
             outdated = (*outdated, args.investigation_guide.as_posix())
     if not outdated:
         print(f"Docs skill reference pages in {args.output_dir} are up to date")

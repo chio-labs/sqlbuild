@@ -7,7 +7,15 @@ from tests.integration.src.sqlbuild.cli.recall._test_types import (
     FailureCauseTestCase,
     GitRevisionTestCase,
 )
-from tests.integration.src.sqlbuild.cli.recall.helpers import recall_rows, run, write_project
+from tests.integration.src.sqlbuild.cli.recall.helpers import (
+    DEPLOYED_REVISION,
+    checkout_project,
+    deployed_project,
+    recall_rows,
+    run,
+    worktree_project,
+    write_project,
+)
 
 BROKEN_TARGET: str = (
     "\n[connections.broken]\n"
@@ -16,17 +24,6 @@ BROKEN_TARGET: str = (
     'connection = "broken"\n'
     'schema = "dev"\n'
 )
-
-
-def _git(directory: Path, *args: str) -> str:
-    completed: subprocess.CompletedProcess[str] = subprocess.run(
-        ["git", "-c", "user.name=Orders", "-c", "user.email=orders@example.com", *args],
-        cwd=directory,
-        capture_output=True,
-        check=True,
-        text=True,
-    )
-    return completed.stdout.strip()
 
 
 @pytest.mark.parametrize(
@@ -68,19 +65,19 @@ def test_given_a_failed_command_when_recorded_then_its_cause_is_structured(
     [
         GitRevisionTestCase(
             description="the deployment's override wins",
-            layout="no_repository",
-            environment={"SQLBUILD_GIT_REVISION": "4f1c2e9", "SQLBUILD_GIT_DIRTY": "true"},
+            prepare=deployed_project,
+            environment={"SQLBUILD_GIT_REVISION": DEPLOYED_REVISION, "SQLBUILD_GIT_DIRTY": "true"},
             expected_dirty=1,
         ),
         GitRevisionTestCase(
             description="a git worktree reads HEAD through its .git file",
-            layout="worktree",
+            prepare=worktree_project,
             environment={},
             expected_dirty=None,
         ),
         GitRevisionTestCase(
             description="a plain checkout reads HEAD from .git",
-            layout="checkout",
+            prepare=checkout_project,
             environment={},
             expected_dirty=None,
         ),
@@ -90,17 +87,7 @@ def test_given_a_failed_command_when_recorded_then_its_cause_is_structured(
 def test_given_a_deployment_or_checkout_when_recorded_then_the_git_revision_is_known(
     test_case: GitRevisionTestCase, tmp_path: Path
 ) -> None:
-    repository: Path = tmp_path / "repository"
-    project_dir: Path = write_project(repository / "orders_shop")
-    expected_revision: str = test_case.environment.get("SQLBUILD_GIT_REVISION", "")
-    if test_case.layout != "no_repository":
-        _ = _git(repository, "init", "-q", "-b", "main")
-        _ = _git(repository, "add", ".")
-        _ = _git(repository, "commit", "-q", "-m", "orders")
-        expected_revision = _git(repository, "rev-parse", "HEAD")
-    if test_case.layout == "worktree":
-        _ = _git(repository, "worktree", "add", "-q", "-b", "orders", str(tmp_path / "linked"))
-        project_dir = tmp_path / "linked" / "orders_shop"
+    project_dir, expected_revision = test_case.prepare(tmp_path)
 
     built: subprocess.CompletedProcess[bytes] = run(project_dir, "build", **test_case.environment)
 

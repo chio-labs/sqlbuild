@@ -1,4 +1,6 @@
+from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -248,7 +250,7 @@ class FailureCauseTestCase:
 @dataclass(frozen=True)
 class GitRevisionTestCase:
     description: str
-    layout: str
+    prepare: Callable[[Path], tuple[Path, str]]
     environment: dict[str, str]
     expected_dirty: object
 
@@ -257,3 +259,18 @@ class GitRevisionTestCase:
 class LeanRecallTestCase:
     description: str
     args: tuple[str, ...]
+    expected_sink_log: bool
+
+
+@dataclass(frozen=True)
+class StatementStartTestCase:
+    description: str
+    sql: str
+    expected_rows: list[list[object]]
+
+
+@dataclass(frozen=True)
+class StoreBeingCreatedTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_error: str

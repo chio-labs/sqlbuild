@@ -35,6 +35,3 @@ class RecallConnections:
 
         with self._guard:
             return self._connections.pop(handle, None)
-
-
-RECALL_CONNECTIONS: RecallConnections = RecallConnections()

@@ -1,9 +1,10 @@
 //! `upgrade_statements`: what an administrator runs to bring an observed store up to this build's schema.
 
 use crate::schema::_helpers::rendering::sqlite_identifier;
+use crate::schema::_helpers::version_row::version_row_statement;
 use crate::schema::constants::{ALL_TABLES, RECALL_SCHEMA_VERSION};
 use crate::schema::main::add_column_statement::add_column_statement;
-use crate::schema::main::ddl_script::{ddl_statements, version_row_statement};
+use crate::schema::main::ddl_statements::ddl_statements;
 use crate::schema::main::table_columns::table_columns;
 use crate::schema::main::table_spec::table_spec;
 use crate::schema::main::table_statements::table_statements;

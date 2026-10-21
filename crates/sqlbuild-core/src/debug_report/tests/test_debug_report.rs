@@ -7,7 +7,9 @@ use crate::debug_report::models::{
     ConnectionCheck, ConnectionValue, DebugFailure, DebugLine, DebugReport, DebugStatus,
 };
 use crate::debug_report::tests::helpers::{line_summary, sample_report, text};
-use crate::debug_report::tests::test_types::{ConnectionLinesTestCase, FormatTestCase};
+use crate::debug_report::tests::test_types::{
+    ConnectionLinesTestCase, DebugFailureTestCase, FormatTestCase,
+};
 
 /// Expectations recorded from the retired Python formatter.
 #[test]
@@ -105,45 +107,52 @@ fn given_connection_settings_when_listing_then_values_are_sorted_masked_and_shor
 
 #[test]
 fn given_a_debug_report_when_its_failure_is_read_then_the_first_failed_check_is_coded() {
-    let passed = DebugReport {
-        connection: vec![DebugLine::checked(
-            "connection test",
-            "",
-            (DebugStatus::Ok, Some("connected")),
-        )],
-        ..DebugReport::default()
-    };
-    let invalid_config = DebugReport {
-        configuration: vec![DebugLine::checked(
-            "project file",
-            "/repo/sqlbuild_project.toml",
-            (DebugStatus::Error, Some("invalid TOML")),
-        )],
-        ..DebugReport::default()
-    };
-    let test_cases: [(&str, DebugReport, Option<DebugFailure>); 3] = [
-        (
-            "a failed connection test is a connection error",
-            sample_report(),
-            Some(DebugFailure {
+    let test_cases = [
+        DebugFailureTestCase {
+            description: "a failed connection test is a connection error",
+            report: sample_report(),
+            expected_failure: Some(DebugFailure {
                 error_type: "ConnectionError".to_owned(),
                 error_code: "C980".to_owned(),
                 message: "connection test: authentication failed".to_owned(),
             }),
-        ),
-        (
-            "another failed check is a configuration error",
-            invalid_config,
-            Some(DebugFailure {
+        },
+        DebugFailureTestCase {
+            description: "another failed check is a configuration error",
+            report: DebugReport {
+                configuration: vec![DebugLine::checked(
+                    "project file",
+                    "/repo/sqlbuild_project.toml",
+                    (DebugStatus::Error, Some("invalid TOML")),
+                )],
+                ..DebugReport::default()
+            },
+            expected_failure: Some(DebugFailure {
                 error_type: "ConfigurationError".to_owned(),
                 error_code: "C982".to_owned(),
                 message: "project file: invalid TOML".to_owned(),
             }),
-        ),
-        ("a passing report has no failure", passed, None),
+        },
+        DebugFailureTestCase {
+            description: "a passing report has no failure",
+            report: DebugReport {
+                connection: vec![DebugLine::checked(
+                    "connection test",
+                    "",
+                    (DebugStatus::Ok, Some("connected")),
+                )],
+                ..DebugReport::default()
+            },
+            expected_failure: None,
+        },
     ];
 
-    for (description, report, expected) in test_cases {
-        assert_eq!(debug_failure(&report), expected, "{description}");
+    for test_case in test_cases {
+        assert_eq!(
+            debug_failure(&test_case.report),
+            test_case.expected_failure,
+            "{}",
+            test_case.description
+        );
     }
 }

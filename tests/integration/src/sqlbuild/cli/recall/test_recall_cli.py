@@ -1,5 +1,4 @@
 import json
-import sqlite3
 import subprocess
 from pathlib import Path
 
@@ -9,9 +8,12 @@ from tests.integration.src.sqlbuild.cli.recall._test_types import (
     DeprecatedFormatTestCase,
     JsonErrorTestCase,
     LeanRecallTestCase,
+    StatementStartTestCase,
+    StoreBeingCreatedTestCase,
 )
 from tests.integration.src.sqlbuild.cli.recall.helpers import (
     OUTPUT_LOG_SINK,
+    drop_store_views,
     recall_rows,
     run,
     write_project,
@@ -114,9 +116,14 @@ def test_given_the_table_format_when_querying_then_it_works_with_a_deprecation_w
         LeanRecallTestCase(
             description="query",
             args=("recall", "query", "SELECT count(*) FROM invocations"),
+            expected_sink_log=False,
         ),
-        LeanRecallTestCase(description="schema", args=("recall", "schema")),
-        LeanRecallTestCase(description="output", args=("recall", "output", "last")),
+        LeanRecallTestCase(
+            description="schema", args=("recall", "schema"), expected_sink_log=False
+        ),
+        LeanRecallTestCase(
+            description="output", args=("recall", "output", "last"), expected_sink_log=False
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -133,42 +140,56 @@ def test_given_project_sinks_when_reading_recall_then_no_sink_runs_and_no_comput
 
     assert read.returncode == 0, read.stderr.decode(errors="replace")
     assert read.stdout
-    assert not (project_dir / "output.log").exists()
+    assert (project_dir / "output.log").exists() is test_case.expected_sink_log
     assert set((project_dir / "logs").glob("*/*")) == logs_before
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StatementStartTestCase(
+            description="statements carry their invocation's start time",
+            sql=(
+                "SELECT COUNT(*) > 0, COUNT(DISTINCT s.invocation_started_at = "
+                "i.invocation_started_at) FROM statements s JOIN invocations i "
+                "USING (invocation_id) WHERE s.invocation_started_at >= "
+                "(SELECT MIN(invocation_started_at) FROM invocations)"
+            ),
+            expected_rows=[[1, 1]],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_recorded_statements_when_filtered_by_start_time_then_the_view_exposes_it(
-    tmp_path: Path,
+    test_case: StatementStartTestCase, tmp_path: Path
 ) -> None:
     project_dir: Path = write_project(tmp_path / "orders_shop")
     assert run(project_dir, "build").returncode == 0
 
-    rows: list[list[object]] = recall_rows(
-        project_dir,
-        "SELECT COUNT(*) > 0, COUNT(DISTINCT s.invocation_started_at = i.invocation_started_at) "
-        "FROM statements s JOIN invocations i USING (invocation_id) "
-        "WHERE s.invocation_started_at >= (SELECT MIN(invocation_started_at) FROM invocations)",
-    )
+    rows: list[list[object]] = recall_rows(project_dir, test_case.sql)
 
-    assert rows == [[1, 1]]
+    assert rows == test_case.expected_rows
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StoreBeingCreatedTestCase(
+            description="a query before the views exist",
+            args=("recall", "query", "SELECT COUNT(*) FROM invocations"),
+            expected_error="error[C971]: no Recall history is recorded yet",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_a_store_whose_views_are_still_being_created_when_queried_then_it_is_not_recorded_yet(
-    tmp_path: Path,
+    test_case: StoreBeingCreatedTestCase, tmp_path: Path
 ) -> None:
     project_dir: Path = write_project(tmp_path / "orders_shop")
     assert run(project_dir, "build").returncode == 0
-    with sqlite3.connect(project_dir / "logs" / "recall.sqlite3") as connection:
-        views: list[str] = [
-            row[0]
-            for row in connection.execute("SELECT name FROM sqlite_schema WHERE type = 'view'")
-        ]
-        for view in views:
-            _ = connection.execute(f'DROP VIEW "{view}"')
+    drop_store_views(project_dir / "logs" / "recall.sqlite3")
 
-    queried: subprocess.CompletedProcess[bytes] = run(
-        project_dir, "recall", "query", "SELECT COUNT(*) FROM invocations"
-    )
+    queried: subprocess.CompletedProcess[bytes] = run(project_dir, *test_case.args)
 
     assert queried.returncode == 1
-    assert "error[C971]: no Recall history is recorded yet" in queried.stderr.decode()
+    assert test_case.expected_error in queried.stderr.decode()

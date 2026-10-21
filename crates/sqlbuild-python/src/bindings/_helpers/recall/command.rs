@@ -7,7 +7,8 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyStringMethods};
 use sqlbuild_recall::records::models::OutputStream;
 use sqlbuild_recall::schema::constants::VIEW_NAMES;
-use sqlbuild_recall::schema::main::ddl_script::{ddl_statements, render_script};
+use sqlbuild_recall::schema::main::ddl_statements::ddl_statements;
+use sqlbuild_recall::schema::main::render_script::render_script;
 use sqlbuild_recall::schema::main::upgrade_statements::upgrade_statements;
 use sqlbuild_recall::schema::models::{DdlOptions, Dialect};
 use sqlbuild_recall::settings::main::resolve_recall_settings::resolve_recall_settings;
@@ -204,11 +205,9 @@ fn open_store(py: Python<'_>, settings: &RecallSettings, checked: bool) -> PyRes
             &ClickHouseLocation::new(config, database, settings.retention_days),
         )
         .and_then(|reader| {
-            if checked {
-                if let Err(error) = reader.require_store(py) {
-                    reader.close();
-                    return Err(error);
-                }
+            if checked && let Err(error) = reader.require_store(py) {
+                reader.close();
+                return Err(error);
             }
             Ok(reader)
         })
@@ -240,8 +239,10 @@ fn open_store(py: Python<'_>, settings: &RecallSettings, checked: bool) -> PyRes
 
 /// The "no history yet" failure when a query failed because a writer is still creating the store's views, so it reads like the store not existing yet rather than an invalid query.
 fn not_created(store: &SqliteStore, path: &str) -> Option<StoreError> {
-    let observed = observe_sqlite_schema(store).ok()?;
-    let complete: bool = VIEW_NAMES.iter().all(|view| observed.views.contains(*view));
+    let complete: bool = match observe_sqlite_schema(store) {
+        Ok(observed) => VIEW_NAMES.iter().all(|view| observed.views.contains(*view)),
+        Err(_unreadable) => return None,
+    };
     (!complete).then(|| StoreError {
         kind: StoreErrorKind::Other,
         message: format!(

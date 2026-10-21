@@ -12,7 +12,7 @@ from tests.unit.scripts.docs_skill._helpers._test_types import RecallViewsSectio
             description="an empty section is filled",
             guide=f"# Guide\n\n{SCHEMA_SECTION_START}\n{SCHEMA_SECTION_END}\n",
             views="orders (view)\n  order_id TEXT\n",
-            expected=(
+            expected_guide=(
                 f"# Guide\n\n{SCHEMA_SECTION_START}\n\n```text\norders (view)\n  order_id TEXT\n"
                 f"```\n\n{SCHEMA_SECTION_END}\n"
             ),
@@ -24,7 +24,7 @@ from tests.unit.scripts.docs_skill._helpers._test_types import RecallViewsSectio
                 f"{SCHEMA_SECTION_END}\noutro\n"
             ),
             views="customers (view)\n",
-            expected=(
+            expected_guide=(
                 f"intro\n{SCHEMA_SECTION_START}\n\n```text\ncustomers (view)\n```\n\n"
                 f"{SCHEMA_SECTION_END}\noutro\n"
             ),
@@ -35,7 +35,7 @@ from tests.unit.scripts.docs_skill._helpers._test_types import RecallViewsSectio
 def test_given_a_guide_when_the_views_section_is_rendered_then_only_that_section_changes(
     test_case: RecallViewsSectionTestCase,
 ) -> None:
-    rendered: str = with_recall_views(test_case.guide, test_case.views)
+    rendered: str = with_recall_views(guide=test_case.guide, views=test_case.views)
 
-    assert rendered == test_case.expected
-    assert with_recall_views(rendered, test_case.views) == rendered
+    assert rendered == test_case.expected_guide
+    assert with_recall_views(guide=rendered, views=test_case.views) == test_case.expected_guide

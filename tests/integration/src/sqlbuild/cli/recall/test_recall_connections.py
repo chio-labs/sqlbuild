@@ -9,40 +9,14 @@ from tests.integration.src.sqlbuild.cli.recall._test_types import (
     ReadOnlyReaderTestCase,
     RecallConnectionErrorTestCase,
 )
-from tests.integration.src.sqlbuild.cli.recall.helpers import recall_rows, run, write_project
-
-SHARED_STORE_TOML: str = (
-    '\n[connections.history]\nadapter = "sqlite"\npath = "{path}"\n\n[recall]\n{keys}'
+from tests.integration.src.sqlbuild.cli.recall.helpers import (
+    make_store_behind,
+    recall_rows,
+    run,
+    shared_store_project,
+    store_schema,
+    write_project,
 )
-
-
-def _shared_project(parent: Path, *, store: Path, keys: str) -> Path:
-    return write_project(
-        parent / "orders_shop",
-        extra_toml=SHARED_STORE_TOML.format(path=store.as_posix(), keys=keys),
-    )
-
-
-def _schema(store: Path) -> list[tuple[object, ...]]:
-    with sqlite3.connect(store) as connection:
-        return connection.execute(
-            "SELECT m.type, m.name, p.name FROM sqlite_schema AS m "
-            "LEFT JOIN pragma_table_xinfo(m.name) AS p ORDER BY m.type, m.name, p.cid"
-        ).fetchall()
-
-
-def _make_store_behind(store: Path) -> None:
-    """Turn a current store into one a previous SQLBuild version wrote: no newer column, views or version."""
-
-    with sqlite3.connect(store) as connection:
-        views: list[str] = [
-            row[0]
-            for row in connection.execute("SELECT name FROM sqlite_schema WHERE type = 'view'")
-        ]
-        for view in views:
-            _ = connection.execute(f'DROP VIEW "{view}"')
-        _ = connection.execute('ALTER TABLE "recall_heartbeats" DROP COLUMN "subcommand"')
-        _ = connection.execute("DELETE FROM recall_meta WHERE component = 'schema'")
 
 
 @pytest.mark.parametrize(
@@ -104,16 +78,16 @@ def test_given_only_a_read_connection_when_running_then_reads_are_shared_and_wri
     test_case: ReadOnlyReaderTestCase, tmp_path: Path
 ) -> None:
     store: Path = tmp_path / "shared" / "history.sqlite3"
-    writer: Path = _shared_project(
-        tmp_path / "writer",
+    writer: Path = shared_store_project(
+        parent=tmp_path / "writer",
         store=store,
         keys='write_connection = "history"\nread_connection = "history"\n',
     )
     assert run(writer, "build").returncode == 0
-    reader: Path = _shared_project(
-        tmp_path / "reader", store=store, keys='read_connection = "history"\n'
+    reader: Path = shared_store_project(
+        parent=tmp_path / "reader", store=store, keys='read_connection = "history"\n'
     )
-    schema_before: list[tuple[object, ...]] = _schema(store)
+    schema_before: list[tuple[object, ...]] = store_schema(store)
 
     built: subprocess.CompletedProcess[bytes] = run(reader, "build")
     shared: list[list[object]] = recall_rows(reader, "SELECT command, status FROM invocations")
@@ -122,7 +96,7 @@ def test_given_only_a_read_connection_when_running_then_reads_are_shared_and_wri
     assert b"Recall" not in built.stderr
     assert shared == test_case.expected_shared_invocations
     assert (reader / "logs" / "recall.sqlite3").exists()
-    assert _schema(store) == schema_before
+    assert store_schema(store) == schema_before
 
 
 @pytest.mark.parametrize(
@@ -145,20 +119,20 @@ def test_given_a_store_one_version_behind_when_read_then_no_ddl_runs_and_the_pri
     test_case: BehindStoreTestCase, tmp_path: Path
 ) -> None:
     store: Path = tmp_path / "shared" / "history.sqlite3"
-    project_dir: Path = _shared_project(
-        tmp_path,
+    project_dir: Path = shared_store_project(
+        parent=tmp_path,
         store=store,
         keys='write_connection = "history"\nread_connection = "history"\n',
     )
     assert run(project_dir, "build").returncode == 0
-    _make_store_behind(store)
-    schema_before: list[tuple[object, ...]] = _schema(store)
+    make_store_behind(store)
+    schema_before: list[tuple[object, ...]] = store_schema(store)
 
     queried: subprocess.CompletedProcess[bytes] = run(
         project_dir, "recall", "query", "SELECT count(*) FROM recall_invocations"
     )
     printed: subprocess.CompletedProcess[bytes] = run(project_dir, "recall", "schema", "--ddl")
-    schema_after_reads: list[tuple[object, ...]] = _schema(store)
+    schema_after_reads: list[tuple[object, ...]] = store_schema(store)
     with sqlite3.connect(store) as connection:
         connection.executescript(printed.stdout.decode())
     repeated: subprocess.CompletedProcess[bytes] = run(project_dir, "recall", "schema", "--ddl")
