@@ -4,6 +4,7 @@ use crate::bindings::_helpers::attachments::cursor_intrinsics::resolve_cursor_in
 use crate::bindings::_helpers::attachments::reference_markers::assert_no_unresolved_sql_markers;
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;
+use crate::bindings::_helpers::compiled_views::function_reads;
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
 use crate::bindings::_helpers::model_config::typed_config::{
@@ -316,9 +317,9 @@ pub(crate) fn resolve_function_sql<'py>(
         function_locations: args.value("function_locations")?,
     };
     let function = args.value("function")?;
-    let name: String = native_field(&function, "name")?.extract()?;
+    let name: String = function_reads::name(&function)?.extract()?;
     let sql: String = resolution.unbounded(
-        native_field(&function, "body_sql")?,
+        function_reads::body_sql(&function)?,
         &format!("Function '{name}'"),
     )?;
     Ok(PyString::new(py, &sql).into_any())

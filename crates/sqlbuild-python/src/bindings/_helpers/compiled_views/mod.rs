@@ -3,6 +3,7 @@ pub(crate) mod audit_reads;
 pub(crate) mod audit_views;
 pub(crate) mod compiled_model_analysis;
 pub(crate) mod compiled_model_view;
+pub(crate) mod function_reads;
 pub(crate) mod function_views;
 pub(crate) mod getters;
 pub(crate) mod inputs_view;
