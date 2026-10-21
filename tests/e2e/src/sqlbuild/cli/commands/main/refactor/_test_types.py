@@ -189,3 +189,10 @@ class BatchMoveConflictE2ETestCase:
     description: str
     arguments: tuple[str, ...]
     expected_reason: str
+
+
+@dataclass(frozen=True)
+class BatchMoveDryRunE2ETestCase:
+    description: str
+    arguments: tuple[str, ...]
+    expected_lines: tuple[str, ...]

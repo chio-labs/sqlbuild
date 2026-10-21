@@ -8403,9 +8403,11 @@ class RefactorCommandRequest(NativeRecord):
     """CLI inputs for one `sqb rename` or `sqb mv` invocation."""
 
     command: str
-    target: str
+    target: str | None
     new_name: str | None
     destination: str | None
+    more_moves: tuple[str, ...]
+    from_file: str | None
     project_dir: Path | None
     cascade: bool
     dry_run: bool
@@ -8414,9 +8416,11 @@ class RefactorCommandRequest(NativeRecord):
     def __init__(
         self,
         command: str,
-        target: str,
+        target: str | None = None,
         new_name: str | None = None,
         destination: str | None = None,
+        more_moves: tuple[str, ...] = (),
+        from_file: str | None = None,
         project_dir: Path | None = None,
         cascade: bool = False,
         dry_run: bool = False,

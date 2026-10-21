@@ -10,6 +10,7 @@ Online: https://sqlbuild.com/docs/cli/rename/
 
 - Usage
 - Rename or move
+- Move several models at once
 - What changes
 - History
 - Refusals
@@ -26,7 +27,8 @@ Nothing is written until the edited project compiles. The command applies its ed
 
 ```bash
 sqb rename <model> <new_name> [flags]
-sqb mv <model> <path/to/new_file.sql | folder/> [flags]
+sqb mv <model> <path/to/new_file.sql | folder/> [<model> <destination> ...] [flags]
+sqb mv --from-file <moves.tsv> [flags]
 sqb rename <model>.<column> <new_name> [--cascade] [flags]
 ```
 
@@ -54,6 +56,25 @@ sqb mv orders__int_clean__order_lines models/orders/intermediate/enriched/orders
 # Folder only: the name stays
 sqb mv orders__int_clean__order_lines models/orders/intermediate/clean/web/
 ```
+
+## Move several models at once
+
+`sqb mv` takes several `<model> <destination>` pairs, or `--from-file` with one pair per line, separated by a tab or spaces. Blank lines and lines starting with `#` are ignored.
+
+```bash
+sqb mv stg_order_cents models/finance/ stg_order_refunds models/finance/
+sqb mv --from-file moves.tsv --dry-run
+```
+
+```text
+# moves.tsv
+stg_order_cents     models/finance/
+stg_order_refunds   models/finance/
+```
+
+The moves are planned and verified together: the project compiles once before planning and the edited project once after, whatever the number of moves. As with a single move, adding `migrate_from` to models whose relation moves takes one more compile of the edited project. Declarations and unit tests are placed for the state after every move, so a macro whose users all move goes straight to their new folder instead of up to a shared folder and back. States between the moves are never checked, which lets a batch make a change that no order of single moves could make. As with one move, nothing is written unless the whole batch compiles.
+
+A batch is refused when it moves the same model twice, moves two models to the same file, gives two models the same new name, or gives a model the name another model of the batch gives up: the old name keeps working through a compatibility view after the rename, so it must stay free. With `--dry-run`, the output lists the combined edits of every move.
 
 ## What changes
 
@@ -137,6 +158,7 @@ References produced by a macro are only possible when a project turns off explic
 |------|-------------|
 | `--cascade` | For column renames, rename the output of every downstream model that passes the column through. |
 | `--dry-run` | Print every edit and verify the edited project compiles, without writing files. |
+| `--from-file <file>` | For `sqb mv`, read `<model> <destination>` pairs, one per line, and move them together. |
 | `--json` | Print the result as JSON on stdout. Progress goes to stderr. |
 
 ## Output
@@ -154,7 +176,7 @@ Migrations
 Compiled: ok, 3 files changed
 ```
 
-With `--json`, the result has `operation`, `target`, `new_name`, `destination`, `status` (`applied`, `dry_run`, `refused`, or `compile_failed`), `files` with every edit, `migrations`, `renamed_columns`, `manual`, `blocking`, `notes` (files deliberately kept in place, with the reason), and `compile.errors`.
+With `--json`, the result has `operation`, `target`, `new_name`, `destination`, `status` (`applied`, `dry_run`, `refused`, or `compile_failed`), `files` with every edit, `migrations`, `renamed_columns`, `manual`, `blocking`, `notes` (files deliberately kept in place, with the reason), and `compile.errors`. A batch move also has `moves`, every `target` and `destination` in order; `target`, `new_name`, and `destination` then describe its first move.
 
 ## Exit codes
 

@@ -12,20 +12,31 @@ use crate::refactoring::types::DeclarationMoveHost;
 
 const UNSETTLED_REASON: &str = "declaration placement at the destination could not be worked out";
 
-/// The declaration file moves of moving `model` from `source` to `destination`, and blockers.
+/// One model move: its name and its paths before and after.
+pub(crate) struct ModelMove<'a> {
+    pub(crate) model: &'a str,
+    pub(crate) source: &'a str,
+    pub(crate) destination: &'a str,
+}
+
+/// Declaration file moves and blockers of every model move together; `vacated` paths are free.
 pub(crate) fn declaration_moves(
     project_dir: &Path,
-    model: &str,
-    paths: (&str, &str),
+    moves: &[ModelMove<'_>],
+    vacated: &BTreeSet<String>,
     host: &DeclarationMoveHost<'_>,
 ) -> Result<DeclarationMoves, RefactorError> {
-    let (source, destination) = paths;
-    if parent(destination) == parent(source) {
+    let changed: Vec<(String, String)> = moves
+        .iter()
+        .filter(|item| parent(item.destination) != parent(item.source))
+        .map(|item| (item.model.to_owned(), item.destination.to_owned()))
+        .collect();
+    let Some((_, first_destination)) = changed.first() else {
         return Ok(DeclarationMoves::default());
-    }
-    let placement: DeclarationPlacement = host(model, destination)?;
+    };
+    let placement: DeclarationPlacement = host(&changed)?;
     let Some(relocated) = &placement.relocated else {
-        return Ok(unsettled(destination, &placement.diagnostics));
+        return Ok(unsettled(first_destination, &placement.diagnostics));
     };
     let mut destinations: BTreeMap<String, String> = BTreeMap::new();
     let mut blocking: Vec<ManualLocation> = Vec::new();
@@ -90,7 +101,7 @@ pub(crate) fn declaration_moves(
     blocking.extend(
         targets
             .into_iter()
-            .filter(|path| join(project_dir, path).exists())
+            .filter(|path| !vacated.contains(*path) && join(project_dir, path).exists())
             .map(|path| ManualLocation {
                 path: path.clone(),
                 line: None,

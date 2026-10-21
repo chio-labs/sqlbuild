@@ -3,8 +3,8 @@
 use sqlbuild_core::cli_text::models::CliStyle;
 
 use crate::refactor_command::_helpers::output_text::{
-    change_lines, diagnostic_lines, heading, layer_move_lines, location_lines, migration_lines,
-    refactor_target, status_line, verb,
+    batch_lines, change_lines, diagnostic_lines, heading, layer_move_lines, location_lines,
+    migration_lines, refactor_target, status_line, verb,
 };
 use crate::refactor_command::models::{LayerMove, RefactorDiagnostic, RefactorStatus};
 use crate::refactoring::models::{ManualLocation, RefactorPlan};
@@ -18,6 +18,7 @@ pub fn render_refactor_text(
     style: CliStyle,
 ) -> String {
     let mut lines: Vec<String> = vec![style.title(&heading(plan))];
+    lines.extend(batch_lines(style, plan));
     let blocked: bool = status == RefactorStatus::Refused;
     if !blocked || (plan.blocking.is_empty() && plan.manual.is_empty()) {
         lines.extend(change_lines(style, &plan.changes));

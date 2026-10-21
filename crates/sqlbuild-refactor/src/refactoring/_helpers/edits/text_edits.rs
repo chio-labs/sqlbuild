@@ -184,6 +184,7 @@ pub(crate) fn build_plan(
         .map(str::to_owned);
     RefactorPlan {
         request,
+        batch: Vec::new(),
         changes: file_changes(parts.edits, moves),
         manual: parts.manual,
         blocking: parts.blocking,

@@ -1,5 +1,6 @@
 //! Resolve, block and migrate a model rename or move, as `model_planning.py` does.
 
+use std::collections::BTreeSet;
 use std::path::Path;
 
 use crate::refactoring::_helpers::edits::header_edits::{header_tokens, is_value};
@@ -11,7 +12,7 @@ use crate::refactoring::_helpers::files::paths::{
 use crate::refactoring::_helpers::files::project_files::{
     ProjectSqlFile, project_sql_files, yaml_files,
 };
-use crate::refactoring::_helpers::planning::declaration_moves::declaration_moves;
+use crate::refactoring::_helpers::planning::declaration_moves::{ModelMove, declaration_moves};
 use crate::refactoring::_helpers::planning::model_references::{
     macro_reference_locations, model_reference_edits,
 };
@@ -171,23 +172,77 @@ pub(crate) fn model_parts(
     (host, test_host): (&DeclarationMoveHost<'_>, &UnitTestScopeHost<'_>),
 ) -> Result<RefactorParts, RefactorError> {
     let files = project_sql_files(facts);
-    let old = target.model.name.as_str();
-    let new = target.request.new_name.as_str();
+    let destination = target.destination();
     let declaration = declaration_moves(
         Path::new(&facts.project_dir),
-        &target.model.name,
-        (&target.source_path, &target.destination()),
+        &[ModelMove {
+            model: &target.model.name,
+            source: &target.source_path,
+            destination: &destination,
+        }],
+        &BTreeSet::new(),
         host,
     )?;
+    let own = own_model_parts(
+        facts,
+        (&files, context, test_host),
+        target,
+        &FinalState::default(),
+    )?;
+    let mut manual = own.manual;
+    manual.extend(facts.python_locations.iter().cloned());
+    let mut blocking = own.collisions;
+    blocking.extend(declaration.blocking);
+    blocking.extend(own.test_blocking);
+    blocking.extend(own.pending);
+    let mut moves = declaration.moves;
+    moves.extend(own.test_moves);
+    Ok(RefactorParts {
+        edits: own.edits,
+        manual,
+        blocking,
+        moves,
+        notes: own.notes,
+        ..RefactorParts::default()
+    })
+}
+
+/// What other moves of the same plan change: paths they leave and models they rename.
+#[derive(Default)]
+pub(crate) struct FinalState {
+    pub(crate) vacated: BTreeSet<String>,
+    pub(crate) renamed: BTreeSet<String>,
+}
+
+/// One model's own edits and blockers, apart from the declaration moves planned for all models.
+pub(crate) struct OwnModelParts {
+    pub(crate) edits: Vec<(String, TextEdit)>,
+    pub(crate) manual: Vec<ManualLocation>,
+    pub(crate) collisions: Vec<ManualLocation>,
+    pub(crate) test_blocking: Vec<ManualLocation>,
+    pub(crate) pending: Vec<ManualLocation>,
+    pub(crate) test_moves: Vec<(String, String)>,
+    pub(crate) notes: Vec<ManualLocation>,
+}
+
+/// References, unit tests, collisions and pending migrations of one model rename or move.
+pub(crate) fn own_model_parts(
+    facts: &RefactorFacts,
+    (files, context, test_host): (&[ProjectSqlFile], &ScanContext, &UnitTestScopeHost<'_>),
+    target: &ModelTarget<'_>,
+    state: &FinalState,
+) -> Result<OwnModelParts, RefactorError> {
+    let old = target.model.name.as_str();
+    let new = target.request.new_name.as_str();
     let mut edits: Vec<(String, TextEdit)> = Vec::new();
     if new != old {
-        edits.extend(model_reference_edits(&files, (old, new), context)?);
+        edits.extend(model_reference_edits(files, (old, new), context)?);
         edits.extend(yaml_model_edits(&yaml_files(facts), old, new)?);
     }
     let destination = target.destination();
     let tests = unit_test_parts(
         Path::new(&facts.project_dir),
-        (&facts.unit_tests, &files),
+        (&facts.unit_tests, files),
         &FollowedModel {
             names: (old, new),
             paths: (&target.source_path, &destination),
@@ -195,31 +250,30 @@ pub(crate) fn model_parts(
         test_host,
     )?;
     edits.extend(tests.edits);
-    let mut manual = macro_reference_locations(&facts.models, &files, old, context);
-    manual.extend(facts.python_locations.iter().cloned());
-    let mut blocking = collisions(facts, target);
-    blocking.extend(declaration.blocking);
-    blocking.extend(tests.blocking);
-    blocking.extend(pending_migration(&files, target)?);
-    let mut moves = declaration.moves;
-    moves.extend(tests.moves);
-    Ok(RefactorParts {
+    Ok(OwnModelParts {
         edits,
-        manual,
-        blocking,
-        moves,
+        manual: macro_reference_locations(&facts.models, files, old, context),
+        collisions: collisions(facts, target, state),
+        test_blocking: tests.blocking,
+        pending: pending_migration(files, target)?,
+        test_moves: tests.moves,
         notes: tests.notes,
-        ..RefactorParts::default()
     })
 }
 
-fn collisions(facts: &RefactorFacts, target: &ModelTarget<'_>) -> Vec<ManualLocation> {
+fn collisions(
+    facts: &RefactorFacts,
+    target: &ModelTarget<'_>,
+    state: &FinalState,
+) -> Vec<ManualLocation> {
     let new = &target.request.new_name;
     let mut found: Vec<ManualLocation> = facts
         .models
         .iter()
         .filter(|other| {
-            other.name.to_lowercase() == new.to_lowercase() && other.name != target.model.name
+            other.name.to_lowercase() == new.to_lowercase()
+                && other.name != target.model.name
+                && !state.renamed.contains(&other.name)
         })
         .map(|other| ManualLocation {
             path: other.path.clone(),
@@ -230,6 +284,7 @@ fn collisions(facts: &RefactorFacts, target: &ModelTarget<'_>) -> Vec<ManualLoca
         .collect();
     let destination = target.destination();
     if destination != target.source_path
+        && !state.vacated.contains(&destination)
         && join(Path::new(&facts.project_dir), &destination).exists()
     {
         found.push(ManualLocation {

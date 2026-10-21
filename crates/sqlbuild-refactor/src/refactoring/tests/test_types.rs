@@ -228,3 +228,11 @@ pub(super) struct FollowedUnitTestTestCase {
     /// Each `path: reason` note of a test file kept in its folder.
     pub(super) expected_notes: &'static [&'static str],
 }
+
+/// Several moves planned together, and their blockers and file moves.
+pub(super) struct BatchPlanTestCase {
+    pub(super) description: &'static str,
+    pub(super) requests: Vec<RefactorRequest>,
+    pub(super) expected_blocking: &'static [&'static str],
+    pub(super) expected_moves: &'static [&'static str],
+}

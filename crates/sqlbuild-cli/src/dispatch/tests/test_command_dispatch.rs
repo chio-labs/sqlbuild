@@ -89,15 +89,23 @@ fn given_parsed_command_when_dispatching_then_selects_python_dispatcher_route() 
             expected_dispatch: runs(&SCENARIO_CAPTURE_ROUTE),
         },
         CommandDispatchTestCase {
-            description: "mv without a target fails",
+            description: "rename without a target fails",
+            facts: CommandFacts {
+                refactor_target: false,
+                ..facts("rename", None)
+            },
+            expected_dispatch: Dispatch::Run(
+                &REFACTOR_ROUTE,
+                Some(failure("rename command handler is unavailable", "C950")),
+            ),
+        },
+        CommandDispatchTestCase {
+            description: "mv reads its pairs itself, so it may come only from a file",
             facts: CommandFacts {
                 refactor_target: false,
                 ..facts("mv", None)
             },
-            expected_dispatch: Dispatch::Run(
-                &REFACTOR_ROUTE,
-                Some(failure("mv command handler is unavailable", "C950")),
-            ),
+            expected_dispatch: runs(&REFACTOR_ROUTE),
         },
         CommandDispatchTestCase {
             description: "clean has no handler",

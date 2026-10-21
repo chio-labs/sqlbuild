@@ -4991,7 +4991,7 @@
        {
         "kind": "store",
         "dest": "refactor_target",
-        "required": true,
+        "nargs": "?",
         "help": "<model>; the model: prefix is optional",
         "metavar": "TARGET",
         "group": 0
@@ -4999,10 +4999,29 @@
        {
         "kind": "store",
         "dest": "refactor_destination",
-        "required": true,
+        "nargs": "?",
         "help": "new .sql path or folder/",
         "metavar": "DESTINATION",
         "group": 0
+       },
+       {
+        "kind": "store",
+        "dest": "refactor_more_moves",
+        "nargs": "*",
+        "default": [],
+        "help": "further TARGET DESTINATION pairs, moved together with the first",
+        "metavar": "MORE",
+        "group": 0
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--from-file"
+        ],
+        "dest": "refactor_from_file",
+        "help": "read TARGET DESTINATION pairs from FILE, one per line; # starts a comment",
+        "metavar": "FILE",
+        "group": 1
        },
        {
         "kind": "store_true",

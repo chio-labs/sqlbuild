@@ -1,6 +1,6 @@
 //! Refactoring facts read from a compiled project, and the shared scope placement host.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple, PyTupleMethods};
@@ -305,11 +305,15 @@ fn python_locations(
     Ok(locations)
 }
 
-/// The facts one refactoring plan reads.
+/// The facts one refactoring plan of `requests` reads.
 pub(crate) fn refactor_facts(
     project: &Bound<'_, PyAny>,
-    request: &RefactorRequest,
+    requests: &[RefactorRequest],
 ) -> PyResult<RefactorFacts> {
+    let mut locations: Vec<ManualLocation> = Vec::new();
+    for request in requests {
+        locations.extend(python_locations(project, request)?);
+    }
     let compiled: Bound<'_, PyAny> = native_field(&native_field(project, "graph")?, "project")?;
     let discovered: Bound<'_, PyAny> = native_field(project, "discovered")?;
     let dialect: Option<String> = native_field(&compiled, "sql_analysis_dialect")?.extract()?;
@@ -331,7 +335,7 @@ pub(crate) fn refactor_facts(
         authored_files: authored_files(&discovered)?,
         yaml_files,
         unit_tests: unit_tests(&compiled)?,
-        python_locations: python_locations(project, request)?,
+        python_locations: locations,
     })
 }
 
@@ -370,10 +374,11 @@ pub(crate) fn unit_test_rebindings(
     scope_rebound_usages(py, &lookup, paths)
 }
 
-/// Where the shared scope placement puts declarations when `model` moves to `destination`.
+/// Where scope placement puts declarations once every `(model, destination)` moves together.
 pub(crate) fn declaration_placement(
     project: &Bound<'_, PyAny>,
-    (model, destination): (&str, &str),
+    moves: &[(String, String)],
+    vacated: &BTreeSet<String>,
 ) -> PyResult<DeclarationPlacement> {
     let py: Python<'_> = project.py();
     let index: Bound<'_, PyAny> = native_field(
@@ -381,21 +386,35 @@ pub(crate) fn declaration_placement(
         "scope_index",
     )?;
     let lookup: Bound<'_, PyAny> = build_scope_lookup(py, &index)?.into_bound(py);
-    let (preview, diagnostics) = scope_move_preview(
-        py,
-        &lookup,
-        &PyString::new(py, &format!("{MODEL_KIND_PREFIX}{model}")).into_any(),
-        &PyString::new(py, destination).into_any(),
-    )?;
-    let diagnostics: Bound<'_, PyAny> = diagnostics.into_bound(py);
-    let relocated: Option<Vec<RelocatedDeclaration>> = if preview.is_none() {
-        None
-    } else {
-        let resource: ResourceIdentity = ResourceIdentity {
-            kind: ResourceKind::Model,
-            name: model.to_owned(),
-        };
-        let records = relocated_declarations(&index, &[(resource, destination.to_owned())])?;
+    let mut messages: Vec<String> = Vec::new();
+    let mut previewed: bool = true;
+    for (model, destination) in moves.iter().filter(|(_, path)| !vacated.contains(path)) {
+        let (preview, diagnostics) = scope_move_preview(
+            py,
+            &lookup,
+            &PyString::new(py, &format!("{MODEL_KIND_PREFIX}{model}")).into_any(),
+            &PyString::new(py, destination).into_any(),
+        )?;
+        for item in diagnostics.into_bound(py).try_iter()? {
+            messages.push(native_field(&item?, "message")?.extract()?);
+        }
+        if preview.is_none() {
+            previewed = false;
+            break;
+        }
+    }
+    let relocated: Option<Vec<RelocatedDeclaration>> = if previewed {
+        let resources: Vec<(ResourceIdentity, String)> = moves
+            .iter()
+            .map(|(model, destination)| {
+                let resource: ResourceIdentity = ResourceIdentity {
+                    kind: ResourceKind::Model,
+                    name: model.clone(),
+                };
+                (resource, destination.clone())
+            })
+            .collect();
+        let records = relocated_declarations(&index, &resources)?;
         if let Some((records, flags)) = records {
             let mut grouping: HashMap<String, bool> = HashMap::new();
             for (record, requires_group) in records.iter().zip(flags) {
@@ -430,6 +449,8 @@ pub(crate) fn declaration_placement(
         } else {
             None
         }
+    } else {
+        None
     };
     let mut declarations: Vec<PlacedDeclaration> = Vec::new();
     for record in native_field(&index, "declarations")?.try_iter()? {
@@ -447,10 +468,7 @@ pub(crate) fn declaration_placement(
     }
     Ok(DeclarationPlacement {
         relocated,
-        diagnostics: diagnostics
-            .try_iter()?
-            .map(|item| native_field(&item?, "message")?.extract())
-            .collect::<PyResult<_>>()?,
+        diagnostics: messages,
         declarations,
     })
 }

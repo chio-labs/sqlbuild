@@ -18,7 +18,7 @@ use crate::refactoring::_helpers::planning::column_planning::{
 use crate::refactoring::_helpers::planning::column_references::{
     BodyContext, BodyMapping, ColumnQuery, ResourceColumns, analyze_column, consumer_edits,
 };
-use crate::refactoring::_helpers::planning::declaration_moves::declaration_moves;
+use crate::refactoring::_helpers::planning::declaration_moves::{ModelMove, declaration_moves};
 use crate::refactoring::_helpers::planning::model_planning::{model_parts, model_target};
 use crate::refactoring::_helpers::scanning::chars::chars;
 use crate::refactoring::_helpers::scanning::scan_context::ScanContext;
@@ -322,7 +322,7 @@ pub(super) fn blocking_reasons(
     let context = ScanContext {
         backtick_identifiers: false,
     };
-    let host = |_: &str, _: &str| {
+    let host = |_: &[(String, String)]| {
         Ok(DeclarationPlacement {
             relocated: Some(Vec::new()),
             ..DeclarationPlacement::default()
@@ -438,8 +438,17 @@ pub(super) fn planned_declaration_moves(
     paths: (&str, &str),
     placement: &DeclarationPlacement,
 ) -> Result<PlannedMoves, RefactorError> {
-    let host = |_: &str, _: &str| Ok(placement.clone());
-    let moves: DeclarationMoves = declaration_moves(root, "orders", paths, &host)?;
+    let host = |_: &[(String, String)]| Ok(placement.clone());
+    let moves: DeclarationMoves = declaration_moves(
+        root,
+        &[ModelMove {
+            model: "orders",
+            source: paths.0,
+            destination: paths.1,
+        }],
+        &BTreeSet::new(),
+        &host,
+    )?;
     let blocking: Vec<String> = moves
         .blocking
         .iter()
@@ -675,7 +684,7 @@ pub(super) fn followed_unit_tests(
             target_model_names: targets.iter().map(|target| (*target).to_owned()).collect(),
         });
     }
-    let host = |_: &str, _: &str| {
+    let host = |_: &[(String, String)]| {
         Ok(DeclarationPlacement {
             relocated: Some(Vec::new()),
             ..DeclarationPlacement::default()
@@ -688,7 +697,7 @@ pub(super) fn followed_unit_tests(
     };
     let plan = crate::refactoring::main::plan_refactor::plan_refactor(
         &project_facts,
-        request,
+        std::slice::from_ref(request),
         &host,
         &test_host,
     )?;
@@ -729,4 +738,43 @@ pub(super) fn followed_test_changes(changes: &[(&str, &[&str])]) -> Vec<(String,
         .collect::<Vec<_>>();
     expected.sort();
     expected
+}
+
+/// A move of `model` to `destination`.
+pub(super) fn move_request(model: &str, destination: &str) -> RefactorRequest {
+    RefactorRequest {
+        operation: RefactorOperation::MoveModel,
+        model_name: model.to_owned(),
+        new_name: String::new(),
+        column_name: None,
+        destination: Some(destination.to_owned()),
+        cascade: false,
+    }
+}
+
+/// The `path: reason` blockers and `original -> path` file moves of planning `requests` together.
+pub(super) fn planned_batch(
+    facts: &RefactorFacts,
+    requests: &[RefactorRequest],
+) -> Result<(Vec<String>, Vec<String>), RefactorError> {
+    let host = |_: &[(String, String)]| {
+        Ok(DeclarationPlacement {
+            relocated: Some(Vec::new()),
+            ..DeclarationPlacement::default()
+        })
+    };
+    let test_host = |_: &str, _: &str| Ok(Some(Vec::new()));
+    let plan =
+        crate::refactoring::main::plan_refactor::plan_refactor(facts, requests, &host, &test_host)?;
+    Ok((
+        plan.blocking
+            .iter()
+            .map(|item| format!("{}: {}", item.path, item.reason))
+            .collect(),
+        plan.changes
+            .iter()
+            .filter(|change| change.moved())
+            .map(|change| format!("{} -> {}", change.original_path, change.path))
+            .collect(),
+    ))
 }

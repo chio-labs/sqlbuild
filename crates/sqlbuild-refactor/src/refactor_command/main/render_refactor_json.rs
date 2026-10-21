@@ -5,7 +5,7 @@ use sqlbuild_core::json::main::dumps::dumps;
 use sqlbuild_core::json::models::{JsonDialect, JsonValue, StdlibJsonOptions};
 
 use crate::refactor_command::_helpers::json::{
-    count, file, integer, location, object, operation_value, optional_text, text,
+    batch_moves, count, file, integer, location, object, operation_value, optional_text, text,
 };
 use crate::refactor_command::_helpers::output_text::refactor_target;
 use crate::refactor_command::models::{RefactorDiagnostic, RefactorStatus};
@@ -23,9 +23,9 @@ pub fn render_refactor_json(
     } else {
         0
     };
-    let payload: JsonValue = object(vec![
+    let mut entries: Vec<(&str, JsonValue)> = vec![
         ("operation", text(operation_value(plan))),
-        ("target", text(&refactor_target(plan))),
+        ("target", text(&json_target(plan))),
         ("new_name", text(&request.new_name)),
         ("destination", optional_text(request.destination.as_deref())),
         ("cascade", JsonValue::Bool(request.cascade)),
@@ -99,7 +99,20 @@ pub fn render_refactor_json(
                 ),
             ]),
         ),
-    ]);
+    ];
+    if !plan.batch.is_empty() {
+        entries.insert(4, ("moves", batch_moves(plan)));
+    }
+    let payload: JsonValue = object(entries);
     let dialect: JsonDialect = JsonDialect::Stdlib(StdlibJsonOptions::new(Some(2)));
     Ok(format!("{}\n", dumps(&payload, &dialect)?))
+}
+
+/// The target of the one refactoring, or of the first move of a batch.
+fn json_target(plan: &RefactorPlan) -> String {
+    if plan.batch.is_empty() {
+        refactor_target(plan)
+    } else {
+        format!("model:{}", plan.request.model_name)
+    }
 }

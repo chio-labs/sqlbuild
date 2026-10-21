@@ -21,10 +21,11 @@ pub fn command_dispatch(facts: &CommandFacts) -> Dispatch {
     let checked =
         |route: &'static Route, failure: Option<DispatchFailure>| Dispatch::Run(route, failure);
     match command {
-        "rename" | "mv" => checked(
+        "rename" => checked(
             &REFACTOR_ROUTE,
             (!facts.refactor_target).then(|| unavailable_handler(command, "C950")),
         ),
+        "mv" => run(&REFACTOR_ROUTE),
         "contract" => checked(
             &CONTRACT_ROUTE,
             (!facts.contract_ready).then(|| {

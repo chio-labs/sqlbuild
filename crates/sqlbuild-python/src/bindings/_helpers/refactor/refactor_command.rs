@@ -1,7 +1,7 @@
 //! `sqb rename` and `sqb mv`: plan from compiler facts, verify in a scratch copy, then write.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -15,11 +15,12 @@ use sqlbuild_analysis::lineage_command::models::LineageKey;
 use sqlbuild_core::cli_text::main::format_count_noun::format_count_noun;
 use sqlbuild_core::cli_text::models::CliStyle;
 use sqlbuild_refactor::refactor_command::main::layer_move_suggestion::layer_move_suggestion;
+use sqlbuild_refactor::refactor_command::main::move_pairs::move_pairs;
 use sqlbuild_refactor::refactor_command::main::refactor_request_for_target::refactor_request_for_target;
 use sqlbuild_refactor::refactor_command::main::render_refactor_json::render_refactor_json;
 use sqlbuild_refactor::refactor_command::main::render_refactor_text::render_refactor_text;
 use sqlbuild_refactor::refactor_command::models::{
-    LayerMove, RefactorDiagnostic, RefactorStatus, RefactorTargetRequest,
+    LayerMove, MoveArguments, RefactorDiagnostic, RefactorStatus, RefactorTargetRequest,
 };
 use sqlbuild_refactor::refactoring::errors::{RefactorError, RefactorErrorKind};
 use sqlbuild_refactor::refactoring::main::commit_refactor_plan::commit_refactor_plan;
@@ -49,6 +50,7 @@ const STAGING_PREFIX: &str = "sqb-refactor-";
 const MOVE_COMMAND: &str = "mv";
 const EDIT_ERROR_CODE: &str = "C957";
 const WRITE_ERROR_CODE: &str = "C958";
+const MOVE_FILE_ERROR_CODE: &str = "C954";
 
 fn imported<'py>(py: Python<'py>, module: &str, name: &str) -> PyResult<Bound<'py, PyAny>> {
     py.import(module)?.getattr(name)
@@ -212,28 +214,88 @@ fn target_lookup(all_keys: &Bound<'_, PyAny>) -> PyResult<HashMap<String, Lineag
     Ok(names)
 }
 
-fn target_request(request: &Bound<'_, PyAny>) -> PyResult<RefactorTargetRequest> {
-    Ok(RefactorTargetRequest {
-        is_move: native_field(request, "command")?
-            .str()?
-            .extract::<String>()?
-            == MOVE_COMMAND,
-        target: native_field(request, "target")?.extract()?,
-        new_name: native_field(request, "new_name")?.extract()?,
-        destination: native_field(request, "destination")?.extract()?,
-        cascade: native_field(request, "cascade")?.extract()?,
-    })
+fn move_command(request: &Bound<'_, PyAny>) -> PyResult<bool> {
+    Ok(native_field(request, "command")?
+        .str()?
+        .extract::<String>()?
+        == MOVE_COMMAND)
+}
+
+/// The target of each refactoring the command asks for: every move pair, or one rename.
+fn target_requests(
+    py: Python<'_>,
+    request: &Bound<'_, PyAny>,
+) -> PyResult<Vec<RefactorTargetRequest>> {
+    let target: Option<String> = native_field(request, "target")?.extract()?;
+    let destination: Option<String> = native_field(request, "destination")?.extract()?;
+    if !move_command(request)? {
+        return Ok(vec![RefactorTargetRequest {
+            is_move: false,
+            target: target.unwrap_or_default(),
+            new_name: native_field(request, "new_name")?.extract()?,
+            destination,
+            cascade: native_field(request, "cascade")?.extract()?,
+        }]);
+    }
+    let more: Vec<String> = native_field(request, "more_moves")?.extract()?;
+    let from_file: Option<String> = native_field(request, "from_file")?.extract()?;
+    let contents: Option<String> = match &from_file {
+        None => None,
+        Some(path) => Some(std::fs::read_to_string(path).map_err(|error| {
+            user_error(
+                py,
+                (
+                    format!("cannot read move file {path}: {error}"),
+                    MOVE_FILE_ERROR_CODE,
+                    None,
+                ),
+            )
+        })?),
+    };
+    let mut words: Vec<&str> = target
+        .iter()
+        .chain(&destination)
+        .map(String::as_str)
+        .collect();
+    words.extend(more.iter().map(String::as_str));
+    let arguments: MoveArguments<'_> = MoveArguments {
+        words,
+        file: from_file.as_deref().zip(contents.as_deref()),
+    };
+    let pairs: Vec<(String, String)> =
+        move_pairs(&arguments).map_err(|error| refactor_error(py, error))?;
+    Ok(pairs
+        .into_iter()
+        .map(|(target, destination)| RefactorTargetRequest {
+            is_move: true,
+            target,
+            new_name: None,
+            destination: Some(destination),
+            cascade: false,
+        })
+        .collect())
 }
 
 fn plan(
     py: Python<'_>,
     project: &Bound<'_, PyAny>,
-    request: &RefactorRequest,
+    requests: &[RefactorRequest],
 ) -> PyResult<RefactorPlan> {
-    let facts: RefactorFacts = refactor_facts(project, request)?;
+    let facts: RefactorFacts = refactor_facts(project, requests)?;
+    let moving: BTreeSet<&str> = requests
+        .iter()
+        .filter(|_| requests.len() > 1)
+        .map(|request| request.model_name.as_str())
+        .collect();
+    let vacated: BTreeSet<String> = facts
+        .models
+        .iter()
+        .filter(|model| moving.contains(model.name.as_str()))
+        .map(|model| model.path.clone())
+        .collect();
     let host_error: RefCell<Option<PyErr>> = RefCell::new(None);
-    let host = |model: &str, destination: &str| -> Result<DeclarationPlacement, RefactorError> {
-        declaration_placement(project, (model, destination)).map_err(|error| {
+    let host = |moves: &[(String, String)]| -> Result<DeclarationPlacement, RefactorError> {
+        declaration_placement(project, moves, &vacated).map_err(|error| {
             host_error.replace(Some(error));
             RefactorError::internal("the declaration-move host failed")
         })
@@ -245,7 +307,7 @@ fn plan(
         })
     };
     let planned: Result<RefactorPlan, RefactorError> =
-        plan_refactor(&facts, request, &host, &test_host);
+        plan_refactor(&facts, requests, &host, &test_host);
     if let Some(error) = host_error.into_inner() {
         return Err(error);
     }
@@ -301,6 +363,7 @@ fn verify(
 }
 
 fn run(py: Python<'_>, command: &Command<'_>, status: &Status<'_>) -> PyResult<Option<Outcome>> {
+    let targets: Vec<RefactorTargetRequest> = target_requests(py, &command.request)?;
     let started: Instant = Instant::now();
     status.start("Compiling project...")?;
     let before: Compiled<'_> = compile(py, &command.project_dir, false)?;
@@ -318,11 +381,13 @@ fn run(py: Python<'_>, command: &Command<'_>, status: &Status<'_>) -> PyResult<O
         "all_keys",
     )?)?;
     let lookup = |name: &str| names.get(name).cloned();
-    let request: RefactorRequest =
-        refactor_request_for_target(&target_request(&command.request)?, &lookup)
-            .map_err(|error| refactor_error(py, error))?;
+    let requests: Vec<RefactorRequest> = targets
+        .iter()
+        .map(|target| refactor_request_for_target(target, &lookup))
+        .collect::<Result<_, _>>()
+        .map_err(|error| refactor_error(py, error))?;
     status.start("Planning edits...")?;
-    let planned: RefactorPlan = plan(py, &before.project, &request)?;
+    let planned: RefactorPlan = plan(py, &before.project, &requests)?;
     status.complete(&format!("Planned edits to {}.", files(&planned)))?;
     if !planned.blocking.is_empty() || !planned.manual.is_empty() {
         status.error("Refused: some references cannot be rewritten safely.")?;
