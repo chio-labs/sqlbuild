@@ -8,6 +8,8 @@ use std::collections::{HashMap, HashSet};
 
 pub(super) struct ProtectedSql {
     pub sql: String,
+    /// The lower-case prefix every sentinel name starts with.
+    prefix: String,
     fragments: Vec<(String, String)>,
     in_functions: HashSet<String>,
 }
@@ -19,6 +21,14 @@ impl ProtectedSql {
             .map_err(|error| error.to_string())?;
         let mut positions: HashMap<String, Vec<usize>> = HashMap::new();
         for (index, token) in tokens.iter().enumerate() {
+            let prefixed = token
+                .text
+                .as_bytes()
+                .get(..self.prefix.len())
+                .is_some_and(|start| start.eq_ignore_ascii_case(self.prefix.as_bytes()));
+            if !prefixed {
+                continue;
+            }
             positions
                 .entry(token.text.to_ascii_lowercase())
                 .or_default()
@@ -222,6 +232,7 @@ pub(super) fn protect_syntax(
     prepared.extend(&chars[cursor..]);
     Ok(ProtectedSql {
         sql: prepared,
+        prefix,
         fragments,
         in_functions,
     })
