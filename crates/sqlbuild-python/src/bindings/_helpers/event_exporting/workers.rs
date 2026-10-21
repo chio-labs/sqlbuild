@@ -451,9 +451,7 @@ fn cancel(claims: &Bound<'_, PyDict>, token: u64) -> PyResult<()> {
     claims.set_item(token, false)
 }
 
-/// Tell the user, once per stall, that one sink call outlived its timeout and what that costs.
-///
-/// Best-effort: a failing stderr must not stop the dispatcher delivering and counting events.
+/// Warn once per stall that a sink call outlived its timeout; best-effort, ignoring write errors.
 fn warn_blocked(py: Python<'_>, name: &str, timeout: Duration) {
     drop(write_stderr(
         py,

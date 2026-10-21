@@ -653,8 +653,7 @@ fn line_indent(text: &[char], offset: usize) -> String {
 /// Code-point spans of every `SCHEMA (...)` header body, as `SCHEMA_STATEMENT_PATTERN.finditer`.
 fn schema_header_spans(contents: &str, text: &[char]) -> Vec<(usize, usize)> {
     statement_header_spans(
-        contents,
-        text,
+        (contents, text),
         SCHEMA_KEYWORD,
         |index| {
             (index == 0 || !is_word_char(text[index - 1]))
@@ -664,11 +663,9 @@ fn schema_header_spans(contents: &str, text: &[char]) -> Vec<(usize, usize)> {
     )
 }
 
-/// Code-point spans of `keyword (...)` header bodies starting where `opens` allows, scanning on
-/// from `resume` of each body's end.
+/// Code-point spans of `keyword (...)` bodies opening where `opens` allows, resuming at `resume`.
 fn statement_header_spans(
-    contents: &str,
-    text: &[char],
+    (contents, text): (&str, &[char]),
     keyword: &str,
     opens: impl Fn(usize) -> bool,
     resume: impl Fn(usize) -> usize,
@@ -726,8 +723,7 @@ pub(crate) fn schema_model_name_edits(
 /// Code-point spans of every `TEST (...)` header body that starts a line, as discovery splits blocks.
 fn test_header_spans(contents: &str, text: &[char]) -> Vec<(usize, usize)> {
     statement_header_spans(
-        contents,
-        text,
+        (contents, text),
         TEST_KEYWORD,
         |index| index == 0 || text[index - 1] == '\n',
         |end| end,

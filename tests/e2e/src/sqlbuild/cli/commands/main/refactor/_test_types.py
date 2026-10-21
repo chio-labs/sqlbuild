@@ -156,4 +156,4 @@ class ScopedUnitTestMoveE2ETestCase:
     extra_files: dict[str, str]
     amount_sql: str
     expected_path: str
-    expected_note: str | None
+    expected_notes: tuple[str, ...]

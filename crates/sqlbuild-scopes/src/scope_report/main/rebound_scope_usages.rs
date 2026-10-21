@@ -3,8 +3,7 @@
 use crate::scope_report::_helpers::moves::rebound_usages;
 use crate::scope_report::models::{ReportFailure, ReportSource};
 
-/// Qualified identities of the scoped macros, enums and constants the resources at `path` use
-/// that resolve differently from `destination`, or `None` when `destination` cannot hold them.
+/// Used scoped declarations that resolve differently from `destination`; `None` if it is invalid.
 pub fn rebound_scope_usages(
     source: ReportSource<'_>,
     paths: (&str, &str),

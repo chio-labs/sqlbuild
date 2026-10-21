@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,14 @@ _SHARED_FILES: dict[str, str] = {
         "TEST();", 'TEST (name "marts__totals_follow_orders");'
     ).replace(")\nSELECT 1\n", f"),\n{_CUSTOMER_TOTALS_FIXTURE}SELECT 1\n"),
 }
+
+_SAMPLE_AMOUNT_MACRO: str = 'def sample_amount() -> str:\n    return "{amount}"\n'
+_MARTS_MACRO: str = "tests/unit/marts/_sqlbuild/_macros/sample_amount.py"
+_KEPT_NOTE: str = (
+    "└── tests/unit/marts/test_order_facts__keeps_orders.sql  kept in its folder: {declaration} "
+    "would not resolve to the same declaration from tests/unit/reporting"
+)
+_NOTE_LINE: re.Pattern[str] = re.compile(r"^.*kept in its folder.*$", re.MULTILINE)
 
 
 @pytest.mark.parametrize(
@@ -134,10 +143,6 @@ def test_given_dry_run_when_renaming_model_with_unit_test_then_reports_move_and_
     assert project_text(project_dir) == before
 
 
-_SAMPLE_AMOUNT_MACRO: str = 'def sample_amount() -> str:\n    return "{amount}"\n'
-_MARTS_MACRO: str = "tests/unit/marts/_sqlbuild/_macros/sample_amount.py"
-
-
 @pytest.mark.parametrize(
     "test_case",
     [
@@ -146,7 +151,7 @@ _MARTS_MACRO: str = "tests/unit/marts/_sqlbuild/_macros/sample_amount.py"
             extra_files={_MARTS_MACRO: _SAMPLE_AMOUNT_MACRO.format(amount=25)},
             amount_sql="@sample_amount()",
             expected_path="tests/unit/marts/test_order_facts__keeps_orders.sql",
-            expected_note="macro:sample_amount",
+            expected_notes=(_KEPT_NOTE.format(declaration="macro:sample_amount"),),
         ),
         ScopedUnitTestMoveE2ETestCase(
             description="a folder-scoped test constant keeps the test in its folder",
@@ -157,7 +162,7 @@ _MARTS_MACRO: str = "tests/unit/marts/_sqlbuild/_macros/sample_amount.py"
             },
             amount_sql='@const("sample_amount")',
             expected_path="tests/unit/marts/test_order_facts__keeps_orders.sql",
-            expected_note="constant:sample_amount",
+            expected_notes=(_KEPT_NOTE.format(declaration="constant:sample_amount"),),
         ),
         ScopedUnitTestMoveE2ETestCase(
             description="a project-wide constant lets the test move",
@@ -170,7 +175,7 @@ _MARTS_MACRO: str = "tests/unit/marts/_sqlbuild/_macros/sample_amount.py"
             },
             amount_sql='@const("sample_amount")',
             expected_path="tests/unit/reporting/test_order_facts__keeps_orders.sql",
-            expected_note=None,
+            expected_notes=(),
         ),
     ],
     ids=lambda case: case.description,
@@ -183,9 +188,8 @@ def test_given_scoped_declarations_when_moving_model_then_test_moves_only_if_the
     Without SQBRTEST103 selected, a test kept outside the destination's mirrored folder compiles.
     """
 
-    test_sql: str = (
-        _FILES[_MIRRORED_TEST]
-        .replace("25 AS amount", f"{test_case.amount_sql} AS amount", 1)
+    test_sql: str = _FILES[_MIRRORED_TEST].replace(
+        "25 AS amount", f"{test_case.amount_sql} AS amount", 1
     )
     project_dir: Path = write_orders_project(
         tmp_path=tmp_path,
@@ -203,11 +207,5 @@ def test_given_scoped_declarations_when_moving_model_then_test_moves_only_if_the
     moved: str = (project_dir / test_case.expected_path).read_text(encoding="utf-8")
     assert 'TEST (name "order_facts__keeps_orders");' in moved
     assert test_case.amount_sql in moved
-    notes: list[str] = [line for line in result.stdout.splitlines() if "kept in its folder" in line]
-    if test_case.expected_note is None:
-        assert notes == [], result.stdout
-    else:
-        assert len(notes) == 1, result.stdout
-        assert test_case.expected_path in notes[0]
-        assert test_case.expected_note in notes[0]
+    assert tuple(_NOTE_LINE.findall(result.stdout)) == test_case.expected_notes, result.stdout
     assert tested.returncode == 0, tested.stdout + tested.stderr

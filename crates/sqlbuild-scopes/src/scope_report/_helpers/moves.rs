@@ -5,8 +5,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use crate::scope_index::main::classify_report_resource::classify_report_resource;
 use crate::scope_index::main::format_identity::format_identity;
 use crate::scope_index::models::{
-    DeclarationIdentity, DeclarationKind, OwnershipRoot, QualifiedIdentity, ReportClassification, ResourceRecord,
-    ScopeKind,
+    DeclarationIdentity, DeclarationKind, OwnershipRoot, QualifiedIdentity, ReportClassification,
+    ResourceRecord, ScopeKind,
 };
 use crate::scope_report::_helpers::context::Context;
 use crate::scope_report::_helpers::declarations::declaration_report;
@@ -216,7 +216,10 @@ fn scoped_bindings(context: &Context<'_>, values: Visible) -> BTreeMap<String, V
             identity.kind,
             DeclarationKind::Macro | DeclarationKind::Enum | DeclarationKind::Constant
         ) {
-            bindings.entry(qualified(identity)).or_default().push(position);
+            bindings
+                .entry(qualified(identity))
+                .or_default()
+                .push(position);
         }
     }
     for positions in bindings.values_mut() {
@@ -225,8 +228,7 @@ fn scoped_bindings(context: &Context<'_>, values: Visible) -> BTreeMap<String, V
     bindings
 }
 
-/// The scoped declarations the resources at `path` use that would resolve to different
-/// definitions, or to none, from `destination`; `None` when `destination` cannot hold them.
+/// Used scoped declarations that resolve differently from `destination`; `None` if it is invalid.
 pub(crate) fn rebound_usages(
     source: ReportSource<'_>,
     (path, destination): (&str, &str),
