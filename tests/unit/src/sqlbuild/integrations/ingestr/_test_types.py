@@ -38,3 +38,18 @@ class IngestrRunnerTestCase:
     returncode: int
     expected_signal_number: int
     expected_event_types: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class IngestrDriverTestCase:
+    description: str
+    driver_files: tuple[tuple[str, str], ...]
+    environment: dict[str, str]
+    expected_installs: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True)
+class IngestrDriverFailureTestCase:
+    description: str
+    stderr: str
+    expected_message: str

@@ -31,6 +31,11 @@ uv pip install 'sqlbuild[ingestr]'
 
 This installs `ingestr` alongside SQLBuild. The `ingestr` CLI must be available on `PATH`.
 
+ingestr reads and writes DuckDB through an ADBC driver. Before the first ingestr run, SQLBuild
+installs the DuckDB driver that matches its own `duckdb` package (with `dbc`, included in the extra)
+into `<environment>/etc/adbc/drivers`, so the files ingestr writes stay readable by SQLBuild. Set
+`ADBC_DRIVER_PATH` to manage the driver yourself.
+
 ## How it works
 
 1. Declare an `ingestr` block on a source in `sources/*.yml`

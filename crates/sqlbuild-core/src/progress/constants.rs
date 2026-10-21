@@ -1,7 +1,7 @@
 //! Lifecycle event types, operation labels and layout of CLI progress lines.
 
 /// Operations with visible progress lines, and the label each renders with.
-pub(crate) const VISIBLE_OPERATION_LABELS: [(&str, &str); 31] = [
+pub(crate) const VISIBLE_OPERATION_LABELS: [(&str, &str); 32] = [
     ("clone_finalization", "Clone finalization"),
     ("discovery_declaration_parse", "Declaration parsing"),
     ("discovery_filesystem_walk", "Filesystem discovery"),
@@ -14,6 +14,7 @@ pub(crate) const VISIBLE_OPERATION_LABELS: [(&str, &str); 31] = [
     ("dbt_command", "dbt command"),
     ("external_source_load", "loader callable"),
     ("ingestr_command", "ingestr subprocess"),
+    ("adbc_driver_install", "DuckDB driver install"),
     ("managed_source_load", "loader callable"),
     ("python_asset", "Python asset attempt"),
     ("python_check", "Python check attempt"),
@@ -38,7 +39,8 @@ pub(crate) const VISIBLE_OPERATION_LABELS: [(&str, &str); 31] = [
     ("relation_promotion", "Promote relation"),
 ];
 /// Operations a live transient owner shows on a terminal when no resource attempt owns them.
-pub(crate) const TTY_TRANSIENT_OWNER_OPERATIONS: [&str; 18] = [
+pub(crate) const TTY_TRANSIENT_OWNER_OPERATIONS: [&str; 19] = [
+    "adbc_driver_install",
     "dbt_command",
     "discovery_declaration_parse",
     "discovery_filesystem_walk",
