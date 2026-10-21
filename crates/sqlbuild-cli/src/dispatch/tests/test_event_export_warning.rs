@@ -18,7 +18,9 @@ fn given_final_export_summary_when_formatting_warning_then_reports_loss_only() {
             expected_warning: Some(
                 "Warning: command completed successfully, but lifecycle event export was \
                  incomplete: 140 of 248 events dropped, 0 failed (sink 'orders_events'). \
-                 Increase sinks.lifecycle.shutdown_timeout or check sink health.",
+                 Check sink health: a sink call slower than 1s drops that sink's events until it \
+                 returns; events still queued at exit need a longer \
+                 sinks.lifecycle.shutdown_timeout.",
             ),
         },
         EventExportWarningTestCase {
@@ -28,7 +30,9 @@ fn given_final_export_summary_when_formatting_warning_then_reports_loss_only() {
             expected_warning: Some(
                 "Warning: lifecycle event export was incomplete: 0 of 10 events dropped, \
                  1 failed (sink 'orders_events'). \
-                 Increase sinks.lifecycle.shutdown_timeout or check sink health.",
+                 Check sink health: a sink call slower than 1s drops that sink's events until it \
+                 returns; events still queued at exit need a longer \
+                 sinks.lifecycle.shutdown_timeout.",
             ),
         },
         EventExportWarningTestCase {
@@ -41,7 +45,9 @@ fn given_final_export_summary_when_formatting_warning_then_reports_loss_only() {
             expected_warning: Some(
                 "Warning: command completed successfully, but lifecycle event export was \
                  incomplete: 4 of 40 event deliveries dropped, 1 failed (sink 'orders_events'). \
-                 Increase sinks.lifecycle.shutdown_timeout or check sink health.",
+                 Check sink health: a sink call slower than 1s drops that sink's events until it \
+                 returns; events still queued at exit need a longer \
+                 sinks.lifecycle.shutdown_timeout.",
             ),
         },
     ];

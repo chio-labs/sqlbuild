@@ -48,6 +48,15 @@ class SlowSinkFullDeliveryE2ETestCase:
 
 
 @dataclass(frozen=True)
+class SlowOnceSinkE2ETestCase:
+    """A sink with one call slower than the call timeout and the warning it must print."""
+
+    description: str
+    slow_call: int
+    expected_warning: str
+
+
+@dataclass(frozen=True)
 class InvalidDrainTimeoutE2ETestCase:
     """One invalid lifecycle drain timeout value."""
 
@@ -85,3 +94,23 @@ class InvalidAuditMetaE2ETestCase:
     relative_path: str
     contents: str
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class GenericAuditArgumentE2ETestCase:
+    """One generic audit attachment with an unused argument and the error it must report."""
+
+    description: str
+    arguments: str
+    expected_message: str
+
+
+@dataclass(frozen=True)
+class RenderedGenericAuditE2ETestCase:
+    """One generic audit attachment, its compiled SQL file and the SQL it must render to."""
+
+    description: str
+    arguments: str
+    detached_column: str
+    expected_relative_path: str
+    expected_sql: str

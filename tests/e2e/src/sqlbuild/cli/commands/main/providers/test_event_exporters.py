@@ -332,8 +332,9 @@ def test_given_no_exporters_and_exploding_provider_when_non_provider_command_run
             expected_errors_only=("invocation_failed",),
             expected_warning=(
                 "Warning: lifecycle event export was incomplete: 0 of {accepted} event "
-                "deliveries dropped, 1 failed (sink 'failing_on_errors'). Increase "
-                "sinks.lifecycle.shutdown_timeout or check sink health."
+                "deliveries dropped, 1 failed (sink 'failing_on_errors'). Check sink health: a "
+                "sink call slower than 1s drops that sink's events until it returns; events "
+                "still queued at exit need a longer sinks.lifecycle.shutdown_timeout."
             ),
         ),
     ),

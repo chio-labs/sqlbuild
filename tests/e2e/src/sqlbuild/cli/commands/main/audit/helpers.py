@@ -93,6 +93,32 @@ def recording_sink_source(*, event_kinds: str, delay_seconds: float) -> str:
     ).lstrip()
 
 
+def slow_once_sink_source(*, slow_call: int) -> str:
+    """Return a lifecycle sink whose call number ``slow_call`` sleeps past the 1s call timeout."""
+
+    return dedent(
+        f"""
+        import os
+        import time
+        from pathlib import Path
+
+        from sqlbuild.sinks import LifecycleEvent, lifecycle_event_sink, lifecycle_event_to_json
+
+        CALLS: list[int] = []
+
+
+        @lifecycle_event_sink(name="slow_once_events")
+        def record_event(event: LifecycleEvent) -> None:
+            CALLS.append(1)
+            if len(CALLS) == {slow_call}:
+                time.sleep(1.5)
+            path = Path(os.environ["ORDERS_EVENT_PATH"])
+            with path.open("a", encoding="utf-8") as stream:
+                stream.write(lifecycle_event_to_json(event) + "\\n")
+        """
+    ).lstrip()
+
+
 def read_sequenced_events(path: Path) -> list[dict[str, object]]:
     """Return recorded events ordered by canonical invocation sequence."""
 
@@ -284,4 +310,29 @@ def plan_reasons(project_dir: Path) -> dict[str, str]:
     assert result.returncode == 0, result.stdout + result.stderr
     return {
         str(model["name"]): str(model["reason"]) for model in json.loads(result.stdout)["models"]
+    }
+
+
+GENERIC_AUDIT_PATH: str = "audits/generic/unique_within_group.sql"
+
+
+def generic_audit_project_files(*, arguments: str) -> dict[str, str]:
+    """Return a project whose orders model attaches unique_within_group with ``arguments``."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "audit_arguments"\nadapter = "duckdb"\n\n'
+            '[connection]\ndatabase = "audit_arguments.duckdb"\n'
+        ),
+        GENERIC_AUDIT_PATH: (
+            "AUDIT ();\n\n"
+            "SELECT @group_columns, COUNT(DISTINCT @column) AS distinct_count\n"
+            "FROM @relation\nWHERE @column IS NOT NULL\nGROUP BY @group_columns\n"
+            "HAVING COUNT(DISTINCT @column) > 1\n"
+        ),
+        "models/orders.sql": (
+            "MODEL (description 'Test model orders.',\n  materialized table,\n  columns (\n"
+            f"    status (audits [unique_within_group ({arguments})]),\n  ),\n);\n\n"
+            "SELECT 1 AS order_id, 'open' AS status, 'web' AS channel\n"
+        ),
     }

@@ -17,6 +17,7 @@ use sqlbuild_scopes::scope_report::main::cached_projection_index::cached_project
 use sqlbuild_scopes::scope_report::main::explain_scope_declaration::explain_scope_declaration;
 use sqlbuild_scopes::scope_report::main::list_scope_declarations::list_scope_declarations;
 use sqlbuild_scopes::scope_report::main::preview_scope_move::preview_scope_move;
+use sqlbuild_scopes::scope_report::main::rebound_scope_usages::rebound_scope_usages;
 use sqlbuild_scopes::scope_report::main::scope_metadata_projection::scope_metadata_projection;
 use sqlbuild_scopes::scope_report::main::serialize_scope_result::serialize_scope_result;
 use sqlbuild_scopes::scope_report::models::{
@@ -302,6 +303,20 @@ pub(crate) fn scope_move_preview(
                 diagnostics_object(&classes, &index_diagnostics, raised(diagnostics))?.unbind(),
             ))
         }
+        Err(failure) => Err(failure_error(py, &failure)?),
+    }
+}
+
+/// Scoped declarations the resources at `path` use that resolve differently from `destination`.
+pub(crate) fn scope_rebound_usages(
+    py: Python<'_>,
+    lookup: &Bound<'_, PyAny>,
+    paths: (&str, &str),
+) -> PyResult<Option<Vec<String>>> {
+    let reports: LookupReports = lookup_reports(lookup)?;
+    let native: &NativeScopeLookup = reports.lookup.get();
+    match rebound_scope_usages(reports.source(native), paths) {
+        Ok(rebound) => Ok(rebound),
         Err(failure) => Err(failure_error(py, &failure)?),
     }
 }

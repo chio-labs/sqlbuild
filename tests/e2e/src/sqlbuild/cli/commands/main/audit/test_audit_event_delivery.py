@@ -12,6 +12,7 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.audit._test_types import (
     IncrementalAuditEventE2ETestCase,
     InvalidDrainTimeoutE2ETestCase,
+    SlowOnceSinkE2ETestCase,
     SlowSinkDropE2ETestCase,
     SlowSinkFullDeliveryE2ETestCase,
 )
@@ -21,6 +22,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.audit.helpers import (
     events_of_type,
     read_sequenced_events,
     recording_sink_source,
+    slow_once_sink_source,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
@@ -32,7 +34,8 @@ _WARNING_PATTERN: re.Pattern[str] = re.compile(
     r"Warning: command completed successfully, but lifecycle event export was incomplete: "
     r"(?P<dropped>\d+) of (?P<accepted>\d+) events dropped, (?P<failed>\d+) failed "
     r"\(sink 'slow_orders_events'\)\. "
-    r"Increase sinks\.lifecycle\.shutdown_timeout or check sink health\."
+    r"Check sink health: a sink call slower than 1s drops that sink's events until it returns; "
+    r"events still queued at exit need a longer sinks\.lifecycle\.shutdown_timeout\."
 )
 
 
@@ -265,6 +268,53 @@ def test_given_invalid_drain_timeout_when_auditing_then_fails_with_config_error(
 
     assert result.returncode != 0
     assert test_case.expected_error in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SlowOnceSinkE2ETestCase(
+            description="tenth call sleeps past the timeout",
+            slow_call=10,
+            expected_warning=(
+                "Warning: lifecycle sink 'slow_once_events' did not return from one call within 1s"
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_sink_slow_once_when_building_then_later_and_outcome_events_still_arrive(
+    test_case: SlowOnceSinkE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    """One call over the timeout pauses the sink only until that call returns."""
+
+    event_path: Path = tmp_path / "orders-events.jsonl"
+    event_path.touch()
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="audit_event_delivery",
+        repo_files={
+            "sqlbuild_project.toml": delivery_project_toml(lifecycle_config=""),
+            **delivery_model_files(),
+            "sinks/orders_events.py": slow_once_sink_source(slow_call=test_case.slow_call),
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+        env={"ORDERS_EVENT_PATH": str(event_path)},
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    events: list[dict[str, object]] = read_sequenced_events(event_path)
+    event_types: list[object] = [event["event_type"] for event in events]
+    assert "run_completed" in event_types
+    assert event_types[-1] == "invocation_completed"
+    assert len(event_types) > test_case.slow_call
+    assert test_case.expected_warning in result.stderr
+    assert "Check sink health" in result.stderr
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import threading
 import time
 from collections.abc import Callable, Mapping
@@ -890,3 +891,106 @@ def test_given_claims_when_delivery_thread_runs_calls_then_only_unclaimed_cancel
     assert results.qsize() == test_case.expected_delivered
     assert results.get_nowait() == (1, None)
     assert claims == {1: True}
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (EventExporterDispatcherTestCase("delivery resumes after the slow call returns", 5),),
+    ids=lambda case: case.description,
+)
+def test_given_sink_slow_once_when_call_returns_then_later_and_outcome_events_arrive(
+    test_case: EventExporterDispatcherTestCase,
+) -> None:
+    event_ids: tuple[str, ...] = tuple(f"event-{index}" for index in range(1, 8))
+    started: dict[str, threading.Event] = {event_id: threading.Event() for event_id in event_ids}
+    gates: dict[str, threading.Event] = {event_id: threading.Event() for event_id in event_ids}
+    for event_id in event_ids[:1] + event_ids[2:]:
+        gates[event_id].set()
+    first_delivered: threading.Event = started["event-1"]
+    slow_started: threading.Event = started["event-2"]
+    release: threading.Event = gates["event-2"]
+    delivered: list[str] = []
+
+    def record(*, event: LifecycleEvent) -> None:
+        delivered.append(event.event_id)
+        started[event.event_id].set()
+        _ = gates[event.event_id].wait()
+
+    dispatcher: EventExporterDispatcher = EventExporterDispatcher(
+        exporters=(BoundEventExporter("recorder", record, {}),),
+        shutdown_timeout_seconds=5.0,
+        invocation_timeout_seconds=0.1,
+    )
+    dispatcher.enqueue(correlated_event(1, "run_started"))
+    assert first_delivered.wait(timeout=1.0)
+    dispatcher.enqueue(correlated_event(2, "statement_completed"))
+    assert slow_started.wait(timeout=1.0)
+    time.sleep(0.3)
+    dispatcher.enqueue(correlated_event(3, "statement_completed"))
+    dispatcher.enqueue(correlated_event(4, "run_completed"))
+    time.sleep(0.05)
+    release.set()
+    time.sleep(0.1)
+    dispatcher.enqueue(correlated_event(5, "statement_completed"))
+    dispatcher.enqueue(correlated_event(6, "statement_completed"))
+    dispatcher.enqueue(lifecycle_event(7, "invocation_completed"))
+
+    summary: EventExportSummary = dispatcher.shutdown()
+
+    assert delivered == ["event-1", "event-2", "event-4", "event-5", "event-6", "event-7"]
+    assert summary.delivered == test_case.expected_delivered
+    assert (summary.failed, summary.dropped) == (1, 1)
+    assert summary.delivered + summary.failed + summary.dropped == summary.accepted
+
+
+class _BrokenStream:
+    def write(self, text: str) -> int:
+        raise OSError(f"stderr is closed: {len(text)}")
+
+    def flush(self) -> None:
+        raise OSError("stderr is closed")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (EventExporterDispatcherTestCase("a failing stderr does not stop delivery", 2),),
+    ids=lambda case: case.description,
+)
+def test_given_failing_stderr_when_sink_stalls_then_delivery_and_counts_continue(
+    test_case: EventExporterDispatcherTestCase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    event_ids: tuple[str, ...] = tuple(f"event-{index}" for index in range(1, 5))
+    started: dict[str, threading.Event] = {event_id: threading.Event() for event_id in event_ids}
+    gates: dict[str, threading.Event] = {event_id: threading.Event() for event_id in event_ids}
+    for event_id in event_ids[1:]:
+        gates[event_id].set()
+    slow_started: threading.Event = started["event-1"]
+    release: threading.Event = gates["event-1"]
+    delivered: list[str] = []
+
+    def record(*, event: LifecycleEvent) -> None:
+        delivered.append(event.event_id)
+        started[event.event_id].set()
+        _ = gates[event.event_id].wait()
+
+    monkeypatch.setattr(sys, "stderr", _BrokenStream())
+    dispatcher: EventExporterDispatcher = EventExporterDispatcher(
+        exporters=(BoundEventExporter("recorder", record, {}),),
+        shutdown_timeout_seconds=5.0,
+        invocation_timeout_seconds=0.1,
+    )
+    dispatcher.enqueue(correlated_event(1, "statement_completed"))
+    assert slow_started.wait(timeout=1.0)
+    time.sleep(0.3)
+    dispatcher.enqueue(correlated_event(2, "statement_completed"))
+    time.sleep(0.05)
+    release.set()
+    time.sleep(0.1)
+    dispatcher.enqueue(correlated_event(3, "statement_completed"))
+    dispatcher.enqueue(lifecycle_event(4, "invocation_completed"))
+
+    summary: EventExportSummary = dispatcher.shutdown()
+
+    assert delivered == ["event-1", "event-3", "event-4"]
+    assert summary.delivered == test_case.expected_delivered
+    assert summary.delivered + summary.failed + summary.dropped == summary.accepted

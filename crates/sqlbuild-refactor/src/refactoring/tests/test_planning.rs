@@ -2,13 +2,13 @@ use crate::refactoring::_helpers::planning::model_planning::decide_model_migrati
 use crate::refactoring::errors::{RefactorError, RefactorErrorKind};
 use crate::refactoring::models::{DeclarationPlacement, RefactorOperation};
 use crate::refactoring::tests::helpers::{
-    blocking_reasons, change, commit_failure, facts, files_on_disk, model, model_in_database,
-    owned_pairs, placed, planned_declaration_moves, refused_target, relocated, replace_all,
-    request, write_files,
+    blocking_reasons, change, commit_failure, facts, files_on_disk, followed_test_changes,
+    followed_unit_tests, model, model_in_database, owned_pairs, placed, planned_declaration_moves,
+    refused_target, relocated, replace_all, request, write_files,
 };
 use crate::refactoring::tests::test_types::{
-    CollisionTestCase, CommitTestCase, DeclarationMovesTestCase, MigrationDecisionTestCase,
-    RefusedTargetTestCase,
+    CollisionTestCase, CommitTestCase, DeclarationMovesTestCase, FollowedUnitTestTestCase,
+    MigrationDecisionTestCase, RefusedTargetTestCase,
 };
 
 #[test]
@@ -321,6 +321,97 @@ fn given_scope_placement_when_moving_across_folders_then_declaration_files_follo
             "{}",
             test_case.description
         );
+    }
+    Ok(())
+}
+
+#[test]
+fn given_unit_tests_of_model_when_renaming_or_moving_then_tests_follow() -> Result<(), RefactorError>
+{
+    let tests: &[(&str, &str, &[&str])] = &[
+        (
+            "tests/unit/marts/test_orders__keeps_rows.sql",
+            "orders__keeps_rows",
+            &["orders"],
+        ),
+        (
+            "tests/unit/test_orders.sql",
+            "orders__flat_layout",
+            &["orders"],
+        ),
+        (
+            "tests/unit/marts/test_marts__totals.sql",
+            "marts__totals",
+            &["orders", "customers"],
+        ),
+    ];
+    let test_cases = [
+        FollowedUnitTestTestCase {
+            description: "a rename renames owned files and TEST names in place",
+            request: request(RefactorOperation::RenameModel, "order_lines", None),
+            rebound: &["macro:mock_orders"],
+            expected_changes: followed_test_changes(&[
+                (
+                    "tests/unit/marts/test_orders__keeps_rows.sql -> tests/unit/marts/test_order_lines__keeps_rows.sql",
+                    &["\"order_lines__keeps_rows\""] as &[&str],
+                ),
+                (
+                    "tests/unit/test_orders.sql -> tests/unit/test_order_lines.sql",
+                    &["\"order_lines__flat_layout\""],
+                ),
+            ]),
+            expected_notes: &[],
+        },
+        FollowedUnitTestTestCase {
+            description: "a move takes mirrored tests to the mirrored folder and leaves others",
+            request: request(RefactorOperation::MoveModel, "", Some("models/finance/")),
+            rebound: &[],
+            expected_changes: followed_test_changes(&[(
+                "tests/unit/marts/test_orders__keeps_rows.sql -> tests/unit/finance/test_orders__keeps_rows.sql",
+                &[] as &[&str],
+            )]),
+            expected_notes: &[],
+        },
+        FollowedUnitTestTestCase {
+            description: "a move leaves a test whose declarations would rebind in its folder",
+            request: request(RefactorOperation::MoveModel, "", Some("models/finance/")),
+            rebound: &["macro:mock_orders"],
+            expected_changes: Vec::new(),
+            expected_notes: &[
+                "tests/unit/marts/test_orders__keeps_rows.sql: kept in its folder: macro:mock_orders would not resolve to the same declaration from tests/unit/finance",
+            ],
+        },
+        FollowedUnitTestTestCase {
+            description: "a move with a new name renames a kept test in its folder",
+            request: request(
+                RefactorOperation::MoveModel,
+                "",
+                Some("models/finance/order_lines.sql"),
+            ),
+            rebound: &["enum:order_status", "macro:mock_orders"],
+            expected_changes: followed_test_changes(&[
+                (
+                    "tests/unit/marts/test_orders__keeps_rows.sql -> tests/unit/marts/test_order_lines__keeps_rows.sql",
+                    &["\"order_lines__keeps_rows\""] as &[&str],
+                ),
+                (
+                    "tests/unit/test_orders.sql -> tests/unit/test_order_lines.sql",
+                    &["\"order_lines__flat_layout\""],
+                ),
+            ]),
+            expected_notes: &[
+                "tests/unit/marts/test_order_lines__keeps_rows.sql: kept in its folder: enum:order_status, macro:mock_orders would not resolve to the same declaration from tests/unit/finance",
+            ],
+        },
+    ];
+    for test_case in test_cases {
+        let (changes, notes) = followed_unit_tests(&test_case.request, tests, test_case.rebound)?;
+        assert_eq!(
+            changes, test_case.expected_changes,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(notes, test_case.expected_notes, "{}", test_case.description);
     }
     Ok(())
 }

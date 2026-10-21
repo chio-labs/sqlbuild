@@ -190,12 +190,12 @@ def test_given_lone_surrogate_in_full_report_when_compiling_json_then_native_wri
         CliJsonReportTestCase(
             description="selector with undecodable bytes",
             args=("--no-cache", "--select", SURROGATE_SELECTOR),
-            expected_fragment="str is not valid UTF-8: surrogates not allowed",
+            expected_fragment="unknown selector name 'orders\\\\xff'",
         )
     ],
     ids=lambda case: case.description,
 )
-def test_given_lone_surrogate_in_error_report_when_compiling_json_then_orjson_error_propagates(
+def test_given_lone_surrogate_in_error_report_when_compiling_json_then_writes_escaped_json(
     test_case: CliJsonReportTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -206,11 +206,12 @@ def test_given_lone_surrogate_in_error_report_when_compiling_json_then_orjson_er
     write_files(project_dir=tmp_path, files=SURROGATE_HOOK_FILES)
     prepare_output_compiles(monkeypatch=monkeypatch, reuse_disabled="1")
 
-    with pytest.raises(TypeError) as raised:
-        _ = compile_json_text(project_dir=tmp_path, args=test_case.args, capsys=capsys)
+    text: str = compile_json_text(project_dir=tmp_path, args=test_case.args, capsys=capsys)
     _ = capsys.readouterr()
 
-    assert str(raised.value) == test_case.expected_fragment
+    assert test_case.expected_fragment in text
+    assert text.isascii()
+    assert text == json.dumps(json.loads(text), indent=2) + "\n"
 
 
 @pytest.mark.parametrize(

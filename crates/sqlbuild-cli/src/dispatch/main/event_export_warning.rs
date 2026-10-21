@@ -1,5 +1,7 @@
 //! The stderr warning for lifecycle events dropped or failed at command exit.
 
+use sqlbuild_core::event_export::constants::DEFAULT_EVENT_EXPORT_INVOCATION_TIMEOUT_SECONDS;
+
 use crate::dispatch::constants::SHUTDOWN_TIMEOUT_SETTING;
 use crate::dispatch::models::{ExportSummary, ExporterLoss};
 
@@ -32,7 +34,9 @@ pub fn event_export_warning(summary: &ExportSummary, command_succeeded: bool) ->
     };
     Some(format!(
         "{prefix}: {} of {} {unit} dropped, {} failed ({sink_label} {names}). \
-         Increase {SHUTDOWN_TIMEOUT_SETTING} or check sink health.",
+         Check sink health: a sink call slower than {DEFAULT_EVENT_EXPORT_INVOCATION_TIMEOUT_SECONDS}s \
+         drops that sink's events until it returns; events still queued at exit need a longer \
+         {SHUTDOWN_TIMEOUT_SETTING}.",
         summary.dropped, summary.accepted, summary.failed
     ))
 }

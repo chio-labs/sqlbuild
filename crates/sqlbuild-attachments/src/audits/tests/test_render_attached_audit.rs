@@ -81,6 +81,28 @@ fn given_attached_audits_when_rendering_then_python_rendering_is_returned() {
             ),
         },
         AttachedAuditTestCase {
+            description: "an argument the audit SQL never reads names itself for removal",
+            attachment: AuditAttachment {
+                definition_path: Some("audits/generic/accepted_values.sql".to_owned()),
+                ..attachment(
+                    vec![
+                        values.clone(),
+                        (
+                            "where_condition".to_owned(),
+                            ArgumentValue::Text("status <> 'void'".to_owned()),
+                        ),
+                    ],
+                    None,
+                    None,
+                )
+            },
+            expected_rendering: failed(
+                "models/schema.yml audit 'accepted_values' passes argument 'where_condition', \
+                 which the audit's SQL in audits/generic/accepted_values.sql never uses; remove \
+                 'where_condition' from the attachment",
+            ),
+        },
+        AttachedAuditTestCase {
             description: "a missing argument is Python's error before the policies",
             attachment: attachment(Vec::new(), Some("fatal"), None),
             expected_rendering: failed(

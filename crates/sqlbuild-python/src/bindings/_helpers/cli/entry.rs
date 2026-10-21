@@ -28,6 +28,7 @@ use crate::bindings::_helpers::diff_report::output::render_diff_error_json;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::output_capture::records::invocation_context;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::recall::events::escaped_text;
 use crate::bindings::_helpers::recall::session::{
     InvocationRecall, finish_invocation_recall, start_invocation_recall,
 };
@@ -113,23 +114,27 @@ fn print_object(value: &Bound<'_, PyAny>, stream: Option<&str>, end: Option<&str
     Ok(())
 }
 
-/// `(code, message, help)` of an expected error as Python objects, as the CLI renders it.
+/// `(code, message, help)` of an expected error as printable strings, lone surrogates escaped.
 fn error_parts<'py>(
     error: &Bound<'py, PyAny>,
     fallback_code: &str,
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let py: Python<'py> = error.py();
+    let printable = |text: Bound<'py, PyString>| -> PyResult<Bound<'py, PyAny>> {
+        Ok(PyString::new(py, &escaped_text(&text)?).into_any())
+    };
     let code: Bound<'py, PyAny> = match error.getattr_opt("code")? {
-        Some(code) => code.str()?.into_any(),
+        Some(code) => printable(code.str()?)?,
         None => PyString::new(py, fallback_code).into_any(),
     };
     let message: Bound<'py, PyAny> = match error.getattr_opt("message")? {
-        Some(message) => message.str()?.into_any(),
-        None => error.str()?.into_any(),
+        Some(message) => printable(message.str()?)?,
+        None => printable(error.str()?)?,
     };
-    let help: Bound<'py, PyAny> = error
-        .getattr_opt("help")?
-        .unwrap_or_else(|| py.None().into_bound(py));
+    let help: Bound<'py, PyAny> = match error.getattr_opt("help")? {
+        Some(help) if !help.is_none() => printable(help.str()?)?,
+        _ => py.None().into_bound(py),
+    };
     Ok((code, message, help))
 }
 
@@ -144,7 +149,7 @@ fn print_expected_error(
     let help: Option<String> = if help.is_none() {
         None
     } else {
-        Some(help.str()?.extract()?)
+        Some(help.extract()?)
     };
     let text: String = format_coded_error(
         (

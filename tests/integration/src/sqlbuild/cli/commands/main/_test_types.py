@@ -1266,3 +1266,13 @@ class FormatWriteFailureTestCase:
     expected_replaced: tuple[bool, ...]
     expected_error: type[BaseException]
     expected_status: str
+
+
+@dataclass(frozen=True)
+class SetOperationStarRuleTestCase:
+    """A model whose set-operation branches select a star and the findings they must raise."""
+
+    description: str
+    model_sql: str
+    expected_codes: tuple[str, ...]
+    expected_distinct_lines: int

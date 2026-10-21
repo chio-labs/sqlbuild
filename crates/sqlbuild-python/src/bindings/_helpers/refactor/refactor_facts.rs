@@ -8,7 +8,7 @@ use sqlbuild_refactor::refactoring::models::{
     AuthoredFile, DeclarationPlacement, DependencyFacts, DestinationFacts, DiscoveredFile,
     ExpansionFacts, ExpansionSpan, LocationFacts, ManualLocation, ModelFacts, PlacedDeclaration,
     RefactorFacts, RefactorOperation, RefactorRequest, RelocatedDeclaration, ResourceColumnsFacts,
-    SchemaColumnFacts, SqlFileRole,
+    SchemaColumnFacts, SqlFileRole, UnitTestFacts,
 };
 
 use crate::bindings::_helpers::model_config::config_values::config_str;
@@ -17,7 +17,7 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::refactor::python_strings::find_python_string_locations;
 use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
-use crate::bindings::_helpers::scopes::scope_reports::scope_move_preview;
+use crate::bindings::_helpers::scopes::scope_reports::{scope_move_preview, scope_rebound_usages};
 use crate::bindings::_helpers::scopes::scope_validation::scope_relocated_declarations;
 
 const GENERIC_DIALECT: &str = "generic";
@@ -331,12 +331,44 @@ pub(crate) fn refactor_facts(
         model_files: discovered_files(&native_field(&discovered, "model_files")?)?,
         authored_files: authored_files(&discovered)?,
         yaml_files,
+        unit_tests: unit_tests(&compiled)?,
         python_locations: python_locations(project, request)?,
     })
 }
 
+/// Every compiled SQL unit test with its file, header name and target models.
+fn unit_tests(compiled: &Bound<'_, PyAny>) -> PyResult<Vec<UnitTestFacts>> {
+    let mut tests: Vec<UnitTestFacts> = Vec::new();
+    for test in native_field(compiled, "sql_tests")?.try_iter()? {
+        let test: Bound<'_, PyAny> = test?;
+        tests.push(UnitTestFacts {
+            path: posix(&native_field(
+                &native_field(&test, "test_file")?,
+                "relative_path",
+            )?)?,
+            name: native_field(&native_field(&test, "test_block")?, "name")?.extract()?,
+            target_model_names: native_field(&test, "target_model_names")?.extract()?,
+        });
+    }
+    Ok(tests)
+}
+
 fn identity_key(identity: &Bound<'_, PyAny>) -> PyResult<String> {
     identity.repr()?.extract()
+}
+
+/// Scoped declarations the test file at `path` uses that resolve differently from `destination`.
+pub(crate) fn unit_test_rebindings(
+    project: &Bound<'_, PyAny>,
+    paths: (&str, &str),
+) -> PyResult<Option<Vec<String>>> {
+    let py: Python<'_> = project.py();
+    let index: Bound<'_, PyAny> = native_field(
+        &native_field(&native_field(project, "graph")?, "project")?,
+        "scope_index",
+    )?;
+    let lookup: Bound<'_, PyAny> = build_scope_lookup(py, &index)?.into_bound(py);
+    scope_rebound_usages(py, &lookup, paths)
 }
 
 /// Where the shared scope placement puts declarations when `model` moves to `destination`.

@@ -1219,3 +1219,23 @@ class DialectLineCommentTestCase:
     project_toml: str
     query_sql: str
     expected_column_count: int
+
+
+@dataclass(frozen=True)
+class MissingTargetDatabaseTestCase:
+    """A Snowflake project without a target database and the S101 error it must print."""
+
+    description: str
+    project_toml: str
+    expected_error: str
+    expected_example_count: int
+
+
+@dataclass(frozen=True)
+class UndecodableSelectorTestCase:
+    """An output mode for a selector holding undecodable bytes and the error it must print."""
+
+    description: str
+    output_flags: tuple[str, ...]
+    expected_code: str
+    expected_escaped_selector: str

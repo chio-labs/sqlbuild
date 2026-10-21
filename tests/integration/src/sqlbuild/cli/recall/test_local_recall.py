@@ -830,15 +830,17 @@ def test_given_an_invalid_output_limit_when_running_then_the_command_fails_with_
     "test_case",
     [
         UndecodableArgumentTestCase(
-            description="an undecodable selector is recorded escaped; the command fails as before",
+            description="an undecodable selector is recorded escaped; the error prints it escaped",
             selector="orders\udcff",
-            expected_error=b"TypeError: str is not valid UTF-8: surrogates not allowed",
+            expected_error=(
+                b"error[S007]: unknown selector name 'orders\\xff'\n  = help: did you mean 'orders'?"
+            ),
             expected_recorded=[['["orders\\\\xff"]', 1]],
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_an_undecodable_argument_when_recorded_then_it_is_escaped_and_the_command_unchanged(
+def test_given_an_undecodable_argument_when_recorded_then_it_is_escaped_in_history_and_error(
     test_case: UndecodableArgumentTestCase, tmp_path: Path
 ) -> None:
     project_dir: Path = write_project(tmp_path / "orders_shop")

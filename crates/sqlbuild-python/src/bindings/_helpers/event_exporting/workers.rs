@@ -10,14 +10,12 @@ use sqlbuild_core::event_export::constants::TIMEOUT_ERROR_TYPE;
 use sqlbuild_core::event_export::main::drop_lifecycle_attempts::drop_lifecycle_attempts;
 use sqlbuild_core::event_export::main::retain_outcome_events::retain_outcome_events;
 use sqlbuild_core::event_export::main::take_lifecycle_event::take_lifecycle_event;
-use sqlbuild_core::event_export::models::{
-    EventQueue, ExportSeverity, ExportSnapshot, QueuedEvent,
-};
+use sqlbuild_core::event_export::models::{EventQueue, ExportSnapshot, QueuedEvent};
 use sqlbuild_host::entries::models::UserCodeHost;
 
 use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
 use crate::bindings::_helpers::event_exporting::constants::{
-    INVOCATION_THREAD_PREFIX, LANE_WINDOW, NO_SECONDS, POLL_SECONDS,
+    CHARGE_LIMIT_SECONDS, INVOCATION_THREAD_PREFIX, LANE_WINDOW, NO_SECONDS, POLL_SECONDS,
 };
 use crate::bindings::_helpers::event_exporting::dispatcher::{Exporter, Queued, Shared, State};
 use crate::bindings::_helpers::event_exporting::models::{
@@ -25,6 +23,7 @@ use crate::bindings::_helpers::event_exporting::models::{
 };
 use crate::bindings::_helpers::event_exporting::values::error_type_of;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::recall::console::write_stderr;
 
 /// Which long-lived dispatcher thread a worker runs.
 #[derive(Clone, Copy)]
@@ -41,11 +40,13 @@ pub(crate) struct DispatcherWorker {
     role: WorkerRole,
 }
 
+/// Outcome events held for blocked exporters, each with its exporter index.
+type HeldOutcomes = Vec<(usize, Queued)>;
+
 /// One attempt handed to a lane and not yet reported.
 pub(crate) struct Attempt {
     token: u64,
-    kind: String,
-    severity: ExportSeverity,
+    queued: Queued,
     outcome: bool,
 }
 
@@ -54,8 +55,8 @@ pub(crate) struct Lane {
     calls: Py<PyAny>,
     thread: Py<PyAny>,
     pending: VecDeque<Attempt>,
-    /// When the attempt at the front of `pending` began, approximately.
-    head_started: Instant,
+    /// The running attempt at the front of `pending` and the time charged to it so far.
+    timed: Option<(u64, Duration)>,
 }
 
 /// What one dispatch round reads from the dispatcher besides its state.
@@ -102,7 +103,7 @@ impl Lane {
             calls: calls.unbind(),
             thread: thread.unbind(),
             pending: VecDeque::new(),
-            head_started: Instant::now(),
+            timed: None,
         })
     }
 
@@ -133,6 +134,10 @@ impl State {
                 claims.del_item(token)?;
             }
             let Some(index) = self.tokens.remove(&token) else {
+                if let Some(index) = self.stalled.remove(&token) {
+                    self.abandoned_calls = !self.stalled.is_empty();
+                    notify |= self.resume(py, index, round)?;
+                }
                 continue;
             };
             let Some(lane) = self.lanes.get_mut(index).and_then(Option::as_mut) else {
@@ -148,12 +153,11 @@ impl State {
             let Some(attempt) = lane.pending.remove(position) else {
                 continue;
             };
-            lane.head_started = Instant::now();
             match error_type {
                 Some(error_type) => {
                     notify |= self.note_failure(
                         round.diagnostics,
-                        (index, &attempt.kind, attempt.severity),
+                        (index, &attempt.queued.kind, attempt.queued.severity),
                         error_type,
                     );
                 }
@@ -178,39 +182,72 @@ impl State {
         let claims: &Bound<'_, PyDict> = claims.bind(py);
         let mut claimed: Vec<Attempt> = Vec::new();
         for attempt in attempts {
-            let already_claimed: bool = match claims.get_item(attempt.token)? {
-                Some(claim) => claim.is_truthy()?,
-                None => false,
-            };
-            if already_claimed {
+            if claim(claims, attempt.token)? == Some(true) {
                 claimed.push(attempt);
                 continue;
             }
-            claims.set_item(attempt.token, false)?;
+            cancel(claims, attempt.token)?;
             self.tokens.remove(&attempt.token);
             self.counts = drop_lifecycle_attempts(std::mem::take(&mut self.counts), &[index]);
         }
         Ok(claimed)
     }
 
-    /// Retire `index`'s lane: calls it already claimed fail as timed out and the rest are dropped.
-    fn abandon_lane(&mut self, py: Python<'_>, index: usize, round: Round<'_>) -> PyResult<bool> {
+    /// Unblock `index` once its stalled call returned, delivering its held outcomes on a fresh lane.
+    fn resume(&mut self, py: Python<'_>, index: usize, round: Round<'_>) -> PyResult<bool> {
+        if self.stalled.values().any(|stalled| *stalled == index) {
+            return Ok(false);
+        }
+        self.blocked.remove(&index);
+        let (owed, kept): (HeldOutcomes, HeldOutcomes) = std::mem::take(&mut self.held)
+            .into_iter()
+            .partition(|(exporter, _)| *exporter == index);
+        self.held = kept;
+        let mut notify: bool = false;
+        for (_, queued) in owed {
+            notify |= self.offer(py, index, (&queued, true), round)?;
+        }
+        Ok(notify)
+    }
+
+    /// Retire `index`'s lane: claimed calls fail as timed out and block it until they return.
+    fn abandon_lane(
+        &mut self,
+        py: Python<'_>,
+        (index, timed_out): (usize, bool),
+        round: Round<'_>,
+    ) -> PyResult<bool> {
         let Some(mut lane) = self.lanes.get_mut(index).and_then(Option::take) else {
             return Ok(false);
         };
-        let attempts: VecDeque<Attempt> = std::mem::take(&mut lane.pending);
+        let claims: &Bound<'_, PyDict> = round.shared.claims.bind(py);
+        let mut attempts: Vec<Attempt> = Vec::new();
+        for attempt in std::mem::take(&mut lane.pending) {
+            if timed_out && attempt.outcome && claim(claims, attempt.token)?.is_none() {
+                cancel(claims, attempt.token)?;
+                self.tokens.remove(&attempt.token);
+                self.held.push((index, attempt.queued));
+            } else {
+                attempts.push(attempt);
+            }
+        }
         let claimed: Vec<Attempt> =
             self.cancel_unclaimed(py, index, attempts, &round.shared.claims)?;
-        let claims: &Bound<'_, PyDict> = round.shared.claims.bind(py);
         let mut notify: bool = false;
         for running in claimed {
             claims.del_item(running.token)?;
             self.tokens.remove(&running.token);
-            self.blocked.insert(index);
+            self.stalled.insert(running.token, index);
+            if self.blocked.insert(index)
+                && timed_out
+                && let Some(exporter) = self.exporters.get(index)
+            {
+                self.newly_blocked.push(exporter.name.clone());
+            }
             self.abandoned_calls = true;
             notify |= self.note_failure(
                 round.diagnostics,
-                (index, &running.kind, running.severity),
+                (index, &running.queued.kind, running.queued.severity),
                 TIMEOUT_ERROR_TYPE.to_owned(),
             );
         }
@@ -219,20 +256,35 @@ impl State {
         Ok(notify)
     }
 
-    /// Abandon every lane whose current sink call outlived `timeout`.
+    /// Abandon lanes whose started call outlived `timeout`, charging each round at most `CHARGE_LIMIT_SECONDS`.
     fn expire_lanes(
         &mut self,
         py: Python<'_>,
         timeout: Duration,
         round: Round<'_>,
     ) -> PyResult<bool> {
+        let now: Instant = Instant::now();
+        let charge: Duration = self.last_charged.map_or(Duration::ZERO, |last| {
+            now.saturating_duration_since(last)
+                .min(Duration::from_secs_f64(CHARGE_LIMIT_SECONDS))
+        });
+        self.last_charged = Some(now);
+        let claims: &Bound<'_, PyDict> = round.shared.claims.bind(py);
         let mut notify: bool = false;
         for index in 0..self.lanes.len() {
-            let expired: bool = self.lanes[index].as_ref().is_some_and(|lane| {
-                !lane.pending.is_empty() && lane.head_started.elapsed() >= timeout
+            let Some(lane) = self.lanes[index].as_mut() else {
+                continue;
+            };
+            let running: Option<u64> = match lane.pending.front() {
+                Some(head) if claim(claims, head.token)? == Some(true) => Some(head.token),
+                _ => None,
+            };
+            lane.timed = running.map(|token| match lane.timed {
+                Some((timed, charged)) if timed == token => (token, charged + charge),
+                _ => (token, Duration::ZERO),
             });
-            if expired {
-                notify |= self.abandon_lane(py, index, round)?;
+            if lane.timed.is_some_and(|(_, charged)| charged >= timeout) {
+                notify |= self.abandon_lane(py, (index, true), round)?;
             }
         }
         Ok(notify)
@@ -295,11 +347,20 @@ impl State {
             }
             for index in &item.eligible_exporters {
                 if self.blocked.contains(index) {
-                    self.counts =
-                        drop_lifecycle_attempts(std::mem::take(&mut self.counts), &[*index]);
+                    if item.outcome {
+                        let queued: Queued = Queued {
+                            event: item.item.event.clone_ref(py),
+                            kind: item.item.kind.clone(),
+                            severity: item.item.severity,
+                        };
+                        self.held.push((*index, queued));
+                    } else {
+                        self.counts =
+                            drop_lifecycle_attempts(std::mem::take(&mut self.counts), &[*index]);
+                    }
                     continue;
                 }
-                notify |= self.offer(py, *index, &item, round)?;
+                notify |= self.offer(py, *index, (&item.item, item.outcome), round)?;
             }
         }
         Ok(notify)
@@ -310,7 +371,7 @@ impl State {
         &mut self,
         py: Python<'_>,
         index: usize,
-        item: &QueuedEvent<Queued>,
+        (item, outcome): (&Queued, bool),
         round: Round<'_>,
     ) -> PyResult<bool> {
         let Some(exporter) = self.exporters.get(index).map(Arc::clone) else {
@@ -325,7 +386,7 @@ impl State {
                 Err(error) => {
                     return Ok(self.note_failure(
                         round.diagnostics,
-                        (index, &item.item.kind, item.item.severity),
+                        (index, &item.kind, item.severity),
                         error_type_of(py, &error),
                     ));
                 }
@@ -341,18 +402,18 @@ impl State {
             ((
                 exporter.function.bind(py),
                 exporter.provider_arguments.bind(py),
-                item.item.event.bind(py),
+                item.event.bind(py),
                 token,
             ),),
         )?;
-        if lane.pending.is_empty() {
-            lane.head_started = Instant::now();
-        }
         lane.pending.push_back(Attempt {
             token,
-            kind: item.item.kind.clone(),
-            severity: item.item.severity,
-            outcome: item.outcome,
+            queued: Queued {
+                event: item.event.clone_ref(py),
+                kind: item.kind.clone(),
+                severity: item.severity,
+            },
+            outcome,
         });
         self.tokens.insert(token, index);
         Ok(false)
@@ -375,6 +436,31 @@ impl State {
         }
         Ok(())
     }
+}
+
+/// Whether a delivery thread claimed `token` (`Some(true)`), it was cancelled, or neither (`None`).
+fn claim(claims: &Bound<'_, PyDict>, token: u64) -> PyResult<Option<bool>> {
+    claims
+        .get_item(token)?
+        .map(|claim| claim.is_truthy())
+        .transpose()
+}
+
+/// Mark `token` cancelled, so its delivery thread skips the call.
+fn cancel(claims: &Bound<'_, PyDict>, token: u64) -> PyResult<()> {
+    claims.set_item(token, false)
+}
+
+/// Warn once per stall that a sink call outlived its timeout; best-effort, ignoring write errors.
+fn warn_blocked(py: Python<'_>, name: &str, timeout: Duration) {
+    drop(write_stderr(
+        py,
+        &format!(
+            "Warning: lifecycle sink '{name}' did not return from one call within {}s; \
+             its events are dropped until that call returns.\n",
+            timeout.as_secs_f64()
+        ),
+    ));
 }
 
 impl DispatcherWorker {
@@ -441,7 +527,10 @@ impl DispatcherWorker {
                 );
             }
             for index in 0..state.lanes.len() {
-                notify |= state.abandon_lane(py, index, round)?;
+                notify |= state.abandon_lane(py, (index, false), round)?;
+            }
+            for (index, _) in std::mem::take(&mut state.held) {
+                state.counts = drop_lifecycle_attempts(std::mem::take(&mut state.counts), &[index]);
             }
             drop(drained);
             true
@@ -452,9 +541,13 @@ impl DispatcherWorker {
                 state.reserve_for_outcomes(py, &shared.claims)?;
             }
             notify |= state.feed(py, round)?;
-            state.stopping && !state.busy() && state.queue.items.is_empty()
+            state.stopping && !state.busy() && state.queue.items.is_empty() && state.held.is_empty()
         };
+        let blocked: Vec<String> = std::mem::take(&mut state.newly_blocked);
         drop(state);
+        for name in blocked {
+            warn_blocked(py, &name, shared.invocation_timeout);
+        }
         if notify {
             shared.notify_all(py)?;
         }
