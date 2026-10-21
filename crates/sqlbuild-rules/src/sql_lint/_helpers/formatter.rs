@@ -92,10 +92,11 @@ fn try_format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
         wrap: wrap.as_ref(),
     };
     let (formatted, formatted_tokens, oracle) = format_layout(&original, &layout, &parse_options)?;
-    if relayout((&formatted, &formatted_tokens), oracle.as_ref(), &layout)? != formatted {
+    let changed = formatted != original;
+    if changed && relayout((&formatted, &formatted_tokens), oracle.as_ref(), &layout)? != formatted
+    {
         return Err(NOT_IDEMPOTENT_FAILURE.to_string());
     }
-    let changed = formatted != original;
     Ok(FormatResponse {
         version: LINT_API_VERSION,
         changed,
