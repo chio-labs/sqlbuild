@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::compiled_views::function_reads;
 use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::planner_entries::model_entries::scope_overlaps;
 use crate::bindings::_helpers::planner_entries::models::PlanOutputInputs;
@@ -369,26 +370,34 @@ pub(super) fn function_entry<'py>(
             ],
         )?),
     )?;
-    let field = |name: &str| native_field(function, name);
     planner_model(
         py,
         RecordId::FunctionPlanEntry,
         &[
-            ("key", field("key")?),
-            ("name", field("name")?),
-            ("relative_path", field("relative_path")?),
-            ("destination", field("destination")?),
-            ("arguments", field("arguments")?),
-            ("returns", field("returns")?),
+            ("key", function_reads::key(function)?),
+            ("name", function_reads::name(function)?),
+            ("relative_path", function_reads::relative_path(function)?),
+            ("destination", function_reads::destination(function)?),
+            ("arguments", function_reads::arguments(function)?),
+            ("returns", function_reads::returns(function)?),
             ("body_sql", body_sql),
             ("fingerprint_query_sql", fingerprint_query_sql),
-            ("fingerprint_destination", field("fingerprint_destination")?),
-            ("return_columns", field("return_columns")?),
-            ("language", field("language")?),
-            ("source_file_path", field("source_file_path")?),
-            ("runtime_version", field("runtime_version")?),
-            ("entry_point", field("entry_point")?),
-            ("packages", field("packages")?),
+            (
+                "fingerprint_destination",
+                function_reads::fingerprint_destination(function)?,
+            ),
+            ("return_columns", function_reads::return_columns(function)?),
+            ("language", function_reads::language(function)?),
+            (
+                "source_file_path",
+                function_reads::source_file_path(function)?,
+            ),
+            (
+                "runtime_version",
+                function_reads::runtime_version(function)?,
+            ),
+            ("entry_point", function_reads::entry_point(function)?),
+            ("packages", function_reads::packages(function)?),
             ("previous_query_sql", previous_query_sql),
             ("reason", reason),
         ],
@@ -407,10 +416,10 @@ fn function_entries<'py>(
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
     for function in project_reads::functions(project)?.try_iter()? {
         let function = function?;
-        if !selected_keys.contains(native_field(&function, "key")?)? {
+        if !selected_keys.contains(function_reads::key(&function)?)? {
             continue;
         }
-        let name = native_field(&function, "name")?;
+        let name = function_reads::name(&function)?;
         let change = functions.get_item(&name)?;
         let previous_query_sql = if previous.contains(&name)? {
             native_field(&previous.get_item(&name)?, "definition")?

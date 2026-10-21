@@ -5,6 +5,7 @@ use sqlbuild_host::entries::models::UserCodeHost;
 use crate::bindings::_helpers::authored_values::project_vars::render_project_var_text;
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compiled_views::audit_reads;
+use crate::bindings::_helpers::compiled_views::function_reads;
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
@@ -99,9 +100,9 @@ fn selected_managed_refs(
     }
     for function in project_reads::functions(project)?.try_iter()? {
         let function = function?;
-        if selected.contains(native_field(&function, "key")?)? {
+        if selected.contains(function_reads::key(&function)?)? {
             names.extend(sql_source_reads(
-                &native_field(&function, "body_sql")?,
+                &function_reads::body_sql(&function)?,
                 managed,
             )?);
         }
