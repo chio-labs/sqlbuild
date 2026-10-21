@@ -10,6 +10,16 @@ from collections import defaultdict
 from pathlib import Path
 
 SCENARIOS = ("cold", "warm", "edit1", "edit100")
+VARIANT_ORDER = (
+    "sqb_rules",
+    "sqb_norules",
+    "sqb_rules_full",
+    "v2_parse",
+    "v2_compile",
+    "v2_compile_strict",
+    "core_parse",
+    "core_compile",
+)
 TIME_RE = re.compile(r"^(?P<variant>\w+)\.(?P<scenario>\w+)\.r(?P<round>\d+)\.time$")
 LOAD_RE = re.compile(r"^(\w+) (\w+) r\d+ load ([\d.]+) ([\d.]+)$")
 
@@ -49,7 +59,8 @@ def main() -> None:
             (float(wall), float(user) + float(sys_), int(rss), rc, taken)
         )
     loads: dict[tuple[str, str], list[float]] = defaultdict(list)
-    for line in (out / "uptime.log").read_text().splitlines():
+    uptime = out / "uptime.log"
+    for line in uptime.read_text().splitlines() if uptime.exists() else []:
         m = LOAD_RE.match(line)
         if m:
             loads[(m[1], m[2])] += [float(m[3]), float(m[4])]
@@ -59,7 +70,8 @@ def main() -> None:
         "| peak RSS MiB (median) | exit codes | path | 1-min load before/after |"
     )
     print("|---|---|---|---|---|---|---|---|---|---|")
-    variants = sorted({variant for variant, _ in runs})
+    found = {variant for variant, _ in runs}
+    variants = [v for v in VARIANT_ORDER if v in found] + sorted(found - set(VARIANT_ORDER))
     for variant in variants:
         for scenario in SCENARIOS:
             cell = runs.get((variant, scenario))

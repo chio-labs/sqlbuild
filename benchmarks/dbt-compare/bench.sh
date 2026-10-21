@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Dense-project compile benchmark: SQLBuild vs dbt Core (and optionally dbt v2).
+# Dense-project compile benchmark: SQLBuild vs dbt v2 and dbt Core.
 #
 # Usage: bench.sh PROJECT_ROOT OUTDIR ROUNDS [VARIANT...]
 #
@@ -14,12 +14,12 @@
 # Environment:
 #   SQB       sqb executable (default: sqb)
 #   DBT_CORE  dbt Core executable (default: dbt)
-#   DBT_V2    dbt v2 executable; the v2_* variants are skipped when unset
+#   DBT_V2    dbt v2 executable (default: dbt2)
 #   PYTHON    Python used for the edit helper (default: python3)
-#   LOAD_MAX  wait until the 1-minute load average is below this integer before each timed run
-#             (default 2)
-#   LOAD_WAIT_MAX  give up waiting after this many seconds and run anyway (default 1800)
 #   SCENARIOS which of warm, edit1 and edit100 to run after cold (default: all three)
+#
+# Variants: sqb_rules sqb_norules sqb_rules_full v2_parse v2_compile v2_compile_strict core_parse
+# core_compile. With no VARIANT arguments, all of them run.
 set -u
 ROOT=$(realpath "$1")
 OUT=$(realpath -m "$2")
@@ -29,16 +29,12 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 WORK=$ROOT/work
 SQB=${SQB:-sqb}
 DBT_CORE=${DBT_CORE:-dbt}
-DBT_V2=${DBT_V2:-}
+DBT_V2=${DBT_V2:-dbt2}
 PYTHON=${PYTHON:-python3}
-LOAD_MAX=${LOAD_MAX:-2}
-LOAD_WAIT_MAX=${LOAD_WAIT_MAX:-1800}
 SCENARIOS=" ${SCENARIOS:-warm edit1 edit100} "
 MODELS=$(find "$ROOT/sqlbuild/models" -name '*.sql' | wc -l)
 export DBT_SEND_ANONYMOUS_USAGE_STATS=false
 DBTFLAGS="--profiles-dir $ROOT/profiles --no-version-check"
-mkdir -p "$OUT" "$WORK"
-
 declare -A SRC CMD
 SRC[sqb_rules]=sqlbuild
 CMD[sqb_rules]="$SQB --no-color compile"
@@ -59,37 +55,22 @@ CMD[v2_compile_strict]="$DBT_V2 compile $DBTFLAGS --static-analysis strict"
 
 VARIANTS=("$@")
 if [ ${#VARIANTS[@]} -eq 0 ]; then
-  VARIANTS=(sqb_rules sqb_norules core_parse core_compile)
-  [ -n "$DBT_V2" ] && VARIANTS+=(v2_parse v2_compile)
+  VARIANTS=(sqb_rules sqb_norules sqb_rules_full v2_parse v2_compile v2_compile_strict
+    core_parse core_compile)
 fi
+for v in "${VARIANTS[@]}"; do
+  if [ -z "${CMD[$v]+set}" ]; then
+    echo "unknown variant: $v" >&2
+    exit 2
+  fi
+done
+mkdir -p "$OUT" "$WORK"
 
 load1() { cut -d' ' -f1 /proc/loadavg; }
-
-above_limit() {
-  local load
-  read -r load _ </proc/loadavg
-  [ "${load%.*}" -ge "$LOAD_MAX" ]
-}
-
-wait_quiet() {
-  local waited=0
-  while above_limit; do
-    if [ "$waited" -ge "$LOAD_WAIT_MAX" ]; then
-      echo "load gate timed out at $(load1) after ${waited}s" >>"$OUT/uptime.log"
-      return
-    fi
-    sleep 15
-    waited=$((waited + 15))
-  done
-  if [ "$waited" -gt 0 ]; then
-    echo "waited ${waited}s for load below $LOAD_MAX" >>"$OUT/uptime.log"
-  fi
-}
 
 measure() {
   local v=$1 scenario=$2 round=$3 base
   base="$OUT/$v.$scenario.r$round"
-  wait_quiet
   local before after
   before=$(load1)
   /usr/bin/time -f '%e %U %S %M' -o "$base.time" \
@@ -126,3 +107,4 @@ for round in $(seq 1 "$ROUNDS"); do
     fi
   done
 done
+rm -rf "${WORK:?}"
