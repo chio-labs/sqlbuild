@@ -53,7 +53,7 @@ fn rules_error(py: Python<'_>, message: String) -> PyResult<pyo3::PyErr> {
     Ok(pyo3::PyErr::from_value(class.call1((message,))?))
 }
 
-fn stored_rules(path: &std::path::Path) -> StoredRules {
+pub(crate) fn stored_rules(path: &std::path::Path) -> StoredRules {
     let Ok(text) = std::fs::read_to_string(path) else {
         return StoredRules::new();
     };
@@ -118,6 +118,16 @@ impl CustomRuleCache {
     /// Stored read sets whose current digest decides whether their results are reused.
     pub(crate) fn pending_readsets(&self) -> &[ReadSet] {
         &self.pending
+    }
+
+    /// The read set `code` last recorded for `subject` under its current identity, if any.
+    pub(crate) fn stored_readset(&self, code: &str, subject: &str) -> Option<&ReadSet> {
+        let rule: &CustomRule = self.rules.iter().find(|rule| rule.code == code)?;
+        let cached = self.stored.get(code)?;
+        if rule.identity.as_deref() != Some(cached.identity.as_str()) {
+            return None;
+        }
+        cached.readsets.get(cached.entries.get(subject)?.readset)
     }
 
     /// Reuse results given each pending read set's digest; returns the subjects still to run.

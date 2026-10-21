@@ -4,7 +4,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use pyo3::prelude::PyResult;
-use sqlbuild_analysis::assembly::analysis_session::models::{RelationTables, SessionRequest};
+use sqlbuild_analysis::assembly::analysis_session::models::{
+    DynamicFamily, RelationTables, SessionRequest,
+};
 use sqlbuild_cache::project_reuse::types::ImageSections;
 use sqlbuild_discovery::header_changes::types::HeaderKeys;
 use sqlbuild_rules::engine::main::retained_request::retained_request;
@@ -103,6 +105,8 @@ pub(crate) struct ImageCapture {
     pub(crate) environment_names: Vec<String>,
     /// Each discovered model's header keys, by model file path.
     pub(crate) header_keys: BTreeMap<String, HeaderKeys>,
+    /// The audit factories each model file's header attaches, for files attaching any.
+    pub(crate) audit_references: BTreeMap<String, Vec<String>>,
     /// Each model file's SQL lint cache key, in project model order.
     pub(crate) lint_model_keys: Option<Vec<(String, String)>>,
     /// Each other SQL file's lint cache key, in walk order.
@@ -193,6 +197,8 @@ pub(crate) struct DeltaInjection {
     pub(crate) coverage: Option<Vec<ModelCoverage>>,
     /// Every project model in project order, with the models it reads.
     pub(crate) coverage_order: Vec<(String, Vec<String>)>,
+    /// The audit factories each model file's header attaches, for files attaching any.
+    pub(crate) audit_references: BTreeMap<String, Vec<String>>,
 }
 
 static CAPTURE: Mutex<Option<ImageCapture>> = Mutex::new(None);
@@ -328,17 +334,9 @@ pub(crate) fn injected_fact_digest(key: &[String]) -> Option<String> {
 
 /// Give a delta's analysis session the whole project's relation facts and analysis order.
 pub(crate) fn inject_relations(mut request: SessionRequest) -> pyo3::PyResult<SessionRequest> {
-    if !request.dynamic_families_by_table.is_empty() {
-        capture_unsupported("a model declares dynamic column families");
-    }
     let Some(injection) = injection() else {
         return Ok(request);
     };
-    if !request.dynamic_families_by_table.is_empty() {
-        return Err(delta_unsupported(
-            "a model declares dynamic column families",
-        ));
-    }
     let relations: &RelationTables = &injection.relations;
     request.forced_order = Some((relations.dependency_ordered, relations.cyclic));
     request.retain_relations = true;
@@ -347,6 +345,16 @@ pub(crate) fn inject_relations(mut request: SessionRequest) -> pyo3::PyResult<Se
         .iter()
         .map(|model| model.name.as_str())
         .collect();
+    let rerun: BTreeSet<&str> = analysed
+        .iter()
+        .copied()
+        .chain(injection.rerun_names.iter().map(String::as_str))
+        .collect();
+    request.dynamic_families_by_table = injected_families(
+        &request.dynamic_families_by_table,
+        &relations.families,
+        &rerun,
+    )?;
     for (table, injected) in [
         (&mut request.column_types, &relations.types),
         (&mut request.column_nullability, &relations.nullability),
@@ -361,6 +369,32 @@ pub(crate) fn inject_relations(mut request: SessionRequest) -> pyo3::PyResult<Se
         );
     }
     Ok(request)
+}
+
+/// The stored compile's dynamic column families, when no rerun model changed its own.
+fn injected_families(
+    current: &[(String, Vec<DynamicFamily>)],
+    stored: &[(String, Vec<DynamicFamily>)],
+    rerun: &BTreeSet<&str>,
+) -> pyo3::PyResult<Vec<(String, Vec<DynamicFamily>)>> {
+    let families_of = |table: &[(String, Vec<DynamicFamily>)], name: &str| {
+        table
+            .iter()
+            .find(|(table, _)| table == name)
+            .map(|(_, families)| families.clone())
+    };
+    let changed: bool = current
+        .iter()
+        .any(|(name, _)| !rerun.contains(name.as_str()))
+        || rerun
+            .iter()
+            .any(|name| families_of(current, name) != families_of(stored, name));
+    if changed {
+        return Err(delta_unsupported(
+            "a model's dynamic column families changed",
+        ));
+    }
+    Ok(stored.to_vec())
 }
 
 /// What a delta compile's reuse record keeps of the stored compile it patched.

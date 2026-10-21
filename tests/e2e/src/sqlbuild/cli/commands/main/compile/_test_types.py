@@ -1165,6 +1165,26 @@ class DeltaCompileFullCopyTestCase:
 
 
 @dataclass(frozen=True)
+class DeltaCompileProjectShapeTestCase:
+    description: str
+    files: tuple[tuple[str, str], ...]
+    edits: tuple[tuple[str, str, str], ...]
+    expected_delta_line: bool
+    stored_edits: tuple[tuple[str, str, str], ...] = ()
+    expected_difference: None = None
+
+
+@dataclass(frozen=True)
+class DeltaCompileVerifyTestCase:
+    description: str
+    files: tuple[tuple[str, str], ...]
+    edits: tuple[tuple[str, str, str], ...]
+    env: dict[str, str]
+    expected_stderr_line: str
+    stored_edits: tuple[tuple[str, str, str], ...] = ()
+
+
+@dataclass(frozen=True)
 class DeltaCompileSequenceTestCase:
     description: str
     edits: tuple[SequenceEdit, ...]
