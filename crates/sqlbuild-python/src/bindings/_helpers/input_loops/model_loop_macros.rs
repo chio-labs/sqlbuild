@@ -10,7 +10,6 @@ use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_
 use sqlbuild_sqltext::sql_references::models::ReferenceExtraction;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
-use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::input_loops::model_loop::{
     LoopContext, VisibleDeclarations, compile_error,
 };
@@ -20,6 +19,7 @@ use crate::bindings::_helpers::render::macro_expansion::{
     ExpansionOutput, NativeMacroExpansion, StateInput, expanded,
 };
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
+use sqlbuild_project::models::ReferenceRow;
 
 /// Fields of `_VisibleModelDeclarations` a `DeclarationResolutionContext` is built from.
 const CONTEXT_FIELDS: [&str; 9] = [

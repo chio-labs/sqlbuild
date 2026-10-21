@@ -503,7 +503,8 @@ impl NativeProjectView {
                 for record in owner.inputs() {
                     let expansion: Py<PyAny> = authored_expansion(&classes, record)?;
                     if !expansion.is_none(py) {
-                        let path: Bound<'_, PyAny> = record.model_file.get().path_objects(py)?.0;
+                        let path: Bound<'_, PyAny> =
+                            record.host.model_file.get().path_objects(py)?.0;
                         expansions.set_item(path, expansion)?;
                     }
                 }

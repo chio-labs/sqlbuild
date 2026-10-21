@@ -35,7 +35,6 @@ use crate::bindings::_helpers::compiled_project::attachment_inputs::SourceSettin
 use crate::bindings::_helpers::compiled_project::attachment_inputs::SqlTestSettings;
 use crate::bindings::_helpers::compiled_project::attachment_inputs::TestFileRow;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
-use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::compiled_views::audit_views::AttachedAudit;
 use crate::bindings::_helpers::compiled_views::function_views::AttachedFunction;
 use crate::bindings::_helpers::compiled_views::model_input_view::NativeModelInput;
@@ -102,6 +101,7 @@ use crate::bindings::_helpers::sqltext::static_sql::{
     InterpolationRow as SqlInterpolationRow, InterpolationSources, interpolation_batch,
 };
 use crate::bindings::types::CompilerDetach;
+use sqlbuild_project::models::ReferenceRow;
 
 const MATERIALIZED_KEY: &str = "materialized";
 const CURSOR_KEY: &str = "cursor";

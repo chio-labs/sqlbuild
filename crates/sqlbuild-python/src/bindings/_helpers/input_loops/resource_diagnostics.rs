@@ -25,10 +25,10 @@ use crate::bindings::_helpers::compiled_project::attachment_inputs::{
     ScenarioDescriptionRow,
 };
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
-use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
-use crate::bindings::_helpers::compiled_views::seed_views::SeedParts;
+use crate::bindings::_helpers::compiled_views::seed_views::{SeedParts, SeedViews};
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use sqlbuild_project::models::ReferenceRow;
 
 const MISSING_DESCRIPTION_CODE: &str = "P010";
 const CURSOR_WITHOUT_INPUTS_CODE: &str = "P011";
@@ -222,7 +222,7 @@ fn missing_descriptions<'py>(
     let py: Python<'py> = diagnostics.py;
     let mut found: Vec<Option<Bound<'py, PyAny>>> = Vec::new();
     for record in project.inputs() {
-        let model_file: &NativeModelFile = record.model_file.get();
+        let model_file: &NativeModelFile = record.host.model_file.get();
         let name: String = record.name.clone();
         let path: String = model_file.relative_text(py)?;
         let contents: &str = model_file.contents_text();
@@ -360,13 +360,14 @@ fn source_description<'py>(
     let py: Python<'py> = diagnostics.py;
     let attached = source.attached();
     let name: &str = &attached.name;
-    let source_file: &Bound<'py, PyAny> = attached.source_file.bind(py);
+    let source_file: &Bound<'py, PyAny> = attached.host.source_file.bind(py);
     let path: String = native_field(source_file, "relative_path")?
         .str()?
         .extract()?;
     let contents_value = native_field(source_file, "contents")?;
     let contents = contents_value.downcast::<PyString>()?.to_str()?;
-    let loader_name: Option<String> = native_field(attached.entry.bind(py), "loader")?.extract()?;
+    let loader_name: Option<String> =
+        native_field(attached.host.entry.bind(py), "loader")?.extract()?;
     let loader: Option<(&String, &LoaderRow)> = loader_name
         .as_ref()
         .and_then(|loader| diagnostics.settings.loaders.get_key_value(loader));
@@ -406,7 +407,7 @@ fn function_description<'py>(
     let py: Python<'py> = diagnostics.py;
     let attached = &function.attached;
     let name: &str = &attached.name;
-    let function_file: &Bound<'py, PyAny> = attached.function_file.bind(py);
+    let function_file: &Bound<'py, PyAny> = attached.host.function_file.bind(py);
     let path: String = native_field(function_file, "relative_path")?
         .str()?
         .extract()?;
@@ -472,7 +473,7 @@ fn cursor_without_inputs<'py>(
     let mut errors: Vec<Bound<'py, PyAny>> = Vec::new();
     for record in project.inputs() {
         let values: Bound<'py, PyDict> =
-            native_field(record.config.bind(py), "values")?.downcast_into()?;
+            native_field(record.host.config.bind(py), "values")?.downcast_into()?;
         let kinds: Vec<&str> = record
             .references
             .iter()
@@ -481,7 +482,7 @@ fn cursor_without_inputs<'py>(
         let materialized: Option<String> = config_text(&values, "materialized")?;
         let cursor: Option<String> = config_text(&values, CURSOR_KEY)?;
         let strategy: Option<String> = config_text(&values, "microbatch_strategy")?;
-        let model_file: &NativeModelFile = record.model_file.get();
+        let model_file: &NativeModelFile = record.host.model_file.get();
         let name: String = record.name.clone();
         let Some((message, help)) = cursor_lacks_inputs(
             &name,

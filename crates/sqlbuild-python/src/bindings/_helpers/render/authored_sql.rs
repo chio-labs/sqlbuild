@@ -24,7 +24,7 @@ use crate::bindings::_helpers::render::declaration_expansion::{
 use crate::bindings::_helpers::render::declaration_values::ConstantRendering;
 use crate::bindings::_helpers::render::declaration_values::resolved_declaration_context;
 use crate::bindings::_helpers::render::macro_call_rows::SpanRow;
-use crate::bindings::_helpers::render::macro_call_rows::span_row;
+use crate::bindings::_helpers::render::macro_call_rows::{span_row, span_tuple};
 use crate::bindings::_helpers::render::macro_expansion_result::{ExpansionRequest, macro_output};
 use crate::bindings::_helpers::sqltext::declaration_references::declaration_scan;
 use crate::bindings::_helpers::sqltext::static_sql::{
@@ -84,7 +84,7 @@ fn span_objects<'py>(py: Python<'py>, spans: &[SpanRow]) -> PyResult<Bound<'py, 
             new_record(
                 py,
                 RecordId::ExpansionSpan,
-                IntoPyObject::into_pyobject(*span, py)?,
+                IntoPyObject::into_pyobject(span_tuple(span), py)?,
                 None,
             )
         })

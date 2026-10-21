@@ -19,7 +19,7 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::declaration_expansion::usage_visibility;
 use crate::bindings::_helpers::render::macro_call_classes::{CallClass, ClassInputs};
 use crate::bindings::_helpers::render::macro_call_memo::{MacroCallMemo, poisoned};
-use crate::bindings::_helpers::render::macro_call_rows::{SpanRow, span_row};
+use crate::bindings::_helpers::render::macro_call_rows::{SpanTuple, span_row, span_tuple};
 use crate::bindings::_helpers::render::macro_evaluation::{CallText, Evaluation, evaluate_call};
 use crate::bindings::_helpers::render::macro_expansion_facts::{ExpansionFacts, ResourceRef};
 use crate::bindings::_helpers::render::macro_generated_references::{
@@ -38,7 +38,7 @@ positional_record! {
     /// `(sql, spans, argument references, dependencies, usages)` of one expansion.
     struct ExpansionRow {
         sql: String,
-        spans: Vec<SpanRow>,
+        spans: Vec<SpanTuple>,
         argument_references: Vec<ResourceRef>,
         dependencies: Vec<Py<PyAny>>,
         usages: Vec<Py<PyAny>>,
@@ -141,7 +141,11 @@ impl NativeMacroExpansion {
         let output: ExpansionOutput = expanded(slf, sql.to_str()?, bridge)?;
         Ok(ExpansionRow {
             sql: output.sql,
-            spans: output.spans.into_iter().map(span_row).collect(),
+            spans: output
+                .spans
+                .into_iter()
+                .map(|span| span_tuple(&span_row(span)))
+                .collect(),
             argument_references: output.argument_references,
             dependencies: output.dependencies,
             usages: output.usages,

@@ -159,7 +159,7 @@ pub(crate) fn interpolation_batch(
         let row = match interpolate_sql(&host, sql, file_path) {
             Ok(result) => InterpolationRow {
                 sql: result.sql,
-                spans: result.spans.into_iter().map(SpanRow::from).collect(),
+                spans: result.spans,
                 reads: read_rows(result.reads),
                 error: None,
             },

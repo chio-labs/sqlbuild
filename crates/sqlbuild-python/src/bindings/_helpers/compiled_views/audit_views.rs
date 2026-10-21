@@ -6,16 +6,18 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::PyTuple;
 use pyo3::{FromPyObject, IntoPyObjectExt, pyclass, pymethods};
 
+use sqlbuild_project::models as project_models;
+use sqlbuild_project::types::ObjectKeyRow;
+
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
-use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::compiled_views::compiled_model_view::object_key;
-use crate::bindings::_helpers::compiled_views::function_views::ObjectKeyRow;
 use crate::bindings::_helpers::compiled_views::model_input_view::{
     InputViewClasses, reference_tuple, view_classes,
 };
+use crate::bindings::_helpers::compiled_views::project_host::PyProjectHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::scopes::scope_report_objects::json_to_python;
-use sqlbuild_core::json::models::JsonValue;
+use sqlbuild_project::models::ReferenceRow;
 
 const AUDIT_RESOURCE: &str = "audit";
 const AUDIT_CLASSES: &str = "audits";
@@ -35,69 +37,40 @@ pub(crate) type AuditAssemblyRow = (
     Option<(String, String)>,
 );
 
-/// The target an attached audit checks: its kind, name and column.
-pub(crate) struct AttachedTarget {
-    pub(crate) kind: String,
-    pub(crate) name: String,
-    pub(crate) column: Option<String>,
-}
-
 /// What the audit loop attached for one singular audit block or attached generic audit.
-pub(crate) struct AttachedAudit {
+pub(crate) type AttachedAudit = project_models::AttachedAudit<PyProjectHost>;
+
+/// One attached audit held by the compiled project.
+pub(crate) type AuditRecord = project_models::AuditRecord<PyProjectHost>;
+
+/// An attached audit's user values.
+pub(crate) struct AuditHandles {
     /// The discovered (or built-in) audit file and block the SQL comes from.
     pub(crate) audit_file: Py<PyAny>,
     pub(crate) audit_block: Py<PyAny>,
-    /// The block's name, else the file's stem.
-    pub(crate) definition_name: String,
-    pub(crate) sql_body: String,
-    pub(crate) measurement: bool,
-    pub(crate) evidence_sql: Option<String>,
     /// The authored measurement policy specs, carrying user values.
     pub(crate) thresholds: Py<PyAny>,
     pub(crate) minimum_samples: Py<PyAny>,
     pub(crate) evidence_limit: Py<PyAny>,
-    pub(crate) references: Vec<ReferenceRow>,
-    pub(crate) target: Option<AttachedTarget>,
-    pub(crate) severity: &'static str,
-    pub(crate) run_scope: String,
-    pub(crate) always_run: bool,
     /// Usage records, the identities the scope index is built from.
     pub(crate) usages: Py<PyTuple>,
-    pub(crate) name: Option<String>,
-    pub(crate) description: Option<String>,
-    /// The authored mapping of JSON values reported with results, or `None`.
-    pub(crate) meta: Option<JsonValue>,
 }
 
-impl AttachedAudit {
-    /// `_resolve_audit_name`: the instance name, else the definition name.
-    fn compiled_name(&self) -> &str {
-        self.name.as_deref().unwrap_or(&self.definition_name)
-    }
+/// An audit record's Python projections, each built once on first access.
+pub(crate) struct AuditProjections {
+    pub(crate) references: PyOnceLock<Py<PyTuple>>,
+    pub(crate) key: PyOnceLock<Py<PyAny>>,
 }
 
-/// One attached audit held by the compiled project.
-pub(crate) struct AuditRecord {
-    pub(crate) attached: AttachedAudit,
-    /// The scope dependency keys native project assembly resolved, once it ran.
-    scope_deps: Option<Vec<ObjectKeyRow>>,
-    references: PyOnceLock<Py<PyTuple>>,
-    key: PyOnceLock<Py<PyAny>>,
-}
-
-impl AuditRecord {
-    pub(crate) fn new(attached: AttachedAudit) -> Self {
-        Self {
-            attached,
-            scope_deps: None,
+/// The audit record of an attached audit, before assembly resolves its scope dependencies.
+pub(crate) fn audit_record(attached: AttachedAudit) -> AuditRecord {
+    AuditRecord {
+        attached,
+        scope_deps: None,
+        host: AuditProjections {
             references: PyOnceLock::new(),
             key: PyOnceLock::new(),
-        }
-    }
-
-    /// Keep the scope dependency keys native project assembly resolved for the audit.
-    pub(crate) fn set_scope_deps(&mut self, deps: Vec<ObjectKeyRow>) {
-        self.scope_deps = Some(deps);
+        },
     }
 }
 
@@ -137,14 +110,14 @@ macro_rules! audit_getters {
             #[getter]
             pub(crate) fn audit_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
                 read_audit(&self.owner, self.index, py, |audit, py| {
-                    Ok(audit.attached.audit_file.clone_ref(py))
+                    Ok(audit.attached.host.audit_file.clone_ref(py))
                 })
             }
 
             #[getter]
             pub(crate) fn audit_block(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
                 read_audit(&self.owner, self.index, py, |audit, py| {
-                    Ok(audit.attached.audit_block.clone_ref(py))
+                    Ok(audit.attached.host.audit_block.clone_ref(py))
                 })
             }
 
@@ -160,7 +133,7 @@ macro_rules! audit_getters {
                 read_audit(&self.owner, self.index, py, |audit, py| {
                     Ok(native_field(&audit
                         .attached
-                        .audit_block
+                        .host.audit_block
                         .bind(py), "evaluation_mode")?
                         .unbind())
                 })
@@ -171,7 +144,7 @@ macro_rules! audit_getters {
                 read_audit(&self.owner, self.index, py, |audit, py| {
                     Ok(native_field(&audit
                         .attached
-                        .audit_block
+                        .host.audit_block
                         .bind(py), "measurement_contract")?
                         .unbind())
                 })
@@ -180,14 +153,14 @@ macro_rules! audit_getters {
             #[getter]
             pub(crate) fn thresholds(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
                 read_audit(&self.owner, self.index, py, |audit, py| {
-                    Ok(audit.attached.thresholds.clone_ref(py))
+                    Ok(audit.attached.host.thresholds.clone_ref(py))
                 })
             }
 
             #[getter]
             pub(crate) fn minimum_samples(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
                 read_audit(&self.owner, self.index, py, |audit, py| {
-                    Ok(audit.attached.minimum_samples.clone_ref(py))
+                    Ok(audit.attached.host.minimum_samples.clone_ref(py))
                 })
             }
 
@@ -211,7 +184,7 @@ macro_rules! audit_getters {
             #[getter]
             pub(crate) fn evidence_limit(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
                 read_audit(&self.owner, self.index, py, |audit, py| {
-                    Ok(audit.attached.evidence_limit.clone_ref(py))
+                    Ok(audit.attached.host.evidence_limit.clone_ref(py))
                 })
             }
 
@@ -219,7 +192,7 @@ macro_rules! audit_getters {
             pub(crate) fn references(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
                 let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
                 read_audit(&self.owner, self.index, py, |audit, _| {
-                    reference_tuple(&classes, &audit.attached.references, &audit.references)
+                    reference_tuple(&classes, &audit.attached.references, &audit.host.references)
                 })
             }
 
@@ -311,7 +284,7 @@ audit_getters!(NativeAuditInput, {
     #[getter]
     pub(crate) fn declaration_usages(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
         read_audit(&self.owner, self.index, py, |audit, py| {
-            Ok(audit.attached.usages.clone_ref(py))
+            Ok(audit.attached.host.usages.clone_ref(py))
         })
     }
 
@@ -369,6 +342,7 @@ audit_getters!(NativeCompiledAudit, {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         read_audit(&self.owner, self.index, py, |audit, py| {
             audit
+                .host
                 .key
                 .get_or_try_init(py, || {
                     object_key(

@@ -9,12 +9,11 @@ use crate::bindings::_helpers::compiled_project::attachment_inputs::{
     ResourceAttachment, ScenarioRow, SourceRow, SourceSettings, SqlTestSettings, TestFileRow,
 };
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
-use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::compiled_views::audit_views::NativeAuditInput;
 use crate::bindings::_helpers::compiled_views::function_views::{
     AttachedFunction, NativeFunctionInput,
 };
-use crate::bindings::_helpers::compiled_views::seed_views::SeedParts;
+use crate::bindings::_helpers::compiled_views::seed_views::{SeedParts, SeedViews};
 use crate::bindings::_helpers::compiled_views::source_views::{AttachedSource, NativeSourceInput};
 use crate::bindings::_helpers::input_loops::audit_loop::{
     AttachmentOwner, model_owner, resource_owner,
@@ -22,6 +21,7 @@ use crate::bindings::_helpers::input_loops::audit_loop::{
 use crate::bindings::_helpers::input_loops::model_loop::NativeModelLoop;
 use crate::bindings::_helpers::input_loops::resource_diagnostics::resource_diagnostics;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use sqlbuild_project::models::ReferenceRow;
 
 const RELATIVE_PATH_ATTRIBUTE: &str = "relative_path";
 const SOURCE_OWNER: &str = "source";
@@ -68,7 +68,7 @@ pub(crate) fn attach_functions(
         .iter()
         .map(|record| {
             Ok((
-                record.model_file.get().relative_text(py)?,
+                record.host.model_file.get().relative_text(py)?,
                 record.references.clone(),
             ))
         })
@@ -147,25 +147,26 @@ fn attachment_owners<'py>(
         };
         owners.push(model_owner(
             record.name.clone(),
-            record.model_file.get().relative_text(py)?,
+            record.host.model_file.get().relative_text(py)?,
             (
-                schema.audits.bind(py),
-                (schema.columns.as_ref(), &fact.columns),
+                schema.host.audits.bind(py),
+                (schema.host.columns.as_ref(), &fact.columns),
             ),
         )?);
     }
     for source in project.sources() {
         let attached: &AttachedSource = source.attached();
-        let path: String = native_field(attached.source_file.bind(py), RELATIVE_PATH_ATTRIBUTE)?
-            .str()?
-            .to_string();
+        let path: String =
+            native_field(attached.host.source_file.bind(py), RELATIVE_PATH_ATTRIBUTE)?
+                .str()?
+                .to_string();
         owners.push(resource_owner(
             SOURCE_OWNER,
             attached.name.clone(),
             (path.clone(), path),
             (
-                attached.audits.bind(py).as_any(),
-                attached.columns.bind(py).as_any(),
+                attached.host.audits.bind(py).as_any(),
+                attached.host.columns.bind(py).as_any(),
             ),
         )?);
     }

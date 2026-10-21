@@ -3,9 +3,10 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 
 use crate::bindings::_helpers::compiled_views::compiled_model_view::{
-    DeclaredRow, InferredRow, LineageInput, NativeCompiledModel,
+    DeclaredRow, LineageInput, NativeCompiledModel,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
+use sqlbuild_project::types::InferredRow;
 
 /// One lineage output with its transform kind and confidence values, and its sources.
 pub(crate) struct LineageFactRow {

@@ -7,10 +7,13 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{IntoPyObjectExt, pyclass, pymethods};
 use sqlbuild_analysis::compiled_project::models::SchemaColumnFact;
 
+use sqlbuild_project::models as project_models;
+
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::compiled_project::schema_facts::python_column_facts;
 use crate::bindings::_helpers::compiled_views::compiled_model_view::object_key;
 use crate::bindings::_helpers::compiled_views::model_input_view::{InputViewClasses, view_classes};
+use crate::bindings::_helpers::compiled_views::project_host::PyProjectHost;
 use crate::bindings::_helpers::compiled_views::relation_keys::audit_key_rows;
 use crate::bindings::_helpers::graph::project_graph::ResourceRow;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -29,22 +32,18 @@ positional_record! {
     }
 }
 
-/// `(database, schema)` native project assembly resolved for a source, or `None`.
-pub(crate) type SourceNamespace = Option<(Option<String>, Option<String>)>;
-
 /// What the source loop attached for one source: its expanded metadata and usages.
-pub(crate) struct AttachedSource {
+pub(crate) type AttachedSource = project_models::AttachedSource<PyProjectHost>;
+
+/// One attached source held by the compiled project.
+pub(crate) type SourceRecord = project_models::SourceRecord<PyProjectHost>;
+
+/// An attached source's user values.
+pub(crate) struct SourceHandles {
     /// The discovered source file.
     pub(crate) source_file: Py<PyAny>,
     /// The discovered entry; its spec carries user-authored metadata.
     pub(crate) entry: Py<PyAny>,
-    pub(crate) name: String,
-    pub(crate) contract: Option<String>,
-    pub(crate) database: Option<String>,
-    pub(crate) schema: Option<String>,
-    pub(crate) table: Option<String>,
-    pub(crate) expression: Option<String>,
-    pub(crate) description: Option<String>,
     /// Template-expanded user metadata.
     pub(crate) meta: Py<PyAny>,
     /// Template-expanded column specs, which carry user metadata and audit arguments.
@@ -61,52 +60,53 @@ pub(crate) struct SourceKeyFacts {
     pub(crate) audits: Vec<(String, Option<String>)>,
 }
 
-/// One attached source held by the compiled project.
-pub(crate) struct SourceRecord {
-    attached: AttachedSource,
+/// A source record's key facts and entries, each built once from its Python values.
+pub(crate) struct SourceProjections {
     key_facts: PyOnceLock<SourceKeyFacts>,
-    /// The namespace native project assembly resolved, once it ran.
-    namespace: Option<SourceNamespace>,
     attached_entry: PyOnceLock<Py<PyAny>>,
     assembled_entry: PyOnceLock<Py<PyAny>>,
-    key: PyOnceLock<Py<PyAny>>,
+    pub(crate) key: PyOnceLock<Py<PyAny>>,
 }
 
-impl SourceRecord {
-    pub(crate) fn new(attached: AttachedSource) -> Self {
-        Self {
-            attached,
+/// The source record of an attached source, before assembly resolves its namespace.
+pub(crate) fn source_record(attached: AttachedSource) -> SourceRecord {
+    SourceRecord {
+        attached,
+        namespace: None,
+        host: SourceProjections {
             key_facts: PyOnceLock::new(),
-            namespace: None,
             attached_entry: PyOnceLock::new(),
             assembled_entry: PyOnceLock::new(),
             key: PyOnceLock::new(),
-        }
+        },
     }
+}
 
-    /// The attached source.
-    pub(crate) fn attached(&self) -> &AttachedSource {
-        &self.attached
-    }
-
+/// What a source record projects from its Python values, each built once.
+pub(crate) trait SourceViews {
     /// The source's declared column facts and audit key rows, read once from its expanded specs.
-    pub(crate) fn key_facts(&self, py: Python<'_>) -> PyResult<&SourceKeyFacts> {
-        self.key_facts.get_or_try_init(py, || {
+    fn key_facts(&self, py: Python<'_>) -> PyResult<&SourceKeyFacts>;
+
+    /// The attached `SourceEntry`: the discovered entry with its expanded metadata.
+    fn attached_entry(&self, py: Python<'_>) -> PyResult<Py<PyAny>>;
+
+    /// The assembled `SourceEntry`: the attached entry in its resolved namespace.
+    fn assembled_entry(&self, py: Python<'_>) -> PyResult<Py<PyAny>>;
+}
+
+impl SourceViews for SourceRecord {
+    fn key_facts(&self, py: Python<'_>) -> PyResult<&SourceKeyFacts> {
+        self.host.key_facts.get_or_try_init(py, || {
             Ok(SourceKeyFacts {
-                columns: python_column_facts(self.attached.columns.bind(py).as_any(), None)?,
-                audits: audit_key_rows(self.attached.audits.bind(py).as_any())?,
+                columns: python_column_facts(self.attached.host.columns.bind(py).as_any(), None)?,
+                audits: audit_key_rows(self.attached.host.audits.bind(py).as_any())?,
             })
         })
     }
 
-    /// Keep the namespace native project assembly resolved for the source.
-    pub(crate) fn set_namespace(&mut self, namespace: SourceNamespace) {
-        self.namespace = Some(namespace);
-    }
-
-    /// The attached `SourceEntry`: the discovered entry with its expanded metadata.
     fn attached_entry(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        self.attached_entry
+        self.host
+            .attached_entry
             .get_or_try_init(py, || {
                 let source: &AttachedSource = &self.attached;
                 let changes: Bound<'_, PyDict> = PyDict::new(py);
@@ -116,21 +116,21 @@ impl SourceRecord {
                 changes.set_item("table", &source.table)?;
                 changes.set_item("expression", &source.expression)?;
                 changes.set_item("description", &source.description)?;
-                changes.set_item("meta", source.meta.bind(py))?;
-                changes.set_item("columns", source.columns.bind(py))?;
-                changes.set_item("audits", source.audits.bind(py))?;
-                replaced(py, source.entry.bind(py), &changes)
+                changes.set_item("meta", source.host.meta.bind(py))?;
+                changes.set_item("columns", source.host.columns.bind(py))?;
+                changes.set_item("audits", source.host.audits.bind(py))?;
+                replaced(py, source.host.entry.bind(py), &changes)
             })
             .map(|entry| entry.clone_ref(py))
     }
 
-    /// The assembled `SourceEntry`: the attached entry in its resolved namespace.
     fn assembled_entry(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let attached: Py<PyAny> = self.attached_entry(py)?;
         let Some(Some((database, schema))) = &self.namespace else {
             return Ok(attached);
         };
-        self.assembled_entry
+        self.host
+            .assembled_entry
             .get_or_try_init(py, || {
                 let changes: Bound<'_, PyDict> = PyDict::new(py);
                 changes.set_item("database", database)?;
@@ -206,14 +206,14 @@ impl NativeSourceInput {
     #[getter]
     pub(crate) fn source_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_source(&self.owner, self.index, py, |source, py| {
-            Ok(source.attached.source_file.clone_ref(py))
+            Ok(source.attached.host.source_file.clone_ref(py))
         })
     }
 
     #[getter]
     pub(crate) fn declaration_usages(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
         read_source(&self.owner, self.index, py, |source, py| {
-            Ok(source.attached.usages.clone_ref(py))
+            Ok(source.attached.host.usages.clone_ref(py))
         })
     }
 
@@ -224,7 +224,7 @@ impl NativeSourceInput {
             let attached: &AttachedSource = &source.attached;
             Ok(SourceAssemblyRow {
                 name: attached.name.clone(),
-                managed: !native_field(attached.entry.bind(py), "loader")?.is_none(),
+                managed: !native_field(attached.host.entry.bind(py), "loader")?.is_none(),
                 database: attached.database.clone(),
                 schema: attached.schema.clone(),
             })
@@ -265,6 +265,7 @@ impl NativeCompiledSource {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         read_source(&self.owner, self.index, py, |source, py| {
             source
+                .host
                 .key
                 .get_or_try_init(py, || {
                     object_key(&classes.compiled, SOURCE_RESOURCE, &source.attached.name)
@@ -295,7 +296,7 @@ impl NativeCompiledSource {
     #[getter]
     pub(crate) fn source_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_source(&self.owner, self.index, py, |source, py| {
-            Ok(source.attached.source_file.clone_ref(py))
+            Ok(source.attached.host.source_file.clone_ref(py))
         })
     }
 }
@@ -322,7 +323,7 @@ pub(crate) fn retain_sources(
     let first: usize = project.sources().len();
     let count: usize = attached.len();
     for source in attached {
-        project.retain_source(SourceRecord::new(source));
+        project.retain_source(source_record(source));
     }
     drop(project);
     (first..first + count)

@@ -16,14 +16,17 @@ use sqlbuild_analysis::binding_locations::main::locate_binding_diagnostics::loca
 use sqlbuild_analysis::binding_locations::models::{BindingSource, LocatedDiagnostic};
 use sqlbuild_analysis::semantic_validation::models::{DiagnosticRow, Expansion};
 
+use sqlbuild_project::models as project_models;
+use sqlbuild_project::types::InferredRow;
+
 use crate::bindings::_helpers::analysis_session::session::NativeModelAnalysisSession;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
-use crate::bindings::_helpers::compiled_views::compiled_model_view::{
-    CompiledViewClasses, InferredRow,
-};
+use crate::bindings::_helpers::compiled_views::compiled_model_view::CompiledViewClasses;
 use crate::bindings::_helpers::compiled_views::model_input_view::ModelInputRecord;
+use crate::bindings::_helpers::compiled_views::project_host::PyProjectHost;
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::lineage::lineage_facts::{confidence_member, transform_kind_member};
+use crate::bindings::_helpers::render::macro_call_rows::span_expansion;
 
 const COMPILE_PHASE: &str = "compile";
 const MODEL_RESOURCE: &str = "model";
@@ -45,19 +48,10 @@ positional_record! {
 pub(crate) type SessionArgument = (Py<NativeModelAnalysisSession>, usize);
 
 /// What one model's analysis left for its compiled model.
-pub(crate) struct AnalysisRecord {
-    pub(crate) inferred: Option<Vec<InferredRow>>,
-    lineage: Option<LineageFacts>,
-    pub(crate) has_star: bool,
-    pub(crate) star_resolved: bool,
-    binding: Vec<LocatedDiagnostic>,
-    pub(crate) binding_validated: bool,
-    pub(crate) proof: Option<ContractProof>,
-    projections: AnalysisProjections,
-}
+pub(crate) type AnalysisRecord = project_models::AnalysisRecord<PyProjectHost>;
 
 /// Python projections of the analysis, each built once on first access.
-struct AnalysisProjections {
+pub(crate) struct AnalysisProjections {
     lineage: PyOnceLock<Py<PyAny>>,
     binding: PyOnceLock<Py<PyTuple>>,
     proof: PyOnceLock<Py<PyAny>>,
@@ -122,7 +116,7 @@ pub(crate) fn analysis_record(
         binding: Vec::new(),
         binding_validated: false,
         proof: standalone_proof.map(proof_fact),
-        projections: AnalysisProjections::default(),
+        host: AnalysisProjections::default(),
     };
     if let Some((session, index)) = analysis {
         let session = session.borrow(py);
@@ -159,7 +153,7 @@ fn located(input: &ModelInputRecord, outcome: &ModelOutcome) -> PyResult<Vec<Loc
         return Ok(Vec::new());
     }
     let cleaned: Cow<'_, str> = resolved_cleaned_sql(outcome).map_err(compiler_error)?;
-    let model_file: &NativeModelFile = input.model_file.get();
+    let model_file: &NativeModelFile = input.host.model_file.get();
     let authored: &str = model_file.contents_text();
     let query: &str = model_file.query_text();
     let expansion = &input.expansion;
@@ -168,13 +162,13 @@ fn located(input: &ModelInputRecord, outcome: &ModelOutcome) -> PyResult<Vec<Loc
             .declaration_spans
             .iter()
             .copied()
-            .map(Expansion::from)
+            .map(span_expansion)
             .collect(),
         expansion
             .macro_spans
             .iter()
             .copied()
-            .map(Expansion::from)
+            .map(span_expansion)
             .collect(),
     ];
     let source: BindingSource<'_> = BindingSource {
@@ -188,21 +182,39 @@ fn located(input: &ModelInputRecord, outcome: &ModelOutcome) -> PyResult<Vec<Loc
     locate_binding_diagnostics(rows, &source).map_err(PyValueError::new_err)
 }
 
-impl AnalysisRecord {
-    /// The session's lineage rows, or `None` when the model kept no lineage.
-    pub(crate) fn lineage_rows(&self) -> Option<&[LineageRow]> {
-        self.lineage.as_ref().map(|lineage| match lineage {
-            LineageFacts::Native(rows) | LineageFacts::NativeFacts(rows) => rows.as_slice(),
-        })
-    }
-
+/// The Python objects a model analysis record projects, each built once.
+pub(crate) trait AnalysisViews {
     /// The session's lineage as `CompactLineageFacts` or plain facts, or `None`.
-    pub(crate) fn lineage_object(
+    fn lineage_object(
+        &self,
+        py: Python<'_>,
+        classes: &CompiledViewClasses<'_>,
+    ) -> PyResult<Py<PyAny>>;
+
+    /// The model's `CompilerDiagnostic` tuple, built once.
+    fn binding_tuple(
+        &self,
+        py: Python<'_>,
+        classes: &CompiledViewClasses<'_>,
+        model: (&str, &Bound<'_, PyAny>),
+    ) -> PyResult<Py<PyTuple>>;
+
+    /// The model's `DynamicColumnContractProof`, or `None`.
+    fn proof_object(
+        &self,
+        py: Python<'_>,
+        classes: &CompiledViewClasses<'_>,
+    ) -> PyResult<Py<PyAny>>;
+}
+
+impl AnalysisViews for AnalysisRecord {
+    /// The session's lineage as `CompactLineageFacts` or plain facts, or `None`.
+    fn lineage_object(
         &self,
         py: Python<'_>,
         classes: &CompiledViewClasses<'_>,
     ) -> PyResult<Py<PyAny>> {
-        self.projections
+        self.host
             .lineage
             .get_or_try_init(py, || match &self.lineage {
                 None => Ok(py.None()),
@@ -212,24 +224,14 @@ impl AnalysisRecord {
             .map(|lineage| lineage.clone_ref(py))
     }
 
-    /// The number of upstream sources across the model's lineage rows, or `None` without lineage.
-    pub(crate) fn lineage_edge_count(&self) -> Option<usize> {
-        match &self.lineage {
-            None => None,
-            Some(LineageFacts::Native(rows) | LineageFacts::NativeFacts(rows)) => {
-                Some(rows.iter().map(|row| row.sources.len()).sum())
-            }
-        }
-    }
-
     /// The model's `CompilerDiagnostic` tuple, built once.
-    pub(crate) fn binding_tuple(
+    fn binding_tuple(
         &self,
         py: Python<'_>,
         classes: &CompiledViewClasses<'_>,
         model: (&str, &Bound<'_, PyAny>),
     ) -> PyResult<Py<PyTuple>> {
-        self.projections
+        self.host
             .binding
             .get_or_try_init(py, || {
                 let mut diagnostics: Vec<Py<PyAny>> = Vec::with_capacity(self.binding.len());
@@ -242,12 +244,12 @@ impl AnalysisRecord {
     }
 
     /// The model's `DynamicColumnContractProof`, or `None`.
-    pub(crate) fn proof_object(
+    fn proof_object(
         &self,
         py: Python<'_>,
         classes: &CompiledViewClasses<'_>,
     ) -> PyResult<Py<PyAny>> {
-        self.projections
+        self.host
             .proof
             .get_or_try_init(py, || match &self.proof {
                 None => Ok(py.None()),
