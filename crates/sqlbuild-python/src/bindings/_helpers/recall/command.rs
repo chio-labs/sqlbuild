@@ -6,6 +6,7 @@ use std::time::Instant;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyStringMethods};
 use sqlbuild_recall::records::models::OutputStream;
+use sqlbuild_recall::schema::constants::VIEW_NAMES;
 use sqlbuild_recall::schema::main::ddl_script::{ddl_statements, render_script};
 use sqlbuild_recall::schema::main::upgrade_statements::upgrade_statements;
 use sqlbuild_recall::schema::models::{DdlOptions, Dialect};
@@ -237,6 +238,19 @@ fn open_store(py: Python<'_>, settings: &RecallSettings, checked: bool) -> PyRes
     }
 }
 
+/// The "no history yet" failure when a query failed because a writer is still creating the store's views, so it reads like the store not existing yet rather than an invalid query.
+fn not_created(store: &SqliteStore, path: &str) -> Option<StoreError> {
+    let observed = observe_sqlite_schema(store).ok()?;
+    let complete: bool = VIEW_NAMES.iter().all(|view| observed.views.contains(*view));
+    (!complete).then(|| StoreError {
+        kind: StoreErrorKind::Other,
+        message: format!(
+            "no Recall history is recorded yet at {path}, or its tables are still being created; \
+             run a command first"
+        ),
+    })
+}
+
 /// `sqb recall query --backend warehouse` and `schema --backend warehouse` run through `sqb query`.
 fn warehouse_query(
     py: Python<'_>,
@@ -286,9 +300,9 @@ fn run_query(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
     let started = Instant::now();
     let limit = limit.map(|limit| usize::try_from(limit).unwrap_or(usize::MAX));
     let queried = match &store {
-        ReadStore::Sqlite { store, .. } => {
-            query_store(store, &sql, limit).map(|result| (result, None))
-        }
+        ReadStore::Sqlite { store, path } => query_store(store, &sql, limit)
+            .map(|result| (result, None))
+            .map_err(|failure| not_created(store, path).unwrap_or(failure)),
         ReadStore::ClickHouse(reader) => reader
             .query(py, &sql, limit)
             .map(|(result, statistics)| (result, Some(statistics))),

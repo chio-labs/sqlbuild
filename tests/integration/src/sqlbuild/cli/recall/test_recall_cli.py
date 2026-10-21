@@ -1,4 +1,5 @@
 import json
+import sqlite3
 import subprocess
 from pathlib import Path
 
@@ -150,3 +151,24 @@ def test_given_recorded_statements_when_filtered_by_start_time_then_the_view_exp
     )
 
     assert rows == [[1, 1]]
+
+
+def test_given_a_store_whose_views_are_still_being_created_when_queried_then_it_is_not_recorded_yet(
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = write_project(tmp_path / "orders_shop")
+    assert run(project_dir, "build").returncode == 0
+    with sqlite3.connect(project_dir / "logs" / "recall.sqlite3") as connection:
+        views: list[str] = [
+            row[0]
+            for row in connection.execute("SELECT name FROM sqlite_schema WHERE type = 'view'")
+        ]
+        for view in views:
+            _ = connection.execute(f'DROP VIEW "{view}"')
+
+    queried: subprocess.CompletedProcess[bytes] = run(
+        project_dir, "recall", "query", "SELECT COUNT(*) FROM invocations"
+    )
+
+    assert queried.returncode == 1
+    assert "error[C971]: no Recall history is recorded yet" in queried.stderr.decode()
