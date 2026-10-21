@@ -38,6 +38,18 @@ fn given_custom_rule_fact_when_a_delta_compiles_some_models_then_only_facts_it_h
             expected_safe: true,
         },
         DeltaFactTestCase {
+            description: "the models under a folder, listed from the project's models",
+            key: &["tree.resources_under", "models"],
+            all_sources: false,
+            expected_safe: false,
+        },
+        DeltaFactTestCase {
+            description: "the files under a folder, listed from the filesystem",
+            key: &["tree.descendants", "models"],
+            all_sources: false,
+            expected_safe: true,
+        },
+        DeltaFactTestCase {
             description: "every model",
             key: &["project.models"],
             all_sources: true,

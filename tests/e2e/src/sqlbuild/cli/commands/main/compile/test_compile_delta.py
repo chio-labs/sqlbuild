@@ -161,6 +161,24 @@ def order_todo_markers(*, model: Model, ctx: RuleContext) -> list[Finding]:
     return [ctx.finding(subject=model)] if "TODO" in authored else []
 """,
 )
+_FOLDER_RULE: tuple[str, str] = (
+    "rules/order_folders.py",
+    """from sqlbuild.rules import Finding, Model, RuleContext, rule
+
+
+@rule(
+    code="XSQBRBENCH003",
+    message="Order models must share their folder with another model",
+    remediation="Group the model with related models.",
+)
+def order_folder_siblings(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    if not model.name.endswith("_00005"):
+        return []
+    siblings = ctx.project.tree.resources_under(model.path.parent.as_posix())
+    return [ctx.finding(subject=model)] if len(siblings) < 2 else []
+""",
+)
+_RULE_READ_MORE: str = "delta compile fell back: a custom rule read more than the changed models"
 _FAMILY_TYPE_EDIT: tuple[str, str, str] = (_CATEGORY_PIVOT_PATH, "type DOUBLE", "type VARCHAR")
 _FAMILIES_CHANGED: str = "delta compile fell back: a model's dynamic column families changed"
 _EXAMPLE_TRACKED_VARIABLE: str = "SQLBUILD_ORDERS_EXAMPLE"
@@ -353,6 +371,12 @@ def test_given_stored_compile_when_compiling_an_edit_then_it_prints_what_a_full_
             expected_delta_line=True,
         ),
         DeltaCompileProjectShapeTestCase(
+            description="a model-subject custom rule listing models under a folder",
+            files=(_FOLDER_RULE,),
+            edits=(_BODY_EDIT,),
+            expected_delta_line=False,
+        ),
+        DeltaCompileProjectShapeTestCase(
             description="an edit to dynamic column families compiles in full",
             files=(_CATEGORY_AMOUNTS, _CATEGORY_PIVOT),
             edits=(_FAMILY_TYPE_EDIT,),
@@ -407,6 +431,13 @@ def test_given_project_shape_when_compiling_an_edit_then_it_prints_what_a_full_c
             edits=(_FAMILY_TYPE_EDIT,),
             env={DELTA_COMPILE_VERIFY_ENV_VAR: "1"},
             expected_stderr_line=_FAMILIES_CHANGED,
+        ),
+        DeltaCompileVerifyTestCase(
+            description="a rule listing models under a folder names why it fell back",
+            files=(_FOLDER_RULE,),
+            edits=(_BODY_EDIT,),
+            env={DELTA_COMPILE_VERIFY_ENV_VAR: "1"},
+            expected_stderr_line=_RULE_READ_MORE,
         ),
         DeltaCompileVerifyTestCase(
             description="a new tracked variable names what changed",
