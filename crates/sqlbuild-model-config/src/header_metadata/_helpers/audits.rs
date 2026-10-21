@@ -90,12 +90,12 @@ fn configured_audit<N: AuthoredNode>(
     let minimum_samples = optional_count(
         entry(options, "minimum_samples"),
         option_site,
-        (definition, "minimum_samples"),
+        (definition, "minimum_samples", options),
     )?;
     let evidence_limit = optional_count(
         entry(options, "evidence_limit"),
         option_site,
-        (definition, "evidence_limit"),
+        (definition, "evidence_limit", options),
     )?;
     let meta = optional_meta(entry(options, "meta"), option_site)?;
     let arguments: Vec<(N, N)> = options

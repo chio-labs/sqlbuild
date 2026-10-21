@@ -373,9 +373,15 @@ def _integer_range_cases() -> tuple[FailureCase, ...]:
             ),
             expected_help=_header_help(
                 purpose="set minimum_samples to a value that fits in 64 bits",
-                entry=f"audits [not_null (minimum_samples {_INT64_MAX})]",
+                entry=(
+                    'audits [not_null (name "order_ids_present", '
+                    f'minimum_samples {_INT64_MAX}, severity "warn", meta (tiers ["gold"]))]'
+                ),
             ),
-            files=_staging_header(f"  audits [not_null (minimum_samples {_BEYOND_64_BITS})],"),
+            files=_staging_header(
+                '  audits [not_null (name "order_ids_present", '
+                f"minimum_samples {_BEYOND_64_BITS}, severity warn, meta (tiers [gold]))],"
+            ),
         ),
         failure_case(
             name="header-column-audit-evidence-limit-beyond-64-bits",
