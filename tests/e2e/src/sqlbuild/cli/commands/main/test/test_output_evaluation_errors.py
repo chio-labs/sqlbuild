@@ -12,6 +12,7 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import (
     OutputEvaluationErrorE2ETestCase,
 )
+from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import order_totals_test_files
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     execute_duckdb,
     prepare_inline_project,
@@ -42,6 +43,20 @@ _NO_TEMPORARY_TABLES: str = (
     "    def create_sql_test_output(self, *, connection, sql, name):\n"
     '        raise PermissionError("temporary tables are disabled on this session")\n'
 )
+# A session that keeps one test output and refuses every later one.
+_ONE_TEMPORARY_TABLE: str = (
+    "from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter\n\n\n"
+    "class PruningDuckDbAdapter(DuckDbAdapter):\n"
+    '    adapter_name = "pruning_duckdb"\n'
+    "    stored = []\n\n"
+    "    def create_sql_test_output(self, *, connection, sql, name):\n"
+    "        self.stored.append(name)\n"
+    "        if len(self.stored) > 1:\n"
+    '            raise PermissionError("no more temporary tables in this session")\n'
+    "        return super().create_sql_test_output(connection=connection, sql=sql, name=name)\n"
+)
+
+
 _PROJECT_FILES: dict[str, str] = {
     "sqlbuild_project.toml": (
         'name = "orders"\nadapter = "pruning_duckdb"\n\n'
@@ -75,6 +90,7 @@ _PROJECT_FILES: dict[str, str] = {
         OutputEvaluationErrorE2ETestCase(
             description="an output the warehouse cannot compute errors the test",
             adapter_source=_PRUNING_WAREHOUSE,
+            extra_files={},
             expected_exit_code=1,
             expected_fragments=(
                 "test 'orders_ids' encountered an execution error while running 'orders'",
@@ -87,10 +103,29 @@ _PROJECT_FILES: dict[str, str] = {
         OutputEvaluationErrorE2ETestCase(
             description="a session that cannot store outputs still compares inline",
             adapter_source=_NO_TEMPORARY_TABLES,
+            extra_files={},
             expected_exit_code=0,
             expected_fragments=("PASS=1  FAIL=0",),
             expected_json_fragments=('"pass"',),
             unexpected_fragments=("encountered an execution error",),
+        ),
+        OutputEvaluationErrorE2ETestCase(
+            description="a computable later output that cannot be stored compares inline",
+            adapter_source=_ONE_TEMPORARY_TABLE,
+            extra_files=order_totals_test_files("code_number + 1"),
+            expected_exit_code=0,
+            expected_fragments=("PASS=1  FAIL=0",),
+            expected_json_fragments=('"pass"',),
+            unexpected_fragments=("encountered an execution error", "does not exist"),
+        ),
+        OutputEvaluationErrorE2ETestCase(
+            description="a later output that fails on its own reports the warehouse error",
+            adapter_source=_ONE_TEMPORARY_TABLE,
+            extra_files=order_totals_test_files("CAST('cluster::r1' AS INTEGER)"),
+            expected_exit_code=1,
+            expected_fragments=("Could not convert string 'cluster::r1'", "PASS=0  FAIL=1"),
+            expected_json_fragments=('"error"', "Could not convert string"),
+            unexpected_fragments=("does not exist",),
         ),
     ],
     ids=lambda case: case.description,
@@ -103,7 +138,18 @@ def test_given_output_store_failure_when_testing_then_only_storage_problems_fall
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
         project_name="orders",
-        repo_files={**_PROJECT_FILES, "adapters/pruning_duckdb.py": test_case.adapter_source},
+        repo_files={
+            **_PROJECT_FILES,
+            "adapters/pruning_duckdb.py": test_case.adapter_source,
+            **test_case.extra_files,
+        },
+    )
+    config_path: Path = project_dir / "sqlbuild_project.toml"
+    _ = config_path.write_text(
+        config_path.read_text(encoding="utf-8").replace(
+            '"orders.duckdb"', f'"{(project_dir / "orders.duckdb").as_posix()}"'
+        ),
+        encoding="utf-8",
     )
     execute_duckdb(
         db_path=project_dir / "orders.duckdb",

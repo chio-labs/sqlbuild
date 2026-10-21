@@ -76,3 +76,14 @@ class OutputStorageTestCase:
     output_fails: bool
     expected_outcome: SqlTestOutcome
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class LaterStepStorageTestCase:
+    """A chain whose first output is stored and whose second cannot be, and how the test ends."""
+
+    description: str
+    chain_steps: tuple[tuple[str, str, str | None], ...]
+    expected_outcome: SqlTestOutcome
+    expected_error_fragment: str
+    unexpected_error_fragment: str

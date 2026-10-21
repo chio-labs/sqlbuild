@@ -478,6 +478,7 @@ class OutputEvaluationErrorE2ETestCase:
 
     description: str
     adapter_source: str
+    extra_files: dict[str, str]
     expected_exit_code: int
     expected_fragments: tuple[str, ...]
     expected_json_fragments: tuple[str, ...]
