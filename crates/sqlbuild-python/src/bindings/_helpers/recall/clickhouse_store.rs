@@ -43,7 +43,7 @@ use sqlbuild_recall::store::types::{RecallStore, RecallStoreOpener};
 use crate::bindings::_helpers::recall::clickhouse_calls::{
     self as calls, QueryStatistics, StoreHandle,
 };
-use crate::bindings::_helpers::recall::constants::SECONDS_PER_DAY;
+use crate::bindings::_helpers::recall::constants::{SECONDS_PER_DAY, UNKNOWN_TABLE_ERROR};
 
 /// Where a ClickHouse store lives and how long it keeps history.
 #[derive(Clone, Debug)]
@@ -575,7 +575,7 @@ pub(crate) struct ClickHouseReader {
 
 impl ClickHouseReader {
     pub(crate) fn open(py: Python<'_>, location: &ClickHouseLocation) -> Result<Self, StoreError> {
-        let mut store = ClickHouseStore {
+        let store = ClickHouseStore {
             location: location.clone(),
             connection: Some(calls::connect(
                 py,
@@ -585,19 +585,27 @@ impl ClickHouseReader {
             columns: HashMap::new(),
             notices: Vec::new(),
         };
-        let state: StoreState = store.state(py)?;
+        Ok(Self { store })
+    }
+
+    /// Fail with "no history yet" when the store's tables or views are missing; queries check only after they fail, so a successful one costs no extra round trip.
+    pub(crate) fn require_store(&self, py: Python<'_>) -> Result<(), StoreError> {
+        let state: StoreState = self.store.state(py)?;
         if state.tables.len() < ALL_TABLES.len() || state.views.len() < VIEW_NAMES.len() {
-            store.close();
             return Err(StoreError {
                 kind: StoreErrorKind::NotFound,
-                message: format!(
-                    "no Recall history is recorded yet in ClickHouse database `{}`, or its tables \
-                     are still being created; run a command first",
-                    location.database()
-                ),
+                message: self.not_created_message(),
             });
         }
-        Ok(Self { store })
+        Ok(())
+    }
+
+    fn not_created_message(&self) -> String {
+        format!(
+            "no Recall history is recorded yet in ClickHouse database `{}`, or its tables are \
+             still being created; run a command first",
+            self.database()
+        )
     }
 
     /// The statements that create the store in `location`, or bring it up to this build's schema, read with `SELECT` only.
@@ -650,13 +658,31 @@ impl ClickHouseReader {
             (sql, &settings),
             "run the Recall query",
         )
-        .map_err(|failure| StoreError {
-            kind: if failure.kind == StoreErrorKind::Busy {
-                StoreErrorKind::Other
-            } else {
-                StoreErrorKind::Query
-            },
-            message: failure.message,
+        .map_err(|failure| {
+            // A store not created yet is a store failure (C971), not a missing invocation.
+            match self.require_store(py) {
+                Err(missing) if missing.kind == StoreErrorKind::NotFound => {
+                    return StoreError {
+                        kind: StoreErrorKind::Other,
+                        message: missing.message,
+                    };
+                }
+                Ok(()) if failure.message.contains(UNKNOWN_TABLE_ERROR) => {
+                    return StoreError {
+                        kind: StoreErrorKind::Other,
+                        message: self.not_created_message(),
+                    };
+                }
+                Ok(()) | Err(_) => {}
+            }
+            StoreError {
+                kind: if failure.kind == StoreErrorKind::Busy {
+                    StoreErrorKind::Other
+                } else {
+                    StoreErrorKind::Query
+                },
+                message: failure.message,
+            }
         })?;
         if let Some(limit) = limit
             && result.rows.len() > limit

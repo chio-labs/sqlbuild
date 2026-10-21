@@ -251,3 +251,9 @@ class GitRevisionTestCase:
     layout: str
     environment: dict[str, str]
     expected_dirty: object
+
+
+@dataclass(frozen=True)
+class LeanRecallTestCase:
+    description: str
+    args: tuple[str, ...]

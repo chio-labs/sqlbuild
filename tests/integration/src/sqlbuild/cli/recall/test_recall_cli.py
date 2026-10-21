@@ -7,8 +7,14 @@ import pytest
 from tests.integration.src.sqlbuild.cli.recall._test_types import (
     DeprecatedFormatTestCase,
     JsonErrorTestCase,
+    LeanRecallTestCase,
 )
-from tests.integration.src.sqlbuild.cli.recall.helpers import run, write_project
+from tests.integration.src.sqlbuild.cli.recall.helpers import (
+    OUTPUT_LOG_SINK,
+    run,
+    write_project,
+    write_sinks,
+)
 
 TABLE_DEPRECATION: str = "--format table is deprecated and will be removed"
 
@@ -93,3 +99,32 @@ def test_given_the_table_format_when_querying_then_it_works_with_a_deprecation_w
     assert rendered.returncode == 0
     assert rendered.stdout
     assert (TABLE_DEPRECATION in rendered.stderr.decode()) is test_case.expected_warning
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LeanRecallTestCase(
+            description="query",
+            args=("recall", "query", "SELECT count(*) FROM invocations"),
+        ),
+        LeanRecallTestCase(description="schema", args=("recall", "schema")),
+        LeanRecallTestCase(description="output", args=("recall", "output", "last")),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_project_sinks_when_reading_recall_then_no_sink_runs_and_no_compute_log_is_kept(
+    test_case: LeanRecallTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_project(tmp_path / "orders_shop")
+    _ = write_sinks(project_dir, {"output_log": OUTPUT_LOG_SINK})
+    assert run(project_dir, "build").returncode == 0
+    (project_dir / "output.log").unlink()
+    logs_before: set[Path] = set((project_dir / "logs").glob("*/*"))
+
+    read: subprocess.CompletedProcess[bytes] = run(project_dir, *test_case.args)
+
+    assert read.returncode == 0, read.stderr.decode(errors="replace")
+    assert read.stdout
+    assert not (project_dir / "output.log").exists()
+    assert set((project_dir / "logs").glob("*/*")) == logs_before

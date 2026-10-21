@@ -32,13 +32,10 @@ def dispatch_with_compute_logs(
     args: CliNamespace,
     identity: ExecutionIdentity,
     operation: Callable[[], int],
-    creates_project: bool,
     recall: RecallLifecycleSink | None = None,
 ) -> int:
     """Run one composed dispatch while retaining exact process streams best-effort."""
 
-    if creates_project:
-        return operation()
     project_dir: Path = Path(args.project_dir) if args.project_dir is not None else Path.cwd()
     project_roots: tuple[str, ...] = diagnostic_project_roots(project_dir=project_dir)
     routing_options: DiagnosticRoutingOptions = DiagnosticRoutingOptions(

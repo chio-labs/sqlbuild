@@ -173,7 +173,8 @@ impl ReadStore {
     }
 }
 
-fn open_store(py: Python<'_>, settings: &RecallSettings) -> PyResult<ReadStore> {
+/// The read store; `checked` first confirms a ClickHouse store exists, which a query skips and confirms only if it fails.
+fn open_store(py: Python<'_>, settings: &RecallSettings, checked: bool) -> PyResult<ReadStore> {
     match &settings.read_store {
         StoreLocation::Sqlite { path } => {
             let store = open_sqlite_store(path, OpenMode::ReadOnly).map_err(|error| {
@@ -201,6 +202,15 @@ fn open_store(py: Python<'_>, settings: &RecallSettings) -> PyResult<ReadStore> 
             py,
             &ClickHouseLocation::new(config, database, settings.retention_days),
         )
+        .and_then(|reader| {
+            if checked {
+                if let Err(error) = reader.require_store(py) {
+                    reader.close();
+                    return Err(error);
+                }
+            }
+            Ok(reader)
+        })
         .map(ReadStore::ClickHouse)
         .map_err(|error| {
             let error = if error.kind == StoreErrorKind::NotFound {
@@ -272,7 +282,7 @@ fn run_query(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
     if recall.backend.as_deref() == Some(WAREHOUSE_BACKEND) {
         return warehouse_query(py, recall, &project_dir, (&sql, limit));
     }
-    let store = open_store(py, &settings)?;
+    let store = open_store(py, &settings, false)?;
     let started = Instant::now();
     let limit = limit.map(|limit| usize::try_from(limit).unwrap_or(usize::MAX));
     let queried = match &store {
@@ -339,7 +349,7 @@ fn run_schema_ddl(py: Python<'_>, settings: &RecallSettings) -> PyResult<i32> {
             format!("in ClickHouse database `{database}`"),
         ),
         StoreLocation::Unsupported { .. } => {
-            return open_store(py, settings).map(|store| {
+            return open_store(py, settings, true).map(|store| {
                 store.close();
                 0
             });
@@ -390,7 +400,7 @@ fn run_schema(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
         };
         return warehouse_query(py, recall, &project_dir, (&sql, None));
     }
-    let store = open_store(py, &settings)?;
+    let store = open_store(py, &settings, true)?;
     let described = match &store {
         ReadStore::Sqlite { store, .. } => describe_store(store),
         ReadStore::ClickHouse(reader) => reader.describe(py),
@@ -429,7 +439,7 @@ fn tail_lines(data: &[u8], lines: usize) -> &[u8] {
 
 fn run_output(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
     let (_, settings) = settings(py, recall)?;
-    let store = open_store(py, &settings)?;
+    let store = open_store(py, &settings, true)?;
     let selector: &str = recall.invocation.as_deref().unwrap_or(LAST_INVOCATION);
     let stream = recall.stream.as_deref().and_then(OutputStream::from_name);
     let read = store

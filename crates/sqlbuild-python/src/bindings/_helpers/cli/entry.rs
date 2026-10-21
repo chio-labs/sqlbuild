@@ -7,7 +7,7 @@ use pyo3::exceptions::PySystemExit;
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyBool, PyCFunction, PyDict, PyDictMethods, PyInt, PyList, PyString, PyTuple};
+use pyo3::types::{PyCFunction, PyDict, PyDictMethods, PyInt, PyList, PyString, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_cli::dispatch::main::failure_report::failure_report;
 use sqlbuild_cli::dispatch::main::invocation_policy::invocation_policy;
@@ -671,21 +671,19 @@ fn parsed_invocation<'py>(
             Ok(handled_dispatch(&invocation)?.unbind())
         },
     )?;
-    let dispatched: PyResult<Bound<'py, PyAny>> = call_with(
-        &host::entry(py, FacadeHost::DispatchWithComputeLogs)?,
-        &[
-            ("args", args),
-            ("identity", identity.clone()),
-            ("operation", operation.into_any()),
-            (
-                "creates_project",
-                PyBool::new(py, policy.creates_project)
-                    .to_owned()
-                    .into_any(),
-            ),
-            ("recall", recall_sink),
-        ],
-    );
+    let dispatched: PyResult<Bound<'py, PyAny>> = if policy.captured {
+        call_with(
+            &host::entry(py, FacadeHost::DispatchWithComputeLogs)?,
+            &[
+                ("args", args),
+                ("identity", identity.clone()),
+                ("operation", operation.into_any()),
+                ("recall", recall_sink),
+            ],
+        )
+    } else {
+        operation.call0()
+    };
     let exit_status: Option<i64> = match &dispatched {
         Ok(code) if code.is_instance_of::<PyInt>() => Some(code.extract().unwrap_or(1)),
         Ok(_) | Err(_) => None,

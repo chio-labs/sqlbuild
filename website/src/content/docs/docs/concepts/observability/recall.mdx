@@ -105,7 +105,8 @@ of its history still succeeds, prints a warning followed by its own final status
 `output_invocations` reports the gap. An invocation whose process died without finishing has
 status `abandoned`.
 
-Every command is recorded except `sqb recall` itself, commands that create a project (such as
+`sqb recall` only reads history: it publishes no lifecycle events, runs no project sinks, and keeps
+no compute logs, so a query starts quickly. Every command is recorded except `sqb recall` itself, commands that create a project (such as
 `sqb init`), and raw-query `sqb diff`. Commands `sqb` answers without starting Python are not
 recorded either: a `sqb compile` answered from the launcher's warm cache, and `sqb clean`, `sqb skills`,
 `sqb rules list` and `sqb rules show` in a project with no custom rules, rule options or sinks.

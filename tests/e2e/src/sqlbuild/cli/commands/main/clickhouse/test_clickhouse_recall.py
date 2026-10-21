@@ -617,14 +617,14 @@ def test_given_sql_older_than_retention_when_still_referenced_then_artifacts_sho
     "test_case",
     [
         ClickHouseRecallQueryOutputSinkTestCase(
-            description="query results reach a command-output sink",
+            description="a read-only recall query runs no project sinks",
             sql="SELECT 'shipped_orders' AS answer",
             expected_fragment="shipped_orders",
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_an_output_sink_when_querying_clickhouse_recall_then_the_sink_sees_the_results(
+def test_given_an_output_sink_when_querying_clickhouse_recall_then_the_sink_is_not_run(
     test_case: ClickHouseRecallQueryOutputSinkTestCase,
     tmp_path: Path,
     clickhouse_e2e_config: dict[str, object],
@@ -640,7 +640,7 @@ def test_given_an_output_sink_when_querying_clickhouse_recall_then_the_sink_sees
 
     assert queried.returncode == 0, queried.stderr
     assert test_case.expected_fragment.encode() in queried.stdout
-    assert test_case.expected_fragment in (project_dir / "output.log").read_text(encoding="utf-8")
+    assert not (project_dir / "output.log").exists()
 
 
 @pytest.mark.parametrize(

@@ -4326,7 +4326,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "clickhouse-connect", marker = "extra == 'clickhouse'", specifier = ">=0.8" },
+    { name = "clickhouse-connect", marker = "extra == 'clickhouse'", specifier = ">=0.15" },
     { name = "dagster", marker = "extra == 'dagster'", specifier = ">=1.13.0" },
     { name = "dagster-webserver", marker = "extra == 'dagster'", specifier = ">=1.13.0" },
     { name = "databricks-sql-connector", extras = ["pyarrow"], marker = "extra == 'databricks'", specifier = ">=4.1.2" },

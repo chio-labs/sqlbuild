@@ -121,6 +121,8 @@ pub struct InvocationPolicy {
     pub maintains_skills: bool,
     /// Whether Recall records the invocation; `sqb recall` never records itself.
     pub recalled: bool,
+    /// Whether compute logs capture the process streams; read-only `sqb recall` skips them.
+    pub captured: bool,
 }
 
 /// What a failed command reports: its fallback error code and the debug log message.
