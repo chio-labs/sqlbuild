@@ -183,7 +183,8 @@ pub const OPERATION_KINDS: [&str; 10] = [
     "subprocess",
     "warehouse",
 ];
-pub const OPERATION_NAMES: [&str; 55] = [
+pub const OPERATION_NAMES: [&str; 56] = [
+    "adbc_driver_install",
     "audit_evaluation",
     "clone_execution",
     "clone_finalization",
