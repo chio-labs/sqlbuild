@@ -90,7 +90,7 @@ pub(crate) fn resolve_attachment_kind<'py>(
                 ErrorId::PlannerInput,
                 &format!(
                     "audit '{}': attached audit is missing an attached target name",
-                    text(&native_field(audit, "name")?)?
+                    text(&audit_reads::name(audit)?)?
                 ),
                 None,
             ));

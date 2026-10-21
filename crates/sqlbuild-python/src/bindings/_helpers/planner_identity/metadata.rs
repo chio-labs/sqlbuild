@@ -17,6 +17,7 @@ use sqlbuild_analysis::planner_identity::models::FunctionFingerprintFields;
 use crate::bindings::_helpers::boundary::python_calls::{imported, keywords, within};
 use crate::bindings::_helpers::compiled_views::function_reads;
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::seed_reads;
 use crate::bindings::_helpers::discovery::hook_entries::hook_entries;
 use crate::bindings::_helpers::model_config::typed_config::{config_value, model_values};
 use crate::bindings::_helpers::planner_identity::hashing::function_definition_hash;
@@ -381,22 +382,22 @@ pub(crate) fn compiled_function_fingerprint_sql(function: &Bound<'_, PyAny>) -> 
 /// `(identity_hash, metadata_json)` of one compiled seed from its content and load-affecting config.
 pub(crate) fn seed_identity(seed: &Bound<'_, PyAny>) -> PyResult<(String, String)> {
     let py: Python<'_> = seed.py();
-    let schema_entry: Bound<'_, PyAny> = native_field(seed, "schema_entry")?;
+    let schema_entry: Bound<'_, PyAny> = seed_reads::schema_entry(seed)?;
     let csv_settings: Bound<'_, PyAny> = native_field(&schema_entry, "csv_settings")?;
     let columns: Bound<'_, PyList> = PyList::empty(py);
     for column in native_field(&schema_entry, "columns")?.try_iter()? {
         columns.append(column_signature(&column?)?)?;
     }
-    let rows: Bound<'_, PyAny> = if native_field(seed, "external")?.is_truthy()? {
+    let rows: Bound<'_, PyAny> = if seed_reads::external(seed)?.is_truthy()? {
         PyList::empty(py).into_any()
     } else {
         seed_rows(
-            &native_field(&native_field(seed, "seed_file")?, "file_path")?,
+            &native_field(&seed_reads::seed_file(seed)?, "file_path")?,
             &csv_settings,
         )?
     };
     let payload: Bound<'_, PyDict> = PyDict::new(py);
-    payload.set_item("name", native_field(seed, "name")?)?;
+    payload.set_item("name", seed_reads::name(seed)?)?;
     payload.set_item(
         "csv_settings",
         imported(py, DATACLASSES_MODULE, "asdict")?.call1((&csv_settings,))?,

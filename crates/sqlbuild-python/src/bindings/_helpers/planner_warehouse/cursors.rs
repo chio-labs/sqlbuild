@@ -4,6 +4,8 @@ use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, key
 use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::compiled_views::project_reads;
+use crate::bindings::_helpers::compiled_views::resource_reads;
+use crate::bindings::_helpers::compiled_views::source_reads;
 use crate::bindings::_helpers::cursor::intervals::partition;
 use crate::bindings::_helpers::cursor::scalars;
 use crate::bindings::_helpers::cursor::scalars::compare_values;
@@ -197,8 +199,8 @@ fn runtime_producer_names(
     let mut loaded: HashSet<String> = HashSet::new();
     for source in project_reads::sources(project)?.try_iter()? {
         let source = source?;
-        if !native_field(&native_field(&source, "source_entry")?, "loader")?.is_none() {
-            loaded.insert(native_field(&source, "name")?.extract()?);
+        if !native_field(&source_reads::source_entry(&source)?, "loader")?.is_none() {
+            loaded.insert(source_reads::name(&source)?.extract()?);
         }
     }
     for key in selected.try_iter()? {
@@ -224,7 +226,7 @@ fn upstream_relation<'py>(
     let name_text: String = name.extract()?;
     let is_selected = selected.is_some_and(|names| names.contains(&name_text));
     let qualified = |node: Bound<'py, PyAny>| {
-        native_field(&native_field(&node, "destination")?, "qualified_name")
+        native_field(&resource_reads::destination(&node)?, "qualified_name")
     };
     if (kind.eq("ref")? || kind.eq("seed")?)
         && !deferred.is_none()
@@ -250,7 +252,7 @@ fn upstream_relation<'py>(
         return object(
             py,
             render_source_relation(
-                &native_field(&source, "source_entry")?,
+                &source_reads::source_entry(&source)?,
                 Some(adapter).filter(|value| !value.is_none()),
             )?,
         );

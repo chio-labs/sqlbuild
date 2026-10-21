@@ -14,6 +14,7 @@ use sqlbuild_analysis::planner_strategy::types::ReferenceGraph;
 
 use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::resource_reads;
 use crate::bindings::_helpers::model_config::typed_config::{config_text_is, model_values};
 use crate::bindings::_helpers::planner_strategy::microbatches::{
     CAP_ACTIONS, microbatch_limit_config,
@@ -44,7 +45,7 @@ fn mapped_references<'py>(
 }
 
 fn references<'py>(owner: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    native_field(owner, "references")?.try_iter()?.collect()
+    resource_reads::references(owner)?.try_iter()?.collect()
 }
 
 /// Whether a model's `incremental_mode` is microbatch.

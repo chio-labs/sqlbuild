@@ -15,5 +15,8 @@ pub(crate) mod project_view;
 pub(crate) mod records;
 pub(crate) mod registration;
 pub(crate) mod relation_keys;
+pub(crate) mod resource_reads;
+pub(crate) mod seed_reads;
 pub(crate) mod seed_views;
+pub(crate) mod source_reads;
 pub(crate) mod source_views;
