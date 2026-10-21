@@ -133,6 +133,7 @@ impl AnalysisSession {
                 dependency_ordered: self.dependency_ordered,
                 cyclic: self.cyclic,
                 legacy_models: self.legacy_models.clone(),
+                families: self.request.dynamic_families_by_table.clone(),
             });
         let (schema_additions, analysis_names) = self.catalog.into_changes();
         let mut request: SessionRequest = self.request;

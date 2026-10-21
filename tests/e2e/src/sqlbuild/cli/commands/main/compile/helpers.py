@@ -5287,6 +5287,24 @@ def run_delta_compile(
     )
 
 
+def store_shaped_project(
+    *,
+    project_dir: Path,
+    files: tuple[tuple[str, str], ...],
+    stored_edits: tuple[tuple[str, str, str], ...],
+) -> None:
+    """Add `files` to the project, apply `stored_edits` and compile once to store it."""
+
+    for relative_path, contents in files:
+        write_project_file(project_dir, relative_path, contents)
+    for relative_path, old, new in stored_edits:
+        replace_project_text(project_dir, relative_path, old, new)
+    stored: DeltaCompileOutcome = run_delta_compile(
+        project_dir=project_dir, args=("compile",), env={}
+    )
+    assert "Traceback" not in stored.stderr, stored.stderr[-2000:]
+
+
 def run_full_compile(project_dir: Path, *, args: tuple[str, ...]) -> DeltaCompileOutcome:
     """Compile the project at `project_dir` in full, with delta compiles off."""
 

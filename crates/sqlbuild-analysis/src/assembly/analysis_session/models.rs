@@ -199,6 +199,8 @@ pub struct RelationTables {
     pub cyclic: bool,
     /// Models whose analysis took the legacy path, which reads every relation's facts.
     pub legacy_models: Vec<String>,
+    /// The request's dynamic column families by table, in request order.
+    pub families: Vec<(String, Vec<DynamicFamily>)>,
 }
 
 /// One inferred output column; nullability is Python's `InferredNullability` value.

@@ -18,6 +18,9 @@ use sqlbuild_rules::custom_rule_cache::types::ReadSet;
 use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
+use crate::bindings::_helpers::compile_context::delta::{
+    DeltaInjection, delta_unsupported, injection,
+};
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
@@ -31,13 +34,22 @@ use crate::bindings::_helpers::rules::custom_host_payload::{
 use crate::bindings::_helpers::rules::custom_hosts::{HostCancel, HostRequest, run_custom_hosts};
 use crate::bindings::_helpers::rules::custom_rule_cache::CustomRuleCache;
 use crate::bindings::_helpers::rules::custom_rule_cache::custom_rule_identity;
+use crate::bindings::_helpers::rules::custom_rule_cache::stored_rules;
 use crate::bindings::_helpers::rules::custom_rule_evidence::custom_rule_implementation_fingerprint;
 use crate::bindings::_helpers::rules::custom_rule_evidence::custom_rule_import_closure;
 use crate::bindings::_helpers::rules::fact_encoder::{Encoded, reproducible};
-use crate::bindings::_helpers::rules::fact_replay::{FactReplay, is_tree_fact};
-use crate::bindings::_helpers::rules::rule_run::bulk_cache_file;
+use crate::bindings::_helpers::rules::fact_replay::{
+    FactReplay, delta_safe_fact, is_tree_fact, read_text_path,
+};
+use crate::bindings::_helpers::rules::rule_run::{bulk_cache_file, rules_bulk_cache_path};
 
 const PROJECT_SUBJECT: &str = "project";
+/// Why a delta compile cannot rerun a custom rule that reads facts of models it does not compile.
+const READ_MORE: &str = "a custom rule read more than the changed models";
+const PROJECT_WIDE: &str = "a project-wide custom rule must run again";
+const OUTSIDE_DELTA: &str = "a custom rule must run again for a model the delta does not compile";
+/// The custom-rule cache's subject key of project-wide rules.
+const PROJECT_SUBJECT_KEY: &str = "";
 const MODEL_SUBJECT: &str = "model";
 /// The run one custom-rule evaluation describes.
 pub(crate) struct CustomRun<'a, 'py> {
@@ -140,13 +152,11 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
         readset_digests.push(reproducible(digests.combined(readset))?);
     }
     let plan: HostPlan = cache.plan(readset_digests);
-    if !plan.is_empty() && crate::bindings::_helpers::compile_context::delta::injection().is_some()
+    let delta: Option<std::sync::Arc<DeltaInjection>> = injection();
+    if let Some(injection) = &delta
+        && let Some(reason) = delta_plan_refusal(&plan, &cache, injection)
     {
-        return Err(
-            crate::bindings::_helpers::compile_context::delta::delta_unsupported(
-                "a custom rule must run again",
-            ),
-        );
+        return Err(delta_unsupported(reason));
     }
     if !plan.is_empty() {
         let rules: Vec<(String, HostRuleSubject)> = custom
@@ -169,6 +179,13 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
             &plan,
         )?;
         let evaluations: Vec<CustomEvaluation> = evaluations(host_run, &mut digests, enabled)?;
+        if let Some(injection) = &delta
+            && !evaluations
+                .iter()
+                .all(|evaluation| delta_safe_evaluation(evaluation, injection))
+        {
+            return Err(delta_unsupported(READ_MORE));
+        }
         cache.record(py, evaluations)?;
     }
     crate::bindings::_helpers::compile_context::delta::capture(|capture| {
@@ -187,6 +204,80 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
         (cache.findings(py)?, cache.hits(), cache.misses()),
         (elapsed_ms, cpu_ms),
     )
+}
+
+/// Why a delta can't run `plan`: it runs only its own models' rules that read what it holds.
+fn delta_plan_refusal(
+    plan: &HostPlan,
+    cache: &CustomRuleCache,
+    injection: &DeltaInjection,
+) -> Option<&'static str> {
+    let all_sources: bool = injection.source_names.is_none();
+    for (code, subjects) in plan {
+        let Some(subjects) = subjects else {
+            return Some(PROJECT_WIDE);
+        };
+        for subject in subjects {
+            if !injection.model_paths.contains(subject) {
+                return Some(OUTSIDE_DELTA);
+            }
+            if cache.stored_readset(code, subject).is_some_and(|readset| {
+                !readset
+                    .iter()
+                    .all(|key| delta_safe_fact(key, &injection.model_paths, all_sources))
+            }) {
+                return Some(READ_MORE);
+            }
+        }
+    }
+    None
+}
+
+/// Why a delta of `model_paths` would stop at custom rules, judged from their stored read sets.
+pub(crate) fn stored_custom_rule_refusal(
+    project_dir: &Path,
+    (model_paths, changed): (&BTreeSet<String>, &BTreeSet<String>),
+    all_sources: bool,
+) -> Option<&'static str> {
+    let stored = stored_rules(&rules_bulk_cache_path(
+        project_dir.to_path_buf(),
+        CUSTOM_RULES_CACHE_FILE,
+    ));
+    for rule in stored.values() {
+        for (subject, entry) in &rule.entries {
+            let Some(readset) = rule.readsets.get(entry.readset) else {
+                continue;
+            };
+            if model_paths.contains(subject) {
+                if !readset
+                    .iter()
+                    .all(|key| delta_safe_fact(key, model_paths, all_sources))
+                {
+                    return Some(READ_MORE);
+                }
+            } else if readset
+                .iter()
+                .any(|key| read_text_path(key).is_some_and(|path| changed.contains(path)))
+            {
+                return Some(if subject == PROJECT_SUBJECT_KEY {
+                    PROJECT_WIDE
+                } else {
+                    OUTSIDE_DELTA
+                });
+            }
+        }
+    }
+    None
+}
+
+/// Whether a delta compile evaluated a custom rule from facts it holds in full.
+fn delta_safe_evaluation(evaluation: &CustomEvaluation, injection: &DeltaInjection) -> bool {
+    let all_sources: bool = injection.source_names.is_none();
+    evaluation.cacheable.as_ref().is_some_and(|(readset, _)| {
+        readset
+            .iter()
+            .all(|key| delta_safe_fact(key, &injection.model_paths, all_sources))
+    })
 }
 
 /// `CustomRulesOutcome(findings=..., cache_hits=..., cache_misses=..., custom_ms=..., ...)`.

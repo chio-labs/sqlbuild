@@ -11,10 +11,12 @@ import pytest
 from scripts.delta_compile_series._helpers.outcomes import full_compile_difference
 from scripts.delta_compile_series.constants import (
     DELTA_COMPILE_LINE,
+    DELTA_VERIFIED_LINE,
     DOUBLE_CAST,
     DOUBLE_COLUMN,
     FLOAT_CAST,
     FLOAT_COLUMN,
+    MISMATCH_EXIT_CODE,
     PROJECT_CONFIG,
 )
 from scripts.delta_compile_series.main.run_delta_compile_sequence import (
@@ -34,13 +36,16 @@ from sqlbuild._native import DELTA_COMPILE_DISABLE_ENV_VAR, DELTA_COMPILE_VERIFY
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     DeltaCompileFullCopyTestCase,
     DeltaCompileOptOutTestCase,
+    DeltaCompileProjectShapeTestCase,
     DeltaCompileSequenceTestCase,
     DeltaCompileSeriesTestCase,
+    DeltaCompileVerifyTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     replace_project_text,
     run_delta_compile,
     run_full_compile,
+    store_shaped_project,
     without_compile_timings,
 )
 
@@ -76,6 +81,110 @@ _PATH_DEFAULT_EDIT: tuple[str, str, str] = (
     "[defaults]",
 )
 _REUSE_ROOT: str = "target/cache/compiler-native-v1/project-reuse-v3"
+_PIVOT_ROOT: str = f"{_SMALL_MODEL_ROOT}/batch00009"
+_CATEGORY_AMOUNTS: tuple[str, str] = (
+    f"{_PIVOT_ROOT}/order_category_amounts.sql",
+    """MODEL (
+  description "Order amounts per category.",
+  materialized table,
+  contract enforced,
+  columns (
+    customer_id (type INTEGER, description "Customer identifier."),
+    category (type VARCHAR, description "Order category."),
+    amount (type DOUBLE, description "Order amount."),
+  ),
+);
+
+SELECT CAST(b.id AS INTEGER) AS customer_id, CAST('books' AS VARCHAR) AS category,
+  CAST(b.amount AS DOUBLE) AS amount
+FROM __ref("sales000__int_clean__orders_00001") AS b
+""",
+)
+_CATEGORY_PIVOT_PATH: str = f"{_PIVOT_ROOT}/order_category_pivot.sql"
+_CATEGORY_PIVOT: tuple[str, str] = (
+    _CATEGORY_PIVOT_PATH,
+    """MODEL (
+  description "Order amounts pivoted per category.",
+  materialized table,
+  contract enforced,
+  columns (customer_id (type INTEGER, description "Customer identifier.")),
+  dynamic_columns (
+    category_amounts (
+      pivot_column category,
+      value_column amount,
+      aggregate MAX,
+      type DOUBLE
+    )
+  ),
+);
+
+PIVOT __ref("order_category_amounts")
+ON category
+USING MAX(amount)
+GROUP BY customer_id
+""",
+)
+_ORDER_QUALITY_FACTORY: tuple[str, str] = (
+    "python/factories/quality.py",
+    """from sqlbuild.audits import AuditCase, AuditSeverity, audit_factory
+
+
+@audit_factory
+def order_quality():
+    return [
+        AuditCase(
+            name="amount_present",
+            definition="not_null",
+            arguments={"column": "amount"},
+            severity=AuditSeverity.ERROR,
+        ),
+    ]
+""",
+)
+_ATTACH_ORDER_QUALITY: tuple[str, str, str] = (
+    _ANALYSED_MODEL,
+    "MODEL (description",
+    "MODEL (audit_factories [order_quality], description",
+)
+_MODEL_SQL_RULE: tuple[str, str] = (
+    "rules/order_sql.py",
+    """from sqlbuild.rules import Finding, Model, RuleContext, rule
+
+
+@rule(
+    code="XSQBRBENCH002",
+    message="Order models must not leave TODO markers",
+    remediation="Resolve the TODO.",
+)
+def order_todo_markers(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    authored = ctx.sql.for_model(model).authored.source
+    return [ctx.finding(subject=model)] if "TODO" in authored else []
+""",
+)
+_FOLDER_RULE: tuple[str, str] = (
+    "rules/order_folders.py",
+    """from sqlbuild.rules import Finding, Model, RuleContext, rule
+
+
+@rule(
+    code="XSQBRBENCH003",
+    message="Order models must share their folder with another model",
+    remediation="Group the model with related models.",
+)
+def order_folder_siblings(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    if not model.name.endswith("_00005"):
+        return []
+    siblings = ctx.project.tree.resources_under(model.path.parent.as_posix())
+    return [ctx.finding(subject=model)] if len(siblings) < 2 else []
+""",
+)
+_RULE_READ_MORE: str = "delta compile fell back: a custom rule read more than the changed models"
+_FAMILY_TYPE_EDIT: tuple[str, str, str] = (_CATEGORY_PIVOT_PATH, "type DOUBLE", "type VARCHAR")
+_FAMILIES_CHANGED: str = "delta compile fell back: a model's dynamic column families changed"
+_EXAMPLE_TRACKED_VARIABLE: str = "SQLBUILD_ORDERS_EXAMPLE"
+_TRACKED_VARIABLE_ADDED: str = (
+    "delta compile fell back: the set of tracked environment variables changed"
+)
 _EDITED_MODEL: str = (
     "models/sales000/intermediate/clean/batch00000/sales000__int_clean__orders_00003.sql"
 )
@@ -237,6 +346,126 @@ def test_given_stored_compile_when_compiling_an_edit_then_it_prints_what_a_full_
         )
         == test_case.expected_difference
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DeltaCompileProjectShapeTestCase(
+            description="a model with dynamic column families",
+            files=(_CATEGORY_AMOUNTS, _CATEGORY_PIVOT),
+            edits=(_BODY_EDIT,),
+            expected_delta_line=True,
+        ),
+        DeltaCompileProjectShapeTestCase(
+            description="an audit factory attached only by an unchanged model",
+            files=(_ORDER_QUALITY_FACTORY,),
+            stored_edits=(_ATTACH_ORDER_QUALITY,),
+            edits=(_BODY_EDIT,),
+            expected_delta_line=True,
+        ),
+        DeltaCompileProjectShapeTestCase(
+            description="a model-subject custom rule reading the edited model's SQL",
+            files=(_MODEL_SQL_RULE,),
+            edits=(_BODY_EDIT,),
+            expected_delta_line=True,
+        ),
+        DeltaCompileProjectShapeTestCase(
+            description="a model-subject custom rule listing models under a folder",
+            files=(_FOLDER_RULE,),
+            edits=(_BODY_EDIT,),
+            expected_delta_line=False,
+        ),
+        DeltaCompileProjectShapeTestCase(
+            description="an edit to dynamic column families compiles in full",
+            files=(_CATEGORY_AMOUNTS, _CATEGORY_PIVOT),
+            edits=(_FAMILY_TYPE_EDIT,),
+            expected_delta_line=False,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_project_shape_when_compiling_an_edit_then_it_prints_what_a_full_compile_prints(
+    test_case: DeltaCompileProjectShapeTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = tmp_path / "dense_orders"
+    write_delta_compile_project(project_dir=project_dir, model_count=_SMALL_MODEL_COUNT)
+    store_shaped_project(
+        project_dir=project_dir, files=test_case.files, stored_edits=test_case.stored_edits
+    )
+    for relative_path, old, new in test_case.edits:
+        replace_project_text(project_dir, relative_path, old, new)
+    copy: Path = tmp_path / "full_copy"
+    _ = shutil.copytree(project_dir, copy, symlinks=True)
+
+    edited: DeltaCompileOutcome = run_delta_compile(
+        project_dir=project_dir, args=_TEXT_COMPILE, env={}
+    )
+
+    assert (DELTA_COMPILE_LINE in edited.stderr) == test_case.expected_delta_line, edited.stderr
+    assert (
+        full_compile_difference(
+            outcome=edited,
+            full=run_full_compile(copy, args=_TEXT_COMPILE),
+            project_dir=project_dir,
+            full_project_dir=copy,
+        )
+        == test_case.expected_difference
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DeltaCompileVerifyTestCase(
+            description="every shape together matches a full compile",
+            files=(_CATEGORY_AMOUNTS, _CATEGORY_PIVOT, _ORDER_QUALITY_FACTORY, _MODEL_SQL_RULE),
+            stored_edits=(_ATTACH_ORDER_QUALITY,),
+            edits=(_BODY_EDIT,),
+            env={DELTA_COMPILE_VERIFY_ENV_VAR: "1"},
+            expected_stderr_line=DELTA_VERIFIED_LINE,
+        ),
+        DeltaCompileVerifyTestCase(
+            description="an edit to dynamic column families names why it fell back",
+            files=(_CATEGORY_AMOUNTS, _CATEGORY_PIVOT),
+            edits=(_FAMILY_TYPE_EDIT,),
+            env={DELTA_COMPILE_VERIFY_ENV_VAR: "1"},
+            expected_stderr_line=_FAMILIES_CHANGED,
+        ),
+        DeltaCompileVerifyTestCase(
+            description="a rule listing models under a folder names why it fell back",
+            files=(_FOLDER_RULE,),
+            edits=(_BODY_EDIT,),
+            env={DELTA_COMPILE_VERIFY_ENV_VAR: "1"},
+            expected_stderr_line=_RULE_READ_MORE,
+        ),
+        DeltaCompileVerifyTestCase(
+            description="a new tracked variable names what changed",
+            files=(),
+            edits=(_BODY_EDIT,),
+            env={DELTA_COMPILE_VERIFY_ENV_VAR: "1", _EXAMPLE_TRACKED_VARIABLE: "1"},
+            expected_stderr_line=_TRACKED_VARIABLE_ADDED,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_verified_edit_when_compiling_then_it_verifies_or_names_why_it_fell_back(
+    test_case: DeltaCompileVerifyTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = tmp_path / "dense_orders"
+    write_delta_compile_project(project_dir=project_dir, model_count=_SMALL_MODEL_COUNT)
+    store_shaped_project(
+        project_dir=project_dir, files=test_case.files, stored_edits=test_case.stored_edits
+    )
+    for relative_path, old, new in test_case.edits:
+        replace_project_text(project_dir, relative_path, old, new)
+
+    edited: DeltaCompileOutcome = run_delta_compile(
+        project_dir=project_dir, args=_TEXT_COMPILE, env=test_case.env
+    )
+
+    assert edited.returncode != MISMATCH_EXIT_CODE, edited.stderr[-2000:]
+    assert test_case.expected_stderr_line in edited.stderr.splitlines(), edited.stderr[-2000:]
 
 
 @pytest.mark.parametrize(

@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use sqlbuild_analysis::assembly::analysis_session::models::RelationTables;
+use sqlbuild_analysis::assembly::analysis_session::models::{DynamicFamily, RelationTables};
 use sqlbuild_analysis::assembly::analysis_session::types::Shapes;
 use sqlbuild_cache::project_reuse::types::ImageSections;
 use sqlbuild_rules::models::RetainedRows;
@@ -16,7 +16,7 @@ use crate::bindings::_helpers::compile_context::image_codec::{Decoder, Encoder};
 use sqlbuild_discovery::header_changes::types::HeaderKeys;
 
 /// Changes whenever the image's meaning changes, so an older image is never read.
-pub(crate) const IMAGE_FORMAT: &str = "sqlbuild-project-image-v8";
+pub(crate) const IMAGE_FORMAT: &str = "sqlbuild-project-image-v9";
 pub(crate) const GATE_SECTION: &str = "gate";
 /// The upstream kind of a model another model reads.
 const MODEL_KIND: &str = "model";
@@ -46,6 +46,7 @@ pub(crate) struct ProjectImage {
     pub(crate) lint_model_keys: Option<Vec<(String, String)>>,
     pub(crate) lint_file_keys: Option<Vec<(String, Option<String>)>>,
     pub(crate) header_keys: BTreeMap<String, HeaderKeys>,
+    pub(crate) audit_references: BTreeMap<String, Vec<String>>,
     pub(crate) rules: Option<ImageRules>,
 }
 
@@ -101,7 +102,11 @@ pub(crate) struct ImageRelations {
     pub(crate) dependency_ordered: bool,
     pub(crate) cyclic: bool,
     pub(crate) legacy_models: Vec<String>,
+    pub(crate) families: FamiliesByTable,
 }
+
+/// Each table's dynamic column families, in the order the analysis request listed them.
+pub(crate) type FamiliesByTable = Vec<(String, Vec<DynamicFamily>)>;
 
 impl From<RelationTables> for ImageRelations {
     fn from(tables: RelationTables) -> Self {
@@ -113,6 +118,7 @@ impl From<RelationTables> for ImageRelations {
             dependency_ordered: tables.dependency_ordered,
             cyclic: tables.cyclic,
             legacy_models: tables.legacy_models,
+            families: tables.families,
         }
     }
 }
@@ -127,6 +133,7 @@ impl From<ImageRelations> for RelationTables {
             dependency_ordered: relations.dependency_ordered,
             cyclic: relations.cyclic,
             legacy_models: relations.legacy_models,
+            families: relations.families,
         }
     }
 }
@@ -193,6 +200,7 @@ struct StoredFacts {
     dependency_ordered: bool,
     cyclic: bool,
     legacy_models: Vec<String>,
+    families: FamiliesByTable,
     model_subjects: Option<Vec<(String, String, Option<String>)>>,
     diagnostics: Vec<CapturedDiagnostic>,
     text_models: Option<Vec<(String, bool, i64)>>,
@@ -203,6 +211,7 @@ struct StoredFacts {
     coverage: Option<Vec<ModelCoverage>>,
     lint_model_keys: Option<Vec<(String, String)>>,
     lint_file_keys: Option<Vec<(String, Option<String>)>>,
+    audit_references: BTreeMap<String, Vec<String>>,
 }
 
 fn section<'a>(sections: &'a ImageSections, name: &str) -> Option<&'a [u8]> {
@@ -279,6 +288,39 @@ fn stored_shapes(decoder: &mut Decoder<'_>) -> Option<StoredShapes> {
             None
         };
         Some((name, shape))
+    })
+}
+
+fn put_families<'a>(encoder: &mut Encoder<'a>, families: &'a FamiliesByTable) {
+    encoder.count(families.len());
+    for (table, declared) in families {
+        encoder.string(table);
+        encoder.count(declared.len());
+        for family in declared {
+            encoder.string(&family.name);
+            encoder.string(&family.pivot_column);
+            encoder.string(&family.value_column);
+            encoder.string(&family.aggregate);
+            encoder.string(&family.data_type);
+            encoder.optional_string(family.name_pattern.as_deref());
+        }
+    }
+}
+
+fn families(decoder: &mut Decoder<'_>) -> Option<FamiliesByTable> {
+    decoder.list(|decoder| {
+        let table: String = decoder.string()?;
+        let declared: Vec<DynamicFamily> = decoder.list(|decoder| {
+            Some(DynamicFamily {
+                name: decoder.string()?,
+                pivot_column: decoder.string()?,
+                value_column: decoder.string()?,
+                aggregate: decoder.string()?,
+                data_type: decoder.string()?,
+                name_pattern: decoder.optional_string()?,
+            })
+        })?;
+        Some((table, declared))
     })
 }
 
@@ -374,6 +416,7 @@ impl StoredFacts {
         encoder.flag(self.dependency_ordered);
         encoder.flag(self.cyclic);
         encoder.strings(self.legacy_models.iter().map(String::as_str));
+        put_families(&mut encoder, &self.families);
         encoder.flag(self.model_subjects.is_some());
         if let Some(subjects) = &self.model_subjects {
             encoder.count(subjects.len());
@@ -401,6 +444,11 @@ impl StoredFacts {
             encoder.string(path);
             encoder.strings(names.iter().map(String::as_str));
         }
+        encoder.count(self.audit_references.len());
+        for (path, names) in &self.audit_references {
+            encoder.string(path);
+            encoder.strings(names.iter().map(String::as_str));
+        }
         encoder.bytes(&misc);
         Ok(encoder.finish())
     }
@@ -419,6 +467,7 @@ impl StoredFacts {
         let dependency_ordered: bool = decoder.flag()?;
         let cyclic: bool = decoder.flag()?;
         let legacy_models: Vec<String> = decoder.strings()?;
+        let families: FamiliesByTable = families(&mut decoder)?;
         let model_subjects = if decoder.flag()? {
             Some(decoder.list(|decoder| {
                 Some((
@@ -445,6 +494,10 @@ impl StoredFacts {
             .list(|decoder| Some((decoder.string()?, decoder.strings()?)))?
             .into_iter()
             .collect();
+        let audit_references: BTreeMap<String, Vec<String>> = decoder
+            .list(|decoder| Some((decoder.string()?, decoder.strings()?)))?
+            .into_iter()
+            .collect();
         let StoredMisc {
             diagnostics,
             text_models,
@@ -461,6 +514,7 @@ impl StoredFacts {
             dependency_ordered,
             cyclic,
             legacy_models,
+            families,
             model_subjects,
             diagnostics,
             text_models,
@@ -471,6 +525,7 @@ impl StoredFacts {
             coverage,
             lint_model_keys,
             lint_file_keys,
+            audit_references,
         })
     }
 }
@@ -532,6 +587,7 @@ impl ProjectImage {
             lint_model_keys: capture.lint_model_keys,
             lint_file_keys: capture.lint_file_keys,
             header_keys: capture.header_keys,
+            audit_references: capture.audit_references,
             rules: capture
                 .rules
                 .map(|rules| ImageRules::Retained(rules.retained)),
@@ -562,6 +618,7 @@ impl ProjectImage {
             dependency_ordered: relations.dependency_ordered,
             cyclic: relations.cyclic,
             legacy_models: relations.legacy_models,
+            families: relations.families,
             model_subjects: self.model_subjects,
             diagnostics: self.diagnostics,
             text_models: self.text_models,
@@ -571,6 +628,7 @@ impl ProjectImage {
             test_sources: self.test_sources,
             lint_model_keys: self.lint_model_keys,
             lint_file_keys: self.lint_file_keys,
+            audit_references: self.audit_references,
         };
         let rules: Option<RetainedRows> = self.rules.and_then(ImageRules::retained);
         let (gate, facts) = rayon::join(|| gate.encode(), || facts.encode());
@@ -624,6 +682,7 @@ impl ProjectImage {
             dependency_ordered: facts.dependency_ordered,
             cyclic: facts.cyclic,
             legacy_models: facts.legacy_models,
+            families: facts.families,
             types: Shapes::new(),
         };
         let model_shapes: Shapes = restored(facts.model_shapes, &types)?;
@@ -646,6 +705,7 @@ impl ProjectImage {
             lint_model_keys: facts.lint_model_keys,
             lint_file_keys: facts.lint_file_keys,
             header_keys: gate.header_keys,
+            audit_references: facts.audit_references,
             rules,
         })
     }

@@ -1,6 +1,6 @@
 //! Native replay of the compiler facts custom-rule evaluations recorded, for their digests.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, PyTypeMethods, Python};
@@ -148,6 +148,63 @@ pub(crate) fn is_tree_fact(key: &FactKey) -> bool {
                 && (*fact == Fact::TreePaths || matches!(arguments, Arguments::Text(_)))
         })
     })
+}
+
+/// The fact a key name reads, if it names one.
+fn fact_of(name: &str) -> Option<Fact> {
+    FACTS
+        .iter()
+        .find(|(fact_name, _, _)| *fact_name == name)
+        .map(|(_, fact, _)| *fact)
+}
+
+/// Whether a delta compiling `model_paths` reads `key` exactly as a full compile would.
+pub(crate) fn delta_safe_fact(
+    key: &FactKey,
+    model_paths: &BTreeSet<String>,
+    all_sources: bool,
+) -> bool {
+    if is_tree_fact(key) {
+        return !key
+            .first()
+            .is_some_and(|name| fact_of(name) == Some(Fact::ResourcesUnder));
+    }
+    if let [name] = key.as_slice() {
+        return all_sources
+            && FACTS
+                .iter()
+                .any(|(fact_name, fact, _)| fact_name == name && *fact == Fact::Sources);
+    }
+    let [name, path] = key.as_slice() else {
+        return false;
+    };
+    FACTS.iter().any(|(fact_name, fact, arguments)| {
+        fact_name == name
+            && *arguments == Arguments::ModelPath
+            && matches!(
+                fact,
+                Fact::SqlForModel
+                    | Fact::Declared
+                    | Fact::Inferred
+                    | Fact::Names
+                    | Fact::Enforced
+                    | Fact::Grain
+            )
+            && model_paths.contains(path)
+    })
+}
+
+/// The project file whose text `key` reads: a file's text or a model's SQL.
+pub(crate) fn read_text_path(key: &FactKey) -> Option<&str> {
+    let [name, path] = key.as_slice() else {
+        return None;
+    };
+    FACTS
+        .iter()
+        .any(|(fact_name, fact, _)| {
+            fact_name == name && matches!(fact, Fact::ReadText | Fact::SqlForModel)
+        })
+        .then_some(path.as_str())
 }
 
 /// What the facts read of one compiled model.

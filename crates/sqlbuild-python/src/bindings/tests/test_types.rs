@@ -57,3 +57,11 @@ pub(crate) struct UncompiledModelTestCase {
     pub(crate) message: &'static str,
     pub(crate) expected_uncompiled: bool,
 }
+
+/// A custom-rule fact key a delta compile holding some models may or may not read in full.
+pub(crate) struct DeltaFactTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) key: &'static [&'static str],
+    pub(crate) all_sources: bool,
+    pub(crate) expected_safe: bool,
+}
