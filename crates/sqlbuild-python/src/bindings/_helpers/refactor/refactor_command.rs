@@ -42,7 +42,7 @@ use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::refactor::offline_compile::{OfflineCompile, compile_for_refactor};
 use crate::bindings::_helpers::refactor::refactor_facts::{
-    declaration_placement, model_facts, refactor_facts,
+    declaration_placement, model_facts, refactor_facts, unit_test_rebindings,
 };
 
 const STAGING_PREFIX: &str = "sqb-refactor-";
@@ -238,7 +238,14 @@ fn plan(
             RefactorError::internal("the declaration-move host failed")
         })
     };
-    let planned: Result<RefactorPlan, RefactorError> = plan_refactor(&facts, request, &host);
+    let test_host = |path: &str, destination: &str| -> Result<Option<Vec<String>>, RefactorError> {
+        unit_test_rebindings(project, (path, destination)).map_err(|error| {
+            host_error.replace(Some(error));
+            RefactorError::internal("the unit-test scope host failed")
+        })
+    };
+    let planned: Result<RefactorPlan, RefactorError> =
+        plan_refactor(&facts, request, &host, &test_host);
     if let Some(error) = host_error.into_inner() {
         return Err(error);
     }

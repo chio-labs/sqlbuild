@@ -131,6 +131,9 @@ pub struct RefactorPlan {
     pub migrations: Vec<MigrationDeclaration>,
     pub renamed_columns: Vec<(String, String, String)>,
     pub help: Option<String>,
+    /// Files the refactoring deliberately leaves in place, and why.
+    #[serde(default)]
+    pub notes: Vec<ManualLocation>,
 }
 
 impl RefactorPlan {

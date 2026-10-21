@@ -74,6 +74,10 @@ pub fn render_refactor_json(
             JsonValue::Array(plan.blocking.iter().map(location).collect()),
         ),
         (
+            "notes",
+            JsonValue::Array(plan.notes.iter().map(location).collect()),
+        ),
+        (
             "compile",
             object(vec![
                 ("ok", JsonValue::Bool(diagnostics.is_empty())),

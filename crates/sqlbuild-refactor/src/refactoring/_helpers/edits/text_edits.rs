@@ -19,6 +19,7 @@ pub(crate) struct RefactorParts {
     pub(crate) migrations: Vec<MigrationDeclaration>,
     pub(crate) cascaded: Vec<String>,
     pub(crate) moves: Vec<(String, String)>,
+    pub(crate) notes: Vec<ManualLocation>,
 }
 
 /// The 1-based line and column of an offset.
@@ -118,6 +119,7 @@ pub(crate) fn merge_parts(parts: Vec<RefactorParts>) -> RefactorParts {
         merged.blocking.extend(part.blocking);
         merged.migrations.extend(part.migrations);
         merged.cascaded.extend(part.cascaded);
+        merged.notes.extend(part.notes);
     }
     merged
 }
@@ -188,6 +190,7 @@ pub(crate) fn build_plan(
         migrations: parts.migrations,
         renamed_columns,
         help,
+        notes: parts.notes,
     }
 }
 

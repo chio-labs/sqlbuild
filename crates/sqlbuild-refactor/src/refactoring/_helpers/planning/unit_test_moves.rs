@@ -12,6 +12,7 @@ use crate::refactoring::constants::{
 };
 use crate::refactoring::errors::RefactorError;
 use crate::refactoring::models::{ManualLocation, UnitTestFacts};
+use crate::refactoring::types::UnitTestScopeHost;
 
 /// The model's names and project-relative paths before and after the refactoring.
 pub(crate) struct FollowedModel<'a> {
@@ -20,11 +21,15 @@ pub(crate) struct FollowedModel<'a> {
 }
 
 /// Rename `TEST` names of tests that target only the model, and move files holding only them.
+///
+/// A file moves only when every macro, enum and constant it uses resolves to the same
+/// declaration from the destination folder; otherwise it is renamed in place, with a note.
 pub(crate) fn unit_test_parts(
     project_dir: &Path,
     tests: &[UnitTestFacts],
     files: &[ProjectSqlFile],
     model: &FollowedModel<'_>,
+    host: &UnitTestScopeHost<'_>,
 ) -> Result<RefactorParts, RefactorError> {
     let (old, _) = model.names;
     let mut by_path: BTreeMap<&str, Vec<&UnitTestFacts>> = BTreeMap::new();
@@ -51,7 +56,18 @@ pub(crate) fn unit_test_parts(
         if !blocks.iter().all(|test| targets_only_model(test)) {
             continue;
         }
-        let destination = test_destination(path, model);
+        let mut destination = test_destination(path, model);
+        if parent(&destination) != parent(path)
+            && let Some(reason) = kept_in_folder(path, &destination, host)?
+        {
+            destination = format!("{}/{}", parent(path), name(&destination));
+            parts.notes.push(ManualLocation {
+                path: destination.clone(),
+                line: None,
+                column: None,
+                reason,
+            });
+        }
         if destination == path {
             continue;
         }
@@ -72,6 +88,25 @@ pub(crate) fn unit_test_parts(
         parts.moves.push((path.to_owned(), destination));
     }
     Ok(parts)
+}
+
+/// Why the test file at `path` must stay in its folder instead of moving to `destination`.
+fn kept_in_folder(
+    path: &str,
+    destination: &str,
+    host: &UnitTestScopeHost<'_>,
+) -> Result<Option<String>, RefactorError> {
+    let folder = parent(destination);
+    Ok(match host(path, destination)? {
+        Some(rebound) if rebound.is_empty() => None,
+        Some(rebound) => Some(format!(
+            "kept in its folder: {} would not resolve to the same declaration from {folder}",
+            rebound.join(", ")
+        )),
+        None => Some(format!(
+            "kept in its folder: its declarations could not be checked from {folder}"
+        )),
+    })
 }
 
 /// Where a test file of the model belongs after the refactoring.

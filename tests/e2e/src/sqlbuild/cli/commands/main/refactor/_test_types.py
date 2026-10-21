@@ -148,3 +148,12 @@ class FollowedUnitTestDryRunE2ETestCase:
     command: tuple[str, ...]
     expected_status: str
     expected_path: str
+
+
+@dataclass(frozen=True)
+class ScopedUnitTestMoveE2ETestCase:
+    description: str
+    extra_files: dict[str, str]
+    amount_sql: str
+    expected_path: str
+    expected_note: str | None

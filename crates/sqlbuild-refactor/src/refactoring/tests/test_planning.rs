@@ -349,6 +349,7 @@ fn given_unit_tests_of_model_when_renaming_or_moving_then_tests_follow() -> Resu
         FollowedUnitTestTestCase {
             description: "a rename renames owned files and TEST names in place",
             request: request(RefactorOperation::RenameModel, "order_lines", None),
+            rebound: &["macro:mock_orders"],
             expected_changes: followed_test_changes(&[
                 (
                     "tests/unit/marts/test_orders__keeps_rows.sql -> tests/unit/marts/test_order_lines__keeps_rows.sql",
@@ -359,23 +360,59 @@ fn given_unit_tests_of_model_when_renaming_or_moving_then_tests_follow() -> Resu
                     &["\"order_lines__flat_layout\""],
                 ),
             ]),
+            expected_notes: &[],
         },
         FollowedUnitTestTestCase {
             description: "a move takes mirrored tests to the mirrored folder and leaves others",
             request: request(RefactorOperation::MoveModel, "", Some("models/finance/")),
+            rebound: &[],
             expected_changes: followed_test_changes(&[(
                 "tests/unit/marts/test_orders__keeps_rows.sql -> tests/unit/finance/test_orders__keeps_rows.sql",
                 &[] as &[&str],
             )]),
+            expected_notes: &[],
+        },
+        FollowedUnitTestTestCase {
+            description: "a move leaves a test whose declarations would rebind in its folder",
+            request: request(RefactorOperation::MoveModel, "", Some("models/finance/")),
+            rebound: &["macro:mock_orders"],
+            expected_changes: Vec::new(),
+            expected_notes: &[
+                "tests/unit/marts/test_orders__keeps_rows.sql: kept in its folder: macro:mock_orders would not resolve to the same declaration from tests/unit/finance",
+            ],
+        },
+        FollowedUnitTestTestCase {
+            description: "a move with a new name renames a kept test in its folder",
+            request: request(
+                RefactorOperation::MoveModel,
+                "",
+                Some("models/finance/order_lines.sql"),
+            ),
+            rebound: &["enum:order_status", "macro:mock_orders"],
+            expected_changes: followed_test_changes(&[
+                (
+                    "tests/unit/marts/test_orders__keeps_rows.sql -> tests/unit/marts/test_order_lines__keeps_rows.sql",
+                    &["\"order_lines__keeps_rows\""] as &[&str],
+                ),
+                (
+                    "tests/unit/test_orders.sql -> tests/unit/test_order_lines.sql",
+                    &["\"order_lines__flat_layout\""],
+                ),
+            ]),
+            expected_notes: &[
+                "tests/unit/marts/test_order_lines__keeps_rows.sql: kept in its folder: enum:order_status, macro:mock_orders would not resolve to the same declaration from tests/unit/finance",
+            ],
         },
     ];
     for test_case in test_cases {
+        let (changes, notes) =
+            followed_unit_tests(&test_case.request, tests, test_case.rebound)?;
         assert_eq!(
-            followed_unit_tests(&test_case.request, tests)?,
-            test_case.expected_changes,
+            changes, test_case.expected_changes,
             "{}",
             test_case.description
         );
+        assert_eq!(notes, test_case.expected_notes, "{}", test_case.description);
     }
     Ok(())
 }
