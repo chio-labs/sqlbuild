@@ -519,7 +519,7 @@ fn select_star(
             );
         }
         for (select, star) in stars {
-            if dynamic_output_star {
+            if dynamic_output_star || dynamic_contracts::is_dynamic_pivot_star(select) {
                 continue;
             }
             let lone = select.items.len() == 1;
