@@ -1320,7 +1320,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-project"
-version = "0.164.2"
+version = "0.164.3"
 dependencies = [
  "sqlbuild-analysis",
  "sqlbuild-core",
