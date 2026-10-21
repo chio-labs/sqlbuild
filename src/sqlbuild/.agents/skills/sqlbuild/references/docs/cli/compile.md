@@ -163,14 +163,20 @@ The compile runs in full instead, decided before any compile work starts, when:
 - An edited model changes what it references, or changes a header setting other than its
   `description`, `columns`, `dynamic_columns`, `model_schema`, `audits`, `contract`, or a switch
   between `view` and `table` materialization.
-- A custom rule reads something the edit changed, such as a model's contract or materialization.
+- A project-subject custom rule reads something the edit changed, or a model-subject custom rule
+  must run again for a model the edit did not change, for example because it reads the text of an
+  edited upstream file.
 - The stored compile reported errors or warnings other than rule findings in model or SQL test
   files the edit did not change.
 - The stored compile used the other output format (`--json` or text), or has no project image.
 
 A few edits are found to need a full compile only part-way through, for example when a macro's
-arguments change which models or sources it reads, or when the edit changes the shape of so many
-models that a full compile is cheaper.
+arguments change which models or sources it reads, when the edit changes a model's
+`dynamic_columns` families, or when the edit changes the shape of so many models that a full
+compile is cheaper. A model-subject custom rule that must run again for an edited model runs in the
+delta compile when it reads only that model's SQL, columns, contract and grain, project files, and
+the source list; if it reads anything else, such as the model's dependencies, the compile runs in
+full.
 
 Otherwise, an edit runs the whole compile again, and a few caches under `target/cache/` shorten
 it: every model, test, and audit is rendered again, and contracts and semantic validation run for

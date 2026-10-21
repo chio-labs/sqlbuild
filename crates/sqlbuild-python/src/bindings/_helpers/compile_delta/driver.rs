@@ -34,6 +34,7 @@ use crate::bindings::_helpers::compile_driver::command::{
 };
 use crate::bindings::_helpers::compile_outputs::reuse::NativeReuseAttempt;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::rules::custom_evaluation::stored_custom_rule_refusal;
 use sqlbuild_discovery::header_changes::main::custom_rule_reads::custom_rule_reads;
 use sqlbuild_discovery::header_changes::main::header_change::header_change;
 use sqlbuild_discovery::header_changes::models::HeaderChange;
@@ -57,6 +58,8 @@ const UNKNOWN_SOURCE: &str = "unknown source";
 const SOURCE_KIND: &str = "source";
 /// The upstream kind of a model a model reads.
 const MODEL_KIND: &str = "model";
+/// The custom-rule fact listing every project source.
+const PROJECT_SOURCES_FACT: &str = "project.sources";
 const TESTS_ROOT: &str = "tests/";
 const STDERR: &str = "stderr";
 const SQL_SUFFIX: &str = ".sql";
@@ -321,6 +324,7 @@ fn lent_injection(
             .collect(),
         lint_model_keys: image.lint_model_keys.take(),
         lint_file_keys: image.lint_file_keys.take(),
+        audit_references: image.audit_references.clone(),
         ..DeltaInjection::default()
     };
     (image, injection)
@@ -588,6 +592,17 @@ fn prepared(
         Ok(found) => found,
         Err(reason) => return Ok(Err(reason)),
     };
+    let all_sources: bool = gate
+        .fact_digests
+        .iter()
+        .any(|(key, _)| lists_all_sources(key));
+    if let Some(reason) = stored_custom_rule_refusal(
+        &project_dir,
+        (&rerun.model_paths, &rerun.changed),
+        all_sources,
+    ) {
+        return Ok(Err(reason.to_owned()));
+    }
     let limit: usize = MAX_RERUN_MODELS.max(gate.models.len() * MAX_RERUN_PERCENT / 100);
     if rerun.models.len() > limit {
         return Ok(Err(TOO_MANY_MODELS.to_owned()));
@@ -647,7 +662,11 @@ fn rounds<'py>(
         {
             return stopped("the stored compile reports problems in files the edit leaves alone");
         }
-        rerun.sources = sources_read(&image, &rerun);
+        rerun.sources = if reads_all_sources(&injection) {
+            None
+        } else {
+            sources_read(&image, &rerun)
+        };
         let injection_for_round: DeltaInjection =
             for_rerun(injection, &rerun, rerun.sources.clone());
         let (outcome, back) = round(request, attempt, (injection_for_round, &rerun))?;
@@ -703,6 +722,19 @@ fn rounds<'py>(
         rerun = rerun.with_models(&image, added);
     }
     stopped("changed shapes reach too far")
+}
+
+/// Whether a custom rule read the project's whole source list, which a delta must then keep.
+fn reads_all_sources(injection: &DeltaInjection) -> bool {
+    injection
+        .fact_digests
+        .keys()
+        .any(|key| lists_all_sources(key))
+}
+
+/// Whether a custom-rule fact key is the project's whole source list.
+fn lists_all_sources(key: &[String]) -> bool {
+    matches!(key, [name] if name == PROJECT_SOURCES_FACT)
 }
 
 /// The sources the rerun models, functions, audits and rerun SQL tests read; `None` for all.
@@ -1162,6 +1194,10 @@ fn patched_image(base: ProjectImage, rerun: &Rerun, capture: ImageCapture) -> Pr
         image.coverage = capture.coverage;
     }
     image.header_keys.extend(capture.header_keys);
+    image
+        .audit_references
+        .retain(|path, _| !rerun.model_paths.contains(path));
+    image.audit_references.extend(capture.audit_references);
     let mut pinned: BTreeSet<String> = std::mem::take(&mut image.pinned_sources)
         .into_iter()
         .collect();
