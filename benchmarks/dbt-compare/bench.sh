@@ -16,7 +16,8 @@
 #   DBT_CORE  dbt Core executable (default: dbt)
 #   DBT_V2    dbt v2 executable; the v2_* variants are skipped when unset
 #   PYTHON    Python used for the edit helper (default: python3)
-#   LOAD_MAX  wait until the 1-minute load average is below this before each timed run (default 2)
+#   LOAD_MAX  wait until the 1-minute load average is below this integer before each timed run
+#             (default 2)
 #   LOAD_WAIT_MAX  give up waiting after this many seconds and run anyway (default 1800)
 #   SCENARIOS which of warm, edit1 and edit100 to run after cold (default: all three)
 set -u
@@ -64,9 +65,15 @@ fi
 
 load1() { cut -d' ' -f1 /proc/loadavg; }
 
+above_limit() {
+  local load
+  read -r load _ </proc/loadavg
+  [ "${load%.*}" -ge "$LOAD_MAX" ]
+}
+
 wait_quiet() {
   local waited=0
-  while awk -v l="$(load1)" -v m="$LOAD_MAX" 'BEGIN { exit !(l >= m) }'; do
+  while above_limit; do
     if [ "$waited" -ge "$LOAD_WAIT_MAX" ]; then
       echo "load gate timed out at $(load1) after ${waited}s" >>"$OUT/uptime.log"
       return
@@ -74,6 +81,9 @@ wait_quiet() {
     sleep 15
     waited=$((waited + 15))
   done
+  if [ "$waited" -gt 0 ]; then
+    echo "waited ${waited}s for load below $LOAD_MAX" >>"$OUT/uptime.log"
+  fi
 }
 
 measure() {
