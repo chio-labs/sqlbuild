@@ -1276,3 +1276,13 @@ class SetOperationStarRuleTestCase:
     model_sql: str
     expected_codes: tuple[str, ...]
     expected_distinct_lines: int
+
+
+@dataclass(frozen=True)
+class CompiledViewFallbacksTestCase:
+    """One command run over a natively compiled project."""
+
+    description: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_fallbacks: int
