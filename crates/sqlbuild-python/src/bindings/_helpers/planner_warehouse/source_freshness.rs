@@ -3,6 +3,7 @@
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, within};
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::resource_reads;
 use crate::bindings::_helpers::freshness::planning::{
     build_direct_source_freshness_planning_result, build_direct_source_freshness_propagation_result,
 };
@@ -69,7 +70,7 @@ pub(crate) fn source_freshness_unknown_warnings<'py>(
 
 fn state_database<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     for node in destination_nodes(project)? {
-        let database = native_field(&native_field(&node, "destination")?, "database")?;
+        let database = native_field(&resource_reads::destination(&node)?, "database")?;
         if !database.is_none() {
             return Ok(database);
         }
@@ -83,7 +84,7 @@ fn state_schemas(
 ) -> PyResult<BTreeSet<String>> {
     let mut schemas: BTreeSet<_> = BTreeSet::new();
     for node in destination_nodes(project)? {
-        let schema = native_field(&native_field(&node, "destination")?, "schema")?;
+        let schema = native_field(&resource_reads::destination(&node)?, "schema")?;
         if !schema.is_none() {
             schemas.insert(schema.extract()?);
         }

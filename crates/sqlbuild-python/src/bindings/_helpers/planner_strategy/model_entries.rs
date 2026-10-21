@@ -18,6 +18,7 @@ use sqlbuild_model_config::model_validation::constants::PHYSICAL_STORAGE_KEYS;
 
 use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::resource_reads;
 use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
 use crate::bindings::_helpers::model_config::typed_config::{
     ConfigValues, config_cursor_bound, config_flag, config_integer_object, config_text_object,
@@ -102,7 +103,7 @@ fn schema_columns<'py>(
     typed_only: bool,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = model.py();
-    let entry: Bound<'py, PyAny> = native_field(model, "schema_entry")?;
+    let entry: Bound<'py, PyAny> = resource_reads::schema_entry(model)?;
     if entry.is_none() {
         return Ok(PyTuple::empty(py));
     }
