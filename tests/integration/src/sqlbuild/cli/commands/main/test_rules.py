@@ -37,6 +37,7 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     NumericRangeDecisionIntegrationTestCase,
     RulePassIntegrationTestCase,
     RulesIntegrationTestCase,
+    SetOperationStarRuleTestCase,
     SqlRuleCacheSequenceTestCase,
     TypedContractRuleIntegrationTestCase,
 )
@@ -3231,3 +3232,45 @@ def test_given_custom_rule_outcome_when_compiling_then_result_and_cleanup_are_re
     assert exit_code == test_case.expected_exit_code
     assert tuple(item["message"] for item in output["diagnostics"]) == test_case.expected_messages
     assert not tuple((tmp_path / "target" / "rules-cache" / "host-inputs").iterdir())
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SetOperationStarRuleTestCase(
+            description="unaliased and aliased derived-table branches",
+            model_sql=(
+                "MODEL (description 'Test model order_ids.', materialized view);\n"
+                'SELECT * FROM (SELECT order_id FROM __ref("orders"))\n'
+                "UNION ALL\n"
+                'SELECT * FROM (SELECT order_id FROM __ref("orders")) AS s\n'
+            ),
+            expected_codes=("SQBRMODEL102", "SQBRMODEL102"),
+            expected_distinct_lines=2,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_star_in_set_operation_branches_when_compiling_then_each_branch_is_reported(
+    test_case: SetOperationStarRuleTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRMODEL102"]\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models" / "orders.sql").write_text(
+        "MODEL (description 'Test model orders.', materialized view);\nSELECT 1 AS order_id\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "models" / "order_ids.sql").write_text(test_case.model_sql, encoding="utf-8")
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+    result: dict[str, object] = json.loads(capsys.readouterr().out)
+    diagnostics: list[dict[str, object]] = cast(list[dict[str, object]], result["diagnostics"])
+
+    assert exit_code == 1
+    assert tuple(item["code"] for item in diagnostics) == test_case.expected_codes
+    assert len({item["line"] for item in diagnostics}) == test_case.expected_distinct_lines

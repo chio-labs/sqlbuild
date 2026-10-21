@@ -77,6 +77,18 @@ fn given_dialect_sql_when_reading_query_facts_then_findings_match_the_authored_s
             expected_faults: &[("SQBRMODEL102", 2, 8, "SELECT * is allowed only")],
         },
         QueryFactsTestCase {
+            description: "stars in plain set-operation branches are each reported",
+            dialect: "duckdb",
+            query_sql: "WITH imported AS (SELECT * FROM __ref(\"orders\"))\nSELECT * FROM (SELECT order_id FROM imported)\nUNION ALL\nSELECT * FROM (SELECT order_id FROM imported) AS s",
+            select: &["SQBRMODEL102"],
+            enum_columns: &[],
+            columns: json!([]),
+            expected_faults: &[
+                ("SQBRMODEL102", 2, 8, "SELECT * is allowed only"),
+                ("SQBRMODEL102", 4, 8, "SELECT * is allowed only"),
+            ],
+        },
+        QueryFactsTestCase {
             description: "a comparison of two literals keeps its source position",
             dialect: "duckdb",
             query_sql: "SELECT order_id FROM orders WHERE 3 < 7",
