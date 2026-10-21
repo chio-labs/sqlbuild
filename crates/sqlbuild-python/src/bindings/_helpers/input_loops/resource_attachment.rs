@@ -9,7 +9,6 @@ use crate::bindings::_helpers::compiled_project::attachment_inputs::{
     ResourceAttachment, ScenarioRow, SourceRow, SourceSettings, SqlTestSettings, TestFileRow,
 };
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
-use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::compiled_views::audit_views::NativeAuditInput;
 use crate::bindings::_helpers::compiled_views::function_views::{
     AttachedFunction, NativeFunctionInput,
@@ -22,6 +21,7 @@ use crate::bindings::_helpers::input_loops::audit_loop::{
 use crate::bindings::_helpers::input_loops::model_loop::NativeModelLoop;
 use crate::bindings::_helpers::input_loops::resource_diagnostics::resource_diagnostics;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use sqlbuild_project::models::ReferenceRow;
 
 const RELATIVE_PATH_ATTRIBUTE: &str = "relative_path";
 const SOURCE_OWNER: &str = "source";

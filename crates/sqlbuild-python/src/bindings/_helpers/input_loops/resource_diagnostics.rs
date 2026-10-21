@@ -25,10 +25,10 @@ use crate::bindings::_helpers::compiled_project::attachment_inputs::{
     ScenarioDescriptionRow,
 };
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
-use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::compiled_views::seed_views::SeedParts;
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use sqlbuild_project::models::ReferenceRow;
 
 const MISSING_DESCRIPTION_CODE: &str = "P010";
 const CURSOR_WITHOUT_INPUTS_CODE: &str = "P011";

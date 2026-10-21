@@ -34,8 +34,6 @@ use crate::bindings::_helpers::compile_context::delta::record_source_reads;
 use crate::bindings::_helpers::compiled_project::attachment_inputs::{
     FunctionRow, FunctionSettings,
 };
-use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
-use crate::bindings::_helpers::compiled_views::compiled_model_view::DestinationFact;
 use crate::bindings::_helpers::compiled_views::function_views::{
     AttachedFunction, NamedTypeRow, PythonRuntime,
 };
@@ -48,6 +46,8 @@ use crate::bindings::_helpers::input_loops::source_loop::{
     AuthoredExpansion, expanded_authored_sql, expanded_template, parse_checked, scoped_declarations,
 };
 use crate::bindings::_helpers::model_config::model_validator::NativeModelValidator;
+use sqlbuild_project::models::DestinationFact;
+use sqlbuild_project::models::ReferenceRow;
 
 const PRESERVE_TARGET_VALUE: &str = "preserve";
 const GENERIC_DIALECT: &str = "generic";

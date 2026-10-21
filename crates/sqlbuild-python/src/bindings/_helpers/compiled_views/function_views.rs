@@ -7,15 +7,16 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{FromPyObject, IntoPyObjectExt, pyclass, pymethods};
 
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
-use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::compiled_views::compiled_model_view::{
-    DestinationFact, defaulted_destination, object_key, relation_location,
+    defaulted_destination, object_key, relation_location,
 };
 use crate::bindings::_helpers::compiled_views::model_input_view::{
     InputViewClasses, reference_tuple, view_classes,
 };
 use crate::bindings::_helpers::graph::project_graph::ResourceRow;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use sqlbuild_project::models::DestinationFact;
+use sqlbuild_project::models::ReferenceRow;
 
 const TABLE_FUNCTION_TYPE: &str = "table_fn";
 const SCALAR_FUNCTION_TYPE: &str = "udf";

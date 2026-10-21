@@ -6,7 +6,7 @@ use sqlbuild_analysis::compiled_project::main::header_metadata_keys::is_header_m
 use sqlbuild_analysis::compiled_project::models::{AnalysisOverride, ModelReferenceFact};
 use sqlbuild_sqltext::sql_references::models::SqlReference;
 
-use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
+use sqlbuild_project::models::ReferenceRow;
 
 const SQL_ANALYSIS_KEY: &str = "sql_analysis";
 const SQL_VALIDATION_KEY: &str = "sql_validation";

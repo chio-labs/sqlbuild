@@ -17,9 +17,8 @@ use crate::bindings::_helpers::compiled_project::project::{
 use crate::bindings::_helpers::compiled_project::project::{
     DeclarationPy, config_values, declarations,
 };
-use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::compiled_views::model_input_view::{
-    ExpansionRecord, InputProjections, ModelInputRecord, SchemaRecord,
+    InputProjections, ModelInputRecord, SchemaRecord,
 };
 use crate::bindings::_helpers::discovery::model_file_record::{ModelFileTexts, NativeModelFile};
 use crate::bindings::_helpers::input_loops::model_loop_header::AttachedHeader;
@@ -29,6 +28,8 @@ use crate::bindings::_helpers::render::declaration_expansion::{ExpandedDeclarati
 use crate::bindings::_helpers::render::macro_call_rows::{SpanRow, span_row};
 use crate::bindings::_helpers::render::macro_expansion::ExpansionOutput;
 use crate::bindings::_helpers::sqltext::declaration_references::ScannedReference;
+use sqlbuild_project::models::ExpansionRecord;
+use sqlbuild_project::models::ReferenceRow;
 
 const HEADER_KEYS_ATTRIBUTE: &str = "model_header_keys";
 const LAYER_SCHEMA_ATTRIBUTE: &str = "layer_schema";

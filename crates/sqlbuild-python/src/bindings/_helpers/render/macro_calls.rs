@@ -13,7 +13,9 @@ use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::render::macro_call_memo::MacroCallMemo;
-use crate::bindings::_helpers::render::macro_call_rows::{SiteRow, SpanRow, site_row, span_row};
+use crate::bindings::_helpers::render::macro_call_rows::{
+    SiteRow, SpanTuple, site_row, span_row, span_tuple,
+};
 use crate::bindings::_helpers::render::macro_expansion::raised;
 use crate::bindings::types::CompilerDetach;
 
@@ -79,13 +81,19 @@ pub(crate) fn splice_macro_calls(
     sql: &str,
     sites: Vec<(usize, usize)>,
     outputs: Vec<String>,
-) -> PyResult<(String, Vec<SpanRow>)> {
+) -> PyResult<(String, Vec<SpanTuple>)> {
     let spliced = py
         .compiler_detach(|| Ok(splice_calls(sql, &sites, &outputs)))
         .map_err(compiler_error)?;
     let (rendered, spans) =
         spliced.ok_or_else(|| PyValueError::new_err("macro call sites do not fit the SQL"))?;
-    Ok((rendered, spans.into_iter().map(span_row).collect()))
+    Ok((
+        rendered,
+        spans
+            .into_iter()
+            .map(|span| span_tuple(&span_row(span)))
+            .collect(),
+    ))
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

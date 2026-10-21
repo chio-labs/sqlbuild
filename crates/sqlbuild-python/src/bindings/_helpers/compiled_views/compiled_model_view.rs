@@ -1,5 +1,6 @@
 //! A compiled model, read from the native compiled project that owns it.
 
+use sqlbuild_project::models::{DestinationFact, ModelMetadataTexts};
 use std::sync::Arc;
 
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
@@ -15,7 +16,7 @@ use sqlbuild_analysis::compiled_project::models::{
 };
 
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
-use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
+use crate::bindings::_helpers::compiled_project::rows::{ReferenceTuple, reference_row_tuple};
 use crate::bindings::_helpers::compiled_views::compiled_model_analysis::{
     AnalysisRecord, ProofArgument, SessionArgument, analysis_record,
 };
@@ -87,17 +88,6 @@ pub(crate) struct CompiledViewClasses<'py> {
     pub(crate) family_proof: Bound<'py, PyAny>,
 }
 
-/// A compiled relation location's parts.
-#[derive(Clone)]
-pub(crate) struct DestinationFact {
-    pub(crate) database: Option<String>,
-    pub(crate) schema: Option<String>,
-    pub(crate) name: String,
-    pub(crate) qualified_name: Option<String>,
-    pub(crate) logical_schema: Option<String>,
-    pub(crate) logical_database: Option<String>,
-}
-
 /// What assembly and the semantic checks finished for one compiled model.
 pub(crate) struct CompiledRecord {
     /// `(resource type, name)` of each dependency.
@@ -159,14 +149,6 @@ impl Default for ViewProjections {
             inferred_columns: PyOnceLock::new(),
         }
     }
-}
-
-/// A model's name, compiled query, authored file, and whether it calls a function.
-pub(crate) struct ModelMetadataTexts {
-    pub(crate) name: String,
-    pub(crate) query_sql: String,
-    pub(crate) authored_sql: String,
-    pub(crate) calls_functions: bool,
 }
 
 /// Deps, session analysis, failed analysis's columns, standalone proof, and macro deps.
@@ -601,8 +583,15 @@ impl NativeCompiledModel {
 
     /// Each reference as `(kind, name, package, call argument count)`.
     #[getter]
-    pub(crate) fn reference_rows(&self, py: Python<'_>) -> PyResult<Vec<ReferenceRow>> {
-        self.read(py, |record, _| Ok(record.references.clone()))
+    pub(crate) fn reference_rows(&self, py: Python<'_>) -> PyResult<Vec<ReferenceTuple>> {
+        self.read(py, |record, _| {
+            Ok(record
+                .references
+                .iter()
+                .cloned()
+                .map(reference_row_tuple)
+                .collect())
+        })
     }
 
     /// The model's declared key facts, for deriving its unique keys.

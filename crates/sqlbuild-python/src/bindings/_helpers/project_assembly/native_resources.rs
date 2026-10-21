@@ -19,7 +19,6 @@ use sqlbuild_model_config::templates::models::Scalar;
 use crate::bindings::_helpers::authored_values::project_vars::project_var_text;
 use crate::bindings::_helpers::boundary::panics::{NativeCompilerError, compiler_error};
 use crate::bindings::_helpers::boundary::python_calls::{imported, keywords};
-use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::compiled_views::model_input_view::input_reference_rows;
 use crate::bindings::_helpers::model_config::template_data::record_reads;
 use crate::bindings::_helpers::project_assembly::models::{
@@ -31,6 +30,7 @@ use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::types::CompilerDetach;
+use sqlbuild_project::models::ReferenceRow;
 
 const OS_MODULE: &str = "os";
 const PROJECT_ASSEMBLY_CONTEXT: &str = "native project assembly";

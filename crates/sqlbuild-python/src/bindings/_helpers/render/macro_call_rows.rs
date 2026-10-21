@@ -16,37 +16,37 @@ positional_record! {
         typed_reference_text: bool,
     }
 }
+/// One substitution span: source start and end, output start and end.
+pub(crate) type SpanRow = CharSpan;
+
 positional_record! {
-    extract, into;
-    /// One substitution span: source start and end, output start and end.
-    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-    pub(crate) struct SpanRow {
-        pub(crate) source_start: usize,
-        pub(crate) source_end: usize,
-        pub(crate) output_start: usize,
-        pub(crate) output_end: usize,
+    into;
+    /// A span as the tuple Python reads: source start and end, output start and end.
+    pub(crate) struct SpanTuple {
+        source_start: usize,
+        source_end: usize,
+        output_start: usize,
+        output_end: usize,
     }
 }
 
-impl From<CharSpan> for SpanRow {
-    fn from(span: CharSpan) -> Self {
-        Self {
-            source_start: span.source_start,
-            source_end: span.source_end,
-            output_start: span.output_start,
-            output_end: span.output_end,
-        }
+/// A span as the tuple Python reads.
+pub(crate) fn span_tuple(span: &SpanRow) -> SpanTuple {
+    SpanTuple {
+        source_start: span.source_start,
+        source_end: span.source_end,
+        output_start: span.output_start,
+        output_end: span.output_end,
     }
 }
 
-impl From<SpanRow> for Expansion {
-    fn from(span: SpanRow) -> Self {
-        Self {
-            source_start: span.source_start,
-            source_end: span.source_end,
-            output_start: span.output_start,
-            output_end: span.output_end,
-        }
+/// A span as the expansion semantic validation maps offsets through.
+pub(crate) fn span_expansion(span: SpanRow) -> Expansion {
+    Expansion {
+        source_start: span.source_start,
+        source_end: span.source_end,
+        output_start: span.output_start,
+        output_end: span.output_end,
     }
 }
 

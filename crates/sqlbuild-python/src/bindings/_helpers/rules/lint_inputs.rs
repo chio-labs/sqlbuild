@@ -7,7 +7,7 @@ use std::sync::Arc;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 
 use crate::bindings::_helpers::compiled_views::model_input_view::{
-    ExpansionRecord, ModelInputRecord, NativeModelInput,
+    ModelInputRecord, NativeModelInput,
 };
 use crate::bindings::_helpers::compiled_views::project_view::NativeProjectView;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -15,6 +15,7 @@ use crate::bindings::_helpers::render::macro_call_rows::SpanRow;
 use crate::bindings::_helpers::rules::lint_pipeline::{
     CompiledExpansion, CompiledSource, span_pass,
 };
+use sqlbuild_project::models::ExpansionRecord;
 
 const FILE_PATH_ATTRIBUTE: &str = "file_path";
 

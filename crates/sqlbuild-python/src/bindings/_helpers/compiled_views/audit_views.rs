@@ -7,7 +7,6 @@ use pyo3::types::PyTuple;
 use pyo3::{FromPyObject, IntoPyObjectExt, pyclass, pymethods};
 
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
-use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::compiled_views::compiled_model_view::object_key;
 use crate::bindings::_helpers::compiled_views::function_views::ObjectKeyRow;
 use crate::bindings::_helpers::compiled_views::model_input_view::{
@@ -16,6 +15,7 @@ use crate::bindings::_helpers::compiled_views::model_input_view::{
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::scopes::scope_report_objects::json_to_python;
 use sqlbuild_core::json::models::JsonValue;
+use sqlbuild_project::models::ReferenceRow;
 
 const AUDIT_RESOURCE: &str = "audit";
 const AUDIT_CLASSES: &str = "audits";

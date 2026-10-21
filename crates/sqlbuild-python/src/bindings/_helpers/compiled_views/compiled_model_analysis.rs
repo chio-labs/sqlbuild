@@ -24,6 +24,7 @@ use crate::bindings::_helpers::compiled_views::compiled_model_view::{
 use crate::bindings::_helpers::compiled_views::model_input_view::ModelInputRecord;
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::lineage::lineage_facts::{confidence_member, transform_kind_member};
+use crate::bindings::_helpers::render::macro_call_rows::span_expansion;
 
 const COMPILE_PHASE: &str = "compile";
 const MODEL_RESOURCE: &str = "model";
@@ -168,13 +169,13 @@ fn located(input: &ModelInputRecord, outcome: &ModelOutcome) -> PyResult<Vec<Loc
             .declaration_spans
             .iter()
             .copied()
-            .map(Expansion::from)
+            .map(span_expansion)
             .collect(),
         expansion
             .macro_spans
             .iter()
             .copied()
-            .map(Expansion::from)
+            .map(span_expansion)
             .collect(),
     ];
     let source: BindingSource<'_> = BindingSource {

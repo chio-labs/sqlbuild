@@ -27,7 +27,6 @@ use crate::bindings::_helpers::compile_context::delta::record_source_reads;
 use crate::bindings::_helpers::compiled_project::attachment_inputs::{
     AuditBlockRow, AuditFileRow, AuditSettings,
 };
-use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::compiled_views::audit_views::{AttachedAudit, AttachedTarget};
 use crate::bindings::_helpers::input_loops::model_loop::{
     LoopContext, NativeModelLoop, compile_error, helped_compile_error,
@@ -46,6 +45,7 @@ use crate::bindings::_helpers::model_config::header_metadata::thresholds;
 use crate::bindings::_helpers::model_config::model_validator::NativeModelValidator;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::result_output::integration_values::json_value;
+use sqlbuild_project::models::ReferenceRow;
 
 const THRESHOLDS_KEY: &str = "thresholds";
 const MINIMUM_SAMPLES_KEY: &str = "minimum_samples";

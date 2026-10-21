@@ -1321,6 +1321,9 @@ dependencies = [
 [[package]]
 name = "sqlbuild-project"
 version = "0.164.1"
+dependencies = [
+ "sqlbuild-sqltext",
+]
 
 [[package]]
 name = "sqlbuild-pysource"

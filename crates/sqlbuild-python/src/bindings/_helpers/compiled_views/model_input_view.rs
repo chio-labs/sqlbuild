@@ -1,5 +1,6 @@
 //! A model's compile input, read from the native compiled project that owns it.
 
+use sqlbuild_project::models::ExpansionRecord;
 use std::sync::Arc;
 
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
@@ -9,7 +10,7 @@ use pyo3::{FromPyObject, IntoPyObject, pyclass, pymethods};
 use sqlbuild_analysis::compiled_project::models::SchemaColumnFact;
 
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
-use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
+use crate::bindings::_helpers::compiled_project::rows::{ReferenceTuple, reference_row_tuple};
 use crate::bindings::_helpers::compiled_project::schema_facts::python_column_facts;
 use crate::bindings::_helpers::compiled_views::compiled_model_view::{
     CompiledArguments, CompiledRecord, CompiledViewClasses, NativeCompiledModel, compiled_record,
@@ -18,7 +19,8 @@ use crate::bindings::_helpers::compiled_views::relation_keys::{RelationKeyRow, r
 use crate::bindings::_helpers::discovery::model_file_record::{NativeModelFile, projected_text};
 use crate::bindings::_helpers::model_config::header_metadata::HeaderColumns;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::render::macro_call_rows::SpanRow;
+use crate::bindings::_helpers::render::macro_call_rows::{SpanRow, span_tuple};
+use sqlbuild_project::models::ReferenceRow;
 
 const MODEL_RELATION_KIND: &str = "ref";
 
@@ -42,19 +44,6 @@ pub(crate) struct SchemaRecord {
     pub(crate) dynamic_columns: Py<PyTuple>,
     pub(crate) type_enforcement: bool,
     pub(crate) model_schema: Option<String>,
-}
-
-/// The expansion passes of a model's query, from authored text to expanded SQL.
-pub(crate) struct ExpansionRecord {
-    /// The authored query below the header.
-    pub(crate) authored_sql: Arc<str>,
-    /// The declaration- and macro-expanded SQL before canonicalisation.
-    pub(crate) expanded_sql: Arc<str>,
-    pub(crate) interpolation_spans: Vec<SpanRow>,
-    pub(crate) declaration_spans: Vec<SpanRow>,
-    pub(crate) macro_spans: Vec<SpanRow>,
-    /// Whether interpolation left the authored query unchanged.
-    pub(crate) authored: bool,
 }
 
 /// What the model loop finished for one model beyond its facts; handles carry user values.
@@ -208,8 +197,15 @@ impl NativeModelInput {
 
     /// Each reference as `(kind, name, package, call argument count)`.
     #[getter]
-    pub(crate) fn reference_rows(&self, py: Python<'_>) -> PyResult<Vec<ReferenceRow>> {
-        self.read(py, |record, _| Ok(record.references.clone()))
+    pub(crate) fn reference_rows(&self, py: Python<'_>) -> PyResult<Vec<ReferenceTuple>> {
+        self.read(py, |record, _| {
+            Ok(record
+                .references
+                .iter()
+                .cloned()
+                .map(reference_row_tuple)
+                .collect())
+        })
     }
 
     /// The model's declared key facts, for deriving its unique keys.
@@ -464,7 +460,11 @@ fn expansion_object(
     for spans in passes {
         let mut span_objects: Vec<Bound<'_, PyAny>> = Vec::with_capacity(spans.len());
         for span in spans.iter() {
-            span_objects.push(classes.expansion_span.call1(span.into_pyobject(py)?)?);
+            span_objects.push(
+                classes
+                    .expansion_span
+                    .call1(span_tuple(span).into_pyobject(py)?)?,
+            );
         }
         pass_objects.push(PyTuple::new(py, span_objects)?);
     }
