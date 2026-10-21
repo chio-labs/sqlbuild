@@ -2,7 +2,9 @@ use serde_json::{Value, json};
 
 use std::collections::BTreeMap;
 
-use crate::sql_lint::_helpers::token_layout::{KeywordRecase, tokenize, verify_token_invariant};
+use crate::sql_lint::_helpers::token_layout::{
+    KeywordRecase, TokenTexts, tokenize, verify_printed_tokens,
+};
 use crate::sql_lint::main::formatter::format_json;
 use crate::sql_lint::tests::test_types;
 
@@ -396,8 +398,10 @@ fn given_formatted_candidates_when_checking_token_invariant_then_only_layout_may
             .collect();
         let before_tokens = tokenize(test_case.before, &dialect).expect("before tokenizes");
         let after_tokens = tokenize(test_case.after, &dialect).expect("after tokenizes");
-        let actual = verify_token_invariant(
-            (test_case.before, &before_tokens),
+        let before_texts =
+            TokenTexts::read(test_case.before, &before_tokens, &dialect).expect("before reads");
+        let actual = verify_printed_tokens(
+            (test_case.before, &before_tokens, &before_texts),
             (test_case.after, &after_tokens),
             &dialect,
             &recases,

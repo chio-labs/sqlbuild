@@ -1890,7 +1890,7 @@ fn given_format_cases_when_formatting_then_output_matches() -> Result<(), String
         test_types::FormatTestCase {
             description: "trailing comment after a kept statement terminator",
             sql: "select a from items; -- retained",
-            expected_sql: "SELECT a\nFROM items; -- retained\n",
+            expected_sql: "SELECT a\nFROM items; -- retained",
             expected_changed: true,
         },
         test_types::FormatTestCase {
