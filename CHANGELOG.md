@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.164.2](https://github.com/chio-labs/sqlbuild/compare/v0.164.1...v0.164.2) (2026-10-20)
+
+
+### Performance Improvements
+
+* **format:** format files in parallel and skip unchanged files ([#1183](https://github.com/chio-labs/sqlbuild/issues/1183)) ([1f39065](https://github.com/chio-labs/sqlbuild/commit/1f390652f13d5499f4eee68edb209be605d6a55a))
+
 ## [0.164.1](https://github.com/chio-labs/sqlbuild/compare/v0.164.0...v0.164.1) (2026-10-20)
 
 

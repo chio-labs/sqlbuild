@@ -107,3 +107,23 @@ class TokenPreservationBuildTestCase:
     expected_sql: str
     expected_columns: list[str]
     expected_rows: list[tuple[object, ...]]
+
+
+@dataclass(frozen=True)
+class FormatParallelDeterminismTestCase:
+    """One format mode whose output must not depend on how many worker threads run it."""
+
+    description: str
+    arguments: tuple[str, ...]
+    expected_returncode: int
+
+
+@dataclass(frozen=True)
+class FormatCacheEndToEndTestCase:
+    """A generated project checked cold, warm, after an edit and after damaging the cache."""
+
+    description: str
+    model_count: int
+    edited_model: str
+    expected_warm_summary: str
+    expected_edited_summary: str
