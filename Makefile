@@ -146,7 +146,8 @@ E2E_DUCKDB_CLI_DATA_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_interrupts.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_empty_fixture.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_expected_columns.py \
-	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_helper_ctes.py
+	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_helper_ctes.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_unmocked_inputs.py
 
 E2E_DUCKDB_CLI_PATHS := \
 	tests/e2e/scripts/cli_preview \

@@ -1,5 +1,7 @@
 //! Infer scenario closure while preserving dependency and diagnostic order.
 
+use crate::planner_scenario::_helpers::boundaries::unmocked_boundaries;
+use crate::planner_scenario::constants::LISTED_MISSING_SOURCES;
 use crate::planner_scenario::models::{ScenarioGraphInput, ScenarioGraphOutput};
 
 /// Infer required relations, cutting traversal at authored reference fixtures.
@@ -47,13 +49,51 @@ pub fn graph(input: &ScenarioGraphInput) -> ScenarioGraphOutput {
     for target in &input.targets {
         output = walk(target, input, output);
     }
-    for name in &output.sources {
-        if !input.sources.contains(name) {
+    let missing: Vec<&String> = output
+        .sources
+        .iter()
+        .filter(|name| !input.sources.contains(name))
+        .collect();
+    let boundaries: Vec<String> = if missing.is_empty() {
+        Vec::new()
+    } else {
+        unmocked_boundaries(input, &output.models)
+    };
+    if boundaries.is_empty() {
+        for name in &missing {
             output.warnings.push((format!(
                 "Scenario '{}' requires source '{name}', but no fixture was provided. Add a CTE named __source__{} AS (...).",
                 input.name, name.replace('.', "__")
             ), false));
         }
+    } else {
+        output
+            .warnings
+            .extend(boundaries.into_iter().map(|message| (message, false)));
+        let listed: Vec<&str> = missing
+            .iter()
+            .take(LISTED_MISSING_SOURCES)
+            .map(|name| name.as_str())
+            .collect();
+        let more: String = if missing.len() > LISTED_MISSING_SOURCES {
+            format!(" and {} more", missing.len() - LISTED_MISSING_SOURCES)
+        } else {
+            String::new()
+        };
+        output.warnings.push((
+            format!(
+                "Scenario '{}' requires {} {} without fixtures: {}{more}.",
+                input.name,
+                missing.len(),
+                if missing.len() == 1 {
+                    "source"
+                } else {
+                    "sources"
+                },
+                listed.join(", ")
+            ),
+            false,
+        ));
     }
     for name in &output.dbt_refs {
         if !input.dbt_refs.contains(name) {
