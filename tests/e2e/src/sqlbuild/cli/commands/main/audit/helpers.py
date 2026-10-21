@@ -311,3 +311,28 @@ def plan_reasons(project_dir: Path) -> dict[str, str]:
     return {
         str(model["name"]): str(model["reason"]) for model in json.loads(result.stdout)["models"]
     }
+
+
+GENERIC_AUDIT_PATH: str = "audits/generic/unique_within_group.sql"
+
+
+def generic_audit_project_files(*, arguments: str) -> dict[str, str]:
+    """Return a project whose orders model attaches unique_within_group with ``arguments``."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "audit_arguments"\nadapter = "duckdb"\n\n'
+            '[connection]\ndatabase = "audit_arguments.duckdb"\n'
+        ),
+        GENERIC_AUDIT_PATH: (
+            "AUDIT ();\n\n"
+            "SELECT @group_columns, COUNT(DISTINCT @column) AS distinct_count\n"
+            "FROM @relation\nWHERE @column IS NOT NULL\nGROUP BY @group_columns\n"
+            "HAVING COUNT(DISTINCT @column) > 1\n"
+        ),
+        "models/orders.sql": (
+            "MODEL (description 'Test model orders.',\n  materialized table,\n  columns (\n"
+            f"    status (audits [unique_within_group ({arguments})]),\n  ),\n);\n\n"
+            "SELECT 1 AS order_id, 'open' AS status, 'web' AS channel\n"
+        ),
+    }

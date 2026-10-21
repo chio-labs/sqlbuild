@@ -98,9 +98,19 @@ class InvalidAuditMetaE2ETestCase:
 
 @dataclass(frozen=True)
 class GenericAuditArgumentE2ETestCase:
-    """One generic audit attachment and how its compile ends."""
+    """One generic audit attachment with an unused argument and the error it must report."""
 
     description: str
     arguments: str
-    expected_exit_code: int
-    expected_message: str | None
+    expected_message: str
+
+
+@dataclass(frozen=True)
+class RenderedGenericAuditE2ETestCase:
+    """One generic audit attachment, its compiled SQL file and the SQL it must render to."""
+
+    description: str
+    arguments: str
+    detached_column: str
+    expected_relative_path: str
+    expected_sql: str
