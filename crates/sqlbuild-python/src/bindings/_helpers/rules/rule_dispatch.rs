@@ -123,8 +123,37 @@ struct NativeRun<'py> {
     verify_determinism: bool,
     initial_findings: Option<Bound<'py, PyAny>>,
     cancel: HostCancel,
-    /// A selected run's whole-project pass: its project-wide codes, its only custom rules.
-    whole_project: Option<Vec<String>>,
+    /// Which of the selected custom rules this evaluation runs.
+    custom_scope: CustomScope,
+}
+
+/// The custom rules one evaluation of a selected run runs, and where it caches.
+enum CustomScope {
+    /// Every selected custom rule, caching in the bulk cache.
+    All,
+    /// The slice of a selection: every selected custom rule except these project-wide ones.
+    Slice(Vec<String>),
+    /// The whole-project pass of a selection: only these, caching in its own directory.
+    WholeProject(Vec<String>),
+}
+
+impl CustomScope {
+    /// Whether this evaluation runs the selected custom rule `code`.
+    fn runs(&self, code: &String) -> bool {
+        match self {
+            Self::All => true,
+            Self::Slice(skipped) => !skipped.contains(code),
+            Self::WholeProject(codes) => codes.contains(code),
+        }
+    }
+
+    /// The bulk cache subdirectory this evaluation caches in, the bulk cache itself when `None`.
+    fn cache_directory(&self) -> Option<&'static str> {
+        match self {
+            Self::WholeProject(_) => Some(WHOLE_PROJECT_CACHE_DIRECTORY),
+            Self::All | Self::Slice(_) => None,
+        }
+    }
 }
 
 /// How a native evaluation obtains its custom-rule outcome.
@@ -170,7 +199,7 @@ fn evaluate_project_rules<'py>(
         verify_determinism,
         initial_findings: None,
         cancel: HostCancel::default(),
-        whole_project: None,
+        custom_scope: CustomScope::All,
     };
     evaluate_native(&run, (false, None), CustomSource::Deferred, None)
 }
@@ -195,7 +224,7 @@ fn evaluate_native_rules<'py>(
         verify_determinism: arguments.flag("verify_determinism")?,
         initial_findings: (!initial_findings.is_none()).then_some(initial_findings),
         cancel: HostCancel::default(),
-        whole_project: None,
+        custom_scope: CustomScope::All,
     };
     evaluate_native(
         &run,
@@ -268,6 +297,7 @@ pub(crate) fn evaluate_rules<'py>(
             ),
         ],
     )?))?;
+    let whole_codes: Vec<String> = whole_project_codes(&plan)?;
     let run: NativeRun<'py> = NativeRun {
         project: field(&plan, "project")?,
         config: field(&plan, "config")?,
@@ -277,7 +307,7 @@ pub(crate) fn evaluate_rules<'py>(
         verify_determinism: false,
         initial_findings: None,
         cancel: HostCancel::default(),
-        whole_project: None,
+        custom_scope: CustomScope::Slice(whole_codes.clone()),
     };
     let payloads: Bound<'py, PyAny> = field(&plan, "custom_payloads")?;
     let custom: Option<CustomHandle> = start_custom_rules(&run, &payloads)?;
@@ -311,7 +341,7 @@ pub(crate) fn evaluate_rules<'py>(
                     verify_determinism: false,
                     initial_findings: None,
                     cancel: native_cancel,
-                    whole_project: None,
+                    custom_scope: CustomScope::All,
                 };
                 evaluate_native(
                     &run,
@@ -343,7 +373,6 @@ pub(crate) fn evaluate_rules<'py>(
     }
     let sql_result: Bound<'py, PyAny> = sql_result?;
     let result: Bound<'py, PyAny> = result?;
-    let whole_codes: Vec<String> = whole_project_codes(&plan)?;
     let result: Bound<'py, PyAny> = if whole_codes.is_empty() {
         result
     } else {
@@ -392,7 +421,7 @@ fn with_whole_project_rules<'py>(
         verify_determinism: false,
         initial_findings: None,
         cancel: slice.cancel.clone(),
-        whole_project: Some(codes.to_vec()),
+        custom_scope: CustomScope::WholeProject(codes.to_vec()),
     };
     let evaluated: PyResult<Bound<'py, PyAny>> = evaluate_native(
         &whole,
@@ -636,8 +665,8 @@ fn request_options<'py>(
             ),
         ],
     )?;
-    if run.whole_project.is_some() {
-        options.set_item("cache_directory", WHOLE_PROJECT_CACHE_DIRECTORY)?;
+    if let Some(directory) = run.custom_scope.cache_directory() {
+        options.set_item("cache_directory", directory)?;
     }
     Ok(options)
 }
@@ -657,7 +686,7 @@ pub(crate) fn speculative_rules_request<'py>(
         verify_determinism: false,
         initial_findings: None,
         cancel: HostCancel::default(),
-        whole_project: None,
+        custom_scope: CustomScope::All,
     };
     rules_request_over(
         &request_options(&run, &field(plan, "custom_payloads")?)?,
@@ -683,10 +712,7 @@ fn start_custom_rules(
         let code: String = field(&rule, "code")?.extract()?;
         if field(&rule, "custom")?.is_truthy()?
             && selected.contains(&code)
-            && run
-                .whole_project
-                .as_ref()
-                .is_none_or(|codes| codes.contains(&code))
+            && run.custom_scope.runs(&code)
         {
             rules.push(rule.unbind());
         }
@@ -716,10 +742,7 @@ fn start_custom_rules(
     let dialect: String = run.dialect.clone();
     let verify_determinism: bool = run.verify_determinism;
     let cancel: HostCancel = run.cancel.clone();
-    let cache_directory: Option<&'static str> = run
-        .whole_project
-        .as_ref()
-        .map(|_| WHOLE_PROJECT_CACHE_DIRECTORY);
+    let cache_directory: Option<&'static str> = run.custom_scope.cache_directory();
     PhaseThread::spawn(CUSTOM_THREAD, move || {
         Python::attach(|py| {
             let [project, config, project_dir] = inputs;

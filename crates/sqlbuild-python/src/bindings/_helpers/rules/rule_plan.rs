@@ -108,9 +108,7 @@ pub(crate) fn rule_run_plan<'py>(
     };
     let mut codes: Vec<Bound<'py, PyAny>> = Vec::with_capacity(selected.len());
     for rule in &selected {
-        if model_paths.is_none() || !field(rule, "project_wide")?.is_truthy()? {
-            codes.push(field(rule, "code")?);
-        }
+        codes.push(field(rule, "code")?);
     }
     let selection_config: Bound<'py, PyAny> =
         selection_rules_config(&effective_config, model_paths.as_ref(), &selected_project)?;
