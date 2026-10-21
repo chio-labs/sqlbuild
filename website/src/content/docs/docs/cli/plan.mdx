@@ -130,6 +130,10 @@ when the plan has an error-severity finding that `sqb build` would refuse, such 
 claim; the final line then reads `✗ Plan failed with errors`. `sqb plan --json` uses the same exit
 codes, so CI can gate on either form.
 
+When `sqb plan --json` fails before it can produce a plan, for example on an unknown selector, it
+still exits `1` and prints its coded error on stderr, and prints the error as JSON on stdout:
+`{"error": {"code": "S007", "message": "...", "help": null}}`.
+
 Release note: earlier versions printed `Plan complete with errors` and exited `0` for such plans.
 
 ## Missing upstream dependencies

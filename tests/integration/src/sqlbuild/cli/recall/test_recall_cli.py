@@ -38,6 +38,11 @@ TABLE_DEPRECATION: str = "--format table is deprecated and will be removed"
             expected_code="C971",
         ),
         JsonErrorTestCase(
+            description="a plan with an unknown selector",
+            args=("plan", "--json", "--select", "no_such_model"),
+            expected_code="S007",
+        ),
+        JsonErrorTestCase(
             description="a schema request without a store",
             args=("recall", "schema", "--json", "--target", "missing"),
             expected_code="C971",
