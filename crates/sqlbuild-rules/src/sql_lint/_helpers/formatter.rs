@@ -146,6 +146,9 @@ fn format_layout(
         comments: &comments,
     };
     let (printed, recases, authored_texts) = layout.print(&authored, &oracle)?;
+    if printed == sql {
+        return Ok((printed, tokens, Some(oracle)));
+    }
     let printed_tokens = tokenize(&printed, dialect)?;
     verify_printed_tokens(
         (sql, &tokens, &authored_texts),
