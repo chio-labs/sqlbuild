@@ -470,3 +470,15 @@ class TemporaryFunctionConnectionE2ETestCase:
     description: str
     expected_exit_code: int
     expected_stderr_fragment: str
+
+
+@dataclass(frozen=True)
+class OutputEvaluationErrorE2ETestCase:
+    """How a unit test ends when storing its tested model's output fails for a given reason."""
+
+    description: str
+    adapter_source: str
+    expected_exit_code: int
+    expected_fragments: tuple[str, ...]
+    expected_json_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...]

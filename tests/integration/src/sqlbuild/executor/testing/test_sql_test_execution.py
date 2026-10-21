@@ -25,6 +25,7 @@ from sqlbuild.executor.testing.models import (
 from sqlbuild.executor.testing.types import SqlTestDifferenceDirection, SqlTestOutcome
 from tests.integration.src.sqlbuild.executor.testing._test_types import (
     ExpectedBooleanTestCase,
+    OutputStorageTestCase,
     SqlTestComparisonSqlTestCase,
     SqlTestDiagnosticsTestCase,
     SqlTestDifferenceSqlTestCase,
@@ -46,6 +47,29 @@ class FailingDifferenceSampleDuckDbAdapter(DuckDbAdapter):
     def execute(self, *, connection: Any, sql: str) -> Any:
         if "__sqlbuild_difference" in sql:
             raise RuntimeError("controlled difference sampling failure")
+        return super().execute(connection=connection, sql=sql)
+
+
+class StorageFailingDuckDbAdapter(DuckDbAdapter):
+    """Fails to store a test output; with ``output_fails`` the output query itself errors.
+
+    The output query failing while inline comparisons pass is how a warehouse that prunes
+    unread columns behaves when a fixture breaks a column the expected rows leave out.
+    """
+
+    def __init__(self, *, error: str, output_fails: bool) -> None:
+        super().__init__()
+        self._error: str = error
+        self._output_fails: bool = output_fails
+        self._outputs: set[str] = set()
+
+    def create_sql_test_output(self, *, connection: Any, sql: str, name: str) -> str | None:
+        self._outputs.add(sql)
+        raise RuntimeError(self._error)
+
+    def execute(self, *, connection: Any, sql: str) -> Any:
+        if self._output_fails and sql in self._outputs:
+            raise RuntimeError(self._error)
         return super().execute(connection=connection, sql=sql)
 
 
@@ -700,3 +724,40 @@ def test_given_oversized_unit_test_sql_when_executing_then_it_returns_clear_erro
     assert "maximum of 80 bytes" in result.error_message
     assert "scenario test" in result.error_message
     verify_test_result(result=result, test_case=test_case)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        OutputStorageTestCase(
+            description="an output query the warehouse cannot compute errors the test",
+            chain_steps=(("orders", "SELECT 1 AS order_id", "SELECT 1 AS order_id"),),
+            storage_error="Numeric value 'cluster::r1' is not recognized",
+            output_fails=True,
+            expected_outcome=SqlTestOutcome.ERROR,
+            expected_error_fragment="Numeric value 'cluster::r1' is not recognized",
+        ),
+        OutputStorageTestCase(
+            description="a session that cannot store outputs still compares inline",
+            chain_steps=(("orders", "SELECT 1 AS order_id", "SELECT 1 AS order_id"),),
+            storage_error="temporary tables are not allowed in this session",
+            output_fails=False,
+            expected_outcome=SqlTestOutcome.PASS,
+            expected_error_fragment="",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_output_that_cannot_be_stored_when_executing_then_only_query_errors_fail(
+    test_case: OutputStorageTestCase, connection: Any
+) -> None:
+    result: SqlTestExecutionResult = execute_sql_test(
+        test_entry=build_sql_test_plan_entry(name="orders_ids", chain_steps=test_case.chain_steps),
+        adapter=StorageFailingDuckDbAdapter(
+            error=test_case.storage_error, output_fails=test_case.output_fails
+        ),
+        connection=connection,
+    )
+
+    assert result.outcome == test_case.expected_outcome, result.error_message
+    assert test_case.expected_error_fragment in (result.error_message or "")
