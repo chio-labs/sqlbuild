@@ -30,7 +30,13 @@ use crate::project_snapshot::models::PathStamp;
 const NO_STORED_COMPILE: &str = "no stored compile";
 const REUSE_BYPASSED: &str = "compile reuse is off";
 const OUTPUT_UNREADABLE: &str = "the stored output cannot be replayed";
-const IDENTITY_CHANGED: &str = "the invocation, runtime, environment or settings changed";
+const INVOCATION_CHANGED: &str = "the command invocation changed";
+const RUNTIME_CHANGED: &str = "the Python runtime changed";
+const SEARCH_PATH_CHANGED: &str = "a Python search path entry changed";
+const ENVIRONMENT_NAMES_CHANGED: &str = "the set of tracked environment variables changed";
+const ENVIRONMENT_CHANGED: &str = "a tracked environment variable changed";
+const SETTINGS_CHANGED: &str = "provider settings inputs changed";
+const MODULES_CHANGED: &str = "an imported Python module outside the project changed";
 const TARGET_CHANGED: &str = "the compiled target changed";
 
 fn now_ns() -> i64 {
@@ -115,8 +121,8 @@ pub(crate) fn check(check: ReuseCheck<'_>) -> ReuseAttempt {
         attempt.restamped = restamped_paths(&inputs.project_files, &attempt.snapshot);
         if comparison.unchanged {
             attempt.delta = DeltaCandidate::Unavailable(OUTPUT_UNREADABLE);
-        } else if !comparison.identity_unchanged {
-            attempt.delta = DeltaCandidate::Unavailable(IDENTITY_CHANGED);
+        } else if let Some(reason) = comparison.identity_change {
+            attempt.delta = DeltaCandidate::Unavailable(reason);
         } else if !target_files_unchanged(
             &inputs.target_files,
             &attempt.project_dir,
@@ -146,21 +152,16 @@ pub(crate) fn check(check: ReuseCheck<'_>) -> ReuseAttempt {
 /// Whether a stored compile still matches, with the digests still valid either way.
 struct Comparison {
     unchanged: bool,
-    identity_unchanged: bool,
+    /// The first identity component that differs, if any.
+    identity_change: Option<&'static str>,
     digests: HashMap<String, String>,
     digested_files: usize,
 }
 
 /// Compare every stored identity, carrying forward digests still valid either way.
 fn checked(attempt: &ReuseAttempt, inputs: &StoredInputs, rules: &ReuseRules) -> Comparison {
-    let identity_unchanged: bool = inputs.invocation_digest == attempt.identity.invocation_digest
-        && inputs.runtime == attempt.identity.runtime
-        && inputs.search_path == attempt.search_path
-        && tracked_environment_names(&inputs.environment_names, rules) == inputs.environment_names
-        && environment_digest(&inputs.environment_names, rules) == inputs.environment_digest
-        && settings_inputs_digest(&inputs.settings_inputs, rules) == inputs.settings_digest
-        && module_stamps_unchanged(&inputs.modules);
-    let (files_unchanged, verified, digested_files) = if identity_unchanged {
+    let identity_change: Option<&'static str> = identity_change(attempt, inputs, rules);
+    let (files_unchanged, verified, digested_files) = if identity_change.is_none() {
         compare_project_files(
             &attempt.project_dir,
             &inputs.project_files,
@@ -170,7 +171,7 @@ fn checked(attempt: &ReuseAttempt, inputs: &StoredInputs, rules: &ReuseRules) ->
         (false, HashMap::new(), 0)
     };
     Comparison {
-        identity_unchanged,
+        identity_change,
         unchanged: files_unchanged
             && target_files_unchanged(
                 &inputs.target_files,
@@ -180,6 +181,33 @@ fn checked(attempt: &ReuseAttempt, inputs: &StoredInputs, rules: &ReuseRules) ->
             ),
         digests: carried_forward_digests(&inputs.project_files, &attempt.snapshot, verified),
         digested_files,
+    }
+}
+
+/// The first stored identity component that no longer matches, in checking order.
+fn identity_change(
+    attempt: &ReuseAttempt,
+    inputs: &StoredInputs,
+    rules: &ReuseRules,
+) -> Option<&'static str> {
+    if inputs.invocation_digest != attempt.identity.invocation_digest {
+        Some(INVOCATION_CHANGED)
+    } else if inputs.runtime != attempt.identity.runtime {
+        Some(RUNTIME_CHANGED)
+    } else if inputs.search_path != attempt.search_path {
+        Some(SEARCH_PATH_CHANGED)
+    } else if tracked_environment_names(&inputs.environment_names, rules)
+        != inputs.environment_names
+    {
+        Some(ENVIRONMENT_NAMES_CHANGED)
+    } else if environment_digest(&inputs.environment_names, rules) != inputs.environment_digest {
+        Some(ENVIRONMENT_CHANGED)
+    } else if settings_inputs_digest(&inputs.settings_inputs, rules) != inputs.settings_digest {
+        Some(SETTINGS_CHANGED)
+    } else if !module_stamps_unchanged(&inputs.modules) {
+        Some(MODULES_CHANGED)
+    } else {
+        None
     }
 }
 

@@ -2,6 +2,7 @@
 
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 
+use crate::bindings::_helpers::compile_delta::driver::DELTA_VERIFY_ENV_VAR;
 use crate::bindings::_helpers::frontier::stage_capture::CAPTURE_DIR_ENV_VAR;
 
 /// The directory under the compiler cache directory holding the native reuse store.
@@ -16,8 +17,11 @@ pub(crate) const REUSE_DISABLE_VALUE: &str = "1";
 pub(crate) const REUSE_LOGGER_NAME: &str = "sqlbuild.compile.reuse";
 pub(crate) const TRACKED_ENVIRONMENT_PREFIXES: [&str; 2] = ["SQLBUILD_", "SQB_"];
 /// Sorted; tracked-prefix variables that never invalidate a stored compile.
-pub(crate) const UNTRACKED_ENVIRONMENT_NAMES: [&str; 2] =
-    [CAPTURE_DIR_ENV_VAR, REUSE_DISABLE_ENV_VAR];
+pub(crate) const UNTRACKED_ENVIRONMENT_NAMES: [&str; 3] = [
+    CAPTURE_DIR_ENV_VAR,
+    REUSE_DISABLE_ENV_VAR,
+    DELTA_VERIFY_ENV_VAR,
+];
 pub(crate) const MISSING_ENVIRONMENT_VALUE: &str = "\0missing";
 pub(crate) const MISSING_FILE_DIGEST: &str = "\0missing";
 pub(crate) const PROJECT_CONFIG_FILENAMES: [&str; 2] =
