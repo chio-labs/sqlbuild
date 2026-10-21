@@ -275,6 +275,17 @@ def _interpolation_cases() -> tuple[FailureCase, ...]:
                 **_staging_header("  audits [floor],"),
             },
         ),
+        failure_case(
+            name="generic-audit-unused-argument",
+            expected_code="P001",
+            expected_message="passes argument 'where_condition', which the audit's SQL in",
+            files={
+                "models/staging/_sqlbuild/_audits/generic/floor.sql": _FLOOR_AUDIT,
+                **_staging_header(
+                    "  audits [floor (minimum 0, where_condition \"status <> 'void'\")],"
+                ),
+            },
+        ),
     )
 
 

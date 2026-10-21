@@ -145,6 +145,7 @@ MODEL_CONFIG_PROJECT: dict[str, str] = {
 
 LATER_VALIDATION_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"is missing argument '[^']+' for generic audit '[^']+'$"),
+    re.compile(r"passes argument '[^']+', which the audit's SQL in .+ never uses; remove .+$"),
     re.compile(r"column '[^']+' migrate_from must name one column of the model's existing table$"),
     re.compile(
         r"audit '[^']+': thresholds and minimum_samples are only valid for measurement audits$"

@@ -1,6 +1,8 @@
 //! Python's argument merge, SQL rendering and policy resolution for one attachment.
 
-use crate::audits::_helpers::parameters::{RenderStop, render_parameterized_sql};
+use crate::audits::_helpers::parameters::{
+    RenderStop, parameter_matches, render_parameterized_sql,
+};
 use crate::audits::_helpers::policies::{resolve_run_scope, resolve_severity};
 use crate::audits::constants::{MODEL_RESOURCE, SEED_RESOURCE, SOURCE_RESOURCE};
 use crate::audits::models::{ArgumentValue, AuditAttachment, PolicySource};
@@ -93,4 +95,37 @@ pub(crate) fn merged_arguments(
         }
     }
     Ok(merged)
+}
+
+/// The error for the first explicit argument neither the audit SQL nor its evidence SQL reads.
+pub(crate) fn unused_argument(attachment: &AuditAttachment) -> Option<String> {
+    let mut used: Vec<&str> = parameter_matches(&attachment.sql_body)
+        .into_iter()
+        .map(|item| item.name)
+        .collect();
+    if let Some(evidence) = &attachment.evidence_sql {
+        used.extend(
+            parameter_matches(evidence)
+                .into_iter()
+                .map(|item| item.name),
+        );
+    }
+    let implicit: Vec<&str> = attachment
+        .implicit_arguments
+        .iter()
+        .map(|(name, _)| name.as_str())
+        .collect();
+    let (name, _) = attachment
+        .explicit_arguments
+        .iter()
+        .find(|(name, _)| !used.contains(&name.as_str()) && !implicit.contains(&name.as_str()))?;
+    let definition: String = attachment
+        .definition_path
+        .as_deref()
+        .map_or_else(|| "its built-in definition".to_owned(), str::to_owned);
+    Some(format!(
+        "{} audit '{}' passes argument '{name}', which the audit's SQL in {definition} never \
+         uses; remove '{name}' from the attachment",
+        attachment.owner_label, attachment.definition_name
+    ))
 }

@@ -238,6 +238,16 @@ MODEL (
 );
 ```
 
+Every argument an attachment passes must be read by the audit's SQL or evidence SQL as `@name` or
+`@'name'`. An argument the audit never reads, including a misspelt one, is a compile error that names
+the argument to remove, so a check is never silently broader or narrower than its attachment says:
+
+```text
+models/marts/fct_orders.sql audit 'expression_is_true' passes argument 'where_condition', which the audit's SQL in audits/generic/expression_is_true.sql never uses; remove 'where_condition' from the attachment
+```
+
+An argument that repeats one the attached resource supplies, such as `column`, is not checked.
+
 ### Audits that read other resources
 
 An attached audit can read other models, sources, seeds, and table functions besides its target,

@@ -94,3 +94,13 @@ class InvalidAuditMetaE2ETestCase:
     relative_path: str
     contents: str
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class GenericAuditArgumentE2ETestCase:
+    """One generic audit attachment and how its compile ends."""
+
+    description: str
+    arguments: str
+    expected_exit_code: int
+    expected_message: str | None
