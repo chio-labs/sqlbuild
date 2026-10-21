@@ -1,4 +1,4 @@
-"""Compile and plan read a native project's models through its native views."""
+"""Compile and plan read a native project's resources through their native views."""
 
 from __future__ import annotations
 
@@ -17,12 +17,21 @@ from tests.integration.src.sqlbuild.cli.commands.main.helpers import compiled_vi
     [
         CompiledViewFallbacksTestCase(
             description="compiling reads every model natively",
+            fixture=None,
             command=("compile", "--json", "--no-cache"),
             expected_exit_code=0,
             expected_fallbacks=0,
         ),
         CompiledViewFallbacksTestCase(
             description="planning reads every model natively",
+            fixture=None,
+            command=("plan", "--json", "--no-cache"),
+            expected_exit_code=0,
+            expected_fallbacks=0,
+        ),
+        CompiledViewFallbacksTestCase(
+            description="planning reads every source, seed, function and audit natively",
+            fixture="waffle_shop",
             command=("plan", "--json", "--no-cache"),
             expected_exit_code=0,
             expected_fallbacks=0,
@@ -36,7 +45,7 @@ def test_given_native_project_when_running_then_no_model_read_falls_back_to_pyth
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     exit_code, fallbacks = compiled_view_fallbacks(
-        project_dir=tmp_path / "project", command=test_case.command
+        project_dir=tmp_path / "project", fixture=test_case.fixture, command=test_case.command
     )
     _ = capsys.readouterr()
 

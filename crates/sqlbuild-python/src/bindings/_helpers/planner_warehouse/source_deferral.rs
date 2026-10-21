@@ -4,6 +4,7 @@ use sqlbuild_host::entries::models::UserCodeHost;
 
 use crate::bindings::_helpers::authored_values::project_vars::render_project_var_text;
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
+use crate::bindings::_helpers::compiled_views::audit_reads;
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
@@ -107,7 +108,7 @@ fn selected_managed_refs(
     }
     for audit in project_reads::audits(project)?.try_iter()? {
         let audit = audit?;
-        let deps = native_field(&audit, "scope_deps")?;
+        let deps = audit_reads::scope_deps(&audit)?;
         if deps.is_truthy()? {
             let mut any = false;
             for dep in deps.try_iter()? {
@@ -120,17 +121,14 @@ fn selected_managed_refs(
                 continue;
             }
         }
-        for reference in native_field(&audit, "references")?.try_iter()? {
+        for reference in audit_reads::references(&audit)?.try_iter()? {
             let reference = reference?;
             let name: String = native_field(&reference, "ref_name")?.extract()?;
             if native_field(&reference, "ref_kind")?.eq("source")? && managed.contains(&name) {
                 names.insert(name);
             }
         }
-        names.extend(sql_source_reads(
-            &native_field(&audit, "sql_body")?,
-            managed,
-        )?);
+        names.extend(sql_source_reads(&audit_reads::sql_body(&audit)?, managed)?);
     }
     Ok(names)
 }
