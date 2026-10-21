@@ -472,6 +472,16 @@ pub(crate) fn expression_edits(
             EditKind::Header,
         ));
     }
+    for join in &facts.joins {
+        result.manual.push(manual_at(
+            site.path,
+            site.contents,
+            join.start.and_then(locate).or(Some(site.offset)),
+            format!(
+                "USING or NATURAL join on {old} in this audit argument; rewrite it as an ON condition"
+            ),
+        ));
+    }
     for unresolved in &facts.unresolved {
         result.manual.push(manual_at(
             site.path,
