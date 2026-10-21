@@ -641,7 +641,7 @@ impl ClickHouseReader {
         self.store.location.database()
     }
 
-    /// At most `limit` rows of a read-only query, with the server's statistics. A failure on a store that is not created yet is a store failure (C971), not an invalid query.
+    /// At most `limit` rows of a read-only query, with the server's statistics. A failure on a store that is not created yet is a store failure (C971), not an invalid query. An unknown relation on a complete store is retried once, since its views may have been created since the query ran; a relation still unknown is the query's own error (C974).
     pub(crate) fn query(
         &self,
         py: Python<'_>,
@@ -652,37 +652,37 @@ impl ClickHouseReader {
         if let Some(limit) = limit {
             settings.push(("limit", i64::try_from(limit).unwrap_or(i64::MAX - 1) + 1));
         }
-        let (mut result, statistics) = calls::query(
-            py,
-            self.store.connection()?,
-            (sql, &settings),
-            "run the Recall query",
-        )
-        .map_err(|failure| {
-            match self.require_store(py) {
+        let run = || {
+            calls::query(
+                py,
+                self.store.connection()?,
+                (sql, &settings),
+                "run the Recall query",
+            )
+        };
+        let rejected = |failure: StoreError| StoreError {
+            kind: if failure.kind == StoreErrorKind::Busy {
+                StoreErrorKind::Other
+            } else {
+                StoreErrorKind::Query
+            },
+            message: failure.message,
+        };
+        let (mut result, statistics) = match run() {
+            Ok(found) => found,
+            Err(failure) => match self.require_store(py) {
                 Err(missing) if missing.kind == StoreErrorKind::NotFound => {
-                    return StoreError {
+                    return Err(StoreError {
                         kind: StoreErrorKind::Other,
                         message: missing.message,
-                    };
+                    });
                 }
                 Ok(()) if failure.message.contains(UNKNOWN_TABLE_ERROR) => {
-                    return StoreError {
-                        kind: StoreErrorKind::Other,
-                        message: self.not_created_message(),
-                    };
+                    run().map_err(rejected)?
                 }
-                Ok(()) | Err(_) => {}
-            }
-            StoreError {
-                kind: if failure.kind == StoreErrorKind::Busy {
-                    StoreErrorKind::Other
-                } else {
-                    StoreErrorKind::Query
-                },
-                message: failure.message,
-            }
-        })?;
+                Ok(()) | Err(_) => return Err(rejected(failure)),
+            },
+        };
         if let Some(limit) = limit
             && result.rows.len() > limit
         {

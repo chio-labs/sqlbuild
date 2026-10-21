@@ -223,3 +223,10 @@ class ClickHouseRecallExpiredVersionTestCase:
     stale_view: str
     expected_statement_columns: tuple[tuple[object, ...], ...]
     expected_version: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallUnknownRelationTestCase:
+    description: str
+    sql: str
+    expected_fragments: tuple[str, ...]

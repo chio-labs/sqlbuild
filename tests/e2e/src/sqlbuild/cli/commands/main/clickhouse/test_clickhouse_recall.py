@@ -24,6 +24,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse._test_types import (
     ClickHouseRecallQueryOutputSinkTestCase,
     ClickHouseRecallRetentionConflictTestCase,
     ClickHouseRecallRetentionTestCase,
+    ClickHouseRecallUnknownRelationTestCase,
     ClickHouseRecallUnlimitedOutputTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse.helpers import (
@@ -943,3 +944,35 @@ def test_given_a_store_whose_version_row_expired_when_a_writer_with_ddl_builds_t
         )
         == test_case.expected_version
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseRecallUnknownRelationTestCase(
+            description="a misspelled view on a complete store is the query's own error",
+            sql="SELECT * FROM invocation",
+            expected_fragments=("error[C974]", "invocation"),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_complete_store_when_a_query_names_an_unknown_relation_then_the_server_error_shows(
+    test_case: ClickHouseRecallUnknownRelationTestCase,
+    tmp_path: Path,
+    clickhouse_e2e_config: dict[str, object],
+    recall_database: str,
+) -> None:
+    project_dir: Path = write_recall_project(
+        parent=tmp_path, config=clickhouse_e2e_config, database=recall_database
+    )
+    assert run(project_dir, "build").returncode == 0
+
+    queried: subprocess.CompletedProcess[bytes] = run(project_dir, "recall", "query", test_case.sql)
+
+    stderr: str = queried.stderr.decode(errors="replace")
+    assert queried.returncode == 1
+    assert [fragment in stderr for fragment in test_case.expected_fragments] == [
+        True for _ in test_case.expected_fragments
+    ]
+    assert "C971" not in stderr
