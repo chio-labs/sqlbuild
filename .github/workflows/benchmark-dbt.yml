@@ -1,0 +1,166 @@
+name: Benchmark dbt comparison
+
+# Manual only. Times SQLBuild and dbt v2 (dbt Core on request) on the same generated dense DuckDB project with
+# released packages from PyPI, and publishes the tables as an artifact and in the job summary.
+# See benchmarks/dbt-compare/README.md.
+on:
+  workflow_dispatch:
+    inputs:
+      sqlbuild_version:
+        description: "sqlbuild version from PyPI (empty: latest release)"
+        required: false
+        default: ""
+        type: string
+      dbt_version:
+        description: "dbt (v2) version from PyPI"
+        required: false
+        default: "2.0.9"
+        type: string
+      dbt_core_version:
+        description: "dbt-core version from PyPI (installed only for core_* variants)"
+        required: false
+        default: "1.12.6"
+        type: string
+      dbt_duckdb_version:
+        description: "dbt-duckdb version from PyPI (installed only for core_* variants)"
+        required: false
+        default: "1.11.0"
+        type: string
+      models:
+        description: "Models in the generated project"
+        required: false
+        default: "10000"
+        type: string
+      rounds:
+        description: "Rounds per variant (the summary reports medians)"
+        required: false
+        default: "3"
+        type: string
+      variants:
+        description: "Space-separated bench.sh variants"
+        required: false
+        default: "sqb_norules sqb_norules_full sqb_rules sqb_rules_full v2_compile_cached v2_compile_strict_cached v2_compile_dirty v2_compile_strict_dirty v2_compile v2_compile_strict v2_compile_strict_remote"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmark-dbt
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    name: SQLBuild vs dbt (${{ inputs.models }} models)
+    # The same runner type as the dense compile performance jobs in verify.yml.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    env:
+      SQLBUILD_VERSION: ${{ inputs.sqlbuild_version }}
+      DBT_VERSION: ${{ inputs.dbt_version }}
+      DBT_CORE_VERSION: ${{ inputs.dbt_core_version }}
+      DBT_DUCKDB_VERSION: ${{ inputs.dbt_duckdb_version }}
+      MODELS: ${{ inputs.models }}
+      ROUNDS: ${{ inputs.rounds }}
+      VARIANTS: ${{ inputs.variants }}
+      BENCH: ${{ github.workspace }}/benchmarks/dbt-compare
+      DBT_SEND_ANONYMOUS_USAGE_STATS: "false"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.3"
+      - name: Validate inputs
+        run: |
+          [[ $MODELS =~ ^[0-9]+$ && $MODELS -ge 100 ]] || { echo "models must be an integer >= 100"; exit 1; }
+          [[ $ROUNDS =~ ^[1-9][0-9]*$ ]] || { echo "rounds must be a positive integer"; exit 1; }
+          for spec in "$SQLBUILD_VERSION" "$DBT_VERSION" "$DBT_CORE_VERSION" "$DBT_DUCKDB_VERSION"; do
+            [[ -z $spec || $spec =~ ^[0-9A-Za-z.+-]+$ ]] || { echo "invalid version: $spec"; exit 1; }
+          done
+      - name: Set paths
+        run: |
+          {
+            echo "WORK=$RUNNER_TEMP/dbt-compare"
+            echo "RESULTS=$RUNNER_TEMP/dbt-compare-results"
+            echo "SQB=$RUNNER_TEMP/dbt-compare/venv-sqb/bin/sqb"
+            echo "DBT_V2=$RUNNER_TEMP/dbt-compare/venv-dbt2/bin/dbt"
+            echo "PYTHON=$RUNNER_TEMP/dbt-compare/venv-sqb/bin/python"
+          } >>"$GITHUB_ENV"
+      - name: Install released packages
+        run: |
+          uv python install 3.12
+          mkdir -p "$WORK" "$RESULTS"
+          sqlbuild_spec=sqlbuild${SQLBUILD_VERSION:+==$SQLBUILD_VERSION}
+          uv venv -q -p 3.12 "$WORK/venv-sqb"
+          uv pip install -q -p "$WORK/venv-sqb/bin/python" "$sqlbuild_spec" pytest duckdb
+          uv venv -q -p 3.12 "$WORK/venv-dbt2"
+          uv pip install -q -p "$WORK/venv-dbt2/bin/python" "dbt==$DBT_VERSION"
+          # dbt Core is a reference only; install it when a core_* variant is requested.
+          if [[ " $VARIANTS " == *" core_"* ]]; then
+            uv venv -q -p 3.12 "$WORK/venv-dbt"
+            uv pip install -q -p "$WORK/venv-dbt/bin/python" \
+              "dbt-core==$DBT_CORE_VERSION" "dbt-duckdb==$DBT_DUCKDB_VERSION"
+            echo "DBT_CORE=$WORK/venv-dbt/bin/dbt" >>"$GITHUB_ENV"
+          fi
+      - name: Record versions and runner
+        run: |
+          {
+            echo "## Environment"
+            echo
+            echo "- Date: $(date -u +%Y-%m-%d)"
+            echo "- Commit: ${GITHUB_SHA}"
+            echo "- Runner: ${RUNNER_OS} ${ImageOS:-} ${ImageVersion:-}, $(nproc) CPUs ($(lscpu | sed -n 's/^Model name: *//p')), $(free -g | awk '/^Mem:/ {print $2}') GiB RAM"
+            echo "- Python: $("$WORK/venv-sqb/bin/python" -c 'import platform; print(platform.python_version())')"
+            echo "- sqlbuild: $("$WORK/venv-sqb/bin/python" -c 'import importlib.metadata as m; print(m.version("sqlbuild"))')"
+            echo "- dbt (v2): $("$WORK/venv-dbt2/bin/dbt" --version 2>&1 | head -1)"
+            if [[ -n ${DBT_CORE:-} ]]; then
+              echo "- dbt-core: $("$WORK/venv-dbt/bin/python" -c 'import importlib.metadata as m; print(m.version("dbt-core"))')"
+              echo "- dbt-duckdb: $("$WORK/venv-dbt/bin/python" -c 'import importlib.metadata as m; print(m.version("dbt-duckdb"))')"
+            fi
+            echo "- Models: ${MODELS}, rounds: ${ROUNDS}, variants: ${VARIANTS}"
+            echo
+          } | tee "$RESULTS/environment.md"
+      - name: Generate the project
+        run: |
+          "$PYTHON" "$BENCH/write_dbt_dense.py" --models "$MODELS" --out "$WORK/project"
+      # Runs before the timed benchmark so dbt v2's one-time driver download is not timed.
+      - name: Correctness matrix
+        run: |
+          "$BENCH/correctness.sh" "$WORK/correctness" | tee "$RESULTS/correctness.md"
+          cp -r "$WORK/correctness/logs" "$RESULTS/correctness-logs"
+      # Strict analysis is only in the `dbt` distribution and can fall back silently; stop before
+      # the long benchmark unless it demonstrably ran.
+      - name: Prove dbt v2 strict analysis ran (correctness)
+        run: python3 "$BENCH/check_strict.py" correctness "$WORK/correctness" | tee "$RESULTS/strict-check.md"
+      - name: Benchmark
+        run: |
+          read -ra variants <<<"$VARIANTS"
+          "$BENCH/bench.sh" "$WORK/project" "$RESULTS/runs" "$ROUNDS" "${variants[@]}"
+      - name: Prove dbt v2 strict analysis ran (benchmark)
+        if: ${{ contains(inputs.variants, 'strict') }}
+        run: python3 "$BENCH/check_strict.py" runs "$RESULTS/runs" | tee -a "$RESULTS/strict-check.md"
+      - name: Summarize
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            cat "$RESULTS/environment.md"
+            echo "## Correctness (50 models)"
+            echo
+            cat "$RESULTS/correctness.md" 2>/dev/null || echo "Not run."
+            echo
+            cat "$RESULTS/strict-check.md" 2>/dev/null || echo "Strict check not run."
+            echo
+            echo "## Benchmark (${MODELS} models, medians of ${ROUNDS} rounds)"
+            echo
+            python3 "$BENCH/summarize.py" "$RESULTS/runs" 2>&1 || echo "No benchmark results."
+          } >"$RESULTS/summary.md"
+          cat "$RESULTS/summary.md" >>"$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: dbt-compare-${{ github.run_id }}
+          path: ${{ runner.temp }}/dbt-compare-results
+          retention-days: 90

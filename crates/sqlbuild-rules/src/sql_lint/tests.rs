@@ -14,6 +14,8 @@ mod format_corpus;
 mod function_call_spacing;
 #[path = "tests/helpers.rs"]
 mod helpers;
+#[path = "tests/test_idempotency_reprint.rs"]
+mod idempotency_reprint;
 #[path = "tests/test_layout_rules.rs"]
 mod layout_rules;
 #[path = "tests/test_line_wrap.rs"]

@@ -26,6 +26,7 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     LeadingCteCommentFormatIntegrationTestCase,
     LineWidthWrapIntegrationTestCase,
     MixedFromValuesFormatIntegrationTestCase,
+    TrailingCommentFormatIntegrationTestCase,
     TypedNullFormatIntegrationTestCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
@@ -434,6 +435,44 @@ def test_given_description_width_when_formatting_then_wrapped_model_compiles(
     assert f'description "{test_case.expected_formatted_description}"' in model.read_text(
         encoding="utf-8"
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TrailingCommentFormatIntegrationTestCase(
+            description="a trailing line comment on the last line stays settled",
+            body="SELECT 1 AS order_id\nFROM orders -- latest orders\n",
+            expected_body="SELECT 1 AS order_id\nFROM orders -- latest orders\n",
+        ),
+        TrailingCommentFormatIntegrationTestCase(
+            description="comments after the last clause gain no blank line",
+            body="select 1 as order_id from orders\n\n-- first note\n\n-- second note\n",
+            expected_body="SELECT 1 AS order_id\nFROM orders -- first note\n -- second note\n",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_trailing_comments_when_formatting_twice_then_second_run_changes_nothing(
+    test_case: TrailingCommentFormatIntegrationTestCase,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    header: str = 'MODEL (description "Orders placed by customers.");\n\n'
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(header + test_case.body, encoding="utf-8")
+
+    first_exit: int = main(["--project-dir", str(tmp_path), "format", "--no-cache"])
+    formatted_once: str = model.read_text(encoding="utf-8")
+    second_exit: int = main(["--project-dir", str(tmp_path), "format", "--no-cache"])
+    check_exit: int = main(["--project-dir", str(tmp_path), "format", "--check", "--no-cache"])
+
+    assert (first_exit, second_exit, check_exit) == (0, 0, 0)
+    assert formatted_once == header + test_case.expected_body
+    assert model.read_text(encoding="utf-8") == formatted_once
 
 
 @pytest.mark.parametrize(
