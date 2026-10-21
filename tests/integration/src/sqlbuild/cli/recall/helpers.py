@@ -470,6 +470,11 @@ def logged_event_types(project_dir: Path, dropped_prefix: str) -> tuple[list[str
 
 
 DEPLOYED_REVISION: str = "4f1c2e9"
+SPLIT_CREDENTIALS_TOML: str = (
+    '\n[connections.writer]\nadapter = "sqlite"\npath = "${env:ORDERS_RECALL_WRITER_PATH}"\n'
+    '\n[connections.reader]\nadapter = "sqlite"\npath = "${env:ORDERS_RECALL_READER_PATH}"\n'
+    '\n[recall]\nwrite_connection = "writer"\nread_connection = "reader"\n'
+)
 SHARED_STORE_TOML: str = (
     '\n[connections.history]\nadapter = "sqlite"\npath = "{path}"\n\n[recall]\n{keys}'
 )

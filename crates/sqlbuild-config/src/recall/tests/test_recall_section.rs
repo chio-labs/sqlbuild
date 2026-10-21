@@ -85,12 +85,6 @@ fn given_invalid_sections_when_validated_then_the_message_names_the_key() {
                                       read_connection = \"history\"",
         },
         InvalidSectionTestCase {
-            description: "a write connection needs a read connection",
-            value: table(&[("write_connection", text("history"))]),
-            label: "recall",
-            expected_message_prefix: "recall.write_connection requires recall.read_connection",
-        },
-        InvalidSectionTestCase {
             description: "unknown keys are listed",
             value: table(&[("mode", text("x"))]),
             label: "recall",

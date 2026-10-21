@@ -1,4 +1,4 @@
-use crate::settings::models::{RecallSettings, StoreLocation};
+use crate::settings::models::{RecallSettings, StoreLocation, StorePurpose};
 use crate::settings::tests::helpers::{central_store, defaults, local_store, resolved};
 use crate::settings::tests::test_types::{ResolveErrorTestCase, ResolveTestCase};
 
@@ -42,6 +42,47 @@ const OUTPUT_LIMIT_PROJECT: &[(&str, &str)] = &[(
      [targets.dev]\n[targets.dev.recall]\nmax_output_bytes = 8388608\n[targets.prod]\n",
 )];
 
+const WRITER_CREDENTIALS_PROJECT: &[(&str, &str)] = &[(
+    "sqlbuild_project.toml",
+    "name = \"shop\"\nadapter = \"duckdb\"\n\
+     [recall]\nwrite_connection = \"central\"\nread_connection = \"reader\"\n\
+     [connections.central]\nadapter = \"clickhouse\"\nhost = \"localhost\"\n\
+     database = \"observability\"\npassword = \"secret\"\n\
+     [connections.reader]\nadapter = \"clickhouse\"\nhost = \"localhost\"\n\
+     database = \"observability\"\npassword = \"${env:SQLBUILD_RECALL_READER_UNSET_FOR_TEST}\"\n",
+)];
+
+const READER_CREDENTIALS_PROJECT: &[(&str, &str)] = &[(
+    "sqlbuild_project.toml",
+    "name = \"shop\"\nadapter = \"duckdb\"\n\
+     [recall]\nwrite_connection = \"writer\"\nread_connection = \"central\"\n\
+     [connections.writer]\nadapter = \"clickhouse\"\nhost = \"localhost\"\n\
+     database = \"observability\"\npassword = \"${env:SQLBUILD_RECALL_WRITER_UNSET_FOR_TEST}\"\n\
+     [connections.central]\nadapter = \"clickhouse\"\nhost = \"localhost\"\n\
+     database = \"observability\"\npassword = \"secret\"\n",
+)];
+
+const LOCAL_READ_PROJECT: &[(&str, &str)] = &[
+    (
+        "sqlbuild_project.toml",
+        "name = \"shop\"\nadapter = \"duckdb\"\n[recall]\nwrite_connection = \"central\"\n\
+         [connections.central]\nadapter = \"clickhouse\"\nhost = \"localhost\"\n\
+         database = \"observability\"\npassword = \"secret\"\n",
+    ),
+    (
+        "sqlbuild_local.toml",
+        "[recall]\nread_connection = \"central\"\n",
+    ),
+];
+
+const TARGET_WRITE_PROJECT: &[(&str, &str)] = &[(
+    "sqlbuild_project.toml",
+    "name = \"shop\"\nadapter = \"duckdb\"\n[recall]\nread_connection = \"central\"\n\
+     [connections.central]\nadapter = \"clickhouse\"\nhost = \"localhost\"\n\
+     database = \"observability\"\npassword = \"secret\"\n\
+     [targets.ci]\n[targets.ci.recall]\nwrite_connection = \"central\"\n",
+)];
+
 #[test]
 fn given_project_layers_when_resolved_then_target_over_local_over_project_over_defaults() {
     let test_cases = [
@@ -49,6 +90,7 @@ fn given_project_layers_when_resolved_then_target_over_local_over_project_over_d
             description: "without a recall section local SQLite is on by default",
             files: DEFAULT_PROJECT,
             target: None,
+            purpose: StorePurpose::Record,
             expected_settings: RecallSettings {
                 target: Some("dev".to_owned()),
                 destination_schema: Some("analytics".to_owned()),
@@ -59,13 +101,11 @@ fn given_project_layers_when_resolved_then_target_over_local_over_project_over_d
             description: "the target disables recall and the local file moves the store",
             files: LAYERED_PROJECT,
             target: Some("dev"),
+            purpose: StorePurpose::Record,
             expected_settings: RecallSettings {
                 enabled: false,
                 target: Some("dev".to_owned()),
                 store: StoreLocation::Sqlite {
-                    path: "/tmp/opencode/elsewhere.sqlite3".into(),
-                },
-                read_store: StoreLocation::Sqlite {
                     path: "/tmp/opencode/elsewhere.sqlite3".into(),
                 },
                 write_connection: Some("history".to_owned()),
@@ -79,10 +119,10 @@ fn given_project_layers_when_resolved_then_target_over_local_over_project_over_d
             description: "a ClickHouse connection keeps its options and records all output by default",
             files: LAYERED_PROJECT,
             target: Some("prod"),
+            purpose: StorePurpose::Record,
             expected_settings: RecallSettings {
                 target: Some("prod".to_owned()),
                 store: central_store(),
-                read_store: central_store(),
                 write_connection: Some("central".to_owned()),
                 read_connection: Some("central".to_owned()),
                 retention_days: 10,
@@ -95,10 +135,10 @@ fn given_project_layers_when_resolved_then_target_over_local_over_project_over_d
             description: "a configured output limit applies to a ClickHouse store",
             files: LAYERED_PROJECT,
             target: Some("capped"),
+            purpose: StorePurpose::Record,
             expected_settings: RecallSettings {
                 target: Some("capped".to_owned()),
                 store: central_store(),
-                read_store: central_store(),
                 write_connection: Some("central".to_owned()),
                 read_connection: Some("central".to_owned()),
                 retention_days: 10,
@@ -111,6 +151,7 @@ fn given_project_layers_when_resolved_then_target_over_local_over_project_over_d
             description: "a target raises the output limit over the project's unlimited one",
             files: OUTPUT_LIMIT_PROJECT,
             target: Some("dev"),
+            purpose: StorePurpose::Record,
             expected_settings: RecallSettings {
                 target: Some("dev".to_owned()),
                 max_output_bytes: Some(8_388_608),
@@ -121,6 +162,7 @@ fn given_project_layers_when_resolved_then_target_over_local_over_project_over_d
             description: "zero records all output",
             files: OUTPUT_LIMIT_PROJECT,
             target: Some("prod"),
+            purpose: StorePurpose::Record,
             expected_settings: RecallSettings {
                 target: Some("prod".to_owned()),
                 max_output_bytes: None,
@@ -131,13 +173,10 @@ fn given_project_layers_when_resolved_then_target_over_local_over_project_over_d
             description: "a connection on another adapter is reported as unsupported",
             files: LAYERED_PROJECT,
             target: Some("qa"),
+            purpose: StorePurpose::Record,
             expected_settings: RecallSettings {
                 target: Some("qa".to_owned()),
                 store: StoreLocation::Unsupported {
-                    connection: "other".to_owned(),
-                    adapter: "postgres".to_owned(),
-                },
-                read_store: StoreLocation::Unsupported {
                     connection: "other".to_owned(),
                     adapter: "postgres".to_owned(),
                 },
@@ -153,12 +192,12 @@ fn given_project_layers_when_resolved_then_target_over_local_over_project_over_d
             description: "a target read connection replaces only the read side",
             files: LAYERED_PROJECT,
             target: Some("laptop"),
+            purpose: StorePurpose::Record,
             expected_settings: RecallSettings {
                 target: Some("laptop".to_owned()),
                 store: StoreLocation::Sqlite {
                     path: "/tmp/opencode/elsewhere.sqlite3".into(),
                 },
-                read_store: central_store(),
                 write_connection: Some("history".to_owned()),
                 read_connection: Some("central".to_owned()),
                 retention_days: 10,
@@ -171,10 +210,91 @@ fn given_project_layers_when_resolved_then_target_over_local_over_project_over_d
             description: "a read connection alone reads shared history and writes the local store",
             files: READER_PROJECT,
             target: None,
+            purpose: StorePurpose::Record,
             expected_settings: RecallSettings {
                 store: local_store(),
-                read_store: central_store(),
                 read_connection: Some("central".to_owned()),
+                ..defaults()
+            },
+        },
+        ResolveTestCase {
+            description: "a reader resolves the read connection a target sets",
+            files: LAYERED_PROJECT,
+            target: Some("laptop"),
+            purpose: StorePurpose::Read,
+            expected_settings: RecallSettings {
+                target: Some("laptop".to_owned()),
+                store: central_store(),
+                write_connection: Some("history".to_owned()),
+                read_connection: Some("central".to_owned()),
+                retention_days: 10,
+                shutdown_timeout_ms: 1000,
+                max_output_bytes: None,
+                ..defaults()
+            },
+        },
+        ResolveTestCase {
+            description: "a reader with a read connection alone reads shared history",
+            files: READER_PROJECT,
+            target: None,
+            purpose: StorePurpose::Read,
+            expected_settings: RecallSettings {
+                store: central_store(),
+                read_connection: Some("central".to_owned()),
+                max_output_bytes: None,
+                ..defaults()
+            },
+        },
+        ResolveTestCase {
+            description: "a recording machine needs only the writer's environment",
+            files: WRITER_CREDENTIALS_PROJECT,
+            target: None,
+            purpose: StorePurpose::Record,
+            expected_settings: RecallSettings {
+                store: central_store(),
+                write_connection: Some("central".to_owned()),
+                read_connection: Some("reader".to_owned()),
+                max_output_bytes: None,
+                ..defaults()
+            },
+        },
+        ResolveTestCase {
+            description: "a reader needs only the reader's environment",
+            files: READER_CREDENTIALS_PROJECT,
+            target: None,
+            purpose: StorePurpose::Read,
+            expected_settings: RecallSettings {
+                store: central_store(),
+                write_connection: Some("writer".to_owned()),
+                read_connection: Some("central".to_owned()),
+                max_output_bytes: None,
+                ..defaults()
+            },
+        },
+        ResolveTestCase {
+            description: "a local read connection completes a project write connection",
+            files: LOCAL_READ_PROJECT,
+            target: None,
+            purpose: StorePurpose::Record,
+            expected_settings: RecallSettings {
+                store: central_store(),
+                write_connection: Some("central".to_owned()),
+                read_connection: Some("central".to_owned()),
+                max_output_bytes: None,
+                ..defaults()
+            },
+        },
+        ResolveTestCase {
+            description: "a target's write connection is completed by the project's read connection",
+            files: TARGET_WRITE_PROJECT,
+            target: Some("ci"),
+            purpose: StorePurpose::Record,
+            expected_settings: RecallSettings {
+                target: Some("ci".to_owned()),
+                store: central_store(),
+                write_connection: Some("central".to_owned()),
+                read_connection: Some("central".to_owned()),
+                max_output_bytes: None,
                 ..defaults()
             },
         },
@@ -182,7 +302,7 @@ fn given_project_layers_when_resolved_then_target_over_local_over_project_over_d
 
     for test_case in test_cases {
         assert_eq!(
-            resolved(test_case.files, test_case.target),
+            resolved(test_case.files, test_case.target, test_case.purpose),
             Ok(format!("{:?}", test_case.expected_settings)),
             "{}",
             test_case.description
@@ -200,6 +320,7 @@ fn given_invalid_settings_when_resolved_then_the_error_names_the_setting() {
                 "name = \"x\"\nadapter = \"duckdb\"\n[recall]\nwrite_connection = \"local\"\nread_connection = \"missing\"\n[connections.local]\npath = \"a.sqlite3\"\nadapter = \"sqlite\"\n",
             )],
             target: None,
+            purpose: StorePurpose::Read,
             expected_message_fragment: "recall.read_connection names unknown connection 'missing'",
         },
         ResolveErrorTestCase {
@@ -209,6 +330,7 @@ fn given_invalid_settings_when_resolved_then_the_error_names_the_setting() {
                 "name = \"x\"\nadapter = \"duckdb\"\n[targets.dev.recall]\nretention = \"soon\"\n",
             )],
             target: Some("dev"),
+            purpose: StorePurpose::Record,
             expected_message_fragment: "targets.dev.recall.retention",
         },
         ResolveErrorTestCase {
@@ -220,13 +342,39 @@ fn given_invalid_settings_when_resolved_then_the_error_names_the_setting() {
                  password = \"${env:SQLBUILD_RECALL_UNSET_FOR_TEST}\"\n",
             )],
             target: None,
+            purpose: StorePurpose::Read,
             expected_message_fragment: "connections.central.password references unset",
+        },
+        ResolveErrorTestCase {
+            description: "a reader without the reader's environment names it",
+            files: WRITER_CREDENTIALS_PROJECT,
+            target: None,
+            purpose: StorePurpose::Read,
+            expected_message_fragment: "connections.reader.password references unset",
+        },
+        ResolveErrorTestCase {
+            description: "a recording machine without the writer's environment names it",
+            files: READER_CREDENTIALS_PROJECT,
+            target: None,
+            purpose: StorePurpose::Record,
+            expected_message_fragment: "connections.writer.password references unset",
+        },
+        ResolveErrorTestCase {
+            description: "a write connection without a read connection anywhere is rejected",
+            files: &[(
+                "sqlbuild_project.toml",
+                "name = \"x\"\nadapter = \"duckdb\"\n[targets.ci.recall]\nwrite_connection = \"local\"\n\
+                 [connections.local]\npath = \"a.sqlite3\"\nadapter = \"sqlite\"\n",
+            )],
+            target: Some("ci"),
+            purpose: StorePurpose::Read,
+            expected_message_fragment: "recall.write_connection requires recall.read_connection for target `ci`",
         },
     ];
 
     for test_case in test_cases {
-        let message: String =
-            resolved(test_case.files, test_case.target).expect_err("the settings are invalid");
+        let message: String = resolved(test_case.files, test_case.target, test_case.purpose)
+            .expect_err("the settings are invalid");
         assert!(
             message.contains(test_case.expected_message_fragment),
             "{}: {message}",

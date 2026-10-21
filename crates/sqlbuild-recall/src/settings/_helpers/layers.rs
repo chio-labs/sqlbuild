@@ -13,7 +13,7 @@ use crate::settings::constants::{
     SQLITE_PATH_KEY,
 };
 use crate::settings::errors::SettingsError;
-use crate::settings::models::StoreLocation;
+use crate::settings::models::{StoreLocation, StorePurpose};
 
 pub(crate) fn section(
     document: Option<&ConfigValue>,
@@ -38,6 +38,27 @@ pub(crate) fn overlay(base: RecallSection, layer: RecallSection) -> RecallSectio
             .or(base.diagnostics_min_severity),
         max_output_bytes: layer.max_output_bytes.or(base.max_output_bytes),
     }
+}
+
+/// The key and connection the purpose uses from the merged settings; a write connection with no read connection on any layer is a configuration mistake.
+pub(crate) fn purpose_connection<'a>(
+    effective: &'a RecallSection,
+    target: Option<&str>,
+    purpose: StorePurpose,
+) -> Result<(&'static str, Option<&'a str>), SettingsError> {
+    if effective.write_connection.is_some() && effective.read_connection.is_none() {
+        let place: String =
+            target.map_or_else(String::new, |target| format!(" for target `{target}`"));
+        return Err(SettingsError::invalid_configuration(format!(
+            "recall.write_connection requires recall.read_connection{place}, the connection \
+             `sqb recall` reads history with; set it in [recall], a target's recall table or \
+             sqlbuild_local.toml (it may name the same connection)"
+        )));
+    }
+    Ok(match purpose {
+        StorePurpose::Record => ("write_connection", effective.write_connection.as_deref()),
+        StorePurpose::Read => ("read_connection", effective.read_connection.as_deref()),
+    })
 }
 
 /// The named connection's entries, local keys overriding project keys.

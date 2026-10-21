@@ -1,3 +1,4 @@
+import json
 import sqlite3
 import subprocess
 from pathlib import Path
@@ -6,10 +7,13 @@ import pytest
 
 from tests.integration.src.sqlbuild.cli.recall._test_types import (
     BehindStoreTestCase,
+    LayeredConnectionsTestCase,
     ReadOnlyReaderTestCase,
     RecallConnectionErrorTestCase,
+    SplitCredentialsTestCase,
 )
 from tests.integration.src.sqlbuild.cli.recall.helpers import (
+    SPLIT_CREDENTIALS_TOML,
     make_store_behind,
     recall_rows,
     run,
@@ -150,3 +154,84 @@ def test_given_a_store_one_version_behind_when_read_then_no_ddl_runs_and_the_pri
     assert rebuilt.returncode == 0
     assert b"Recall" not in rebuilt.stderr
     assert recall_rows(project_dir, "SELECT count(*) FROM invocations") == [[2]]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SplitCredentialsTestCase(
+            description="the writer needs only its variable and the reader only its own",
+            writer_environment={"ORDERS_RECALL_WRITER_PATH": "history.sqlite3"},
+            reader_environment={"ORDERS_RECALL_READER_PATH": "history.sqlite3"},
+            expected_invocations=[["build", "completed"]],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_split_credentials_when_each_side_runs_then_it_resolves_only_its_connection(
+    test_case: SplitCredentialsTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_project(
+        tmp_path / "orders_shop",
+        extra_toml=SPLIT_CREDENTIALS_TOML,
+    )
+
+    built: subprocess.CompletedProcess[bytes] = run(
+        project_dir, "build", **test_case.writer_environment
+    )
+    read: subprocess.CompletedProcess[bytes] = run(
+        project_dir,
+        "recall",
+        "query",
+        "--json",
+        "SELECT command, status FROM invocations",
+        **test_case.reader_environment,
+    )
+
+    assert built.returncode == 0, built.stderr.decode(errors="replace")
+    assert read.returncode == 0, read.stderr.decode(errors="replace")
+    assert json.loads(read.stdout)["rows"] == test_case.expected_invocations
+    assert not (project_dir / "logs" / "recall.sqlite3").exists()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LayeredConnectionsTestCase(
+            description="a local read connection completes the project's write connection",
+            project_toml='[recall]\nwrite_connection = "history"\n',
+            local_toml='[recall]\nread_connection = "history"\n',
+            expected_invocations=[["build", "completed"]],
+        ),
+        LayeredConnectionsTestCase(
+            description="a target's write connection is completed by the project's read connection",
+            project_toml=(
+                '[recall]\nread_connection = "history"\n'
+                '[targets.dev.recall]\nwrite_connection = "history"\n'
+            ),
+            local_toml="",
+            expected_invocations=[["build", "completed"]],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_connections_split_across_layers_when_building_then_history_is_recorded(
+    test_case: LayeredConnectionsTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_project(
+        tmp_path / "orders_shop",
+        extra_toml=(
+            '\n[connections.history]\nadapter = "sqlite"\npath = "history.sqlite3"\n\n'
+            + test_case.project_toml
+        ),
+    )
+    _ = (project_dir / "sqlbuild_local.toml").write_text(test_case.local_toml)
+
+    built: subprocess.CompletedProcess[bytes] = run(project_dir, "build")
+
+    assert built.returncode == 0, built.stderr.decode(errors="replace")
+    assert (
+        recall_rows(project_dir, "SELECT command, status FROM invocations")
+        == test_case.expected_invocations
+    )
+    assert (project_dir / "history.sqlite3").exists()

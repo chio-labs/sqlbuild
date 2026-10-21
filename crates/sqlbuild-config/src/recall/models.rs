@@ -4,7 +4,7 @@
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RecallSection {
     pub enabled: Option<bool>,
-    /// The connection every command writes its history to; requires `read_connection`.
+    /// The connection every command writes its history to; the merged settings must also set `read_connection`.
     pub write_connection: Option<String>,
     /// The connection `sqb recall query`, `schema` and `output` read.
     pub read_connection: Option<String>,

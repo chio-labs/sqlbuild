@@ -274,3 +274,33 @@ class StoreBeingCreatedTestCase:
     description: str
     args: tuple[str, ...]
     expected_error: str
+
+
+@dataclass(frozen=True)
+class SplitCredentialsTestCase:
+    description: str
+    writer_environment: dict[str, str]
+    reader_environment: dict[str, str]
+    expected_invocations: list[list[object]]
+
+
+@dataclass(frozen=True)
+class LayeredConnectionsTestCase:
+    description: str
+    project_toml: str
+    local_toml: str
+    expected_invocations: list[list[object]]
+
+
+@dataclass(frozen=True)
+class RecallUsageErrorTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_message: str
+
+
+@dataclass(frozen=True)
+class RecallDiagnosticsTestCase:
+    description: str
+    global_args: tuple[str, ...]
+    expected_debug_log: bool

@@ -15,7 +15,9 @@ use sqlbuild_recall::records::models::{InvocationContext, OutputStream, RowEnvel
 use sqlbuild_recall::schema::main::ddl_script::ddl_script;
 use sqlbuild_recall::schema::models::{DdlOptions, Dialect};
 use sqlbuild_recall::settings::main::resolve_recall_settings::resolve_recall_settings;
-use sqlbuild_recall::settings::models::{RecallSettings, SettingsRequest, StoreLocation};
+use sqlbuild_recall::settings::models::{
+    RecallSettings, SettingsRequest, StoreLocation, StorePurpose,
+};
 use sqlbuild_recall::store::main::observe_store_file::observe_store_file;
 use sqlbuild_recall::store::main::quarantine_store::quarantine_store;
 use sqlbuild_recall::store::main::store_location_problem::store_location_problem;
@@ -54,6 +56,8 @@ pub(crate) struct InvocationRecall {
     pub(crate) settings: Option<(RecallSettings, PathBuf)>,
     /// The Recall replacement sinks, configured once runtime extensions are discovered.
     pub(crate) replacements: Arc<RecallReplacements>,
+    /// A Recall configuration mistake the command fails with before it runs.
+    pub(crate) configuration_error: Option<String>,
 }
 
 /// The text of an optional attribute value.
@@ -402,7 +406,7 @@ fn started_session(
     Ok(Some(Arc::new(session)))
 }
 
-/// Begin recording when Recall is enabled, without waiting on the store; invalid settings record nothing and the command reports them.
+/// Begin recording when Recall is enabled, without waiting on the store. Only the write connection is resolved; a write connection without a read connection is kept for the command to fail with, and other unresolvable settings record nothing.
 pub(crate) fn start_invocation_recall(
     py: Python<'_>,
     args: &Bound<'_, PyAny>,
@@ -413,9 +417,17 @@ pub(crate) fn start_invocation_recall(
     let request = SettingsRequest {
         project_dir: project_dir.clone(),
         selected_target: text_value(&args.getattr("target")?)?,
+        purpose: StorePurpose::Record,
     };
-    let Ok(settings) = resolve_recall_settings(&request) else {
-        return Ok(InvocationRecall::default());
+    let settings: RecallSettings = match resolve_recall_settings(&request) {
+        Ok(settings) => settings,
+        Err(error) if error.invalid_configuration => {
+            return Ok(InvocationRecall {
+                configuration_error: Some(error.message),
+                ..InvocationRecall::default()
+            });
+        }
+        Err(_unreachable_store) => return Ok(InvocationRecall::default()),
     };
     let session: Option<Arc<RecallSession>> = if settings.enabled && settings.project_name.is_some()
     {
@@ -430,6 +442,7 @@ pub(crate) fn start_invocation_recall(
         command: facts.command.clone().unwrap_or_default(),
         settings: Some((settings, project_dir)),
         replacements: Arc::default(),
+        configuration_error: None,
     })
 }
 

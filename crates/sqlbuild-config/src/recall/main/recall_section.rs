@@ -73,12 +73,6 @@ pub fn recall_section(value: &ConfigValue, label: &str) -> Result<RecallSection,
             }
         }
     }
-    if section.write_connection.is_some() && section.read_connection.is_none() {
-        return Err(format!(
-            "{label}.write_connection requires {label}.read_connection, the connection \
-             `sqb recall` reads history with; it may name the same connection"
-        ));
-    }
     Ok(section)
 }
 

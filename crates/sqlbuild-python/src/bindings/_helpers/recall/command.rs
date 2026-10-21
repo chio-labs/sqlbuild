@@ -12,7 +12,9 @@ use sqlbuild_recall::schema::main::render_script::render_script;
 use sqlbuild_recall::schema::main::upgrade_statements::upgrade_statements;
 use sqlbuild_recall::schema::models::{DdlOptions, Dialect};
 use sqlbuild_recall::settings::main::resolve_recall_settings::resolve_recall_settings;
-use sqlbuild_recall::settings::models::{RecallSettings, SettingsRequest, StoreLocation};
+use sqlbuild_recall::settings::models::{
+    RecallSettings, SettingsRequest, StoreLocation, StorePurpose,
+};
 use sqlbuild_recall::store::errors::{StoreError, StoreErrorKind};
 use sqlbuild_recall::store::main::describe_store::describe_store;
 use sqlbuild_recall::store::main::observe_sqlite_schema::observe_sqlite_schema;
@@ -116,6 +118,7 @@ fn settings(py: Python<'_>, recall: &RecallRequest) -> PyResult<(PathBuf, Recall
     let request = SettingsRequest {
         project_dir: project_dir.clone(),
         selected_target: recall.selected_target.clone(),
+        purpose: StorePurpose::Read,
     };
     let settings = resolve_recall_settings(&request)
         .map_err(|error| user_error(py, &error.message, RECALL_SETTINGS_CODE))?;
@@ -177,7 +180,7 @@ impl ReadStore {
 
 /// The read store; `checked` first confirms a ClickHouse store exists, which a query skips and confirms only if it fails.
 fn open_store(py: Python<'_>, settings: &RecallSettings, checked: bool) -> PyResult<ReadStore> {
-    match &settings.read_store {
+    match &settings.store {
         StoreLocation::Sqlite { path } => {
             let store = open_sqlite_store(path, OpenMode::ReadOnly).map_err(|error| {
                 if error.kind == StoreErrorKind::NotFound {
@@ -337,8 +340,7 @@ fn run_query(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
 
 /// Print what creates the read store, or brings it up to this build's schema, without changing it.
 fn run_schema_ddl(py: Python<'_>, settings: &RecallSettings) -> PyResult<i32> {
-    let (statements, place): (Result<Vec<String>, StoreError>, String) = match &settings.read_store
-    {
+    let (statements, place): (Result<Vec<String>, StoreError>, String) = match &settings.store {
         StoreLocation::Sqlite { path } => {
             let options = DdlOptions {
                 database: None,

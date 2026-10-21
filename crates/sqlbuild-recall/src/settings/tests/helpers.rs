@@ -3,13 +3,17 @@ use std::path::PathBuf;
 use sqlbuild_config::models::ConfigValue;
 
 use crate::settings::main::resolve_recall_settings::resolve_recall_settings;
-use crate::settings::models::{RecallSettings, SettingsRequest, StoreLocation};
+use crate::settings::models::{RecallSettings, SettingsRequest, StoreLocation, StorePurpose};
 
 /// The placeholder project directory resolved paths are reported under.
 pub(crate) const PROJECT: &str = "<project>";
 
 /// Settings resolved for a project holding `files`, debug-printed with its directory as `PROJECT`.
-pub(crate) fn resolved(files: &[(&str, &str)], target: Option<&str>) -> Result<String, String> {
+pub(crate) fn resolved(
+    files: &[(&str, &str)],
+    target: Option<&str>,
+    purpose: StorePurpose,
+) -> Result<String, String> {
     let directory = tempfile::tempdir().expect("a temporary directory can be created");
     for (name, text) in files {
         std::fs::write(directory.path().join(name), text).expect("test files can be written");
@@ -17,6 +21,7 @@ pub(crate) fn resolved(files: &[(&str, &str)], target: Option<&str>) -> Result<S
     let request = SettingsRequest {
         project_dir: directory.path().to_path_buf(),
         selected_target: target.map(str::to_owned),
+        purpose,
     };
     let project: String = directory.path().to_string_lossy().into_owned();
     resolve_recall_settings(&request)
@@ -59,7 +64,6 @@ pub(crate) fn defaults() -> RecallSettings {
         enabled: true,
         target: None,
         store: local_store(),
-        read_store: local_store(),
         write_connection: None,
         read_connection: None,
         retention_days: 30,

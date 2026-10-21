@@ -39,10 +39,8 @@ pub struct RecallSettings {
     pub enabled: bool,
     /// The effective target; `None` for commands without one.
     pub target: Option<String>,
-    /// Where this invocation's own history is written.
+    /// The store of the request's purpose: where this invocation's history is written, or where `sqb recall` reads it.
     pub store: StoreLocation,
-    /// Where `sqb recall query`, `schema` and `output` read history.
-    pub read_store: StoreLocation,
     /// The configured write connection, `None` for the built-in local store.
     pub write_connection: Option<String>,
     /// The configured read connection, `None` for the built-in local store.
@@ -58,9 +56,19 @@ pub struct RecallSettings {
     pub destination_schema: Option<String>,
 }
 
-/// What selects the settings: the project directory and the `--target` option.
+/// Which connection an invocation uses, so only that one is resolved and its environment references expanded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StorePurpose {
+    /// Recording the invocation's own history through `write_connection`.
+    Record,
+    /// `sqb recall query`, `schema` and `output` through `read_connection`.
+    Read,
+}
+
+/// What selects the settings: the project directory, the `--target` option and the connection used.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SettingsRequest {
     pub project_dir: PathBuf,
     pub selected_target: Option<String>,
+    pub purpose: StorePurpose,
 }

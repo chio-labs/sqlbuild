@@ -31,14 +31,14 @@ use crate::bindings::_helpers::diff_report::output::render_diff_error_json;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::output_capture::records::invocation_context;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
-use crate::bindings::_helpers::recall::constants::JSON_FORMAT;
+use crate::bindings::_helpers::recall::constants::{JSON_FORMAT, RECALL_SETTINGS_CODE};
 use crate::bindings::_helpers::recall::events::escaped_text;
 use crate::bindings::_helpers::recall::session::{
     InvocationRecall, finish_invocation_recall, start_invocation_recall,
 };
 use crate::bindings::_helpers::recall::sinks::RecallLifecycleSink;
-use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::record_class;
+use crate::bindings::_helpers::records::construct::{error_class, new_error};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::workspace_commands::commands::maintain_sqlbuild_skills;
@@ -581,7 +581,15 @@ fn handled_dispatch<'py>(invocation: &Invocation<'py>) -> PyResult<Bound<'py, Py
     let py: Python<'py> = invocation.py();
     let policy: InvocationPolicy = invocation_policy(&invocation.facts);
     report_skill_freshness(invocation, policy)?;
-    let dispatched: PyResult<Bound<'py, PyAny>> = observed_dispatch(invocation, policy);
+    let dispatched: PyResult<Bound<'py, PyAny>> = match &invocation.recall.configuration_error {
+        Some(message) => Err(new_error(
+            py,
+            ErrorId::CliUser,
+            message.clone(),
+            RECALL_SETTINGS_CODE,
+        )),
+        None => observed_dispatch(invocation, policy),
+    };
     shared_transient_line_coordinator(py)
         .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
         .call_method0("clear_active")?;
