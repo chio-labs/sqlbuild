@@ -53,6 +53,21 @@ fn migrate(
     if !decision.needed {
         return migrated;
     }
+    if old == new
+        && before
+            .iter()
+            .any(|model| model.name == old && model.declares_migrate_from)
+    {
+        migrated.blocking.push(ManualLocation {
+            path: migrated.changes[index].path.clone(),
+            line: None,
+            column: None,
+            reason: format!(
+                "model:{old} still declares migrate_from and this move changes its relation; build it on every target and remove migrate_from before moving it again"
+            ),
+        });
+        return migrated;
+    }
     let declaration = format!("{MIGRATE_FROM_KEY} {old}");
     let change = &migrated.changes[index];
     let contents = originals

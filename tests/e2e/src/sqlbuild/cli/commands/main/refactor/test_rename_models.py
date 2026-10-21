@@ -12,6 +12,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.refactor._test_types import (
     DryRunE2ETestCase,
     ModelMigrationE2ETestCase,
     ModelRefactorE2ETestCase,
+    PendingMigrationRefactorE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
     CUSTOMER_DECLARATIONS,
@@ -266,3 +267,51 @@ def test_given_built_model_when_renamed_then_build_migrates_its_relation(
         test_case.expected_old_name_type
     )
     assert order_ids(project_dir=project_dir, name="order_ledger") == test_case.expected_order_ids
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PendingMigrationRefactorE2ETestCase(
+            description="move to another folder under the same name carries migrate_from",
+            command=("mv", "model:order_ledger", "models/reporting/"),
+            expected_returncode=0,
+            expected_file="models/reporting/order_ledger.sql",
+            expected_output="Compiled: ok",
+        ),
+        PendingMigrationRefactorE2ETestCase(
+            description="rename on top of an undeployed migration is refused",
+            command=("rename", "model:order_ledger", "order_journal"),
+            expected_returncode=1,
+            expected_file="models/marts/order_ledger.sql",
+            expected_output="still declares migrate_from",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_model_with_pending_migration_when_refactored_again_then_only_renames_are_refused(
+    tmp_path: Path, test_case: PendingMigrationRefactorE2ETestCase
+) -> None:
+    """A same-name folder move keeps the relation, so the undeployed migrate_from moves with it."""
+
+    project_dir: Path = write_orders_project(
+        tmp_path=tmp_path, files=order_history_files(materialized="table", udf=False)
+    )
+    first: subprocess.CompletedProcess[str] = sqb(project_dir, "build")
+    renamed: subprocess.CompletedProcess[str] = sqb(
+        project_dir, "rename", "model:order_history", "order_ledger"
+    )
+
+    result: subprocess.CompletedProcess[str] = sqb(project_dir, *test_case.command)
+    header: str = (project_dir / test_case.expected_file).read_text(encoding="utf-8")
+    load_raw_orders(project_dir=project_dir, order_ids=(3, 4))
+    second: subprocess.CompletedProcess[str] = sqb(project_dir, "build")
+
+    assert first.returncode == 0, first.stdout + first.stderr
+    assert renamed.returncode == 0, renamed.stdout + renamed.stderr
+    assert result.returncode == test_case.expected_returncode, result.stdout + result.stderr
+    assert test_case.expected_output in result.stdout + result.stderr
+    assert header.count("migrate_from order_history") == 1, header
+    assert second.returncode == 0, second.stdout + second.stderr
+    assert relation_type(project_dir=project_dir, name="order_history") == "VIEW"
+    assert order_ids(project_dir=project_dir, name="order_ledger") == (3, 4)
