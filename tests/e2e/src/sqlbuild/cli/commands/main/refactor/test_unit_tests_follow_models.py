@@ -11,8 +11,10 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.refactor._test_types import (
     FollowedUnitTestDryRunE2ETestCase,
     FollowedUnitTestE2ETestCase,
+    ScopedUnitTestMoveE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
+    CUSTOMER_TOTALS,
     FACT_ORDERS_TEST,
     fragments_present,
     project_text,
@@ -130,3 +132,82 @@ def test_given_dry_run_when_renaming_model_with_unit_test_then_reports_move_and_
     assert payload["status"] == test_case.expected_status
     assert test_case.expected_path in [str(item["path"]) for item in payload["files"]]
     assert project_text(project_dir) == before
+
+
+_SAMPLE_AMOUNT_MACRO: str = 'def sample_amount() -> str:\n    return "{amount}"\n'
+_MARTS_MACRO: str = "tests/unit/marts/_sqlbuild/_macros/sample_amount.py"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScopedUnitTestMoveE2ETestCase(
+            description="a folder-scoped test macro keeps the test in its folder",
+            extra_files={_MARTS_MACRO: _SAMPLE_AMOUNT_MACRO.format(amount=25)},
+            amount_sql="@sample_amount()",
+            expected_path="tests/unit/marts/test_order_facts__keeps_orders.sql",
+            expected_note="macro:sample_amount",
+        ),
+        ScopedUnitTestMoveE2ETestCase(
+            description="a folder-scoped test constant keeps the test in its folder",
+            extra_files={
+                "tests/unit/marts/_sqlbuild/_constants/amounts.sql": (
+                    "CONSTANT (name sample_amount, value 25);\n"
+                ),
+            },
+            amount_sql='@const("sample_amount")',
+            expected_path="tests/unit/marts/test_order_facts__keeps_orders.sql",
+            expected_note="constant:sample_amount",
+        ),
+        ScopedUnitTestMoveE2ETestCase(
+            description="a project-wide constant lets the test move",
+            extra_files={
+                "constants/orders.sql": "CONSTANT (name sample_amount, value 25);\n",
+                "models/marts/customer_totals.sql": CUSTOMER_TOTALS.replace(
+                    "GROUP BY customer_id\n",
+                    'GROUP BY customer_id\nHAVING SUM(amount) >= @const("sample_amount")\n',
+                ),
+            },
+            amount_sql='@const("sample_amount")',
+            expected_path="tests/unit/reporting/test_order_facts__keeps_orders.sql",
+            expected_note=None,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_scoped_declarations_when_moving_model_then_test_moves_only_if_they_resolve_alike(
+    tmp_path: Path, test_case: ScopedUnitTestMoveE2ETestCase
+) -> None:
+    """A test moves only when its macros, enums and constants resolve alike from the destination.
+
+    Without SQBRTEST103 selected, a test kept outside the destination's mirrored folder compiles.
+    """
+
+    test_sql: str = (
+        _FILES[_MIRRORED_TEST]
+        .replace("25 AS amount", f"{test_case.amount_sql} AS amount", 1)
+    )
+    project_dir: Path = write_orders_project(
+        tmp_path=tmp_path,
+        files={_MIRRORED_TEST: test_sql, **test_case.extra_files},
+    )
+    remove_files(project_dir=project_dir, paths=("tests/unit/test_fact_orders.sql",))
+
+    result: subprocess.CompletedProcess[str] = sqb(
+        project_dir, "mv", "model:fact_orders", "models/reporting/order_facts.sql"
+    )
+    tested: subprocess.CompletedProcess[str] = sqb(project_dir, "test")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not (project_dir / _MIRRORED_TEST).exists()
+    moved: str = (project_dir / test_case.expected_path).read_text(encoding="utf-8")
+    assert 'TEST (name "order_facts__keeps_orders");' in moved
+    assert test_case.amount_sql in moved
+    notes: list[str] = [line for line in result.stdout.splitlines() if "kept in its folder" in line]
+    if test_case.expected_note is None:
+        assert notes == [], result.stdout
+    else:
+        assert len(notes) == 1, result.stdout
+        assert test_case.expected_path in notes[0]
+        assert test_case.expected_note in notes[0]
+    assert tested.returncode == 0, tested.stdout + tested.stderr

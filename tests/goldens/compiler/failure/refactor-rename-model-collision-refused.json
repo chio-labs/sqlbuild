@@ -43,6 +43,7 @@
       "reason": "model:customer_totals already exists"
      }
     ],
+    "notes": [],
     "compile": {
      "ok": true,
      "errors": []

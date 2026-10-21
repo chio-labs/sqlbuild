@@ -10,13 +10,15 @@ use crate::refactoring::constants::{COLUMN_MANUAL_HELP, MODEL_MANUAL_HELP};
 use crate::refactoring::errors::RefactorError;
 use crate::refactoring::models::{RefactorFacts, RefactorOperation, RefactorPlan, RefactorRequest};
 
-use crate::refactoring::types::DeclarationMoveHost;
+use crate::refactoring::types::{DeclarationMoveHost, UnitTestScopeHost};
 
-/// Plan one refactoring without touching files; `host` finds declaration-file moves.
+/// Plan one refactoring without touching files; `host` finds declaration-file moves and
+/// `test_host` the declarations that keep a unit test file in its folder.
 pub fn plan_refactor(
     facts: &RefactorFacts,
     request: &RefactorRequest,
     host: &DeclarationMoveHost<'_>,
+    test_host: &UnitTestScopeHost<'_>,
 ) -> Result<RefactorPlan, RefactorError> {
     let context = ScanContext::for_facts(facts);
     if request.operation == RefactorOperation::RenameColumn {
@@ -35,7 +37,7 @@ pub fn plan_refactor(
         ));
     }
     let target = model_target(facts, request)?;
-    let parts = model_parts(facts, &target, &context, host)?;
+    let parts = model_parts(facts, &target, &context, (host, test_host))?;
     let mut moves = parts.moves.clone();
     let destination = target.destination();
     if destination != target.source_path {

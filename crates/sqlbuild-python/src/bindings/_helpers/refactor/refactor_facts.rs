@@ -17,7 +17,7 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::refactor::python_strings::find_python_string_locations;
 use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
-use crate::bindings::_helpers::scopes::scope_reports::scope_move_preview;
+use crate::bindings::_helpers::scopes::scope_reports::{scope_move_preview, scope_rebound_usages};
 use crate::bindings::_helpers::scopes::scope_validation::scope_relocated_declarations;
 
 const GENERIC_DIALECT: &str = "generic";
@@ -355,6 +355,21 @@ fn unit_tests(compiled: &Bound<'_, PyAny>) -> PyResult<Vec<UnitTestFacts>> {
 
 fn identity_key(identity: &Bound<'_, PyAny>) -> PyResult<String> {
     identity.repr()?.extract()
+}
+
+/// The scoped declarations the unit test file at `path` uses that would resolve differently
+/// from `destination`, or `None` when that cannot be worked out.
+pub(crate) fn unit_test_rebindings(
+    project: &Bound<'_, PyAny>,
+    paths: (&str, &str),
+) -> PyResult<Option<Vec<String>>> {
+    let py: Python<'_> = project.py();
+    let index: Bound<'_, PyAny> = native_field(
+        &native_field(&native_field(project, "graph")?, "project")?,
+        "scope_index",
+    )?;
+    let lookup: Bound<'_, PyAny> = build_scope_lookup(py, &index)?.into_bound(py);
+    scope_rebound_usages(py, &lookup, paths)
 }
 
 /// Where the shared scope placement puts declarations when `model` moves to `destination`.

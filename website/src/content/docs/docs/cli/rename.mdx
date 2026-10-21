@@ -54,6 +54,7 @@ The model's own unit tests, the test files whose every `TEST` block targets only
 - a file named `test_<name>.sql` or `test_<name>__<behavior>.sql` is renamed to the new name;
 - `TEST (name "<name>__<behavior>")` takes the new name as its subject;
 - a test file in the folder that mirrors the model, `tests/unit/<folders>/` for `models/<folders>/`, moves to the folder that mirrors the destination. Test files kept elsewhere stay where they are.
+- a test file stays in its folder, still renamed, when a macro, enum, or constant it uses would resolve to a different declaration, or to none, from the destination folder, such as a test macro in `tests/unit/<folders>/_sqlbuild/_macros/`. The output's notes name the file and the declaration.
 
 Tests that also target other models keep their file and name; only their fixtures and references change.
 
@@ -135,7 +136,7 @@ Migrations
 Compiled: ok, 3 files changed
 ```
 
-With `--json`, the result has `operation`, `target`, `new_name`, `destination`, `status` (`applied`, `dry_run`, `refused`, or `compile_failed`), `files` with every edit, `migrations`, `renamed_columns`, `manual`, `blocking`, and `compile.errors`.
+With `--json`, the result has `operation`, `target`, `new_name`, `destination`, `status` (`applied`, `dry_run`, `refused`, or `compile_failed`), `files` with every edit, `migrations`, `renamed_columns`, `manual`, `blocking`, `notes` (files deliberately kept in place, with the reason), and `compile.errors`.
 
 ## Exit codes
 

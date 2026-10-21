@@ -50,6 +50,7 @@
     ],
     "manual": [],
     "blocking": [],
+    "notes": [],
     "compile": {
      "ok": true,
      "errors": []

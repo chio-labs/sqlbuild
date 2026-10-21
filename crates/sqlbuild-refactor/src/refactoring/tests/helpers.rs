@@ -328,7 +328,8 @@ pub(super) fn blocking_reasons(
             ..DeclarationPlacement::default()
         })
     };
-    let parts = model_parts(facts, &target, &context, &host)?;
+    let test_host = |_: &str, _: &str| Ok(Some(Vec::new()));
+    let parts = model_parts(facts, &target, &context, (&host, &test_host))?;
     Ok(parts
         .blocking
         .into_iter()
@@ -648,11 +649,13 @@ pub(super) fn owner_header_parts(
     Ok((described(&edits), manual))
 }
 
-/// Each planned file as `original -> path`, with the replacements made in it.
+/// Each planned test file as `original -> path` with the replacements made in it, and each
+/// `path: reason` note, when the scope host reports `rebound` for every test file.
 pub(super) fn followed_unit_tests(
     request: &RefactorRequest,
     tests: &[(&str, &str, &[&str])],
-) -> Result<Vec<(String, Vec<String>)>, RefactorError> {
+    rebound: &[&str],
+) -> Result<(Vec<(String, Vec<String>)>, Vec<String>), RefactorError> {
     let mut orders: ModelFacts = model("orders", Some("view"), "analytics");
     orders.path = "models/marts/orders.sql".to_owned();
     let mut project_facts = facts("/nonexistent/project", vec![orders]);
@@ -675,8 +678,22 @@ pub(super) fn followed_unit_tests(
             ..DeclarationPlacement::default()
         })
     };
-    let plan =
-        crate::refactoring::main::plan_refactor::plan_refactor(&project_facts, request, &host)?;
+    let test_host = |_: &str, _: &str| {
+        Ok(Some(
+            rebound.iter().map(|item| (*item).to_owned()).collect(),
+        ))
+    };
+    let plan = crate::refactoring::main::plan_refactor::plan_refactor(
+        &project_facts,
+        request,
+        &host,
+        &test_host,
+    )?;
+    let notes: Vec<String> = plan
+        .notes
+        .iter()
+        .map(|note| format!("{}: {}", note.path, note.reason))
+        .collect();
     let mut changes: Vec<(String, Vec<String>)> = plan
         .changes
         .into_iter()
@@ -693,7 +710,7 @@ pub(super) fn followed_unit_tests(
         })
         .collect();
     changes.sort();
-    Ok(changes)
+    Ok((changes, notes))
 }
 
 /// Expected `original -> path` test file changes with their replacements, sorted by path.

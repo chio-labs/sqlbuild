@@ -25,7 +25,7 @@ use crate::refactoring::errors::RefactorError;
 use crate::refactoring::models::{
     ManualLocation, ModelFacts, RefactorFacts, RefactorOperation, RefactorRequest, TextEdit,
 };
-use crate::refactoring::types::DeclarationMoveHost;
+use crate::refactoring::types::{DeclarationMoveHost, UnitTestScopeHost};
 
 /// The model a request names, and the request with its name and destination resolved.
 pub(crate) struct ModelTarget<'a> {
@@ -168,7 +168,7 @@ pub(crate) fn model_parts(
     facts: &RefactorFacts,
     target: &ModelTarget<'_>,
     context: &ScanContext,
-    host: &DeclarationMoveHost<'_>,
+    (host, test_host): (&DeclarationMoveHost<'_>, &UnitTestScopeHost<'_>),
 ) -> Result<RefactorParts, RefactorError> {
     let files = project_sql_files(facts);
     let old = target.model.name.as_str();
@@ -193,6 +193,7 @@ pub(crate) fn model_parts(
             names: (old, new),
             paths: (&target.source_path, &destination),
         },
+        test_host,
     )?;
     edits.extend(tests.edits);
     let mut manual = macro_reference_locations(&facts.models, &files, old, context);
@@ -208,6 +209,7 @@ pub(crate) fn model_parts(
         manual,
         blocking,
         moves,
+        notes: tests.notes,
         ..RefactorParts::default()
     })
 }
