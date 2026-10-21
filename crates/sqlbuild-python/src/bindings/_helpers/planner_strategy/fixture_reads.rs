@@ -62,7 +62,7 @@ pub(crate) fn required_fixture_columns(
             continue;
         };
         let mut references: Vec<FixtureReadReference> = Vec::new();
-        for reference in native_field(&model, "references")?.try_iter()? {
+        for reference in model_reads::references(&model)?.try_iter()? {
             let reference = reference?;
             references.push(FixtureReadReference {
                 kind: native_field(&reference, "ref_kind")?.extract()?,
@@ -132,7 +132,7 @@ fn model_stars(
         return Ok(Vec::new());
     }
     let mut deps: Vec<(String, String)> = Vec::new();
-    for key in native_field(model, "dep_rows")?.extract::<Vec<(String, String)>>()? {
+    for key in model_reads::dep_rows(model)? {
         if schema.iter().any(|relation| relation.key == key) {
             deps.push(key);
         }

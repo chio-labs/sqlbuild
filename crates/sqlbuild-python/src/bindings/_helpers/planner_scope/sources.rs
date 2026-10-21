@@ -2,6 +2,7 @@
 
 use sqlbuild_host::entries::models::ExecutorHost;
 
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::graph::algorithms::closure;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_scope::loaders::intermediate_map;
@@ -30,7 +31,7 @@ pub(crate) fn build_source_load_map<'py>(
         })
         .transpose()?;
     let result = PyDict::new(project.py());
-    for source in native_field(project, "sources")?.try_iter()? {
+    for source in project_reads::sources(project)?.try_iter()? {
         let source = source?;
         if let Some(keys) = &relevant
             && !keys.contains(native_field(&source, "key")?)?

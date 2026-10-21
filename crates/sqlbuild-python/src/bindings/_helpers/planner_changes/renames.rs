@@ -240,7 +240,7 @@ fn changed_referencing_query(
             continue;
         }
         let mut references_models: bool = false;
-        for reference in native_field(&model, "references")?.try_iter()? {
+        for reference in model_reads::references(&model)?.try_iter()? {
             if native_field(&reference?, "ref_kind")?.eq(&ref_kind)? {
                 references_models = true;
                 break;
