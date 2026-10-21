@@ -3,6 +3,7 @@
 use crate::bindings::_helpers::attachments::reference_markers::assert_no_unresolved_sql_markers;
 use crate::bindings::_helpers::auditing::render::render_audit_sql;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::compiled_views::audit_reads;
 use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::graph::views::project_lineage_views;
 use crate::bindings::_helpers::planner_phases::objects::object;
@@ -26,6 +27,9 @@ use crate::bindings::_helpers::planner_strategy::models::AuditPlanning;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
+
+/// One attribute read of a compiled audit.
+type AuditRead<'py> = fn(&Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>;
 
 /// Render and validate one audit query with the supplied adapter callbacks.
 fn render_query<'py>(
@@ -56,13 +60,11 @@ fn render_query<'py>(
 
 /// Resolve an audit enum, applying the default only to absent values.
 fn audit_enum<'py>(
-    audit: &Bound<'py, PyAny>,
-    attribute: &str,
+    value: Bound<'py, PyAny>,
     enum_name: &str,
     default: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let py = audit.py();
-    let value = native_field(audit, attribute)?;
+    let py = value.py();
     imported(py, AUDIT_TYPES_MODULE, enum_name)?.call1((if value.is_none() {
         PyString::new(py, default).into_any()
     } else {
@@ -98,13 +100,13 @@ fn plan_audit<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = audit.py();
     let audit = audit.clone();
-    let name: String = native_field(&audit, "name")?.extract()?;
+    let name: String = audit_reads::name(&audit)?.extract()?;
     let resolved = render_query(
         request,
-        native_field(&audit, "sql_body")?,
+        audit_reads::sql_body(&audit)?,
         &format!("audit '{name}' planned SQL"),
     )?;
-    let evidence = native_field(&audit, "evidence_sql")?;
+    let evidence = audit_reads::evidence_sql(&audit)?;
     let evidence_resolved = if evidence.is_none() {
         py.None().into_bound(py)
     } else {
@@ -124,32 +126,33 @@ fn plan_audit<'py>(
     } else {
         py.None().into_bound(py)
     };
-    let requested = audit_enum(&audit, "run_scope", "AuditRunScope", "final")?;
-    let severity = audit_enum(&audit, "severity", "AuditSeverity", "warn")?;
+    let requested = audit_enum(audit_reads::run_scope(&audit)?, "AuditRunScope", "final")?;
+    let severity = audit_enum(audit_reads::severity(&audit)?, "AuditSeverity", "warn")?;
     let effective = resolve_effective_run_scope(&requested, &materialization)?;
-    let mut target_kind = native_field(&audit, "attached_target_kind")?;
+    let mut target_kind = audit_reads::attached_target_kind(&audit)?;
     if target_kind.is_none() && (kind_text == MODEL_ATTACHMENT || kind_text == SOURCE_ATTACHMENT) {
         target_kind =
             imported(py, COMPILE_TYPES_MODULE, "AttachedAuditTargetKind")?.call1((kind_text,))?;
     }
     let values = PyDict::new(py);
-    for field in [
-        "key",
-        "name",
-        "definition_name",
-        "evaluation_mode",
-        "thresholds",
-        "minimum_samples",
-        "evidence_limit",
-        "scope_deps",
-        "attached_column_name",
-        "always_run",
-        "description",
-        "meta",
-    ] {
-        values.set_item(field, native_field(&audit, field)?)?;
+    let reads: [(&str, AuditRead<'py>); 12] = [
+        ("key", audit_reads::key),
+        ("name", audit_reads::name),
+        ("definition_name", audit_reads::definition_name),
+        ("evaluation_mode", audit_reads::evaluation_mode),
+        ("thresholds", audit_reads::thresholds),
+        ("minimum_samples", audit_reads::minimum_samples),
+        ("evidence_limit", audit_reads::evidence_limit),
+        ("scope_deps", audit_reads::scope_deps),
+        ("attached_column_name", audit_reads::attached_column_name),
+        ("always_run", audit_reads::always_run),
+        ("description", audit_reads::description),
+        ("meta", audit_reads::meta),
+    ];
+    for (field, read) in reads {
+        values.set_item(field, read(&audit)?)?;
     }
-    let measurement = native_field(&audit, "measurement_contract")?;
+    let measurement = audit_reads::measurement_contract(&audit)?;
     for field in ["value_column", "sample_count_column", "sample_unit"] {
         values.set_item(
             field,
@@ -162,7 +165,7 @@ fn plan_audit<'py>(
     }
     for (field, value) in [
         ("resolved_sql", resolved),
-        ("unresolved_sql", native_field(&audit, "sql_body")?),
+        ("unresolved_sql", audit_reads::sql_body(&audit)?),
         ("attachment_kind", kind),
         ("severity", severity),
         ("requested_run_scope", requested),
@@ -170,7 +173,7 @@ fn plan_audit<'py>(
         ("evidence_resolved_sql", evidence_resolved),
         (
             "evidence_unresolved_sql",
-            native_field(&audit, "evidence_sql")?,
+            audit_reads::evidence_sql(&audit)?,
         ),
         ("attached_target_kind", target_kind),
         ("attached_target_name", target),
@@ -197,8 +200,8 @@ pub(crate) fn audit_is_selected(
     selected_keys: &Bound<'_, PyAny>,
 ) -> PyResult<bool> {
     let py = audit.py();
-    let kind = native_field(audit, "attached_target_kind")?;
-    let name = native_field(audit, "attached_target_name")?;
+    let kind = audit_reads::attached_target_kind(audit)?;
+    let name = audit_reads::attached_target_name(audit)?;
     if !kind.is_none() && !name.is_none() {
         let target_value = imported(py, COMPILE_TYPES_MODULE, "AttachedAuditTargetKind")?
             .call1((kind,))?
@@ -211,7 +214,7 @@ pub(crate) fn audit_is_selected(
         )?;
         return selected_keys.contains(key);
     }
-    for dependency in native_field(audit, "scope_deps")?.try_iter()? {
+    for dependency in audit_reads::scope_deps(audit)?.try_iter()? {
         if selected_keys.contains(dependency?)? {
             return Ok(true);
         }

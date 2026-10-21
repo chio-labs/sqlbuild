@@ -1283,6 +1283,7 @@ class CompiledViewFallbacksTestCase:
     """One command run over a natively compiled project."""
 
     description: str
+    fixture: str | None
     command: tuple[str, ...]
     expected_exit_code: int
     expected_fallbacks: int

@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::compiled_views::audit_reads;
 use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::planner_entries::models::{
     PlannerRelationsContext, RelationsRequest,
@@ -35,7 +36,7 @@ fn selected_audit_relation_keys<'py>(
     for audit in project_reads::audits(project)?.try_iter()? {
         let audit = audit?;
         if audit_is_selected(&audit, selected_keys)? {
-            for dependency in native_field(&audit, "scope_deps")?.try_iter()? {
+            for dependency in audit_reads::scope_deps(&audit)?.try_iter()? {
                 keys.add(dependency?)?;
             }
         }

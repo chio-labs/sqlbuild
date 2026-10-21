@@ -1,4 +1,5 @@
 //! Python views of the compiled project: model, input, resource and project views and their records.
+pub(crate) mod audit_reads;
 pub(crate) mod audit_views;
 pub(crate) mod compiled_model_analysis;
 pub(crate) mod compiled_model_view;
