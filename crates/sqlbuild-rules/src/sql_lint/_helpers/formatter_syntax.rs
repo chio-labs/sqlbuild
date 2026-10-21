@@ -1,3 +1,4 @@
+use crate::lint_text::constants::LINT_SENTINEL_PREFIX;
 use crate::sql_lint::_helpers::engine::token_depths;
 use crate::sql_lint::constants::{
     CTE_MACRO_PLACEHOLDER_LITERAL, POSITION_ARGUMENT_SEPARATOR, POSTFIX_CAST_PREFIX_TOKEN_COUNT,
@@ -281,7 +282,7 @@ pub(super) fn cte_macro_indices(tokens: &[Token]) -> HashSet<usize> {
             scopes.insert(depths[index]);
         } else if token.token_type == TokenType::Select {
             scopes.remove(&depths[index]);
-        } else if token.text.starts_with("__sqb_lint_")
+        } else if token.text.starts_with(LINT_SENTINEL_PREFIX)
             && scopes.contains(&depths[index])
             && index > 0
             && matches!(
