@@ -11,6 +11,8 @@ pub(crate) const INVOCATION_THREAD_PREFIX: &str = "sqlbuild-event-exporter-";
 pub(crate) const WORKER_ATTRIBUTE: &str = "_sqlbuild_event_exporter_worker";
 /// The longest single wait of a polling delivery loop, as the Python dispatcher polled.
 pub(crate) const POLL_SECONDS: f64 = 0.01;
+/// The most one dispatch round charges a sink call, so the dispatcher's GIL waits are not counted.
+pub(crate) const CHARGE_LIMIT_SECONDS: f64 = 2.0 * POLL_SECONDS;
 /// Extra time `shutdown` waits for the dispatcher thread beyond the drain deadline.
 pub(crate) const JOIN_GRACE_SECONDS: f64 = 0.05;
 /// How long shutdown and interpreter exit wait for each stopped dispatcher thread.
