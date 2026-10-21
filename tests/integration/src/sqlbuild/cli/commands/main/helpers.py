@@ -1015,13 +1015,28 @@ def typed_config_reads(*, project_dir: Path, extra_header: str) -> int:
 
 
 def compiled_view_fallbacks(
-    *, project_dir: Path, fixture: str | None, command: tuple[str, ...]
+    *, project_dir: Path, write_project: Callable[[Path], None], command: tuple[str, ...]
 ) -> tuple[int, int]:
     """The exit code of `command` over a native project and its reads that missed a native view."""
 
-    if fixture is not None:
-        shutil.copytree(E2E_FIXTURES_DIR / fixture, project_dir)
-        return _counted_fallbacks(project_dir=project_dir, command=command)
+    write_project(project_dir)
+    _ = native_module.compile_stage_work_info(reset=True)
+    exit_code: int = main(["--project-dir", str(project_dir), *command])
+    fallbacks: int = native_module.compile_stage_work_info(reset=True).get(
+        "compiled_view_fallbacks", 0
+    )
+    return exit_code, fallbacks
+
+
+def copy_waffle_shop(project_dir: Path) -> None:
+    """Copy the waffle shop fixture, with sources, seeds, functions and audits, to `project_dir`."""
+
+    _ = shutil.copytree(E2E_FIXTURES_DIR / "waffle_shop", project_dir)
+
+
+def write_orders_project(project_dir: Path) -> None:
+    """Write a three-model orders project to `project_dir`."""
+
     project_dir.mkdir(parents=True)
     (project_dir / "sqlbuild_project.toml").write_text(
         'name = "orders"\nadapter = "duckdb"\ndefault_target = "dev"\n\n'
@@ -1046,18 +1061,6 @@ def compiled_view_fallbacks(
         'SELECT order_id FROM __ref("daily_orders")\n',
         encoding="utf-8",
     )
-    return _counted_fallbacks(project_dir=project_dir, command=command)
-
-
-def _counted_fallbacks(*, project_dir: Path, command: tuple[str, ...]) -> tuple[int, int]:
-    """The exit code of `command` and how many of its reads missed a native view."""
-
-    _ = native_module.compile_stage_work_info(reset=True)
-    exit_code: int = main(["--project-dir", str(project_dir), *command])
-    fallbacks: int = native_module.compile_stage_work_info(reset=True).get(
-        "compiled_view_fallbacks", 0
-    )
-    return exit_code, fallbacks
 
 
 FORMAT_CACHE_UNFORMATTED_MODELS: dict[str, str] = {
