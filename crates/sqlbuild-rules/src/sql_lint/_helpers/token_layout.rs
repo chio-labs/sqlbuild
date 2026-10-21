@@ -67,6 +67,35 @@ impl Lexeme {
     }
 }
 
+/// The source text and case-fold flag of every token, read once for the token check.
+pub(crate) struct TokenTexts {
+    texts: Vec<String>,
+    foldable: Vec<bool>,
+}
+
+impl TokenTexts {
+    #[cfg(test)]
+    pub(crate) fn read(sql: &str, tokens: &[Token], dialect: &Dialect) -> Result<Self, String> {
+        let texts = token_texts(sql, tokens)?;
+        let foldable = foldable_tokens(&texts, tokens, dialect);
+        Ok(Self { texts, foldable })
+    }
+
+    /// Whether token `index` here, upper-cased when foldable, spells `canonical`.
+    fn same_canonical(&self, index: usize, canonical: &str) -> bool {
+        let (text, fold) = (&self.texts[index], self.foldable[index]);
+        text.len() == canonical.len()
+            && text.bytes().zip(canonical.bytes()).all(|(byte, expected)| {
+                expected
+                    == if fold {
+                        byte.to_ascii_uppercase()
+                    } else {
+                        byte
+                    }
+            })
+    }
+}
+
 /// An authored token the printer recased to the layout guide's keyword spelling.
 pub(crate) struct KeywordRecase {
     pub(crate) generated: String,
@@ -198,7 +227,7 @@ pub(crate) fn print_authored_tokens(
     source: &AuthoredSql<'_>,
     oracle: &OracleLayout,
     dialect: &Dialect,
-) -> Result<(String, BTreeMap<usize, KeywordRecase>), String> {
+) -> Result<(String, BTreeMap<usize, KeywordRecase>, TokenTexts), String> {
     let AuthoredSql {
         sql,
         tokens,
@@ -275,29 +304,42 @@ pub(crate) fn print_authored_tokens(
             }
         }
     }
-    Ok((output, recases))
+    let mut texts = TokenTexts {
+        texts: Vec::with_capacity(authored.len()),
+        foldable: Vec::with_capacity(authored.len()),
+    };
+    for lexeme in authored {
+        texts.texts.push(lexeme.raw);
+        texts.foldable.push(lexeme.foldable);
+    }
+    Ok((output, recases, texts))
 }
 
 /// Refuse output that changes anything but layout, fold-set case, and recorded keyword recases.
-pub(crate) fn verify_token_invariant(
-    (before, before_tokens): (&str, &[Token]),
+pub(crate) fn verify_printed_tokens(
+    (before, before_tokens, before_texts): (&str, &[Token], &TokenTexts),
     (after, after_tokens): (&str, &[Token]),
     dialect: &Dialect,
     recases: &BTreeMap<usize, KeywordRecase>,
 ) -> Result<(), String> {
-    let before_canonical = canonical_tokens(before, before_tokens, dialect)?;
     let after_canonical = canonical_tokens(after, after_tokens, dialect)?;
-    if before_canonical.len() != after_canonical.len() {
+    if before_texts.texts.len() != after_canonical.len() {
         return Err(TOKEN_PRESERVATION_FAILURE.to_string());
     }
-    let before_texts = token_texts(before, before_tokens)?;
-    let after_texts = token_texts(after, after_tokens)?;
-    for (index, (left, right)) in before_canonical.iter().zip(&after_canonical).enumerate() {
-        if left != right
-            && !recases
-                .get(&index)
-                .is_some_and(|recase| recase.allows(&before_texts[index], &after_texts[index]))
-        {
+    let mut after_texts: Option<Vec<String>> = None;
+    for (index, canonical) in after_canonical.iter().enumerate() {
+        if before_texts.same_canonical(index, &canonical.text) {
+            continue;
+        }
+        let Some(recase) = recases.get(&index) else {
+            return Err(TOKEN_PRESERVATION_FAILURE.to_string());
+        };
+        let texts: &Vec<String> = match after_texts {
+            Some(ref texts) => texts,
+            None => after_texts.insert(token_texts(after, after_tokens)?),
+        };
+        let printed: &str = &texts[index];
+        if !recase.allows(&before_texts.texts[index], printed) {
             return Err(TOKEN_PRESERVATION_FAILURE.to_string());
         }
     }

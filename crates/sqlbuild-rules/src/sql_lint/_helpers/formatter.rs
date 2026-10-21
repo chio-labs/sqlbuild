@@ -8,8 +8,8 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use crate::sql_lint::_helpers::formatter_syntax::{cte_macro_indices, protect_syntax};
 use crate::sql_lint::_helpers::printed_layout::{PrintedSql, WrapOptions, wrap_lines};
 use crate::sql_lint::_helpers::token_layout::{
-    AuthoredSql, KeywordRecase, OracleLayout, comments_in, neutralize_comments, oracle_layout,
-    print_authored_tokens, tokenize, verify_token_invariant,
+    AuthoredSql, KeywordRecase, OracleLayout, TokenTexts, comments_in, neutralize_comments,
+    oracle_layout, print_authored_tokens, tokenize, verify_printed_tokens,
 };
 use crate::sql_lint::constants::{
     CAST_TYPE_SEPARATOR_KEYWORD, CLOSE_PARENTHESIS, LINT_API_VERSION, OPEN_PARENTHESIS,
@@ -138,10 +138,10 @@ fn format_layout(
         tokens: &tokens,
         comments: &comments,
     };
-    let (printed, recases) = layout.print(&authored, &oracle)?;
+    let (printed, recases, authored_texts) = layout.print(&authored, &oracle)?;
     let printed_tokens = tokenize(&printed, dialect)?;
-    verify_token_invariant(
-        (sql, &tokens),
+    verify_printed_tokens(
+        (sql, &tokens, &authored_texts),
         (&printed, &printed_tokens),
         dialect,
         &recases,
@@ -178,19 +178,19 @@ impl Layout<'_> {
         &self,
         authored: &AuthoredSql<'_>,
         oracle: &OracleLayout,
-    ) -> Result<(String, BTreeMap<usize, KeywordRecase>), String> {
-        let (printed, recases) = print_authored_tokens(authored, oracle, self.dialect)?;
+    ) -> Result<(String, BTreeMap<usize, KeywordRecase>, TokenTexts), String> {
+        let (printed, recases, texts) = print_authored_tokens(authored, oracle, self.dialect)?;
         let no_widths: HashMap<String, usize> = HashMap::new();
         let token_widths = self.wrap.map_or(&no_widths, |wrap| wrap.token_widths);
         let Some(mut sql) = PrintedSql::parse(&printed, self.dialect, token_widths)? else {
-            return Ok((printed, recases));
+            return Ok((printed, recases, texts));
         };
         sql.arrange_clauses(self.wrap.map_or(usize::MAX, |wrap| wrap.line_width));
         if let Some(wrap) = self.wrap {
             wrap_lines(&mut sql, wrap.line_width);
         }
         sql.lead_operators_of_multiline_operands();
-        Ok((sql.render(), recases))
+        Ok((sql.render(), recases, texts))
     }
 }
 
