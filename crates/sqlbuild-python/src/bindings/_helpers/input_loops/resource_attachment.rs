@@ -13,7 +13,7 @@ use crate::bindings::_helpers::compiled_views::audit_views::NativeAuditInput;
 use crate::bindings::_helpers::compiled_views::function_views::{
     AttachedFunction, NativeFunctionInput,
 };
-use crate::bindings::_helpers::compiled_views::seed_views::SeedParts;
+use crate::bindings::_helpers::compiled_views::seed_views::{SeedParts, SeedViews};
 use crate::bindings::_helpers::compiled_views::source_views::{AttachedSource, NativeSourceInput};
 use crate::bindings::_helpers::input_loops::audit_loop::{
     AttachmentOwner, model_owner, resource_owner,

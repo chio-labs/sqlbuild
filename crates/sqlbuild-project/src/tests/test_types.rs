@@ -17,6 +17,7 @@ impl ProjectHost for TestHost {
     type Function = ();
     type AttachedAudit = ();
     type Audit = ();
+    type Seed = ();
 }
 
 pub(super) struct LineageTestCase {

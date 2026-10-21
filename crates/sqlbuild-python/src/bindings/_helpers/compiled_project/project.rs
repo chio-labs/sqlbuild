@@ -49,7 +49,7 @@ use crate::bindings::_helpers::compiled_views::model_input_view::{
 };
 use crate::bindings::_helpers::compiled_views::project_view::NativeProjectView;
 use crate::bindings::_helpers::compiled_views::seed_views::{
-    NativeCompiledSeed, NativeSeedInput, SeedNamespace, SeedRecord, paired_seeds,
+    NativeCompiledSeed, NativeSeedInput, SeedNamespace, SeedRecord, SeedViews, paired_seeds,
 };
 use crate::bindings::_helpers::compiled_views::source_views::{
     NativeCompiledSource, NativeSourceInput, SourceRecord,

@@ -24,6 +24,8 @@ pub trait ProjectHost {
     type AttachedAudit: Debug;
     /// An audit record's lazily built views.
     type Audit: Debug;
+    /// A seed's host values: its CSV file, declaration, schema file and views.
+    type Seed: Debug;
 }
 
 /// `(name, type, nullability)` of one inferred output column.

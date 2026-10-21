@@ -200,3 +200,12 @@ pub struct AuditRecord<H: ProjectHost> {
     pub scope_deps: Option<Vec<ObjectKeyRow>>,
     pub host: H::Audit,
 }
+
+/// One seed CSV paired with its declaration; the host keeps the discovered objects.
+#[derive(Debug)]
+pub struct SeedRecord<H: ProjectHost> {
+    pub name: String,
+    /// The destination native project assembly resolved, once it ran.
+    pub destination: Option<DestinationFact>,
+    pub host: H::Seed,
+}

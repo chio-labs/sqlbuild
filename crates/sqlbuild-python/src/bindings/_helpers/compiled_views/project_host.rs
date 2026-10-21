@@ -13,6 +13,7 @@ use crate::bindings::_helpers::compiled_views::function_views::{
 use crate::bindings::_helpers::compiled_views::model_input_view::{
     ModelInputHandles, SchemaHandles,
 };
+use crate::bindings::_helpers::compiled_views::seed_views::SeedHandles;
 use crate::bindings::_helpers::compiled_views::source_views::{SourceHandles, SourceProjections};
 
 /// The extension's host: Python handles and the views built from them.
@@ -29,6 +30,7 @@ impl ProjectHost for PyProjectHost {
     type Function = FunctionProjections;
     type AttachedAudit = AuditHandles;
     type Audit = AuditProjections;
+    type Seed = SeedHandles;
 }
 
 impl Debug for ModelInputHandles {
@@ -107,6 +109,14 @@ impl Debug for AuditProjections {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         formatter
             .debug_struct("AuditProjections")
+            .finish_non_exhaustive()
+    }
+}
+
+impl Debug for SeedHandles {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        formatter
+            .debug_struct("SeedHandles")
             .finish_non_exhaustive()
     }
 }
