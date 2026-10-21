@@ -108,7 +108,9 @@ pub(crate) fn rule_run_plan<'py>(
     };
     let mut codes: Vec<Bound<'py, PyAny>> = Vec::with_capacity(selected.len());
     for rule in &selected {
-        codes.push(field(rule, "code")?);
+        if model_paths.is_none() || !field(rule, "project_wide")?.is_truthy()? {
+            codes.push(field(rule, "code")?);
+        }
     }
     let selection_config: Bound<'py, PyAny> =
         selection_rules_config(&effective_config, model_paths.as_ref(), &selected_project)?;
@@ -140,6 +142,21 @@ pub(crate) fn rule_run_plan<'py>(
             ("config", selected_config),
         ],
     )
+}
+
+/// The selected project-wide codes a model selection still evaluates over the whole project.
+pub(crate) fn whole_project_codes(plan: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+    let mut codes: Vec<String> = Vec::new();
+    if field(plan, "model_paths")?.is_none() {
+        return Ok(codes);
+    }
+    for rule in field(plan, "selected")?.try_iter()? {
+        let rule: Bound<'_, PyAny> = rule?;
+        if field(&rule, "project_wide")?.is_truthy()? {
+            codes.push(field(&rule, "code")?.extract()?);
+        }
+    }
+    Ok(codes)
 }
 
 /// The relative paths of the selected models, or `None` when the run evaluates every model.

@@ -24,6 +24,11 @@ compiler path and reject Rule findings before opening a warehouse connection.
 `sqb rules run` is intentionally focused. Use it to inspect one exact code or family, but run the
 normal compiler before treating the complete project as valid.
 
+With `--select`, model-subject Rules evaluate only the selected models. Project-subject Rules, which
+compare models with each other, still evaluate the whole project with every exception, as
+`sqb compile` does, and then report only their findings on selected models and on files that are not
+models. A selection never reports a project-subject finding that `sqb compile` would not.
+
 ## Dependency-aware caching
 
 Rules cache under `target/rules-cache-native-v1`. A cache identity includes the Rule code, implementation and

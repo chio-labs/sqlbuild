@@ -35,7 +35,7 @@ use crate::bindings::_helpers::rules::custom_rule_evidence::custom_rule_implemen
 use crate::bindings::_helpers::rules::custom_rule_evidence::custom_rule_import_closure;
 use crate::bindings::_helpers::rules::fact_encoder::{Encoded, reproducible};
 use crate::bindings::_helpers::rules::fact_replay::{FactReplay, is_tree_fact};
-use crate::bindings::_helpers::rules::rule_run::rules_bulk_cache_path;
+use crate::bindings::_helpers::rules::rule_run::bulk_cache_file;
 
 const PROJECT_SUBJECT: &str = "project";
 const MODEL_SUBJECT: &str = "model";
@@ -49,6 +49,8 @@ pub(crate) struct CustomRun<'a, 'py> {
     pub(crate) verify_determinism: bool,
     pub(crate) implementation_fingerprints: HashMap<String, String>,
     pub(crate) cancel: HostCancel,
+    /// The bulk cache subdirectory of the result cache, the bulk cache itself when `None`.
+    pub(crate) cache_directory: Option<&'a str>,
 }
 
 /// Reuse results whose recorded fact reads are unchanged and evaluate only the rest.
@@ -88,8 +90,9 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
         rows.push((code.clone(), identity, subject_value(rule)?));
     }
     let cache_path: Option<PathBuf> = if enabled {
-        Some(rules_bulk_cache_path(
-            run.project_dir.extract()?,
+        Some(bulk_cache_file(
+            &run.project_dir.extract::<PathBuf>()?,
+            run.cache_directory,
             CUSTOM_RULES_CACHE_FILE,
         ))
     } else {

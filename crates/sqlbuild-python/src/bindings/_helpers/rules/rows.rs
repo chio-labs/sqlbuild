@@ -24,7 +24,6 @@ use sqlbuild_rules::models::{
     Declaration, DeclarationMember, EvaluateRequest, Fault, Model, ModelRow, ModelRowsContext,
     RowsEvaluation, RowsRequest, RulesConfig,
 };
-use sqlbuild_rules::rule_cache::main::rules_bulk_cache_path::rules_bulk_cache_path;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
@@ -42,6 +41,7 @@ use crate::bindings::_helpers::rules::config_json::asdict_json;
 use crate::bindings::_helpers::rules::early_builtin_rules::EarlyBuiltinRules;
 use crate::bindings::_helpers::rules::fact_replay::{project_attribute, project_models};
 use crate::bindings::_helpers::rules::findings::{FindingClasses, finding_fault};
+use crate::bindings::_helpers::rules::rule_run::bulk_cache_file;
 use crate::bindings::_helpers::rules::selection::rules_error;
 use crate::bindings::_helpers::rules::sql_test_objects::{scenario_fact, sql_test_fact};
 use crate::bindings::_helpers::scopes::scope_reports::metadata_projection_value;
@@ -157,9 +157,9 @@ pub(crate) fn selectionless_rules_request(
     custom_payloads: &Bound<'_, PyAny>,
 ) -> PyResult<NativeRulesRequest> {
     let py: Python<'_> = config.py();
-    let header: PyResult<Value> = dialect
-        .into_bound_py_any(py)
-        .and_then(|dialect| request_header(config, project_dir, &dialect, (None, custom_payloads)));
+    let header: PyResult<Value> = dialect.into_bound_py_any(py).and_then(|dialect| {
+        request_header(config, project_dir, &dialect, (None, custom_payloads, None))
+    });
     as_rules_error(
         py,
         header.and_then(|header| {
@@ -178,12 +178,16 @@ pub(crate) fn selectionless_rules_request(
     )
 }
 
-/// The request's version, paths, dialect, config, custom rules and, when given, scope index.
+/// The request's version, paths, dialect, config, custom rules, cache files and scope index.
 fn request_header(
     config: &Bound<'_, PyAny>,
     project_dir: &Bound<'_, PyAny>,
     dialect: &Bound<'_, PyAny>,
-    (project, custom_payloads): (Option<&Bound<'_, PyAny>>, &Bound<'_, PyAny>),
+    (project, custom_payloads, cache_directory): (
+        Option<&Bound<'_, PyAny>>,
+        &Bound<'_, PyAny>,
+        Option<&str>,
+    ),
 ) -> PyResult<Value> {
     let py: Python<'_> = config.py();
     let resolved: Bound<'_, PyAny> = project_dir.call_method0("resolve")?;
@@ -202,7 +206,7 @@ fn request_header(
     header["custom_rules"] = plain_value(custom_payloads)?;
     header["rules_cache_path"] = Value::String(path_text(
         py,
-        rules_bulk_cache_path(&resolved_path, NATIVE_RULES_CACHE_FILE),
+        bulk_cache_file(&resolved_path, cache_directory, NATIVE_RULES_CACHE_FILE),
     )?);
     Ok(header)
 }
@@ -216,11 +220,19 @@ fn built_request(
     let config: Bound<'_, PyAny> = options.get("config")?;
     let project_dir: Bound<'_, PyAny> = options.get("project_dir")?;
     let dialect: Bound<'_, PyAny> = options.get("dialect")?;
+    let cache_directory: Option<String> = match options.optional("cache_directory")? {
+        Some(directory) if !directory.is_none() => Some(directory.extract()?),
+        _ => None,
+    };
     let header: Value = request_header(
         &config,
         &project_dir,
         &dialect,
-        (Some(&project), &options.get("custom_payloads")?),
+        (
+            Some(&project),
+            &options.get("custom_payloads")?,
+            cache_directory.as_deref(),
+        ),
     )?;
     let (public_enums, public_constants) = declaration_rows(
         PyTuple::new(
@@ -241,7 +253,11 @@ fn built_request(
             current_code_identity(py)?,
             path_text(
                 py,
-                rules_bulk_cache_path(&unresolved, NATIVE_RULES_MEMO_FILE),
+                bulk_cache_file(
+                    &unresolved,
+                    cache_directory.as_deref(),
+                    NATIVE_RULES_MEMO_FILE,
+                ),
             )?,
         ))
     } else {
