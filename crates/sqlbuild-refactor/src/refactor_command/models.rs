@@ -50,3 +50,10 @@ pub struct LayerMove {
     pub layer_folder: Option<String>,
     pub command: String,
 }
+
+/// The command-line words and optional `(path, contents)` move file of one `sqb mv`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MoveArguments<'a> {
+    pub words: Vec<&'a str>,
+    pub file: Option<(&'a str, &'a str)>,
+}

@@ -5,6 +5,7 @@ use crate::refactoring::models::{FileChange, RefactorOperation, RefactorPlan, Re
 pub(super) fn rename_plan(old_path: &str, new_name: &str) -> RefactorPlan {
     let (folder, file) = old_path.rsplit_once('/').unwrap_or(("", old_path));
     RefactorPlan {
+        batch: Vec::new(),
         request: RefactorRequest {
             operation: RefactorOperation::RenameModel,
             model_name: file.trim_end_matches(".sql").to_owned(),

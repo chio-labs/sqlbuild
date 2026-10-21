@@ -3,12 +3,13 @@ use crate::refactoring::errors::{RefactorError, RefactorErrorKind};
 use crate::refactoring::models::{DeclarationPlacement, RefactorOperation};
 use crate::refactoring::tests::helpers::{
     blocking_reasons, change, commit_failure, facts, files_on_disk, followed_test_changes,
-    followed_unit_tests, model, model_in_database, owned_pairs, placed, planned_declaration_moves,
-    refused_target, relocated, replace_all, request, write_files,
+    followed_unit_tests, model, model_in_database, move_request, owned_pairs, placed,
+    planned_batch, planned_declaration_moves, refused_target, relocated, replace_all, request,
+    write_files,
 };
 use crate::refactoring::tests::test_types::{
-    CollisionTestCase, CommitTestCase, DeclarationMovesTestCase, FollowedUnitTestTestCase,
-    MigrationDecisionTestCase, RefusedTargetTestCase,
+    BatchPlanTestCase, CollisionTestCase, CommitTestCase, DeclarationMovesTestCase,
+    FollowedUnitTestTestCase, MigrationDecisionTestCase, RefusedTargetTestCase,
 };
 
 #[test]
@@ -235,7 +236,7 @@ fn given_scope_placement_when_moving_across_folders_then_declaration_files_follo
         DeclarationMovesTestCase {
             description: "a move within one folder asks no placement",
             on_disk: &[],
-            paths: ("models/orders.sql", "models/orders_v2.sql"),
+            moves: &[("models/orders.sql", "models/orders_v2.sql")],
             placement: DeclarationPlacement::default(),
             expected_moves: &[],
             expected_blocking: &[],
@@ -243,7 +244,7 @@ fn given_scope_placement_when_moving_across_folders_then_declaration_files_follo
         DeclarationMovesTestCase {
             description: "an unsettled placement blocks with the preview's reasons",
             on_disk: &[],
-            paths: ("models/orders.sql", "models/marts/orders.sql"),
+            moves: &[("models/orders.sql", "models/marts/orders.sql")],
             placement: DeclarationPlacement {
                 relocated: None,
                 diagnostics: vec!["Move source model:orders is unknown".to_owned()],
@@ -255,7 +256,7 @@ fn given_scope_placement_when_moving_across_folders_then_declaration_files_follo
         DeclarationMovesTestCase {
             description: "an unsettled placement without reasons blocks with the default reason",
             on_disk: &[],
-            paths: ("models/orders.sql", "models/marts/orders.sql"),
+            moves: &[("models/orders.sql", "models/marts/orders.sql")],
             placement: DeclarationPlacement::default(),
             expected_moves: &[],
             expected_blocking: &[
@@ -269,7 +270,7 @@ fn given_scope_placement_when_moving_across_folders_then_declaration_files_follo
                 ("models/_sqlbuild/_enums/both.sql", "x"),
                 ("models/marts/_sqlbuild/_enums/both.sql", "x"),
             ],
-            paths: ("models/orders.sql", "models/marts/orders.sql"),
+            moves: &[("models/orders.sql", "models/marts/orders.sql")],
             placement: DeclarationPlacement {
                 relocated: Some(vec![
                     relocated("enum:a", "models/marts/_sqlbuild/_enums/both.sql"),
@@ -303,13 +304,83 @@ fn given_scope_placement_when_moving_across_folders_then_declaration_files_follo
                 "models/marts/_sqlbuild/_enums/both.sql:0 a declaration must move here, but the file already exists",
             ],
         },
+        DeclarationMovesTestCase {
+            description: "two grouped files flattened into one direct file block",
+            on_disk: &[
+                ("models/_sqlbuild/_macros/money/helpers.sql", "x"),
+                ("models/_sqlbuild/_macros/text/helpers.sql", "x"),
+            ],
+            moves: &[("models/orders.sql", "models/marts/orders.sql")],
+            placement: DeclarationPlacement {
+                relocated: Some(vec![
+                    relocated("macro:cents", "macros/helpers.sql"),
+                    relocated("macro:label", "macros/helpers.sql"),
+                ]),
+                diagnostics: Vec::new(),
+                declarations: vec![
+                    placed("macro:cents", "models/_sqlbuild/_macros/money/helpers.sql"),
+                    placed("macro:label", "models/_sqlbuild/_macros/text/helpers.sql"),
+                ],
+            },
+            expected_moves: &[
+                (
+                    "models/_sqlbuild/_macros/money/helpers.sql",
+                    "macros/helpers.sql",
+                ),
+                (
+                    "models/_sqlbuild/_macros/text/helpers.sql",
+                    "macros/helpers.sql",
+                ),
+            ],
+            expected_blocking: &[
+                "macros/helpers.sql:0 models/_sqlbuild/_macros/money/helpers.sql and \
+                 models/_sqlbuild/_macros/text/helpers.sql would both move to macros/helpers.sql; \
+                 rename one of them first",
+            ],
+        },
+        DeclarationMovesTestCase {
+            description: "two moved models' same-named local files sharing one target block",
+            on_disk: &[
+                ("models/sales/_sqlbuild/_macros/helpers.sql", "x"),
+                ("models/crm/_sqlbuild/_macros/helpers.sql", "x"),
+            ],
+            moves: &[
+                ("models/sales/orders.sql", "models/marts/orders.sql"),
+                ("models/crm/customers.sql", "models/marts/customers.sql"),
+            ],
+            placement: DeclarationPlacement {
+                relocated: Some(vec![
+                    relocated("macro:cents", "models/marts/_sqlbuild/_macros/helpers.sql"),
+                    relocated("macro:label", "models/marts/_sqlbuild/_macros/helpers.sql"),
+                ]),
+                diagnostics: Vec::new(),
+                declarations: vec![
+                    placed("macro:cents", "models/sales/_sqlbuild/_macros/helpers.sql"),
+                    placed("macro:label", "models/crm/_sqlbuild/_macros/helpers.sql"),
+                ],
+            },
+            expected_moves: &[
+                (
+                    "models/crm/_sqlbuild/_macros/helpers.sql",
+                    "models/marts/_sqlbuild/_macros/helpers.sql",
+                ),
+                (
+                    "models/sales/_sqlbuild/_macros/helpers.sql",
+                    "models/marts/_sqlbuild/_macros/helpers.sql",
+                ),
+            ],
+            expected_blocking: &["models/marts/_sqlbuild/_macros/helpers.sql:0 \
+                 models/crm/_sqlbuild/_macros/helpers.sql and \
+                 models/sales/_sqlbuild/_macros/helpers.sql would both move to \
+                 models/marts/_sqlbuild/_macros/helpers.sql; rename one of them first"],
+        },
     ];
     for test_case in test_cases {
         let project =
             tempfile::tempdir().map_err(|error| RefactorError::value(error.to_string()))?;
         write_files(project.path(), test_case.on_disk)?;
         let (moves, blocking) =
-            planned_declaration_moves(project.path(), test_case.paths, &test_case.placement)?;
+            planned_declaration_moves(project.path(), test_case.moves, &test_case.placement)?;
         assert_eq!(
             moves,
             owned_pairs(test_case.expected_moves),
@@ -412,6 +483,106 @@ fn given_unit_tests_of_model_when_renaming_or_moving_then_tests_follow() -> Resu
             test_case.description
         );
         assert_eq!(notes, test_case.expected_notes, "{}", test_case.description);
+    }
+    Ok(())
+}
+
+#[test]
+fn given_several_moves_when_planning_together_then_chains_pass_and_conflicts_block()
+-> Result<(), RefactorError> {
+    let project = tempfile::tempdir().map_err(|error| RefactorError::value(error.to_string()))?;
+    write_files(
+        project.path(),
+        &[
+            ("models/orders.sql", "SELECT 1"),
+            ("models/customers.sql", "SELECT 1"),
+        ],
+    )?;
+    let project_facts = facts(
+        &project.path().to_string_lossy(),
+        vec![
+            model("orders", Some("view"), "analytics"),
+            model("customers", Some("view"), "analytics"),
+        ],
+    );
+    let test_cases = [
+        BatchPlanTestCase {
+            description: "a model takes the name another move gives up",
+            requests: vec![
+                move_request("orders", "models/customers.sql"),
+                move_request("customers", "models/clients.sql"),
+            ],
+            expected_blocking: &["models/customers.sql: model:orders would take the name \
+                                  model:customers gives up in this batch; the old name must \
+                                  stay free for its history, so move them in separate runs"],
+            expected_moves: &[
+                "models/customers.sql -> models/clients.sql",
+                "models/orders.sql -> models/customers.sql",
+            ],
+        },
+        BatchPlanTestCase {
+            description: "two models moved to the same file",
+            requests: vec![
+                move_request("orders", "models/finance/totals.sql"),
+                move_request("customers", "models/finance/totals.sql"),
+            ],
+            expected_blocking: &[
+                "models/finance/totals.sql: model:orders and model:customers both move to \
+                 models/finance/totals.sql",
+            ],
+            expected_moves: &[
+                "models/orders.sql -> models/finance/totals.sql",
+                "models/customers.sql -> models/finance/totals.sql",
+            ],
+        },
+        BatchPlanTestCase {
+            description: "one model moved twice",
+            requests: vec![
+                move_request("orders", "models/finance/"),
+                move_request("orders", "models/sales/"),
+            ],
+            expected_blocking: &[
+                "models/orders.sql: model:orders is moved more than once in \
+                                  this batch",
+            ],
+            expected_moves: &["models/orders.sql -> models/sales/orders.sql"],
+        },
+        BatchPlanTestCase {
+            description: "two models given one name in different folders",
+            requests: vec![
+                move_request("orders", "models/finance/totals.sql"),
+                move_request("customers", "models/sales/totals.sql"),
+            ],
+            expected_blocking: &[
+                "models/sales/totals.sql: model:orders and model:customers would both be named \
+                 totals",
+            ],
+            expected_moves: &[
+                "models/orders.sql -> models/finance/totals.sql",
+                "models/customers.sql -> models/sales/totals.sql",
+            ],
+        },
+    ];
+    for test_case in test_cases {
+        let (blocking, moves) = planned_batch(&project_facts, &test_case.requests)?;
+
+        assert_eq!(
+            (blocking, moves),
+            (
+                test_case
+                    .expected_blocking
+                    .iter()
+                    .map(|item| (*item).to_owned())
+                    .collect::<Vec<_>>(),
+                test_case
+                    .expected_moves
+                    .iter()
+                    .map(|item| (*item).to_owned())
+                    .collect::<Vec<_>>()
+            ),
+            "{}",
+            test_case.description
+        );
     }
     Ok(())
 }

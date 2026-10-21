@@ -16,6 +16,13 @@ use crate::refactoring::models::{
 
 /// `model:<name>` or `column:<model>.<column>`.
 pub(crate) fn refactor_target(plan: &RefactorPlan) -> String {
+    if !plan.batch.is_empty() {
+        return format_count_noun(
+            i64::try_from(plan.batch.len()).unwrap_or(i64::MAX),
+            "model",
+            None,
+        );
+    }
     let request = &plan.request;
     if request.operation == RefactorOperation::RenameColumn {
         return format!(
@@ -28,6 +35,9 @@ pub(crate) fn refactor_target(plan: &RefactorPlan) -> String {
 }
 
 pub(crate) fn heading(plan: &RefactorPlan) -> String {
+    if !plan.batch.is_empty() {
+        return format!("Move {}", refactor_target(plan));
+    }
     let request = &plan.request;
     match request.operation {
         RefactorOperation::RenameColumn => format!(
@@ -48,6 +58,29 @@ pub(crate) fn heading(plan: &RefactorPlan) -> String {
             )
         }
     }
+}
+
+/// One `model -> destination` line per move of a batch.
+pub(crate) fn batch_lines(style: CliStyle, plan: &RefactorPlan) -> Vec<String> {
+    tree_items(
+        style,
+        plan.batch.iter().map(|request| {
+            format!(
+                "{}  ->  {}",
+                style.object_name(&request.model_name),
+                request.destination.as_deref().unwrap_or_default()
+            )
+        }),
+    )
+}
+
+/// Each item on its own tree branch, the last one closing the tree.
+fn tree_items(style: CliStyle, items: impl ExactSizeIterator<Item = String>) -> Vec<String> {
+    let count: usize = items.len();
+    items
+        .enumerate()
+        .map(|(index, item)| format!("{} {item}", tree_connector(style, index + 1 == count)))
+        .collect()
 }
 
 pub(crate) fn verb(plan: &RefactorPlan) -> &'static str {
@@ -104,19 +137,17 @@ pub(crate) fn change_lines(style: CliStyle, changes: &[FileChange]) -> Vec<Strin
 }
 
 pub(crate) fn migration_lines(style: CliStyle, migrations: &[MigrationDeclaration]) -> Vec<String> {
-    migrations
-        .iter()
-        .enumerate()
-        .map(|(index, item)| {
+    tree_items(
+        style,
+        migrations.iter().map(|item| {
             format!(
-                "{} {}  {}  {}",
-                tree_connector(style, index + 1 == migrations.len()),
+                "{}  {}  {}",
                 style.object_name(&item.model_name),
                 item.declaration,
                 style.muted(&item.reason)
             )
-        })
-        .collect()
+        }),
+    )
 }
 
 pub(crate) fn position(location: &ManualLocation) -> String {

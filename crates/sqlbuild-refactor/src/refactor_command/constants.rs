@@ -6,6 +6,9 @@ pub(crate) const MOVE_USAGE: &str = "write the target as <model>; the model: pre
 pub(crate) const RENAME_SCOPE: &str = "sqb rename renames models and model columns";
 pub(crate) const MOVE_SCOPE: &str = "sqb mv moves models";
 pub(crate) const TARGET_ERROR_CODE: &str = "C954";
+pub(crate) const MOVE_PAIRS_USAGE: &str =
+    "pass TARGET DESTINATION pairs, or --from-file with one pair per line";
+pub(crate) const MOVE_FILE_COMMENT: char = '#';
 pub(crate) const COLUMN_TARGET_KIND: &str = "column";
 pub(crate) const COLUMN_TARGET_SEPARATOR: char = '.';
 pub(crate) const MODEL_RESOURCE_TYPE: &str = "model";

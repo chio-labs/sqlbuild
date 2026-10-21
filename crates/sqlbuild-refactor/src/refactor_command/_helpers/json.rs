@@ -72,6 +72,21 @@ pub(crate) fn location(item: &ManualLocation) -> JsonValue {
     ])
 }
 
+/// Every move of a batch as `{"target": "model:<name>", "destination": <path>}`.
+pub(crate) fn batch_moves(plan: &RefactorPlan) -> JsonValue {
+    JsonValue::Array(
+        plan.batch
+            .iter()
+            .map(|request| {
+                object(vec![
+                    ("target", text(&format!("model:{}", request.model_name))),
+                    ("destination", optional_text(request.destination.as_deref())),
+                ])
+            })
+            .collect(),
+    )
+}
+
 pub(crate) fn operation_value(plan: &RefactorPlan) -> &'static str {
     match plan.request.operation {
         RefactorOperation::RenameModel => "rename_model",

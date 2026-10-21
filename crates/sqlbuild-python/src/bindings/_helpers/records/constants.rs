@@ -652,9 +652,11 @@ const REFACTOR_COMMAND_REQUEST: RecordSpec = RecordSpec {
     doc: "CLI inputs for one `sqb rename` or `sqb mv` invocation.",
     fields: &[
         FieldSpec::required("command"),
-        FieldSpec::required("target"),
+        FieldSpec::new("target", FieldDefault::None),
         FieldSpec::new("new_name", FieldDefault::None),
         FieldSpec::new("destination", FieldDefault::None),
+        FieldSpec::new("more_moves", FieldDefault::EmptyTuple),
+        FieldSpec::new("from_file", FieldDefault::None),
         FieldSpec::new("project_dir", FieldDefault::None),
         FieldSpec::new("cascade", FieldDefault::False),
         FieldSpec::new("dry_run", FieldDefault::False),

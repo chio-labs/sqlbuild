@@ -16,3 +16,11 @@ pub(super) struct RenderTestCase {
     pub(super) codes: &'static [&'static str],
     pub(super) expected_text: &'static str,
 }
+
+/// Command-line words and a move file, and the pairs or error message they give.
+pub(super) struct MovePairsTestCase {
+    pub(super) description: &'static str,
+    pub(super) words: &'static [&'static str],
+    pub(super) file: Option<&'static str>,
+    pub(super) expected_pairs: Result<&'static [(&'static str, &'static str)], &'static str>,
+}

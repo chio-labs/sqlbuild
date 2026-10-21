@@ -3,9 +3,9 @@
 use crate::refactoring::errors::RefactorError;
 use crate::refactoring::models::DeclarationPlacement;
 
-/// The shared scope placement for moving a model to a destination: `(model, destination)`.
+/// The shared scope placement once every `(model, destination)` move is applied together.
 pub type DeclarationMoveHost<'a> =
-    dyn Fn(&str, &str) -> Result<DeclarationPlacement, RefactorError> + 'a;
+    dyn Fn(&[(String, String)]) -> Result<DeclarationPlacement, RefactorError> + 'a;
 
 /// Used scoped declarations a `(test path, destination)` move would rebind; `None` if unknown.
 pub type UnitTestScopeHost<'a> =

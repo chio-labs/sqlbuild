@@ -12,20 +12,31 @@ use crate::refactoring::types::DeclarationMoveHost;
 
 const UNSETTLED_REASON: &str = "declaration placement at the destination could not be worked out";
 
-/// The declaration file moves of moving `model` from `source` to `destination`, and blockers.
+/// One model move: its name and its paths before and after.
+pub(crate) struct ModelMove<'a> {
+    pub(crate) model: &'a str,
+    pub(crate) source: &'a str,
+    pub(crate) destination: &'a str,
+}
+
+/// Declaration file moves and blockers of every model move together; `vacated` paths are free.
 pub(crate) fn declaration_moves(
     project_dir: &Path,
-    model: &str,
-    paths: (&str, &str),
+    moves: &[ModelMove<'_>],
+    vacated: &BTreeSet<String>,
     host: &DeclarationMoveHost<'_>,
 ) -> Result<DeclarationMoves, RefactorError> {
-    let (source, destination) = paths;
-    if parent(destination) == parent(source) {
+    let changed: Vec<(String, String)> = moves
+        .iter()
+        .filter(|item| parent(item.destination) != parent(item.source))
+        .map(|item| (item.model.to_owned(), item.destination.to_owned()))
+        .collect();
+    let Some((_, first_destination)) = changed.first() else {
         return Ok(DeclarationMoves::default());
-    }
-    let placement: DeclarationPlacement = host(model, destination)?;
+    };
+    let placement: DeclarationPlacement = host(&changed)?;
     let Some(relocated) = &placement.relocated else {
-        return Ok(unsettled(destination, &placement.diagnostics));
+        return Ok(unsettled(first_destination, &placement.diagnostics));
     };
     let mut destinations: BTreeMap<String, String> = BTreeMap::new();
     let mut blocking: Vec<ManualLocation> = Vec::new();
@@ -43,6 +54,19 @@ pub(crate) fn declaration_moves(
                 format!(
                     "{} must move to {}, but it is not an authored project file",
                     original.label, record.path
+                ),
+            ));
+            continue;
+        }
+        if record.requires_group {
+            blocking.push(blocker(
+                original,
+                format!(
+                    "{} must move to {}/, which keeps its files in group folders, but {} is \
+                     not in a group; move it into a group folder of its current role first",
+                    original.label,
+                    parent(&record.path),
+                    original.path
                 ),
             ));
             continue;
@@ -73,11 +97,19 @@ pub(crate) fn declaration_moves(
             ));
         }
     }
+    blocking.extend(shared_destinations(
+        destinations
+            .iter()
+            .map(|(source, target)| (source.as_str(), target.as_str())),
+        |first, second, target| {
+            format!("{first} and {second} would both move to {target}; rename one of them first")
+        },
+    ));
     let targets: BTreeSet<&String> = destinations.values().collect();
     blocking.extend(
         targets
             .into_iter()
-            .filter(|path| join(project_dir, path).exists())
+            .filter(|path| !vacated.contains(*path) && join(project_dir, path).exists())
             .map(|path| ManualLocation {
                 path: path.clone(),
                 line: None,
@@ -89,6 +121,26 @@ pub(crate) fn declaration_moves(
         moves: destinations.into_iter().collect(),
         blocking,
     })
+}
+
+/// A blocker at each path two `(source, destination)` moves share, worded by `reason`.
+pub(crate) fn shared_destinations<'a>(
+    moves: impl Iterator<Item = (&'a str, &'a str)>,
+    reason: impl Fn(&str, &str, &str) -> String,
+) -> Vec<ManualLocation> {
+    let mut sources: BTreeMap<&str, &str> = BTreeMap::new();
+    let mut shared: Vec<ManualLocation> = Vec::new();
+    for (source, destination) in moves {
+        if let Some(other) = sources.insert(destination, source) {
+            shared.push(ManualLocation {
+                path: destination.to_owned(),
+                line: None,
+                column: None,
+                reason: reason(other, source, destination),
+            });
+        }
+    }
+    shared
 }
 
 fn unsettled(destination: &str, diagnostics: &[String]) -> DeclarationMoves {

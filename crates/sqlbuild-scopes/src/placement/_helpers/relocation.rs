@@ -1,4 +1,4 @@
-//! The declarations whose placement follows a resource to a new path.
+//! Phases of relocating declarations after resource moves.
 
 use std::collections::{HashMap, HashSet};
 
@@ -7,61 +7,58 @@ use crate::placement::_helpers::anchors::{
 };
 use crate::placement::_helpers::declaration_directory::declaration_directory;
 use crate::placement::_helpers::required::required_placement;
-use crate::placement::main::placement_diagnostics::placement_diagnostics;
+use crate::placement::_helpers::role_layout::carried_path;
 use crate::placement::models::{PlacementIndex, Relocation, RequiredPlacement};
 use crate::scope_index::models::{
     DeclarationIdentity, DeclarationRecord, OwnershipRoot, OwnershipRootKind, ResourceIdentity,
     ScopeKind,
 };
-use sqlbuild_core::posix_path::main::posix_name::posix_name;
 
-/// Python's `relocate_for_resource_move`: each moved declaration, or `None` when unsettled.
-#[must_use]
-pub fn relocate_for_resource_move(
+/// The index with every resource in `moves` at its destination.
+pub(crate) fn moved_resources(
     index: &PlacementIndex,
-    resource: &ResourceIdentity,
-    destination: &str,
-) -> Option<Vec<Relocation>> {
-    let misplaced: HashSet<&DeclarationIdentity> = placement_diagnostics(index)
-        .into_iter()
-        .map(|diagnostic| &index.declarations[diagnostic.declaration].identity)
-        .collect();
+    moves: &[(ResourceIdentity, String)],
+) -> PlacementIndex {
     let mut current: PlacementIndex = index.clone();
     for record in &mut current.resources {
-        if &record.identity == resource {
-            record.path = destination.to_owned();
+        if let Some((_, destination)) = moves.iter().find(|(moved, _)| *moved == record.identity) {
+            record.path.clone_from(destination);
         }
     }
-    for _ in 0..=index.declarations.len() {
-        let usages: UsagesByDeclaration<'_> = usages_by_declaration(&current);
-        let anchors: AnchorSets = anchor_sets(&current, &usages);
-        let mut relocated: HashMap<DeclarationIdentity, DeclarationRecord> = HashMap::new();
-        for record in &current.declarations {
-            if record.scope == ScopeKind::Private || misplaced.contains(&record.identity) {
-                continue;
-            }
-            if let Some(moved) = relocated_record(record, &usages, &anchors) {
-                relocated.insert(record.identity.clone(), moved);
-            }
-        }
-        if relocated.is_empty() {
-            return Some(changed_records(index, &current));
-        }
-        for record in &mut current.declarations {
-            if let Some(moved) = relocated.get(&record.identity) {
-                *record = moved.clone();
-            }
-        }
-    }
-    None
+    current
 }
 
-/// `_relocated_record`: the record at its required placement, when that differs.
+/// The declarations one round moves, and whether each lacks a group its new role needs.
+pub(crate) fn relocation_round(
+    current: &PlacementIndex,
+    misplaced: &HashSet<&DeclarationIdentity>,
+) -> (
+    HashMap<DeclarationIdentity, DeclarationRecord>,
+    Vec<(DeclarationIdentity, bool)>,
+) {
+    let usages: UsagesByDeclaration<'_> = usages_by_declaration(current);
+    let anchors: AnchorSets = anchor_sets(current, &usages);
+    let mut relocated: HashMap<DeclarationIdentity, DeclarationRecord> = HashMap::new();
+    let mut grouping: Vec<(DeclarationIdentity, bool)> = Vec::new();
+    for record in &current.declarations {
+        if record.scope == ScopeKind::Private || misplaced.contains(&record.identity) {
+            continue;
+        }
+        if let Some((moved, needed)) = relocated_record(current, record, &usages, &anchors) {
+            grouping.push((record.identity.clone(), needed));
+            relocated.insert(record.identity.clone(), moved);
+        }
+    }
+    (relocated, grouping)
+}
+
+/// `_relocated_record`: the record at its required placement, and whether it lacks a needed group.
 fn relocated_record(
+    current: &PlacementIndex,
     record: &DeclarationRecord,
     usages: &UsagesByDeclaration<'_>,
     anchors: &AnchorSets,
-) -> Option<DeclarationRecord> {
+) -> Option<(DeclarationRecord, bool)> {
     let RequiredPlacement { scope, path, .. } = required_placement(record, usages, anchors)?;
     if record.scope == scope && record.owning_path == path {
         return None;
@@ -85,8 +82,9 @@ fn relocated_record(
             resource_kind: None,
         },
     };
-    Some(DeclarationRecord {
-        path: format!("{directory}/{}", posix_name(&record.path)),
+    let (carried, requires_group): (String, bool) = carried_path(current, record, &directory);
+    let moved = DeclarationRecord {
+        path: carried,
         scope,
         ownership_root,
         owning_path: if scope == ScopeKind::Global {
@@ -95,11 +93,16 @@ fn relocated_record(
             path
         },
         ..record.clone()
-    })
+    };
+    Some((moved, requires_group))
 }
 
 /// Each declaration whose path differs from the last original record of its identity.
-fn changed_records(original: &PlacementIndex, current: &PlacementIndex) -> Vec<Relocation> {
+pub(crate) fn changed_records(
+    original: &PlacementIndex,
+    current: &PlacementIndex,
+    requires_group: &HashSet<DeclarationIdentity>,
+) -> Vec<Relocation> {
     let paths: HashMap<&DeclarationIdentity, &str> = original
         .declarations
         .iter()
@@ -116,6 +119,7 @@ fn changed_records(original: &PlacementIndex, current: &PlacementIndex) -> Vec<R
             scope: record.scope,
             ownership_root: record.ownership_root.clone(),
             owning_path: record.owning_path.clone(),
+            requires_group: requires_group.contains(&record.identity),
         })
         .collect()
 }

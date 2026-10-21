@@ -125,6 +125,9 @@ pub struct MigrationDeclaration {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RefactorPlan {
     pub request: RefactorRequest,
+    /// Every resolved move of a batch, in order, the first being `request`; empty otherwise.
+    #[serde(default)]
+    pub batch: Vec<RefactorRequest>,
     pub changes: Vec<FileChange>,
     pub manual: Vec<ManualLocation>,
     pub blocking: Vec<ManualLocation>,
@@ -137,6 +140,15 @@ pub struct RefactorPlan {
 }
 
 impl RefactorPlan {
+    /// Every request the plan carries out: the batch, or the one request.
+    pub fn requests(&self) -> &[RefactorRequest] {
+        if self.batch.is_empty() {
+            std::slice::from_ref(&self.request)
+        } else {
+            &self.batch
+        }
+    }
+
     /// The number of text edits the plan writes, over every changed file.
     pub fn edit_count(&self) -> usize {
         self.changes.iter().map(|change| change.edits.len()).sum()
@@ -270,6 +282,9 @@ pub struct PlacedDeclaration {
 pub struct RelocatedDeclaration {
     pub key: String,
     pub path: String,
+    /// The destination role keeps its files in groups, but this file is not in one.
+    #[serde(default)]
+    pub requires_group: bool,
 }
 
 /// The scope placement answer for a model move across folders.

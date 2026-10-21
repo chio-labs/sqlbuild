@@ -1,14 +1,16 @@
 use crate::placement::_helpers::declaration_directory::declaration_directory;
 use crate::placement::main::diagnostic_order::diagnostic_order;
 use crate::placement::main::placement_diagnostics::placement_diagnostics;
-use crate::placement::main::relocate_for_resource_move::relocate_for_resource_move;
+use crate::placement::main::relocate_for_resource_moves::relocate_for_resource_moves;
 use crate::placement::models::Relocation;
 use crate::placement::tests::helpers::{
-    chained_macros, descendant_models, mixed_diagnostics, model, owned_relocations,
+    chained_macros, descendant_models, direct_cents_grouped_role, grouped_cents_direct_role,
+    grouped_cents_empty_role, grouped_cents_grouped_role, mixed_diagnostics, model, owned_moves,
+    owned_relocations,
 };
 use crate::placement::tests::test_types::{
-    DeclarationDirectoryTestCase, DiagnosticOrderTestCase, PlacementDiagnosticsTestCase,
-    RelocationTestCase,
+    CarriedLayoutTestCase, DeclarationDirectoryTestCase, DiagnosticOrderTestCase,
+    PlacementDiagnosticsTestCase, RelocationTestCase,
 };
 use crate::scope_index::models::{DeclarationKind, ScopeKind};
 
@@ -130,10 +132,9 @@ fn given_resource_move_when_relocating_then_chained_local_declarations_follow() 
         },
     ];
     for test_case in test_cases {
-        let relocations: Option<Vec<Relocation>> = relocate_for_resource_move(
+        let relocations: Option<Vec<Relocation>> = relocate_for_resource_moves(
             &(test_case.index)(),
-            &model("orders"),
-            test_case.destination,
+            &[(model("orders"), test_case.destination.to_owned())],
         );
 
         assert_eq!(
@@ -144,6 +145,67 @@ fn given_resource_move_when_relocating_then_chained_local_declarations_follow() 
                     .collect::<Vec<_>>()
             }),
             test_case.expected_relocations.map(owned_relocations),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_destination_role_layout_when_carrying_declaration_then_its_shape_is_matched() {
+    let test_cases = [
+        CarriedLayoutTestCase {
+            description: "an empty destination role keeps the source group",
+            index: grouped_cents_empty_role,
+            moves: &[("orders", "models/sales/eu/orders.sql")],
+            expected_relocations: &[(0, "models/sales/_sqlbuild/macros/money/cents.py", false)],
+        },
+        CarriedLayoutTestCase {
+            description: "a grouped destination role keeps the source group",
+            index: grouped_cents_grouped_role,
+            moves: &[("orders", "models/sales/eu/orders.sql")],
+            expected_relocations: &[(0, "models/sales/_sqlbuild/macros/money/cents.py", false)],
+        },
+        CarriedLayoutTestCase {
+            description: "a direct source in a grouped destination role needs a group",
+            index: direct_cents_grouped_role,
+            moves: &[("orders", "models/sales/eu/orders.sql")],
+            expected_relocations: &[(0, "models/sales/_sqlbuild/macros/cents.py", true)],
+        },
+        CarriedLayoutTestCase {
+            description: "a direct destination role drops the source group",
+            index: grouped_cents_direct_role,
+            moves: &[("orders", "models/sales/eu/orders.sql")],
+            expected_relocations: &[(0, "models/sales/_sqlbuild/macros/cents.py", false)],
+        },
+        CarriedLayoutTestCase {
+            description: "moving every user together places the macro once at their new folder",
+            index: grouped_cents_grouped_role,
+            moves: &[
+                ("orders", "models/sales/eu/orders.sql"),
+                ("refunds", "models/sales/eu/refunds.sql"),
+            ],
+            expected_relocations: &[(0, "models/sales/eu/_sqlbuild/_macros/money/cents.py", false)],
+        },
+    ];
+    for test_case in test_cases {
+        let relocations: Option<Vec<Relocation>> =
+            relocate_for_resource_moves(&(test_case.index)(), &owned_moves(test_case.moves));
+
+        assert_eq!(
+            relocations.map(|items| {
+                items
+                    .into_iter()
+                    .map(|item| (item.declaration, item.path, item.requires_group))
+                    .collect::<Vec<_>>()
+            }),
+            Some(
+                test_case
+                    .expected_relocations
+                    .iter()
+                    .map(|(position, path, group)| (*position, (*path).to_owned(), *group))
+                    .collect()
+            ),
             "{}",
             test_case.description
         );
