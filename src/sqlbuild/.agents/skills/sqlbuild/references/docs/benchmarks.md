@@ -9,13 +9,14 @@ Online: https://sqlbuild.com/docs/benchmarks/
 ## Contents
 
 - SQLBuild vs dbt v2
+- The project
 - All variants, 10,000 models
 - What is compared
 - Why SQLBuild can reuse work by default
-- The project and how to reproduce it
+- Reproduce
 - Compiler guards in CI
 
-SQLBuild 0.164.3 and dbt 2.0.9 compiling the same generated 10,000-model DuckDB project, on a
+SQLBuild 0.164.3 and dbt 2.0.9 compiling the same generated [10,000-model DuckDB project](#the-project), on a
 GitHub-hosted runner with 4 CPUs and 15 GiB RAM. Each cell is the median of three rounds from
 [run 39543189999](https://github.com/chio-labs/sqlbuild/actions/runs/39543189999) (October 21, 2026).
 
@@ -39,6 +40,24 @@ Cold, SQLBuild used 30 s of CPU and 3.1 GiB at peak; dbt used 167 s and 4.7 GiB.
 - **dbt's changed-models-only mode wins a one-model edit.** `--dirty` compiles only changed models
   and their descendants: 1.6 s for the edited model and 47 descendants, against SQLBuild's 2.4 s for
   a report on the whole project. With 100 edited files it falls back to a full parse and takes 60.7 s.
+
+## The project
+
+The project comes from the dense generator SQLBuild's compile CI uses. The dbt project has the same
+names, folders, SQL and DAG.
+
+| What | Count | In dbt |
+|---|---:|---|
+| Models with typed columns (8–472 columns, about 31 on average) | 10,000 | models with enforced contracts |
+| Sources | 2,400 | sources |
+| Seeds | 500 | seeds |
+| SQL functions | 250 | functions |
+| Macros | 120 | Jinja macros producing the same SQL |
+| `not_null` audits | 17,000 | `not_null` data tests |
+| SQL tests with fixture rows | 10,000 | unit tests |
+
+Each edit changes one constant in a model's SQL; the 1% edit changes 100 models spread across the
+project. Rounds alternate the variant order.
 
 ## All variants, 10,000 models
 
@@ -99,23 +118,7 @@ Reuse assumes macros, hooks, providers, adapters and custom rules are determinis
 [documented limits](cli/compile.md#reusing-an-unchanged-compile), and `--no-cache` always
 compiles in full.
 
-## The project and how to reproduce it
-
-The project comes from the dense generator SQLBuild's compile CI uses. The dbt project has the same
-names, folders, SQL and DAG.
-
-| What | Count | In dbt |
-|---|---:|---|
-| Models with typed columns (8–472 columns, about 31 on average) | 10,000 | models with enforced contracts |
-| Sources | 2,400 | sources |
-| Seeds | 500 | seeds |
-| SQL functions | 250 | functions |
-| Macros | 120 | Jinja macros producing the same SQL |
-| `not_null` audits | 17,000 | `not_null` data tests |
-| SQL tests with fixture rows | 10,000 | unit tests |
-
-Each edit changes one constant in a model's SQL; the 1% edit changes 100 models spread across the
-project. Rounds alternate the variant order.
+## Reproduce
 
 The harness and the exact command for every variant are in
 [`benchmarks/dbt-compare/`](https://github.com/chio-labs/sqlbuild/tree/main/benchmarks/dbt-compare).
