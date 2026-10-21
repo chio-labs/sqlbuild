@@ -34,6 +34,8 @@ pub(crate) const NATIVE_HEADER_COLUMNS: &str = "native_header_columns";
 pub(crate) const PARSED_HEADER_COLUMNS: &str = "parsed_header_columns";
 /// Config values converted into typed nodes for a key a reader asked for.
 pub(crate) const TYPED_CONFIG_READS: &str = "typed_config_reads";
+/// Reads of a model or project that is not a native compiled view, read by attribute instead.
+pub(crate) const COMPILED_VIEW_FALLBACKS: &str = "compiled_view_fallbacks";
 
 /// Compile stage runs since the last reset, by stage.
 #[pyclass]
