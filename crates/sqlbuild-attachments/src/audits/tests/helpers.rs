@@ -40,6 +40,7 @@ pub(super) fn attachment(
     AuditAttachment {
         owner_label: "models/schema.yml".to_owned(),
         definition_name: "accepted_values".to_owned(),
+        definition_path: None,
         sql_body: "SELECT * FROM t WHERE @column NOT IN (@'values')".to_owned(),
         evidence_sql: Some("SELECT @column FROM t".to_owned()),
         implicit_arguments: vec![("column".to_owned(), "status".to_owned())],

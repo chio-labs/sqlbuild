@@ -71,6 +71,7 @@ type Definitions<'a, 'py> = (HashMap<String, Definition<'a>>, Vec<Bound<'py, PyA
 struct Definition<'a> {
     file: &'a AuditFileRow,
     block: &'a AuditBlockRow,
+    builtin: bool,
 }
 
 /// One resource's attached audits: its target, consumer path, and owner files and instances.
@@ -151,7 +152,14 @@ fn generic_definitions<'a, 'py>(
             );
             return Err(compile_error(context.classes, &message, None));
         }
-        project.insert(file.stem.clone(), Definition { file, block });
+        project.insert(
+            file.stem.clone(),
+            Definition {
+                file,
+                block,
+                builtin: false,
+            },
+        );
     }
     let mut shadows: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut definitions: HashMap<String, Definition<'a>> = HashMap::new();
@@ -162,6 +170,7 @@ fn generic_definitions<'a, 'py>(
                 Definition {
                     file: builtin,
                     block,
+                    builtin: true,
                 },
             );
         }
@@ -409,6 +418,7 @@ impl<'py> AuditScope<'_, 'py> {
         let rendering: AuditRendering = render_attached_audit(&AuditAttachment {
             owner_label: owner_file.to_owned(),
             definition_name: definition_name.clone(),
+            definition_path: (!definition.builtin).then(|| definition.file.relative_path.clone()),
             sql_body: definition.block.sql_body.clone(),
             evidence_sql: definition.block.evidence_sql.clone(),
             implicit_arguments: implicit,
