@@ -8,7 +8,9 @@ Usage, from the repository root:
 Creates under DIR:
   sqlbuild/          SQLBuild dense project (the CI dense generator, adapter switched to duckdb)
   sqlbuild-norules/  the same project with `[rules] select = []`
-  dbt/               dbt project derived file by file from `sqlbuild/`
+  dbt/               dbt project derived file by file from `sqlbuild/`; sources use their declared
+                     columns (`schema_origin: local`), as SQLBuild does
+  dbt-remote/        the same dbt project with sources read from the warehouse (dbt's default)
   warehouse.duckdb   DuckDB file holding every source and model relation (empty), as after a build
   profiles/profiles.yml
 
@@ -138,6 +140,8 @@ def write_dbt(sqb: Path, out: Path, n: int) -> Path:
         f"  - name: {SOURCE_NAME}",
         f"    database: {DATABASE}",
         f"    schema: {SOURCE_SCHEMA}",
+        "    config:",
+        "      schema_origin: local",
         "    tables:",
     ]
     for index in range(source_count):
@@ -287,6 +291,18 @@ def model_relations(sqb: Path) -> list[tuple[str, str, list[tuple[str, str, bool
     return relations
 
 
+def write_dbt_remote(dbt: Path) -> Path:
+    """Copy the dbt project with source columns read from the warehouse, dbt's default."""
+    target = dbt.parent / "dbt-remote"
+    shutil.copytree(dbt, target)
+    sources = target / "models" / "_sources.yml"
+    text = sources.read_text()
+    new = text.replace("    config:\n      schema_origin: local\n", "", 1)
+    assert new != text
+    sources.write_text(new)
+    return target
+
+
 def write_warehouse(out: Path, n: int, sqb: Path) -> None:
     """Create every source and model relation empty, as the warehouse looks after `dbt build`.
 
@@ -334,7 +350,7 @@ def seed_error(out: Path, kind: str) -> None:
     """
     name = dense_model_name(ERROR_MODEL_INDEX)
     upstream = dense_model_name(ERROR_MODEL_INDEX - 1)
-    for tool in ("sqlbuild", "sqlbuild-norules", "dbt"):
+    for tool in ("sqlbuild", "sqlbuild-norules", "dbt", "dbt-remote"):
         for path in (out / tool / "models").rglob(f"{name}.sql"):
             text = path.read_text()
             if kind == "column":
@@ -361,7 +377,7 @@ def main() -> None:
         shutil.rmtree(args.out)
     args.out.mkdir(parents=True)
     sqb = write_sqlbuild(args.out, args.models)
-    write_dbt(sqb, args.out, args.models)
+    write_dbt_remote(write_dbt(sqb, args.out, args.models))
     write_norules(sqb)
     write_warehouse(args.out, args.models, sqb)
     if args.seed_error:

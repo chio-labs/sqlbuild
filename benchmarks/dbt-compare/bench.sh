@@ -18,9 +18,9 @@
 #   PYTHON    Python used for the edit helper (default: python3)
 #   SCENARIOS which of warm, edit1 and edit100 to run after cold (default: all three)
 #
-# Default variants: sqb_rules sqb_norules sqb_rules_full v2_compile_cached v2_compile_strict_cached
-# v2_compile_dirty v2_compile_strict_dirty v2_compile v2_compile_strict. Also available: v2_parse
-# core_parse core_compile.
+# Default variants: sqb_norules sqb_norules_full sqb_rules sqb_rules_full v2_compile_cached
+# v2_compile_strict_cached v2_compile_dirty v2_compile_strict_dirty v2_compile v2_compile_strict
+# v2_compile_strict_remote. Also available: v2_parse core_parse core_compile.
 set -u
 ROOT=$(realpath "$1")
 OUT=$(realpath -m "$2")
@@ -44,6 +44,8 @@ SRC[sqb_norules]=sqlbuild-norules
 CMD[sqb_norules]="$SQB --no-color compile"
 SRC[sqb_rules_full]=sqlbuild
 CMD[sqb_rules_full]="env SQLBUILD_DISABLE_COMPILE_REUSE=1 SQLBUILD_DISABLE_DELTA_COMPILE=1 $SQB --no-color compile"
+SRC[sqb_norules_full]=sqlbuild-norules
+CMD[sqb_norules_full]="env SQLBUILD_DISABLE_COMPILE_REUSE=1 SQLBUILD_DISABLE_DELTA_COMPILE=1 $SQB --no-color compile"
 SRC[core_parse]=dbt
 CMD[core_parse]="$DBT_CORE parse $DBTFLAGS"
 SRC[core_compile]=dbt
@@ -54,6 +56,11 @@ SRC[v2_compile]=dbt
 CMD[v2_compile]="$DBT_V2 compile $DBTFLAGS"
 SRC[v2_compile_strict]=dbt
 CMD[v2_compile_strict]="$DBT_V2 compile $DBTFLAGS --static-analysis strict"
+# dbt/ declares source columns locally (schema_origin: local). dbt-remote/ reads them from the
+# warehouse, dbt's default; v2_compile_strict_remote shows that introspection cost in default mode,
+# which re-reads source schemas on every run.
+SRC[v2_compile_strict_remote]=dbt-remote
+CMD[v2_compile_strict_remote]="$DBT_V2 compile $DBTFLAGS --static-analysis strict"
 # dbt v2's parse cache is off by default. --partial-parse keeps it under target/private/metadata/;
 # --partial-load loads it faster. --dirty selects only nodes whose files changed since the last
 # --partial-parse run, plus their descendants, so its cold run builds the cache without it.
@@ -70,8 +77,9 @@ CMD[v2_compile_strict_dirty]="$DBT_V2 compile $DBTFLAGS --static-analysis strict
 
 VARIANTS=("$@")
 if [ ${#VARIANTS[@]} -eq 0 ]; then
-  VARIANTS=(sqb_rules sqb_norules sqb_rules_full v2_compile_cached v2_compile_strict_cached
-    v2_compile_dirty v2_compile_strict_dirty v2_compile v2_compile_strict)
+  VARIANTS=(sqb_norules sqb_norules_full sqb_rules sqb_rules_full v2_compile_cached
+    v2_compile_strict_cached v2_compile_dirty v2_compile_strict_dirty v2_compile v2_compile_strict
+    v2_compile_strict_remote)
 fi
 for v in "${VARIANTS[@]}"; do
   if [ -z "${CMD[$v]+set}" ]; then

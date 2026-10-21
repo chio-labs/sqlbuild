@@ -39,7 +39,7 @@ on:
       variants:
         description: "Space-separated bench.sh variants"
         required: false
-        default: "sqb_rules sqb_norules sqb_rules_full v2_compile_cached v2_compile_strict_cached v2_compile_dirty v2_compile_strict_dirty v2_compile v2_compile_strict"
+        default: "sqb_norules sqb_norules_full sqb_rules sqb_rules_full v2_compile_cached v2_compile_strict_cached v2_compile_dirty v2_compile_strict_dirty v2_compile v2_compile_strict v2_compile_strict_remote"
         type: string
 
 permissions:
@@ -131,10 +131,17 @@ jobs:
         run: |
           "$BENCH/correctness.sh" "$WORK/correctness" | tee "$RESULTS/correctness.md"
           cp -r "$WORK/correctness/logs" "$RESULTS/correctness-logs"
+      # Strict analysis is only in the `dbt` distribution and can fall back silently; stop before
+      # the long benchmark unless it demonstrably ran.
+      - name: Prove dbt v2 strict analysis ran (correctness)
+        run: python3 "$BENCH/check_strict.py" correctness "$WORK/correctness" | tee "$RESULTS/strict-check.md"
       - name: Benchmark
         run: |
           read -ra variants <<<"$VARIANTS"
           "$BENCH/bench.sh" "$WORK/project" "$RESULTS/runs" "$ROUNDS" "${variants[@]}"
+      - name: Prove dbt v2 strict analysis ran (benchmark)
+        if: ${{ contains(inputs.variants, 'strict') }}
+        run: python3 "$BENCH/check_strict.py" runs "$RESULTS/runs" | tee -a "$RESULTS/strict-check.md"
       - name: Summarize
         if: ${{ !cancelled() }}
         run: |
@@ -143,6 +150,8 @@ jobs:
             echo "## Correctness (50 models)"
             echo
             cat "$RESULTS/correctness.md" 2>/dev/null || echo "Not run."
+            echo
+            cat "$RESULTS/strict-check.md" 2>/dev/null || echo "Strict check not run."
             echo
             echo "## Benchmark (${MODELS} models, medians of ${ROUNDS} rounds)"
             echo
