@@ -156,7 +156,7 @@ def wait_for(predicate_sql: str, project_dir: Path, *, timeout: float) -> list[l
         completed: subprocess.CompletedProcess[bytes] = run(
             project_dir, "recall", "query", "--json", predicate_sql
         )
-        rows = json.loads(completed.stdout or EMPTY_RESULT)["rows"]
+        rows = json.loads(completed.stdout or EMPTY_RESULT).get("rows", [])
     return rows
 
 

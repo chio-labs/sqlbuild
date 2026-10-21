@@ -199,6 +199,42 @@ fn write_compile_machine_error(
     print_object(&document, None, None)
 }
 
+/// With `sqb recall … --json`, the failure as `{"error": {"code", "message", "help"}}` on stdout, so callers parsing the output read the error instead of failing to parse it.
+fn write_recall_machine_error(
+    invocation: &Invocation<'_>,
+    error: &Bound<'_, PyAny>,
+    fallback_code: &str,
+) -> PyResult<()> {
+    if !invocation.command_is("recall") {
+        return Ok(());
+    }
+    let format: Option<String> = invocation
+        .args
+        .getattr_opt("recall_format")?
+        .and_then(|format| format.extract().ok());
+    if format.as_deref() != Some("json") {
+        return Ok(());
+    }
+    let (code, message, help) = error_parts(error, fallback_code)?;
+    let help: Option<String> = if help.is_none() {
+        None
+    } else {
+        Some(help.str()?.to_string())
+    };
+    let document = serde_json::json!({
+        "error": {
+            "code": code.str()?.to_string(),
+            "message": message.str()?.to_string(),
+            "help": help,
+        }
+    });
+    print_object(
+        &PyString::new(invocation.py(), &document.to_string()).into_any(),
+        None,
+        None,
+    )
+}
+
 fn render_diff_error<'py>(
     py: Python<'py>,
     fields: &[(&str, Bound<'py, PyAny>)],
@@ -345,6 +381,7 @@ fn report_failure<'py>(
         error
     };
     write_compile_machine_error(invocation, &effective, fallback_code)?;
+    write_recall_machine_error(invocation, &effective, fallback_code)?;
     if effective.is_instance(&error_class(py, ErrorId::QueryDiffOutcome)?)? {
         let line: Bound<'py, PyAny> = PyString::new(py, DIFF_OUTCOME_PREFIX)
             .into_any()

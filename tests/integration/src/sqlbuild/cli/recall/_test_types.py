@@ -222,3 +222,10 @@ class BehindStoreTestCase:
     expected_ddl_fragments: tuple[str, ...]
     expected_up_to_date_note: str
 
+
+@dataclass(frozen=True)
+class JsonErrorTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_code: str
+

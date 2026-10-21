@@ -113,6 +113,14 @@ other reason is followed by a note on stderr naming the gap.
 
 ## Errors
 
+With `--json` (or `--format json`), a failing `query` or `schema` still exits `1` and prints its
+coded error on stderr, and prints the error as JSON on stdout, so a program parsing the output reads
+the error instead of failing to parse it:
+
+```json
+{"error": {"code": "C974", "message": "invalid Recall query: no such column: status ...", "help": null}}
+```
+
 | Code | Meaning |
 |------|---------|
 | `C970` | Recall is disabled for this project or target |
