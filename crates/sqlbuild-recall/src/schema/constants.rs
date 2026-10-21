@@ -348,3 +348,6 @@ pub(crate) const RETENTION_CANDIDATE_TABLES: [Table; 5] = [
     Table::Output,
     Table::Diagnostics,
 ];
+
+/// Seconds in a day, for comparing a version row's age with the retention.
+pub(crate) const SECONDS_PER_DAY: i64 = 86_400;

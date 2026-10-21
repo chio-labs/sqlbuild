@@ -118,3 +118,32 @@ pub struct ObservedSchema {
     /// The highest recorded schema version; `None` when none is recorded.
     pub version: Option<i64>,
 }
+
+/// How a store's tables and views compare with this build's, from their columns.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SchemaAge {
+    /// A relation is missing or lacks a column of this build, and none has a column this build does not know.
+    Older,
+    /// Every table and view has exactly this build's columns.
+    Current,
+    /// A relation has a column this build does not know: a newer build created it.
+    Newer,
+}
+
+/// What a writer knows about the store's schema version.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StoreVersion {
+    /// The highest recorded version, and the age in seconds of the newest version row.
+    Recorded { version: i64, age_seconds: i64 },
+    /// No version row is left, as after retention expired it; the columns tell the store's age.
+    Unrecorded(SchemaAge),
+}
+
+/// What a writer does to the views and the version row.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VersionPlan {
+    /// Replace every view with this build's definition.
+    pub replace_views: bool,
+    /// The version to append once the views are settled, if any.
+    pub record: Option<i64>,
+}

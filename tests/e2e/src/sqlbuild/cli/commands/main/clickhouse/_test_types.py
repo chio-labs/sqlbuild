@@ -230,3 +230,26 @@ class ClickHouseRecallUnknownRelationTestCase:
     description: str
     sql: str
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallNewerStoreTestCase:
+    description: str
+    newer_view: str
+    expected_future_columns: tuple[tuple[object, ...], ...]
+    expected_version_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallVersionRefreshTestCase:
+    description: str
+    row_age_days: int
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallUnrecordedBehindTestCase:
+    description: str
+    stale_view: str
+    expected_notice: str
+    expected_version_rows: tuple[tuple[object, ...], ...]

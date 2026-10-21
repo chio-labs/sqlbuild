@@ -17,6 +17,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse._test_types import (
     ClickHouseRecallExpiryTestCase,
     ClickHouseRecallFirstReleaseStoreTestCase,
     ClickHouseRecallLimitedWriterTestCase,
+    ClickHouseRecallNewerStoreTestCase,
     ClickHouseRecallOutputTestCase,
     ClickHouseRecallPartialInsertTestCase,
     ClickHouseRecallPermissionTestCase,
@@ -26,6 +27,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse._test_types import (
     ClickHouseRecallRetentionTestCase,
     ClickHouseRecallUnknownRelationTestCase,
     ClickHouseRecallUnlimitedOutputTestCase,
+    ClickHouseRecallUnrecordedBehindTestCase,
+    ClickHouseRecallVersionRefreshTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse.helpers import (
     FIRST_RELEASE_EDITS,
@@ -976,3 +979,159 @@ def test_given_a_complete_store_when_a_query_names_an_unknown_relation_then_the_
         True for _ in test_case.expected_fragments
     ]
     assert "C971" not in stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseRecallNewerStoreTestCase(
+            description="views with a column this build does not know are left alone",
+            newer_view="SELECT *, 1 AS future_column FROM {database}.recall_events",
+            expected_future_columns=((1,),),
+            expected_version_rows=((0,),),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_newer_store_whose_version_row_expired_when_an_older_writer_builds_then_views_stay(
+    test_case: ClickHouseRecallNewerStoreTestCase,
+    tmp_path: Path,
+    clickhouse_e2e_config: dict[str, object],
+    recall_database: str,
+) -> None:
+    project_dir: Path = write_recall_project(
+        parent=tmp_path, config=clickhouse_e2e_config, database=recall_database
+    )
+    assert run(project_dir, "build").returncode == 0
+    execute_clickhouse_sql(
+        config=clickhouse_e2e_config,
+        statements=(
+            f"CREATE OR REPLACE VIEW {recall_database}.statements AS "
+            + test_case.newer_view.format(database=recall_database),
+            f"ALTER TABLE {recall_database}.recall_meta DELETE WHERE 1 SETTINGS mutations_sync = 2",
+        ),
+    )
+
+    built: subprocess.CompletedProcess[bytes] = run(project_dir, "build")
+
+    assert built.returncode == 0, built.stderr
+    assert b"Recall" not in built.stderr
+    assert (
+        fetch_clickhouse_rows(
+            config=clickhouse_e2e_config,
+            sql=f"SELECT count() FROM system.columns WHERE database = '{recall_database}' "
+            "AND table = 'statements' AND name = 'future_column'",
+        )
+        == test_case.expected_future_columns
+    )
+    assert (
+        fetch_clickhouse_rows(
+            config=clickhouse_e2e_config,
+            sql=f"SELECT count() FROM {recall_database}.recall_meta WHERE component = 'schema'",
+        )
+        == test_case.expected_version_rows
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseRecallVersionRefreshTestCase(
+            description="a version row past half the retention is recorded again",
+            row_age_days=20,
+            expected_rows=((2, 2, 1),),
+        ),
+        ClickHouseRecallVersionRefreshTestCase(
+            description="a recent version row is left as it is",
+            row_age_days=1,
+            expected_rows=((1, 2, 0),),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_an_aging_version_row_when_building_then_it_is_refreshed_before_retention_drops_it(
+    test_case: ClickHouseRecallVersionRefreshTestCase,
+    tmp_path: Path,
+    clickhouse_e2e_config: dict[str, object],
+    recall_database: str,
+) -> None:
+    project_dir: Path = write_recall_project(
+        parent=tmp_path, config=clickhouse_e2e_config, database=recall_database
+    )
+    assert run(project_dir, "build").returncode == 0
+    meta: str = f"{recall_database}.recall_meta"
+    execute_clickhouse_sql(
+        config=clickhouse_e2e_config,
+        statements=(
+            f"CREATE TABLE {recall_database}.aged_meta AS {meta}",
+            f"INSERT INTO {recall_database}.aged_meta SELECT * REPLACE (recorded_at - "
+            f"toIntervalDay({test_case.row_age_days}) AS recorded_at) FROM {meta} "
+            "WHERE component = 'schema'",
+            f"ALTER TABLE {meta} DELETE WHERE component = 'schema' SETTINGS mutations_sync = 2",
+            f"INSERT INTO {meta} SELECT * FROM {recall_database}.aged_meta",
+            f"DROP TABLE {recall_database}.aged_meta",
+        ),
+    )
+
+    built: subprocess.CompletedProcess[bytes] = run(project_dir, "build")
+
+    assert built.returncode == 0, built.stderr
+    assert (
+        fetch_clickhouse_rows(
+            config=clickhouse_e2e_config,
+            sql=f"SELECT count(), max(toInt64OrZero(value)), "
+            f"countIf(recorded_at > now64(6) - toIntervalHour(1)) FROM {meta} "
+            "WHERE component = 'schema'",
+        )
+        == test_case.expected_rows
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseRecallUnrecordedBehindTestCase(
+            description="a SELECT, INSERT writer warns when an expired row hides older views",
+            stale_view="SELECT invocation_id, statement_id FROM {database}.recall_events",
+            expected_notice="is behind this SQLBuild version, and this user may not upgrade it",
+            expected_version_rows=((0,),),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_older_views_and_an_expired_version_row_when_a_limited_writer_builds_then_it_warns(
+    test_case: ClickHouseRecallUnrecordedBehindTestCase,
+    tmp_path: Path,
+    clickhouse_e2e_config: dict[str, object],
+    recall_database: str,
+) -> None:
+    admin: Path = write_recall_project(
+        parent=tmp_path / "admin", config=clickhouse_e2e_config, database=recall_database
+    )
+    assert run(admin, "build").returncode == 0
+    execute_clickhouse_sql(
+        config=clickhouse_e2e_config,
+        statements=(
+            f"CREATE OR REPLACE VIEW {recall_database}.statements AS "
+            + test_case.stale_view.format(database=recall_database),
+            f"ALTER TABLE {recall_database}.recall_meta DELETE WHERE 1 SETTINGS mutations_sync = 2",
+        ),
+    )
+
+    with limited_user(config=clickhouse_e2e_config, database=recall_database) as writer:
+        project_dir: Path = write_recall_project(
+            parent=tmp_path / "writer", config=writer, database=recall_database
+        )
+        built: subprocess.CompletedProcess[bytes] = run(project_dir, "build")
+
+    stderr: str = built.stderr.decode(errors="replace")
+    assert built.returncode == 0, stderr
+    assert stderr.count(test_case.expected_notice) == 1
+    assert "sqb recall schema --ddl" in stderr
+    assert (
+        fetch_clickhouse_rows(
+            config=clickhouse_e2e_config,
+            sql=f"SELECT count() FROM {recall_database}.recall_meta WHERE component = 'schema'",
+        )
+        == test_case.expected_version_rows
+    )

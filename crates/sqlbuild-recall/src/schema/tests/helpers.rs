@@ -1,10 +1,11 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::schema::constants::{ALL_TABLES, VIEW_NAMES};
 use crate::schema::main::ddl_script::ddl_script;
 use crate::schema::main::sqlite_retention_sql::sqlite_retention_sql;
 use crate::schema::main::table_columns::table_columns;
 use crate::schema::main::table_statements::table_statements;
+use crate::schema::main::view_columns::view_columns;
 use crate::schema::models::{DdlOptions, Dialect, ObservedSchema, Table};
 
 /// Options rendering into `observability` with 14-day retention, optionally on `cluster`.
@@ -96,4 +97,25 @@ fn present_columns(table: Table, (without_table, without_name): (Table, &str)) -
         .filter(|column| (table, column.name) != (without_table, without_name))
         .map(|column| column.name.to_owned())
         .collect()
+}
+
+/// This build's view columns, keyed by owned names as a store reports them.
+pub(crate) fn current_views() -> BTreeMap<String, BTreeSet<String>> {
+    view_columns()
+        .expect("this build's views can be listed")
+        .into_iter()
+        .map(|(view, columns)| (view.to_owned(), columns))
+        .collect()
+}
+
+/// This build's view columns with `added` added to and `removed` taken from `statements`.
+pub(crate) fn changed_statements_view(
+    added: &[&str],
+    removed: &[&str],
+) -> BTreeMap<String, BTreeSet<String>> {
+    let mut views = current_views();
+    let statements = views.get_mut("statements").expect("statements is a view");
+    statements.extend(added.iter().map(|column| (*column).to_owned()));
+    statements.retain(|column| !removed.contains(&column.as_str()));
+    views
 }
