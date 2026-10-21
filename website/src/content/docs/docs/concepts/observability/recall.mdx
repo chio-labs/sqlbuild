@@ -96,6 +96,21 @@ recorded either: a `sqb compile` answered from the launcher's warm cache, and `s
 The store is `logs/recall.sqlite3` in the project directory. Add `logs/` to `.gitignore`; the store
 can contain sensitive SQL and output.
 
+## Git revision
+
+`invocations.git_revision` is the commit `HEAD` names in the repository above the project
+directory, including git worktrees and submodules, whose `.git` is a file pointing at the
+repository. Deployments usually have no `.git` at all, so set the revision when building the image
+or starting the job, or comparing production runs by `git_revision` finds nothing:
+
+```bash
+export SQLBUILD_GIT_REVISION="$(git rev-parse HEAD)"   # recorded as git_revision
+export SQLBUILD_GIT_DIRTY=false                        # optional: recorded as git_dirty (true/false)
+```
+
+`SQLBUILD_GIT_REVISION` takes precedence over the repository. Without `SQLBUILD_GIT_DIRTY`,
+`git_dirty` is `NULL`.
+
 ## Settings
 
 Configure Recall in `[recall]` in `sqlbuild_project.toml`. A `[targets.<name>.recall]` table

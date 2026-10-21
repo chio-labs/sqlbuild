@@ -237,3 +237,10 @@ class FailureCauseTestCase:
     expected_failure: list[object]
     expected_message_prefix: str
 
+
+@dataclass(frozen=True)
+class GitRevisionTestCase:
+    description: str
+    layout: str
+    environment: dict[str, str]
+    expected_dirty: object

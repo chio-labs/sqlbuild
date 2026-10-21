@@ -33,9 +33,9 @@ use crate::bindings::_helpers::recall::clickhouse_store::{
 };
 use crate::bindings::_helpers::recall::console::write_stderr;
 use crate::bindings::_helpers::recall::constants::{
-    CLOSE_POLL_MS, DDL_NOTICE_PREFIX, HEARTBEAT_ENVIRONMENT, HOST_TOKEN_LENGTH,
-    MINIMUM_HEARTBEAT_SECONDS, NOTICE_INTERVAL_SECONDS, QUARANTINE_START_WAIT_MS, RECALL_HISTORY,
-    STDOUT_STREAM_INDEX,
+    CLOSE_POLL_MS, DDL_NOTICE_PREFIX, GIT_DIRTY_ENVIRONMENT, GIT_REVISION_ENVIRONMENT,
+    HEARTBEAT_ENVIRONMENT, HOST_TOKEN_LENGTH, MINIMUM_HEARTBEAT_SECONDS, NOTICE_INTERVAL_SECONDS,
+    QUARANTINE_START_WAIT_MS, RECALL_HISTORY, STDOUT_STREAM_INDEX,
 };
 use crate::bindings::_helpers::recall::events::escaped_text;
 use crate::bindings::_helpers::recall::replacements::{RecallReplacements, in_replacement_sink};
@@ -97,24 +97,73 @@ fn project_dir(args: &Bound<'_, PyAny>) -> PyResult<PathBuf> {
     Ok(std::fs::canonicalize(&raw).unwrap_or(raw))
 }
 
-/// The commit `HEAD` names, read from the repository files without running git.
+/// The repository directory a `.git` entry names: the directory itself, or the `gitdir:` a worktree's or submodule's `.git` file points to.
+fn git_directory(entry: &Path) -> Option<PathBuf> {
+    if entry.is_dir() {
+        return Some(entry.to_path_buf());
+    }
+    let pointer: String = file_text(entry)?;
+    let target: &str = pointer.trim().strip_prefix("gitdir:")?.trim();
+    let target: PathBuf = PathBuf::from(target);
+    let resolved: PathBuf = if target.is_absolute() {
+        target
+    } else {
+        entry.parent()?.join(target)
+    };
+    resolved.is_dir().then_some(resolved)
+}
+
+/// The commit `HEAD` names, read from the repository files without running git; a worktree reads its refs from the common directory.
 fn git_revision(project_dir: &Path) -> Option<String> {
     let git: PathBuf = project_dir
         .ancestors()
         .map(|directory| directory.join(".git"))
-        .find(|candidate| candidate.is_dir())?;
+        .find(|candidate| candidate.exists())
+        .and_then(|entry| git_directory(&entry))?;
+    let common: PathBuf = file_text(&git.join("commondir"))
+        .map_or_else(|| git.clone(), |relative| git.join(relative.trim()));
     let head: String = file_text(&git.join("HEAD"))?;
     let Some(reference) = head.trim().strip_prefix("ref: ") else {
         return Some(head.trim().to_owned());
     };
-    if let Some(revision) = file_text(&git.join(reference)) {
-        return Some(revision.trim().to_owned());
+    for directory in [&git, &common] {
+        if let Some(revision) = file_text(&directory.join(reference)) {
+            return Some(revision.trim().to_owned());
+        }
     }
-    file_text(&git.join("packed-refs"))?
-        .lines()
-        .filter_map(|line| line.split_once(' '))
-        .find(|(_, name)| *name == reference)
-        .map(|(revision, _)| revision.to_owned())
+    [&git, &common]
+        .into_iter()
+        .filter_map(|directory| file_text(&directory.join("packed-refs")))
+        .flat_map(|packed| {
+            packed
+                .lines()
+                .filter_map(|line| line.split_once(' '))
+                .filter(|(_, name)| *name == reference)
+                .map(|(revision, _)| revision.to_owned())
+                .collect::<Vec<_>>()
+        })
+        .next()
+}
+
+/// The revision a deployment sets in [`GIT_REVISION_ENVIRONMENT`], else the one the repository's files name.
+fn recorded_git_revision(project_dir: &Path) -> Option<String> {
+    environment(GIT_REVISION_ENVIRONMENT)
+        .map(|revision| revision.trim().to_owned())
+        .filter(|revision| !revision.is_empty())
+        .or_else(|| git_revision(project_dir))
+}
+
+/// Whether the working tree had uncommitted changes, as a deployment sets it in [`GIT_DIRTY_ENVIRONMENT`]; unknown otherwise.
+fn recorded_git_dirty() -> Option<bool> {
+    match environment(GIT_DIRTY_ENVIRONMENT)?
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "1" | "true" | "yes" => Some(true),
+        "0" | "false" | "no" => Some(false),
+        _ => None,
+    }
 }
 
 fn host_token() -> Option<String> {
@@ -178,8 +227,8 @@ fn invocation_facts(
         destination_schema: settings.destination_schema.clone(),
         destination_fingerprint: Some(sha256_hex(fingerprint_source.as_bytes())),
         sqlbuild_version: Some(env!("CARGO_PKG_VERSION").to_owned()),
-        git_revision: git_revision(project_dir),
-        git_dirty: None,
+        git_revision: recorded_git_revision(project_dir),
+        git_dirty: recorded_git_dirty(),
         host_token: host_token(),
         pid: Some(std::process::id()),
         external_context: external_context(py)?,

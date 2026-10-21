@@ -2,6 +2,10 @@
 
 /// Seconds between heartbeats; tests shorten it to observe abandoned invocations quickly.
 pub(crate) const HEARTBEAT_ENVIRONMENT: &str = "SQLBUILD_RECALL_HEARTBEAT_SECONDS";
+/// The commit a deployment without `.git` records as `git_revision`.
+pub(crate) const GIT_REVISION_ENVIRONMENT: &str = "SQLBUILD_GIT_REVISION";
+/// Whether that deployment's tree had uncommitted changes, recorded as `git_dirty`.
+pub(crate) const GIT_DIRTY_ENVIRONMENT: &str = "SQLBUILD_GIT_DIRTY";
 /// Marker files under `target/` limiting store notices to one per interval.
 pub(crate) const DDL_NOTICE_PREFIX: &str = ".recall-notice-";
 pub(crate) const NOTICE_INTERVAL_SECONDS: u64 = 24 * 60 * 60;
