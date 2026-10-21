@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.164.4](https://github.com/chio-labs/sqlbuild/compare/v0.164.3...v0.164.4) (2026-10-21)
+
+
+### Bug Fixes
+
+* evaluate project-wide rules over the whole project on selected runs ([#1198](https://github.com/chio-labs/sqlbuild/issues/1198)) ([5556991](https://github.com/chio-labs/sqlbuild/commit/555699187fe21e2579a898b5f9ef80db1e546071))
+
 ## [0.164.3](https://github.com/chio-labs/sqlbuild/compare/v0.164.2...v0.164.3) (2026-10-21)
 
 
