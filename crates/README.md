@@ -23,6 +23,7 @@ that can be tested and benchmarked with `cargo test` alone.
 | `sqlbuild-analysis` | SQL analysis over polyglot: query analysis, binding, semantic validation and usage, column references, type normalization, FAST/RICH lineage, SQL-test/scenario extraction and compiler-side assembly, and Snowflake cost statement classification and query-tag parsing. |
 | `sqlbuild-rules` | Built-in rules and the rules engine, the custom-rule host, SQL lint, quality checks and formatting, rules configuration and the request models. It also owns the build identity script. |
 | `sqlbuild-refactor` | Native rename/move plans, contract-adoption edits, MODEL/SCHEMA/YAML text edits and atomic staging/commit with rollback. Shared scope placement delegates to the native scope implementation; user Python source inspection remains at the Python AST boundary. |
+| `sqlbuild-project` | The compiled project as plain Rust: the records the compile keeps for each model, source, function, audit and seed. Values that belong to the host, such as user config objects, and the views the host builds lazily are carried in one opaque slot per record, whose type `sqlbuild-python` supplies through the `ProjectHost` trait. |
 | `sqlbuild-cli` | The `sqb` and `sqlbuild` executables: `--version`, unchanged compiles replayed from the shared reuse store with Python's exact streams, exit code and compute log capture, and a handoff of every other invocation to the installed `sqlbuild-python` script. Built as its own wheel (`crates/sqlbuild-cli/pyproject.toml`). |
 | `sqlbuild-python` | The only PyO3 crate: the `_native` module, its Python classes and functions, conversions from Python objects, and the process allocator. |
 
@@ -32,7 +33,7 @@ Dependencies point one way, from the top of this graph to the bottom:
 
 ```text
 sqlbuild-python
-  -> sqlbuild-refactor -> sqlbuild-rules -> sqlbuild-analysis -> sqlbuild-attachments
+  -> sqlbuild-project -> sqlbuild-refactor -> sqlbuild-rules -> sqlbuild-analysis -> sqlbuild-attachments
   -> sqlbuild-model-config -> sqlbuild-scopes -> sqlbuild-render -> sqlbuild-discovery -> sqlbuild-host
   -> sqlbuild-config -> sqlbuild-sqltext -> sqlbuild-cache -> sqlbuild-pysource -> sqlbuild-state -> sqlbuild-cursor -> sqlbuild-core
 sqlbuild-cli -> sqlbuild-cache, sqlbuild-core, sqlbuild-build-features
