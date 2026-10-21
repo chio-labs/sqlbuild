@@ -231,6 +231,13 @@ class JsonErrorTestCase:
 
 
 @dataclass(frozen=True)
+class DeprecatedFormatTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_warning: bool
+
+
+@dataclass(frozen=True)
 class FailureCauseTestCase:
     description: str
     args: tuple[str, ...]

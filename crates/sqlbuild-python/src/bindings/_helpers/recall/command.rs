@@ -27,7 +27,8 @@ use crate::bindings::_helpers::recall::console::{write_stderr, write_stdout_byte
 use crate::bindings::_helpers::recall::constants::{
     DEFAULT_MAX_CELL_BYTES, DEFAULT_QUERY_LIMIT, JSON_FORMAT, LAST_INVOCATION, LONG_FORMAT,
     RECALL_AMBIGUOUS_CODE, RECALL_DISABLED_CODE, RECALL_NOT_FOUND_CODE, RECALL_OPTIONS,
-    RECALL_QUERY_CODE, RECALL_SETTINGS_CODE, RECALL_STORE_CODE, WAREHOUSE_BACKEND,
+    RECALL_QUERY_CODE, RECALL_SETTINGS_CODE, RECALL_STORE_CODE, TABLE_FORMAT,
+    TABLE_FORMAT_DEPRECATION, WAREHOUSE_BACKEND,
 };
 use crate::bindings::_helpers::recall::rendering::{QueryContext, render_result, render_schema};
 use crate::bindings::_helpers::records::construct::new_error;
@@ -93,6 +94,14 @@ fn recall_request(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResul
         tail: number("tail")?,
         ddl: arguments.value("ddl")?.is_truthy()?,
     })
+}
+
+/// Warn once that `--format table` goes away in a later release; it still works in this one.
+fn warn_table_format(py: Python<'_>, recall: &RecallRequest) -> PyResult<()> {
+    if recall.format == TABLE_FORMAT {
+        write_stderr(py, TABLE_FORMAT_DEPRECATION)?;
+    }
+    Ok(())
 }
 
 /// The project directory, target and settings, or the coded failure.
@@ -242,6 +251,7 @@ fn limit(recall: &RecallRequest) -> Option<i64> {
 }
 
 fn run_query(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
+    warn_table_format(py, recall)?;
     let (project_dir, settings) = settings(py, recall)?;
     let sql: String = recall.sql.clone().unwrap_or_default();
     if sql.trim().is_empty() {
@@ -300,8 +310,71 @@ fn run_query(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
     Ok(0)
 }
 
+/// Print what creates the read store, or brings it up to this build's schema, without changing it.
+fn run_schema_ddl(py: Python<'_>, settings: &RecallSettings) -> PyResult<i32> {
+    let (statements, place): (Result<Vec<String>, StoreError>, String) = match &settings.read_store
+    {
+        StoreLocation::Sqlite { path } => {
+            let options = DdlOptions {
+                database: None,
+                retention_days: settings.retention_days,
+                cluster: None,
+            };
+            let statements = if path.exists() {
+                open_sqlite_store(path, OpenMode::ReadOnly)
+                    .and_then(|store| observe_sqlite_schema(&store))
+                    .map(|observed| upgrade_statements(Dialect::Sqlite, &options, &observed))
+            } else {
+                Ok(ddl_statements(Dialect::Sqlite, &options))
+            };
+            (statements, format!("at {}", path.display()))
+        }
+        StoreLocation::ClickHouse {
+            config, database, ..
+        } => (
+            ClickHouseReader::upgrade_statements(
+                py,
+                &ClickHouseLocation::new(config, database, settings.retention_days),
+            ),
+            format!("in ClickHouse database `{database}`"),
+        ),
+        StoreLocation::Unsupported { .. } => {
+            return open_store(py, settings).map(|store| {
+                store.close();
+                0
+            });
+        }
+    };
+    let statements =
+        statements.map_err(|error| user_error(py, &error.message, RECALL_STORE_CODE))?;
+    if statements.is_empty() {
+        write_stderr(
+            py,
+            &format!(
+                "The Recall store {place} is up to date with this SQLBuild version; there is \
+                 nothing to run.\n"
+            ),
+        )?;
+    } else {
+        write_stdout_bytes(py, render_script(&statements).as_bytes())?;
+    }
+    Ok(0)
+}
+
 fn run_schema(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
+    warn_table_format(py, recall)?;
     let (project_dir, settings) = settings(py, recall)?;
+    if recall.ddl {
+        if recall.backend.as_deref() == Some(WAREHOUSE_BACKEND) {
+            return Err(user_error(
+                py,
+                "--ddl prints the Recall store's DDL and cannot be combined with --backend \
+                 warehouse",
+                RECALL_QUERY_CODE,
+            ));
+        }
+        return run_schema_ddl(py, &settings);
+    }
     if recall.backend.as_deref() == Some(WAREHOUSE_BACKEND) {
         let sql = match &recall.relation {
             Some(relation) => format!(

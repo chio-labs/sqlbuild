@@ -16,18 +16,33 @@ still pass, because they run on mocked data. The build finishes with a warning t
 The next morning, ask when the audit started failing, and what each of those builds reported:
 
 ```bash
-sqb recall query --format table \
+sqb recall query \
   "SELECT a.invocation_started_at AS run, a.outcome, a.violation_count, i.status, i.exit_code
    FROM audit_results a JOIN invocations i USING (invocation_id)
    WHERE a.audit_name = 'revenue_is_non_negative' ORDER BY run DESC LIMIT 3"
 ```
 
 ```
-run                         | outcome | violation_count | status    | exit_code
---------------------------- | ------- | --------------- | --------- | ---------
-2026-10-20T00:01:44.784683Z | warn    | 1               | completed | 0
-2026-10-20T00:00:34.652468Z | pass    | 0               | completed | 0
-2026-10-19T23:59:23.827831Z | pass    | 0               | completed | 0
+-[ RECORD 1 ]---------------------------+
+run             | 2026-10-20T00:01:44.784683Z
+outcome         | warn
+violation_count | 1
+status          | completed
+exit_code       | 0
+
+-[ RECORD 2 ]---------------------------+
+run             | 2026-10-20T00:00:34.652468Z
+outcome         | pass
+violation_count | 0
+status          | completed
+exit_code       | 0
+
+-[ RECORD 3 ]---------------------------+
+run             | 2026-10-19T23:59:23.827831Z
+outcome         | pass
+violation_count | 0
+status          | completed
+exit_code       | 0
 
 3 rows
 ```
@@ -50,14 +65,16 @@ sqb recall output last --tail 4
 Then check what is true in the warehouse now, with `sqb recall query` again:
 
 ```bash
-sqb recall query --backend warehouse --format table \
+sqb recall query --backend warehouse \
   "SELECT payment_id, order_id, amount_cents, paid_at FROM prod.stg_payments WHERE amount_cents < 0"
 ```
 
 ```
-payment_id | order_id | amount_cents | paid_at
----------- | -------- | ------------ | -------------------
-9          | 8        | -2200        | 2026-04-03 15:42:00
+-[ RECORD 1 ]---------------------------+
+payment_id   | 9
+order_id     | 8
+amount_cents | -2200
+paid_at      | 2026-04-03 15:42:00
 
 1 row
 ```
@@ -202,11 +219,18 @@ The connection needs `adapter = "clickhouse"` when the project uses another adap
 `database` must already exist; Recall never creates databases.
 
 ```toml
-[connections.history]
+[connections.history_writer]
 adapter = "clickhouse"
 host = "${env:CLICKHOUSE_HOST}"
 user = "recall_writer"
-password = "${env:CLICKHOUSE_PASSWORD}"
+password = "${env:RECALL_WRITER_PASSWORD}"
+database = "observability"
+
+[connections.history_reader]
+adapter = "clickhouse"
+host = "${env:CLICKHOUSE_HOST}"
+user = "recall_reader"
+password = "${env:RECALL_READER_PASSWORD}"
 database = "observability"
 
 [recall]

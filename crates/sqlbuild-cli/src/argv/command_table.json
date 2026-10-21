@@ -6853,6 +6853,7 @@
               "json",
               "csv"
              ],
+             "help": "long (default) for reading, json for programs, csv for export; table is deprecated",
              "mutex_group": 0,
              "group": 1
             },
@@ -7042,6 +7043,7 @@
               "json",
               "csv"
              ],
+             "help": "long (default) for reading, json for programs, csv for export; table is deprecated",
              "mutex_group": 0,
              "group": 1
             },

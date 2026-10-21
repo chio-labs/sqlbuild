@@ -28,6 +28,8 @@ pub(crate) const WAREHOUSE_BACKEND: &str = "warehouse";
 pub(crate) const DEFAULT_MAX_CELL_BYTES: usize = 4096;
 pub(crate) const LONG_FORMAT: &str = "long";
 pub(crate) const TABLE_FORMAT: &str = "table";
+/// What `--format table` prints in the release before it is removed.
+pub(crate) const TABLE_FORMAT_DEPRECATION: &str = "warning: --format table is deprecated and will be removed; use the default long format, or --json/--format csv\n";
 pub(crate) const CSV_FORMAT: &str = "csv";
 pub(crate) const JSON_FORMAT: &str = "json";
 /// The standard base64 alphabet binary JSON cells are encoded with.
