@@ -13,6 +13,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse._test_types import (
     ClickHouseRecallBehindStoreTestCase,
     ClickHouseRecallConcurrencyTestCase,
     ClickHouseRecallDuplicateTestCase,
+    ClickHouseRecallExpiredVersionTestCase,
     ClickHouseRecallExpiryTestCase,
     ClickHouseRecallFirstReleaseStoreTestCase,
     ClickHouseRecallLimitedWriterTestCase,
@@ -889,3 +890,56 @@ def test_given_a_large_store_when_filtering_a_view_then_the_filter_reaches_the_t
     statistics: dict[str, int] = cast(dict[str, int], document["statistics"])
     assert document["rows"] == test_case.expected_rows
     assert statistics["rows_read"] < stored_events * test_case.max_read_fraction
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseRecallExpiredVersionTestCase(
+            description="views of an older version are replaced when its version row expired",
+            stale_view="SELECT invocation_id, statement_id FROM {database}.recall_events",
+            expected_statement_columns=((1,),),
+            expected_version=((2,),),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_store_whose_version_row_expired_when_a_writer_with_ddl_builds_then_views_upgrade(
+    test_case: ClickHouseRecallExpiredVersionTestCase,
+    tmp_path: Path,
+    clickhouse_e2e_config: dict[str, object],
+    recall_database: str,
+) -> None:
+    project_dir: Path = write_recall_project(
+        parent=tmp_path, config=clickhouse_e2e_config, database=recall_database
+    )
+    assert run(project_dir, "build").returncode == 0
+    execute_clickhouse_sql(
+        config=clickhouse_e2e_config,
+        statements=(
+            f"CREATE OR REPLACE VIEW {recall_database}.statements AS "
+            + test_case.stale_view.format(database=recall_database),
+            f"ALTER TABLE {recall_database}.recall_meta DELETE WHERE 1 SETTINGS mutations_sync = 2",
+        ),
+    )
+
+    built: subprocess.CompletedProcess[bytes] = run(project_dir, "build")
+
+    assert built.returncode == 0, built.stderr
+    assert b"Recall" not in built.stderr
+    assert (
+        fetch_clickhouse_rows(
+            config=clickhouse_e2e_config,
+            sql=f"SELECT count() FROM system.columns WHERE database = '{recall_database}' "
+            "AND table = 'statements' AND name = 'invocation_started_at'",
+        )
+        == test_case.expected_statement_columns
+    )
+    assert (
+        fetch_clickhouse_rows(
+            config=clickhouse_e2e_config,
+            sql=f"SELECT max(toInt64OrZero(value)) FROM {recall_database}.recall_meta "
+            "WHERE component = 'schema'",
+        )
+        == test_case.expected_version
+    )

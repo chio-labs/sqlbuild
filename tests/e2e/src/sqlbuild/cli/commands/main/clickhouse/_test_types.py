@@ -215,3 +215,11 @@ class ClickHouseRecallPushdownTestCase:
     sql: str
     expected_rows: list[list[object]]
     max_read_fraction: float
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallExpiredVersionTestCase:
+    description: str
+    stale_view: str
+    expected_statement_columns: tuple[tuple[object, ...], ...]
+    expected_version: tuple[tuple[object, ...], ...]

@@ -273,7 +273,8 @@ impl ClickHouseStore {
                 tables,
             });
         }
-        let upgrade: bool = version > 0 && version < RECALL_SCHEMA_VERSION;
+        // A version of 0 means the version row expired with retention: the views may be from any earlier version, so they are replaced too.
+        let upgrade: bool = version < RECALL_SCHEMA_VERSION;
         for (name, statement) in view_statements(Dialect::ClickHouse, &self.location.options) {
             let statement: String = if upgrade {
                 statement
@@ -285,10 +286,13 @@ impl ClickHouseStore {
             match self.command(py, &statement, "create the Recall views") {
                 Ok(()) => {}
                 Err(error) if error.kind == StoreErrorKind::Permission => {
-                    return Ok(ReadyStore {
-                        behind: behind(self),
-                        tables,
-                    });
+                    // An expired version row says nothing about the views, so stay quiet, but never record a version the views may not have.
+                    let behind: Vec<String> = if version == 0 {
+                        Vec::new()
+                    } else {
+                        behind(self)
+                    };
+                    return Ok(ReadyStore { behind, tables });
                 }
                 Err(error) => return Err(error),
             }
