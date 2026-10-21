@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::planner_migrations::column_objects::{model, text};
 use crate::bindings::_helpers::planner_migrations::constants::{PENDING_ARCHIVE, PENDING_VIEW};
 use crate::bindings::_helpers::planner_migrations::models::OldNamePlanner;
@@ -113,8 +114,7 @@ impl<'py> OldNamePlanner<'py> {
         &self,
         item: &Bound<'py, PyAny>,
     ) -> PyResult<Option<Bound<'py, PyAny>>> {
-        let Some(history) = self.newest(&relation(&native_field(item, "destination")?)?, None)?
-        else {
+        let Some(history) = self.newest(&relation(&model_reads::destination(item)?)?, None)? else {
             return Ok(None);
         };
         if !native_field(&native_field(&history, "move")?, "destination_model")?
@@ -324,7 +324,7 @@ impl<'py> OldNamePlanner<'py> {
             py,
             RecordId::OldNameViewPlanEntry,
             &[
-                ("model_name", native_field(item, "name")?),
+                ("model_name", model_reads::name_object(item)?),
                 (
                     "origin",
                     location(&self.runtime, &native_field(history, "old")?)?,

@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::discovery::locations::yaml_entry_line;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_phases::objects::{planner_error, tuple};
@@ -96,7 +97,7 @@ pub(crate) fn check_selected_source_tables_exist<'py>(
     let read_map = native_field(relations, "source_read_map")?;
     let listed = native_field(relations, "listed_source_names")?;
     let mut unlisted: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>, Vec<String>)> = Vec::new();
-    for source in native_field(project, "sources")?.try_iter()? {
+    for source in project_reads::sources(project)?.try_iter()? {
         let source = source?;
         let name: String = native_field(&source, "name")?.extract()?;
         let Some(source_readers) = readers.get(&name).filter(|readers| !readers.is_empty()) else {

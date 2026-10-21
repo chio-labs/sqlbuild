@@ -22,7 +22,7 @@ pub(crate) fn declared_column_aliases<'py>(
     py: Python<'py>,
     model: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
-    let schema = native_field(model, "schema_entry")?;
+    let schema = model_reads::schema_entry(model)?;
     let mut columns: Vec<(String, Option<String>)> = Vec::new();
     if !schema.is_none() {
         for column in native_field(&schema, "columns")?.try_iter()? {

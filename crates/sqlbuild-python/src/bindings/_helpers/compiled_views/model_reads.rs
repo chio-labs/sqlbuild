@@ -305,3 +305,12 @@ pub(crate) fn dep_rows(model: &Bound<'_, PyAny>) -> PyResult<Vec<(String, String
     }
     native_field(model, "dep_rows")?.extract()
 }
+
+/// The model's dependency `CompiledObjectKey` tuple.
+pub(crate) fn deps<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = model.py();
+    if let Some(view) = native_model(model)? {
+        return Ok(view.deps(py)?.into_bound(py).into_any());
+    }
+    native_field(model, "deps")
+}

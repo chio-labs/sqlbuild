@@ -4,6 +4,7 @@ use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::fingerprints::latest_rows::select_latest_fingerprints;
 use crate::bindings::_helpers::fingerprints::storage_io::read_latest_fingerprints;
 use crate::bindings::_helpers::graph::algorithms::transitive_closure_many;
@@ -75,8 +76,13 @@ pub(crate) fn destination_nodes<'py>(
     project: &Bound<'py, PyAny>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let mut nodes: Vec<_> = Vec::new();
-    for field in ["models", "seeds", "functions"] {
-        for node in native_field(project, field)?.try_iter()? {
+    let collections: [Bound<'py, PyAny>; 3] = [
+        project_reads::models(project)?,
+        project_reads::seeds(project)?,
+        project_reads::functions(project)?,
+    ];
+    for collection in collections {
+        for node in collection.try_iter()? {
             nodes.push(node?);
         }
     }
@@ -151,7 +157,7 @@ fn model_upstream_names(
     selected_names: &HashSet<String>,
 ) -> PyResult<BTreeSet<String>> {
     let mut names: BTreeSet<String> = BTreeSet::new();
-    for reference in native_field(model, "references")?.try_iter()? {
+    for reference in model_reads::references(model)?.try_iter()? {
         let reference = reference?;
         let kind = native_field(&reference, "ref_kind")?;
         let name: String = native_field(&reference, "ref_name")?.extract()?;
@@ -189,7 +195,7 @@ fn metadata_name_filter(
         let models = by_name(project, "models")?;
         let seeds = by_name(project, "seeds")?;
         let sources = PyDict::new(py);
-        for source in native_field(project, "sources")?.try_iter()? {
+        for source in project_reads::sources(project)?.try_iter()? {
             let entry = native_field(&source?, "source_entry")?;
             sources.set_item(native_field(&entry, "name")?, entry)?;
         }
@@ -271,7 +277,7 @@ fn prefetch_schemas<'py>(
     for schema in schemas {
         scopes.push(PyTuple::new(py, [database.clone(), text(py, schema)])?.into_any());
     }
-    for source in native_field(&request.project, "sources")?.try_iter()? {
+    for source in project_reads::sources(&request.project)?.try_iter()? {
         let source = source?;
         let entry = native_field(&source, "source_entry")?;
         if (!relevant.is_none() && !relevant.contains(native_field(&source, "key")?)?)
@@ -466,7 +472,7 @@ fn shares_unfiltered(project: &Bound<'_, PyAny>, selected: &Bound<'_, PyAny>) ->
         .collect::<PyResult<_>>()?;
     let mut all_selected = true;
     let mut any_migration = false;
-    for model in native_field(project, "models")?.try_iter()? {
+    for model in project_reads::models(project)?.try_iter()? {
         let model = model?;
         if !names.contains(&model_reads::model_name(&model)?) {
             all_selected = false;
