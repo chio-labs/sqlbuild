@@ -156,16 +156,17 @@ fn attachment_owners<'py>(
     }
     for source in project.sources() {
         let attached: &AttachedSource = source.attached();
-        let path: String = native_field(attached.source_file.bind(py), RELATIVE_PATH_ATTRIBUTE)?
-            .str()?
-            .to_string();
+        let path: String =
+            native_field(attached.host.source_file.bind(py), RELATIVE_PATH_ATTRIBUTE)?
+                .str()?
+                .to_string();
         owners.push(resource_owner(
             SOURCE_OWNER,
             attached.name.clone(),
             (path.clone(), path),
             (
-                attached.audits.bind(py).as_any(),
-                attached.columns.bind(py).as_any(),
+                attached.host.audits.bind(py).as_any(),
+                attached.host.columns.bind(py).as_any(),
             ),
         )?);
     }

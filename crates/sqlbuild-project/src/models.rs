@@ -7,7 +7,9 @@ use sqlbuild_sqltext::compiler::models::CharSpan;
 use sqlbuild_analysis::assembly::analysis_session::models::{ContractProof, LineageFacts};
 use sqlbuild_analysis::binding_locations::models::LocatedDiagnostic;
 
-use crate::types::{InferredRow, ProjectHost};
+use sqlbuild_core::json::models::JsonValue;
+
+use crate::types::{InferredRow, NamedTypeRow, ObjectKeyRow, ProjectHost, SourceNamespace};
 
 /// One reference a resource's SQL makes: kind, name, package and call argument count.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -102,4 +104,99 @@ pub struct CompiledRecord<H: ProjectHost> {
     pub analysis: AnalysisRecord<H>,
     pub macro_deps: Vec<String>,
     pub host: H::CompiledModel,
+}
+
+/// What the source loop attached for one source: its expanded metadata.
+#[derive(Debug)]
+pub struct AttachedSource<H: ProjectHost> {
+    pub name: String,
+    pub contract: Option<String>,
+    pub database: Option<String>,
+    pub schema: Option<String>,
+    pub table: Option<String>,
+    pub expression: Option<String>,
+    pub description: Option<String>,
+    pub host: H::AttachedSource,
+}
+
+/// One attached source held by the compiled project.
+#[derive(Debug)]
+pub struct SourceRecord<H: ProjectHost> {
+    pub attached: AttachedSource<H>,
+    /// The namespace native project assembly resolved, once it ran.
+    pub namespace: Option<SourceNamespace>,
+    pub host: H::Source,
+}
+
+/// A Python function's runtime, entry point and packages.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PythonRuntime {
+    pub runtime_version: Option<String>,
+    pub entry_point: Option<String>,
+    pub packages: Vec<String>,
+}
+
+/// What the function loop attached for one SQL or Python function.
+#[derive(Debug)]
+pub struct AttachedFunction<H: ProjectHost> {
+    /// The file's relative path, as messages name it.
+    pub relative_path: String,
+    pub name: String,
+    pub arguments: Vec<NamedTypeRow>,
+    pub returns: String,
+    pub return_columns: Vec<NamedTypeRow>,
+    pub body: String,
+    pub references: Vec<ReferenceRow>,
+    pub destination: DestinationFact,
+    pub fingerprint_destination: DestinationFact,
+    pub python: Option<PythonRuntime>,
+    pub tags: Vec<String>,
+    pub description: Option<String>,
+    pub host: H::AttachedFunction,
+}
+
+/// One attached function held by the compiled project.
+#[derive(Debug)]
+pub struct FunctionRecord<H: ProjectHost> {
+    pub attached: AttachedFunction<H>,
+    /// The dependency keys native project assembly resolved, once it ran.
+    pub deps: Option<Vec<ObjectKeyRow>>,
+    pub host: H::Function,
+}
+
+/// The target an attached audit checks: its kind, name and column.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AttachedTarget {
+    pub kind: String,
+    pub name: String,
+    pub column: Option<String>,
+}
+
+/// What the audit loop attached for one singular audit block or attached generic audit.
+#[derive(Debug)]
+pub struct AttachedAudit<H: ProjectHost> {
+    /// The block's name, else the file's stem.
+    pub definition_name: String,
+    pub sql_body: String,
+    pub measurement: bool,
+    pub evidence_sql: Option<String>,
+    pub references: Vec<ReferenceRow>,
+    pub target: Option<AttachedTarget>,
+    pub severity: &'static str,
+    pub run_scope: String,
+    pub always_run: bool,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    /// The authored mapping of JSON values reported with results, or `None`.
+    pub meta: Option<JsonValue>,
+    pub host: H::AttachedAudit,
+}
+
+/// One attached audit held by the compiled project.
+#[derive(Debug)]
+pub struct AuditRecord<H: ProjectHost> {
+    pub attached: AttachedAudit<H>,
+    /// The scope dependency keys native project assembly resolved, once it ran.
+    pub scope_deps: Option<Vec<ObjectKeyRow>>,
+    pub host: H::Audit,
 }

@@ -35,7 +35,7 @@ use crate::bindings::_helpers::compiled_project::attachment_inputs::{
     FunctionRow, FunctionSettings,
 };
 use crate::bindings::_helpers::compiled_views::function_views::{
-    AttachedFunction, NamedTypeRow, PythonRuntime,
+    AttachedFunction, FunctionHandles,
 };
 use crate::bindings::_helpers::input_loops::model_loop::{
     LoopContext, NativeModelLoop, compile_error,
@@ -47,7 +47,9 @@ use crate::bindings::_helpers::input_loops::source_loop::{
 };
 use crate::bindings::_helpers::model_config::model_validator::NativeModelValidator;
 use sqlbuild_project::models::DestinationFact;
+use sqlbuild_project::models::PythonRuntime;
 use sqlbuild_project::models::ReferenceRow;
+use sqlbuild_project::types::NamedTypeRow;
 
 const PRESERVE_TARGET_VALUE: &str = "preserve";
 const GENERIC_DIALECT: &str = "generic";
@@ -213,7 +215,6 @@ fn sql_function(scope: &FunctionScope<'_, '_>, row: FunctionRow) -> PyResult<Att
     )?;
     raise_stage(context, &header, HeaderStage::Metadata)?;
     Ok(AttachedFunction {
-        function_file,
         relative_path,
         destination: destination(&name, &namespace, false),
         fingerprint_destination: destination(&name, &namespace, true),
@@ -226,7 +227,10 @@ fn sql_function(scope: &FunctionScope<'_, '_>, row: FunctionRow) -> PyResult<Att
         python: None,
         tags: header.tags,
         description: header.description,
-        usages: expansion.usages.unbind(),
+        host: FunctionHandles {
+            function_file,
+            usages: expansion.usages.unbind(),
+        },
     })
 }
 
@@ -273,7 +277,6 @@ fn python_function(scope: &FunctionScope<'_, '_>, row: FunctionRow) -> PyResult<
     }
     raise_stage(context, &header, HeaderStage::Metadata)?;
     Ok(AttachedFunction {
-        function_file,
         relative_path,
         destination: destination(&name, &namespace, false),
         fingerprint_destination: destination(&name, &namespace, true),
@@ -290,7 +293,10 @@ fn python_function(scope: &FunctionScope<'_, '_>, row: FunctionRow) -> PyResult<
         }),
         tags: header.tags,
         description: header.description,
-        usages: PyTuple::empty(py).unbind(),
+        host: FunctionHandles {
+            function_file,
+            usages: PyTuple::empty(py).unbind(),
+        },
     })
 }
 

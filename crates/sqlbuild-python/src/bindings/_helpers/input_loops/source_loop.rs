@@ -8,7 +8,9 @@ use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicCheck;
 use sqlbuild_model_config::templates::models::TemplateOptions;
 
 use crate::bindings::_helpers::compiled_project::attachment_inputs::{SourceRow, SourceSettings};
-use crate::bindings::_helpers::compiled_views::source_views::{AttachedSource, replaced};
+use crate::bindings::_helpers::compiled_views::source_views::{
+    AttachedSource, SourceHandles, replaced,
+};
 use crate::bindings::_helpers::input_loops::model_loop::{
     LoopContext, NativeModelLoop, compile_error, record_reads,
 };
@@ -114,8 +116,6 @@ pub(crate) fn attached_sources<'py>(
             .extract::<Option<String>>()?
             .or_else(|| default_contract.clone());
         attached.push(AttachedSource {
-            source_file,
-            entry: entry.unbind(),
             name,
             contract,
             database,
@@ -123,10 +123,14 @@ pub(crate) fn attached_sources<'py>(
             table,
             expression,
             description,
-            meta: meta.unbind(),
-            columns: PyTuple::new(py, columns)?.unbind(),
-            audits: PyTuple::new(py, audits)?.unbind(),
-            usages: usages.unbind(),
+            host: SourceHandles {
+                source_file,
+                entry: entry.unbind(),
+                meta: meta.unbind(),
+                columns: PyTuple::new(py, columns)?.unbind(),
+                audits: PyTuple::new(py, audits)?.unbind(),
+                usages: usages.unbind(),
+            },
         });
     }
     Ok(attached)

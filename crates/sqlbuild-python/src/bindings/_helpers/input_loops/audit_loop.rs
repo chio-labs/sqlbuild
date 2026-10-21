@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString, PyTuple, PyTupleMethods};
 use sqlbuild_analysis::compiled_project::main::merge_call_site_references::merge_call_site_references;
 use sqlbuild_analysis::compiled_project::models::SchemaColumnFact;
@@ -27,7 +27,7 @@ use crate::bindings::_helpers::compile_context::delta::record_source_reads;
 use crate::bindings::_helpers::compiled_project::attachment_inputs::{
     AuditBlockRow, AuditFileRow, AuditSettings,
 };
-use crate::bindings::_helpers::compiled_views::audit_views::{AttachedAudit, AttachedTarget};
+use crate::bindings::_helpers::compiled_views::audit_views::{AttachedAudit, AuditHandles};
 use crate::bindings::_helpers::input_loops::model_loop::{
     LoopContext, NativeModelLoop, compile_error, helped_compile_error,
 };
@@ -45,6 +45,7 @@ use crate::bindings::_helpers::model_config::header_metadata::thresholds;
 use crate::bindings::_helpers::model_config::model_validator::NativeModelValidator;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::result_output::integration_values::json_value;
+use sqlbuild_project::models::AttachedTarget;
 use sqlbuild_project::models::ReferenceRow;
 
 const THRESHOLDS_KEY: &str = "thresholds";
@@ -308,24 +309,26 @@ impl<'py> AuditScope<'_, 'py> {
             usages.push(self.context.classes.usage_record.call((), Some(&fields))?);
         }
         Ok(AttachedAudit {
-            audit_file: audit_file.clone_ref(py),
-            audit_block: audit_block.clone_ref(py),
             definition_name: audit_name,
             sql_body: expanded.sql_body,
             measurement: *measurement,
             evidence_sql: expanded.evidence_sql,
-            thresholds: thresholds.unbind(),
-            minimum_samples: minimum_samples.unbind(),
-            evidence_limit: py.None(),
             references: expanded.references,
             target: None,
             severity,
             run_scope,
             always_run,
-            usages: PyTuple::new(py, usages)?.unbind(),
             name: None,
             description: None,
             meta: None,
+            host: AuditHandles {
+                audit_file: audit_file.clone_ref(py),
+                audit_block: audit_block.clone_ref(py),
+                thresholds: thresholds.unbind(),
+                minimum_samples: minimum_samples.unbind(),
+                evidence_limit: py.None(),
+                usages: PyTuple::new(py, usages)?.unbind(),
+            },
         })
     }
 
@@ -451,9 +454,13 @@ impl<'py> AuditScope<'_, 'py> {
             return Err(compile_error(self.context.classes, &message, None));
         }
         usages.extend(expanded.usages);
+        let evidence_limit: Py<PyAny> = native_field(instance, "evidence_limit")?.unbind();
+        let always_run: bool = native_field(instance, ALWAYS_RUN_KEY)?.is_truthy()?;
+        let usages: Py<PyTuple> = PyTuple::new(py, usages)?.unbind();
+        let name: Option<String> = native_field(instance, "name")?.extract()?;
+        let description: Option<String> = native_field(instance, "description")?.extract()?;
+        let meta: Option<JsonValue> = self.meta(instance, &label)?;
         Ok(AttachedAudit {
-            audit_file: definition.file.file.clone_ref(py),
-            audit_block: definition.block.block.clone_ref(py),
             definition_name: definition
                 .block
                 .name
@@ -462,9 +469,6 @@ impl<'py> AuditScope<'_, 'py> {
             sql_body: expanded.sql_body,
             measurement,
             evidence_sql: expanded.evidence_sql,
-            thresholds: thresholds.unbind(),
-            minimum_samples: minimum_samples.unbind(),
-            evidence_limit: native_field(instance, "evidence_limit")?.unbind(),
             references: expanded.references,
             target: Some(AttachedTarget {
                 kind: owner.kind.to_owned(),
@@ -473,11 +477,18 @@ impl<'py> AuditScope<'_, 'py> {
             }),
             severity,
             run_scope,
-            always_run: native_field(instance, ALWAYS_RUN_KEY)?.is_truthy()?,
-            usages: PyTuple::new(py, usages)?.unbind(),
-            name: native_field(instance, "name")?.extract()?,
-            description: native_field(instance, "description")?.extract()?,
-            meta: self.meta(instance, &label)?,
+            always_run,
+            name,
+            description,
+            meta,
+            host: AuditHandles {
+                audit_file: definition.file.file.clone_ref(py),
+                audit_block: definition.block.block.clone_ref(py),
+                thresholds: thresholds.unbind(),
+                minimum_samples: minimum_samples.unbind(),
+                evidence_limit,
+                usages,
+            },
         })
     }
 

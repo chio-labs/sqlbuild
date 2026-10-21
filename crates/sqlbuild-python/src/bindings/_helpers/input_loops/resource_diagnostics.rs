@@ -360,13 +360,14 @@ fn source_description<'py>(
     let py: Python<'py> = diagnostics.py;
     let attached = source.attached();
     let name: &str = &attached.name;
-    let source_file: &Bound<'py, PyAny> = attached.source_file.bind(py);
+    let source_file: &Bound<'py, PyAny> = attached.host.source_file.bind(py);
     let path: String = native_field(source_file, "relative_path")?
         .str()?
         .extract()?;
     let contents_value = native_field(source_file, "contents")?;
     let contents = contents_value.downcast::<PyString>()?.to_str()?;
-    let loader_name: Option<String> = native_field(attached.entry.bind(py), "loader")?.extract()?;
+    let loader_name: Option<String> =
+        native_field(attached.host.entry.bind(py), "loader")?.extract()?;
     let loader: Option<(&String, &LoaderRow)> = loader_name
         .as_ref()
         .and_then(|loader| diagnostics.settings.loaders.get_key_value(loader));
@@ -406,7 +407,7 @@ fn function_description<'py>(
     let py: Python<'py> = diagnostics.py;
     let attached = &function.attached;
     let name: &str = &attached.name;
-    let function_file: &Bound<'py, PyAny> = attached.function_file.bind(py);
+    let function_file: &Bound<'py, PyAny> = attached.host.function_file.bind(py);
     let path: String = native_field(function_file, "relative_path")?
         .str()?
         .extract()?;

@@ -4,11 +4,16 @@ use std::fmt::{Debug, Formatter, Result as FmtResult};
 
 use sqlbuild_project::types::ProjectHost;
 
+use crate::bindings::_helpers::compiled_views::audit_views::{AuditHandles, AuditProjections};
 use crate::bindings::_helpers::compiled_views::compiled_model_analysis::AnalysisProjections;
 use crate::bindings::_helpers::compiled_views::compiled_model_view::CompiledProjections;
+use crate::bindings::_helpers::compiled_views::function_views::{
+    FunctionHandles, FunctionProjections,
+};
 use crate::bindings::_helpers::compiled_views::model_input_view::{
     ModelInputHandles, SchemaHandles,
 };
+use crate::bindings::_helpers::compiled_views::source_views::{SourceHandles, SourceProjections};
 
 /// The extension's host: Python handles and the views built from them.
 pub(crate) struct PyProjectHost;
@@ -18,6 +23,12 @@ impl ProjectHost for PyProjectHost {
     type Schema = SchemaHandles;
     type CompiledModel = CompiledProjections;
     type Analysis = AnalysisProjections;
+    type AttachedSource = SourceHandles;
+    type Source = SourceProjections;
+    type AttachedFunction = FunctionHandles;
+    type Function = FunctionProjections;
+    type AttachedAudit = AuditHandles;
+    type Audit = AuditProjections;
 }
 
 impl Debug for ModelInputHandles {
@@ -48,6 +59,54 @@ impl Debug for AnalysisProjections {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         formatter
             .debug_struct("AnalysisProjections")
+            .finish_non_exhaustive()
+    }
+}
+
+impl Debug for SourceHandles {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        formatter
+            .debug_struct("SourceHandles")
+            .finish_non_exhaustive()
+    }
+}
+
+impl Debug for SourceProjections {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        formatter
+            .debug_struct("SourceProjections")
+            .finish_non_exhaustive()
+    }
+}
+
+impl Debug for FunctionHandles {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        formatter
+            .debug_struct("FunctionHandles")
+            .finish_non_exhaustive()
+    }
+}
+
+impl Debug for FunctionProjections {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        formatter
+            .debug_struct("FunctionProjections")
+            .finish_non_exhaustive()
+    }
+}
+
+impl Debug for AuditHandles {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        formatter
+            .debug_struct("AuditHandles")
+            .finish_non_exhaustive()
+    }
+}
+
+impl Debug for AuditProjections {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        formatter
+            .debug_struct("AuditProjections")
             .finish_non_exhaustive()
     }
 }

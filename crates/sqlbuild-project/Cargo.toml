@@ -12,4 +12,5 @@ workspace = true
 
 [dependencies]
 sqlbuild-analysis.workspace = true
+sqlbuild-core.workspace = true
 sqlbuild-sqltext.workspace = true

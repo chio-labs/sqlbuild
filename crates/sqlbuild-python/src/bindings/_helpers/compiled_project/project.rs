@@ -35,13 +35,13 @@ use crate::bindings::_helpers::compiled_project::attachment_inputs::TestFileRow;
 use crate::bindings::_helpers::compiled_project::attachment_inputs::resource_attachment;
 use crate::bindings::_helpers::compiled_project::values::{object_value, plain_value};
 use crate::bindings::_helpers::compiled_views::audit_views::{
-    AttachedAudit, AuditRecord, NativeAuditInput, NativeCompiledAudit,
+    AttachedAudit, AuditRecord, NativeAuditInput, NativeCompiledAudit, audit_record,
 };
 use crate::bindings::_helpers::compiled_views::compiled_model_view::{
     CompiledViewClasses, NativeCompiledModel,
 };
 use crate::bindings::_helpers::compiled_views::function_views::{
-    AttachedFunction, FunctionRecord, NativeCompiledFunction, NativeFunctionInput, ObjectKeyRow,
+    AttachedFunction, FunctionRecord, NativeCompiledFunction, NativeFunctionInput, function_record,
 };
 use crate::bindings::_helpers::compiled_views::inputs_view::NativeInputsView;
 use crate::bindings::_helpers::compiled_views::model_input_view::{
@@ -52,10 +52,12 @@ use crate::bindings::_helpers::compiled_views::seed_views::{
     NativeCompiledSeed, NativeSeedInput, SeedNamespace, SeedRecord, paired_seeds,
 };
 use crate::bindings::_helpers::compiled_views::source_views::{
-    NativeCompiledSource, NativeSourceInput, SourceNamespace, SourceRecord,
+    NativeCompiledSource, NativeSourceInput, SourceRecord,
 };
 use crate::bindings::_helpers::render::declaration_values::ConstantRendering;
 use sqlbuild_project::types::InferredRow;
+use sqlbuild_project::types::ObjectKeyRow;
+use sqlbuild_project::types::SourceNamespace;
 
 pub(crate) const CONTRACT_KEY: &str = "contract";
 const INPUT_CLASSES_UNSET: &str = "no model loop recorded inputs into this project";
@@ -210,15 +212,14 @@ impl NativeCompiledProject {
     pub(crate) fn extend_functions(&mut self, attached: Vec<AttachedFunction>) -> usize {
         let first: usize = self.functions.len();
         self.functions
-            .extend(attached.into_iter().map(FunctionRecord::new));
+            .extend(attached.into_iter().map(function_record));
         first
     }
 
     /// Retain attached audits; return the index of the first.
     pub(crate) fn extend_audits(&mut self, attached: Vec<AttachedAudit>) -> usize {
         let first: usize = self.audits.len();
-        self.audits
-            .extend(attached.into_iter().map(AuditRecord::new));
+        self.audits.extend(attached.into_iter().map(audit_record));
         first
     }
 

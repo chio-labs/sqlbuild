@@ -17,7 +17,9 @@ use crate::bindings::_helpers::compiled_views::compiled_model_view::NativeCompil
 use crate::bindings::_helpers::compiled_views::model_input_view::{
     NativeModelInput, model_relation_key_row,
 };
-use crate::bindings::_helpers::compiled_views::source_views::{SourceKeyFacts, read_source_view};
+use crate::bindings::_helpers::compiled_views::source_views::{
+    SourceKeyFacts, SourceViews, read_source_view,
+};
 use crate::bindings::_helpers::discovery::project_facts::seed_csv_settings;
 use crate::bindings::_helpers::records::fields::field as native_field;
 

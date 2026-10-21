@@ -11,6 +11,12 @@ impl ProjectHost for TestHost {
     type Schema = ();
     type CompiledModel = ();
     type Analysis = ();
+    type AttachedSource = ();
+    type Source = ();
+    type AttachedFunction = ();
+    type Function = ();
+    type AttachedAudit = ();
+    type Audit = ();
 }
 
 pub(super) struct LineageTestCase {
