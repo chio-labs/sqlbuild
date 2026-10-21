@@ -3,6 +3,7 @@
 use crate::bindings::_helpers::attachments::reference_markers::assert_no_unresolved_sql_markers;
 use crate::bindings::_helpers::auditing::render::render_audit_sql;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::graph::views::project_lineage_views;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_strategy::audits::{
@@ -229,7 +230,7 @@ pub(crate) fn build_selected_audit_entries<'py>(
     let project = request.get("project")?;
     let selected_keys = native_field(&request.get("scope")?, "selected_keys")?;
     let mut selected: Vec<Bound<'py, PyAny>> = Vec::new();
-    for audit in native_field(&project, "audits")?.try_iter()? {
+    for audit in project_reads::audits(&project)?.try_iter()? {
         let audit = audit?;
         if audit_is_selected(&audit, &selected_keys)? {
             selected.push(audit);
