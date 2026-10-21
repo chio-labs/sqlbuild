@@ -77,6 +77,21 @@ fn given_column_uses_when_analyzing_then_reports_rename_sites() -> Result<(), St
             expected_outputs: 0,
         },
         ColumnReferenceTestCase {
+            description: "a lambda parameter named like the column shadows it in the body",
+            sql: "SELECT list_filter([amount], amount -> amount > 0) AS kept, \
+                  list_filter([1], lambda amount: amount > 0) AS other FROM orders_fact",
+            output_ctes: &[],
+            expected_parsed: true,
+            expected_names: &["amount"],
+            expected_scopes: &["root"],
+            expected_bare_projections: 0,
+            expected_aliases: &[],
+            expected_star_scopes: &[],
+            expected_joins: 0,
+            expected_output_aliases: &[],
+            expected_outputs: 0,
+        },
+        ColumnReferenceTestCase {
             description: "output scopes report aliased and bare projections of every branch",
             sql: "WITH fixture AS (SELECT 1 AS amount UNION ALL SELECT 2 AS amount) \
                   SELECT amount FROM orders_fact",

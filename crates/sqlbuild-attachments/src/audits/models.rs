@@ -28,6 +28,8 @@ pub struct AuditAttachment {
     /// Python's `str(owner_file)` and the generic audit name, which its error messages quote.
     pub owner_label: String,
     pub definition_name: String,
+    /// The project file defining the audit, or `None` for a built-in audit.
+    pub definition_path: Option<String>,
     pub sql_body: String,
     pub evidence_sql: Option<String>,
     /// Arguments from the attached resource, such as `model` and `column`; always text.

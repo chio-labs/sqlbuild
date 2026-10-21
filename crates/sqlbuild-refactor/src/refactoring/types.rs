@@ -7,6 +7,10 @@ use crate::refactoring::models::DeclarationPlacement;
 pub type DeclarationMoveHost<'a> =
     dyn Fn(&str, &str) -> Result<DeclarationPlacement, RefactorError> + 'a;
 
+/// Used scoped declarations a `(test path, destination)` move would rebind; `None` if unknown.
+pub type UnitTestScopeHost<'a> =
+    dyn Fn(&str, &str) -> Result<Option<Vec<String>>, RefactorError> + 'a;
+
 /// Original texts keyed by original path, in plan order.
 pub type Originals = Vec<(String, String)>;
 

@@ -23,6 +23,7 @@
     "renamed_columns": [],
     "manual": [],
     "blocking": [],
+    "notes": [],
     "compile": {
      "ok": true,
      "errors": []

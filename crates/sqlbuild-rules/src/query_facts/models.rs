@@ -162,6 +162,23 @@ impl QueryFacts {
         values
     }
 
+    /// The plain SELECTs of this query's body: the body itself or every branch of its set operation.
+    pub(crate) fn body_selects(&self) -> Vec<&SelectFacts> {
+        fn collect<'a>(body: &'a SetFacts, values: &mut Vec<&'a SelectFacts>) {
+            match body {
+                SetFacts::Select(select) => values.push(select),
+                SetFacts::SetOperation { left, right, .. } => {
+                    collect(left, values);
+                    collect(right, values);
+                }
+                SetFacts::Query(_) | SetFacts::Other => {}
+            }
+        }
+        let mut values: Vec<&SelectFacts> = Vec::new();
+        collect(&self.body, &mut values);
+        values
+    }
+
     pub(crate) fn root_select(&self) -> Option<&SelectFacts> {
         match &self.body {
             SetFacts::Select(select) => Some(select),

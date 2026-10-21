@@ -20,8 +20,10 @@ from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
     CUSTOMER_DECLARATIONS,
     FLAGGED_AUDITS,
     FLAGGED_CONTRACT,
+    FLAGGED_LAMBDA_AUDIT,
     FLAGGED_LITERAL_AUDIT,
     FLAGGED_SUBQUERY_AUDITS,
+    FLAGGED_USING_AUDIT,
     ORDER_AMOUNT_CHECK,
     ORDER_EXPORT,
     ORDER_SHAPE,
@@ -178,6 +180,17 @@ from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
                 "vip_flags": ("is_flagged",),
             },
         ),
+        ColumnRenameE2ETestCase(
+            description="audit lambda parameters named like the column keep their name",
+            command=("rename", "column:flagged_orders.is_flagged", "is_marked"),
+            extra_files=FLAGGED_LAMBDA_AUDIT,
+            expected_fragments={
+                "models/marts/flagged_orders.sql": (
+                    "'len(list_filter([is_marked], lambda is_flagged: is_flagged)) > 0'",
+                ),
+            },
+            expected_columns={"flagged_orders": ("order_id", "is_marked")},
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -264,6 +277,14 @@ def test_given_column_rename_when_applied_then_project_tests_and_builds(
             extra_files=FLAGGED_LITERAL_AUDIT,
             expected_status="refused",
             expected_reason="audit prefix_check quotes argument prefix as a string",
+            expected_paths=("models/marts/flagged_orders.sql",),
+        ),
+        RefusedRefactorE2ETestCase(
+            description="audit argument joining on the column with USING needs a manual edit",
+            command=("rename", "column:flagged_orders.is_flagged", "is_marked"),
+            extra_files=FLAGGED_USING_AUDIT,
+            expected_status="refused",
+            expected_reason="USING or NATURAL join on is_flagged in this audit argument",
             expected_paths=("models/marts/flagged_orders.sql",),
         ),
     ],

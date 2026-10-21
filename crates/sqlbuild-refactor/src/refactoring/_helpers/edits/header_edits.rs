@@ -14,7 +14,7 @@ use crate::refactoring::constants::{
     HEADER_DESCRIPTION_KEY, HEADER_INDENT, HEADER_KEY_AND_VALUE_TOKENS, HEADER_OPEN_PAREN,
     HEADER_OPENERS, HEADER_SEPARATOR, LIST_OPENER, MIGRATE_FROM_KEY, PARENTHESIZED_EMPTY_TOKENS,
     REF_FUNCTION, RELATIONSHIPS_AUDIT, RELATIONSHIPS_FIELD_KEY, RELATIONSHIPS_TO_KEY,
-    SCHEMA_KEYWORD,
+    SCHEMA_KEYWORD, TEST_KEYWORD, TEST_NAME_KEY, TEST_NAME_SEPARATOR,
 };
 use crate::refactoring::errors::RefactorError;
 use crate::refactoring::models::{EditKind, TextEdit};
@@ -652,21 +652,36 @@ fn line_indent(text: &[char], offset: usize) -> String {
 
 /// Code-point spans of every `SCHEMA (...)` header body, as `SCHEMA_STATEMENT_PATTERN.finditer`.
 fn schema_header_spans(contents: &str, text: &[char]) -> Vec<(usize, usize)> {
+    statement_header_spans(
+        (contents, text),
+        SCHEMA_KEYWORD,
+        |index| {
+            (index == 0 || !is_word_char(text[index - 1]))
+                && starts_with(text, index, SCHEMA_KEYWORD)
+        },
+        |end| statement_end(text, end),
+    )
+}
+
+/// Code-point spans of `keyword (...)` bodies opening where `opens` allows, resuming at `resume`.
+fn statement_header_spans(
+    (contents, text): (&str, &[char]),
+    keyword: &str,
+    opens: impl Fn(usize) -> bool,
+    resume: impl Fn(usize) -> usize,
+) -> Vec<(usize, usize)> {
     let mut byte_offsets: Vec<usize> = contents.char_indices().map(|(offset, _)| offset).collect();
     byte_offsets.push(contents.len());
     let mut spans: Vec<(usize, usize)> = Vec::new();
     let mut index = 0;
     while index < text.len() {
-        let bounded = index == 0 || !is_word_char(text[index - 1]);
-        if bounded
-            && starts_with(text, index, SCHEMA_KEYWORD)
+        if opens(index)
             && let Some((start, end, _)) =
-                match_statement_header(contents, byte_offsets[index], SCHEMA_KEYWORD)
+                match_statement_header(contents, byte_offsets[index], keyword)
         {
-            let start = byte_to_char(&byte_offsets, start);
             let end = byte_to_char(&byte_offsets, end);
-            spans.push((start, end));
-            index = statement_end(text, end);
+            spans.push((byte_to_char(&byte_offsets, start), end));
+            index = resume(end);
             continue;
         }
         index += 1;
@@ -701,6 +716,52 @@ pub(crate) fn schema_model_name_edits(
             names.0,
             names.1,
         ));
+    }
+    Ok(edits)
+}
+
+/// Code-point spans of every `TEST (...)` header body that starts a line, as discovery splits blocks.
+fn test_header_spans(contents: &str, text: &[char]) -> Vec<(usize, usize)> {
+    statement_header_spans(
+        (contents, text),
+        TEST_KEYWORD,
+        |index| index == 0 || text[index - 1] == '\n',
+        |end| end,
+    )
+}
+
+/// Rename the subject of `TEST (name "<old>__<behavior>")` headers whose name is in `owned`.
+pub(crate) fn test_name_edits(
+    contents: &str,
+    text: &[char],
+    names: (&str, &str),
+    owned: &[&str],
+) -> Result<Vec<TextEdit>, RefactorError> {
+    let (old, new) = names;
+    let prefix = format!("{old}{TEST_NAME_SEPARATOR}");
+    let mut edits: Vec<TextEdit> = Vec::new();
+    for span in test_header_spans(contents, text) {
+        let tokens = span_tokens(text, span)?;
+        for (key, entry) in header_entries(&tokens) {
+            if !key.eq_ignore_ascii_case(TEST_NAME_KEY) {
+                continue;
+            }
+            let Some(value) = entry.get(1).filter(|value| is_value_kind(value.kind)) else {
+                continue;
+            };
+            let Some(behavior) = value.value.strip_prefix(&prefix) else {
+                continue;
+            };
+            if behavior.is_empty() || !owned.contains(&value.value.as_str()) {
+                continue;
+            }
+            edits.push(rename_value_token(
+                text,
+                value,
+                &format!("{new}{TEST_NAME_SEPARATOR}{behavior}"),
+                EditKind::Header,
+            ));
+        }
     }
     Ok(edits)
 }

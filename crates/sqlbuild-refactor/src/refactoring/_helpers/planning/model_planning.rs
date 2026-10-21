@@ -15,6 +15,7 @@ use crate::refactoring::_helpers::planning::declaration_moves::declaration_moves
 use crate::refactoring::_helpers::planning::model_references::{
     macro_reference_locations, model_reference_edits,
 };
+use crate::refactoring::_helpers::planning::unit_test_moves::{FollowedModel, unit_test_parts};
 use crate::refactoring::_helpers::scanning::scan_context::ScanContext;
 use crate::refactoring::constants::{
     CURRENT_DIRECTORY, HISTORY_MATERIALIZATIONS, MIGRATABLE_MATERIALIZATIONS, MIGRATE_FROM_KEY,
@@ -24,7 +25,7 @@ use crate::refactoring::errors::RefactorError;
 use crate::refactoring::models::{
     ManualLocation, ModelFacts, RefactorFacts, RefactorOperation, RefactorRequest, TextEdit,
 };
-use crate::refactoring::types::DeclarationMoveHost;
+use crate::refactoring::types::{DeclarationMoveHost, UnitTestScopeHost};
 
 /// The model a request names, and the request with its name and destination resolved.
 pub(crate) struct ModelTarget<'a> {
@@ -167,7 +168,7 @@ pub(crate) fn model_parts(
     facts: &RefactorFacts,
     target: &ModelTarget<'_>,
     context: &ScanContext,
-    host: &DeclarationMoveHost<'_>,
+    (host, test_host): (&DeclarationMoveHost<'_>, &UnitTestScopeHost<'_>),
 ) -> Result<RefactorParts, RefactorError> {
     let files = project_sql_files(facts);
     let old = target.model.name.as_str();
@@ -183,16 +184,31 @@ pub(crate) fn model_parts(
         edits.extend(model_reference_edits(&files, (old, new), context)?);
         edits.extend(yaml_model_edits(&yaml_files(facts), old, new)?);
     }
+    let destination = target.destination();
+    let tests = unit_test_parts(
+        Path::new(&facts.project_dir),
+        (&facts.unit_tests, &files),
+        &FollowedModel {
+            names: (old, new),
+            paths: (&target.source_path, &destination),
+        },
+        test_host,
+    )?;
+    edits.extend(tests.edits);
     let mut manual = macro_reference_locations(&facts.models, &files, old, context);
     manual.extend(facts.python_locations.iter().cloned());
     let mut blocking = collisions(facts, target);
     blocking.extend(declaration.blocking);
+    blocking.extend(tests.blocking);
     blocking.extend(pending_migration(&files, target)?);
+    let mut moves = declaration.moves;
+    moves.extend(tests.moves);
     Ok(RefactorParts {
         edits,
         manual,
         blocking,
-        moves: declaration.moves,
+        moves,
+        notes: tests.notes,
         ..RefactorParts::default()
     })
 }

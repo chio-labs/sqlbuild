@@ -5,8 +5,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use crate::scope_index::main::classify_report_resource::classify_report_resource;
 use crate::scope_index::main::format_identity::format_identity;
 use crate::scope_index::models::{
-    DeclarationIdentity, OwnershipRoot, QualifiedIdentity, ReportClassification, ResourceRecord,
-    ScopeKind,
+    DeclarationIdentity, DeclarationKind, OwnershipRoot, QualifiedIdentity, ReportClassification,
+    ResourceRecord, ScopeKind,
 };
 use crate::scope_report::_helpers::context::Context;
 use crate::scope_report::_helpers::declarations::declaration_report;
@@ -205,4 +205,73 @@ pub(crate) fn move_preview(
         }),
         Vec::new(),
     ))
+}
+
+/// Directly visible positions of each scoped (macro, enum, constant) declaration identity.
+fn scoped_bindings(context: &Context<'_>, values: Visible) -> BTreeMap<String, Vec<usize>> {
+    let mut bindings: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+    for (position, _) in values {
+        let identity: &DeclarationIdentity = &context.declaration(position).identity;
+        if matches!(
+            identity.kind,
+            DeclarationKind::Macro | DeclarationKind::Enum | DeclarationKind::Constant
+        ) {
+            bindings
+                .entry(qualified(identity))
+                .or_default()
+                .push(position);
+        }
+    }
+    for positions in bindings.values_mut() {
+        positions.sort_unstable();
+    }
+    bindings
+}
+
+/// Used scoped declarations that resolve differently from `destination`; `None` if it is invalid.
+pub(crate) fn rebound_usages(
+    source: ReportSource<'_>,
+    (path, destination): (&str, &str),
+) -> Result<Option<Vec<String>>, ReportFailure> {
+    let context: Context<'_> = Context::new(source);
+    let Ok(destination) = normalized(destination) else {
+        return Ok(None);
+    };
+    let mut rebound: Vec<String> = Vec::new();
+    for position in context.resources_at(path) {
+        let moving: &ResourceRecord = context.resource(*position);
+        let roots: Vec<OwnershipRoot> = destination_roots(&context, moving, &destination)?;
+        let [root] = roots.as_slice() else {
+            return Ok(None);
+        };
+        let moved: ResourceRecord = ResourceRecord {
+            identity: moving.identity.clone(),
+            path: destination.clone(),
+            ownership_root: root.clone(),
+        };
+        let (old_direct, _) = visible(
+            classify_report_resource(source.records, source.lookup, moving)
+                .map_err(ReportFailure::Path)?,
+        );
+        let (new_direct, _) = visible(
+            classify_report_resource(source.records, source.lookup, &moved)
+                .map_err(ReportFailure::Path)?,
+        );
+        let old: BTreeMap<String, Vec<usize>> = scoped_bindings(&context, old_direct);
+        let new: BTreeMap<String, Vec<usize>> = scoped_bindings(&context, new_direct);
+        let consumer: QualifiedIdentity = QualifiedIdentity::Resource(moving.identity.clone());
+        for usage in context.usages_of_consumer(&consumer) {
+            let usage = context.usage(*usage);
+            let text: String = qualified(&usage.declaration);
+            if usage.through.is_none()
+                && old.contains_key(&text)
+                && old.get(&text) != new.get(&text)
+                && !rebound.contains(&text)
+            {
+                rebound.push(text);
+            }
+        }
+    }
+    rebound.sort();
+    Ok(Some(rebound))
 }

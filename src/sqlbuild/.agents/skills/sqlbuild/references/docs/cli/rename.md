@@ -64,6 +64,15 @@ Renaming or moving a model rewrites:
 - `cursor_inputs` keys, `relationships (to ...)` audits, and `__ref("<name>")` inside quoted SQL in `MODEL` headers and reusable `SCHEMA` declarations;
 - `relationships` audits (`to:` and `field:`) and `__ref("<name>")` in source and seed YAML.
 
+The model's own unit tests, the test files whose every `TEST` block targets only that model, follow it:
+
+- a file named `test_<name>.sql` or `test_<name>__<behavior>.sql` is renamed to the new name;
+- `TEST (name "<name>__<behavior>")` takes the new name as its subject;
+- a test file in the folder that mirrors the model, `tests/unit/<folders>/` for `models/<folders>/`, moves to the folder that mirrors the destination. Test files kept elsewhere stay where they are.
+- a test file stays in its folder, still renamed, when a macro, enum, or constant it uses would resolve to a different declaration, or to none, from the destination folder, such as a test macro in `tests/unit/<folders>/_sqlbuild/_macros/`. The output's notes name the file and the declaration.
+
+Tests that also target other models keep their file and name; only their fixtures and references change.
+
 Moving a model to another folder also moves the macros, enums, constants, reusable schemas, generic audits, and named hooks it uses when their [placement](../concepts/declaration-scopes/placement.md) must change, following the same rules `sqb compile` enforces:
 
 - a declaration only the moved model uses moves with it, into the destination folder's matching role;
@@ -77,7 +86,7 @@ Renaming a column rewrites the model that produces it and every query that reads
 - the producing projection, as `amount AS revenue`, or the existing alias;
 - every downstream reference, including filters, joins, grouping, and ordering;
 - column declarations, including the model's own `MODEL (columns (...))` entries with or without commas between them, and column-valued config such as `unique_key`, `cursor`, and `partition_by`, and `cursor_inputs` and `relationships (field ...)` entries that point at the column;
-- string arguments of audits attached in `MODEL` headers, such as `where_condition "is_flagged = TRUE"` or `expression "amount > 0"`, when the generic audit's SQL definition splices the argument in as SQL with `@where_condition`. These arguments are parsed as SQL expressions, so only references to the audited model's column change: string literals stay as written, and a subquery reading another model, such as `customer_id IN (SELECT customer_id FROM __ref("vip_customers"))`, keeps that model's column. You are asked to edit an argument by hand when it cannot be parsed, when it reads a relation whose columns SQLBuild does not know, when the audit quotes it as a string with `@'prefix'`, or when no SQL definition of the audit is found;
+- string arguments of audits attached in `MODEL` headers, such as `where_condition "is_flagged = TRUE"` or `expression "amount > 0"`, when the generic audit's SQL definition splices the argument in as SQL with `@where_condition`. These arguments are parsed as SQL expressions, so only references to the audited model's column change: string literals stay as written, and a subquery reading another model, such as `customer_id IN (SELECT customer_id FROM __ref("vip_customers"))`, keeps that model's column. You are asked to edit an argument by hand when it cannot be parsed, when it reads a relation whose columns SQLBuild does not know, when the audit quotes it as a string with `@'prefix'`, when it joins on the column with `USING` or `NATURAL`, or when no SQL definition of the audit is found. A lambda parameter named like the column, as in `list_filter(xs, customer_id -> customer_id > 0)`, keeps its name;
 - fixture columns of `__ref__<model>` and `__expected__<model>` CTEs.
 
 By default a column rename is one step: downstream models keep their output names, so `SELECT o.amount` becomes `SELECT o.revenue AS amount`. With `--cascade`, a downstream model that passes the column through unchanged, as a bare column, a same-named alias, or `SELECT *`, renames its output too, and the rename continues through its own consumers.
@@ -142,7 +151,7 @@ Migrations
 Compiled: ok, 3 files changed
 ```
 
-With `--json`, the result has `operation`, `target`, `new_name`, `destination`, `status` (`applied`, `dry_run`, `refused`, or `compile_failed`), `files` with every edit, `migrations`, `renamed_columns`, `manual`, `blocking`, and `compile.errors`.
+With `--json`, the result has `operation`, `target`, `new_name`, `destination`, `status` (`applied`, `dry_run`, `refused`, or `compile_failed`), `files` with every edit, `migrations`, `renamed_columns`, `manual`, `blocking`, `notes` (files deliberately kept in place, with the reason), and `compile.errors`.
 
 ## Exit codes
 

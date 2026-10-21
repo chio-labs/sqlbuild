@@ -26,6 +26,11 @@ pub fn render_refactor_text(
         lines.push(style.section("Migrations"));
         lines.extend(migration_lines(style, &plan.migrations));
     }
+    if !plan.notes.is_empty() && !blocked {
+        lines.push(style.section("Notes"));
+        let notes: Vec<&ManualLocation> = plan.notes.iter().collect();
+        lines.extend(location_lines(style, &notes));
+    }
     if blocked {
         lines.push(style.error_strong(&format!(
             "Cannot {} {} automatically",

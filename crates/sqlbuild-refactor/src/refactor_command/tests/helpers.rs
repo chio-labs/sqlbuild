@@ -23,6 +23,7 @@ pub(super) fn rename_plan(old_path: &str, new_name: &str) -> RefactorPlan {
         migrations: Vec::new(),
         renamed_columns: Vec::new(),
         help: None,
+        notes: Vec::new(),
     }
 }
 

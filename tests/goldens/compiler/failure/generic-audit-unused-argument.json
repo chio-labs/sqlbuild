@@ -1,0 +1,18 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "models/staging/stg_orders.sql audit 'floor' passes argument 'where_condition', which the audit's SQL in models/staging/_sqlbuild/_audits/generic/floor.sql never uses; remove 'where_condition' from the attachment"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

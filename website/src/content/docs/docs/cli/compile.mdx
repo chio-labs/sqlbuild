@@ -44,6 +44,24 @@ Positional `SELECTOR` arguments work like `--select`, and both forms can be comb
    and compile prints one note naming them
 7. **Artifact write** - writes compiled SQL to `target/compiled/` when Rules pass
 
+## Compiled artifacts
+
+`target/compiled/` mirrors what each resource will run, with every macro, variable and audit
+argument already rendered:
+
+| Path | Contents |
+|------|----------|
+| `models/<path>.sql` | Each model's query |
+| `functions/<language>/<path>.sql` | Each function's `CREATE FUNCTION` statements |
+| `audits/generic/<resource>/<audit>__<column>.sql` | Each attached generic audit, under the model, source or seed it checks; column audits end in `__<column>`, and an audit's `name` replaces the audit name |
+| `audits/singular/<audit>.sql` | Each singular audit |
+| `tests/...` | Each SQL unit test's comparison query |
+
+Read an audit's file to see how its arguments were spliced into the SQL without running it or
+looking up the warehouse's query history. Files are rewritten on every compile, and files for
+resources that no longer exist are removed. References such as `__ref("orders")` stay as written,
+as in compiled models.
+
 ## Focused compilation
 
 Use normal selectors to limit expensive analysis and reporting while retaining complete project

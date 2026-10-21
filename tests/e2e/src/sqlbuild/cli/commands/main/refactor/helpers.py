@@ -251,6 +251,27 @@ FLAGGED_SUBQUERY_AUDITS: dict[str, str] = {
         "  ],\n);",
     ),
 }
+FLAGGED_USING_AUDIT: dict[str, str] = {
+    **FLAGGED_SUBQUERY_AUDITS,
+    "models/marts/flagged_orders.sql": FLAGGED_ORDERS.replace(
+        "  ),\n);",
+        "  ),\n  audits [\n"
+        '    flag_check (name "joined_flag", where_condition '
+        '\'order_id IN (SELECT o.order_id FROM __ref("flagged_orders") AS o '
+        'JOIN __ref("vip_flags") AS v USING (is_flagged))\'),\n'
+        "  ],\n);",
+    ),
+}
+FLAGGED_LAMBDA_AUDIT: dict[str, str] = {
+    "models/marts/_sqlbuild/_audits/generic/flag_check.sql": _FLAG_CHECK,
+    "models/marts/flagged_orders.sql": FLAGGED_ORDERS.replace(
+        "  ),\n);",
+        "  ),\n  audits [\n"
+        '    flag_check (name "lambda_flag", where_condition '
+        "'len(list_filter([is_flagged], lambda is_flagged: is_flagged)) > 0'),\n"
+        "  ],\n);",
+    ),
+}
 FLAGGED_LITERAL_AUDIT: dict[str, str] = {
     "models/marts/_sqlbuild/_audits/generic/prefix_check.sql": (
         "AUDIT ();\n\nSELECT *\nFROM @relation\nWHERE @'prefix' = ''\n"

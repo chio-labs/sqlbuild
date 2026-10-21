@@ -131,6 +131,9 @@ pub struct RefactorPlan {
     pub migrations: Vec<MigrationDeclaration>,
     pub renamed_columns: Vec<(String, String, String)>,
     pub help: Option<String>,
+    /// Files the refactoring deliberately leaves in place, and why.
+    #[serde(default)]
+    pub notes: Vec<ManualLocation>,
 }
 
 impl RefactorPlan {
@@ -234,6 +237,16 @@ pub struct AuthoredFile {
     pub texts: Vec<String>,
 }
 
+/// One compiled unit test, the file that declares it and the models it targets.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UnitTestFacts {
+    /// The project-relative POSIX path of the test file.
+    pub path: String,
+    /// The `name` its `TEST` header declares, if any.
+    pub name: Option<String>,
+    pub target_model_names: Vec<String>,
+}
+
 /// Declaration files a model move takes along, and what blocks the move.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeclarationMoves {
@@ -286,6 +299,9 @@ pub struct RefactorFacts {
     pub authored_files: Vec<AuthoredFile>,
     /// Discovered source and seed YAML declaration files, in discovery order.
     pub yaml_files: Vec<DiscoveredFile>,
+    /// Compiled unit tests, which follow a renamed or moved model they target alone.
+    #[serde(default)]
+    pub unit_tests: Vec<UnitTestFacts>,
     /// Python strings naming the renamed model or column, found by the Python host.
     pub python_locations: Vec<ManualLocation>,
 }

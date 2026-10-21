@@ -502,9 +502,6 @@ fn select_star(
         }
     }
     for query in parsed.facts.all_queries() {
-        let Some(select) = query.root_select() else {
-            continue;
-        };
         if import_queries
             .iter()
             .any(|imported| std::ptr::eq(*imported, query))
@@ -513,8 +510,16 @@ fn select_star(
         }
         let dynamic_output_star =
             dynamic_contracts::allows_output_star(query, parsed.facts, parsed.model);
-        for star in stars_in_select(select) {
-            if dynamic_output_star {
+        let mut stars: Vec<(&SelectFacts, Option<usize>)> = Vec::new();
+        for select in query.body_selects() {
+            stars.extend(
+                stars_in_select(select)
+                    .into_iter()
+                    .map(|star| (select, star)),
+            );
+        }
+        for (select, star) in stars {
+            if dynamic_output_star || dynamic_contracts::is_dynamic_pivot_star(select) {
                 continue;
             }
             let lone = select.items.len() == 1;
