@@ -1,6 +1,8 @@
 //! A compiled model, read from the native compiled project that owns it.
 
+use sqlbuild_project::models as project_models;
 use sqlbuild_project::models::{DestinationFact, ModelMetadataTexts};
+use sqlbuild_project::types::InferredRow;
 use std::sync::Arc;
 
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
@@ -18,12 +20,13 @@ use sqlbuild_analysis::compiled_project::models::{
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::compiled_project::rows::{ReferenceTuple, reference_row_tuple};
 use crate::bindings::_helpers::compiled_views::compiled_model_analysis::{
-    AnalysisRecord, ProofArgument, SessionArgument, analysis_record,
+    AnalysisRecord, AnalysisViews, ProofArgument, SessionArgument, analysis_record,
 };
 use crate::bindings::_helpers::compiled_views::model_input_view::{
     InputViewClasses, ModelInputRecord, model_relation_key_row, query_sql_text, read_input,
     read_input_with_owner, references, rejected_opt_out, schema_entry, view_classes,
 };
+use crate::bindings::_helpers::compiled_views::project_host::PyProjectHost;
 use crate::bindings::_helpers::compiled_views::relation_keys::RelationKeyRow;
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::graph::project_graph::ResourceRow;
@@ -59,9 +62,6 @@ pub(crate) struct SqlRuleKey {
 /// A schema's entry audits, column specs and each audited column's index and name.
 pub(crate) type AuditedSchema = (Py<PyTuple>, Arc<HeaderColumns>, Vec<(usize, String)>);
 
-/// `(name, type, nullability)` of one inferred output column.
-pub(crate) type InferredRow = (String, Option<String>, String);
-
 /// `(name, type)` of a declared column.
 pub(crate) type DeclaredRow = (String, Option<String>);
 
@@ -89,18 +89,10 @@ pub(crate) struct CompiledViewClasses<'py> {
 }
 
 /// What assembly and the semantic checks finished for one compiled model.
-pub(crate) struct CompiledRecord {
-    /// `(resource type, name)` of each dependency.
-    deps: Vec<(String, String)>,
-    destination: DestinationFact,
-    /// Columns, lineage, binding diagnostics and dynamic proof kept from the native session.
-    analysis: AnalysisRecord,
-    macro_deps: Vec<String>,
-    projections: CompiledProjections,
-}
+pub(crate) type CompiledRecord = project_models::CompiledRecord<PyProjectHost>;
 
 /// A compiled model's Python attribute projections, each built once on first access.
-struct CompiledProjections {
+pub(crate) struct CompiledProjections {
     key: PyOnceLock<Py<PyAny>>,
     deps: PyOnceLock<Py<PyTuple>>,
 }
@@ -185,7 +177,7 @@ pub(crate) fn compiled_record(
         },
         analysis,
         macro_deps,
-        projections: CompiledProjections::default(),
+        host: CompiledProjections::default(),
     })
 }
 
@@ -509,7 +501,7 @@ impl NativeCompiledModel {
         self.read(py, |record, py| {
             let compiled: &CompiledRecord = compiled_of(record)?;
             compiled
-                .projections
+                .host
                 .key
                 .get_or_try_init(py, || {
                     let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
@@ -523,7 +515,7 @@ impl NativeCompiledModel {
     pub(crate) fn deps(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
         self.compiled(py, |compiled, py| {
             compiled
-                .projections
+                .host
                 .deps
                 .get_or_try_init(py, || {
                     let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;

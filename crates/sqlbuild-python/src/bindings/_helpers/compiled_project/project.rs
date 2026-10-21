@@ -38,7 +38,7 @@ use crate::bindings::_helpers::compiled_views::audit_views::{
     AttachedAudit, AuditRecord, NativeAuditInput, NativeCompiledAudit,
 };
 use crate::bindings::_helpers::compiled_views::compiled_model_view::{
-    CompiledViewClasses, InferredRow, NativeCompiledModel,
+    CompiledViewClasses, NativeCompiledModel,
 };
 use crate::bindings::_helpers::compiled_views::function_views::{
     AttachedFunction, FunctionRecord, NativeCompiledFunction, NativeFunctionInput, ObjectKeyRow,
@@ -55,6 +55,7 @@ use crate::bindings::_helpers::compiled_views::source_views::{
     NativeCompiledSource, NativeSourceInput, SourceNamespace, SourceRecord,
 };
 use crate::bindings::_helpers::render::declaration_values::ConstantRendering;
+use sqlbuild_project::types::InferredRow;
 
 pub(crate) const CONTRACT_KEY: &str = "contract";
 const INPUT_CLASSES_UNSET: &str = "no model loop recorded inputs into this project";

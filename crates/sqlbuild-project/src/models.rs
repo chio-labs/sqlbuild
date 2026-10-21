@@ -4,7 +4,10 @@ use std::sync::Arc;
 
 use sqlbuild_sqltext::compiler::models::CharSpan;
 
-use crate::types::ProjectHost;
+use sqlbuild_analysis::assembly::analysis_session::models::{ContractProof, LineageFacts};
+use sqlbuild_analysis::binding_locations::models::LocatedDiagnostic;
+
+use crate::types::{InferredRow, ProjectHost};
 
 /// One reference a resource's SQL makes: kind, name, package and call argument count.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -72,6 +75,31 @@ pub struct ModelInputRecord<H: ProjectHost> {
     pub macro_deps: Vec<String>,
     pub expansion: ExpansionRecord,
     /// What assembly and the semantic checks finished, once the model is assembled.
-    pub compiled: Option<H::CompiledModel>,
+    pub compiled: Option<CompiledRecord<H>>,
     pub host: H::ModelInput,
+}
+
+/// What one model's analysis left for its compiled model.
+#[derive(Debug)]
+pub struct AnalysisRecord<H: ProjectHost> {
+    pub inferred: Option<Vec<InferredRow>>,
+    pub lineage: Option<LineageFacts>,
+    pub has_star: bool,
+    pub star_resolved: bool,
+    pub binding: Vec<LocatedDiagnostic>,
+    pub binding_validated: bool,
+    pub proof: Option<ContractProof>,
+    pub host: H::Analysis,
+}
+
+/// What assembly and the semantic checks finished for one compiled model.
+#[derive(Debug)]
+pub struct CompiledRecord<H: ProjectHost> {
+    /// `(resource type, name)` of each dependency.
+    pub deps: Vec<(String, String)>,
+    pub destination: DestinationFact,
+    /// Columns, lineage, binding diagnostics and dynamic proof kept from the native session.
+    pub analysis: AnalysisRecord<H>,
+    pub macro_deps: Vec<String>,
+    pub host: H::CompiledModel,
 }

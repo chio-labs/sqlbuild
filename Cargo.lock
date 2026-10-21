@@ -1322,6 +1322,7 @@ dependencies = [
 name = "sqlbuild-project"
 version = "0.164.1"
 dependencies = [
+ "sqlbuild-analysis",
  "sqlbuild-sqltext",
 ]
 

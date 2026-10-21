@@ -8,6 +8,11 @@ pub trait ProjectHost {
     type ModelInput: Debug;
     /// A model schema's host values: its header columns, audits and dynamic columns.
     type Schema: Debug;
-    /// What assembly and the semantic checks finished for a compiled model.
+    /// A compiled model's lazily built views.
     type CompiledModel: Debug;
+    /// A model analysis's lazily built views.
+    type Analysis: Debug;
 }
+
+/// `(name, type, nullability)` of one inferred output column.
+pub type InferredRow = (String, Option<String>, String);

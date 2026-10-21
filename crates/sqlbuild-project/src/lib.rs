@@ -2,5 +2,10 @@
 
 #![forbid(unsafe_code)]
 
+mod _helpers;
+
 pub mod models;
 pub mod types;
+
+#[cfg(test)]
+mod tests;

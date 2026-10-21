@@ -4,7 +4,8 @@ use std::fmt::{Debug, Formatter, Result as FmtResult};
 
 use sqlbuild_project::types::ProjectHost;
 
-use crate::bindings::_helpers::compiled_views::compiled_model_view::CompiledRecord;
+use crate::bindings::_helpers::compiled_views::compiled_model_analysis::AnalysisProjections;
+use crate::bindings::_helpers::compiled_views::compiled_model_view::CompiledProjections;
 use crate::bindings::_helpers::compiled_views::model_input_view::{
     ModelInputHandles, SchemaHandles,
 };
@@ -15,7 +16,8 @@ pub(crate) struct PyProjectHost;
 impl ProjectHost for PyProjectHost {
     type ModelInput = ModelInputHandles;
     type Schema = SchemaHandles;
-    type CompiledModel = CompiledRecord;
+    type CompiledModel = CompiledProjections;
+    type Analysis = AnalysisProjections;
 }
 
 impl Debug for ModelInputHandles {
@@ -34,10 +36,18 @@ impl Debug for SchemaHandles {
     }
 }
 
-impl Debug for CompiledRecord {
+impl Debug for CompiledProjections {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         formatter
-            .debug_struct("CompiledRecord")
+            .debug_struct("CompiledProjections")
+            .finish_non_exhaustive()
+    }
+}
+
+impl Debug for AnalysisProjections {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
+        formatter
+            .debug_struct("AnalysisProjections")
             .finish_non_exhaustive()
     }
 }

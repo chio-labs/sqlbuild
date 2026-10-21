@@ -1,0 +1,21 @@
+use sqlbuild_analysis::assembly::analysis_session::models::LineageFacts;
+
+use crate::types::ProjectHost;
+
+/// A host that keeps nothing beside the records.
+#[derive(Debug)]
+pub(super) struct TestHost;
+
+impl ProjectHost for TestHost {
+    type ModelInput = ();
+    type Schema = ();
+    type CompiledModel = ();
+    type Analysis = ();
+}
+
+pub(super) struct LineageTestCase {
+    pub(super) description: &'static str,
+    pub(super) lineage: Option<LineageFacts>,
+    pub(super) expected_outputs: Option<Vec<&'static str>>,
+    pub(super) expected_edge_count: Option<usize>,
+}

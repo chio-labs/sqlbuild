@@ -13,7 +13,7 @@ use crate::bindings::_helpers::analysis_session::stage_functions::infer_native_e
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compiled_project::rows::ReferenceTuple;
 use crate::bindings::_helpers::compiled_views::compiled_model_view::{
-    DeclaredRow, InferredRow, NativeCompiledModel,
+    DeclaredRow, NativeCompiledModel,
 };
 use crate::bindings::_helpers::compiled_views::model_reads::{
     declared_rows, dynamic_columns_declared, inferred_rows, star_flags, unchecked_columns,
@@ -24,6 +24,7 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
+use sqlbuild_project::types::InferredRow;
 
 const UNKNOWN: &str = "UNKNOWN";
 const GENERIC_DIALECT: &str = "generic";

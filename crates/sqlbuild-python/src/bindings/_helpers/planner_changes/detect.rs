@@ -28,7 +28,6 @@ use sqlbuild_analysis::planner_changes::models::{
 };
 
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
-use crate::bindings::_helpers::compiled_views::compiled_model_view::InferredRow;
 use crate::bindings::_helpers::compiled_views::model_reads::{inferred_rows, star_flags};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_changes::renames::origin_names;
@@ -48,6 +47,7 @@ use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::semantic_shapes::shapes::snapshot_validity_columns;
 use crate::bindings::_helpers::type_system::equality::types_equal as native_types_equal;
+use sqlbuild_project::types::InferredRow;
 
 const CHANGES_LOGGER: &str = "sqlbuild.planner.changes";
 const REPLAY_CONFIG_KEY: &str = "replay_on_change";
