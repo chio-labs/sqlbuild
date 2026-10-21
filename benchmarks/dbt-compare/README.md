@@ -1,8 +1,8 @@
 # SQLBuild vs dbt: dense project compile benchmark
 
 This harness generates one dense synthetic project in both SQLBuild and dbt form, then times the
-same edit loop in each tool. It compares SQLBuild with dbt v2 (the `dbt` package on PyPI), with
-dbt Core as a reference. Published results are on the
+same edit loop in each tool. The comparison is with dbt v2 (the `dbt` package on PyPI); dbt Core
+variants are available as a reference but don't run by default. Published results are on the
 [Benchmarks](https://sqlbuild.com/docs/benchmarks) page.
 
 ## Files
@@ -41,7 +41,8 @@ column binding, type inference and contract checks still run.
 ## Running it on GitHub Actions
 
 The `Benchmark dbt comparison` workflow (`.github/workflows/benchmark-dbt.yml`) runs only when
-started by hand. It installs the requested released versions from PyPI, runs `correctness.sh`, then
+started by hand. It installs the requested released versions from PyPI (dbt Core only when a
+`core_*` variant is requested), runs `correctness.sh`, then
 `bench.sh`, and uploads the results directory with a `summary.md` (environment, correctness table,
 benchmark table). The same summary appears on the run page.
 
@@ -53,11 +54,11 @@ gh workflow run benchmark-dbt.yml -f sqlbuild_version=0.164.2 -f rounds=3
 |---|---|
 | `sqlbuild_version` | empty: the latest release |
 | `dbt_version` | `2.0.9` |
-| `dbt_core_version` | `1.12.6` |
-| `dbt_duckdb_version` | `1.11.0` |
+| `dbt_core_version` | `1.12.6` (only for `core_*` variants) |
+| `dbt_duckdb_version` | `1.11.0` (only for `core_*` variants) |
 | `models` | `10000` |
 | `rounds` | `3` |
-| `variants` | all eight variants below |
+| `variants` | `sqb_rules sqb_norules sqb_rules_full v2_compile v2_compile_strict v2_compile_cached v2_compile_strict_cached v2_compile_dirty` |
 
 ## Running it locally
 
@@ -66,16 +67,19 @@ Use the released packages in fresh virtual environments. From the repository roo
 ```bash
 uv venv -p 3.12 /path/to/venv-sqb && uv pip install -p /path/to/venv-sqb/bin/python sqlbuild pytest duckdb
 uv venv -p 3.12 /path/to/venv-dbt2 && uv pip install -p /path/to/venv-dbt2/bin/python dbt
-uv venv -p 3.12 /path/to/venv-dbt && uv pip install -p /path/to/venv-dbt/bin/python dbt-core dbt-duckdb
 
 export SQB=/path/to/venv-sqb/bin/sqb DBT_V2=/path/to/venv-dbt2/bin/dbt \
-  DBT_CORE=/path/to/venv-dbt/bin/dbt PYTHON=/path/to/venv-sqb/bin/python
+  PYTHON=/path/to/venv-sqb/bin/python
 
 "$PYTHON" benchmarks/dbt-compare/write_dbt_dense.py --models 10000 --out /path/to/p10k
 benchmarks/dbt-compare/correctness.sh /path/to/correctness
 benchmarks/dbt-compare/bench.sh /path/to/p10k /path/to/results 3
 python3 benchmarks/dbt-compare/summarize.py /path/to/results
 ```
+
+For the dbt Core reference rows, install `dbt-core dbt-duckdb` in another environment, set
+`DBT_CORE` to its `dbt`, and pass `core_parse core_compile` to `bench.sh`. `correctness.sh` adds dbt
+Core rows when `DBT_CORE` is set.
 
 The generator imports the CI helpers from the checkout, so it needs a Python with `sqlbuild`,
 `duckdb` and `pytest` installed, and works best with a sqlbuild release close to the checkout.
@@ -96,31 +100,59 @@ Each edit changes one constant in a projection, so the query changes but its col
 references don't. Rounds alternate the variant order. `SCENARIOS` limits which of warm, edit1 and
 edit100 run.
 
-Commands, run from the project copy:
+Commands, run from the project copy. Every dbt command also gets
+`--profiles-dir ../profiles --no-version-check`.
 
 | Variant | Command |
 |---|---|
 | `sqb_rules` | `sqb --no-color compile` in `sqlbuild/` |
 | `sqb_norules` | `sqb --no-color compile` in `sqlbuild-norules/` |
 | `sqb_rules_full` | `sqb_rules` with `SQLBUILD_DISABLE_COMPILE_REUSE=1 SQLBUILD_DISABLE_DELTA_COMPILE=1`: every run is a full compile that uses the per-model caches |
-| `v2_parse` / `v2_compile` | dbt v2 `parse` / `compile` with `--profiles-dir ../profiles --no-version-check` |
+| `v2_compile` | dbt v2 `compile` |
 | `v2_compile_strict` | dbt v2 `compile --static-analysis strict`, which checks columns like SQLBuild does |
-| `core_parse` / `core_compile` | the same `parse` / `compile` commands with dbt Core |
+| `v2_compile_cached` | dbt v2 `compile --partial-parse --partial-load` |
+| `v2_compile_strict_cached` | dbt v2 `compile --static-analysis strict --partial-parse --partial-load` |
+| `v2_compile_dirty` | cold: dbt v2 `compile --partial-parse --partial-load`; then `compile --partial-load --dirty` |
+| `v2_parse` | dbt v2 `parse` (not run by default) |
+| `core_parse` / `core_compile` | dbt Core `parse` / `compile` (not run by default) |
 
-Both tools use their defaults otherwise: SQLBuild's compile cache, reuse and delta compile, and
-dbt's partial parsing. `DBT_SEND_ANONYMOUS_USAGE_STATS=false` is set. The DuckDB profile sets
-`threads: 4`.
+SQLBuild uses its defaults: the compile cache, replaying an unchanged compile, and compiling only
+changed files after an edit. dbt Core uses its default partial parsing.
+`DBT_SEND_ANONYMOUS_USAGE_STATS=false` is set. The DuckDB profile sets `threads: 4`.
+
+### dbt v2 modes
+
+dbt v2 2.0.9 has three ways to run `compile`, and the benchmark times all of them:
+
+- **Default** (`v2_compile`, `v2_compile_strict`): no cache between runs. Every run parses and
+  compiles the whole project.
+- **Partial parse** (`*_cached`): `--partial-parse` keeps a parse cache under
+  `target/private/metadata/` and `--partial-load` loads it faster. Both are off by default, and
+  `--partial-parse` is hidden from `dbt --help` in 2.0.9. The cold run builds the cache. Later runs
+  still compile every node.
+- **Dirty** (`v2_compile_dirty`): `--dirty` selects only nodes whose files changed, by modification
+  time, since the last `--partial-parse` run, plus all their downstream dependents. It needs that
+  cache, so the cold run is a `--partial-parse --partial-load` compile and is timed as cold. With
+  nothing changed it reports `NoNodesSelected` ("Nothing to do"). Its own run refreshes the cache,
+  so each edit is compared with the run before it. Dense models form long `ref` chains, so one edited
+  model can select dozens of descendants.
 
 `/usr/bin/time -f '%e %U %S %M'` records wall time, user and system CPU, and the peak RSS of the
 largest process. `summarize.py` also reports what each tool said it did: SQLBuild prints whether it
-reused the previous compile or compiled only the changed files, and dbt Core logs when it falls back
-to a full parse. The 1-minute load average before and after each run is recorded too.
+reused the previous compile or compiled only the changed files, dbt Core logs when it falls back
+to a full parse, and dbt v2 prints how many models it processed. The 1-minute load average before and after each run is recorded too.
 
 ## What isn't equivalent
 
 - SQLBuild compile binds every column, infers types and checks contracts. dbt v2 does this with
   `--static-analysis strict`; its default compile doesn't report unknown columns. dbt Core compile
   renders Jinja and resolves references without analysing the SQL.
+- `--dirty` compiles the changed nodes and all their descendants, and leaves the rest of `target/`
+  from earlier runs; its run summary covers only the selected nodes. SQLBuild's delta compile
+  re-analyses the changed models plus any model whose inputs' columns, types or nullability changed,
+  re-runs project-wide Rules, and reports the same result as a full compile.
+- dbt v2's partial parse and dirty modes are opt-in; SQLBuild's caching is on by default. Both are
+  shown so neither tool is measured in a mode its users wouldn't pick.
 - SQLBuild compile also runs configurable Rules (`sqb_rules`). dbt has no built-in counterpart.
 - SQLBuild compile prepares its 10,000 SQL tests. dbt `compile` parses the unit tests but doesn't
   render them; that happens in `dbt test` or `dbt build`.

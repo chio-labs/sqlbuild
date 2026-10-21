@@ -17,15 +17,24 @@ VARIANT_ORDER = (
     "v2_parse",
     "v2_compile",
     "v2_compile_strict",
+    "v2_compile_cached",
+    "v2_compile_strict_cached",
+    "v2_compile_dirty",
     "core_parse",
     "core_compile",
 )
+PROCESSED_RE = re.compile(r"Processed: (\d+) models?")
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 TIME_RE = re.compile(r"^(?P<variant>\w+)\.(?P<scenario>\w+)\.r(?P<round>\d+)\.time$")
 LOAD_RE = re.compile(r"^(\w+) (\w+) r\d+ load ([\d.]+) ([\d.]+)$")
 
 
 def path_taken(variant: str, out: str, err: str) -> str:
-    """What each tool reported doing: full work, a partial parse, a replay or a delta compile."""
+    """What each tool reported doing.
+
+    SQLBuild: a full compile, a replay or a delta compile. dbt Core: a full or partial parse. dbt v2:
+    how many models it processed, or that `--dirty` found nothing to do.
+    """
     if variant.startswith("sqb"):
         if "Inputs unchanged; reused the previous compile" in err:
             return "reused"
@@ -37,6 +46,13 @@ def path_taken(variant: str, out: str, err: str) -> str:
         if "Unable to do partial parsing" in text or "Starting full parse" in text:
             return "full parse"
         return "partial parse"
+    if variant.startswith("v2"):
+        text = ANSI_RE.sub("", out + err)
+        processed = PROCESSED_RE.search(text)
+        if processed:
+            return f"{processed[1]} models"
+        if "NoNodesSelected" in text:
+            return "nothing to do"
     return "-"
 
 
@@ -67,7 +83,7 @@ def main() -> None:
 
     print(
         "| variant | scenario | runs | wall s (median) | wall s (all) | user+sys s (median) "
-        "| peak RSS MiB (median) | exit codes | path | 1-min load before/after |"
+        "| peak RSS MiB (median) | exit codes | what the tool did | 1-min load before/after |"
     )
     print("|---|---|---|---|---|---|---|---|---|---|")
     found = {variant for variant, _ in runs}

@@ -3,13 +3,14 @@
 # upstream model does not have. Run from the repository root.
 #
 # Usage: correctness.sh OUTROOT
-# Environment: SQB, DBT_V2, DBT_CORE and PYTHON, as for bench.sh. PYTHON must be able to
-# import duckdb, pytest and the installed sqlbuild package (the generator uses the CI helpers).
+# Environment: SQB, DBT_V2 and PYTHON, as for bench.sh; set DBT_CORE to add dbt Core rows. PYTHON
+# must be able to import duckdb, pytest and the installed sqlbuild package (the generator uses the
+# CI helpers).
 set -u
 OUT=$(realpath -m "$1")
 HERE=$(cd "$(dirname "$0")" && pwd)
 SQB=${SQB:-sqb}
-DBT_CORE=${DBT_CORE:-dbt}
+DBT_CORE=${DBT_CORE:-}
 DBT_V2=${DBT_V2:-dbt2}
 PYTHON=${PYTHON:-python3}
 export DBT_SEND_ANONYMOUS_USAGE_STATS=false
@@ -47,6 +48,8 @@ for kind in clean ref column; do
   run "$kind" "dbt v2 compile" "$P/dbt" "$DBT_V2" compile "${DBTFLAGS[@]}"
   run "$kind" "dbt v2 compile --static-analysis strict" "$P/dbt" "$DBT_V2" compile \
     "${DBTFLAGS[@]}" --static-analysis strict
-  run "$kind" "dbt Core parse" "$P/dbt" "$DBT_CORE" parse "${DBTFLAGS[@]}"
-  run "$kind" "dbt Core compile" "$P/dbt" "$DBT_CORE" compile "${DBTFLAGS[@]}"
+  if [ -n "$DBT_CORE" ]; then
+    run "$kind" "dbt Core parse" "$P/dbt" "$DBT_CORE" parse "${DBTFLAGS[@]}"
+    run "$kind" "dbt Core compile" "$P/dbt" "$DBT_CORE" compile "${DBTFLAGS[@]}"
+  fi
 done

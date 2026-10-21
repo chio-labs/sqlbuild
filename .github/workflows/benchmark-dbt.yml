@@ -1,6 +1,6 @@
 name: Benchmark dbt comparison
 
-# Manual only. Times SQLBuild, dbt v2 and dbt Core on the same generated dense DuckDB project with
+# Manual only. Times SQLBuild and dbt v2 (dbt Core on request) on the same generated dense DuckDB project with
 # released packages from PyPI, and publishes the tables as an artifact and in the job summary.
 # See benchmarks/dbt-compare/README.md.
 on:
@@ -17,12 +17,12 @@ on:
         default: "2.0.9"
         type: string
       dbt_core_version:
-        description: "dbt-core version from PyPI"
+        description: "dbt-core version from PyPI (installed only for core_* variants)"
         required: false
         default: "1.12.6"
         type: string
       dbt_duckdb_version:
-        description: "dbt-duckdb version from PyPI"
+        description: "dbt-duckdb version from PyPI (installed only for core_* variants)"
         required: false
         default: "1.11.0"
         type: string
@@ -39,7 +39,7 @@ on:
       variants:
         description: "Space-separated bench.sh variants"
         required: false
-        default: "sqb_rules sqb_norules sqb_rules_full v2_parse v2_compile v2_compile_strict core_parse core_compile"
+        default: "sqb_rules sqb_norules sqb_rules_full v2_compile v2_compile_strict v2_compile_cached v2_compile_strict_cached v2_compile_dirty"
         type: string
 
 permissions:
@@ -87,7 +87,6 @@ jobs:
             echo "RESULTS=$RUNNER_TEMP/dbt-compare-results"
             echo "SQB=$RUNNER_TEMP/dbt-compare/venv-sqb/bin/sqb"
             echo "DBT_V2=$RUNNER_TEMP/dbt-compare/venv-dbt2/bin/dbt"
-            echo "DBT_CORE=$RUNNER_TEMP/dbt-compare/venv-dbt/bin/dbt"
             echo "PYTHON=$RUNNER_TEMP/dbt-compare/venv-sqb/bin/python"
           } >>"$GITHUB_ENV"
       - name: Install released packages
@@ -99,9 +98,13 @@ jobs:
           uv pip install -q -p "$WORK/venv-sqb/bin/python" "$sqlbuild_spec" pytest duckdb
           uv venv -q -p 3.12 "$WORK/venv-dbt2"
           uv pip install -q -p "$WORK/venv-dbt2/bin/python" "dbt==$DBT_VERSION"
-          uv venv -q -p 3.12 "$WORK/venv-dbt"
-          uv pip install -q -p "$WORK/venv-dbt/bin/python" \
-            "dbt-core==$DBT_CORE_VERSION" "dbt-duckdb==$DBT_DUCKDB_VERSION"
+          # dbt Core is a reference only; install it when a core_* variant is requested.
+          if [[ " $VARIANTS " == *" core_"* ]]; then
+            uv venv -q -p 3.12 "$WORK/venv-dbt"
+            uv pip install -q -p "$WORK/venv-dbt/bin/python" \
+              "dbt-core==$DBT_CORE_VERSION" "dbt-duckdb==$DBT_DUCKDB_VERSION"
+            echo "DBT_CORE=$WORK/venv-dbt/bin/dbt" >>"$GITHUB_ENV"
+          fi
       - name: Record versions and runner
         run: |
           {
@@ -113,8 +116,10 @@ jobs:
             echo "- Python: $("$WORK/venv-sqb/bin/python" -c 'import platform; print(platform.python_version())')"
             echo "- sqlbuild: $("$WORK/venv-sqb/bin/python" -c 'import importlib.metadata as m; print(m.version("sqlbuild"))')"
             echo "- dbt (v2): $("$WORK/venv-dbt2/bin/dbt" --version 2>&1 | head -1)"
-            echo "- dbt-core: $("$WORK/venv-dbt/bin/python" -c 'import importlib.metadata as m; print(m.version("dbt-core"))')"
-            echo "- dbt-duckdb: $("$WORK/venv-dbt/bin/python" -c 'import importlib.metadata as m; print(m.version("dbt-duckdb"))')"
+            if [[ -n ${DBT_CORE:-} ]]; then
+              echo "- dbt-core: $("$WORK/venv-dbt/bin/python" -c 'import importlib.metadata as m; print(m.version("dbt-core"))')"
+              echo "- dbt-duckdb: $("$WORK/venv-dbt/bin/python" -c 'import importlib.metadata as m; print(m.version("dbt-duckdb"))')"
+            fi
             echo "- Models: ${MODELS}, rounds: ${ROUNDS}, variants: ${VARIANTS}"
             echo
           } | tee "$RESULTS/environment.md"
