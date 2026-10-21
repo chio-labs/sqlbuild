@@ -109,7 +109,7 @@ _TAGGED_SOURCES: str = (
             expected_file="models/reporting/order_facts.sql",
             expected_fragments={
                 "models/marts/customer_totals.sql": ('__ref("order_facts")',),
-                "tests/unit/test_fact_orders.sql": ("__expected__order_facts AS (",),
+                "tests/unit/test_order_facts.sql": ("__expected__order_facts AS (",),
             },
             expected_relation="order_facts",
         ),

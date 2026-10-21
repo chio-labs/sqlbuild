@@ -4,3 +4,4 @@ pub(crate) mod column_references;
 pub(crate) mod declaration_moves;
 pub(crate) mod model_planning;
 pub(crate) mod model_references;
+pub(crate) mod unit_test_moves;

@@ -62,6 +62,15 @@ pub const MODEL_RESOURCE_TYPE: &str = "model";
 pub const UNKNOWN_COLUMN_TYPE: &str = "UNKNOWN";
 pub const GENERIC_DIALECT: &str = "generic";
 pub const SCHEMA_KEYWORD: &str = "SCHEMA";
+pub const TEST_KEYWORD: &str = "TEST";
+pub const TEST_NAME_KEY: &str = "name";
+/// Separates a unit test's subject from its behavior, in `TEST` names and file stems.
+pub const TEST_NAME_SEPARATOR: &str = "__";
+/// The prefix of unit test file stems, as in `test_<subject>__<behavior>.sql`.
+pub const TEST_FILE_PREFIX: &str = "test_";
+/// The root that holds unit tests, mirroring model folders below `models/`.
+pub const UNIT_TEST_ROOT: &str = "tests/unit";
+pub const MODELS_ROOT: &str = "models";
 pub const MODEL_MANUAL_HELP: &str = "Pass the model into the macro as an argument, or edit the listed locations, then run the command again.";
 pub const COLUMN_MANUAL_HELP: &str = "Edit the listed locations, then run the command again.";
 /// `RefactorInputError`'s default code.

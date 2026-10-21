@@ -15,6 +15,7 @@ use crate::refactoring::_helpers::planning::declaration_moves::declaration_moves
 use crate::refactoring::_helpers::planning::model_references::{
     macro_reference_locations, model_reference_edits,
 };
+use crate::refactoring::_helpers::planning::unit_test_moves::{FollowedModel, unit_test_parts};
 use crate::refactoring::_helpers::scanning::scan_context::ScanContext;
 use crate::refactoring::constants::{
     CURRENT_DIRECTORY, HISTORY_MATERIALIZATIONS, MIGRATABLE_MATERIALIZATIONS, MIGRATE_FROM_KEY,
@@ -183,16 +184,30 @@ pub(crate) fn model_parts(
         edits.extend(model_reference_edits(&files, (old, new), context)?);
         edits.extend(yaml_model_edits(&yaml_files(facts), old, new)?);
     }
+    let destination = target.destination();
+    let tests = unit_test_parts(
+        Path::new(&facts.project_dir),
+        &facts.unit_tests,
+        &files,
+        &FollowedModel {
+            names: (old, new),
+            paths: (&target.source_path, &destination),
+        },
+    )?;
+    edits.extend(tests.edits);
     let mut manual = macro_reference_locations(&facts.models, &files, old, context);
     manual.extend(facts.python_locations.iter().cloned());
     let mut blocking = collisions(facts, target);
     blocking.extend(declaration.blocking);
+    blocking.extend(tests.blocking);
     blocking.extend(pending_migration(&files, target)?);
+    let mut moves = declaration.moves;
+    moves.extend(tests.moves);
     Ok(RefactorParts {
         edits,
         manual,
         blocking,
-        moves: declaration.moves,
+        moves,
         ..RefactorParts::default()
     })
 }

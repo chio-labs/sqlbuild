@@ -132,3 +132,19 @@ class OtherRenameRefusalE2ETestCase:
     old_name: str
     new_name: str
     expected_codes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FollowedUnitTestE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_fragments: dict[str, tuple[str, ...]]
+    extra_files: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class FollowedUnitTestDryRunE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_status: str
+    expected_path: str

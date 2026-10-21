@@ -49,6 +49,14 @@ Renaming or moving a model rewrites:
 - `cursor_inputs` keys, `relationships (to ...)` audits, and `__ref("<name>")` inside quoted SQL in `MODEL` headers and reusable `SCHEMA` declarations;
 - `relationships` audits (`to:` and `field:`) and `__ref("<name>")` in source and seed YAML.
 
+The model's own unit tests, the test files whose every `TEST` block targets only that model, follow it:
+
+- a file named `test_<name>.sql` or `test_<name>__<behavior>.sql` is renamed to the new name;
+- `TEST (name "<name>__<behavior>")` takes the new name as its subject;
+- a test file in the folder that mirrors the model, `tests/unit/<folders>/` for `models/<folders>/`, moves to the folder that mirrors the destination. Test files kept elsewhere stay where they are.
+
+Tests that also target other models keep their file and name; only their fixtures and references change.
+
 Moving a model to another folder also moves the macros, enums, constants, reusable schemas, generic audits, and named hooks it uses when their [placement](/docs/concepts/declaration-scopes/placement) must change, following the same rules `sqb compile` enforces:
 
 - a declaration only the moved model uses moves with it, into the destination folder's matching role;

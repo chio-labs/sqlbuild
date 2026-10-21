@@ -8,7 +8,7 @@ use sqlbuild_refactor::refactoring::models::{
     AuthoredFile, DeclarationPlacement, DependencyFacts, DestinationFacts, DiscoveredFile,
     ExpansionFacts, ExpansionSpan, LocationFacts, ManualLocation, ModelFacts, PlacedDeclaration,
     RefactorFacts, RefactorOperation, RefactorRequest, RelocatedDeclaration, ResourceColumnsFacts,
-    SchemaColumnFacts, SqlFileRole,
+    SchemaColumnFacts, SqlFileRole, UnitTestFacts,
 };
 
 use crate::bindings::_helpers::model_config::config_values::config_str;
@@ -331,8 +331,26 @@ pub(crate) fn refactor_facts(
         model_files: discovered_files(&native_field(&discovered, "model_files")?)?,
         authored_files: authored_files(&discovered)?,
         yaml_files,
+        unit_tests: unit_tests(&compiled)?,
         python_locations: python_locations(project, request)?,
     })
+}
+
+/// Every compiled SQL unit test with its file, header name and target models.
+fn unit_tests(compiled: &Bound<'_, PyAny>) -> PyResult<Vec<UnitTestFacts>> {
+    let mut tests: Vec<UnitTestFacts> = Vec::new();
+    for test in native_field(compiled, "sql_tests")?.try_iter()? {
+        let test: Bound<'_, PyAny> = test?;
+        tests.push(UnitTestFacts {
+            path: posix(&native_field(
+                &native_field(&test, "test_file")?,
+                "relative_path",
+            )?)?,
+            name: native_field(&native_field(&test, "test_block")?, "name")?.extract()?,
+            target_model_names: native_field(&test, "target_model_names")?.extract()?,
+        });
+    }
+    Ok(tests)
 }
 
 fn identity_key(identity: &Bound<'_, PyAny>) -> PyResult<String> {
