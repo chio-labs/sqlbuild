@@ -76,8 +76,11 @@ statements and SQL, audit results, errors, timing and exact output. `sqb recall 
 views (`invocations`, `statements`, `audit_results`, `artifacts` and more); `sqb recall query
 "SELECT ..."` runs SQL over them; `sqb recall output last --tail 50` prints what the latest command
 printed. Add `--backend warehouse` to check live warehouse state with the same command.
+Read [references/investigating-runs.md](references/investigating-runs.md) before writing recall
+queries; `statements` and `audit_results` use `outcome`, not `status`.
 
-Check `[recall] connection` in the project config to see which store you are reading:
+Check `read_connection` in `[recall]` or `[targets.<name>.recall]` to see which store you are
+reading:
 
 - **Local (the default).** A SQLite file, `logs/recall.sqlite3`, holding this checkout's own runs.
   Use it for "what did my last build do?" and to compare runs during your session.
@@ -86,8 +89,8 @@ Check `[recall] connection` in the project config to see which store you are rea
   actually ran and printed last night without access to the machine, find the first run where an
   audit started failing or a statement slowed down across all runs, and compare a production run
   with yours by `target`, `git_revision`, `sqlbuild_version` or `host_token`. Queries use
-  ClickHouse SQL, and `--json` reports `rows_read` and `bytes_read`; filter by time and keep a
-  `LIMIT` on large stores.
+  ClickHouse SQL, and `--json` reports `rows_read` and `bytes_read`; filter on `invocation_id` or
+  `invocation_started_at` and keep a `LIMIT` on large stores.
 
 Read [references/docs/concepts/observability/recall.md](references/docs/concepts/observability/recall.md).
 
@@ -207,6 +210,8 @@ diff.
     Rules.
   - [references/macros-and-declarations.md](references/macros-and-declarations.md): macros,
     enums, constants, placement and scopes.
+  - [references/investigating-runs.md](references/investigating-runs.md): Recall store design,
+    every view and column, traps and worked investigations of past runs.
 - Full documentation for this SQLBuild version: [references/docs/CONTENTS.md](references/docs/CONTENTS.md)
   lists every page; open only the page you need, for example `references/docs/cli/build.md` or
   `references/docs/concepts/snapshots.md`. The same pages are online at

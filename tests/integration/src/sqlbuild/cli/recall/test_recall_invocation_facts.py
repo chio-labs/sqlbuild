@@ -55,8 +55,7 @@ def test_given_a_failed_command_when_recorded_then_its_cause_is_structured(
     failed: subprocess.CompletedProcess[bytes] = run(project_dir, *test_case.args)
     recorded: list[list[object]] = recall_rows(
         project_dir,
-        "SELECT command, status, exit_code, error_type, error_code, error_message "
-        "FROM invocations",
+        "SELECT command, status, exit_code, error_type, error_code, error_message FROM invocations",
     )
 
     assert failed.returncode != 0
@@ -103,9 +102,7 @@ def test_given_a_deployment_or_checkout_when_recorded_then_the_git_revision_is_k
         _ = _git(repository, "worktree", "add", "-q", "-b", "orders", str(tmp_path / "linked"))
         project_dir = tmp_path / "linked" / "orders_shop"
 
-    built: subprocess.CompletedProcess[bytes] = run(
-        project_dir, "build", **test_case.environment
-    )
+    built: subprocess.CompletedProcess[bytes] = run(project_dir, "build", **test_case.environment)
 
     assert built.returncode == 0, built.stderr.decode(errors="replace")
     assert recall_rows(project_dir, "SELECT git_revision, git_dirty FROM invocations") == [

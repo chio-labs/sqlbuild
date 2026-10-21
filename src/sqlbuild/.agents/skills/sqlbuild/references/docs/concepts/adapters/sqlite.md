@@ -136,4 +136,5 @@ as `datetime(ordered_at, 'start of day')`, have no DuckDB translation and fail l
 
 [Recall](../observability/recall.md) keeps its local history in a SQLite file,
 `logs/recall.sqlite3`, for every project, whichever adapter it builds with. Point
-`[recall] connection` at a `sqlite` connection to put the file somewhere else.
+`[recall] write_connection` and `read_connection` at a `sqlite` connection to put the file somewhere
+else.

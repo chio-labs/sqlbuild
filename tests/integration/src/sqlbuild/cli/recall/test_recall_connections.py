@@ -12,11 +12,7 @@ from tests.integration.src.sqlbuild.cli.recall._test_types import (
 from tests.integration.src.sqlbuild.cli.recall.helpers import recall_rows, run, write_project
 
 SHARED_STORE_TOML: str = (
-    "\n[connections.history]\n"
-    'adapter = "sqlite"\n'
-    'path = "{path}"\n'
-    "\n[recall]\n"
-    "{keys}"
+    '\n[connections.history]\nadapter = "sqlite"\npath = "{path}"\n\n[recall]\n{keys}'
 )
 
 
@@ -138,7 +134,7 @@ def test_given_only_a_read_connection_when_running_then_reads_are_shared_and_wri
                 'ALTER TABLE "recall_heartbeats" ADD COLUMN "subcommand" TEXT;',
                 'DROP VIEW IF EXISTS "invocations";',
                 'CREATE VIEW IF NOT EXISTS "invocations" AS',
-                "INSERT OR IGNORE INTO \"recall_meta\"",
+                'INSERT OR IGNORE INTO "recall_meta"',
             ),
             expected_up_to_date_note="is up to date with this SQLBuild version",
         ),
