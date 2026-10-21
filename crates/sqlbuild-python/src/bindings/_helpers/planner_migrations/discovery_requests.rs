@@ -1,6 +1,7 @@
 //! Live candidate inspection and automatic request materialization.
 
 use crate::bindings::_helpers::boundary::python_calls::call_with;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::planner_migrations::column_objects::config;
 use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use crate::bindings::_helpers::planner_migrations::discovery_events::{
@@ -114,10 +115,10 @@ pub(super) fn automatic<'py>(
     let py = runtime.py();
     let mut requests: Vec<ModelMigrationRequest<'py>> = Vec::new();
     for item in models {
-        if !native_field(scope, "selected_keys")?.contains(native_field(item, "key")?)? {
+        if !native_field(scope, "selected_keys")?.contains(model_reads::model_key(item)?)? {
             continue;
         }
-        let name = native_field(item, "name")?;
+        let name = model_reads::name_object(item)?;
         let event = matches.1.get_item(&name)?;
         let candidate = mapping_get(matches.0, &name)?;
         let origin = if let Some(event) = event {
@@ -162,8 +163,8 @@ pub(super) fn warnings<'py>(
     let py = scope.py();
     let selected = PySet::empty(py)?;
     for item in models {
-        if native_field(scope, "selected_keys")?.contains(native_field(item, "key")?)? {
-            selected.add(native_field(item, "name")?)?;
+        if native_field(scope, "selected_keys")?.contains(model_reads::model_key(item)?)? {
+            selected.add(model_reads::name_object(item)?)?;
         }
     }
     let ambiguous: BTreeMap<String, String> = ambiguous.extract()?;

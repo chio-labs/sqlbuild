@@ -1,6 +1,7 @@
 //! Native migration discovery over existing inspection and fingerprint cache boundaries.
 
 use crate::bindings::_helpers::boundary::python_calls::call_with;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::planner_migrations::matching::{
     match_migration_fingerprints, migration_destination_fingerprints,
 };
@@ -56,7 +57,7 @@ pub(super) fn discover_model_migrations<'py>(
     let declared = discovery_events::declared(&declarations, &state)?;
     let names = PyDict::new(py);
     for item in &models {
-        names.set_item(native_field(item, "name")?, item)?;
+        names.set_item(model_reads::name_object(item)?, item)?;
     }
     let event_renames = discovery_events::renames(&runtime, &names, &state)?;
     for (name, origin) in declared.iter() {
@@ -74,7 +75,7 @@ pub(super) fn discover_model_migrations<'py>(
     }
     let unbuilt = PyDict::new(py);
     for item in &models {
-        let name = native_field(item, "name")?;
+        let name = model_reads::name_object(item)?;
         if !declared_names.contains(&name)?
             && call_with(
                 &native_field(&state, "named_fingerprint")?,

@@ -3,6 +3,7 @@
 use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::cursor::intervals::partition;
 use crate::bindings::_helpers::cursor::scalars;
 use crate::bindings::_helpers::cursor::scalars::compare_values;
@@ -194,7 +195,7 @@ fn runtime_producer_names(
         return Ok(names);
     }
     let mut loaded: HashSet<String> = HashSet::new();
-    for source in native_field(project, "sources")?.try_iter()? {
+    for source in project_reads::sources(project)?.try_iter()? {
         let source = source?;
         if !native_field(&native_field(&source, "source_entry")?, "loader")?.is_none() {
             loaded.insert(native_field(&source, "name")?.extract()?);
@@ -341,7 +342,7 @@ fn collect_models<'py>(
     };
     let runtime_names = runtime_producer_names(project, &producers)?;
     let mut models: Vec<_> = Vec::new();
-    for model in native_field(project, "models")?.try_iter()? {
+    for model in project_reads::models(project)?.try_iter()? {
         let model = model?;
         let name_value = model_reads::name_object(&model)?;
         let model_name: String = name_value.extract()?;

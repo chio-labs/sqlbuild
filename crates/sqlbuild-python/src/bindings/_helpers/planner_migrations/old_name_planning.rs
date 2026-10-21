@@ -4,6 +4,8 @@ use sqlbuild_host::entries::models::AdapterHost;
 
 use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::models::{MigrationPhase, OldNameViewPlanning};
 use crate::bindings::_helpers::planner_migrations::old_name_objects::recorded_view;
@@ -24,7 +26,7 @@ fn schemas<'py>(
     let snapshot = phase.snapshot.clone();
     let needed = PySet::empty(py)?;
     for item in selected {
-        let schema = native_field(&native_field(item, "destination")?, "schema")?;
+        let schema = native_field(&model_reads::destination(item)?, "schema")?;
         if !schema.is_none() {
             needed.add(schema)?;
         }
@@ -43,7 +45,7 @@ fn schemas<'py>(
     if !include_project {
         for item in selected {
             let existing = native_field(&snapshot, "existing_relations")?
-                .call_method1("get", (native_field(item, "name")?,))?;
+                .call_method1("get", (model_reads::name_object(item)?,))?;
             if !existing.is_none()
                 && host::entry(py, AdapterHost::NormalizeRelationType)?
                     .call1((native_field(&existing, "relation_type")?,))?
@@ -75,12 +77,12 @@ pub(crate) fn plan_old_name_views<'py>(
     let runtime = phase.runtime.clone();
     let scope = phase.scope.clone();
     let project = runtime_field(&runtime, |runtime| &runtime.project)?;
-    let models: Vec<Bound<'py, PyAny>> = native_field(&project, "models")?
+    let models: Vec<Bound<'py, PyAny>> = project_reads::models(&project)?
         .try_iter()?
         .collect::<PyResult<_>>()?;
     let by_name = PyDict::new(py);
     for item in &models {
-        by_name.set_item(native_field(item, "name")?, item)?;
+        by_name.set_item(model_reads::name_object(item)?, item)?;
     }
     let mut selected: Vec<Bound<'py, PyAny>> = Vec::new();
     for key in native_field(&scope, "execution_order")?.try_iter()? {
@@ -136,7 +138,7 @@ pub(crate) fn plan_old_name_views<'py>(
         }
     }
     for item in &selected {
-        if !covered.contains(native_field(item, "name")?)?
+        if !covered.contains(model_reads::name_object(item)?)?
             && let Some(planned) = planner.pending_for(item)?
         {
             entries.push(planned);

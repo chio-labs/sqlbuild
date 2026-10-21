@@ -3,6 +3,7 @@
 use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::boundary::python_calls::call_with;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::column_objects::config;
 use crate::bindings::_helpers::planner_migrations::models::ModelMigrationDeclaration;
@@ -110,11 +111,11 @@ pub(super) fn resumed<'py>(
     let target = native_field(&native_field(runtime, "project")?, "effective_target_name")?;
     let events = native_field(state, "events")?;
     for item in models {
-        let name = native_field(item, "name")?;
+        let name = model_reads::name_object(item)?;
         if !unbuilt.contains(&name)? || !(history(item)? || identity(item)?) {
             continue;
         }
-        let destination = native_field(item, "destination")?;
+        let destination = model_reads::destination(item)?;
         let event = newest(&events, &destination)?;
         if event.is_none() {
             continue;
