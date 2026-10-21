@@ -43,6 +43,8 @@ SRC[sqb_rules]=sqlbuild
 CMD[sqb_rules]="$SQB --no-color compile"
 SRC[sqb_norules]=sqlbuild-norules
 CMD[sqb_norules]="$SQB --no-color compile"
+SRC[sqb_rules_full]=sqlbuild
+CMD[sqb_rules_full]="env SQLBUILD_DISABLE_COMPILE_REUSE=1 SQLBUILD_DISABLE_DELTA_COMPILE=1 $SQB --no-color compile"
 SRC[core_parse]=dbt
 CMD[core_parse]="$DBT_CORE parse $DBTFLAGS"
 SRC[core_compile]=dbt

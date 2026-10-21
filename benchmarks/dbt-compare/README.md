@@ -86,6 +86,7 @@ Commands, run from the project copy:
 |---|---|
 | `sqb_rules` | `sqb --no-color compile` in `sqlbuild/` |
 | `sqb_norules` | `sqb --no-color compile` in `sqlbuild-norules/` |
+| `sqb_rules_full` | `sqb_rules` with `SQLBUILD_DISABLE_COMPILE_REUSE=1 SQLBUILD_DISABLE_DELTA_COMPILE=1`: every run is a full compile that uses the per-model caches |
 | `core_parse` / `core_compile` | `dbt parse` / `dbt compile` with `--profiles-dir ../profiles --no-version-check` |
 | `v2_parse` / `v2_compile` | the same commands with dbt v2 |
 | `v2_compile_strict` | dbt v2 `compile --static-analysis strict` |
