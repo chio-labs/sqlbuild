@@ -483,3 +483,13 @@ class OutputEvaluationErrorE2ETestCase:
     expected_fragments: tuple[str, ...]
     expected_json_fragments: tuple[str, ...]
     unexpected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SharedPartialFixtureE2ETestCase:
+    """A partial mock read by two real models, with each reader's column spelling."""
+
+    description: str
+    enriched_column: str
+    report_column: str
+    expected_padding_count: int
