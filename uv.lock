@@ -917,6 +917,18 @@ wheels = [
 ]
 
 [[package]]
+name = "dbc"
+version = "0.3.1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8b/10/c595fd891a8a5415378d40fd4d428b72c7266dd5cbf8c04ea5f16279f323/dbc-0.3.1-py3-none-macosx_12_0_arm64.whl", hash = "sha256:9b55f649516055c121d80ebf189ec47451a4f30a3e66577dfb89d4c92c104524", size = 3994959, upload-time = "2026-10-01T16:00:28.743Z" },
+    { url = "https://files.pythonhosted.org/packages/ee/38/abf425442f73343e0f27fd32451fdabedd403317d6fc3ec6fe423742cc1f/dbc-0.3.1-py3-none-macosx_12_0_x86_64.whl", hash = "sha256:4d6ac7ed02572a55ce8312ef510367155cbb0fee529512684a460895dfb991f5", size = 4429256, upload-time = "2026-10-01T16:00:30.927Z" },
+    { url = "https://files.pythonhosted.org/packages/f1/59/f07789d4db5a8e3f1eb3afd8524d099e048ccb75a4f854ece6ef0cdb402f/dbc-0.3.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:bbb1f137c75d4ac18b1e29f662ddbb06d636cb455a9b76a6fcc9bf4dcf2a8b3a", size = 4288844, upload-time = "2026-10-01T16:00:33.016Z" },
+    { url = "https://files.pythonhosted.org/packages/ee/80/55ad27b5b6f21c0af04acb611d9a48da07fc0bb0a287f03515ee4b34aaf3/dbc-0.3.1-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:79a880d10ccb2c4816262ccd4cf11aca0db259bc36a34eced34b533a404ba029", size = 3865144, upload-time = "2026-10-01T16:00:34.848Z" },
+    { url = "https://files.pythonhosted.org/packages/27/b9/904c2249a1bfd5a6f34011f33db01b113af0ca7685b1a1218a20b5e8838a/dbc-0.3.1-py3-none-win_amd64.whl", hash = "sha256:5ae67a0d0c9e028a24ed3cd802d85c184f73794e90405c59984471d0e3a3bd1b", size = 4415639, upload-time = "2026-10-01T16:00:36.529Z" },
+]
+
+[[package]]
 name = "dbt-adapters"
 version = "1.24.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2049,14 +2061,10 @@ wheels = [
 
 [[package]]
 name = "ingestr"
-version = "1.0.0"
+version = "1.1.73"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a1/e8/25b6bddfb758ce416a4ef28d8d42cf80b665216ad6dad1c814ed8e079730/ingestr-1.0.0-py2.py3-none-macosx_10_15_x86_64.whl", hash = "sha256:f32c9d70090c4eaa0f452b6c10aedb2efc146b8ea148e2baa349c6fa626fce5d", size = 55923802, upload-time = "2026-05-22T07:32:01.917Z" },
-    { url = "https://files.pythonhosted.org/packages/9f/bc/c92aa774b74c2e6e65c115fcb7920e24c31751c7a4854b458b7917bd240a/ingestr-1.0.0-py2.py3-none-macosx_11_0_arm64.whl", hash = "sha256:c9ff2e5092f30685338e2a27cf0b384f516db9f1bf0edba580faac294abfd453", size = 51329572, upload-time = "2026-05-22T07:32:05.683Z" },
-    { url = "https://files.pythonhosted.org/packages/f7/c1/ee8b02a7266f1f0ab60cf4e55b8ac74d19bfe5905399bd4b323590dd9247/ingestr-1.0.0-py2.py3-none-manylinux2014_aarch64.whl", hash = "sha256:693f98ed6632fa1321ab4184aea25974bbf722478102627564674c3311b39ab3", size = 49705302, upload-time = "2026-05-22T07:32:08.958Z" },
-    { url = "https://files.pythonhosted.org/packages/34/0b/9cb4623a5903bf177f0411ead9a50fd8867c24380f574a8567c8ceb7e294/ingestr-1.0.0-py2.py3-none-manylinux2014_x86_64.whl", hash = "sha256:3910167cf18577635b39c695e257e2bcd74c2d4dd956e28ebc2381ca79cbb8cc", size = 55611218, upload-time = "2026-05-22T07:32:11.922Z" },
-    { url = "https://files.pythonhosted.org/packages/e3/7a/f0561d903fc96f5824a8e46864dd14f3203f6a3b7b59099f3c731c484a0f/ingestr-1.0.0-py2.py3-none-win_amd64.whl", hash = "sha256:db9460062b3b0466b412023282aa8a7349c44cbf4f7d654c820551fd19af236c", size = 57230133, upload-time = "2026-05-22T07:32:14.842Z" },
+    { url = "https://files.pythonhosted.org/packages/03/c4/ec864b94260069470c94f0e6e0a84a10f7838bcc0a21e8ceb7f5196f81d7/ingestr-1.1.73-py3-none-any.whl", hash = "sha256:dad15bc1b0c0c1eaef746f885c89a4986c66a64941660a0e3971f106ee221db8", size = 18387, upload-time = "2026-10-21T16:03:12.817Z" },
 ]
 
 [[package]]
@@ -4275,6 +4283,7 @@ dlt = [
     { name = "dlt", extra = ["duckdb", "filesystem", "sql-database"] },
 ]
 ingestr = [
+    { name = "dbc" },
     { name = "ingestr" },
 ]
 postgres = [
@@ -4293,6 +4302,7 @@ sqlserver = [
 [package.dev-dependencies]
 dev = [
     { name = "commitizen" },
+    { name = "dbc" },
     { name = "dbt-bigquery" },
     { name = "dbt-core" },
     { name = "dbt-databricks" },
@@ -4320,11 +4330,12 @@ requires-dist = [
     { name = "dagster", marker = "extra == 'dagster'", specifier = ">=1.13.0" },
     { name = "dagster-webserver", marker = "extra == 'dagster'", specifier = ">=1.13.0" },
     { name = "databricks-sql-connector", extras = ["pyarrow"], marker = "extra == 'databricks'", specifier = ">=4.1.2" },
+    { name = "dbc", marker = "extra == 'ingestr'", specifier = ">=0.3.1" },
     { name = "dlt", extras = ["duckdb", "filesystem", "sql-database"], marker = "extra == 'dlt'", specifier = ">=1.28.0,<2" },
     { name = "duckdb", specifier = ">=1.3.2" },
     { name = "filelock", specifier = ">=3.20.3" },
     { name = "google-cloud-bigquery", marker = "extra == 'bigquery'", specifier = ">=3.37.0" },
-    { name = "ingestr", marker = "extra == 'ingestr'", specifier = ">=1.0.0" },
+    { name = "ingestr", marker = "extra == 'ingestr'", specifier = ">=1.1.73" },
     { name = "jinja2", marker = "extra == 'dbt'", specifier = ">=3.1" },
     { name = "orjson", specifier = ">=3.11.7" },
     { name = "polyglot-sql-chio", specifier = "==0.13.9" },
@@ -4342,6 +4353,7 @@ provides-extras = ["dbt", "snowflake", "bigquery", "databricks", "dagster", "pos
 [package.metadata.requires-dev]
 dev = [
     { name = "commitizen", specifier = ">=4.9.1" },
+    { name = "dbc", specifier = ">=0.3.1" },
     { name = "dbt-bigquery", specifier = ">=1.9.0,<1.11" },
     { name = "dbt-core", specifier = ">=1.11.6,<1.12" },
     { name = "dbt-databricks", specifier = ">=1.9.0,<1.11" },
@@ -4351,7 +4363,7 @@ dev = [
     { name = "dbt-sqlserver", specifier = ">=1.9.0,<1.11" },
     { name = "dlt", extras = ["duckdb", "filesystem", "sql-database"], specifier = ">=1.28.0,<2" },
     { name = "fensu", specifier = ">=0.27.0" },
-    { name = "ingestr", specifier = ">=1.0.0" },
+    { name = "ingestr", specifier = ">=1.1.73" },
     { name = "jsonschema", specifier = ">=4.23.0" },
     { name = "maturin", specifier = ">=1.9,<2" },
     { name = "pre-commit", specifier = ">=4.3.0" },
