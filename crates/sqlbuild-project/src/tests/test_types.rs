@@ -26,3 +26,13 @@ pub(super) struct LineageTestCase {
     pub(super) expected_outputs: Option<Vec<&'static str>>,
     pub(super) expected_edge_count: Option<usize>,
 }
+
+pub(super) struct ProjectInputTestCase {
+    pub(super) description: &'static str,
+    pub(super) retained: &'static [&'static str],
+    pub(super) recorded_schemas: &'static [&'static str],
+    pub(super) read_index: usize,
+    pub(super) expected_indexes: Vec<usize>,
+    pub(super) expected_name: Option<&'static str>,
+    pub(super) expected_schema_column: Option<&'static str>,
+}

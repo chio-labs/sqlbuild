@@ -1,6 +1,10 @@
 use sqlbuild_analysis::assembly::analysis_session::models::{LineageFacts, LineageRow};
 
-use crate::models::AnalysisRecord;
+use sqlbuild_analysis::compiled_project::models::{
+    CompiledModelFacts, ModelSchemaFact, SchemaColumnFact,
+};
+
+use crate::models::{AnalysisRecord, ExpansionRecord, ModelInputRecord};
 use crate::tests::test_types::TestHost;
 
 pub(super) fn lineage_row(output: &str, sources: &[&str]) -> LineageRow {
@@ -31,5 +35,41 @@ pub(super) fn analysis(lineage: Option<LineageFacts>) -> AnalysisRecord<TestHost
         binding_validated: false,
         proof: None,
         host: (),
+    }
+}
+
+pub(super) fn model_input(name: &str) -> ModelInputRecord<TestHost> {
+    ModelInputRecord {
+        name: name.to_owned(),
+        query_sql: "SELECT 1".into(),
+        macro_source_sql: "SELECT 1".into(),
+        references: Vec::new(),
+        schema: None,
+        sql_validation_enabled: true,
+        macro_deps: Vec::new(),
+        expansion: ExpansionRecord {
+            authored_sql: "SELECT 1".into(),
+            expanded_sql: "SELECT 1".into(),
+            interpolation_spans: Vec::new(),
+            declaration_spans: Vec::new(),
+            macro_spans: Vec::new(),
+            authored: true,
+        },
+        compiled: None,
+        host: (),
+    }
+}
+
+pub(super) fn schema_facts(name: &str, column: &str) -> CompiledModelFacts {
+    CompiledModelFacts {
+        name: name.to_owned(),
+        schema: Some(ModelSchemaFact {
+            columns: vec![SchemaColumnFact {
+                name: column.to_owned(),
+                ..SchemaColumnFact::default()
+            }],
+            ..ModelSchemaFact::default()
+        }),
+        ..CompiledModelFacts::default()
     }
 }

@@ -6,6 +6,7 @@ use sqlbuild_sqltext::compiler::models::CharSpan;
 
 use sqlbuild_analysis::assembly::analysis_session::models::{ContractProof, LineageFacts};
 use sqlbuild_analysis::binding_locations::models::LocatedDiagnostic;
+use sqlbuild_analysis::compiled_project::models::CompiledProjectFacts;
 
 use sqlbuild_core::json::models::JsonValue;
 
@@ -208,4 +209,22 @@ pub struct SeedRecord<H: ProjectHost> {
     /// The destination native project assembly resolved, once it ran.
     pub destination: Option<DestinationFact>,
     pub host: H::Seed,
+}
+
+/// One compile's project: the facts producers record and each resource's records.
+#[derive(Debug)]
+pub struct CompiledProject<H: ProjectHost> {
+    pub facts: CompiledProjectFacts,
+    /// What the model loop finished for each model beyond its facts, in loop order.
+    pub inputs: Vec<ModelInputRecord<H>>,
+    /// Lineage graphs its project views built.
+    pub graph_builds: usize,
+    /// Each attached seed, in attachment order.
+    pub seeds: Vec<SeedRecord<H>>,
+    /// Each attached source, in attachment order.
+    pub sources: Vec<SourceRecord<H>>,
+    /// Each attached SQL, then Python, function in attachment order.
+    pub functions: Vec<FunctionRecord<H>>,
+    /// Each singular, then model-, source- and seed-attached, audit in attachment order.
+    pub audits: Vec<AuditRecord<H>>,
 }
