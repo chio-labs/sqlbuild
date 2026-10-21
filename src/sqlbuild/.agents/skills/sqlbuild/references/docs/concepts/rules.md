@@ -227,7 +227,7 @@ Required CI exercises custom Rule packs over generated projects, checking compil
 memory, and cache invalidation. Separate 20- and 100-Rule profiles measure the cost of custom
 validation at 5,000-model scale.
 
-See [Benchmarks](../benchmarks.md#rules-performance) for the benchmark profiles and reproduction commands,
+See [Benchmarks](../benchmarks.md#compiler-guards-in-ci) for the benchmark profiles and reproduction commands,
 and [Execution and caching](rules/execution-and-caching.md) for the Rules lifecycle.
 
 ## Continue
