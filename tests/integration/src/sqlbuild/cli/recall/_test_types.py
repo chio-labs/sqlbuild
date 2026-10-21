@@ -229,3 +229,11 @@ class JsonErrorTestCase:
     args: tuple[str, ...]
     expected_code: str
 
+
+@dataclass(frozen=True)
+class FailureCauseTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_failure: list[object]
+    expected_message_prefix: str
+

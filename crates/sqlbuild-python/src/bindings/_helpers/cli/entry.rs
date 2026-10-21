@@ -19,6 +19,7 @@ use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, key
 use crate::bindings::_helpers::build_progress::transient_lines::shared_transient_line_coordinator;
 use crate::bindings::_helpers::cli::argv::parse_cli_invocation;
 use crate::bindings::_helpers::cli::dispatch::{command_facts, dispatch_command};
+use crate::bindings::_helpers::cli::failure_cause::take_failure_cause;
 use crate::bindings::_helpers::cli::launch_state::offer_launch_record;
 use crate::bindings::_helpers::cli::observability::{
     CliObservabilityScope, cli_observability_scope,
@@ -48,6 +49,7 @@ const UNKNOWN_COMMAND: &str = "unknown";
 const DIFF_PUBLICATION_CODE: &str = "C257";
 const DIFF_EXECUTION_STATUS: &str = "execution_failed";
 const DIFF_OUTCOME_PREFIX: &str = "Query diff outcome  ";
+const ERROR_MESSAGE_CHARACTERS: usize = 500;
 /// Expected staying-Python command failures, loaded only once a command raised.
 const EXPECTED_COMMAND_FAILURES: [ExecutorHost; 4] = [
     ExecutorHost::AuditExecutionError,
@@ -483,6 +485,12 @@ fn add_invocation_context(
     Ok(())
 }
 
+/// The first line of `message`, at most [`ERROR_MESSAGE_CHARACTERS`] characters.
+fn short_message(message: &str) -> String {
+    let line: &str = message.lines().next().unwrap_or_default().trim();
+    line.chars().take(ERROR_MESSAGE_CHARACTERS).collect()
+}
+
 /// Dispatch once while publishing canonical invocation lifecycle facts.
 fn observed_dispatch<'py>(
     invocation: &Invocation<'py>,
@@ -496,6 +504,7 @@ fn observed_dispatch<'py>(
         return dispatch_command(&invocation.args, invocation.handlers.clone());
     }
     let command: String = invocation.command_name();
+    drop(take_failure_cause());
     let started: Instant = Instant::now();
     let elapsed = |started: Instant| -> PyResult<Bound<'py, PyAny>> {
         u64::try_from(started.elapsed().as_millis())
@@ -529,6 +538,11 @@ fn observed_dispatch<'py>(
                 let terminal: &str = if exit_code.eq(0)? {
                     "invocation_completed"
                 } else {
+                    if let Some(cause) = take_failure_cause() {
+                        payload.set_item("error_type", cause.error_type)?;
+                        payload.set_item("error_code", cause.error_code)?;
+                        payload.set_item("error_message", short_message(&cause.message))?;
+                    }
                     "invocation_failed"
                 };
                 publish(lifecycle_event(py, terminal, payload)?)?;
@@ -539,6 +553,17 @@ fn observed_dispatch<'py>(
                 payload.set_item("command", &command)?;
                 payload.set_item("duration_ms", elapsed(started)?)?;
                 payload.set_item("error_type", error.get_type(py).getattr("__name__")?)?;
+                let value: Bound<'py, PyAny> = error.value(py).clone().into_any();
+                if let Some(code) = value.getattr_opt("code")?
+                    && let Ok(code) = code.extract::<String>()
+                {
+                    payload.set_item("error_code", code)?;
+                }
+                let message: String = match value.getattr_opt("message")? {
+                    Some(message) if !message.is_none() => message.str()?.to_string(),
+                    _ => value.str()?.to_string(),
+                };
+                payload.set_item("error_message", short_message(&message))?;
                 publish(lifecycle_event(py, "invocation_failed", payload)?)?;
                 Err(error)
             }

@@ -1,8 +1,11 @@
 use crate::cli_text::models::CliStyle;
 use crate::debug_report::main::debug_connection_lines::debug_connection_lines;
+use crate::debug_report::main::debug_failure::debug_failure;
 use crate::debug_report::main::format_debug_json::format_debug_json;
 use crate::debug_report::main::format_debug_text::format_debug_text;
-use crate::debug_report::models::{ConnectionCheck, ConnectionValue, DebugLine};
+use crate::debug_report::models::{
+    ConnectionCheck, ConnectionValue, DebugFailure, DebugLine, DebugReport, DebugStatus,
+};
 use crate::debug_report::tests::helpers::{line_summary, sample_report, text};
 use crate::debug_report::tests::test_types::{ConnectionLinesTestCase, FormatTestCase};
 
@@ -97,5 +100,50 @@ fn given_connection_settings_when_listing_then_values_are_sorted_masked_and_shor
             "{}",
             test_case.description
         );
+    }
+}
+
+#[test]
+fn given_a_debug_report_when_its_failure_is_read_then_the_first_failed_check_is_coded() {
+    let passed = DebugReport {
+        connection: vec![DebugLine::checked(
+            "connection test",
+            "",
+            (DebugStatus::Ok, Some("connected")),
+        )],
+        ..DebugReport::default()
+    };
+    let invalid_config = DebugReport {
+        configuration: vec![DebugLine::checked(
+            "project file",
+            "/repo/sqlbuild_project.toml",
+            (DebugStatus::Error, Some("invalid TOML")),
+        )],
+        ..DebugReport::default()
+    };
+    let test_cases: [(&str, DebugReport, Option<DebugFailure>); 3] = [
+        (
+            "a failed connection test is a connection error",
+            sample_report(),
+            Some(DebugFailure {
+                error_type: "ConnectionError".to_owned(),
+                error_code: "C980".to_owned(),
+                message: "connection test: authentication failed".to_owned(),
+            }),
+        ),
+        (
+            "another failed check is a configuration error",
+            invalid_config,
+            Some(DebugFailure {
+                error_type: "ConfigurationError".to_owned(),
+                error_code: "C982".to_owned(),
+                message: "project file: invalid TOML".to_owned(),
+            }),
+        ),
+        ("a passing report has no failure", passed, None),
+    ];
+
+    for (description, report, expected) in test_cases {
+        assert_eq!(debug_failure(&report), expected, "{description}");
     }
 }

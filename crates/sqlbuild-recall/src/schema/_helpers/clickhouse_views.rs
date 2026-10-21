@@ -52,7 +52,9 @@ terminals AS (
         argMax(exit_code, tuple(invocation_sequence, occurred_at)) AS terminal_exit_code,
         argMax(duration_ms, tuple(invocation_sequence, occurred_at)) AS terminal_duration_ms,
         argMax(error_type, tuple(invocation_sequence, occurred_at)) AS terminal_error_type,
-        argMax(error_code, tuple(invocation_sequence, occurred_at)) AS terminal_error_code
+        argMax(error_code, tuple(invocation_sequence, occurred_at)) AS terminal_error_code,
+        argMax(JSONExtract(payload, 'error_message', 'Nullable(String)'),
+            tuple(invocation_sequence, occurred_at)) AS terminal_error_message
     FROM {events}
     WHERE event_type IN ('invocation_completed', 'invocation_failed')
     GROUP BY invocation_id
@@ -82,6 +84,7 @@ SELECT
     terminals.terminal_exit_code AS exit_code,
     terminals.terminal_error_type AS error_type,
     terminals.terminal_error_code AS error_code,
+    terminals.terminal_error_message AS error_message,
     coalesce(context.command, started.command, beats.command) AS command,
     coalesce(context.subcommand, beats.subcommand) AS subcommand,
     context.target AS target,

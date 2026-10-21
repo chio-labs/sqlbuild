@@ -251,6 +251,7 @@ started AS (
 ),
 terminals AS (
     SELECT invocation_id, event_type, occurred_at, exit_code, duration_ms, error_type, error_code,
+        json_extract(payload, '$.error_message') AS error_message,
         ROW_NUMBER() OVER (
             PARTITION BY invocation_id
             ORDER BY invocation_sequence DESC, occurred_at DESC, event_id DESC
@@ -282,6 +283,7 @@ projected AS (
         terminals.exit_code,
         terminals.error_type,
         terminals.error_code,
+        terminals.error_message,
         COALESCE(context.command, started.command, beats.command) AS command,
         COALESCE(context.subcommand, beats.subcommand) AS subcommand,
         context.target,
@@ -322,6 +324,7 @@ SELECT
     exit_code,
     error_type,
     error_code,
+    error_message,
     command,
     subcommand,
     target,

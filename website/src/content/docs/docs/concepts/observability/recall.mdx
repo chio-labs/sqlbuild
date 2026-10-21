@@ -70,7 +70,11 @@ return `--json`.
 
 For every recorded invocation, Recall keeps:
 
-- the invocation itself: command, arguments, target, adapter, status, exit code, and timing;
+- the invocation itself: command, arguments, target, adapter, status, exit code, and timing, and
+  for a failed invocation its cause as `error_type`, `error_code` and a one-line
+  `error_message`, also when the command reported the failure only through its exit code (for
+  example `sqb debug` failing to connect records `ConnectionError` and `C980`);
+- the commit it ran from (`git_revision`), see [Git revision](#git-revision);
 - its [lifecycle events](/docs/concepts/observability): runs, resource attempts, statements,
   retries, and audit results;
 - the SQL text of every executed statement, stored once per distinct statement and shared across
