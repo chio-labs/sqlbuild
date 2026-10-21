@@ -10,7 +10,7 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [Quickstart](quickstart.md) (`quickstart`) - Get a SQLBuild project running locally with DuckDB in under a minute.
 - [Feature Comparison](feature-comparison.md) (`feature-comparison`) - Feature comparison between SQLBuild, dbt, and SQLMesh.
 - [Roadmap](roadmap.md) (`roadmap`) - What's coming next in SQLBuild.
-- [Benchmarks](benchmarks.md) (`benchmarks`) - SQLBuild and dbt v2 compiling the same 10,000-model project: cold, unchanged, one-model and 1% edits, with CPU time and peak memory.
+- [Benchmarks](benchmarks.md) (`benchmarks`) - SQLBuild and dbt v2 compiling the same 10,000-model project: cold, unchanged, one-model and 1% edits.
 
 ## dbt Compatibility
 

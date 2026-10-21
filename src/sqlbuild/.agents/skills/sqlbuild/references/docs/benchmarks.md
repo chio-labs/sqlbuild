@@ -2,251 +2,125 @@
 
 # Benchmarks
 
-> SQLBuild and dbt v2 compiling the same 10,000-model project: cold, unchanged, one-model and 1% edits, with CPU time and peak memory.
+> SQLBuild and dbt v2 compiling the same 10,000-model project: cold, unchanged, one-model and 1% edits.
 
 Online: https://sqlbuild.com/docs/benchmarks/
 
 ## Contents
 
-- SQLBuild vs dbt v2 with column checking
-- dbt v2 `--dirty`
-- dbt v2 out of the box and with remote sources
-- SQLBuild with every rule
-- Correctness
-- What is compared and what isn't
-- The project
-- Methodology
-- Reproduce the benchmark
+- SQLBuild vs dbt v2
+- All variants
+- What is compared
+- Why SQLBuild can reuse work by default
+- The project and how to reproduce it
 - Compiler guards in CI
 
-These numbers come from one run of the [benchmark workflow](https://github.com/chio-labs/sqlbuild/blob/main/.github/workflows/benchmark-dbt.yml):
-[run 39543189999](https://github.com/chio-labs/sqlbuild/actions/runs/39543189999), October 21, 2026,
-on a GitHub-hosted `ubuntu-24.04` runner with 4 CPUs (AMD EPYC 9V45) and 15 GiB RAM. It compared
-**SQLBuild 0.164.3** with **dbt 2.0.9** (the `dbt` package on PyPI), both installed from PyPI,
-on the same generated 10,000-model DuckDB project. Every cell is the median of three rounds.
+SQLBuild 0.164.3 and dbt 2.0.9 compiling the same generated 10,000-model DuckDB project, on a
+GitHub-hosted runner with 4 CPUs and 15 GiB RAM. Each cell is the median of three rounds from
+[run 39543189999](https://github.com/chio-labs/sqlbuild/actions/runs/39543189999) (October 21, 2026).
 
-## SQLBuild vs dbt v2 with column checking
+## SQLBuild vs dbt v2
 
-Both tools here bind every column and type in every model. SQLBuild runs `sqb compile` with its
-defaults: compile with column and type checks, configurable rules off. dbt runs
-`dbt compile --static-analysis strict` with its parse cache turned on (`--partial-parse --partial-load`;
-the cache is opt-in and the command compiles the whole project).
+Both tools bind every column and type in every model. SQLBuild runs `sqb compile` with its defaults
+(configurable rules off). dbt runs `dbt compile --static-analysis strict` with its opt-in parse cache
+(`--partial-parse --partial-load`).
 
-| Scenario | SQLBuild wall | CPU | Peak memory | dbt v2 strict, parse cache wall | CPU | Peak memory | dbt / SQLBuild |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| Cold (no `target/`, no caches) | **15.7 s** | 30.3 s | 3.1 GiB | 64.7 s | 167.0 s | 4.7 GiB | 4.1× |
-| Unchanged | **0.46 s** (replay) | 0.5 s | 0.07 GiB | 43.8 s | 132.2 s | 4.1 GiB | 95× |
-| One model edited | **2.4 s** | 2.5 s | 0.8 GiB | 45.9 s | 137.2 s | 4.1 GiB | 19× |
-| 100 models edited (1%) | **2.4 s** | 2.5 s | 0.8 GiB | 72.9 s | 176.1 s | 6.9 GiB | 30× |
-
-SQLBuild's unchanged run replays the stored result of the previous compile. Its edit runs compile
-only the changed files against the previous compile and report the same result as a full compile.
-
-The gap isn't only replay. With reuse and delta compile turned off, every SQLBuild run is a full
-compile that takes per-model analyses from its cache:
-
-| Scenario | SQLBuild full compile wall | CPU | Peak memory | dbt v2 strict, parse cache wall | dbt / SQLBuild |
-|---|---:|---:|---:|---:|---:|
-| Cold | **14.2 s** | 28.4 s | 2.8 GiB | 64.7 s | 4.6× |
-| Unchanged | **8.6 s** | 12.9 s | 2.8 GiB | 43.8 s | 5.1× |
-| One model edited | **8.0 s** | 12.4 s | 2.8 GiB | 45.9 s | 5.7× |
-| 100 models edited (1%) | **8.1 s** | 12.6 s | 2.8 GiB | 72.9 s | 9.0× |
-
-## dbt v2 `--dirty`
-
-`dbt compile --dirty` compiles only models whose files changed since the last parse-cache run,
-plus all their downstream dependents. It needs the cache, so its cold run is a
-`--partial-parse --partial-load` compile.
-
-| Scenario | SQLBuild | dbt v2 `--dirty`, strict | dbt v2 `--dirty` |
+| Scenario | SQLBuild | dbt v2 | dbt / SQLBuild |
 |---|---:|---:|---:|
-| Cold | **15.7 s** | 63.3 s | 40.1 s |
-| Unchanged | **0.46 s** (replay) | 0.86 s (nothing to do) | 0.80 s (nothing to do) |
-| One model edited | 2.4 s | **1.6 s** (48 models) | **1.5 s** (48 models) |
-| 100 models edited (1%) | **2.4 s** | 60.7 s (2,800 models) | 48.6 s (2,800 models) |
+| Cold (no `target/`, no caches) | **15.7 s** | 64.7 s | 4.1× |
+| Unchanged | **0.46 s** (replay) | 43.8 s | 95× |
+| One model edited | **2.4 s** | 45.9 s | 19× |
+| 100 models edited (1%) | **2.4 s** | 72.9 s | 30× |
 
-`--dirty` is faster on a single-model edit: strict analysis of the edited model and its 47
-descendants took 1.6 s. SQLBuild took 2.4 s and reported the result for the whole project, the same
-report a full compile produces; models whose inputs didn't change kept their stored analysis. With
-100 edited files, dbt 2.0.9 logged `[partial-parse] ... exceeds incremental threshold (100), falling
-back to full parse` and compiled the 2,800 selected models after a full parse.
+Cold, SQLBuild used 30 s of CPU and 3.1 GiB at peak; dbt used 167 s and 4.7 GiB.
 
-## dbt v2 out of the box and with remote sources
+- **Reuse isn't the whole gap.** With reuse and delta compile off, every SQLBuild run is a full
+  compile with per-model caches: 14.2 s cold and about 8 s after an edit, still 5–9× faster.
+- **Every rule on.** With every built-in rule and a custom Python rule, SQLBuild compiles cold in
+  19.5 s, 3.3× faster than dbt strict.
+- **dbt `--dirty` wins a one-model edit.** It compiles only changed models and their descendants: 1.6 s
+  for the edited model and 47 descendants, against SQLBuild's 2.4 s for a report on the whole
+  project. With 100 edited files it falls back to a full parse and takes 60.7 s.
 
-For context, dbt v2 without the parse cache, and strict analysis reading source schemas from the
-warehouse (dbt's default) instead of from their declarations:
+## All variants
 
-| Scenario | dbt v2 default | dbt v2 default, strict | dbt v2 default, strict, sources from warehouse |
-|---|---:|---:|---:|
-| Cold | 36.9 s | 61.5 s | 67.4 s |
-| Unchanged | 45.9 s | 67.2 s | 74.3 s |
-| One model edited | 44.8 s | 67.4 s | 73.9 s |
-| 100 models edited (1%) | 43.4 s | 65.7 s | 73.5 s |
+Wall time in seconds. CPU and memory for every cell are in the run's `summary.md`.
 
-dbt v2's default `compile` doesn't report unknown columns.
-
-## SQLBuild with every rule
-
-The same project with every built-in rule and one custom Python rule turned on. These rules check
-contract, declaration, graph, model, project, SQL and test conventions that dbt compile doesn't
-check.
-
-| Scenario | SQLBuild with rules | CPU | Peak memory | Full compile with per-model caches |
+| Variant | Cold | Unchanged | 1 edit | 100 edits |
 |---|---:|---:|---:|---:|
-| Cold | 19.5 s | 42.0 s | 3.6 GiB | 18.0 s |
-| Unchanged | 0.46 s (replay) | 0.5 s | 0.07 GiB | 9.9 s |
-| One model edited | 2.9 s | 2.8 s | 0.9 GiB | 9.8 s |
-| 100 models edited (1%) | 3.1 s | 3.0 s | 0.9 GiB | 9.9 s |
+| SQLBuild | 15.7 | 0.46 | 2.4 | 2.4 |
+| SQLBuild, reuse and delta off | 14.2 | 8.6 | 8.0 | 8.1 |
+| SQLBuild, every rule | 19.5 | 0.46 | 2.9 | 3.1 |
+| dbt v2 strict, parse cache | 64.7 | 43.8 | 45.9 | 72.9 |
+| dbt v2 strict, `--dirty` | 63.3 | 0.86 | 1.6 | 60.7 |
+| dbt v2 strict, default | 61.5 | 67.2 | 67.4 | 65.7 |
+| dbt v2 strict, sources from warehouse | 67.4 | 74.3 | 73.9 | 73.5 |
+| dbt v2, parse cache | 39.5 | 21.8 | 24.0 | 47.9 |
+| dbt v2, `--dirty` | 40.1 | 0.80 | 1.5 | 48.6 |
+| dbt v2, default | 36.9 | 45.9 | 44.8 | 43.4 |
 
-Cold, it is still 3.3× faster than dbt v2 strict with its parse cache (64.7 s).
+dbt v2 without `--static-analysis strict` doesn't report unknown columns.
 
-## Correctness
+## What is compared
 
-The workflow also runs both tools on three 50-model projects before timing anything:
-
-| Project | `sqb compile` | `dbt compile` | `dbt compile --static-analysis strict` |
-|---|---|---|---|
-| Clean | exit 0 | exit 0 | exit 0 |
-| Reference to a missing model | exit 1, `P001` | exit 1, `dbt1048` | exit 1, `dbt1048` |
-| Column the upstream model doesn't have | exit 1, `B002 Unknown column 'missing_col' in b` | exit 0, nothing reported | exit 1, `dbt0227 No column b.missing_col found` |
-
-Strict analysis must also report the missing column in the parse-cache and `--dirty` modes, and no
-strict run may mention a fallback, login or skipped analysis. Otherwise the workflow fails. SQLBuild
-reports the same errors with rules on and off.
-
-## What is compared and what isn't
-
-- Both tools bind columns and types. dbt does this only with `--static-analysis strict`.
-- SQLBuild compile also plans and binds its 10,000 SQL tests. dbt `compile` excludes unit tests.
-- SQLBuild reports contract, type and nullability problems as errors. dbt strict warns on contract
-  type mismatches, and enforced contracts are checked at run time.
-- SQLBuild computes column lineage by default.
-- Sources are declared locally in both: dbt's sources set `schema_origin: local` and every column
-  has a `data_type`. The remote-sources column above shows dbt's default.
-- The DuckDB warehouse holds every source and model relation, empty, as after `dbt build`. dbt reads
-  it; `sqb compile` is offline and doesn't.
-- The measured dbt is the `dbt` distribution on PyPI. Strict static analysis isn't in its Apache-2.0
-  build.
+- Both tools bind columns and types; dbt only with `--static-analysis strict`. The measured dbt is
+  the `dbt` distribution on PyPI; strict analysis isn't in its Apache-2.0 build.
+- SQLBuild also plans and binds its 10,000 SQL tests, reports contract, type and nullability
+  problems as errors, and computes column lineage. dbt `compile` skips unit tests, warns on contract
+  type mismatches and checks enforced contracts at run time.
+- Sources are declared locally in both. The warehouse holds every relation, empty, as after
+  `dbt build`; dbt reads it and `sqb compile` doesn't.
 - dbt's parse cache and `--dirty` are opt-in. SQLBuild's reuse and delta compile are on by default.
 
-### Why SQLBuild can reuse work by default
+Before timing anything, the workflow checks both tools on 50-model projects, and fails if strict
+analysis doesn't report the missing column in every dbt mode:
 
-SQLBuild records what each compile depended on, then checks all of it before reusing anything:
+| Project | `sqb compile` | `dbt compile` | `dbt compile` strict |
+|---|:-:|:-:|:-:|
+| Clean | ✓ passes | ✓ passes | ✓ passes |
+| Reference to a missing model | ✓ reported | ✓ reported | ✓ reported |
+| Column the upstream model doesn't have | ✓ reported | ✗ not reported | ✓ reported |
 
-- **Every input is recorded during the compile itself.** That covers the project's files, the
-  command line, the variables passed with `--vars`, every environment variable a template read,
-  provider settings files, the Python interpreter and every loaded module, and the SQLBuild build.
-  Nothing is inferred afterwards.
+## Why SQLBuild can reuse work by default
+
+SQLBuild records what each compile depended on and checks all of it before reusing anything:
+
+- **Every input is recorded during the compile itself:** project files, the command line, `--vars`,
+  every environment variable a template read, provider settings files, the Python interpreter and
+  loaded modules, and the SQLBuild build.
 - **Files are checked by type, size, modification time, change time and inode**, and by content
   digest when a recently touched file's stamps move. If anything doesn't match, the stored result
   isn't replayed.
-- **Edits recompile only what they affect.** SQLBuild knows each model's references and the
-  columns, types and nullability it reads. A changed model is compiled again, together with every
-  model whose inputs changed shape. An edit outside model and SQL test files, such as a macro,
-  config or a new file, runs a full compile. That choice is made before any work starts, apart from
-  a few edits found part-way through to need a full compile.
-- **The result is the same as a full compile.** A delta compile produces byte-identical output to
-  `sqb compile --no-cache`, and a replay prints the previous report again. CI checks this by
-  compiling a copy in full after every step of a seeded edit series and comparing the exit code and
-  everything printed.
+- **Edits recompile only what they affect.** A changed model is compiled again, with every model
+  whose input columns, types or nullability changed. Edits outside model and SQL test files, such as
+  a macro, config or a new file, run a full compile.
+- **The result matches a full compile.** A delta compile produces byte-identical output to
+  `sqb compile --no-cache`, and a replay prints the previous report again. CI compiles a copy in full
+  after every step of a seeded edit series and compares the exit code and everything printed.
 
 Reuse assumes macros, hooks, providers, adapters and custom rules are deterministic. It has
-[documented limits](cli/compile.md#reusing-an-unchanged-compile), for example on network
-filesystems or with clocks that differ between machines, and `--no-cache` always compiles in full.
+[documented limits](cli/compile.md#reusing-an-unchanged-compile), and `--no-cache` always
+compiles in full.
 
-## The project
+## The project and how to reproduce it
 
-The project comes from the dense generator SQLBuild's compile-performance CI jobs use, with the
-adapter switched to DuckDB. The dbt project is derived from it file by file: the same model names,
-folders, SQL bodies and DAG, with Jinja macros, `_models.yml` contracts, `data_tests` and
-`unit_tests`.
+The project comes from the dense generator SQLBuild's compile CI uses: 10,000 models (31 columns on
+average), 2,400 sources, 500 seeds, 250 SQL functions, 120 macros and 10,000 SQL tests. The dbt
+project has the same names, folders, SQL and DAG. Each edit changes one constant in a model's SQL;
+the 1% edit changes 100 models spread across the project. Rounds alternate the variant order.
 
-| Resource | Count |
-|---|---:|
-| Models | 10,000 (8 to 472 columns, 31 on average) |
-| Sources | 2,400 |
-| Seeds | 500 |
-| SQL functions | 250 |
-| Macros | 120 |
-| `not_null` checks | 17,000 |
-| SQL tests (dbt unit tests) | 10,000 |
-
-Each edit changes one constant in a model's SQL body, so its columns, types and references stay the
-same. The 1% edit changes 100 models spread evenly across the project.
-
-## Methodology
-
-For every variant and round, the workflow copies the pristine project, runs the cold compile, runs
-it again unchanged, edits one model and compiles, then edits 100 models and compiles. Rounds
-alternate the variant order. `/usr/bin/time` records wall time, user plus system CPU time, and the
-peak resident memory of the largest process. dbt runs use `DBT_SEND_ANONYMOUS_USAGE_STATS=false` and
-a DuckDB profile with `threads: 4`.
-
-The exact commands, run in each project copy:
-
-```bash
-# SQLBuild default
-sqb --no-color compile
-
-# SQLBuild full compile with per-model caches
-SQLBUILD_DISABLE_COMPILE_REUSE=1 SQLBUILD_DISABLE_DELTA_COMPILE=1 sqb --no-color compile
-
-# SQLBuild with every rule: the same command in the project with [rules] select = ["SQBR", "XSQBR"]
-sqb --no-color compile
-
-# dbt v2 strict with parse cache
-dbt compile --profiles-dir ../profiles --no-version-check --static-analysis strict --partial-parse --partial-load
-
-# dbt v2 --dirty: the cold run builds the cache, later runs use --dirty
-dbt compile --profiles-dir ../profiles --no-version-check --static-analysis strict --partial-parse --partial-load
-dbt compile --profiles-dir ../profiles --no-version-check --static-analysis strict --partial-load --dirty
-
-# dbt v2 default, with and without strict
-dbt compile --profiles-dir ../profiles --no-version-check
-dbt compile --profiles-dir ../profiles --no-version-check --static-analysis strict
-```
-
-The non-strict parse-cache and `--dirty` rows drop `--static-analysis strict`. The remote-sources row
-runs the default strict command in a copy of the dbt project without `schema_origin: local`.
-
-## Reproduce the benchmark
-
-The harness is in [`benchmarks/dbt-compare/`](https://github.com/chio-labs/sqlbuild/tree/main/benchmarks/dbt-compare),
-and its README describes every variant. Start the workflow with the versions measured here:
+The harness and the exact command for every variant are in
+[`benchmarks/dbt-compare/`](https://github.com/chio-labs/sqlbuild/tree/main/benchmarks/dbt-compare).
+To rerun it on GitHub Actions:
 
 ```bash
 gh workflow run benchmark-dbt.yml -f sqlbuild_version=0.164.3 -f dbt_version=2.0.9 -f rounds=3
 ```
 
-The run uploads the per-run files and a `summary.md` with the environment, the correctness table
-and the full results table.
-
-To run it locally, from a checkout of the repository:
-
-```bash
-uv venv -p 3.12 venv-sqb && uv pip install -p venv-sqb/bin/python sqlbuild==0.164.3 pytest duckdb
-uv venv -p 3.12 venv-dbt2 && uv pip install -p venv-dbt2/bin/python dbt==2.0.9
-
-export SQB=$PWD/venv-sqb/bin/sqb DBT_V2=$PWD/venv-dbt2/bin/dbt PYTHON=$PWD/venv-sqb/bin/python
-
-"$PYTHON" benchmarks/dbt-compare/write_dbt_dense.py --models 10000 --out /tmp/p10k
-benchmarks/dbt-compare/correctness.sh /tmp/correctness
-python3 benchmarks/dbt-compare/check_strict.py correctness /tmp/correctness
-benchmarks/dbt-compare/bench.sh /tmp/p10k /tmp/results 3
-python3 benchmarks/dbt-compare/check_strict.py runs /tmp/results
-python3 benchmarks/dbt-compare/summarize.py /tmp/results
-```
-
-Use an otherwise idle machine: other load changes wall times far more than CPU times.
+The README also covers running it locally. Use an otherwise idle machine: load changes wall times
+far more than CPU times.
 
 ## Compiler guards in CI
 
-SQLBuild's CI also runs fresh-process compile guards with time and memory budgets on dense and
-varied projects, and a custom-Rules benchmark with 20- and 100-rule packs. Run them from the
-repository:
-
-```bash
-make test-e2e-dense-compile-performance SQLBUILD_BENCHMARK_MODELS=10000
-make test-e2e-cache-compile-performance SQLBUILD_BENCHMARK_MODELS=5000
-uv run python -m scripts.benchmark_rules --models 5000 --rule-counts 20 100 --iterations 5 --output rules-5000.json
-```
+SQLBuild's CI also runs compile time and memory guards on dense projects and a custom Rules
+benchmark; see `make test-e2e-dense-compile-performance` and `scripts/benchmark_rules.py`.
