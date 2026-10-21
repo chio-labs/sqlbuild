@@ -1,7 +1,7 @@
 //! Deferred target relation locations, and the warehouse relations they name.
 
 use pyo3::prelude::{
-    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+    Bound, IntoPyObject, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -11,6 +11,7 @@ use sqlbuild_model_config::templates::models::DeferredSegment;
 
 use crate::bindings::_helpers::authored_values::project_vars::render_project_var_text;
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::model_config::typed_config::{config_value, model_values};
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -18,6 +19,9 @@ use crate::bindings::_helpers::records::fields::mapping_values;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 
 const PRESERVE_TARGET_VALUE: &str = "preserve";
+const MIGRATE_FROM_KEY: &str = "migrate_from";
+/// `database.schema.name`.
+const QUALIFIED_RELATION_MAX_PARTS: usize = 3;
 /// `sorted(DEFERRED_TARGET_CONTEXT_KEYS)`.
 const DEFERRED_TARGET_CONTEXT_KEYS: [&str; 2] = ["database", "schema"];
 
@@ -290,6 +294,145 @@ fn deferred_relations<'py>(
     Ok(relations_by_name)
 }
 
+/// The relation in `relations` named `name`, ignoring case.
+fn relation_named<'py>(
+    relations: &Bound<'py, PyDict>,
+    name: &str,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    if let Some(relation) = relations.get_item(name)? {
+        return Ok(Some(relation));
+    }
+    let wanted: String = name.to_lowercase();
+    for (key, relation) in relations.iter() {
+        if key.extract::<String>()?.to_lowercase() == wanted {
+            return Ok(Some(relation));
+        }
+    }
+    Ok(None)
+}
+
+/// A model's declared `migrate_from`, split into its dotted parts.
+fn migration_origin_parts(model: &Bound<'_, PyAny>) -> PyResult<Option<Vec<String>>> {
+    let py: Python<'_> = model.py();
+    let origin: Bound<'_, PyAny> = config_value(py, &model_values(model)?, MIGRATE_FROM_KEY)?;
+    if !origin.is_instance_of::<PyString>() {
+        return Ok(None);
+    }
+    let raw: String = origin.extract()?;
+    let parts: Vec<String> = raw
+        .split('.')
+        .map(|part| part.trim().trim_matches(['"', '`']).to_owned())
+        .collect();
+    if parts.is_empty()
+        || parts.len() > QUALIFIED_RELATION_MAX_PARTS
+        || parts.iter().any(String::is_empty)
+    {
+        return Ok(None);
+    }
+    Ok(Some(parts))
+}
+
+/// Point models the deferred target lacks under their current name at their `migrate_from` relation.
+pub(crate) fn defer_to_migration_origins<'py>(
+    (project, adapter, connection): (&Bound<'py, PyAny>, &Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    locations: &Bound<'py, PyDict>,
+    relations: &Bound<'py, PyDict>,
+) -> PyResult<()> {
+    let py: Python<'py> = project.py();
+    let mut pending: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>, Vec<String>)> = Vec::new();
+    for model in native_field(project, "models")?.try_iter()? {
+        let model: Bound<'py, PyAny> = model?;
+        let name: Bound<'py, PyAny> = native_field(&model, "name")?;
+        let Some(location) = locations.get_item(&name)? else {
+            continue;
+        };
+        let relation_name: String = native_field(&location, "name")?.extract()?;
+        if relation_named(relations, &relation_name)?.is_some() {
+            continue;
+        }
+        if let Some(parts) = migration_origin_parts(&model)? {
+            pending.push((name, location, parts));
+        }
+    }
+    let mut listed: Vec<(Option<String>, String, Bound<'py, PyDict>)> = Vec::new();
+    for (name, location, parts) in pending {
+        let origin: Option<Bound<'py, PyAny>> = if parts.len() == 1 {
+            relation_named(relations, &parts[0])?
+        } else {
+            let database: Option<String> = if parts.len() == QUALIFIED_RELATION_MAX_PARTS {
+                Some(parts[0].clone())
+            } else {
+                native_field(&location, "database")?.extract()?
+            };
+            let schema: String = parts[parts.len() - 2].clone();
+            let index: usize =
+                match listed
+                    .iter()
+                    .position(|(listed_database, listed_schema, _)| {
+                        *listed_database == database && listed_schema.eq_ignore_ascii_case(&schema)
+                    }) {
+                    Some(index) => index,
+                    None => {
+                        let found: Bound<'py, PyDict> = PyDict::new(py);
+                        for relation in call_with(
+                            &native_field(adapter, "list_relations")?,
+                            &[
+                                ("connection", connection.clone()),
+                                ("database", database.clone().into_pyobject(py)?.into_any()),
+                                ("schemas", PyTuple::new(py, [schema.clone()])?.into_any()),
+                            ],
+                        )?
+                        .try_iter()?
+                        {
+                            let relation: Bound<'py, PyAny> = relation?;
+                            found.set_item(native_field(&relation, "name")?, relation)?;
+                        }
+                        listed.push((database, schema, found));
+                        listed.len() - 1
+                    }
+                };
+            relation_named(&listed[index].2, &parts[parts.len() - 1])?
+        };
+        let Some(origin) = origin else {
+            continue;
+        };
+        let mut database: Bound<'py, PyAny> = native_field(&origin, "database")?;
+        if database.is_none() {
+            database = native_field(&location, "database")?;
+        }
+        let schema: Bound<'py, PyAny> = native_field(&origin, "schema")?;
+        let relation_name: Bound<'py, PyAny> = native_field(&origin, "name")?;
+        let qualified_name: Bound<'py, PyAny> = call_with(
+            &native_field(adapter, "render_qualified_name")?,
+            &[
+                ("database", database.clone()),
+                ("schema", schema.clone()),
+                ("name", relation_name.clone()),
+            ],
+        )?;
+        locations.set_item(
+            &name,
+            new_record_with(
+                py,
+                RecordId::CompiledRelationLocation,
+                &[
+                    ("database", database),
+                    ("schema", schema),
+                    ("name", relation_name),
+                    ("qualified_name", qualified_name),
+                    ("logical_schema", native_field(&location, "logical_schema")?),
+                    (
+                        "logical_database",
+                        native_field(&location, "logical_database")?,
+                    ),
+                ],
+            )?,
+        )?;
+        relations.set_item(&name, origin)?;
+    }
+    Ok(())
+}
+
 /// Resolve native target locations and warehouse relations for model deferral.
 #[pyfunction]
 #[pyo3(signature = (**options))]
@@ -333,11 +476,10 @@ pub(crate) fn resolve_model_deferral_inputs<'py>(
             render_qualified_name: native_field(&adapter, "render_qualified_name")?,
         },
     )?;
-    let relations: Bound<'py, PyDict> = deferred_relations(
-        &adapter,
-        &arguments.value("connection")?,
-        locations.as_any(),
-    )?;
+    let connection: Bound<'py, PyAny> = arguments.value("connection")?;
+    let relations: Bound<'py, PyDict> =
+        deferred_relations(&adapter, &connection, locations.as_any())?;
+    defer_to_migration_origins((&project, &adapter, &connection), &locations, &relations)?;
     new_record_with(
         py,
         RecordId::DeferralInputs,

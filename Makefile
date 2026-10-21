@@ -93,6 +93,7 @@ E2E_DUCKDB_BUILD_CORE_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_python_hooks.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_python_node_selection.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_python_source_deferral.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_defer_migration_origin.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_sql_hook_reads.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_python_node_identity.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_sql_hook_identity.py \
