@@ -101,10 +101,21 @@ compiles in full.
 
 ## The project and how to reproduce it
 
-The project comes from the dense generator SQLBuild's compile CI uses: 10,000 models (31 columns on
-average), 2,400 sources, 500 seeds, 250 SQL functions, 120 macros and 10,000 SQL tests. The dbt
-project has the same names, folders, SQL and DAG. Each edit changes one constant in a model's SQL;
-the 1% edit changes 100 models spread across the project. Rounds alternate the variant order.
+The project comes from the dense generator SQLBuild's compile CI uses. The dbt project has the same
+names, folders, SQL and DAG.
+
+| What | Count | In dbt |
+|---|---:|---|
+| Models with typed columns (8–472 columns, about 31 on average) | 10,000 | models with enforced contracts |
+| Sources | 2,400 | sources |
+| Seeds | 500 | seeds |
+| SQL functions | 250 | functions |
+| Macros | 120 | Jinja macros producing the same SQL |
+| `not_null` audits | 17,000 | `not_null` data tests |
+| SQL tests with fixture rows | 10,000 | unit tests |
+
+Each edit changes one constant in a model's SQL; the 1% edit changes 100 models spread across the
+project. Rounds alternate the variant order.
 
 The harness and the exact command for every variant are in
 [`benchmarks/dbt-compare/`](https://github.com/chio-labs/sqlbuild/tree/main/benchmarks/dbt-compare).
