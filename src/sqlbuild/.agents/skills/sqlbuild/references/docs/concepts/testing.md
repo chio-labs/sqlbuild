@@ -919,7 +919,10 @@ SQLBuild drops after the test, including after a failure or timeout. PostgreSQL 
 one transaction with an `ON COMMIT DROP` temporary table that the transaction's end removes, so the
 reads stay on one server session behind a transaction-mode connection pooler. Snowflake reads the
 first query's persisted result through `RESULT_SCAN`. If a stored output can no longer be read,
-the test falls back to the inline comparison. Other adapters compare the inline query as before. `target/run/tests/` keeps the self-contained inline comparison query for each test.
+the test falls back to the inline comparison. If storing an output fails, SQLBuild runs the output
+query on its own: when that query fails too, for example because a fixture value cannot be
+converted in a column the expected rows leave out, the test errors with the warehouse's message
+instead of passing on a comparison of the other columns; otherwise it compares inline. Other adapters compare the inline query as before. `target/run/tests/` keeps the self-contained inline comparison query for each test.
 
 ## Skipping SQL analysis
 

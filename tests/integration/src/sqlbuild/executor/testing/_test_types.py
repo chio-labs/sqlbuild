@@ -64,3 +64,15 @@ class SqlTestBuildParityTestCase:
     model_name: str
     expected_whole_body_rendered: bool
     expected_verbatim_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class OutputStorageTestCase:
+    """A tested output that cannot be stored, and whether the test still runs inline."""
+
+    description: str
+    chain_steps: tuple[tuple[str, str, str | None], ...]
+    storage_error: str
+    output_fails: bool
+    expected_outcome: SqlTestOutcome
+    expected_error_fragment: str
