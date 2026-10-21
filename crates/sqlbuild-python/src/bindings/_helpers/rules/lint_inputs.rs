@@ -7,7 +7,7 @@ use std::sync::Arc;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 
 use crate::bindings::_helpers::compiled_views::model_input_view::{
-    ExpansionRecord, ModelInputRecord, NativeModelInput,
+    ModelInputRecord, NativeModelInput,
 };
 use crate::bindings::_helpers::compiled_views::project_view::NativeProjectView;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -15,12 +15,13 @@ use crate::bindings::_helpers::render::macro_call_rows::SpanRow;
 use crate::bindings::_helpers::rules::lint_pipeline::{
     CompiledExpansion, CompiledSource, span_pass,
 };
+use sqlbuild_project::models::ExpansionRecord;
 
 const FILE_PATH_ATTRIBUTE: &str = "file_path";
 
 /// The model file path of a native input record.
 fn record_path(record: &ModelInputRecord) -> PathBuf {
-    record.model_file.get().file_path_buf()
+    record.host.model_file.get().file_path_buf()
 }
 
 /// The record's shared texts with the given passes, read only when their file is linted.

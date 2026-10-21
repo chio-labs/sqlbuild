@@ -6,19 +6,22 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{FromPyObject, IntoPyObjectExt, pyclass, pymethods};
 
+use sqlbuild_project::models as project_models;
+use sqlbuild_project::types::{NamedTypeRow, ObjectKeyRow};
+
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
-use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::compiled_views::compiled_model_view::{
-    DestinationFact, defaulted_destination, object_key, relation_location,
+    defaulted_destination, object_key, relation_location,
 };
 use crate::bindings::_helpers::compiled_views::model_input_view::{
     InputViewClasses, reference_tuple, view_classes,
 };
+use crate::bindings::_helpers::compiled_views::project_host::PyProjectHost;
 use crate::bindings::_helpers::graph::project_graph::ResourceRow;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use sqlbuild_project::models::DestinationFact;
+use sqlbuild_project::models::ReferenceRow;
 
-const TABLE_FUNCTION_TYPE: &str = "table_fn";
-const SCALAR_FUNCTION_TYPE: &str = "udf";
 const SQL_LANGUAGE: &str = "sql";
 const PYTHON_LANGUAGE: &str = "python";
 const FUNCTION_FILE_ATTRIBUTE: &str = "relative_path";
@@ -35,9 +38,6 @@ pub(crate) struct FunctionClasses<'py> {
     function_language: Bound<'py, PyAny>,
 }
 
-/// `(name, type)` of an argument or return column, its types template-expanded.
-pub(crate) type NamedTypeRow = (String, String);
-
 positional_record! {
     into;
     /// `(node type, name, tags, references as (kind, name, package))`.
@@ -49,108 +49,74 @@ positional_record! {
     }
 }
 
-/// `(kind, name)` of a compiled object key.
-pub(crate) type ObjectKeyRow = (String, String);
-
-/// A Python function's runtime, entry point and packages.
-pub(crate) struct PythonRuntime {
-    pub(crate) runtime_version: Option<String>,
-    pub(crate) entry_point: Option<String>,
-    pub(crate) packages: Vec<String>,
-}
-
 /// What the function loop attached for one SQL or Python function.
-pub(crate) struct AttachedFunction {
+pub(crate) type AttachedFunction = project_models::AttachedFunction<PyProjectHost>;
+
+/// One attached function held by the compiled project.
+pub(crate) type FunctionRecord = project_models::FunctionRecord<PyProjectHost>;
+
+/// An attached function's user values.
+pub(crate) struct FunctionHandles {
     /// The discovered function file.
     pub(crate) function_file: Py<PyAny>,
-    /// The file's relative path, as messages name it.
-    pub(crate) relative_path: String,
-    pub(crate) name: String,
-    pub(crate) arguments: Vec<NamedTypeRow>,
-    pub(crate) returns: String,
-    pub(crate) return_columns: Vec<NamedTypeRow>,
-    /// The expanded SQL body, or the Python function's source.
-    pub(crate) body: String,
-    pub(crate) references: Vec<ReferenceRow>,
-    /// The physical and logical destination.
-    pub(crate) destination: DestinationFact,
-    /// The destination the function's fingerprint reads.
-    pub(crate) fingerprint_destination: DestinationFact,
-    /// `None` for a SQL function.
-    pub(crate) python: Option<PythonRuntime>,
-    pub(crate) tags: Vec<String>,
-    pub(crate) description: Option<String>,
     /// Usage records, the identities the scope index is built from.
     pub(crate) usages: Py<PyTuple>,
 }
 
-impl AttachedFunction {
-    /// `function_node_type`: a table function when it declares return columns.
-    pub(crate) fn node_type(&self) -> &'static str {
-        if self.return_columns.is_empty() {
-            SCALAR_FUNCTION_TYPE
-        } else {
-            TABLE_FUNCTION_TYPE
-        }
-    }
-}
-
-/// One attached function held by the compiled project.
-pub(crate) struct FunctionRecord {
-    pub(crate) attached: AttachedFunction,
-    /// The dependency keys native project assembly resolved, once it ran.
-    deps: Option<Vec<ObjectKeyRow>>,
+/// A function record's Python projections, each built once on first access.
+pub(crate) struct FunctionProjections {
     arguments: PyOnceLock<Py<PyTuple>>,
     return_columns: PyOnceLock<Py<PyTuple>>,
-    references: PyOnceLock<Py<PyTuple>>,
-    key: PyOnceLock<Py<PyAny>>,
+    pub(crate) references: PyOnceLock<Py<PyTuple>>,
+    pub(crate) key: PyOnceLock<Py<PyAny>>,
 }
 
-impl FunctionRecord {
-    pub(crate) fn new(attached: AttachedFunction) -> Self {
-        Self {
-            attached,
-            deps: None,
+/// The function record of an attached function, before assembly resolves its dependencies.
+pub(crate) fn function_record(attached: AttachedFunction) -> FunctionRecord {
+    FunctionRecord {
+        attached,
+        deps: None,
+        host: FunctionProjections {
             arguments: PyOnceLock::new(),
             return_columns: PyOnceLock::new(),
             references: PyOnceLock::new(),
             key: PyOnceLock::new(),
-        }
+        },
     }
+}
 
-    /// Keep the dependency keys native project assembly resolved for the function.
-    pub(crate) fn set_deps(&mut self, deps: Vec<ObjectKeyRow>) {
-        self.deps = Some(deps);
-    }
+/// `rows` as `class` records, built once into `cache`.
+fn named_types(
+    rows: &[NamedTypeRow],
+    class: &Bound<'_, PyAny>,
+    cache: &PyOnceLock<Py<PyTuple>>,
+) -> PyResult<Py<PyTuple>> {
+    let py: Python<'_> = class.py();
+    cache
+        .get_or_try_init(py, || {
+            let mut items: Vec<Bound<'_, PyAny>> = Vec::with_capacity(rows.len());
+            for (name, type_text) in rows {
+                let fields: Bound<'_, PyDict> = PyDict::new(py);
+                fields.set_item("name", name)?;
+                fields.set_item("type", type_text)?;
+                items.push(class.call((), Some(&fields))?);
+            }
+            Ok::<_, pyo3::PyErr>(PyTuple::new(py, items)?.unbind())
+        })
+        .map(|items| items.clone_ref(py))
+}
 
-    fn named_types(
-        rows: &[NamedTypeRow],
-        class: &Bound<'_, PyAny>,
-        cache: &PyOnceLock<Py<PyTuple>>,
-    ) -> PyResult<Py<PyTuple>> {
-        let py: Python<'_> = class.py();
-        cache
-            .get_or_try_init(py, || {
-                let mut items: Vec<Bound<'_, PyAny>> = Vec::with_capacity(rows.len());
-                for (name, type_text) in rows {
-                    let fields: Bound<'_, PyDict> = PyDict::new(py);
-                    fields.set_item("name", name)?;
-                    fields.set_item("type", type_text)?;
-                    items.push(class.call((), Some(&fields))?);
-                }
-                Ok::<_, pyo3::PyErr>(PyTuple::new(py, items)?.unbind())
-            })
-            .map(|items| items.clone_ref(py))
-    }
-
-    fn language<'py>(&self, classes: &FunctionClasses<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let value: &str = if self.attached.python.is_some() {
-            PYTHON_LANGUAGE
-        } else {
-            SQL_LANGUAGE
-        };
-        classes.function_language.call1((value,))
-    }
+/// The function's `FunctionLanguage` member.
+fn language<'py>(
+    function: &FunctionRecord,
+    classes: &FunctionClasses<'py>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let value: &str = if function.attached.python.is_some() {
+        PYTHON_LANGUAGE
+    } else {
+        SQL_LANGUAGE
+    };
+    classes.function_language.call1((value,))
 }
 
 fn read_function<'py, T>(
@@ -197,10 +163,10 @@ macro_rules! function_getters {
             pub(crate) fn arguments(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
                 let classes: FunctionClasses<'_> = function_classes(&self.owner, py)?;
                 read_function(&self.owner, self.index, py, |function, _| {
-                    FunctionRecord::named_types(
+                    named_types(
                         &function.attached.arguments,
                         &classes.function_argument,
-                        &function.arguments,
+                        &function.host.arguments,
                     )
                 })
             }
@@ -223,10 +189,10 @@ macro_rules! function_getters {
             pub(crate) fn return_columns(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
                 let classes: FunctionClasses<'_> = function_classes(&self.owner, py)?;
                 read_function(&self.owner, self.index, py, |function, _| {
-                    FunctionRecord::named_types(
+                    named_types(
                         &function.attached.return_columns,
                         &classes.function_return_column,
-                        &function.return_columns,
+                        &function.host.return_columns,
                     )
                 })
             }
@@ -238,7 +204,7 @@ macro_rules! function_getters {
                     reference_tuple(
                         &classes,
                         &function.attached.references,
-                        &function.references,
+                        &function.host.references,
                     )
                 })
             }
@@ -247,7 +213,7 @@ macro_rules! function_getters {
             pub(crate) fn language<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
                 let classes: FunctionClasses<'py> = function_classes(&self.owner, py)?;
                 read_function(&self.owner, self.index, py, |function, _| {
-                    function.language(&classes)
+                    language(function, &classes)
                 })
             }
 
@@ -319,7 +285,7 @@ function_getters!(NativeFunctionInput, {
     #[getter]
     pub(crate) fn function_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_function(&self.owner, self.index, py, |function, py| {
-            Ok(function.attached.function_file.clone_ref(py))
+            Ok(function.attached.host.function_file.clone_ref(py))
         })
     }
 
@@ -390,7 +356,7 @@ function_getters!(NativeFunctionInput, {
     #[getter]
     pub(crate) fn declaration_usages(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
         read_function(&self.owner, self.index, py, |function, py| {
-            Ok(function.attached.usages.clone_ref(py))
+            Ok(function.attached.host.usages.clone_ref(py))
         })
     }
 
@@ -490,6 +456,7 @@ function_getters!(NativeCompiledFunction, {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         read_function(&self.owner, self.index, py, |function, py| {
             function
+                .host
                 .key
                 .get_or_try_init(py, || {
                     object_key(
@@ -523,7 +490,7 @@ function_getters!(NativeCompiledFunction, {
     pub(crate) fn relative_path(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_function(&self.owner, self.index, py, |function, py| {
             Ok(native_field(
-                function.attached.function_file.bind(py),
+                function.attached.host.function_file.bind(py),
                 FUNCTION_FILE_ATTRIBUTE,
             )?
             .unbind())
@@ -534,7 +501,7 @@ function_getters!(NativeCompiledFunction, {
     pub(crate) fn source_file_path(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_function(&self.owner, self.index, py, |function, py| {
             Ok(native_field(
-                function.attached.function_file.bind(py),
+                function.attached.host.function_file.bind(py),
                 FILE_PATH_ATTRIBUTE,
             )?
             .unbind())

@@ -200,7 +200,7 @@ impl<W: Write> PayloadWriter<W> {
         let mut model: Map<String, Value> = Map::new();
         let (authored, query): (Arc<str>, Arc<str>) = view.read(py, |record, _| {
             Ok((
-                record.model_file.get().contents_text().clone(),
+                record.host.model_file.get().contents_text().clone(),
                 record.query_sql.clone(),
             ))
         })?;
@@ -266,8 +266,8 @@ fn native_declared(py: Python<'_>, view: &NativeCompiledModel) -> PyResult<Decla
         let Some(schema) = &record.schema else {
             return Ok(Declared::Absent);
         };
-        let mut columns: Vec<PayloadColumn> = Vec::with_capacity(schema.columns.specs.len());
-        for column in &schema.columns.specs {
+        let mut columns: Vec<PayloadColumn> = Vec::with_capacity(schema.host.columns.specs.len());
+        for column in &schema.host.columns.specs {
             let Some(spec) = column.native_spec() else {
                 return Ok(Declared::Python);
             };

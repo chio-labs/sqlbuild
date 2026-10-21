@@ -7,13 +7,17 @@ use pyo3::types::PyTuple;
 use pyo3::{IntoPyObjectExt, pyclass, pymethods};
 use sqlbuild_attachments::seeds::main::pair_seed_declarations::pair_seed_declarations;
 
+use sqlbuild_project::models as project_models;
+
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::compiled_views::compiled_model_view::{
-    DestinationFact, defaulted_destination, object_key, relation_location,
+    defaulted_destination, object_key, relation_location,
 };
 use crate::bindings::_helpers::compiled_views::model_input_view::{InputViewClasses, view_classes};
+use crate::bindings::_helpers::compiled_views::project_host::PyProjectHost;
 use crate::bindings::_helpers::graph::project_graph::ResourceRow;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use sqlbuild_project::models::DestinationFact;
 
 const SEED_RESOURCE: &str = "seed";
 const TAGS_ATTRIBUTE: &str = "tags";
@@ -42,17 +46,26 @@ pub(crate) struct SeedParts<'a> {
 }
 
 /// One seed CSV paired with its declaration; the discovered objects are discovery's.
-pub(crate) struct SeedRecord {
+pub(crate) type SeedRecord = project_models::SeedRecord<PyProjectHost>;
+
+/// A seed's discovered objects and the key its views build.
+pub(crate) struct SeedHandles {
     /// The discovered CSV file.
     seed_file: Py<PyAny>,
     /// The discovered declaration, whose spec carries user-authored column metadata.
     schema_entry: Py<PyAny>,
     /// The schema file declaring the seed.
     schema_file: Py<PyAny>,
-    name: String,
-    /// The destination native project assembly resolved, once it ran.
-    destination: Option<DestinationFact>,
     key: PyOnceLock<Py<PyAny>>,
+}
+
+/// What a seed record reads and keeps through its Python values.
+pub(crate) trait SeedViews {
+    /// The seed's name, CSV file, declaration and declaring schema file.
+    fn parts(&self) -> SeedParts<'_>;
+
+    /// Keep the destination native project assembly resolved for the seed.
+    fn set_namespace(&mut self, namespace: SeedNamespace);
 }
 
 /// Pair each declaration with the CSV file of its name, raising for the first without one.
@@ -96,30 +109,30 @@ pub(crate) fn paired_seeds(
         declarations.into_iter().zip(names).zip(pairs)
     {
         seeds.push(SeedRecord {
-            seed_file: seed_files[file_index].clone_ref(py),
-            schema_entry,
-            schema_file,
             name,
             destination: None,
-            key: PyOnceLock::new(),
+            host: SeedHandles {
+                seed_file: seed_files[file_index].clone_ref(py),
+                schema_entry,
+                schema_file,
+                key: PyOnceLock::new(),
+            },
         });
     }
     Ok(seeds)
 }
 
-impl SeedRecord {
-    /// The seed's name, CSV file, declaration and declaring schema file.
-    pub(crate) fn parts(&self) -> SeedParts<'_> {
+impl SeedViews for SeedRecord {
+    fn parts(&self) -> SeedParts<'_> {
         SeedParts {
             name: &self.name,
-            seed_file: &self.seed_file,
-            schema_entry: &self.schema_entry,
-            schema_file: &self.schema_file,
+            seed_file: &self.host.seed_file,
+            schema_entry: &self.host.schema_entry,
+            schema_file: &self.host.schema_file,
         }
     }
 
-    /// Keep the destination native project assembly resolved for the seed.
-    pub(crate) fn set_namespace(&mut self, namespace: SeedNamespace) {
+    fn set_namespace(&mut self, namespace: SeedNamespace) {
         let SeedNamespace {
             database,
             schema,
@@ -169,21 +182,21 @@ impl NativeSeedInput {
     #[getter]
     pub(crate) fn seed_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_seed(&self.owner, self.index, py, |seed, py| {
-            Ok(seed.seed_file.clone_ref(py))
+            Ok(seed.host.seed_file.clone_ref(py))
         })
     }
 
     #[getter]
     pub(crate) fn schema_entry(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_seed(&self.owner, self.index, py, |seed, py| {
-            Ok(seed.schema_entry.clone_ref(py))
+            Ok(seed.host.schema_entry.clone_ref(py))
         })
     }
 
     #[getter]
     pub(crate) fn schema_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_seed(&self.owner, self.index, py, |seed, py| {
-            Ok(seed.schema_file.clone_ref(py))
+            Ok(seed.host.schema_file.clone_ref(py))
         })
     }
 }
@@ -212,7 +225,7 @@ impl NativeCompiledSeed {
     pub(crate) fn graph_row(&self, py: Python<'_>) -> PyResult<ResourceRow> {
         read_seed(&self.owner, self.index, py, |seed, py| {
             let mut tags: Vec<String> = Vec::new();
-            for tag in native_field(seed.schema_entry.bind(py), TAGS_ATTRIBUTE)?.try_iter()? {
+            for tag in native_field(seed.host.schema_entry.bind(py), TAGS_ATTRIBUTE)?.try_iter()? {
                 tags.push(tag?.str()?.extract()?);
             }
             Ok(ResourceRow {
@@ -243,7 +256,8 @@ impl NativeCompiledSeed {
     pub(crate) fn key(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         read_seed(&self.owner, self.index, py, |seed, py| {
-            seed.key
+            seed.host
+                .key
                 .get_or_try_init(py, || {
                     object_key(&classes.compiled, SEED_RESOURCE, &seed.name)
                 })
@@ -264,21 +278,21 @@ impl NativeCompiledSeed {
     #[getter]
     pub(crate) fn seed_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_seed(&self.owner, self.index, py, |seed, py| {
-            Ok(seed.seed_file.clone_ref(py))
+            Ok(seed.host.seed_file.clone_ref(py))
         })
     }
 
     #[getter]
     pub(crate) fn schema_entry(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_seed(&self.owner, self.index, py, |seed, py| {
-            Ok(seed.schema_entry.clone_ref(py))
+            Ok(seed.host.schema_entry.clone_ref(py))
         })
     }
 
     #[getter]
     pub(crate) fn schema_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_seed(&self.owner, self.index, py, |seed, py| {
-            Ok(seed.schema_file.clone_ref(py))
+            Ok(seed.host.schema_file.clone_ref(py))
         })
     }
 

@@ -19,7 +19,6 @@ use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_
 use sqlbuild_sqltext::sql_references::models::ReferenceExtraction;
 
 use crate::bindings::_helpers::attachments::argument_values::argument_pairs;
-use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::input_loops::model_loop::{
     LoopContext, NativeModelLoop, VisibleDeclarations, compile_error, record_reads,
     validation_outcome,
@@ -43,6 +42,7 @@ use crate::bindings::_helpers::render::declaration_expansion::{
 };
 use crate::bindings::_helpers::sqltext::declaration_references::declaration_scan;
 use crate::bindings::_helpers::sqltext::static_sql::{InterpolationSources, interpolated};
+use sqlbuild_project::models::ReferenceRow;
 
 const REFERENCES_METHOD: &str = "references";
 const STATEMENT_ATTRIBUTE: &str = "statement";

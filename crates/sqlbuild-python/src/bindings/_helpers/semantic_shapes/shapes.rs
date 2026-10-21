@@ -11,9 +11,9 @@ use crate::bindings::_helpers::analysis::binding_catalog::{
 use crate::bindings::_helpers::analysis::normalization::normalize_analysis_sql;
 use crate::bindings::_helpers::analysis_session::stage_functions::infer_native_expression_source_shapes;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
+use crate::bindings::_helpers::compiled_project::rows::ReferenceTuple;
 use crate::bindings::_helpers::compiled_views::compiled_model_view::{
-    DeclaredRow, InferredRow, NativeCompiledModel,
+    DeclaredRow, NativeCompiledModel,
 };
 use crate::bindings::_helpers::compiled_views::model_reads::{
     declared_rows, dynamic_columns_declared, inferred_rows, star_flags, unchecked_columns,
@@ -24,6 +24,7 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
+use sqlbuild_project::types::InferredRow;
 
 const UNKNOWN: &str = "UNKNOWN";
 const GENERIC_DIALECT: &str = "generic";
@@ -70,11 +71,11 @@ fn relation_names(rows: Vec<(String, String)>) -> Vec<String> {
 /// The relations a model's reference rows bind; a native model answers from its record.
 fn model_relation_names(model: &Bound<'_, PyAny>) -> PyResult<(Vec<String>, bool)> {
     if let Ok(view) = model.downcast::<NativeCompiledModel>() {
-        let rows: Vec<ReferenceRow> = view.get().reference_rows(model.py())?;
+        let rows: Vec<ReferenceTuple> = view.get().reference_rows(model.py())?;
         let referenced: bool = !rows.is_empty();
         let names: Vec<String> = relation_names(
             rows.into_iter()
-                .map(|ReferenceRow { kind, name, .. }| (kind, name))
+                .map(|ReferenceTuple { kind, name, .. }| (kind, name))
                 .collect(),
         );
         return Ok((names, referenced));

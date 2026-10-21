@@ -15,9 +15,7 @@ use sqlbuild_analysis::semantic_checks::models::{
 use sqlbuild_analysis::semantic_validation::models as validation;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
-use crate::bindings::_helpers::compiled_views::compiled_model_view::{
-    ModelMetadataTexts, NativeCompiledModel,
-};
+use crate::bindings::_helpers::compiled_views::compiled_model_view::NativeCompiledModel;
 use crate::bindings::_helpers::compiled_views::model_reads::binding_validated;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
@@ -31,6 +29,7 @@ use crate::bindings::_helpers::semantic_checks::stage_objects::StageClasses;
 use crate::bindings::_helpers::semantic_checks::type_recovery::items;
 use crate::bindings::_helpers::semantic_shapes::shapes::project_shapes;
 use crate::bindings::types::CompilerDetach;
+use sqlbuild_project::models::ModelMetadataTexts;
 
 /// `SqlReferenceKind.UDF` and `SqlReferenceKind.TABLE_FUNCTION` values.
 const FUNCTION_REFERENCE_KINDS: [&str; 2] = ["udf", "table_fn"];

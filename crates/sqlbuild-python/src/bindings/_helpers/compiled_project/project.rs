@@ -10,14 +10,14 @@ use pyo3::prelude::{
 use pyo3::types::{PyDict, PyDictMethods, PyString};
 use pyo3::{FromPyObject, pyclass, pymethods};
 use serde_json::Value;
-use sqlbuild_analysis::compiled_project::main::model_facts::model_facts as project_model;
 use sqlbuild_analysis::compiled_project::main::project_models::project_models;
-use sqlbuild_analysis::compiled_project::main::record_model::record_model;
 use sqlbuild_analysis::compiled_project::main::record_model_analysis::record_model_analysis;
 use sqlbuild_analysis::compiled_project::models::{
     CompiledModelFacts, CompiledProjectFacts, DeclarationFact, DynamicProofFact, ModelAnalysisFact,
     ModelConfigFacts, ModelReferenceFact, ModelSchemaFact,
 };
+
+use sqlbuild_project::models::CompiledProject;
 
 use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
 use crate::bindings::_helpers::compiled_project::attachment_inputs::AttachedSqlTests;
@@ -35,26 +35,30 @@ use crate::bindings::_helpers::compiled_project::attachment_inputs::TestFileRow;
 use crate::bindings::_helpers::compiled_project::attachment_inputs::resource_attachment;
 use crate::bindings::_helpers::compiled_project::values::{object_value, plain_value};
 use crate::bindings::_helpers::compiled_views::audit_views::{
-    AttachedAudit, AuditRecord, NativeAuditInput, NativeCompiledAudit,
+    AttachedAudit, AuditRecord, NativeAuditInput, NativeCompiledAudit, audit_record,
 };
 use crate::bindings::_helpers::compiled_views::compiled_model_view::{
-    CompiledViewClasses, InferredRow, NativeCompiledModel,
+    CompiledViewClasses, NativeCompiledModel,
 };
 use crate::bindings::_helpers::compiled_views::function_views::{
-    AttachedFunction, FunctionRecord, NativeCompiledFunction, NativeFunctionInput, ObjectKeyRow,
+    AttachedFunction, FunctionRecord, NativeCompiledFunction, NativeFunctionInput, function_record,
 };
 use crate::bindings::_helpers::compiled_views::inputs_view::NativeInputsView;
 use crate::bindings::_helpers::compiled_views::model_input_view::{
     ModelInputRecord, NativeModelInput,
 };
+use crate::bindings::_helpers::compiled_views::project_host::PyProjectHost;
 use crate::bindings::_helpers::compiled_views::project_view::NativeProjectView;
 use crate::bindings::_helpers::compiled_views::seed_views::{
-    NativeCompiledSeed, NativeSeedInput, SeedNamespace, SeedRecord, paired_seeds,
+    NativeCompiledSeed, NativeSeedInput, SeedNamespace, SeedRecord, SeedViews, paired_seeds,
 };
 use crate::bindings::_helpers::compiled_views::source_views::{
-    NativeCompiledSource, NativeSourceInput, SourceNamespace, SourceRecord,
+    NativeCompiledSource, NativeSourceInput, SourceRecord,
 };
 use crate::bindings::_helpers::render::declaration_values::ConstantRendering;
+use sqlbuild_project::types::InferredRow;
+use sqlbuild_project::types::ObjectKeyRow;
+use sqlbuild_project::types::SourceNamespace;
 
 pub(crate) const CONTRACT_KEY: &str = "contract";
 const INPUT_CLASSES_UNSET: &str = "no model loop recorded inputs into this project";
@@ -125,27 +129,15 @@ pub(crate) struct DeclarationPy<'py>(
     Option<String>,
 );
 
-/// One compile's project facts, recorded by the stages that produce them.
+/// One compile's project, recorded by the stages that produce it, with its Python projections.
 #[pyclass(module = "sqlbuild._native")]
 #[derive(Default)]
 pub(crate) struct NativeCompiledProject {
-    facts: CompiledProjectFacts,
-    /// What the model loop finished for each model beyond its facts, in loop order.
-    inputs: Vec<ModelInputRecord>,
+    project: CompiledProject<PyProjectHost>,
     /// The Python classes model input views project their attributes with.
     input_classes: Option<Py<PyAny>>,
     /// Shared immutable column projections, allocated only when Python consumers request them.
     inferred_column_projections: Mutex<HashMap<InferredRow, Py<PyAny>>>,
-    /// Lineage graphs its project views built.
-    graph_builds: usize,
-    /// Each attached seed, in attachment order.
-    seeds: Vec<SeedRecord>,
-    /// Each attached source, in attachment order.
-    sources: Vec<SourceRecord>,
-    /// Each attached SQL, then Python, function in attachment order.
-    functions: Vec<FunctionRecord>,
-    /// Each singular, then model-, source- and seed-attached, audit in attachment order.
-    audits: Vec<AuditRecord>,
     /// The model loop and its constant rendering, which attach the project's other resources.
     attachment: Option<(Py<PyAny>, Py<ConstantRendering>)>,
 }
@@ -153,26 +145,25 @@ pub(crate) struct NativeCompiledProject {
 impl NativeCompiledProject {
     /// The facts recorded so far, for native consumers such as the rules request.
     pub(crate) fn facts(&self) -> &CompiledProjectFacts {
-        &self.facts
+        &self.project.facts
     }
 
     /// A project holding only `facts`, which analyses can be recorded into apart from the compile's.
     pub(crate) fn with_facts(facts: CompiledProjectFacts) -> Self {
         Self {
-            facts,
+            project: CompiledProject::with_facts(facts),
             ..Self::default()
         }
     }
 
     /// Retain facts a producer finished natively.
     pub(crate) fn retain(&mut self, facts: CompiledModelFacts) {
-        record_model(&mut self.facts, facts);
+        self.project.retain(facts);
     }
 
     /// Retain a finished model's input record; return its index for the model's view.
     pub(crate) fn retain_input(&mut self, record: ModelInputRecord) -> usize {
-        self.inputs.push(record);
-        self.inputs.len() - 1
+        self.project.retain_input(record)
     }
 
     /// Keep the classes model input views project their attributes with.
@@ -182,7 +173,7 @@ impl NativeCompiledProject {
 
     /// Count one lineage graph a project view built.
     pub(crate) fn record_graph_build(&mut self) {
-        self.graph_builds += 1;
+        self.project.graph_builds += 1;
     }
 
     /// The kept model loop and its constant rendering.
@@ -207,65 +198,68 @@ impl NativeCompiledProject {
 
     /// Retain attached functions; return the index of the first.
     pub(crate) fn extend_functions(&mut self, attached: Vec<AttachedFunction>) -> usize {
-        let first: usize = self.functions.len();
-        self.functions
-            .extend(attached.into_iter().map(FunctionRecord::new));
+        let first: usize = self.project.functions.len();
+        self.project
+            .functions
+            .extend(attached.into_iter().map(function_record));
         first
     }
 
     /// Retain attached audits; return the index of the first.
     pub(crate) fn extend_audits(&mut self, attached: Vec<AttachedAudit>) -> usize {
-        let first: usize = self.audits.len();
-        self.audits
-            .extend(attached.into_iter().map(AuditRecord::new));
+        let first: usize = self.project.audits.len();
+        self.project
+            .audits
+            .extend(attached.into_iter().map(audit_record));
         first
     }
 
     /// Every attached audit, in attachment order.
     pub(crate) fn audits(&self) -> &[AuditRecord] {
-        &self.audits
+        self.project.audits()
     }
 
     /// Every attached function, in attachment order.
     pub(crate) fn functions(&self) -> &[FunctionRecord] {
-        &self.functions
+        self.project.functions()
     }
 
     /// Every attached source, in attachment order.
     pub(crate) fn sources(&self) -> &[SourceRecord] {
-        &self.sources
+        self.project.sources()
     }
 
     /// Keep one attached source.
     pub(crate) fn retain_source(&mut self, source: SourceRecord) {
-        self.sources.push(source);
+        self.project.sources.push(source);
     }
 
     /// Every attached seed, in attachment order.
     pub(crate) fn seeds(&self) -> &[SeedRecord] {
-        &self.seeds
+        self.project.seeds()
     }
 
     /// The schema fact recorded for an input record's model.
     pub(crate) fn input_schema_fact(&self, record: &ModelInputRecord) -> Option<&ModelSchemaFact> {
-        project_model(&self.facts, &record.name).and_then(|facts| facts.schema.as_ref())
+        self.project.input_schema_fact(record)
     }
 
     /// Every model's input record, in loop order.
     pub(crate) fn inputs(&self) -> &[ModelInputRecord] {
-        &self.inputs
+        &self.project.inputs
     }
 
     /// The input record at `index`.
     pub(crate) fn input(&self, index: usize) -> PyResult<&ModelInputRecord> {
-        self.inputs
-            .get(index)
+        self.project
+            .input(index)
             .ok_or_else(|| PyIndexError::new_err(index))
     }
 
     /// The input record at `index`, for recording what later stages finish.
     pub(crate) fn input_mut(&mut self, index: usize) -> PyResult<&mut ModelInputRecord> {
-        self.inputs
+        self.project
+            .inputs
             .get_mut(index)
             .ok_or_else(|| PyIndexError::new_err(index))
     }
@@ -349,7 +343,7 @@ impl NativeCompiledProject {
             fast_lineage_has_star,
             unchecked_output_columns: unchecked,
         };
-        record_model_analysis(&mut self.facts, name, analysis)
+        record_model_analysis(&mut self.project.facts, name, analysis)
     }
 
     /// Record each assembled native model view's final typed analysis; return how many.
@@ -365,7 +359,11 @@ impl NativeCompiledProject {
         let mut owner = slf.borrow_mut();
         let mut recorded: usize = 0;
         for (name, analysis) in facts {
-            recorded += usize::from(record_model_analysis(&mut owner.facts, &name, analysis));
+            recorded += usize::from(record_model_analysis(
+                &mut owner.project.facts,
+                &name,
+                analysis,
+            ));
         }
         Ok(recorded)
     }
@@ -395,7 +393,7 @@ impl NativeCompiledProject {
     ) -> PyResult<Vec<NativeSeedInput>> {
         let seeds: Vec<SeedRecord> = paired_seeds(declarations, &seed_files, compile_error)?;
         let count: usize = seeds.len();
-        slf.borrow_mut().seeds = seeds;
+        slf.borrow_mut().project.seeds = seeds;
         Ok((0..count)
             .map(|index| NativeSeedInput::new(slf.clone().unbind(), index))
             .collect())
@@ -404,7 +402,8 @@ impl NativeCompiledProject {
     /// Keep the destinations native project assembly resolved, in seed order.
     fn record_seed_namespaces(&mut self, namespaces: Vec<SeedNamespace>) -> PyResult<()> {
         for (index, namespace) in namespaces.into_iter().enumerate() {
-            self.seeds
+            self.project
+                .seeds
                 .get_mut(index)
                 .ok_or_else(|| PyIndexError::new_err(index))?
                 .set_namespace(namespace);
@@ -460,7 +459,8 @@ impl NativeCompiledProject {
     /// Keep the scope dependency keys native project assembly resolved, in audit order.
     fn record_audit_scope_deps(&mut self, deps: Vec<Vec<ObjectKeyRow>>) -> PyResult<()> {
         for (index, keys) in deps.into_iter().enumerate() {
-            self.audits
+            self.project
+                .audits
                 .get_mut(index)
                 .ok_or_else(|| PyIndexError::new_err(index))?
                 .set_scope_deps(keys);
@@ -470,7 +470,7 @@ impl NativeCompiledProject {
 
     /// The assembled audit at `index`.
     fn compiled_audit(slf: &Bound<'_, Self>, index: usize) -> PyResult<NativeCompiledAudit> {
-        if index >= slf.borrow().audits.len() {
+        if index >= slf.borrow().project.audits.len() {
             return Err(PyIndexError::new_err(index));
         }
         Ok(NativeCompiledAudit::new(slf.clone().unbind(), index))
@@ -479,7 +479,8 @@ impl NativeCompiledProject {
     /// Keep the dependency keys native project assembly resolved, in function order.
     fn record_function_deps(&mut self, deps: Vec<Vec<ObjectKeyRow>>) -> PyResult<()> {
         for (index, keys) in deps.into_iter().enumerate() {
-            self.functions
+            self.project
+                .functions
                 .get_mut(index)
                 .ok_or_else(|| PyIndexError::new_err(index))?
                 .set_deps(keys);
@@ -489,7 +490,7 @@ impl NativeCompiledProject {
 
     /// The assembled function at `index`.
     fn compiled_function(slf: &Bound<'_, Self>, index: usize) -> PyResult<NativeCompiledFunction> {
-        if index >= slf.borrow().functions.len() {
+        if index >= slf.borrow().project.functions.len() {
             return Err(PyIndexError::new_err(index));
         }
         Ok(NativeCompiledFunction::new(slf.clone().unbind(), index))
@@ -498,7 +499,8 @@ impl NativeCompiledProject {
     /// Keep the namespaces native project assembly resolved, in source order.
     fn record_source_namespaces(&mut self, namespaces: Vec<SourceNamespace>) -> PyResult<()> {
         for (index, namespace) in namespaces.into_iter().enumerate() {
-            self.sources
+            self.project
+                .sources
                 .get_mut(index)
                 .ok_or_else(|| PyIndexError::new_err(index))?
                 .set_namespace(namespace);
@@ -508,7 +510,7 @@ impl NativeCompiledProject {
 
     /// The assembled source at `index`.
     fn compiled_source(slf: &Bound<'_, Self>, index: usize) -> PyResult<NativeCompiledSource> {
-        if index >= slf.borrow().sources.len() {
+        if index >= slf.borrow().project.sources.len() {
             return Err(PyIndexError::new_err(index));
         }
         Ok(NativeCompiledSource::new(slf.clone().unbind(), index))
@@ -516,7 +518,7 @@ impl NativeCompiledProject {
 
     /// The assembled seed at `index`.
     fn compiled_seed(slf: &Bound<'_, Self>, index: usize) -> PyResult<NativeCompiledSeed> {
-        if index >= slf.borrow().seeds.len() {
+        if index >= slf.borrow().project.seeds.len() {
             return Err(PyIndexError::new_err(index));
         }
         Ok(NativeCompiledSeed::new(slf.clone().unbind(), index))
@@ -524,17 +526,17 @@ impl NativeCompiledProject {
 
     /// How many lineage graphs this owner's project views built.
     fn graph_builds(&self) -> usize {
-        self.graph_builds
+        self.project.graph_builds
     }
 
     /// Whether both projects retained the same facts.
     fn __eq__(&self, other: &Self) -> bool {
-        self.facts == other.facts
+        self.project.facts == other.project.facts
     }
 
     /// The recorded models' names, in production order.
     fn model_names(&self) -> Vec<String> {
-        project_models(&self.facts)
+        project_models(&self.project.facts)
             .iter()
             .map(|model| model.name.clone())
             .collect()

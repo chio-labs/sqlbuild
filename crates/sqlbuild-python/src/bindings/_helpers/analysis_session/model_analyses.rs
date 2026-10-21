@@ -23,7 +23,6 @@ use crate::bindings::_helpers::cache::native_store::{content_digest, current_cod
 use crate::bindings::_helpers::compile_driver::analysis_cache::{
     AnalysisCacheCounts, record_analysis_cache_metrics,
 };
-use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
 use crate::bindings::_helpers::compiled_views::model_input_view::{
     AttachedSchema, NativeModelInput, attached_schema, input_model_name, input_query_sql,
     input_reference_rows,
@@ -35,6 +34,7 @@ use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::semantic_shapes::shapes::{VALID_FROM_DEFAULT, VALID_TO_DEFAULT};
+use sqlbuild_project::models::ReferenceRow;
 
 const LOGGING_MODULE: &str = "logging";
 const DEBUG_LOGGER: &str = "sqlbuild.compile";

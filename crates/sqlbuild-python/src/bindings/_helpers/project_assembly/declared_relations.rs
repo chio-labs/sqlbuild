@@ -12,7 +12,9 @@ use crate::bindings::_helpers::compiled_project::schema_facts::python_column_fac
 use crate::bindings::_helpers::compiled_views::model_input_view::{
     attached_columns, attached_schema,
 };
-use crate::bindings::_helpers::compiled_views::source_views::{AttachedSource, read_source_view};
+use crate::bindings::_helpers::compiled_views::source_views::{
+    AttachedSource, SourceViews, read_source_view,
+};
 use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::{enum_member_value, field as native_field};
 use crate::bindings::_helpers::records::ids::RecordId;

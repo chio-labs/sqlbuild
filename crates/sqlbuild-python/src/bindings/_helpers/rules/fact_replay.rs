@@ -14,9 +14,7 @@ use sqlbuild_rules::project_tree::main::tracked_text_path::tracked_text_path;
 use sqlbuild_rules::project_tree::models::ProjectTreeEntry;
 
 use crate::bindings::_helpers::compiled_views::audit_views::NativeCompiledAudit;
-use crate::bindings::_helpers::compiled_views::compiled_model_view::{
-    InferredRow, NativeCompiledModel,
-};
+use crate::bindings::_helpers::compiled_views::compiled_model_view::NativeCompiledModel;
 use crate::bindings::_helpers::compiled_views::function_views::NativeCompiledFunction;
 use crate::bindings::_helpers::compiled_views::project_view::NativeProjectView;
 use crate::bindings::_helpers::compiled_views::seed_views::NativeCompiledSeed;
@@ -32,6 +30,7 @@ use crate::bindings::_helpers::rules::fact_tree::{
     Outcome, Raised, TreeQuery, nodes_value, path_string, read_text, relative_parts,
     selected_nodes, tree_nodes,
 };
+use sqlbuild_project::types::InferredRow;
 
 const MODEL_RECORD: &str = "sqlbuild._native.Model";
 const MATERIALIZED: &str = "materialized";

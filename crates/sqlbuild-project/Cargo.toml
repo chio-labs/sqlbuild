@@ -1,0 +1,16 @@
+[package]
+name = "sqlbuild-project"
+version.workspace = true
+description = "The compiled project as plain Rust: model, source, function, audit and seed records, with the host's values carried as opaque handles."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+sqlbuild-analysis.workspace = true
+sqlbuild-core.workspace = true
+sqlbuild-sqltext.workspace = true
