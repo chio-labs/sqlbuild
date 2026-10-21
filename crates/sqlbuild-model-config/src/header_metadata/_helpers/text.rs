@@ -57,13 +57,13 @@ pub(crate) fn optional_bool<N: AuthoredNode>(
     }
 }
 
-/// Read a non-negative non-boolean integer option of audit `definition` that fits in 64 bits.
+/// Read a non-negative integer option of audit `definition` that fits in 64 bits; help repeats `options`.
 pub(crate) fn optional_count<N: AuthoredNode>(
     node: Option<&N>,
     site: Site<'_>,
-    option: (&str, &str),
+    option: (&str, &str, &[(N, N)]),
 ) -> Result<Option<N>, ConfigError> {
-    let (definition, key) = option;
+    let (definition, key, options) = option;
     match (
         node.map(AuthoredNode::kind),
         node.and_then(AuthoredNode::integer),
@@ -75,14 +75,29 @@ pub(crate) fn optional_count<N: AuthoredNode>(
                 "'{key}' {} is larger than a 64-bit integer",
                 node.map(AuthoredNode::python_str).unwrap_or_default()
             ))
-            .with_help(count_help(site, definition, key))),
+            .with_help(count_help(site, (definition, options), key))),
         (Some(_), _) => Err(site.error(&format!("'{key}' must be a non-negative integer"))),
     }
 }
 
-/// The MODEL header help that sets audit option `key` to the largest 64-bit integer.
-fn count_help(site: Site<'_>, definition: &str, key: &str) -> String {
-    let audits: String = format!("audits [{definition} ({key} {})]", i64::MAX);
+/// The MODEL header help repeating the audit call with option `key` set to the largest 64-bit integer.
+fn count_help<N: AuthoredNode>(
+    site: Site<'_>,
+    (definition, options): (&str, &[(N, N)]),
+    key: &str,
+) -> String {
+    let rendered: Vec<String> = options
+        .iter()
+        .map(|(name, value)| {
+            let name: String = name.text().unwrap_or_else(|| name.python_str());
+            if name == key {
+                format!("{name} {}", i64::MAX)
+            } else {
+                format!("{name} {}", header_value(value))
+            }
+        })
+        .collect();
+    let audits: String = format!("audits [{definition} ({})]", rendered.join(", "));
     let entry: String = site.column.map_or_else(
         || audits.clone(),
         |column| format!("columns ({column} ({audits}))"),
@@ -92,6 +107,34 @@ fn count_help(site: Site<'_>, definition: &str, key: &str) -> String {
         "set {key} to a value that fits in 64 bits, add this to the MODEL header:\n{indent}MODEL (\n\
          {indent}  {entry},\n{indent}  ...\n{indent});"
     )
+}
+
+/// One authored value as MODEL header syntax: quoted strings, `[...]` lists and `(key value)` maps.
+fn header_value<N: AuthoredNode>(node: &N) -> String {
+    match node.kind() {
+        NodeKind::Null => "null".to_owned(),
+        NodeKind::Bool(value) => value.to_string(),
+        NodeKind::Str => {
+            let text: String = node.text().unwrap_or_default();
+            format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
+        }
+        NodeKind::List | NodeKind::Tuple => {
+            let items: Vec<String> = node.items().iter().map(header_value).collect();
+            format!("[{}]", items.join(", "))
+        }
+        NodeKind::Map => {
+            let entries: Vec<String> = node
+                .entries()
+                .iter()
+                .map(|(key, value)| {
+                    let key: String = key.text().unwrap_or_else(|| key.python_str());
+                    format!("{key} {}", header_value(value))
+                })
+                .collect();
+            format!("({})", entries.join(", "))
+        }
+        NodeKind::Int { .. } | NodeKind::Other => node.python_str(),
+    }
 }
 
 /// Return the mapping entry whose key is the string `key`.
