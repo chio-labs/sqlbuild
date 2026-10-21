@@ -8,6 +8,7 @@ pub(crate) mod inputs_view;
 pub(crate) mod model_input_view;
 pub(crate) mod model_reads;
 pub(crate) mod project_host;
+pub(crate) mod project_reads;
 pub(crate) mod project_view;
 pub(crate) mod records;
 pub(crate) mod registration;

@@ -1,6 +1,6 @@
 //! A compiled model's analysis outcomes as Rust data: views read their owner, records their fields.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 
 use crate::bindings::_helpers::compile_driver::stage_work::{COMPILED_VIEW_FALLBACKS, count_stage};
 use crate::bindings::_helpers::compiled_views::compiled_model_view::{
@@ -251,4 +251,57 @@ pub(crate) fn name_object<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
         return Ok(pyo3::types::PyString::new(model.py(), &name).into_any());
     }
     native_field(model, "name")
+}
+
+/// The model's attached `SchemaModelEntry`, or `None`.
+pub(crate) fn schema_entry<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = model.py();
+    if let Some(view) = native_model(model)? {
+        return Ok(view.schema_entry(py)?.into_bound(py));
+    }
+    native_field(model, "schema_entry")
+}
+
+/// The model's `CompileModelConfig`.
+pub(crate) fn config<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = model.py();
+    if let Some(view) = native_model(model)? {
+        return Ok(view.config(py)?.into_bound(py));
+    }
+    native_field(model, "config")
+}
+
+/// The model's `CompileSqlReference` tuple.
+pub(crate) fn references<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = model.py();
+    if let Some(view) = native_model(model)? {
+        return Ok(view.references(py)?.into_bound(py).into_any());
+    }
+    native_field(model, "references")
+}
+
+/// The model file's relative path.
+pub(crate) fn relative_path<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = model.py();
+    if let Some(view) = native_model(model)? {
+        return Ok(view.relative_path(py)?.into_bound(py));
+    }
+    native_field(model, "relative_path")
+}
+
+/// The model's `InferredColumn` tuple, or `None`.
+pub(crate) fn inferred_columns<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = model.py();
+    if let Some(view) = native_model(model)? {
+        return Ok(view.inferred_columns(py)?.into_bound(py));
+    }
+    native_field(model, "inferred_columns")
+}
+
+/// `(resource type, name)` of each dependency.
+pub(crate) fn dep_rows(model: &Bound<'_, PyAny>) -> PyResult<Vec<(String, String)>> {
+    if let Some(view) = native_model(model)? {
+        return view.dep_rows(model.py());
+    }
+    native_field(model, "dep_rows")?.extract()
 }

@@ -195,7 +195,7 @@ fn on_schema_change<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny
 /// Whether the model's schema enforces declared column types.
 fn type_enforcement<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = model.py();
-    let entry: Bound<'py, PyAny> = native_field(model, "schema_entry")?;
+    let entry: Bound<'py, PyAny> = model_reads::schema_entry(model)?;
     if !entry.is_none() {
         let enforcement: Bound<'py, PyAny> = native_field(&entry, "type_enforcement")?;
         if !enforcement.is_none() {
@@ -310,7 +310,7 @@ fn logical_ddl<'py>(
 /// The output column names SQL analysis inferred for the model, when it inferred them.
 fn expected_output_columns<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = model.py();
-    let inferred: Bound<'py, PyAny> = native_field(model, "inferred_columns")?;
+    let inferred: Bound<'py, PyAny> = model_reads::inferred_columns(model)?;
     if inferred.is_none() {
         return Ok(none(py));
     }
@@ -577,7 +577,7 @@ fn contract_fields<'py>(
         mapping_get(values, "contract")?.eq(ENFORCED_CONTRACT)?,
     )?;
     entry.set_item("contract_columns", schema_columns(model, false)?)?;
-    let schema_entry: Bound<'py, PyAny> = native_field(model, "schema_entry")?;
+    let schema_entry: Bound<'py, PyAny> = model_reads::schema_entry(model)?;
     entry.set_item(
         "contract_dynamic_columns",
         if schema_entry.is_none() {
@@ -653,7 +653,7 @@ pub(crate) fn assemble_model_plan_entry<'py>(
             .unwrap_or_else(|| PyTuple::empty(py));
     let table_type: Bound<'py, PyAny> = native_field(
         &native_field(
-            &native_field(&native_field(model, "config")?, "table_type")?,
+            &native_field(&model_reads::config(model)?, "table_type")?,
             "value",
         )?,
         "value",
@@ -666,7 +666,7 @@ pub(crate) fn assemble_model_plan_entry<'py>(
     let entry: Bound<'py, PyDict> = PyDict::new(py);
     entry.set_item("key", model_reads::model_key(model)?)?;
     entry.set_item("name", &name)?;
-    entry.set_item("relative_path", native_field(model, "relative_path")?)?;
+    entry.set_item("relative_path", model_reads::relative_path(model)?)?;
     entry.set_item("destination", model_reads::destination(model)?)?;
     entry.set_item("fingerprint_query_sql", model_reads::query_sql(model)?)?;
     entry.set_item("logical_ddl", table_type_ddl(&ddl, &text(&table_type)?))?;

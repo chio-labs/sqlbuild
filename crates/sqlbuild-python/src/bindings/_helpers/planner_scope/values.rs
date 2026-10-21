@@ -1,5 +1,6 @@
 //! Python function identity and compiled graph conversion.
 
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::graph::keys::native_key;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_items;
@@ -67,7 +68,7 @@ pub(crate) fn loader_graph(loaders: &Bound<'_, PyAny>) -> PyResult<LoaderGraph> 
 
 pub(crate) fn project_graph(project: &Bound<'_, PyAny>) -> PyResult<LoaderGraph> {
     let mut graph = loader_graph(&native_field(project, "loader_functions")?)?;
-    for source in native_field(project, "sources")?.try_iter()? {
+    for source in project_reads::sources(project)?.try_iter()? {
         let entry = native_field(&source?, "source_entry")?;
         graph.sources.push((
             native_field(&entry, "name")?.extract()?,

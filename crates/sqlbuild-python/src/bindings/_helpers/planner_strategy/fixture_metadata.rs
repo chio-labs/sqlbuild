@@ -5,6 +5,7 @@ use sqlbuild_analysis::planner_fixtures::main::merge_metadata::merge_metadata;
 use sqlbuild_analysis::planner_fixtures::models::FixtureColumn;
 use sqlbuild_core::text::main::python_casefold::python_casefold;
 
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::compiled_views::model_reads::{inferred_rows, star_flags};
 use crate::bindings::_helpers::model_config::typed_config::{config_value, model_values};
 use crate::bindings::_helpers::planner_strategy::constants::ENFORCED_CONTRACT;
@@ -18,7 +19,7 @@ const CONTRACT_KEY: &str = "contract";
 /// The model's merged inferred and declared columns, authoritative unless its analysis saw a star.
 pub(crate) fn model_fixture_relation(model: &Bound<'_, PyAny>) -> PyResult<FixtureRelation> {
     let inferred: Option<Vec<InferredRow>> = inferred_rows(model)?;
-    let schema = native_field(model, "schema_entry")?;
+    let schema = model_reads::schema_entry(model)?;
     let declared: Vec<FixtureColumn> = if schema.is_none() {
         Vec::new()
     } else {
