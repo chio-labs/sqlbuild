@@ -675,3 +675,14 @@ def write_model_files(*, project_dir: Path, toml: str, files: tuple[tuple[str, s
         path: Path = project_dir / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
+
+
+def duckdb_rules_project_toml(*, project_dir: Path, rules_toml: str) -> str:
+    """Return a plannable DuckDB project's `sqlbuild_project.toml` with the given `[rules]` body."""
+
+    return (
+        'name = "orders"\nadapter = "duckdb"\ndefault_target = "dev"\n\n'
+        f'[connection]\ndatabase = "{project_dir / "orders.duckdb"}"\n\n'
+        '[targets.dev]\nschema = "dev"\n\n'
+        f"[rules]\n{rules_toml}"
+    )

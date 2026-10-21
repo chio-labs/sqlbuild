@@ -1,7 +1,7 @@
 //! The finished result of one rules run, the bulk cache locations and freed-memory release.
 
 use std::collections::BTreeSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use pyo3::exceptions::PyException;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -20,6 +20,7 @@ use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::rules::fact_replay::project_models;
 use crate::bindings::_helpers::rules::results::rule_finding;
 use crate::bindings::_helpers::rules::rows::finalize_rule_findings_rows;
+use crate::bindings::_helpers::rules::rule_plan::whole_project_codes;
 
 const PATHLIB_MODULE: &str = "pathlib";
 const CTYPES_MODULE: &str = "ctypes";
@@ -61,9 +62,13 @@ pub(crate) fn finish_rule_run<'py>(
     result: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = plan.py();
+    let whole_project: Vec<String> = whole_project_codes(plan)?;
     let mut evaluated_codes: Vec<String> = Vec::new();
     for rule in record_field(plan, "selected")?.try_iter()? {
-        evaluated_codes.push(record_field(&rule?, "code")?.extract()?);
+        let code: String = record_field(&rule?, "code")?.extract()?;
+        if !whole_project.contains(&code) {
+            evaluated_codes.push(code);
+        }
     }
     let mut combined: Vec<Bound<'py, PyAny>> = Vec::new();
     for findings in [
@@ -147,6 +152,18 @@ pub(crate) fn run_rules<'py>(
 #[pyo3(signature = (*, project_dir, file_name))]
 pub(crate) fn rules_bulk_cache_path(project_dir: PathBuf, file_name: &str) -> PathBuf {
     bulk_cache_path(&project_dir, file_name)
+}
+
+/// One bulk Rules cache file, inside `directory` of the bulk cache when given.
+pub(crate) fn bulk_cache_file(
+    project_dir: &Path,
+    directory: Option<&str>,
+    file_name: &str,
+) -> PathBuf {
+    match directory {
+        Some(directory) => bulk_cache_path(project_dir, directory).join(file_name),
+        None => bulk_cache_path(project_dir, file_name),
+    }
 }
 
 /// Hand freed glibc heap pages back to the OS; a no-op elsewhere or without `malloc_trim`.

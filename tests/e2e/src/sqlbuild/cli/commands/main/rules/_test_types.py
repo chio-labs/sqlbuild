@@ -279,3 +279,27 @@ class PublishedLayerCase:
     rules_toml: str
     expected_findings: tuple[tuple[str, str], ...]
     expected_exit: int
+
+
+@dataclass(frozen=True)
+class SelectedProjectWideRuleCase:
+    """One selected plan whose project-wide Rules must agree with a whole-project compile."""
+
+    description: str
+    rules_toml: str
+    selection: tuple[str, ...]
+    expected_compile_findings: tuple[tuple[str, str], ...]
+    expected_plan_findings: tuple[tuple[str, str], ...]
+    expected_plan_exit: int
+
+
+@dataclass(frozen=True)
+class SelectedRuleCacheCase:
+    """One compile, selected plan and edited recompile that must share the built-in Rules cache."""
+
+    description: str
+    rules_toml: str
+    selection: tuple[str, ...]
+    edited_path: str
+    expected_entries: tuple[str, ...]
+    expected_recompile_cache_hits: int

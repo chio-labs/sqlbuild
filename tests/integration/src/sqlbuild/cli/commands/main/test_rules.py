@@ -2649,7 +2649,7 @@ def two_models(*, project: Project, ctx: RuleContext) -> list[Finding]:
     full_exit: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
     full: dict[str, object] = json.loads(capsys.readouterr().out)
 
-    assert focused_exit == 1
+    assert focused_exit == test_case.expected_exit_code
     assert full_exit == test_case.expected_exit_code
     assert full["diagnostics"] == []
 
