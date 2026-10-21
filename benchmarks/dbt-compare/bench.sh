@@ -13,13 +13,14 @@
 #
 # Environment:
 #   SQB       sqb executable (default: sqb)
-#   DBT_CORE  dbt Core executable (default: dbt)
 #   DBT_V2    dbt v2 executable (default: dbt2)
+#   DBT_CORE  dbt Core executable, for the core_* variants (default: dbt)
 #   PYTHON    Python used for the edit helper (default: python3)
 #   SCENARIOS which of warm, edit1 and edit100 to run after cold (default: all three)
 #
-# Variants: sqb_rules sqb_norules sqb_rules_full v2_parse v2_compile v2_compile_strict core_parse
-# core_compile. With no VARIANT arguments, all of them run.
+# Default variants: sqb_norules sqb_norules_full sqb_rules sqb_rules_full v2_compile_cached
+# v2_compile_strict_cached v2_compile_dirty v2_compile_strict_dirty v2_compile v2_compile_strict
+# v2_compile_strict_remote. Also available: v2_parse core_parse core_compile.
 set -u
 ROOT=$(realpath "$1")
 OUT=$(realpath -m "$2")
@@ -35,13 +36,16 @@ SCENARIOS=" ${SCENARIOS:-warm edit1 edit100} "
 MODELS=$(find "$ROOT/sqlbuild/models" -name '*.sql' | wc -l)
 export DBT_SEND_ANONYMOUS_USAGE_STATS=false
 DBTFLAGS="--profiles-dir $ROOT/profiles --no-version-check"
-declare -A SRC CMD
+# CMD_COLD overrides CMD for the cold scenario.
+declare -A SRC CMD CMD_COLD
 SRC[sqb_rules]=sqlbuild
 CMD[sqb_rules]="$SQB --no-color compile"
 SRC[sqb_norules]=sqlbuild-norules
 CMD[sqb_norules]="$SQB --no-color compile"
 SRC[sqb_rules_full]=sqlbuild
 CMD[sqb_rules_full]="env SQLBUILD_DISABLE_COMPILE_REUSE=1 SQLBUILD_DISABLE_DELTA_COMPILE=1 $SQB --no-color compile"
+SRC[sqb_norules_full]=sqlbuild-norules
+CMD[sqb_norules_full]="env SQLBUILD_DISABLE_COMPILE_REUSE=1 SQLBUILD_DISABLE_DELTA_COMPILE=1 $SQB --no-color compile"
 SRC[core_parse]=dbt
 CMD[core_parse]="$DBT_CORE parse $DBTFLAGS"
 SRC[core_compile]=dbt
@@ -52,11 +56,30 @@ SRC[v2_compile]=dbt
 CMD[v2_compile]="$DBT_V2 compile $DBTFLAGS"
 SRC[v2_compile_strict]=dbt
 CMD[v2_compile_strict]="$DBT_V2 compile $DBTFLAGS --static-analysis strict"
+# dbt/ declares source columns locally (schema_origin: local). dbt-remote/ reads them from the
+# warehouse, dbt's default; v2_compile_strict_remote shows that introspection cost in default mode,
+# which re-reads source schemas on every run.
+SRC[v2_compile_strict_remote]=dbt-remote
+CMD[v2_compile_strict_remote]="$DBT_V2 compile $DBTFLAGS --static-analysis strict"
+# dbt v2's parse cache is off by default. --partial-parse keeps it under target/private/metadata/;
+# --partial-load loads it faster. --dirty selects only nodes whose files changed since the last
+# --partial-parse run, plus their descendants, so its cold run builds the cache without it.
+SRC[v2_compile_cached]=dbt
+CMD[v2_compile_cached]="$DBT_V2 compile $DBTFLAGS --partial-parse --partial-load"
+SRC[v2_compile_strict_cached]=dbt
+CMD[v2_compile_strict_cached]="$DBT_V2 compile $DBTFLAGS --static-analysis strict --partial-parse --partial-load"
+SRC[v2_compile_dirty]=dbt
+CMD_COLD[v2_compile_dirty]="$DBT_V2 compile $DBTFLAGS --partial-parse --partial-load"
+CMD[v2_compile_dirty]="$DBT_V2 compile $DBTFLAGS --partial-load --dirty"
+SRC[v2_compile_strict_dirty]=dbt
+CMD_COLD[v2_compile_strict_dirty]="$DBT_V2 compile $DBTFLAGS --static-analysis strict --partial-parse --partial-load"
+CMD[v2_compile_strict_dirty]="$DBT_V2 compile $DBTFLAGS --static-analysis strict --partial-load --dirty"
 
 VARIANTS=("$@")
 if [ ${#VARIANTS[@]} -eq 0 ]; then
-  VARIANTS=(sqb_rules sqb_norules sqb_rules_full v2_parse v2_compile v2_compile_strict
-    core_parse core_compile)
+  VARIANTS=(sqb_norules sqb_norules_full sqb_rules sqb_rules_full v2_compile_cached
+    v2_compile_strict_cached v2_compile_dirty v2_compile_strict_dirty v2_compile v2_compile_strict
+    v2_compile_strict_remote)
 fi
 for v in "${VARIANTS[@]}"; do
   if [ -z "${CMD[$v]+set}" ]; then
@@ -69,12 +92,15 @@ mkdir -p "$OUT" "$WORK"
 load1() { cut -d' ' -f1 /proc/loadavg; }
 
 measure() {
-  local v=$1 scenario=$2 round=$3 base
+  local v=$1 scenario=$2 round=$3 base cmd
   base="$OUT/$v.$scenario.r$round"
+  cmd=${CMD[$v]}
+  if [ "$scenario" = cold ] && [ -n "${CMD_COLD[$v]+set}" ]; then cmd=${CMD_COLD[$v]}; fi
+  echo "$cmd" >"$base.cmd"
   local before after
   before=$(load1)
   /usr/bin/time -f '%e %U %S %M' -o "$base.time" \
-    bash -c "cd '$WORK/$v' && exec ${CMD[$v]}" >"$base.out" 2>"$base.err"
+    bash -c "cd '$WORK/$v' && exec $cmd" >"$base.out" 2>"$base.err"
   echo $? >"$base.rc"
   after=$(load1)
   echo "$v $scenario r$round load $before $after" >>"$OUT/uptime.log"

@@ -8,8 +8,10 @@ Usage, from the repository root:
 Creates under DIR:
   sqlbuild/          SQLBuild dense project (the CI dense generator, adapter switched to duckdb)
   sqlbuild-norules/  the same project with `[rules] select = []`
-  dbt/               dbt project derived file by file from `sqlbuild/`
-  warehouse.duckdb   DuckDB file holding every source table (empty)
+  dbt/               dbt project derived file by file from `sqlbuild/`; sources use their declared
+                     columns (`schema_origin: local`), as SQLBuild does
+  dbt-remote/        the same dbt project with sources read from the warehouse (dbt's default)
+  warehouse.duckdb   DuckDB file holding every source and model relation (empty), as after a build
   profiles/profiles.yml
 
 The SQLBuild project comes unchanged from the generator the compile-performance CI jobs use. The
@@ -138,6 +140,8 @@ def write_dbt(sqb: Path, out: Path, n: int) -> Path:
         f"  - name: {SOURCE_NAME}",
         f"    database: {DATABASE}",
         f"    schema: {SOURCE_SCHEMA}",
+        "    config:",
+        "      schema_origin: local",
         "    tables:",
     ]
     for index in range(source_count):
@@ -272,7 +276,39 @@ def write_dbt(sqb: Path, out: Path, n: int) -> Path:
     return dbt
 
 
-def write_warehouse(out: Path, n: int) -> None:
+MATERIALIZED_RE = re.compile(r"\bmaterialized (table|view)\b")
+
+
+def model_relations(sqb: Path) -> list[tuple[str, str, list[tuple[str, str, bool, str, bool]]]]:
+    """Name, materialization and columns of every model, read from the SQLBuild headers."""
+    relations = []
+    for path in sorted((sqb / "models").rglob("*.sql")):
+        text = path.read_text()
+        materialized = MATERIALIZED_RE.search(text.split("\n", 1)[0])
+        assert materialized, path
+        columns, _body = model_header_and_body(text)
+        relations.append((path.stem, materialized[1], columns))
+    return relations
+
+
+def write_dbt_remote(dbt: Path) -> Path:
+    """Copy the dbt project with source columns read from the warehouse, dbt's default."""
+    target = dbt.parent / "dbt-remote"
+    shutil.copytree(dbt, target)
+    sources = target / "models" / "_sources.yml"
+    text = sources.read_text()
+    new = text.replace("    config:\n      schema_origin: local\n", "", 1)
+    assert new != text
+    sources.write_text(new)
+    return target
+
+
+def write_warehouse(out: Path, n: int, sqb: Path) -> None:
+    """Create every source and model relation empty, as the warehouse looks after `dbt build`.
+
+    dbt v2 reads the columns of unselected upstream models from the warehouse in
+    `--static-analysis strict --dirty` runs, so the model relations must exist.
+    """
     import duckdb
 
     path = (out / f"{DATABASE}.duckdb").resolve()
@@ -287,6 +323,16 @@ def write_warehouse(out: Path, n: int) -> None:
             f"quantity_{c:03d} double" for c in range(width - 2)
         ]
         con.execute(f"create table {SOURCE_SCHEMA}.orders_{index:05d} ({', '.join(cols)})")
+    for name, materialized, columns in model_relations(sqb):
+        if materialized == "table":
+            cols = [
+                f"{col} {typ.lower()}{' not null' if not_null else ''}"
+                for col, typ, not_null, _desc, _audit in columns
+            ]
+            con.execute(f"create table analytics.{name} ({', '.join(cols)})")
+        else:
+            cols = [f"cast(null as {typ.lower()}) as {col}" for col, typ, *_ in columns]
+            con.execute(f"create view analytics.{name} as select {', '.join(cols)} where false")
     con.close()
     profiles = out / "profiles"
     profiles.mkdir(exist_ok=True)
@@ -304,7 +350,7 @@ def seed_error(out: Path, kind: str) -> None:
     """
     name = dense_model_name(ERROR_MODEL_INDEX)
     upstream = dense_model_name(ERROR_MODEL_INDEX - 1)
-    for tool in ("sqlbuild", "sqlbuild-norules", "dbt"):
+    for tool in ("sqlbuild", "sqlbuild-norules", "dbt", "dbt-remote"):
         for path in (out / tool / "models").rglob(f"{name}.sql"):
             text = path.read_text()
             if kind == "column":
@@ -331,9 +377,9 @@ def main() -> None:
         shutil.rmtree(args.out)
     args.out.mkdir(parents=True)
     sqb = write_sqlbuild(args.out, args.models)
-    write_dbt(sqb, args.out, args.models)
+    write_dbt_remote(write_dbt(sqb, args.out, args.models))
     write_norules(sqb)
-    write_warehouse(args.out, args.models)
+    write_warehouse(args.out, args.models, sqb)
     if args.seed_error:
         seed_error(args.out, args.seed_error)
 
