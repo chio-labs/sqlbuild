@@ -32,8 +32,8 @@ LOAD_RE = re.compile(r"^(\w+) (\w+) r\d+ load ([\d.]+) ([\d.]+)$")
 def path_taken(variant: str, out: str, err: str) -> str:
     """What each tool reported doing.
 
-    SQLBuild: a full compile, a replay or a delta compile. dbt Core: a full or partial parse. dbt v2:
-    how many models it processed, or that `--dirty` found nothing to do.
+    SQLBuild: a full compile, a replay or a delta compile. dbt Core: a full or partial parse.
+    dbt v2: how many models it processed, or that `--dirty` found nothing to do.
     """
     if variant.startswith("sqb"):
         if "Inputs unchanged; reused the previous compile" in err:
