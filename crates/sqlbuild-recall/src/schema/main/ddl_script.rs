@@ -22,19 +22,52 @@ fn clickhouse_version_row(options: &DdlOptions) -> String {
     )
 }
 
-/// Every table, index and view statement, then for ClickHouse the schema version row, each terminated by `;`.
+/// The SQLite `recall_meta` row recording the schema version.
+fn sqlite_version_row() -> String {
+    let now = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
+    format!(
+        "INSERT OR IGNORE INTO \"{meta}\" (component, key, value, recorded_at, invocation_id, \
+         invocation_started_at, schema_version, producer_version, ingested_at, content_hash)\n\
+         VALUES ('{META_SCHEMA_COMPONENT}', '{META_SCHEMA_VERSION_KEY}', \
+         '{RECALL_SCHEMA_VERSION}', {now}, '{DDL_SCRIPT_INVOCATION}', {now}, \
+         {RECALL_SCHEMA_VERSION}, '{version}', {now}, '')",
+        meta = table_spec(Table::Meta).name,
+        version = env!("CARGO_PKG_VERSION"),
+    )
+}
+
+/// The insert recording this build's schema version, which a writer allowed only `SELECT` and `INSERT` may also run.
 #[must_use]
-pub fn ddl_script(dialect: Dialect, options: &DdlOptions) -> String {
+pub fn version_row_statement(dialect: Dialect, options: &DdlOptions) -> String {
+    match dialect {
+        Dialect::Sqlite => sqlite_version_row(),
+        Dialect::ClickHouse => clickhouse_version_row(options),
+    }
+}
+
+/// Every table, index and view statement, then the schema version row.
+#[must_use]
+pub fn ddl_statements(dialect: Dialect, options: &DdlOptions) -> Vec<String> {
     let mut statements: Vec<String> = table_statements(dialect, options);
     statements.extend(
         view_statements(dialect, options)
             .into_iter()
             .map(|(_, statement)| statement),
     );
-    if dialect == Dialect::ClickHouse {
-        statements.push(clickhouse_version_row(options));
-    }
+    statements.push(version_row_statement(dialect, options));
+    statements
+}
+
+/// `statements` as one script, each terminated by `;`.
+#[must_use]
+pub fn render_script(statements: &[String]) -> String {
     let mut script: String = statements.join(";\n\n");
     script.push_str(";\n");
     script
+}
+
+/// The complete creation script of [`ddl_statements`].
+#[must_use]
+pub fn ddl_script(dialect: Dialect, options: &DdlOptions) -> String {
+    render_script(&ddl_statements(dialect, options))
 }

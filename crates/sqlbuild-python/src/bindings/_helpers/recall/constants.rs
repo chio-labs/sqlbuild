@@ -42,7 +42,7 @@ pub(crate) const DEFAULT_QUERY_LIMIT: i64 = 100;
 /// The invocation selector naming the most recently started invocation.
 pub(crate) const LAST_INVOCATION: &str = "last";
 /// The keyword arguments the `sqb recall` dispatch route passes.
-pub(crate) const RECALL_OPTIONS: [&str; 13] = [
+pub(crate) const RECALL_OPTIONS: [&str; 14] = [
     "project_dir",
     "selected_target",
     "recall_command",
@@ -56,6 +56,7 @@ pub(crate) const RECALL_OPTIONS: [&str; 13] = [
     "invocation",
     "stream",
     "tail",
+    "ddl",
 ];
 /// Required text envelope fields of a known lifecycle event.
 pub(crate) const EVENT_TEXT_FIELDS: [&str; 5] = [

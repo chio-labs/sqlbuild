@@ -6,4 +6,5 @@ pub mod sqlite_retention_sql;
 pub mod table_columns;
 pub mod table_spec;
 pub mod table_statements;
+pub mod upgrade_statements;
 pub mod view_statements;

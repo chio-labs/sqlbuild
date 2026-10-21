@@ -109,3 +109,12 @@ pub struct SqliteRetentionSql {
     /// `?1` cutoff: maintenance claims older than retention.
     pub delete_old_claims: String,
 }
+
+/// What a Recall store holds: its tables with their column names, its views, and the recorded schema version.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ObservedSchema {
+    pub tables: std::collections::BTreeMap<Table, std::collections::BTreeSet<String>>,
+    pub views: std::collections::BTreeSet<String>,
+    /// The highest recorded schema version; `None` when none is recorded.
+    pub version: Option<i64>,
+}

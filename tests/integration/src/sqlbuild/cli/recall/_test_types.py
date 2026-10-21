@@ -200,3 +200,25 @@ class ThirdPartyLogTestCase:
     expected_present: tuple[str, ...]
     expected_absent: tuple[str, ...]
     expected_traceback_count: int
+
+
+@dataclass(frozen=True)
+class RecallConnectionErrorTestCase:
+    description: str
+    recall_toml: str
+    args: tuple[str, ...]
+    expected_message: str
+
+
+@dataclass(frozen=True)
+class ReadOnlyReaderTestCase:
+    description: str
+    expected_shared_invocations: list[list[object]]
+
+
+@dataclass(frozen=True)
+class BehindStoreTestCase:
+    description: str
+    expected_ddl_fragments: tuple[str, ...]
+    expected_up_to_date_note: str
+

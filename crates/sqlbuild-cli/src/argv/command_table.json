@@ -7018,6 +7018,18 @@
              "group": 1
             },
             {
+             "kind": "store_true",
+             "options": [
+              "--ddl"
+             ],
+             "dest": "recall_ddl",
+             "nargs": 0,
+             "const": true,
+             "default": false,
+             "help": "print the SQL that creates the Recall store or brings it up to this version",
+             "group": 1
+            },
+            {
              "kind": "store",
              "options": [
               "--format"

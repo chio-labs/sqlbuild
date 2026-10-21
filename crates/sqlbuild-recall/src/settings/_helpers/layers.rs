@@ -29,7 +29,8 @@ pub(crate) fn section(
 pub(crate) fn overlay(base: RecallSection, layer: RecallSection) -> RecallSection {
     RecallSection {
         enabled: layer.enabled.or(base.enabled),
-        connection: layer.connection.or(base.connection),
+        write_connection: layer.write_connection.or(base.write_connection),
+        read_connection: layer.read_connection.or(base.read_connection),
         retention_days: layer.retention_days.or(base.retention_days),
         shutdown_timeout_ms: layer.shutdown_timeout_ms.or(base.shutdown_timeout_ms),
         diagnostics_min_severity: layer
@@ -120,7 +121,7 @@ fn clickhouse_location(
 pub(crate) fn store_location(
     project_dir: &Path,
     documents: [Option<&ConfigValue>; 2],
-    (connection, project_adapter): (Option<&str>, Option<&str>),
+    (key, connection, project_adapter): (&str, Option<&str>, Option<&str>),
 ) -> Result<StoreLocation, SettingsError> {
     let Some(name) = connection else {
         return Ok(StoreLocation::Sqlite {
@@ -131,7 +132,7 @@ pub(crate) fn store_location(
     };
     let entries = connection_entries(documents, name).ok_or_else(|| {
         SettingsError::new(format!(
-            "recall.connection names unknown connection '{name}'; define [connections.{name}]"
+            "recall.{key} names unknown connection '{name}'; define [connections.{name}]"
         ))
     })?;
     let value = |key: &str| {

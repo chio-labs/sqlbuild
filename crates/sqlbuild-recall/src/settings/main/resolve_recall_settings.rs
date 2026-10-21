@@ -46,7 +46,20 @@ pub fn resolve_recall_settings(request: &SettingsRequest) -> Result<RecallSettin
     let store = store_location(
         &request.project_dir,
         documents,
-        (effective.connection.as_deref(), project_adapter.as_deref()),
+        (
+            "write_connection",
+            effective.write_connection.as_deref(),
+            project_adapter.as_deref(),
+        ),
+    )?;
+    let read_store = store_location(
+        &request.project_dir,
+        documents,
+        (
+            "read_connection",
+            effective.read_connection.as_deref(),
+            project_adapter.as_deref(),
+        ),
     )?;
     let max_output_bytes: Option<u64> = match effective.max_output_bytes {
         Some(0) => None,
@@ -57,7 +70,9 @@ pub fn resolve_recall_settings(request: &SettingsRequest) -> Result<RecallSettin
         enabled: effective.enabled.unwrap_or(true),
         target: target.clone(),
         store,
-        connection: effective.connection,
+        read_store,
+        write_connection: effective.write_connection,
+        read_connection: effective.read_connection,
         retention_days: effective.retention_days.unwrap_or(DEFAULT_RETENTION_DAYS),
         shutdown_timeout_ms: effective
             .shutdown_timeout_ms

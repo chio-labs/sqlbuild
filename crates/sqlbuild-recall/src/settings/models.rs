@@ -6,7 +6,7 @@ use sqlbuild_config::models::ConfigValue;
 
 use crate::settings::constants::DEFAULT_SQLITE_MAX_OUTPUT_BYTES;
 
-/// Where Recall writes.
+/// Where Recall writes or reads.
 #[derive(Clone, Debug, PartialEq)]
 pub enum StoreLocation {
     /// A SQLite file, written natively.
@@ -39,9 +39,14 @@ pub struct RecallSettings {
     pub enabled: bool,
     /// The effective target; `None` for commands without one.
     pub target: Option<String>,
+    /// Where this invocation's own history is written.
     pub store: StoreLocation,
-    /// The configured connection name, `None` for the built-in local store.
-    pub connection: Option<String>,
+    /// Where `sqb recall query`, `schema` and `output` read history.
+    pub read_store: StoreLocation,
+    /// The configured write connection, `None` for the built-in local store.
+    pub write_connection: Option<String>,
+    /// The configured read connection, `None` for the built-in local store.
+    pub read_connection: Option<String>,
     pub retention_days: u32,
     pub shutdown_timeout_ms: u64,
     pub diagnostics_min_severity: String,

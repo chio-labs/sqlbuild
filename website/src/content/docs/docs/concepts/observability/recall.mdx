@@ -111,7 +111,8 @@ enabled = false               # do not record runs against the ci target
 | Key | Default | Description |
 |-----|---------|-------------|
 | `enabled` | `true` | Set to `false` to stop recording |
-| `connection` | (none) | A `sqlite` connection whose `path` names the store, or a `clickhouse` connection; defaults to `logs/recall.sqlite3` |
+| `write_connection` | (none) | The connection every command writes its history to: a `sqlite` connection whose `path` names the store, or a `clickhouse` connection. Requires `read_connection`. Defaults to `logs/recall.sqlite3` |
+| `read_connection` | (none) | The connection `sqb recall query`, `schema` and `output` read; may name the same connection as `write_connection`. Set alone to read shared history while this machine's own commands record to `logs/recall.sqlite3` |
 | `retention` | `"30d"` | How long invocations are kept, in days (`d`) or hours (`h`), up to 3650 days |
 | `shutdown_timeout` | `"3s"` | The cap on time spent flushing history at exit, in `s` or `ms`, up to 10 minutes |
 | `diagnostics_min_severity` | `"info"` | `trace`, `debug`, `info`, `warning`, `error`, or `critical` |
@@ -162,12 +163,17 @@ repeats at most once a day. If the store file is not a SQLite database, Recall m
 `recall.sqlite3.corrupt-<UTC timestamp>`, starts a fresh store, and says so once. Commands that
 find the same corrupt file coordinate through `recall.sqlite3.lock`, so only one of them moves it.
 
-A `connection` on any adapter other than `sqlite` or `clickhouse` is not supported; Recall prints a
-notice and records nothing.
+A `write_connection` on any adapter other than `sqlite` or `clickhouse` is not supported; Recall
+prints a notice and records nothing.
+
+`write_connection` and `read_connection` replaced the single `connection` key. A configuration that
+still sets `connection` fails with an error naming the replacements: set both keys to the old
+connection to keep the previous behaviour.
 
 ## Sharing history in ClickHouse
 
-Point `connection` at a ClickHouse connection to keep one history for a whole team. Every machine
+Point `write_connection` and `read_connection` at ClickHouse connections to keep one history for a
+whole team. Every machine
 that writes to it, including CI and scheduled production runs, becomes queryable from anywhere:
 see what last night's production build ran and printed without access to the machine, find the
 first run where an audit started failing across everyone's runs, or compare a production run with
@@ -185,15 +191,49 @@ password = "${env:CLICKHOUSE_PASSWORD}"
 database = "observability"
 
 [recall]
-connection = "history"
+write_connection = "history_writer"  # every command writes history (INSERT, SELECT)
+read_connection = "history_reader"   # sqb recall query, schema and output (SELECT only)
 retention = "30d"
 ```
 
-- **Setup.** On first use Recall creates its `recall_*` MergeTree tables and the views above in that
-  database, and adds columns that a newer SQLBuild introduces. After that, writing needs only
-  `INSERT` and `SELECT` on the tables. If the user may not create them, the command still succeeds
-  and prints the complete DDL for an administrator to run; a store created from it accepts writers
-  limited to `SELECT` and `INSERT`.
+`sqb recall query`, `schema` and `output` use only `read_connection` and never create or change
+anything in the store, so someone investigating production runs needs no credentials that could
+rewrite or delete its history. Both keys may name one connection when separate users are not
+wanted. A machine that only reads shared history, such as a laptop investigating production runs,
+sets only `read_connection`; its own commands keep recording to the local store.
+
+### Users and grants
+
+SQLBuild does not enforce grants; it only lets the roles be separated. A least-privilege setup:
+
+```sql
+-- once, as an administrator: the users
+CREATE USER recall_writer IDENTIFIED BY '...';
+CREATE USER recall_reader IDENTIFIED BY '...';
+GRANT SELECT, INSERT ON observability.* TO recall_writer;
+GRANT SELECT ON observability.* TO recall_reader;
+```
+
+Then, as the administrator, create the store with the DDL that `sqb recall schema --ddl` prints
+(any connection that can read the database works, so the reader's is enough):
+
+```bash
+sqb recall schema --ddl --target prod > recall.sql   # review, then run it with an admin user
+```
+
+Repeat the same step after upgrading SQLBuild: `sqb recall schema --ddl` reads the store and prints
+only what this version adds (`ALTER TABLE … ADD COLUMN`, replaced views and the schema version row),
+or says that the store is up to date. Changes are always additive, and older SQLBuild versions keep
+writing to an upgraded store.
+
+- **Setup.** A writer allowed to run DDL creates the `recall_*` MergeTree tables and the views above
+  in that database on first use, and adds the columns and views a newer SQLBuild introduces. If the
+  user may not create the store, the command still succeeds and prints the complete DDL for an
+  administrator to run; a store created from it accepts writers limited to `SELECT` and `INSERT`.
+- **Upgrades.** When a store is behind this SQLBuild version and the writer may not upgrade it, the
+  command still runs and exits as it otherwise would. History is still written, to the columns
+  that exist, and Recall prints one warning (at most once a day) with the exact statements an
+  administrator should run; `sqb recall schema --ddl` prints them again.
 - **Writes.** History is sent in batches of up to 5,000 rows about once a second, one insert per
   table, with the same queue, shutdown budget and exit-code guarantees as the local store. Many
   concurrent commands can write one store.

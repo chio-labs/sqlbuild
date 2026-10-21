@@ -5,8 +5,9 @@ sidebar:
   label: "recall"
 ---
 
-Read the local [Recall](/docs/concepts/observability/recall) store: past invocations, the
-statements they executed, and what they printed. `sqb recall` never records itself.
+Read the [Recall](/docs/concepts/observability/recall) store that `read_connection` names, or the
+local store: past invocations, the statements they executed, and what they printed. `sqb recall`
+never records itself, and never creates or changes the store.
 
 ## Usage
 
@@ -81,7 +82,12 @@ Timestamps are ISO-8601 UTC text, so they compare correctly as strings. Filter o
 ## sqb recall schema
 
 List every Recall view with its columns, types, and join keys. Accepts `--format`, `--json`, and
-`--target`. With `--backend warehouse`, it lists SQLBuild's state tables in the target's warehouse
+`--target`.
+
+With `--ddl`, print instead the SQL that creates the store, or brings an existing store up to this
+SQLBuild version (missing columns, replaced views, and the schema version row), for an
+administrator to run. It reads the store through `read_connection` and changes nothing; when the
+store is up to date it prints nothing and says so on stderr. Run it again after every upgrade. With `--backend warehouse`, it lists SQLBuild's state tables in the target's warehouse
 instead, or describes one with `--relation <name>`.
 
 ## sqb recall output

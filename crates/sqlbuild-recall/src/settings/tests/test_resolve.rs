@@ -1,7 +1,5 @@
-use sqlbuild_config::models::ConfigValue;
-
 use crate::settings::models::{RecallSettings, StoreLocation};
-use crate::settings::tests::helpers::{defaults, resolved};
+use crate::settings::tests::helpers::{central_store, defaults, local_store, resolved};
 use crate::settings::tests::test_types::{ResolveErrorTestCase, ResolveTestCase};
 
 const DEFAULT_PROJECT: &[(&str, &str)] = &[(
@@ -13,22 +11,30 @@ const LAYERED_PROJECT: &[(&str, &str)] = &[
     (
         "sqlbuild_project.toml",
         "name = \"shop\"\nadapter = \"duckdb\"\n\
-         [recall]\nretention = \"10d\"\nconnection = \"history\"\n\
+         [recall]\nretention = \"10d\"\nwrite_connection = \"history\"\nread_connection = \"history\"\n\
          [connections.history]\nadapter = \"sqlite\"\npath = \"state/history.sqlite3\"\n\
          [connections.central]\nadapter = \"clickhouse\"\nhost = \"localhost\"\n\
          database = \"observability\"\npassword = \"secret\"\n\
          [connections.other]\nadapter = \"postgres\"\nhost = \"localhost\"\n\
          [targets.dev]\n[targets.dev.recall]\nenabled = false\n\
-         [targets.prod]\n[targets.prod.recall]\nconnection = \"central\"\n\
-         [targets.capped]\n[targets.capped.recall]\nconnection = \"central\"\n\
+         [targets.prod]\n[targets.prod.recall]\nwrite_connection = \"central\"\nread_connection = \"central\"\n\
+         [targets.capped]\n[targets.capped.recall]\nwrite_connection = \"central\"\nread_connection = \"central\"\n\
          max_output_bytes = 4096\n\
-         [targets.qa]\n[targets.qa.recall]\nconnection = \"other\"\n",
+         [targets.qa]\n[targets.qa.recall]\nwrite_connection = \"other\"\nread_connection = \"other\"\n\
+         [targets.laptop]\n[targets.laptop.recall]\nread_connection = \"central\"\n",
     ),
     (
         "sqlbuild_local.toml",
         "[recall]\nshutdown_timeout = \"1s\"\n[connections.history]\npath = \"/tmp/opencode/elsewhere.sqlite3\"\n",
     ),
 ];
+
+const READER_PROJECT: &[(&str, &str)] = &[(
+    "sqlbuild_project.toml",
+    "name = \"shop\"\nadapter = \"duckdb\"\n[recall]\nread_connection = \"central\"\n\
+     [connections.central]\nadapter = \"clickhouse\"\nhost = \"localhost\"\n\
+     database = \"observability\"\npassword = \"secret\"\n",
+)];
 
 const OUTPUT_LIMIT_PROJECT: &[(&str, &str)] = &[(
     "sqlbuild_project.toml",
@@ -59,7 +65,11 @@ fn given_project_layers_when_resolved_then_target_over_local_over_project_over_d
                 store: StoreLocation::Sqlite {
                     path: "/tmp/opencode/elsewhere.sqlite3".into(),
                 },
-                connection: Some("history".to_owned()),
+                read_store: StoreLocation::Sqlite {
+                    path: "/tmp/opencode/elsewhere.sqlite3".into(),
+                },
+                write_connection: Some("history".to_owned()),
+                read_connection: Some("history".to_owned()),
                 retention_days: 10,
                 shutdown_timeout_ms: 1000,
                 ..defaults()
@@ -71,25 +81,10 @@ fn given_project_layers_when_resolved_then_target_over_local_over_project_over_d
             target: Some("prod"),
             expected_settings: RecallSettings {
                 target: Some("prod".to_owned()),
-                store: StoreLocation::ClickHouse {
-                    connection: "central".to_owned(),
-                    config: vec![
-                        (
-                            "host".to_owned(),
-                            ConfigValue::String("localhost".to_owned()),
-                        ),
-                        (
-                            "database".to_owned(),
-                            ConfigValue::String("observability".to_owned()),
-                        ),
-                        (
-                            "password".to_owned(),
-                            ConfigValue::String("secret".to_owned()),
-                        ),
-                    ],
-                    database: "observability".to_owned(),
-                },
-                connection: Some("central".to_owned()),
+                store: central_store(),
+                read_store: central_store(),
+                write_connection: Some("central".to_owned()),
+                read_connection: Some("central".to_owned()),
                 retention_days: 10,
                 shutdown_timeout_ms: 1000,
                 max_output_bytes: None,
@@ -102,25 +97,10 @@ fn given_project_layers_when_resolved_then_target_over_local_over_project_over_d
             target: Some("capped"),
             expected_settings: RecallSettings {
                 target: Some("capped".to_owned()),
-                store: StoreLocation::ClickHouse {
-                    connection: "central".to_owned(),
-                    config: vec![
-                        (
-                            "host".to_owned(),
-                            ConfigValue::String("localhost".to_owned()),
-                        ),
-                        (
-                            "database".to_owned(),
-                            ConfigValue::String("observability".to_owned()),
-                        ),
-                        (
-                            "password".to_owned(),
-                            ConfigValue::String("secret".to_owned()),
-                        ),
-                    ],
-                    database: "observability".to_owned(),
-                },
-                connection: Some("central".to_owned()),
+                store: central_store(),
+                read_store: central_store(),
+                write_connection: Some("central".to_owned()),
+                read_connection: Some("central".to_owned()),
                 retention_days: 10,
                 shutdown_timeout_ms: 1000,
                 max_output_bytes: Some(4096),
@@ -157,10 +137,44 @@ fn given_project_layers_when_resolved_then_target_over_local_over_project_over_d
                     connection: "other".to_owned(),
                     adapter: "postgres".to_owned(),
                 },
-                connection: Some("other".to_owned()),
+                read_store: StoreLocation::Unsupported {
+                    connection: "other".to_owned(),
+                    adapter: "postgres".to_owned(),
+                },
+                write_connection: Some("other".to_owned()),
+                read_connection: Some("other".to_owned()),
                 retention_days: 10,
                 shutdown_timeout_ms: 1000,
                 max_output_bytes: None,
+                ..defaults()
+            },
+        },
+        ResolveTestCase {
+            description: "a target read connection replaces only the read side",
+            files: LAYERED_PROJECT,
+            target: Some("laptop"),
+            expected_settings: RecallSettings {
+                target: Some("laptop".to_owned()),
+                store: StoreLocation::Sqlite {
+                    path: "/tmp/opencode/elsewhere.sqlite3".into(),
+                },
+                read_store: central_store(),
+                write_connection: Some("history".to_owned()),
+                read_connection: Some("central".to_owned()),
+                retention_days: 10,
+                shutdown_timeout_ms: 1000,
+                max_output_bytes: Some(2 * 1024 * 1024),
+                ..defaults()
+            },
+        },
+        ResolveTestCase {
+            description: "a read connection alone reads shared history and writes the local store",
+            files: READER_PROJECT,
+            target: None,
+            expected_settings: RecallSettings {
+                store: local_store(),
+                read_store: central_store(),
+                read_connection: Some("central".to_owned()),
                 ..defaults()
             },
         },
@@ -183,10 +197,10 @@ fn given_invalid_settings_when_resolved_then_the_error_names_the_setting() {
             description: "unknown connections are named",
             files: &[(
                 "sqlbuild_project.toml",
-                "name = \"x\"\nadapter = \"duckdb\"\n[recall]\nconnection = \"missing\"\n",
+                "name = \"x\"\nadapter = \"duckdb\"\n[recall]\nwrite_connection = \"local\"\nread_connection = \"missing\"\n[connections.local]\npath = \"a.sqlite3\"\nadapter = \"sqlite\"\n",
             )],
             target: None,
-            expected_message_fragment: "unknown connection 'missing'",
+            expected_message_fragment: "recall.read_connection names unknown connection 'missing'",
         },
         ResolveErrorTestCase {
             description: "target settings are named with their path",
@@ -201,7 +215,7 @@ fn given_invalid_settings_when_resolved_then_the_error_names_the_setting() {
             description: "an unset environment reference in a ClickHouse connection is named",
             files: &[(
                 "sqlbuild_project.toml",
-                "name = \"x\"\nadapter = \"duckdb\"\n[recall]\nconnection = \"central\"\n\
+                "name = \"x\"\nadapter = \"duckdb\"\n[recall]\nread_connection = \"central\"\n\
                  [connections.central]\nadapter = \"clickhouse\"\n\
                  password = \"${env:SQLBUILD_RECALL_UNSET_FOR_TEST}\"\n",
             )],

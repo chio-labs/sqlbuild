@@ -1,10 +1,12 @@
-use crate::schema::constants::{ALL_TABLES, VIEW_NAMES};
+use crate::schema::constants::{ALL_TABLES, RECALL_SCHEMA_VERSION, VIEW_NAMES};
 use crate::schema::main::add_column_statement::add_column_statement;
 use crate::schema::main::ddl_script::ddl_script;
+use crate::schema::main::table_columns::table_columns;
 use crate::schema::main::table_spec::table_spec;
 use crate::schema::main::table_statements::table_statements;
+use crate::schema::main::upgrade_statements::upgrade_statements;
 use crate::schema::main::view_statements::view_statements;
-use crate::schema::models::{ColumnSpec, ColumnType, Dialect, Table};
+use crate::schema::models::{ColumnSpec, ColumnType, Dialect, ObservedSchema, Table};
 use crate::schema::tests::helpers::{clickhouse_table, contained, options, sqlite_schema_after};
 use crate::schema::tests::test_types::{
     AddColumnTestCase, FragmentTestCase, SqliteScriptTestCase, StatementSetTestCase,
@@ -198,5 +200,85 @@ fn given_a_new_column_when_upgraded_then_the_statement_is_additive_and_nullable(
             "{}",
             test_case.description
         );
+    }
+}
+
+#[test]
+fn given_an_observed_store_when_upgraded_then_only_the_missing_additive_statements_are_listed() {
+    let current = || ObservedSchema {
+        tables: ALL_TABLES
+            .iter()
+            .map(|table| {
+                (
+                    *table,
+                    table_columns(*table)
+                        .iter()
+                        .map(|column| column.name.to_owned())
+                        .collect(),
+                )
+            })
+            .collect(),
+        views: VIEW_NAMES.iter().map(|name| (*name).to_owned()).collect(),
+        version: Some(RECALL_SCHEMA_VERSION),
+    };
+    let mut behind = current();
+    behind.version = Some(RECALL_SCHEMA_VERSION - 1);
+    if let Some(columns) = behind.tables.get_mut(&Table::Heartbeats) {
+        columns.remove("subcommand");
+    }
+    let mut missing_view = current();
+    missing_view.views.remove("statements");
+    let test_cases: [(&str, ObservedSchema, Dialect, Vec<&str>); 4] = [
+        (
+            "a current store needs nothing",
+            current(),
+            Dialect::Sqlite,
+            Vec::new(),
+        ),
+        (
+            "an empty store gets the whole creation script",
+            ObservedSchema::default(),
+            Dialect::ClickHouse,
+            vec!["CREATE TABLE IF NOT EXISTS `observability`.`recall_meta`"],
+        ),
+        (
+            "a store a version behind adds its column, replaces views and records the version",
+            behind,
+            Dialect::ClickHouse,
+            vec![
+                "ALTER TABLE `observability`.`recall_heartbeats` ADD COLUMN IF NOT EXISTS `subcommand` Nullable(String)",
+                "CREATE OR REPLACE VIEW `observability`.`invocations`",
+                "INSERT INTO `observability`.`recall_meta`",
+            ],
+        ),
+        (
+            "a current store missing a view only creates it",
+            missing_view,
+            Dialect::ClickHouse,
+            vec!["CREATE VIEW IF NOT EXISTS `observability`.`statements`"],
+        ),
+    ];
+
+    for (description, observed, dialect, expected_prefixes) in test_cases {
+        let statements: Vec<String> = upgrade_statements(dialect, &options(None), &observed);
+        let firsts: Vec<bool> = expected_prefixes
+            .iter()
+            .map(|prefix| {
+                statements
+                    .iter()
+                    .any(|statement| statement.starts_with(prefix))
+            })
+            .collect();
+        assert_eq!(
+            firsts,
+            vec![true; expected_prefixes.len()],
+            "{description}: {statements:#?}"
+        );
+        if expected_prefixes.is_empty() {
+            assert!(statements.is_empty(), "{description}: {statements:#?}");
+        }
+        if description.starts_with("a current store missing") {
+            assert_eq!(statements.len(), 1, "{description}");
+        }
     }
 }

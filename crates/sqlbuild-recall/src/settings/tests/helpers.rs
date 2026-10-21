@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use sqlbuild_config::models::ConfigValue;
+
 use crate::settings::main::resolve_recall_settings::resolve_recall_settings;
 use crate::settings::models::{RecallSettings, SettingsRequest, StoreLocation};
 
@@ -22,15 +24,44 @@ pub(crate) fn resolved(files: &[(&str, &str)], target: Option<&str>) -> Result<S
         .map_err(|error| error.message)
 }
 
+/// The built-in local store of the project.
+pub(crate) fn local_store() -> StoreLocation {
+    StoreLocation::Sqlite {
+        path: PathBuf::from(PROJECT).join("logs").join("recall.sqlite3"),
+    }
+}
+
+/// The `central` ClickHouse store of the layered test project.
+pub(crate) fn central_store() -> StoreLocation {
+    StoreLocation::ClickHouse {
+        connection: "central".to_owned(),
+        config: vec![
+            (
+                "host".to_owned(),
+                ConfigValue::String("localhost".to_owned()),
+            ),
+            (
+                "database".to_owned(),
+                ConfigValue::String("observability".to_owned()),
+            ),
+            (
+                "password".to_owned(),
+                ConfigValue::String("secret".to_owned()),
+            ),
+        ],
+        database: "observability".to_owned(),
+    }
+}
+
 /// The default settings for project `shop` on the duckdb adapter.
 pub(crate) fn defaults() -> RecallSettings {
     RecallSettings {
         enabled: true,
         target: None,
-        store: StoreLocation::Sqlite {
-            path: PathBuf::from(PROJECT).join("logs").join("recall.sqlite3"),
-        },
-        connection: None,
+        store: local_store(),
+        read_store: local_store(),
+        write_connection: None,
+        read_connection: None,
         retention_days: 30,
         shutdown_timeout_ms: 3000,
         diagnostics_min_severity: "info".to_owned(),

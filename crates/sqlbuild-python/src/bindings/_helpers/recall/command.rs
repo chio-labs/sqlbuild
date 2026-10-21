@@ -6,11 +6,14 @@ use std::time::Instant;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyStringMethods};
 use sqlbuild_recall::records::models::OutputStream;
-use sqlbuild_recall::schema::models::Dialect;
+use sqlbuild_recall::schema::main::ddl_script::{ddl_statements, render_script};
+use sqlbuild_recall::schema::main::upgrade_statements::upgrade_statements;
+use sqlbuild_recall::schema::models::{DdlOptions, Dialect};
 use sqlbuild_recall::settings::main::resolve_recall_settings::resolve_recall_settings;
 use sqlbuild_recall::settings::models::{RecallSettings, SettingsRequest, StoreLocation};
 use sqlbuild_recall::store::errors::{StoreError, StoreErrorKind};
 use sqlbuild_recall::store::main::describe_store::describe_store;
+use sqlbuild_recall::store::main::observe_sqlite_schema::observe_sqlite_schema;
 use sqlbuild_recall::store::main::open_sqlite_store::open_sqlite_store;
 use sqlbuild_recall::store::main::query_store::query_store;
 use sqlbuild_recall::store::main::read_output_transcript::read_output_transcript;
@@ -59,6 +62,7 @@ struct RecallRequest {
     invocation: Option<String>,
     stream: Option<String>,
     tail: Option<i64>,
+    ddl: bool,
 }
 
 fn optional_text(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
@@ -87,6 +91,7 @@ fn recall_request(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResul
         invocation: text("invocation")?,
         stream: text("stream")?,
         tail: number("tail")?,
+        ddl: arguments.value("ddl")?.is_truthy()?,
     })
 }
 
@@ -160,7 +165,7 @@ impl ReadStore {
 }
 
 fn open_store(py: Python<'_>, settings: &RecallSettings) -> PyResult<ReadStore> {
-    match &settings.store {
+    match &settings.read_store {
         StoreLocation::Sqlite { path } => {
             let store = open_sqlite_store(path, OpenMode::ReadOnly).map_err(|error| {
                 if error.kind == StoreErrorKind::NotFound {
