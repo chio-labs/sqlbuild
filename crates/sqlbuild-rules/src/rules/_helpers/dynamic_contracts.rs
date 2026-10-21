@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::constants::{ENFORCED_CONTRACT, SELECT_STAR_MODEL_RULE_CODE};
 use crate::models::{Fault, Model, RuleMetadata, RulesConfig};
-use crate::query_facts::models::{QueryFacts, RelationFacts};
+use crate::query_facts::models::{QueryFacts, RelationFacts, SelectFacts};
 use crate::rules::_helpers::evaluation::sole_table_name;
 use crate::rules::_helpers::{contract_name_types, explicit_output_types, typed_contract_columns};
 use crate::rules::models::FaultCollector;
@@ -49,15 +49,19 @@ pub(crate) fn evaluate_without_query(
     Some(faults.into_inner())
 }
 
+/// Whether `select` is a lone star over one dynamic pivot, whose columns only the pivot knows.
+pub(crate) fn is_dynamic_pivot_star(select: &SelectFacts) -> bool {
+    select.items.len() == 1
+        && select.from.len() == 1
+        && select.joins.is_empty()
+        && matches!(select.from[0], RelationFacts::DynamicPivot)
+}
+
 pub(crate) fn allows_output_star(query: &QueryFacts, root: &QueryFacts, model: &Model) -> bool {
     let Some(select) = query.root_select() else {
         return false;
     };
-    let dynamic_pivot_star = select.items.len() == 1
-        && select.from.len() == 1
-        && select.joins.is_empty()
-        && matches!(select.from[0], RelationFacts::DynamicPivot);
-    dynamic_pivot_star
+    is_dynamic_pivot_star(select)
         || (model.dynamic_columns_proven
             && std::ptr::eq(query, root)
             && root.ctes.last().is_some_and(|cte| {
