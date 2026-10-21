@@ -346,6 +346,7 @@ impl Analysis<'_> {
         let Some(body) = select_body(expression) else {
             return;
         };
+        let shadowed: HashSet<(usize, usize)> = self.lambda_parameter_uses(body);
         for node in walk_in_scope(body, false) {
             let Expression::Column(column) = node else {
                 continue;
@@ -353,8 +354,42 @@ impl Analysis<'_> {
             if column.name.name == STAR || column.name.name.to_lowercase() != self.column {
                 continue;
             }
+            if column.table.is_none()
+                && column
+                    .span
+                    .is_some_and(|span| shadowed.contains(&(span.start, span.end)))
+            {
+                continue;
+            }
             self.record_column(column, select, chain, role);
         }
+    }
+
+    /// Spans of unqualified uses of a lambda parameter named like the column, which read the parameter.
+    fn lambda_parameter_uses(&self, body: &Expression) -> HashSet<(usize, usize)> {
+        let mut shadowed: HashSet<(usize, usize)> = HashSet::new();
+        for node in walk_in_scope(body, false) {
+            let Expression::Lambda(lambda) = node else {
+                continue;
+            };
+            if !lambda
+                .parameters
+                .iter()
+                .any(|parameter| parameter.name.to_lowercase() == self.column)
+            {
+                continue;
+            }
+            for inner in walk_in_scope(&lambda.body, false) {
+                if let Expression::Column(column) = inner
+                    && column.table.is_none()
+                    && column.name.name.to_lowercase() == self.column
+                    && let Some(span) = column.span
+                {
+                    shadowed.insert((span.start, span.end));
+                }
+            }
+        }
+        shadowed
     }
 
     fn record_column(
