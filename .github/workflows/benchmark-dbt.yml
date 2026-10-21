@@ -39,7 +39,7 @@ on:
       variants:
         description: "Space-separated bench.sh variants"
         required: false
-        default: "sqb_rules sqb_norules sqb_rules_full v2_compile v2_compile_strict v2_compile_cached v2_compile_strict_cached v2_compile_dirty"
+        default: "sqb_rules sqb_norules sqb_rules_full v2_compile_cached v2_compile_strict_cached v2_compile_dirty v2_compile_strict_dirty v2_compile v2_compile_strict"
         type: string
 
 permissions:

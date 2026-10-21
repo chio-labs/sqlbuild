@@ -18,9 +18,9 @@
 #   PYTHON    Python used for the edit helper (default: python3)
 #   SCENARIOS which of warm, edit1 and edit100 to run after cold (default: all three)
 #
-# Default variants: sqb_rules sqb_norules sqb_rules_full v2_compile v2_compile_strict
-# v2_compile_cached v2_compile_strict_cached v2_compile_dirty. Also available: v2_parse core_parse
-# core_compile.
+# Default variants: sqb_rules sqb_norules sqb_rules_full v2_compile_cached v2_compile_strict_cached
+# v2_compile_dirty v2_compile_strict_dirty v2_compile v2_compile_strict. Also available: v2_parse
+# core_parse core_compile.
 set -u
 ROOT=$(realpath "$1")
 OUT=$(realpath -m "$2")
@@ -64,11 +64,14 @@ CMD[v2_compile_strict_cached]="$DBT_V2 compile $DBTFLAGS --static-analysis stric
 SRC[v2_compile_dirty]=dbt
 CMD_COLD[v2_compile_dirty]="$DBT_V2 compile $DBTFLAGS --partial-parse --partial-load"
 CMD[v2_compile_dirty]="$DBT_V2 compile $DBTFLAGS --partial-load --dirty"
+SRC[v2_compile_strict_dirty]=dbt
+CMD_COLD[v2_compile_strict_dirty]="$DBT_V2 compile $DBTFLAGS --static-analysis strict --partial-parse --partial-load"
+CMD[v2_compile_strict_dirty]="$DBT_V2 compile $DBTFLAGS --static-analysis strict --partial-load --dirty"
 
 VARIANTS=("$@")
 if [ ${#VARIANTS[@]} -eq 0 ]; then
-  VARIANTS=(sqb_rules sqb_norules sqb_rules_full v2_compile v2_compile_strict v2_compile_cached
-    v2_compile_strict_cached v2_compile_dirty)
+  VARIANTS=(sqb_rules sqb_norules sqb_rules_full v2_compile_cached v2_compile_strict_cached
+    v2_compile_dirty v2_compile_strict_dirty v2_compile v2_compile_strict)
 fi
 for v in "${VARIANTS[@]}"; do
   if [ -z "${CMD[$v]+set}" ]; then

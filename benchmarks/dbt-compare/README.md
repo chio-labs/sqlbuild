@@ -108,11 +108,12 @@ Commands, run from the project copy. Every dbt command also gets
 | `sqb_rules` | `sqb --no-color compile` in `sqlbuild/` |
 | `sqb_norules` | `sqb --no-color compile` in `sqlbuild-norules/` |
 | `sqb_rules_full` | `sqb_rules` with `SQLBUILD_DISABLE_COMPILE_REUSE=1 SQLBUILD_DISABLE_DELTA_COMPILE=1`: every run is a full compile that uses the per-model caches |
-| `v2_compile` | dbt v2 `compile` |
-| `v2_compile_strict` | dbt v2 `compile --static-analysis strict`, which checks columns like SQLBuild does |
-| `v2_compile_cached` | dbt v2 `compile --partial-parse --partial-load` |
-| `v2_compile_strict_cached` | dbt v2 `compile --static-analysis strict --partial-parse --partial-load` |
-| `v2_compile_dirty` | cold: dbt v2 `compile --partial-parse --partial-load`; then `compile --partial-load --dirty` |
+| `v2_compile_cached` | dbt v2 with parse cache (opt-in; compiles the whole project): `compile --partial-parse --partial-load` |
+| `v2_compile_strict_cached` | the same with `--static-analysis strict` |
+| `v2_compile_dirty` | dbt v2 `--dirty` (changed models and descendants only). Cold: `compile --partial-parse --partial-load`; then `compile --partial-load --dirty` |
+| `v2_compile_strict_dirty` | the same with `--static-analysis strict` on every run |
+| `v2_compile` | dbt v2 default: `compile` |
+| `v2_compile_strict` | dbt v2 default with `--static-analysis strict`, which checks columns like SQLBuild does |
 | `v2_parse` | dbt v2 `parse` (not run by default) |
 | `core_parse` / `core_compile` | dbt Core `parse` / `compile` (not run by default) |
 
@@ -122,25 +123,28 @@ changed files after an edit. dbt Core uses its default partial parsing.
 
 ### dbt v2 modes
 
-dbt v2 2.0.9 has three ways to run `compile`, and the benchmark times all of them:
+dbt v2 2.0.9 has three ways to run `compile`. The benchmark times each, with and without
+`--static-analysis strict`, in this order:
 
+- **With parse cache** (`*_cached`): `--partial-parse` keeps a parse cache under
+  `target/private/metadata/` and `--partial-load` loads it faster. The cache is opt-in, and
+  `--partial-parse` is hidden from `dbt --help` in 2.0.9. The cold run builds the cache. Every later
+  run still compiles the whole project.
+- **`--dirty`** (`*_dirty`): selects only models whose files changed, by modification time, since the
+  last `--partial-parse` run, plus all their downstream dependents. It needs that cache, so the cold
+  run is a `--partial-parse --partial-load` compile and is timed as cold. With nothing changed it
+  reports `NoNodesSelected` ("Nothing to do"). Each run refreshes the cache, so each edit is compared
+  with the run before it. Dense models form long `ref` chains, so one edited model can select dozens
+  of descendants.
 - **Default** (`v2_compile`, `v2_compile_strict`): no cache between runs. Every run parses and
   compiles the whole project.
-- **Partial parse** (`*_cached`): `--partial-parse` keeps a parse cache under
-  `target/private/metadata/` and `--partial-load` loads it faster. Both are off by default, and
-  `--partial-parse` is hidden from `dbt --help` in 2.0.9. The cold run builds the cache. Later runs
-  still compile every node.
-- **Dirty** (`v2_compile_dirty`): `--dirty` selects only nodes whose files changed, by modification
-  time, since the last `--partial-parse` run, plus all their downstream dependents. It needs that
-  cache, so the cold run is a `--partial-parse --partial-load` compile and is timed as cold. With
-  nothing changed it reports `NoNodesSelected` ("Nothing to do"). Its own run refreshes the cache,
-  so each edit is compared with the run before it. Dense models form long `ref` chains, so one edited
-  model can select dozens of descendants.
 
 `/usr/bin/time -f '%e %U %S %M'` records wall time, user and system CPU, and the peak RSS of the
 largest process. `summarize.py` also reports what each tool said it did: SQLBuild prints whether it
 reused the previous compile or compiled only the changed files, dbt Core logs when it falls back
-to a full parse, and dbt v2 prints how many models it processed. The 1-minute load average before and after each run is recorded too.
+to a full parse, and dbt v2 prints how many models it processed. For dbt v2 the column also counts
+models it skipped static analysis for. The 1-minute load average before and after each run is
+recorded too.
 
 ## What isn't equivalent
 
@@ -151,8 +155,11 @@ to a full parse, and dbt v2 prints how many models it processed. The 1-minute lo
   from earlier runs; its run summary covers only the selected nodes. SQLBuild's delta compile
   re-analyses the changed models plus any model whose inputs' columns, types or nullability changed,
   re-runs project-wide Rules, and reports the same result as a full compile.
-- dbt v2's partial parse and dirty modes are opt-in; SQLBuild's caching is on by default. Both are
-  shown so neither tool is measured in a mode its users wouldn't pick.
+- With `--static-analysis strict --dirty`, dbt v2 reads the columns of unselected upstream models
+  from the warehouse. This benchmark's warehouse holds only the sources, so for an edited model whose
+  parent is outside the selection dbt warns `RemoteError (dbt1014)`, sets static analysis to off for
+  it, and doesn't report its column errors. The summary counts these models.
+- dbt v2's parse cache and `--dirty` are opt-in; SQLBuild's caching is on by default.
 - SQLBuild compile also runs configurable Rules (`sqb_rules`). dbt has no built-in counterpart.
 - SQLBuild compile prepares its 10,000 SQL tests. dbt `compile` parses the unit tests but doesn't
   render them; that happens in `dbt test` or `dbt build`.

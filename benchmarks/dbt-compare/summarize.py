@@ -14,16 +14,32 @@ VARIANT_ORDER = (
     "sqb_rules",
     "sqb_norules",
     "sqb_rules_full",
-    "v2_parse",
-    "v2_compile",
-    "v2_compile_strict",
     "v2_compile_cached",
     "v2_compile_strict_cached",
     "v2_compile_dirty",
+    "v2_compile_strict_dirty",
+    "v2_compile",
+    "v2_compile_strict",
+    "v2_parse",
     "core_parse",
     "core_compile",
 )
+LABELS = {
+    "sqb_rules": "SQLBuild, Rules on",
+    "sqb_norules": "SQLBuild, Rules off",
+    "sqb_rules_full": "SQLBuild, Rules on, reuse and delta compile off",
+    "v2_compile_cached": "dbt v2 with parse cache (opt-in; compiles the whole project)",
+    "v2_compile_strict_cached": "dbt v2 with parse cache, strict",
+    "v2_compile_dirty": "dbt v2 --dirty (changed models and descendants only)",
+    "v2_compile_strict_dirty": "dbt v2 --dirty, strict",
+    "v2_compile": "dbt v2 default",
+    "v2_compile_strict": "dbt v2 default, strict",
+    "v2_parse": "dbt v2 parse",
+    "core_parse": "dbt Core parse",
+    "core_compile": "dbt Core compile",
+}
 PROCESSED_RE = re.compile(r"Processed: (\d+) models?")
+SKIPPED_ANALYSIS_RE = re.compile(r"Skipping analysis for '([^']+)'")
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 TIME_RE = re.compile(r"^(?P<variant>\w+)\.(?P<scenario>\w+)\.r(?P<round>\d+)\.time$")
 LOAD_RE = re.compile(r"^(\w+) (\w+) r\d+ load ([\d.]+) ([\d.]+)$")
@@ -33,7 +49,8 @@ def path_taken(variant: str, out: str, err: str) -> str:
     """What each tool reported doing.
 
     SQLBuild: a full compile, a replay or a delta compile. dbt Core: a full or partial parse.
-    dbt v2: how many models it processed, or that `--dirty` found nothing to do.
+    dbt v2: how many models it processed, how many it skipped static analysis for, or that
+    `--dirty` found nothing to do.
     """
     if variant.startswith("sqb"):
         if "Inputs unchanged; reused the previous compile" in err:
@@ -50,7 +67,9 @@ def path_taken(variant: str, out: str, err: str) -> str:
         text = ANSI_RE.sub("", out + err)
         processed = PROCESSED_RE.search(text)
         if processed:
-            return f"{processed[1]} models"
+            skipped = len(set(SKIPPED_ANALYSIS_RE.findall(text)))
+            note = f", analysis skipped for {skipped}" if skipped else ""
+            return f"{processed[1]} models{note}"
         if "NoNodesSelected" in text:
             return "nothing to do"
     return "-"
@@ -82,10 +101,10 @@ def main() -> None:
             loads[(m[1], m[2])] += [float(m[3]), float(m[4])]
 
     print(
-        "| variant | scenario | runs | wall s (median) | wall s (all) | user+sys s (median) "
+        "| tool | variant | scenario | runs | wall s (median) | wall s (all) | user+sys s (median) "
         "| peak RSS MiB (median) | exit codes | what the tool did | 1-min load before/after |"
     )
-    print("|---|---|---|---|---|---|---|---|---|---|")
+    print("|---|---|---|---|---|---|---|---|---|---|---|")
     found = {variant for variant, _ in runs}
     variants = [v for v in VARIANT_ORDER if v in found] + sorted(found - set(VARIANT_ORDER))
     for variant in variants:
@@ -96,7 +115,8 @@ def main() -> None:
             walls = [r[0] for r in cell]
             load = loads.get((variant, scenario), [0.0])
             print(
-                f"| {variant} | {scenario} | {len(cell)} | {statistics.median(walls):.2f} "
+                f"| {LABELS.get(variant, variant)} | {variant} | {scenario} | {len(cell)} "
+                f"| {statistics.median(walls):.2f} "
                 f"| {', '.join(f'{w:.1f}' for w in walls)} "
                 f"| {statistics.median(r[1] for r in cell):.1f} "
                 f"| {statistics.median(r[2] for r in cell) / 1024:.0f} "
