@@ -11,7 +11,7 @@ const STATEMENTS: &str = "WITH facts AS (
     WHERE statement_id IS NOT NULL AND event_type LIKE 'statement!_%' ESCAPE '!'
 ),
 firsts AS (
-    SELECT invocation_id, statement_id, run_id, resource_id, resource_attempt_id, operation_id,
+    SELECT invocation_id, invocation_started_at, statement_id, run_id, resource_id, resource_attempt_id, operation_id,
         intent, statement_kind, purpose, sql_digest,
         ROW_NUMBER() OVER (
             PARTITION BY statement_id ORDER BY invocation_sequence, occurred_at, event_id
@@ -48,6 +48,7 @@ resources AS (
 )
 SELECT
     firsts.invocation_id,
+    firsts.invocation_started_at,
     firsts.statement_id,
     firsts.run_id,
     firsts.resource_id,

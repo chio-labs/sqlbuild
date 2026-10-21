@@ -11,6 +11,7 @@ from tests.integration.src.sqlbuild.cli.recall._test_types import (
 )
 from tests.integration.src.sqlbuild.cli.recall.helpers import (
     OUTPUT_LOG_SINK,
+    recall_rows,
     run,
     write_project,
     write_sinks,
@@ -133,3 +134,19 @@ def test_given_project_sinks_when_reading_recall_then_no_sink_runs_and_no_comput
     assert read.stdout
     assert not (project_dir / "output.log").exists()
     assert set((project_dir / "logs").glob("*/*")) == logs_before
+
+
+def test_given_recorded_statements_when_filtered_by_start_time_then_the_view_exposes_it(
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = write_project(tmp_path / "orders_shop")
+    assert run(project_dir, "build").returncode == 0
+
+    rows: list[list[object]] = recall_rows(
+        project_dir,
+        "SELECT COUNT(*) > 0, COUNT(DISTINCT s.invocation_started_at = i.invocation_started_at) "
+        "FROM statements s JOIN invocations i USING (invocation_id) "
+        "WHERE s.invocation_started_at >= (SELECT MIN(invocation_started_at) FROM invocations)",
+    )
+
+    assert rows == [[1, 1]]

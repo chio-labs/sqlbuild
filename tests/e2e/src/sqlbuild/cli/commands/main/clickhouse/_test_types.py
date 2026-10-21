@@ -207,3 +207,11 @@ class ClickHouseRecallBehindStoreTestCase:
     expected_ddl_fragments: tuple[str, ...]
     expected_recorded: list[list[object]]
     expected_heartbeat_columns: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallPushdownTestCase:
+    description: str
+    sql: str
+    expected_rows: list[list[object]]
+    max_read_fraction: float

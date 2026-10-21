@@ -350,6 +350,10 @@ in the store's SQL dialect, against these views:
 
 Run `sqb recall schema` for every column.
 
+Every view has `invocation_id` and `invocation_started_at`. Filter on them to keep a query cheap:
+on a ClickHouse store, a filter on either reaches the table reads, so a query about one invocation or
+the last day reads that part of the store instead of folding the whole retention window.
+
 ## Relationship to compute logs
 
 Compute logs (`logs/<date>/<invocation_id>/stdout.log`, `stderr.log`, and `diagnostics.jsonl`) are

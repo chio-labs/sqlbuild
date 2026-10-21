@@ -532,6 +532,35 @@ def limited_user(
         execute_clickhouse_sql(config=config, statements=(f"DROP USER IF EXISTS {name}",))
 
 
+def replicate_invocations(
+    *, config: dict[str, object], database: str, copies: int, spacing_minutes: int
+) -> None:
+    """Store `copies` more invocations shaped like each recorded one, `spacing_minutes` apart."""
+
+    shift: str = f"toIntervalMinute(n * {spacing_minutes})"
+    shifted: dict[str, str] = {
+        "recall_events": (
+            ", if(statement_id IS NULL, NULL, concat(statement_id, '-', toString(n))) "
+            "AS statement_id, concat(event_id, '-', toString(n)) AS event_id, "
+            f"occurred_at - {shift} AS occurred_at"
+        ),
+        "recall_invocations": "",
+        "recall_heartbeats": f", beat_at - {shift} AS beat_at, stale_at - {shift} AS stale_at",
+    }
+    execute_clickhouse_sql(
+        config=config,
+        statements=tuple(
+            f"INSERT INTO {database}.{table} SELECT * EXCEPT (n) REPLACE ("
+            "concat(invocation_id, '-', toString(n)) AS invocation_id, "
+            f"invocation_started_at - {shift} AS invocation_started_at{extra}) "
+            f"FROM (SELECT * FROM {database}.{table}) AS source "
+            f"CROSS JOIN (SELECT number + 1 AS n FROM numbers({copies})) AS copies "
+            "SETTINGS insert_deduplicate = 0, max_partitions_per_insert_block = 1000"
+            for table, extra in shifted.items()
+        ),
+    )
+
+
 def duplicate_recall_rows(*, config: dict[str, object], database: str) -> None:
     """Deliver every stored Recall row a second time, as a retried insert would."""
 

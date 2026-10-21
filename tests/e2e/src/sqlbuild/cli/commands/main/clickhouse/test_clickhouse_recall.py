@@ -19,6 +19,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse._test_types import (
     ClickHouseRecallOutputTestCase,
     ClickHouseRecallPartialInsertTestCase,
     ClickHouseRecallPermissionTestCase,
+    ClickHouseRecallPushdownTestCase,
     ClickHouseRecallQueryOutputSinkTestCase,
     ClickHouseRecallRetentionConflictTestCase,
     ClickHouseRecallRetentionTestCase,
@@ -37,6 +38,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse.helpers import (
     fetch_clickhouse_rows,
     limited_user,
     physical_rows,
+    replicate_invocations,
     stored_ttl_days,
     write_recall_project,
 )
@@ -820,3 +822,70 @@ def test_given_a_store_one_version_behind_when_a_select_insert_user_builds_then_
         )
         == test_case.expected_heartbeat_columns
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseRecallPushdownTestCase(
+            description="statements of one invocation read only that invocation's granules",
+            sql="SELECT count() > 0 FROM statements WHERE invocation_id = '{invocation_id}'",
+            expected_rows=[[1]],
+            max_read_fraction=0.25,
+        ),
+        ClickHouseRecallPushdownTestCase(
+            description="statements expose invocation_started_at to bound a scan",
+            sql=(
+                "SELECT count() > 0 FROM statements "
+                "WHERE invocation_started_at >= '{invocation_started_at}'"
+            ),
+            expected_rows=[[1]],
+            max_read_fraction=0.25,
+        ),
+        ClickHouseRecallPushdownTestCase(
+            description="invocations of one invocation read a bounded part of the store",
+            sql="SELECT count() FROM invocations WHERE invocation_id = '{invocation_id}'",
+            expected_rows=[[1]],
+            max_read_fraction=0.25,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_large_store_when_filtering_a_view_then_the_filter_reaches_the_table_reads(
+    test_case: ClickHouseRecallPushdownTestCase,
+    tmp_path: Path,
+    clickhouse_e2e_config: dict[str, object],
+    recall_database: str,
+) -> None:
+    project_dir: Path = write_recall_project(
+        parent=tmp_path, config=clickhouse_e2e_config, database=recall_database
+    )
+    assert run(project_dir, "build").returncode == 0
+    replicate_invocations(
+        config=clickhouse_e2e_config, database=recall_database, copies=3000, spacing_minutes=10
+    )
+    execute_clickhouse_sql(
+        config=clickhouse_e2e_config,
+        statements=(f"OPTIMIZE TABLE {recall_database}.recall_events FINAL",),
+    )
+    (invocation_id, started_at), *_ = fetch_clickhouse_rows(
+        config=clickhouse_e2e_config,
+        sql=f"SELECT invocation_id, toString(invocation_started_at) "
+        f"FROM {recall_database}.recall_invocations WHERE position(invocation_id, '-') = 0",
+    )
+    stored_events: int = physical_rows(
+        config=clickhouse_e2e_config, database=recall_database, where="1"
+    )
+
+    queried: subprocess.CompletedProcess[bytes] = run(
+        project_dir,
+        "recall",
+        "query",
+        "--json",
+        test_case.sql.format(invocation_id=invocation_id, invocation_started_at=started_at),
+    )
+
+    document: dict[str, object] = json.loads(queried.stdout)
+    statistics: dict[str, int] = cast(dict[str, int], document["statistics"])
+    assert document["rows"] == test_case.expected_rows
+    assert statistics["rows_read"] < stored_events * test_case.max_read_fraction
