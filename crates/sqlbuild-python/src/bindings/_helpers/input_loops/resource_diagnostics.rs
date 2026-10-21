@@ -2,6 +2,7 @@
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
@@ -20,6 +21,9 @@ use sqlbuild_discovery::yaml_files::main::yaml_entry_lines::yaml_entry_lines;
 use sqlbuild_pysource::definition_locations::main::decorator_location::decorator_location;
 use sqlbuild_sqltext::compiler::main::model_header_entry_span::model_header_entry_span;
 
+use crate::bindings::_helpers::compile_context::delta::{
+    DeltaInjection, capture, capturing, injection,
+};
 use crate::bindings::_helpers::compiled_project::attachment_inputs::{
     DiagnosticSettings, HookDescriptionRow, LoaderRow, PythonResourceRow, ResourceDiagnostics,
     ScenarioDescriptionRow,
@@ -174,19 +178,45 @@ fn orphaned_factories<'py>(diagnostics: &Diagnostics<'_, 'py>) -> PyResult<Vec<B
     if diagnostics.settings.audit_factories.is_empty() {
         return Ok(Vec::new());
     }
+    let injected: Option<Arc<DeltaInjection>> = injection();
+    let by_path: bool = injected.is_some() || capturing();
     let mut referenced: HashSet<String> = HashSet::new();
+    let mut paths: HashSet<String> = HashSet::new();
     for model_file in &diagnostics.settings.model_files {
+        let model_file: &Bound<'py, PyAny> = model_file.bind(py);
+        let path: Option<String> = if by_path {
+            Some(posix(
+                &native_field(model_file, "relative_path")?.str()?.to_cow()?,
+            ))
+        } else {
+            None
+        };
         let header: Bound<'py, PyDict> =
-            native_field(model_file.bind(py), "header_values")?.downcast_into()?;
-        let Some(names) = header.get_item(AUDIT_FACTORIES_KEY)? else {
-            continue;
-        };
-        let Ok(names) = names.downcast::<PyList>() else {
-            continue;
-        };
-        for name in names.iter() {
-            if name.is_instance_of::<PyString>() {
-                referenced.insert(name.extract()?);
+            native_field(model_file, "header_values")?.downcast_into()?;
+        let mut names: Vec<String> = Vec::new();
+        if let Some(values) = header.get_item(AUDIT_FACTORIES_KEY)?
+            && let Ok(values) = values.downcast::<PyList>()
+        {
+            for name in values.iter() {
+                if name.is_instance_of::<PyString>() {
+                    names.push(name.extract()?);
+                }
+            }
+        }
+        if let Some(path) = path {
+            if !names.is_empty() {
+                capture(|capture| {
+                    capture.audit_references.insert(path.clone(), names.clone());
+                });
+            }
+            paths.insert(path);
+        }
+        referenced.extend(names);
+    }
+    if let Some(injected) = &injected {
+        for (path, names) in &injected.audit_references {
+            if !paths.contains(path) {
+                referenced.extend(names.iter().cloned());
             }
         }
     }
