@@ -294,7 +294,7 @@ pub(crate) fn print_authored_tokens(
             } else {
                 separators
                     .get(index + 1)
-                    .is_some_and(|next| next.starts_with('\n'))
+                    .is_none_or(|next| next.starts_with('\n'))
             };
             if !next_starts_line {
                 output.push('\n');

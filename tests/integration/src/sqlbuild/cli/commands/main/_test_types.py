@@ -316,6 +316,15 @@ class FormatCompileIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class TrailingCommentFormatIntegrationTestCase:
+    """A model body ending in comments that formatting must settle on in one run."""
+
+    description: str
+    body: str
+    expected_body: str
+
+
+@dataclass(frozen=True)
 class AuthoredSpellingFormatIntegrationTestCase:
     """One authored function or operator spelling that formatting must keep."""
 
