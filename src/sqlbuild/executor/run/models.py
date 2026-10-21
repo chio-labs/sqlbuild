@@ -285,6 +285,18 @@ class BoundViewGuard:
 
 
 @dataclass(frozen=True)
+class MicrobatchBatchProgress:
+    """One completed microbatch, for progress output that keeps a line per batch."""
+
+    model_name: str
+    batch_number: int
+    batch_count: int
+    window: str
+    rows_affected: int | None
+    elapsed_seconds: float
+
+
+@dataclass(frozen=True)
 class ModelMaterializationContext:
     """Shared runtime inputs for one model's materialization lifecycle."""
 
@@ -312,6 +324,7 @@ class ModelMaterializationContext:
     microbatch_lease_check: Callable[[], None] | None = None
     microbatch_global_concurrency: int = 1
     microbatch_batch_runner: MicrobatchBatchRunner | None = None
+    on_batch_complete: Callable[[MicrobatchBatchProgress], None] | None = None
     watermark_resolver: WatermarkResolver | None = None
     enforce_explicit_references: bool = False
     bound_views: BoundViewGuard = field(default_factory=BoundViewGuard)

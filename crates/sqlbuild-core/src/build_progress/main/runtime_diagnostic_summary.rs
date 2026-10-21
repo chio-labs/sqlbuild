@@ -20,7 +20,7 @@ pub fn runtime_diagnostic_summary(
     }
     if let Some((omitted, statement)) = query.filter(|(omitted, _)| *omitted > 0) {
         lines.push(format!(
-            "Query diagnostics  {omitted} statements omitted after {QUERY_DIAGNOSTIC_LIMIT}; final query: {}",
+            "Query diagnostics  {omitted} statements omitted after {QUERY_DIAGNOSTIC_LIMIT} per resource; final query: {}",
             query_diagnostic_message(statement)
         ));
     }

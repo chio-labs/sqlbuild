@@ -27,7 +27,7 @@ from sqlbuild.executor.build.types import BeforeModelMaterializeCallback, BuildS
 from sqlbuild.executor.custom.models import MaterializationResult
 from sqlbuild.executor.load.models import LoadExecutionResult
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
-from sqlbuild.executor.run.models import ModelExecutionResult
+from sqlbuild.executor.run.models import MicrobatchBatchProgress, ModelExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.microbatches.models import MicrobatchScope
@@ -104,6 +104,7 @@ class BuildCallbacks:
 
     on_progress: Callable[[str], None] | None = None
     on_sub_progress: Callable[[str], None] | None = None
+    on_batch_complete: Callable[[MicrobatchBatchProgress], None] | None = None
     on_node_start: NodeStartCallback | None = None
     on_node_complete: Callable[[object], None] | None = None
     before_model_materialize: BeforeModelMaterializeCallback | None = None
