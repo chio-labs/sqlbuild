@@ -90,7 +90,7 @@ pub(crate) fn model_version_identity_metadata_json<'py>(
     let py: Python<'py> = model.py();
     let local_function_hashes: Bound<'py, PyDict> = PyDict::new(py);
     if let Some(function_hashes) = function_local_hashes.filter(|hashes| !hashes.is_none()) {
-        for upstream_key in native_field(model, "deps")?.try_iter()? {
+        for upstream_key in model_reads::deps(model)?.try_iter()? {
             let upstream_key: Bound<'py, PyAny> = upstream_key?;
             let kind: String = native_field(&upstream_key, "resource_type")?
                 .str()?
@@ -105,7 +105,7 @@ pub(crate) fn model_version_identity_metadata_json<'py>(
             }
         }
     }
-    let config_values: Bound<'py, PyAny> = native_field(&native_field(model, "config")?, "values")?;
+    let config_values: Bound<'py, PyAny> = native_field(&model_reads::config(model)?, "values")?;
     let signature: Bound<'py, PyDict> =
         execution_signature(model, &config_values, hook_version_hashes)?;
     version_identity_metadata_json(
@@ -170,7 +170,7 @@ fn contract_output_signature<'py>(
     config_values: &Bound<'py, PyAny>,
 ) -> PyResult<Option<Bound<'py, PyDict>>> {
     let py: Python<'py> = model.py();
-    let schema_entry: Bound<'py, PyAny> = native_field(model, "schema_entry")?;
+    let schema_entry: Bound<'py, PyAny> = model_reads::schema_entry(model)?;
     if schema_entry.is_none() {
         return Ok(None);
     }
@@ -184,7 +184,7 @@ fn contract_output_signature<'py>(
     if !enforced && native_field(&schema_entry, "model_schema")?.is_none() {
         return Ok(None);
     }
-    let enum_columns: Bound<'py, PyAny> = native_field(model, "enum_columns")?;
+    let enum_columns: Bound<'py, PyAny> = model_reads::enum_columns(model)?;
     let rendered: Bound<'py, PyList> = PyList::empty(py);
     for column in columns.try_iter()? {
         let column: Bound<'py, PyAny> = column?;
@@ -247,7 +247,7 @@ fn family_signatures<'py>(families: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
 /// The hash of a model's own declared columns, column families and contract setting.
 pub(crate) fn model_declared_columns_hash(model: &Bound<'_, PyAny>) -> PyResult<String> {
     let py: Python<'_> = model.py();
-    let schema_entry: Bound<'_, PyAny> = native_field(model, "schema_entry")?;
+    let schema_entry: Bound<'_, PyAny> = model_reads::schema_entry(model)?;
     let payload: Bound<'_, PyDict> = PyDict::new(py);
     payload.set_item(
         "contract",

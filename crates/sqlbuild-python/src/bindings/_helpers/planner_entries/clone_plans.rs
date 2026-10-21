@@ -3,6 +3,7 @@
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
 use crate::bindings::_helpers::model_config::typed_config::{config_node_of, model_values};
 use crate::bindings::_helpers::planner_entries::models::ModelPlanContext;
@@ -121,13 +122,13 @@ fn resolved_source_entries<'py>(
     let source_type = enum_member(py, RecordId::CompiledResourceType, "SOURCE")?;
     let read = PySet::empty(py)?;
     let mut readers: Vec<Bound<'py, PyAny>> = Vec::new();
-    for model in native_field(project, "models")?.try_iter()? {
+    for model in project_reads::models(project)?.try_iter()? {
         let model = model?;
         if recreated_view(&model, &selected)? {
             readers.push(model);
         }
     }
-    for function in native_field(project, "functions")?.try_iter()? {
+    for function in project_reads::functions(project)?.try_iter()? {
         let function = function?;
         if selected.contains(native_field(&function, "key")?)? {
             readers.push(function);
@@ -157,14 +158,11 @@ fn clone_resolution<'py>(
     (adapter, connection): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<CloneResolution<'py>> {
     let py = project.py();
-    let model_locations = object(
-        py,
-        build_model_locations(&native_field(project, "models")?)?,
-    )?;
-    let seed_locations = object(py, build_seed_locations(&native_field(project, "seeds")?)?)?;
+    let model_locations = object(py, build_model_locations(&project_reads::models(project)?)?)?;
+    let seed_locations = object(py, build_seed_locations(&project_reads::seeds(project)?)?)?;
     let function_locations = object(
         py,
-        build_function_locations(&native_field(project, "functions")?)?,
+        build_function_locations(&project_reads::functions(project)?)?,
     )?;
     let source_map = PyDict::new(py);
     for source in native_field(source_project, "sources")?.try_iter()? {
@@ -232,7 +230,7 @@ fn clone_model_entries<'py>(
     let py = project.py();
     let selected = native_field(plan, "selected_keys")?;
     let entries = PyDict::new(py);
-    for model in native_field(project, "models")?.try_iter()? {
+    for model in project_reads::models(project)?.try_iter()? {
         let model = model?;
         if !selected.contains(model_reads::model_key(&model)?)? || disabled_model(&model)? {
             continue;
@@ -240,7 +238,7 @@ fn clone_model_entries<'py>(
         let materialization_type = materialization_of(&model)?;
         let resolved_sql = if materialization_type.eq(VIEW_MATERIALIZATION)? {
             let functions = PyDict::new(py);
-            for function in native_field(project, "functions")?.try_iter()? {
+            for function in project_reads::functions(project)?.try_iter()? {
                 let function = function?;
                 functions.set_item(native_field(&function, "name")?, function)?;
             }
@@ -301,7 +299,7 @@ fn clone_source_entries<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = project.py();
     let entries = PyDict::new(py);
-    for source in native_field(project, "sources")?.try_iter()? {
+    for source in project_reads::sources(project)?.try_iter()? {
         let source = source?;
         let entry = native_field(&source, "source_entry")?;
         if !selected.contains(native_field(&source, "key")?)?
@@ -359,7 +357,7 @@ fn clone_function_entries<'py>(
     let py = project.py();
     let selected = native_field(plan, "selected_keys")?;
     let entries = PyDict::new(py);
-    for function in native_field(project, "functions")?.try_iter()? {
+    for function in project_reads::functions(project)?.try_iter()? {
         let function = function?;
         if !selected.contains(native_field(&function, "key")?)? {
             continue;
@@ -445,7 +443,7 @@ fn seed_entries<'py>(
     wanted: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
-    for seed in native_field(project, "seeds")?.try_iter()? {
+    for seed in project_reads::seeds(project)?.try_iter()? {
         let seed = seed?;
         if wanted.contains(native_field(&seed, field)?)? {
             entries.push(seed_entry(&seed)?);
@@ -460,7 +458,7 @@ fn origin_model_entries<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = project.py();
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
-    for model in native_field(project, "models")?.try_iter()? {
+    for model in project_reads::models(project)?.try_iter()? {
         let model = model?;
         if !selected_names.contains(model_reads::name_object(&model)?)? || disabled_model(&model)? {
             continue;
@@ -487,7 +485,7 @@ fn origin_source_entries<'py>(
     let py = project.py();
     let mut keys: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut order: Vec<Bound<'py, PyAny>> = Vec::new();
-    for source in native_field(project, "sources")?.try_iter()? {
+    for source in project_reads::sources(project)?.try_iter()? {
         let source = source?;
         if selected_names.contains(native_field(&source, "name")?)? {
             keys.push(native_field(&source, "key")?);
