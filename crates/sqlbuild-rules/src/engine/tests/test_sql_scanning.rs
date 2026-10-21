@@ -1,5 +1,5 @@
 use crate::engine::tests::test_types::{
-    DollarQuoteSiteTestCase, LintDialectSiteTestCase, SqlScannerTestCase,
+    DialectCallsTestCase, DollarQuoteSiteTestCase, LintDialectSiteTestCase, SqlScannerTestCase,
 };
 use crate::query_facts::main::model_shape::model_shape;
 use crate::rules::_helpers::numeric_decisions::compact_sql;
@@ -320,6 +320,31 @@ fn given_dollar_quoted_apostrophe_when_preparing_lint_sites_then_later_reference
             })
             .unwrap_or_default();
         assert_eq!(sites, test_case.expected_sites, "{}", test_case.description);
+    }
+    Ok(())
+}
+
+#[test]
+fn given_hash_before_reference_when_shaping_then_only_hash_comment_dialects_skip_it()
+-> Result<(), String> {
+    let test_cases = [
+        DialectCallsTestCase {
+            description: "bigquery treats # as a line comment",
+            dialect: "bigquery",
+            expected_calls: &["__ref(\"o\")"],
+        },
+        DialectCallsTestCase {
+            description: "snowflake reads code after #",
+            dialect: "snowflake",
+            expected_calls: &["__ref(\"o\")", "__ref(\"p\")"],
+        },
+    ];
+    let sql = "SELECT o.order_id FROM __ref(\"o\") AS o\nWHERE o.order_id > 0 # AND o.order_id IN (SELECT order_id FROM __ref(\"p\"))\n";
+    for test_case in test_cases {
+        let calls: Vec<String> = model_shape(sql, test_case.dialect)
+            .map(|shape| shape.calls.into_iter().map(|call| call.text).collect())
+            .unwrap_or_default();
+        assert_eq!(calls, test_case.expected_calls, "{}", test_case.description);
     }
     Ok(())
 }
