@@ -48,6 +48,15 @@ class SlowSinkFullDeliveryE2ETestCase:
 
 
 @dataclass(frozen=True)
+class SlowOnceSinkE2ETestCase:
+    """A sink with one call slower than the call timeout and the warning it must print."""
+
+    description: str
+    slow_call: int
+    expected_warning: str
+
+
+@dataclass(frozen=True)
 class InvalidDrainTimeoutE2ETestCase:
     """One invalid lifecycle drain timeout value."""
 

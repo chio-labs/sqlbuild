@@ -102,11 +102,16 @@ durability. SQLBuild core does not provide a Kafka or ClickHouse implementation.
   Run and invocation outcomes (`run_started`, `run_completed`, `run_failed`, `invocation_started`,
   `invocation_completed`, `invocation_failed`) are always admitted and never displaced.
 - A failing or timed-out sink is isolated from command correctness.
+- Each sink call has one second to return. When a call takes longer, the command prints
+  `Warning: lifecycle sink '<name>' did not return from one call within 1s; its events are dropped until that call returns.`
+  That call counts as failed and the sink's events are dropped and counted while it runs. Run and
+  invocation outcomes are kept instead and delivered, with every later event, once the call returns.
+  Time SQLBuild itself spends waiting for Python's GIL does not count against the call.
 - `audit_completed` facts are published as each audit finishes (model audits in `sqb build` when
   their model finishes), not in one burst at the end of the run.
 - When lifecycle events are dropped or fail, the command prints one warning to stderr with the
   counts and affected sinks, for example
-  `Warning: command completed successfully, but lifecycle event export was incomplete: 140 of 248 events dropped, 0 failed (sink 'orders_events'). Increase sinks.lifecycle.shutdown_timeout or check sink health.`
+  `Warning: command completed successfully, but lifecycle event export was incomplete: 140 of 248 events dropped, 0 failed (sink 'orders_events'). Check sink health: a sink call slower than 1s drops that sink's events until it returns; events still queued at exit need a longer sinks.lifecycle.shutdown_timeout.`
   A successful command then ends with
   `sqb audit completed successfully; only its lifecycle event export is affected.` The exit code
   and stdout, including `--json` output, are unchanged.

@@ -95,6 +95,14 @@ pub(crate) struct State {
     pub(crate) stopping: bool,
     pub(crate) force_stop: bool,
     pub(crate) blocked: HashSet<usize>,
+    /// The exporter of each abandoned sink call that may still be running, by attempt token.
+    pub(crate) stalled: HashMap<u64, usize>,
+    /// Outcome events owed to blocked exporters, delivered once their stalled call returns.
+    pub(crate) held: Vec<(usize, Queued)>,
+    /// Exporters whose sink call timed out since the last dispatch round, to warn about.
+    pub(crate) newly_blocked: Vec<String>,
+    /// When the dispatcher last charged running sink calls toward their timeout.
+    pub(crate) last_charged: Option<Instant>,
     pub(crate) live_invocations: HashSet<u64>,
     pub(crate) next_invocation: u64,
     dispatcher_running: bool,
@@ -699,6 +707,10 @@ impl EventExporterDispatcher {
                 stopping: false,
                 force_stop: false,
                 blocked: HashSet::new(),
+                stalled: HashMap::new(),
+                held: Vec::new(),
+                newly_blocked: Vec::new(),
+                last_charged: None,
                 live_invocations: HashSet::new(),
                 next_invocation: 0,
                 dispatcher_running: true,

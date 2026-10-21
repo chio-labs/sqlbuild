@@ -93,6 +93,32 @@ def recording_sink_source(*, event_kinds: str, delay_seconds: float) -> str:
     ).lstrip()
 
 
+def slow_once_sink_source(*, slow_call: int) -> str:
+    """Return a lifecycle sink whose call number ``slow_call`` sleeps past the 1s call timeout."""
+
+    return dedent(
+        f"""
+        import os
+        import time
+        from pathlib import Path
+
+        from sqlbuild.sinks import LifecycleEvent, lifecycle_event_sink, lifecycle_event_to_json
+
+        CALLS: list[int] = []
+
+
+        @lifecycle_event_sink(name="slow_once_events")
+        def record_event(event: LifecycleEvent) -> None:
+            CALLS.append(1)
+            if len(CALLS) == {slow_call}:
+                time.sleep(1.5)
+            path = Path(os.environ["ORDERS_EVENT_PATH"])
+            with path.open("a", encoding="utf-8") as stream:
+                stream.write(lifecycle_event_to_json(event) + "\\n")
+        """
+    ).lstrip()
+
+
 def read_sequenced_events(path: Path) -> list[dict[str, object]]:
     """Return recorded events ordered by canonical invocation sequence."""
 
