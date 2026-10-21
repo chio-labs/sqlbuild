@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.164.3](https://github.com/chio-labs/sqlbuild/compare/v0.164.2...v0.164.3) (2026-10-21)
+
+
+### Performance Improvements
+
+* **format:** remove repeated work from the native SQL formatter ([#1188](https://github.com/chio-labs/sqlbuild/issues/1188)) ([8928936](https://github.com/chio-labs/sqlbuild/commit/8928936359692fca5f59a6b99168cb91c3440dd3))
+
 ## [0.164.2](https://github.com/chio-labs/sqlbuild/compare/v0.164.1...v0.164.2) (2026-10-20)
 
 
