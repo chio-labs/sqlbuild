@@ -151,6 +151,14 @@ pub(crate) fn is_tree_fact(key: &FactKey) -> bool {
     })
 }
 
+/// The fact a key name reads, if it names one.
+fn fact_of(name: &str) -> Option<Fact> {
+    FACTS
+        .iter()
+        .find(|(fact_name, _, _)| *fact_name == name)
+        .map(|(_, fact, _)| *fact)
+}
+
 /// Whether a delta compiling `model_paths` reads `key` exactly as a full compile would.
 pub(crate) fn delta_safe_fact(
     key: &FactKey,
@@ -158,7 +166,9 @@ pub(crate) fn delta_safe_fact(
     all_sources: bool,
 ) -> bool {
     if is_tree_fact(key) {
-        return true;
+        return !key
+            .first()
+            .is_some_and(|name| fact_of(name) == Some(Fact::ResourcesUnder));
     }
     if let [name] = key.as_slice() {
         return all_sources
