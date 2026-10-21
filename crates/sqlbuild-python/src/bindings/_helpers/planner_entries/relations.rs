@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::planner_entries::models::{
     PlannerRelationsContext, RelationsRequest,
 };
@@ -31,7 +32,7 @@ fn selected_audit_relation_keys<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = project.py();
     let keys = PySet::empty(py)?;
-    for audit in native_field(project, "audits")?.try_iter()? {
+    for audit in project_reads::audits(project)?.try_iter()? {
         let audit = audit?;
         if audit_is_selected(&audit, selected_keys)? {
             for dependency in native_field(&audit, "scope_deps")?.try_iter()? {
@@ -99,12 +100,12 @@ pub(crate) fn planner_relations_context<'py>(
     let selected_keys = native_field(&scope, "selected_keys")?;
     let mut model_locations = object(
         py,
-        build_model_locations(&native_field(&project, "models")?)?,
+        build_model_locations(&project_reads::models(&project)?)?,
     )?;
-    let mut seed_locations = object(py, build_seed_locations(&native_field(&project, "seeds")?)?)?;
+    let mut seed_locations = object(py, build_seed_locations(&project_reads::seeds(&project)?)?)?;
     let function_locations = object(
         py,
-        build_function_locations(&native_field(&project, "functions")?)?,
+        build_function_locations(&project_reads::functions(&project)?)?,
     )?;
     let deferred_locations = native_field(&deferral, "deferred_locations")?;
     if !deferred_locations.is_none() {

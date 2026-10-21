@@ -1,6 +1,7 @@
 //! Convert project views into pure scenario dependency facts.
 
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::graph::keys::{KeyCache, native_key};
 use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_GRAPH_VALIDATION;
 use crate::bindings::_helpers::planner_scenario::values::string;
@@ -33,7 +34,7 @@ pub(crate) fn plan_scenario_graph<'py>(
         dbt_refs: native_field(scenario, "dbt_ref_fixture_names")?.extract()?,
         ..ScenarioGraphInput::default()
     };
-    for model in native_field(project, "models")?.try_iter()? {
+    for model in project_reads::models(project)?.try_iter()? {
         let model = model?;
         let deps = native_field(&model, "deps")?
             .try_iter()?
@@ -43,12 +44,12 @@ pub(crate) fn plan_scenario_graph<'py>(
             .models
             .insert(model_reads::name_object(&model)?.extract()?, deps);
     }
-    for source in native_field(project, "sources")?.try_iter()? {
+    for source in project_reads::sources(project)?.try_iter()? {
         input
             .project_sources
             .insert(native_field(&source?, "name")?.extract()?);
     }
-    for seed in native_field(project, "seeds")?.try_iter()? {
+    for seed in project_reads::seeds(project)?.try_iter()? {
         input
             .project_seeds
             .insert(native_field(&seed?, "name")?.extract()?);

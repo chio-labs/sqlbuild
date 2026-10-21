@@ -1,6 +1,7 @@
 //! Display-only plans for external plan surfaces when warehouse planning cannot resolve.
 
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::model_config::typed_config::{config_text_object, model_values};
 use crate::bindings::_helpers::planner_entries::values::{
     boolean, native, none, planner_model, planner_type, string,
@@ -138,7 +139,7 @@ pub(crate) fn build_display_only_sqlbuild_plan<'py>(
             .collect::<PyResult<Vec<_>>>()?,
     )?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
-    for model in native_field(project, "models")?.try_iter()? {
+    for model in project_reads::models(project)?.try_iter()? {
         let model = model?;
         if selected.contains(model_reads::name_object(&model)?)? {
             entries.push(display_entry(&model, full_refresh)?);

@@ -345,7 +345,7 @@ pub(crate) fn with_declared_source_reads<'py>(
         return Ok(source_map.clone());
     }
     let result = source_map.copy()?;
-    for source in native_field(project, "sources")?.try_iter()? {
+    for source in project_reads::sources(project)?.try_iter()? {
         let entry = native_field(&source?, "source_entry")?;
         let name: String = native_field(&entry, "name")?.extract()?;
         if missing.contains(&name) {

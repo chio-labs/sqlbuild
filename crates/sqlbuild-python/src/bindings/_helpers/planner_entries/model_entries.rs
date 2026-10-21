@@ -3,6 +3,7 @@
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::discovery::guidance::microbatch_guidance;
 use crate::bindings::_helpers::planner_changes::actions::replaces_incremental_relation;
 use crate::bindings::_helpers::planner_changes::detect::detect_model_changes;
@@ -426,7 +427,7 @@ pub(crate) fn plan_entries<'py>(
         runtime_cursor_producer_names(&scope, &relations_context.source_map.bind(py).clone())?,
     )?;
     let functions_by_name = PyDict::new(py);
-    for function in native_field(&project, "functions")?.try_iter()? {
+    for function in project_reads::functions(&project)?.try_iter()? {
         let function = function?;
         functions_by_name.set_item(native_field(&function, "name")?, function)?;
     }
