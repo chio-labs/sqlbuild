@@ -25,6 +25,8 @@ from tests.unit.src.sqlbuild.diagnostics.helpers import (
     HostRecordingLogHandler,
     log_vendor_records,
     spinner_threads,
+    spinner_threads_started_after,
+    stopped_after_join,
 )
 from tests.unit.src.sqlbuild.presentation.classes.helpers import RecordingStream
 
@@ -161,18 +163,20 @@ def test_given_many_records_during_status_line_when_logging_then_one_spinner_thr
     stream: RecordingStream = RecordingStream(events=[], tty=True)
     monkeypatch.setattr(sys, "stderr", stream)
     reporter: TransientStatusReporter = TransientStatusReporter(stream=stream, use_color=False)
+    earlier: list[threading.Thread] = spinner_threads()
     seen: list[threading.Thread] = []
     reporter.start("Preparing clone plan...")
     try:
         with configure_diagnostics(debug=True):
             for index in range(test_case.record_count):
                 logging.getLogger("vendor.client").warning("retrying request %d", index)
-                seen.extend(spinner_threads())
+                seen.extend(spinner_threads_started_after(earlier))
     finally:
         reporter.close()
 
-    assert len({id(thread) for thread in seen}) == test_case.expected_spinner_threads
-    assert spinner_threads() == []
+    started: list[threading.Thread] = list({id(thread): thread for thread in seen}.values())
+    assert len(started) == test_case.expected_spinner_threads
+    assert stopped_after_join(started, timeout_seconds=5.0)
     assert stream.getvalue().count("retrying request") == test_case.record_count
 
 

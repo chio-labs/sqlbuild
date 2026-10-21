@@ -2386,6 +2386,18 @@
         "group": 1
        },
        {
+        "kind": "store_true",
+        "options": [
+         "--no-cache"
+        ],
+        "dest": "no_cache",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "format every file instead of skipping files a previous run found clean",
+        "group": 1
+       },
+       {
         "kind": "store",
         "dest": "format_paths",
         "nargs": "*",

@@ -8,6 +8,7 @@ Online: https://sqlbuild.com/docs/cli/format/
 
 ## Contents
 
+- Skipping unchanged files
 - Line width and descriptions
 - What formatting preserves
 - Rule fixes
@@ -25,6 +26,7 @@ sqb format [flags]
 | `--diff` | Print the proposed diff without writing |
 | `--fix` | Also apply compiler-verified, meaning-preserving Rule fixes before layout formatting |
 | `--json` | Print structured results |
+| `--no-cache` | Format every file instead of skipping files a previous run found clean |
 | `--select`, `-s` | Format selected models |
 | `--select-file` | Read selectors from a file |
 | `--exclude` | Exclude models from the selected scope |
@@ -37,6 +39,20 @@ sqb format --diff --select tag:marts
 
 Formatting owns presentation and source rewriting. Compiler-integrated diagnostics belong to
 configured [Rules](../concepts/rules.md), which never mutate source.
+
+Files are formatted in parallel; the report, the diff and the exit code are the same as a
+one-file-at-a-time run.
+
+## Skipping unchanged files
+
+`sqb format` remembers every file it found already formatted and free of faults and warnings, in
+`target/cache/compiler-native-v1/format-results.bin`. A later run skips such a file while its text,
+its path, the `[format]` and rule threshold settings, the adapter dialect and the SQLBuild build are
+all unchanged, so `sqb format --check` on an unchanged project costs little more than reading the
+files. A file that needed changes or reported anything is always formatted again, and a damaged or
+unreadable cache is ignored. `--fix` never uses the cache, and SQL test files are not skipped
+while typed-null fixture formatting reads their models' contracts. Pass `--no-cache` to format
+every file.
 
 ## Line width and descriptions
 

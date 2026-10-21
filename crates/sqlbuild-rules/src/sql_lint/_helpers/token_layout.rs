@@ -157,10 +157,27 @@ pub(crate) struct AuthoredSql<'a> {
     pub(crate) comments: &'a [Comment],
 }
 
+/// The lexemes and characters of a layout oracle, read once for every print against it.
+pub(crate) struct OracleLayout {
+    generated: Vec<Lexeme>,
+    characters: Vec<char>,
+}
+
+/// Tokenize `oracle` for printing against it.
+pub(crate) fn oracle_layout(oracle: &str, dialect: &Dialect) -> Result<OracleLayout, String> {
+    let oracle_tokens = dialect
+        .tokenize(oracle)
+        .map_err(|error| error.to_string())?;
+    Ok(OracleLayout {
+        generated: lexemes(oracle, &oracle_tokens, None)?,
+        characters: oracle.chars().collect(),
+    })
+}
+
 /// Print every authored token in order, taking only whitespace and keyword case from `oracle`.
 pub(crate) fn print_authored_tokens(
     source: &AuthoredSql<'_>,
-    oracle: &str,
+    oracle: &OracleLayout,
     dialect: &Dialect,
 ) -> Result<(String, BTreeMap<usize, KeywordRecase>), String> {
     let AuthoredSql {
@@ -169,23 +186,21 @@ pub(crate) fn print_authored_tokens(
         comments,
     } = *source;
     let authored = lexemes(sql, tokens, Some(dialect))?;
-    let oracle_tokens = dialect
-        .tokenize(oracle)
-        .map_err(|error| error.to_string())?;
-    let generated = lexemes(oracle, &oracle_tokens, None)?;
-    let alignment = align(&authored, &generated)?;
-    let oracle_characters: Vec<char> = oracle.chars().collect();
-    let separators = separators(&authored, &generated, &alignment, &oracle_characters)?;
+    let generated = &oracle.generated;
+    let alignment = align(&authored, generated)?;
+    let separators = separators(&authored, generated, &alignment, &oracle.characters)?;
     let attached = attach_comments(tokens, comments);
     let mut output = String::with_capacity(sql.len() + sql.len() / 4);
     let string_breaks = string_breaks(sql, tokens);
     let mut recases: BTreeMap<usize, KeywordRecase> = BTreeMap::new();
     for (index, lexeme) in authored.iter().enumerate() {
         let forced_break = string_breaks.contains(&index) && !separators[index].contains('\n');
-        let separator = &if forced_break {
-            format!("\n{}", current_indentation(&output))
+        let forced: String;
+        let separator: &str = if forced_break {
+            forced = format!("\n{}", current_indentation(&output));
+            &forced
         } else {
-            separators[index].clone()
+            &separators[index]
         };
         let leading = &attached[index].leading;
         if leading.is_empty() {
@@ -246,20 +261,18 @@ pub(crate) fn print_authored_tokens(
 
 /// Refuse output that changes anything but layout, fold-set case, and recorded keyword recases.
 pub(crate) fn verify_token_invariant(
-    before: &str,
-    after: &str,
+    (before, before_tokens): (&str, &[Token]),
+    (after, after_tokens): (&str, &[Token]),
     dialect: &Dialect,
     recases: &BTreeMap<usize, KeywordRecase>,
 ) -> Result<(), String> {
-    let before_tokens = tokenize(before, dialect)?;
-    let after_tokens = tokenize(after, dialect)?;
-    let before_canonical = canonical_tokens(before, &before_tokens, dialect)?;
-    let after_canonical = canonical_tokens(after, &after_tokens, dialect)?;
+    let before_canonical = canonical_tokens(before, before_tokens, dialect)?;
+    let after_canonical = canonical_tokens(after, after_tokens, dialect)?;
     if before_canonical.len() != after_canonical.len() {
         return Err(TOKEN_PRESERVATION_FAILURE.to_string());
     }
-    let before_texts = token_texts(before, &before_tokens)?;
-    let after_texts = token_texts(after, &after_tokens)?;
+    let before_texts = token_texts(before, before_tokens)?;
+    let after_texts = token_texts(after, after_tokens)?;
     for (index, (left, right)) in before_canonical.iter().zip(&after_canonical).enumerate() {
         if left != right
             && !recases
@@ -269,10 +282,10 @@ pub(crate) fn verify_token_invariant(
             return Err(TOKEN_PRESERVATION_FAILURE.to_string());
         }
     }
-    if comment_positions(before, &before_tokens) != comment_positions(after, &after_tokens) {
+    if comment_positions(before, before_tokens) != comment_positions(after, after_tokens) {
         return Err(COMMENT_ATTACHMENT_FAILURE.to_string());
     }
-    if !string_breaks(before, &before_tokens).is_subset(&string_breaks(after, &after_tokens)) {
+    if !string_breaks(before, before_tokens).is_subset(&string_breaks(after, after_tokens)) {
         return Err(STRING_BREAK_FAILURE.to_string());
     }
     Ok(())
@@ -288,7 +301,7 @@ impl KeywordRecase {
     }
 }
 
-fn tokenize(sql: &str, dialect: &Dialect) -> Result<Vec<Token>, String> {
+pub(crate) fn tokenize(sql: &str, dialect: &Dialect) -> Result<Vec<Token>, String> {
     dialect.tokenize(sql).map_err(|error| error.to_string())
 }
 
