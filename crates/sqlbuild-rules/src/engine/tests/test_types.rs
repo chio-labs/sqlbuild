@@ -318,3 +318,9 @@ pub(crate) struct StaleRelationExceptionTestCase {
     pub(crate) exceptions: Value,
     pub(crate) expected_error: &'static str,
 }
+
+pub(crate) struct DialectCallsTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: &'static str,
+    pub(crate) expected_calls: &'static [&'static str],
+}

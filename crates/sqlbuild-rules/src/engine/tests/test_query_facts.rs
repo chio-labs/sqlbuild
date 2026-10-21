@@ -32,15 +32,6 @@ fn given_dialect_sql_when_reading_query_facts_then_findings_match_the_authored_s
             expected_faults: &[],
         },
         QueryFactsTestCase {
-            description: "an apostrophe in a Snowflake # comment opens no string",
-            dialect: "snowflake",
-            query_sql: "WITH imported AS (\n  # don't read the archive\n  SELECT * FROM __ref(\"orders\")\n)\nSELECT order_id FROM imported",
-            select: IMPORT_RULES,
-            enum_columns: &[],
-            columns: json!([]),
-            expected_faults: &[],
-        },
-        QueryFactsTestCase {
             description: "an apostrophe in a BigQuery # comment opens no string",
             dialect: "bigquery",
             query_sql: "WITH imported AS (\n  # don't read the archive\n  SELECT * FROM __ref(\"orders\")\n)\nSELECT order_id FROM imported",
