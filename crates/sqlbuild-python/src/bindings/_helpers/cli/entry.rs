@@ -8,7 +8,8 @@ use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
 use pyo3::types::{
-    PyCFunction, PyDict, PyDictMethods, PyInt, PyList, PyString, PyStringMethods, PyTuple,
+    PyBool, PyCFunction, PyDict, PyDictMethods, PyInt, PyList, PyString, PyStringMethods, PyTuple,
+    PyTypeMethods,
 };
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_cli::dispatch::main::failure_report::failure_report;
@@ -53,6 +54,8 @@ const DIFF_PUBLICATION_CODE: &str = "C257";
 const DIFF_EXECUTION_STATUS: &str = "execution_failed";
 const DIFF_OUTCOME_PREFIX: &str = "Query diff outcome  ";
 const ERROR_MESSAGE_CHARACTERS: usize = 500;
+/// The error type recorded when a raised error cannot be read.
+const FALLBACK_ERROR_TYPE: &str = "Exception";
 /// Expected staying-Python command failures, loaded only once a command raised.
 const EXPECTED_COMMAND_FAILURES: [ExecutorHost; 4] = [
     ExecutorHost::AuditExecutionError,
@@ -497,6 +500,28 @@ fn short_message(message: &str) -> String {
     line.chars().take(ERROR_MESSAGE_CHARACTERS).collect()
 }
 
+/// A raised error's type name, code (empty for `SystemExit` or none) and short message; a part that cannot be read is left empty, so the original error and its terminal event survive.
+fn raised_cause(py: Python<'_>, error: &PyErr) -> (String, String, String) {
+    let error_type: String = error.get_type(py).name().map_or_else(
+        |_unreadable| FALLBACK_ERROR_TYPE.to_owned(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    let value: Bound<'_, PyAny> = error.value(py).clone().into_any();
+    let readable = |part: &Bound<'_, PyAny>| -> String {
+        part.str()
+            .map(|text| text.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    };
+    let (code, message): (String, String) = match error_parts(&value, "") {
+        Ok((code, message, _)) => (readable(&code), short_message(&readable(&message))),
+        Err(_unreadable) => (String::new(), String::new()),
+    };
+    if error.is_instance_of::<PySystemExit>(py) {
+        return (error_type, String::new(), message);
+    }
+    (error_type, code, message)
+}
+
 /// Dispatch once while publishing canonical invocation lifecycle facts.
 fn observed_dispatch<'py>(
     invocation: &Invocation<'py>,
@@ -558,17 +583,13 @@ fn observed_dispatch<'py>(
                 let payload: Bound<'py, PyDict> = PyDict::new(py);
                 payload.set_item("command", &command)?;
                 payload.set_item("duration_ms", elapsed(started)?)?;
-                payload.set_item("error_type", error.get_type(py).getattr("__name__")?)?;
-                let value: Bound<'py, PyAny> = error.value(py).clone().into_any();
-                let (code, message, _) = error_parts(&value, "")?;
-                let code: String = code.str()?.to_string_lossy().into_owned();
-                if !code.is_empty() && !error.is_instance_of::<PySystemExit>(py) {
+                let (error_type, code, message): (String, String, String) =
+                    raised_cause(py, &error);
+                payload.set_item("error_type", error_type)?;
+                if !code.is_empty() {
                     payload.set_item("error_code", code)?;
                 }
-                payload.set_item(
-                    "error_message",
-                    short_message(&message.str()?.to_string_lossy()),
-                )?;
+                payload.set_item("error_message", message)?;
                 publish(lifecycle_event(py, "invocation_failed", payload)?)?;
                 Err(error)
             }
@@ -684,7 +705,9 @@ fn parsed_invocation<'py>(
             Ok(handled_dispatch(&invocation)?.unbind())
         },
     )?;
-    let dispatched: PyResult<Bound<'py, PyAny>> = if policy.captured {
+    let dispatched: PyResult<Bound<'py, PyAny>> = if policy.creates_project {
+        call_with(&operation.into_any(), &[])
+    } else {
         call_with(
             &host::entry(py, FacadeHost::DispatchWithComputeLogs)?,
             &[
@@ -692,10 +715,12 @@ fn parsed_invocation<'py>(
                 ("identity", identity.clone()),
                 ("operation", operation.into_any()),
                 ("recall", recall_sink),
+                (
+                    "capture",
+                    PyBool::new(py, policy.captured).to_owned().into_any(),
+                ),
             ],
         )
-    } else {
-        call_with(&operation.into_any(), &[])
     };
     let exit_status: Option<i64> = match &dispatched {
         Ok(code) if code.is_instance_of::<PyInt>() => Some(code.extract().unwrap_or(1)),

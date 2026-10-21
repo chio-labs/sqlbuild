@@ -8,6 +8,8 @@ from tests.integration.src.sqlbuild.cli.recall._test_types import (
     DeprecatedFormatTestCase,
     JsonErrorTestCase,
     LeanRecallTestCase,
+    RecallDiagnosticsTestCase,
+    RecallUsageErrorTestCase,
     StatementStartTestCase,
     StoreBeingCreatedTestCase,
 )
@@ -193,3 +195,59 @@ def test_given_a_store_whose_views_are_still_being_created_when_queried_then_it_
 
     assert queried.returncode == 1
     assert test_case.expected_error in queried.stderr.decode()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RecallUsageErrorTestCase(
+            description="--ddl prints SQL, so it cannot be combined with --json",
+            args=("recall", "schema", "--ddl", "--json"),
+            expected_message="argument --json: not allowed with argument --ddl",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_conflicting_recall_options_when_parsed_then_it_is_a_usage_error(
+    test_case: RecallUsageErrorTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_project(tmp_path / "orders_shop")
+
+    rejected: subprocess.CompletedProcess[bytes] = run(project_dir, *test_case.args)
+
+    assert rejected.returncode == 2
+    assert rejected.stdout == b""
+    assert test_case.expected_message in rejected.stderr.decode()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RecallDiagnosticsTestCase(
+            description="--debug routes the failure's diagnostics to the console",
+            global_args=("--debug",),
+            expected_debug_log=True,
+        ),
+        RecallDiagnosticsTestCase(
+            description="without --debug only the coded error is printed",
+            global_args=(),
+            expected_debug_log=False,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_failing_recall_query_when_run_then_diagnostics_follow_the_debug_option(
+    test_case: RecallDiagnosticsTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_project(tmp_path / "orders_shop")
+    assert run(project_dir, "build").returncode == 0
+
+    failed: subprocess.CompletedProcess[bytes] = run(
+        project_dir, *test_case.global_args, "recall", "query", "SELECT * FROM missing_orders"
+    )
+
+    stderr: str = failed.stderr.decode(errors="replace")
+    assert failed.returncode == 1
+    assert "error[C974]" in stderr
+    assert ("[error] cli" in stderr) is test_case.expected_debug_log
+    assert ("CliUserError" in stderr) is test_case.expected_debug_log

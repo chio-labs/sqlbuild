@@ -160,3 +160,10 @@ class MachineProgressRoutingCase:
     command: str | None = None
     dbt_args: tuple[str, ...] = ()
     expected_stdout_excludes: str = "Project compile  FAIL"
+
+
+@dataclass(frozen=True)
+class UnreadableErrorTestCase:
+    description: str
+    expected_error_type: str
+    expected_message: str

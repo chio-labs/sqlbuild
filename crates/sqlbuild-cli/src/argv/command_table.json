@@ -7028,6 +7028,7 @@
              "const": true,
              "default": false,
              "help": "print the SQL that creates the Recall store or brings it up to this version",
+             "mutex_group": 0,
              "group": 1
             },
             {
