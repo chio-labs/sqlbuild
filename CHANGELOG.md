@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.164.5](https://github.com/chio-labs/sqlbuild/compare/v0.164.4...v0.164.5) (2026-10-21)
+
+
+### Bug Fixes
+
+* **ingestr:** pin the DuckDB ADBC driver to the installed duckdb version ([#1203](https://github.com/chio-labs/sqlbuild/issues/1203)) ([e1ca0bc](https://github.com/chio-labs/sqlbuild/commit/e1ca0bcce8548969a3cf1f728f054c00e5a659fd))
+
 ## [0.164.4](https://github.com/chio-labs/sqlbuild/compare/v0.164.3...v0.164.4) (2026-10-21)
 
 
