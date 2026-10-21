@@ -1,6 +1,7 @@
 use crate::refactoring::_helpers::planning::model_planning::decide_model_migration;
 use crate::refactoring::errors::{RefactorError, RefactorErrorKind};
-use crate::refactoring::models::{DeclarationPlacement, RefactorOperation};
+use crate::refactoring::main::with_model_migration::with_model_migration;
+use crate::refactoring::models::{DeclarationPlacement, RefactorOperation, RefactorPlan};
 use crate::refactoring::tests::helpers::{
     blocking_reasons, change, commit_failure, facts, files_on_disk, followed_test_changes,
     followed_unit_tests, model, model_in_database, move_request, owned_pairs, placed,
@@ -9,7 +10,8 @@ use crate::refactoring::tests::helpers::{
 };
 use crate::refactoring::tests::test_types::{
     BatchPlanTestCase, CollisionTestCase, CommitTestCase, DeclarationMovesTestCase,
-    FollowedUnitTestTestCase, MigrationDecisionTestCase, RefusedTargetTestCase,
+    FollowedUnitTestTestCase, MigrationDecisionTestCase, PendingMigrationTestCase,
+    RefusedTargetTestCase,
 };
 
 #[test]
@@ -579,6 +581,112 @@ fn given_several_moves_when_planning_together_then_chains_pass_and_conflicts_blo
                     .iter()
                     .map(|item| (*item).to_owned())
                     .collect::<Vec<_>>()
+            ),
+            "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn given_pending_migration_when_moving_under_same_name_then_only_relation_moves_block()
+-> Result<(), RefactorError> {
+    let project = tempfile::tempdir().map_err(|error| RefactorError::value(error.to_string()))?;
+    write_files(
+        project.path(),
+        &[(
+            "models/orders.sql",
+            "MODEL (materialized table, migrate_from old_orders);\nSELECT 1",
+        )],
+    )?;
+    let mut pending = model("orders", Some("table"), "analytics");
+    pending.declares_migrate_from = true;
+    pending.migrate_from_set = true;
+    let project_facts = facts(&project.path().to_string_lossy(), vec![pending.clone()]);
+    let plan = RefactorPlan {
+        request: request(
+            RefactorOperation::MoveModel,
+            "orders",
+            Some("models/finance/orders.sql"),
+        ),
+        batch: Vec::new(),
+        changes: vec![change(
+            "models/finance/orders.sql",
+            "models/orders.sql",
+            Vec::new(),
+        )],
+        manual: Vec::new(),
+        blocking: Vec::new(),
+        migrations: Vec::new(),
+        renamed_columns: Vec::new(),
+        help: None,
+        notes: Vec::new(),
+    };
+    let test_cases = [
+        PendingMigrationTestCase {
+            description: "a same-name move passes the pending-migration refusal",
+            request: request(RefactorOperation::MoveModel, "", Some("models/finance/")),
+            after: vec![pending.clone()],
+            expected_refusals: vec![],
+            expected_blocking: vec![],
+            expected_migration_count: 0,
+        },
+        PendingMigrationTestCase {
+            description: "a rename is refused while migrate_from is pending",
+            request: request(RefactorOperation::RenameModel, "order_lines", None),
+            after: vec![pending.clone()],
+            expected_refusals: vec![
+                "models/orders.sql: model:orders still declares migrate_from; build it on every target and remove migrate_from before renaming it again",
+            ],
+            expected_blocking: vec![],
+            expected_migration_count: 0,
+        },
+        PendingMigrationTestCase {
+            description: "a same-name move that changes the relation is blocked",
+            request: request(RefactorOperation::MoveModel, "", Some("models/finance/")),
+            after: vec![
+                model("orders", Some("table"), "finance"),
+                model("customers", Some("table"), "analytics"),
+            ],
+            expected_refusals: vec![],
+            expected_blocking: vec![
+                "models/finance/orders.sql: model:orders still declares migrate_from and this move changes its relation; build it on every target and remove migrate_from before moving it again",
+            ],
+            expected_migration_count: 0,
+        },
+    ];
+    for test_case in test_cases {
+        let refusals = blocking_reasons(&project_facts, &test_case.request)?;
+        let planned = with_model_migration(
+            &plan,
+            std::slice::from_ref(&pending),
+            Some(&test_case.after),
+            &Vec::new(),
+        );
+
+        assert_eq!(
+            (
+                refusals,
+                planned
+                    .blocking
+                    .iter()
+                    .map(|item| format!("{}: {}", item.path, item.reason))
+                    .collect::<Vec<_>>(),
+                planned.migrations.len(),
+            ),
+            (
+                test_case
+                    .expected_refusals
+                    .iter()
+                    .map(|item| (*item).to_owned())
+                    .collect::<Vec<_>>(),
+                test_case
+                    .expected_blocking
+                    .iter()
+                    .map(|item| (*item).to_owned())
+                    .collect::<Vec<_>>(),
+                test_case.expected_migration_count,
             ),
             "{}",
             test_case.description

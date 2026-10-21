@@ -301,7 +301,7 @@ fn pending_migration(
     files: &[ProjectSqlFile],
     target: &ModelTarget<'_>,
 ) -> Result<Vec<ManualLocation>, RefactorError> {
-    if !target.model.declares_migrate_from {
+    if !target.model.declares_migrate_from || target.request.new_name == target.model.name {
         return Ok(Vec::new());
     }
     let (contents, text) = files

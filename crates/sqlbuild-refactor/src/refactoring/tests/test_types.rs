@@ -143,6 +143,18 @@ pub(super) struct MigrationDecisionTestCase {
     pub(super) expected_decision: (bool, bool, &'static str),
 }
 
+pub(super) struct PendingMigrationTestCase {
+    pub(super) description: &'static str,
+    pub(super) request: RefactorRequest,
+    /// Models after the move, for the relation check.
+    pub(super) after: Vec<ModelFacts>,
+    /// `path: reason` refusals before planning.
+    pub(super) expected_refusals: Vec<&'static str>,
+    /// `path: reason` blockers after planning the move.
+    pub(super) expected_blocking: Vec<&'static str>,
+    pub(super) expected_migration_count: usize,
+}
+
 pub(super) struct CommitTestCase {
     pub(super) description: &'static str,
     /// Files on disk before the commit.

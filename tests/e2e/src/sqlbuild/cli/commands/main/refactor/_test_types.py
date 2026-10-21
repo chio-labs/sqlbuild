@@ -30,6 +30,15 @@ class ModelMigrationE2ETestCase:
 
 
 @dataclass(frozen=True)
+class PendingMigrationRefactorE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_returncode: int
+    expected_file: str
+    expected_output: str
+
+
+@dataclass(frozen=True)
 class ColumnRenameE2ETestCase:
     description: str
     command: tuple[str, ...]
