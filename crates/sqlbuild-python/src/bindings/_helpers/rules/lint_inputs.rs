@@ -21,7 +21,7 @@ const FILE_PATH_ATTRIBUTE: &str = "file_path";
 
 /// The model file path of a native input record.
 fn record_path(record: &ModelInputRecord) -> PathBuf {
-    record.model_file.get().file_path_buf()
+    record.host.model_file.get().file_path_buf()
 }
 
 /// The record's shared texts with the given passes, read only when their file is linted.

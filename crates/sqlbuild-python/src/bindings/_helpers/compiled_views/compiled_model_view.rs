@@ -171,7 +171,7 @@ pub(crate) fn compiled_record(
     let CompiledArguments(deps, session, fallback, standalone_proof, macro_deps) = arguments;
     let analysis: AnalysisRecord =
         analysis_record(py, input, session, (fallback, standalone_proof))?;
-    let config: &Bound<'_, PyAny> = input.config.bind(py);
+    let config: &Bound<'_, PyAny> = input.host.config.bind(py);
     let values: Bound<'_, PyDict> = native_field(config, VALUES_ATTRIBUTE)?.downcast_into()?;
     Ok(CompiledRecord {
         deps,
@@ -352,7 +352,7 @@ impl NativeCompiledModel {
             record
                 .schema
                 .as_ref()
-                .map(|schema| schema.columns.project(py).map(Bound::unbind))
+                .map(|schema| schema.host.columns.project(py).map(Bound::unbind))
                 .transpose()
         })
     }
@@ -375,8 +375,8 @@ impl NativeCompiledModel {
                 .map(|(index, column)| (index, column.name.clone()))
                 .collect();
             Ok(Some((
-                schema.audits.clone_ref(py),
-                schema.columns.clone(),
+                schema.host.audits.clone_ref(py),
+                schema.host.columns.clone(),
                 audited,
             )))
         })
@@ -420,7 +420,7 @@ impl NativeCompiledModel {
     /// The model's name, `str(relative_path)` and authored file text.
     pub(crate) fn file_texts(&self, py: Python<'_>) -> PyResult<(String, String, Arc<str>)> {
         self.read(py, |record, py| {
-            let model_file: &NativeModelFile = record.model_file.get();
+            let model_file: &NativeModelFile = record.host.model_file.get();
             Ok((
                 model_name(record),
                 model_file.relative_text(py)?,
@@ -439,7 +439,7 @@ impl NativeCompiledModel {
             Ok(ModelMetadataTexts {
                 name: model_name(record),
                 query_sql: record.query_sql.to_string(),
-                authored_sql: record.model_file.get().contents_text().to_string(),
+                authored_sql: record.host.model_file.get().contents_text().to_string(),
                 calls_functions: record
                     .references
                     .iter()
@@ -452,7 +452,7 @@ impl NativeCompiledModel {
     pub(crate) fn output_texts(&self, py: Python<'_>) -> PyResult<(String, Arc<str>)> {
         self.read(py, |record, py| {
             Ok((
-                record.model_file.get().posix_path(py)?,
+                record.host.model_file.get().posix_path(py)?,
                 Arc::clone(&record.query_sql),
             ))
         })
@@ -473,7 +473,7 @@ impl NativeCompiledModel {
         py: Python<'_>,
         read: impl FnOnce(&NativeModelFile) -> PyResult<T>,
     ) -> PyResult<T> {
-        self.read(py, |record, _| read(record.model_file.get()))
+        self.read(py, |record, _| read(record.host.model_file.get()))
     }
 }
 
@@ -554,7 +554,7 @@ impl NativeCompiledModel {
 
     #[getter]
     pub(crate) fn config(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        self.read(py, |record, py| Ok(record.config.clone_ref(py)))
+        self.read(py, |record, py| Ok(record.host.config.clone_ref(py)))
     }
 
     #[getter]
@@ -677,7 +677,7 @@ impl NativeCompiledModel {
             Ok(record
                 .schema
                 .as_ref()
-                .is_some_and(|schema| !schema.dynamic_columns.bind(py).is_empty()))
+                .is_some_and(|schema| !schema.host.dynamic_columns.bind(py).is_empty()))
         })
     }
 
@@ -691,7 +691,7 @@ impl NativeCompiledModel {
             Ok(record
                 .schema
                 .as_ref()
-                .map_or(0, |schema| schema.columns.specs.len()))
+                .map_or(0, |schema| schema.host.columns.specs.len()))
         })
     }
 
@@ -788,19 +788,21 @@ impl NativeCompiledModel {
 
     #[getter]
     pub(crate) fn enum_declarations(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
-        self.read(py, |record, py| Ok(record.enum_declarations.clone_ref(py)))
+        self.read(py, |record, py| {
+            Ok(record.host.enum_declarations.clone_ref(py))
+        })
     }
 
     #[getter]
     pub(crate) fn constant_declarations(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
         self.read(py, |record, py| {
-            Ok(record.constant_declarations.clone_ref(py))
+            Ok(record.host.constant_declarations.clone_ref(py))
         })
     }
 
     #[getter]
     pub(crate) fn enum_columns(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
-        self.read(py, |record, py| Ok(record.enum_columns.clone_ref(py)))
+        self.read(py, |record, py| Ok(record.host.enum_columns.clone_ref(py)))
     }
 
     #[getter]
@@ -811,7 +813,7 @@ impl NativeCompiledModel {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         self.read(py, |record, py| {
             let name: String = model_name(record);
-            let path: Bound<'_, PyAny> = record.model_file.get().path_objects(py)?.1;
+            let path: Bound<'_, PyAny> = record.host.model_file.get().path_objects(py)?.1;
             compiled_of(record)?
                 .analysis
                 .binding_tuple(py, &classes.compiled, (&name, &path))
@@ -890,7 +892,7 @@ pub(crate) fn model_graph_row(
 ) -> PyResult<ResourceRow> {
     model.read(py, |record, py| {
         let compiled: &CompiledRecord = compiled_of(record)?;
-        let values: Bound<'_, PyAny> = native_field(record.config.bind(py), VALUES_ATTRIBUTE)?;
+        let values: Bound<'_, PyAny> = native_field(record.host.config.bind(py), VALUES_ATTRIBUTE)?;
         let mut tags: Vec<String> = Vec::new();
         if let Some(value) = values.downcast::<PyDict>()?.get_item(TAGS_KEY)?
             && (value.is_instance_of::<pyo3::types::PyList>()
@@ -900,7 +902,7 @@ pub(crate) fn model_graph_row(
                 tags.push(tag?.str()?.extract()?);
             }
         }
-        let folder: String = record.model_file.get().folder(py)?;
+        let folder: String = record.host.model_file.get().folder(py)?;
         Ok(ResourceRow {
             key: (MODEL_RESOURCE.to_owned(), model_name(record)),
             deps: compiled.deps.clone(),

@@ -222,7 +222,7 @@ fn missing_descriptions<'py>(
     let py: Python<'py> = diagnostics.py;
     let mut found: Vec<Option<Bound<'py, PyAny>>> = Vec::new();
     for record in project.inputs() {
-        let model_file: &NativeModelFile = record.model_file.get();
+        let model_file: &NativeModelFile = record.host.model_file.get();
         let name: String = record.name.clone();
         let path: String = model_file.relative_text(py)?;
         let contents: &str = model_file.contents_text();
@@ -472,7 +472,7 @@ fn cursor_without_inputs<'py>(
     let mut errors: Vec<Bound<'py, PyAny>> = Vec::new();
     for record in project.inputs() {
         let values: Bound<'py, PyDict> =
-            native_field(record.config.bind(py), "values")?.downcast_into()?;
+            native_field(record.host.config.bind(py), "values")?.downcast_into()?;
         let kinds: Vec<&str> = record
             .references
             .iter()
@@ -481,7 +481,7 @@ fn cursor_without_inputs<'py>(
         let materialized: Option<String> = config_text(&values, "materialized")?;
         let cursor: Option<String> = config_text(&values, CURSOR_KEY)?;
         let strategy: Option<String> = config_text(&values, "microbatch_strategy")?;
-        let model_file: &NativeModelFile = record.model_file.get();
+        let model_file: &NativeModelFile = record.host.model_file.get();
         let name: String = record.name.clone();
         let Some((message, help)) = cursor_lacks_inputs(
             &name,

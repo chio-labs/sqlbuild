@@ -160,7 +160,7 @@ fn located(input: &ModelInputRecord, outcome: &ModelOutcome) -> PyResult<Vec<Loc
         return Ok(Vec::new());
     }
     let cleaned: Cow<'_, str> = resolved_cleaned_sql(outcome).map_err(compiler_error)?;
-    let model_file: &NativeModelFile = input.model_file.get();
+    let model_file: &NativeModelFile = input.host.model_file.get();
     let authored: &str = model_file.contents_text();
     let query: &str = model_file.query_text();
     let expansion = &input.expansion;

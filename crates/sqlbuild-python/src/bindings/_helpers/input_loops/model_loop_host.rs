@@ -18,7 +18,7 @@ use crate::bindings::_helpers::compiled_project::project::{
     DeclarationPy, config_values, declarations,
 };
 use crate::bindings::_helpers::compiled_views::model_input_view::{
-    InputProjections, ModelInputRecord, SchemaRecord,
+    InputProjections, ModelInputHandles, ModelInputRecord, SchemaHandles, SchemaRecord,
 };
 use crate::bindings::_helpers::discovery::model_file_record::{ModelFileTexts, NativeModelFile};
 use crate::bindings::_helpers::input_loops::model_loop_header::AttachedHeader;
@@ -208,11 +208,13 @@ pub(crate) fn finished_record<'py>(
     };
     let schema: Option<SchemaRecord> = finished.header.schema.as_ref().map(|schema| SchemaRecord {
         description: finished.header.description.clone(),
-        columns: schema.columns.clone(),
-        audits: schema.audits.clone().unbind(),
-        dynamic_columns: schema.dynamic_columns.clone().unbind(),
         type_enforcement: schema.type_enforcement,
         model_schema: schema.model_schema.clone(),
+        host: SchemaHandles {
+            columns: schema.columns.clone(),
+            audits: schema.audits.clone().unbind(),
+            dynamic_columns: schema.dynamic_columns.clone().unbind(),
+        },
     });
     let authored: Arc<str> = authored_query_sql.clone();
     let macro_source: Arc<str> = shared_sql(&finished.declarations.spliced.sql, &[&authored]);
@@ -220,25 +222,12 @@ pub(crate) fn finished_record<'py>(
     let query: Arc<str> = shared_sql(&finished.query_sql, &[&authored, &macro_source, &expanded]);
     let record: ModelInputRecord = ModelInputRecord {
         name: name.clone(),
-        model_file,
-        config: config.unbind(),
         query_sql: Arc::clone(&query),
         macro_source_sql: macro_source,
         references: finished.references.clone(),
         schema,
         sql_validation_enabled: finished.analysis.0,
-        rejected_opt_out: finished.analysis.1.map(Bound::unbind),
-        enum_declarations: local_enums.unbind(),
-        constant_declarations: local_constants.unbind(),
-        enum_columns: finished
-            .header
-            .schema
-            .as_ref()
-            .map_or_else(|| PyDict::new(py), |schema| schema.enum_columns.clone())
-            .unbind(),
         macro_deps,
-        macro_usages: PyTuple::new(py, macro_usages)?.unbind(),
-        declaration_usages: PyTuple::new(py, unique(py, declaration_usages)?)?.unbind(),
         expansion: ExpansionRecord {
             authored: *interpolated_sql == *authored_query_sql,
             authored_sql: authored,
@@ -247,8 +236,23 @@ pub(crate) fn finished_record<'py>(
             declaration_spans: span_rows(&finished.declarations.spliced),
             macro_spans,
         },
-        projections: InputProjections::default(),
         compiled: None,
+        host: ModelInputHandles {
+            model_file,
+            config: config.unbind(),
+            rejected_opt_out: finished.analysis.1.map(Bound::unbind),
+            enum_declarations: local_enums.unbind(),
+            constant_declarations: local_constants.unbind(),
+            enum_columns: finished
+                .header
+                .schema
+                .as_ref()
+                .map_or_else(|| PyDict::new(py), |schema| schema.enum_columns.clone())
+                .unbind(),
+            macro_usages: PyTuple::new(py, macro_usages)?.unbind(),
+            declaration_usages: PyTuple::new(py, unique(py, declaration_usages)?)?.unbind(),
+            projections: InputProjections::default(),
+        },
     };
     let (values, encoding_error) = config_values(&stripped);
     let facts: CompiledModelFacts = plain_model_facts(PlainModel {

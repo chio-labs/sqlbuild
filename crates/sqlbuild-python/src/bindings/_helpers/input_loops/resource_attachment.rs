@@ -68,7 +68,7 @@ pub(crate) fn attach_functions(
         .iter()
         .map(|record| {
             Ok((
-                record.model_file.get().relative_text(py)?,
+                record.host.model_file.get().relative_text(py)?,
                 record.references.clone(),
             ))
         })
@@ -147,10 +147,10 @@ fn attachment_owners<'py>(
         };
         owners.push(model_owner(
             record.name.clone(),
-            record.model_file.get().relative_text(py)?,
+            record.host.model_file.get().relative_text(py)?,
             (
-                schema.audits.bind(py),
-                (schema.columns.as_ref(), &fact.columns),
+                schema.host.audits.bind(py),
+                (schema.host.columns.as_ref(), &fact.columns),
             ),
         )?);
     }
