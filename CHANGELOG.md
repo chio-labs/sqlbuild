@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.166.0](https://github.com/chio-labs/sqlbuild/compare/v0.165.0...v0.166.0) (2026-10-21)
+
+
+### Features
+
+* move several models in one sqb mv and match carried declaration layouts ([#1206](https://github.com/chio-labs/sqlbuild/issues/1206)) ([601ccfc](https://github.com/chio-labs/sqlbuild/commit/601ccfc87bb5cb6a64b06dd528aac4a76e28f58a))
+
 ## [0.165.0](https://github.com/chio-labs/sqlbuild/compare/v0.164.5...v0.165.0) (2026-10-21)
 
 
