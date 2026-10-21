@@ -27,7 +27,7 @@ use crate::refactoring::errors::{RefactorError, RefactorErrorKind};
 use crate::refactoring::models::{
     AuthoredFile, DeclarationMoves, DeclarationPlacement, DestinationFacts, DiscoveredFile,
     EditKind, ExpansionSpan, FileChange, ModelFacts, PlacedDeclaration, RefactorFacts,
-    RefactorOperation, RefactorRequest, RelocatedDeclaration, SqlFileRole, TextEdit,
+    RefactorOperation, RefactorRequest, RelocatedDeclaration, SqlFileRole, TextEdit, UnitTestFacts,
 };
 use crate::refactoring::tests::test_types::{ExpectedSpans, PlannedMoves, Spans};
 
@@ -292,6 +292,7 @@ pub(super) fn facts(project_dir: &str, models: Vec<ModelFacts>) -> RefactorFacts
         model_files: Vec::new(),
         authored_files: Vec::new(),
         yaml_files: Vec::new(),
+        unit_tests: Vec::new(),
         python_locations: Vec::new(),
     }
 }
@@ -645,4 +646,67 @@ pub(super) fn owner_header_parts(
         })
         .collect();
     Ok((described(&edits), manual))
+}
+
+/// Each planned file as `original -> path`, with the replacements made in it.
+pub(super) fn followed_unit_tests(
+    request: &RefactorRequest,
+    tests: &[(&str, &str, &[&str])],
+) -> Result<Vec<(String, Vec<String>)>, RefactorError> {
+    let mut orders: ModelFacts = model("orders", Some("view"), "analytics");
+    orders.path = "models/marts/orders.sql".to_owned();
+    let mut project_facts = facts("/nonexistent/project", vec![orders]);
+    for (path, name, targets) in tests {
+        project_facts.authored_files.push(AuthoredFile {
+            role: SqlFileRole::Test,
+            path: (*path).to_owned(),
+            contents: format!("TEST (name \"{name}\");\n\nSELECT 1\n"),
+            texts: vec!["SELECT 1".to_owned()],
+        });
+        project_facts.unit_tests.push(UnitTestFacts {
+            path: (*path).to_owned(),
+            name: Some((*name).to_owned()),
+            target_model_names: targets.iter().map(|target| (*target).to_owned()).collect(),
+        });
+    }
+    let host = |_: &str, _: &str| {
+        Ok(DeclarationPlacement {
+            relocated: Some(Vec::new()),
+            ..DeclarationPlacement::default()
+        })
+    };
+    let plan =
+        crate::refactoring::main::plan_refactor::plan_refactor(&project_facts, request, &host)?;
+    let mut changes: Vec<(String, Vec<String>)> = plan
+        .changes
+        .into_iter()
+        .filter(|change| change.original_path.starts_with("tests/"))
+        .map(|change| {
+            (
+                format!("{} -> {}", change.original_path, change.path),
+                change
+                    .edits
+                    .into_iter()
+                    .map(|edit| edit.replacement)
+                    .collect(),
+            )
+        })
+        .collect();
+    changes.sort();
+    Ok(changes)
+}
+
+/// Expected `original -> path` test file changes with their replacements, sorted by path.
+pub(super) fn followed_test_changes(changes: &[(&str, &[&str])]) -> Vec<(String, Vec<String>)> {
+    let mut expected = changes
+        .iter()
+        .map(|(path, edits)| {
+            (
+                (*path).to_owned(),
+                edits.iter().map(|edit| (*edit).to_owned()).collect(),
+            )
+        })
+        .collect::<Vec<_>>();
+    expected.sort();
+    expected
 }

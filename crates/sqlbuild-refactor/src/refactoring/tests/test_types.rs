@@ -217,3 +217,10 @@ pub(super) struct HeaderPartsTestCase {
     pub(super) expected_edits: &'static [&'static str],
     pub(super) expected_manual: &'static [&'static str],
 }
+
+pub(super) struct FollowedUnitTestTestCase {
+    pub(super) description: &'static str,
+    pub(super) request: RefactorRequest,
+    /// Each `original -> path` test file change with its replacements, sorted by path.
+    pub(super) expected_changes: Vec<(String, Vec<String>)>,
+}
