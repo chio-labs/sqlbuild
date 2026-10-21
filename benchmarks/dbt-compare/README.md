@@ -38,6 +38,13 @@ average.
 `sqlbuild-norules/` is the same project with `[rules] select = []`. That turns off configurable Rules;
 column binding, type inference and contract checks still run.
 
+`warehouse.duckdb` looks like the warehouse after `dbt build`: every source table and every model
+relation exists, empty, with the declared columns, types and `not null` constraints. Each model is a
+table or a view to match its materialization (all dense models are tables). dbt reads it through
+`profiles/profiles.yml`; every dbt variant uses the same file. dbt v2 reads columns of unselected
+upstream models from it in `--static-analysis strict --dirty` runs. `sqb compile` doesn't open it:
+compile is offline, and its output is identical with the file present or removed.
+
 ## Running it on GitHub Actions
 
 The `Benchmark dbt comparison` workflow (`.github/workflows/benchmark-dbt.yml`) runs only when
@@ -155,10 +162,11 @@ recorded too.
   from earlier runs; its run summary covers only the selected nodes. SQLBuild's delta compile
   re-analyses the changed models plus any model whose inputs' columns, types or nullability changed,
   re-runs project-wide Rules, and reports the same result as a full compile.
-- With `--static-analysis strict --dirty`, dbt v2 reads the columns of unselected upstream models
-  from the warehouse. This benchmark's warehouse holds only the sources, so for an edited model whose
-  parent is outside the selection dbt warns `RemoteError (dbt1014)`, sets static analysis to off for
-  it, and doesn't report its column errors. The summary counts these models.
+- With `--static-analysis strict --dirty`, dbt v2 checks the selected models against the columns of
+  unselected upstream relations in the warehouse, so it depends on the warehouse matching the
+  project. When an upstream relation is missing, dbt warns `RemoteError (dbt1014)` and turns static
+  analysis off for that model; the summary counts such models, and with this warehouse it should
+  report none.
 - dbt v2's parse cache and `--dirty` are opt-in; SQLBuild's caching is on by default.
 - SQLBuild compile also runs configurable Rules (`sqb_rules`). dbt has no built-in counterpart.
 - SQLBuild compile prepares its 10,000 SQL tests. dbt `compile` parses the unit tests but doesn't
