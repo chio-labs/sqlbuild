@@ -236,7 +236,7 @@ fn given_scope_placement_when_moving_across_folders_then_declaration_files_follo
         DeclarationMovesTestCase {
             description: "a move within one folder asks no placement",
             on_disk: &[],
-            paths: ("models/orders.sql", "models/orders_v2.sql"),
+            moves: &[("models/orders.sql", "models/orders_v2.sql")],
             placement: DeclarationPlacement::default(),
             expected_moves: &[],
             expected_blocking: &[],
@@ -244,7 +244,7 @@ fn given_scope_placement_when_moving_across_folders_then_declaration_files_follo
         DeclarationMovesTestCase {
             description: "an unsettled placement blocks with the preview's reasons",
             on_disk: &[],
-            paths: ("models/orders.sql", "models/marts/orders.sql"),
+            moves: &[("models/orders.sql", "models/marts/orders.sql")],
             placement: DeclarationPlacement {
                 relocated: None,
                 diagnostics: vec!["Move source model:orders is unknown".to_owned()],
@@ -256,7 +256,7 @@ fn given_scope_placement_when_moving_across_folders_then_declaration_files_follo
         DeclarationMovesTestCase {
             description: "an unsettled placement without reasons blocks with the default reason",
             on_disk: &[],
-            paths: ("models/orders.sql", "models/marts/orders.sql"),
+            moves: &[("models/orders.sql", "models/marts/orders.sql")],
             placement: DeclarationPlacement::default(),
             expected_moves: &[],
             expected_blocking: &[
@@ -270,7 +270,7 @@ fn given_scope_placement_when_moving_across_folders_then_declaration_files_follo
                 ("models/_sqlbuild/_enums/both.sql", "x"),
                 ("models/marts/_sqlbuild/_enums/both.sql", "x"),
             ],
-            paths: ("models/orders.sql", "models/marts/orders.sql"),
+            moves: &[("models/orders.sql", "models/marts/orders.sql")],
             placement: DeclarationPlacement {
                 relocated: Some(vec![
                     relocated("enum:a", "models/marts/_sqlbuild/_enums/both.sql"),
@@ -304,13 +304,83 @@ fn given_scope_placement_when_moving_across_folders_then_declaration_files_follo
                 "models/marts/_sqlbuild/_enums/both.sql:0 a declaration must move here, but the file already exists",
             ],
         },
+        DeclarationMovesTestCase {
+            description: "two grouped files flattened into one direct file block",
+            on_disk: &[
+                ("models/_sqlbuild/_macros/money/helpers.sql", "x"),
+                ("models/_sqlbuild/_macros/text/helpers.sql", "x"),
+            ],
+            moves: &[("models/orders.sql", "models/marts/orders.sql")],
+            placement: DeclarationPlacement {
+                relocated: Some(vec![
+                    relocated("macro:cents", "macros/helpers.sql"),
+                    relocated("macro:label", "macros/helpers.sql"),
+                ]),
+                diagnostics: Vec::new(),
+                declarations: vec![
+                    placed("macro:cents", "models/_sqlbuild/_macros/money/helpers.sql"),
+                    placed("macro:label", "models/_sqlbuild/_macros/text/helpers.sql"),
+                ],
+            },
+            expected_moves: &[
+                (
+                    "models/_sqlbuild/_macros/money/helpers.sql",
+                    "macros/helpers.sql",
+                ),
+                (
+                    "models/_sqlbuild/_macros/text/helpers.sql",
+                    "macros/helpers.sql",
+                ),
+            ],
+            expected_blocking: &[
+                "macros/helpers.sql:0 models/_sqlbuild/_macros/money/helpers.sql and \
+                 models/_sqlbuild/_macros/text/helpers.sql would both move to macros/helpers.sql; \
+                 rename one of them first",
+            ],
+        },
+        DeclarationMovesTestCase {
+            description: "two moved models' same-named local files sharing one target block",
+            on_disk: &[
+                ("models/sales/_sqlbuild/_macros/helpers.sql", "x"),
+                ("models/crm/_sqlbuild/_macros/helpers.sql", "x"),
+            ],
+            moves: &[
+                ("models/sales/orders.sql", "models/marts/orders.sql"),
+                ("models/crm/customers.sql", "models/marts/customers.sql"),
+            ],
+            placement: DeclarationPlacement {
+                relocated: Some(vec![
+                    relocated("macro:cents", "models/marts/_sqlbuild/_macros/helpers.sql"),
+                    relocated("macro:label", "models/marts/_sqlbuild/_macros/helpers.sql"),
+                ]),
+                diagnostics: Vec::new(),
+                declarations: vec![
+                    placed("macro:cents", "models/sales/_sqlbuild/_macros/helpers.sql"),
+                    placed("macro:label", "models/crm/_sqlbuild/_macros/helpers.sql"),
+                ],
+            },
+            expected_moves: &[
+                (
+                    "models/crm/_sqlbuild/_macros/helpers.sql",
+                    "models/marts/_sqlbuild/_macros/helpers.sql",
+                ),
+                (
+                    "models/sales/_sqlbuild/_macros/helpers.sql",
+                    "models/marts/_sqlbuild/_macros/helpers.sql",
+                ),
+            ],
+            expected_blocking: &["models/marts/_sqlbuild/_macros/helpers.sql:0 \
+                 models/crm/_sqlbuild/_macros/helpers.sql and \
+                 models/sales/_sqlbuild/_macros/helpers.sql would both move to \
+                 models/marts/_sqlbuild/_macros/helpers.sql; rename one of them first"],
+        },
     ];
     for test_case in test_cases {
         let project =
             tempfile::tempdir().map_err(|error| RefactorError::value(error.to_string()))?;
         write_files(project.path(), test_case.on_disk)?;
         let (moves, blocking) =
-            planned_declaration_moves(project.path(), test_case.paths, &test_case.placement)?;
+            planned_declaration_moves(project.path(), test_case.moves, &test_case.placement)?;
         assert_eq!(
             moves,
             owned_pairs(test_case.expected_moves),

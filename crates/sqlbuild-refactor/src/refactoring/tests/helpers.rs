@@ -11,6 +11,7 @@ use crate::refactoring::_helpers::edits::header_edits::{
 };
 use crate::refactoring::_helpers::edits::text_edits::{apply_text_edits, file_changes, text_edit};
 use crate::refactoring::_helpers::edits::yaml_edits::{yaml_column_edits, yaml_model_edits};
+use crate::refactoring::_helpers::files::paths::stem;
 use crate::refactoring::_helpers::files::workspace::commit_changes;
 use crate::refactoring::_helpers::planning::column_planning::{
     column_rename_context, header_parts,
@@ -432,23 +433,22 @@ pub(super) fn relocated(label: &str, path: &str) -> RelocatedDeclaration {
     }
 }
 
-/// The moves and `path:line reason` blockers of moving model `orders` with a fixed placement.
+/// The moves and `path:line reason` blockers of moving models together with a fixed placement.
 pub(super) fn planned_declaration_moves(
     root: &Path,
-    paths: (&str, &str),
+    paths: &[(&str, &str)],
     placement: &DeclarationPlacement,
 ) -> Result<PlannedMoves, RefactorError> {
     let host = |_: &[(String, String)]| Ok(placement.clone());
-    let moves: DeclarationMoves = declaration_moves(
-        root,
-        &[ModelMove {
-            model: "orders",
-            source: paths.0,
-            destination: paths.1,
-        }],
-        &BTreeSet::new(),
-        &host,
-    )?;
+    let models: Vec<ModelMove<'_>> = paths
+        .iter()
+        .map(|(source, destination)| ModelMove {
+            model: stem(source),
+            source,
+            destination,
+        })
+        .collect();
+    let moves: DeclarationMoves = declaration_moves(root, &models, &BTreeSet::new(), &host)?;
     let blocking: Vec<String> = moves
         .blocking
         .iter()

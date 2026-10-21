@@ -97,6 +97,14 @@ pub(crate) fn declaration_moves(
             ));
         }
     }
+    blocking.extend(shared_destinations(
+        destinations
+            .iter()
+            .map(|(source, target)| (source.as_str(), target.as_str())),
+        |first, second, target| {
+            format!("{first} and {second} would both move to {target}; rename one of them first")
+        },
+    ));
     let targets: BTreeSet<&String> = destinations.values().collect();
     blocking.extend(
         targets
@@ -113,6 +121,26 @@ pub(crate) fn declaration_moves(
         moves: destinations.into_iter().collect(),
         blocking,
     })
+}
+
+/// A blocker at each path two `(source, destination)` moves share, worded by `reason`.
+pub(crate) fn shared_destinations<'a>(
+    moves: impl Iterator<Item = (&'a str, &'a str)>,
+    reason: impl Fn(&str, &str, &str) -> String,
+) -> Vec<ManualLocation> {
+    let mut sources: BTreeMap<&str, &str> = BTreeMap::new();
+    let mut shared: Vec<ManualLocation> = Vec::new();
+    for (source, destination) in moves {
+        if let Some(other) = sources.insert(destination, source) {
+            shared.push(ManualLocation {
+                path: destination.to_owned(),
+                line: None,
+                column: None,
+                reason: reason(other, source, destination),
+            });
+        }
+    }
+    shared
 }
 
 fn unsettled(destination: &str, diagnostics: &[String]) -> DeclarationMoves {

@@ -157,6 +157,19 @@ def shared_cents_with_grouped_global_role() -> dict[str, str]:
     }
 
 
+def same_named_local_macros() -> dict[str, str]:
+    """Return two models in different folders, each using its own local ``helpers.py`` macro."""
+
+    return {
+        "models/staging/_sqlbuild/_macros/helpers.py": CENTS_MACRO[
+            "models/staging/_sqlbuild/_macros/cents.py"
+        ],
+        "models/staging/stg_order_cents.sql": CENTS_MACRO["models/staging/stg_order_cents.sql"],
+        "models/marts/_sqlbuild/_macros/helpers.py": _LABEL_MACRO,
+        "models/marts/order_labels.sql": _label_model("order_labels"),
+    }
+
+
 def _label_model(name: str) -> str:
     return (
         f"MODEL (description 'Test model {name}.',\n  materialized view,\n);\n\n"

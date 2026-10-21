@@ -160,8 +160,8 @@ pub(super) struct DeclarationMovesTestCase {
     pub(super) description: &'static str,
     /// Files on disk below the project.
     pub(super) on_disk: &'static [(&'static str, &'static str)],
-    /// `(source, destination)` of the moved model.
-    pub(super) paths: (&'static str, &'static str),
+    /// `(source, destination)` of each moved model.
+    pub(super) moves: &'static [(&'static str, &'static str)],
     pub(super) placement: DeclarationPlacement,
     pub(super) expected_moves: &'static [(&'static str, &'static str)],
     /// `path:line reason` of each blocker.

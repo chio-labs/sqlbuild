@@ -5,7 +5,9 @@ use std::path::Path;
 
 use crate::refactoring::_helpers::edits::text_edits::RefactorParts;
 use crate::refactoring::_helpers::files::project_files::project_sql_files;
-use crate::refactoring::_helpers::planning::declaration_moves::{ModelMove, declaration_moves};
+use crate::refactoring::_helpers::planning::declaration_moves::{
+    ModelMove, declaration_moves, shared_destinations,
+};
 use crate::refactoring::_helpers::planning::model_planning::{
     FinalState, ModelTarget, own_model_parts,
 };
@@ -68,7 +70,12 @@ pub(crate) fn batch_parts(
     parts.blocking.extend(collisions);
     parts.blocking.extend(declaration.blocking);
     parts.blocking.extend(test_blocking);
-    parts.blocking.extend(shared_test_destinations(&test_moves));
+    parts.blocking.extend(shared_destinations(
+        test_moves
+            .iter()
+            .map(|(source, destination)| (source.as_str(), destination.as_str())),
+        |first, second, _| format!("the unit tests {first} and {second} would both move here"),
+    ));
     parts.blocking.extend(pending);
     parts.moves = declaration.moves;
     parts.moves.extend(test_moves);
@@ -134,21 +141,6 @@ fn batch_conflicts(targets: &[ModelTarget<'_>]) -> Vec<ManualLocation> {
         }
     }
     conflicts
-}
-
-/// Unit test files of different models that would move to the same path.
-fn shared_test_destinations(moves: &[(String, String)]) -> Vec<ManualLocation> {
-    let mut sources: BTreeMap<&str, &str> = BTreeMap::new();
-    let mut shared: Vec<ManualLocation> = Vec::new();
-    for (source, destination) in moves {
-        if let Some(other) = sources.insert(destination, source) {
-            shared.push(conflict(
-                destination,
-                format!("the unit tests {other} and {source} would both move here"),
-            ));
-        }
-    }
-    shared
 }
 
 fn conflict(path: &str, reason: String) -> ManualLocation {

@@ -20,6 +20,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
     existing_files,
     project_text,
     relation_type,
+    same_named_local_macros,
     shared_cents_with_grouped_global_role,
     sqb,
     with_move_file,
@@ -130,6 +131,7 @@ def test_given_one_move_of_the_batch_alone_when_moving_then_it_is_refused(
     "test_case",
     [
         BatchMoveConflictE2ETestCase(
+            files=shared_cents_with_grouped_global_role(),
             description="two models moved to the same file",
             arguments=(
                 "stg_order_cents",
@@ -143,6 +145,7 @@ def test_given_one_move_of_the_batch_alone_when_moving_then_it_is_refused(
             ),
         ),
         BatchMoveConflictE2ETestCase(
+            files=shared_cents_with_grouped_global_role(),
             description="one model moved twice",
             arguments=(
                 "stg_order_cents",
@@ -153,6 +156,7 @@ def test_given_one_move_of_the_batch_alone_when_moving_then_it_is_refused(
             expected_reason="model:stg_order_cents is moved more than once",
         ),
         BatchMoveConflictE2ETestCase(
+            files=shared_cents_with_grouped_global_role(),
             description="a model taking the name another model gives up",
             arguments=(
                 "stg_order_refunds",
@@ -164,21 +168,34 @@ def test_given_one_move_of_the_batch_alone_when_moving_then_it_is_refused(
                 "model:stg_order_cents would take the name model:stg_order_refunds gives up"
             ),
         ),
+        BatchMoveConflictE2ETestCase(
+            description="two moved models' same-named local macro files sharing one target",
+            files=same_named_local_macros(),
+            arguments=(
+                "stg_order_cents",
+                "models/finance/",
+                "order_labels",
+                "models/finance/",
+            ),
+            expected_reason=(
+                "models/marts/_sqlbuild/_macros/helpers.py and "
+                "models/staging/_sqlbuild/_macros/helpers.py would both move to "
+                "models/finance/_sqlbuild/_macros/helpers.py; rename one of them first"
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
 def test_given_conflicting_moves_when_moved_together_then_batch_is_refused_and_nothing_changes(
     tmp_path: Path, test_case: BatchMoveConflictE2ETestCase
 ) -> None:
-    project_dir: Path = write_orders_project(
-        tmp_path=tmp_path, files=shared_cents_with_grouped_global_role()
-    )
+    project_dir: Path = write_orders_project(tmp_path=tmp_path, files=test_case.files)
     before: dict[str, str] = project_text(project_dir)
 
     moved: subprocess.CompletedProcess[str] = sqb(project_dir, "mv", *test_case.arguments)
 
     assert moved.returncode == 1, moved.stdout + moved.stderr
-    assert test_case.expected_reason in moved.stdout, moved.stdout + moved.stderr
+    assert test_case.expected_reason in " ".join(moved.stdout.split()), moved.stdout
     assert "Refused; no files changed" in moved.stdout
     assert project_text(project_dir) == before
 

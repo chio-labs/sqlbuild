@@ -187,6 +187,7 @@ class SingleMoveOfBatchE2ETestCase:
 @dataclass(frozen=True)
 class BatchMoveConflictE2ETestCase:
     description: str
+    files: dict[str, str]
     arguments: tuple[str, ...]
     expected_reason: str
 
