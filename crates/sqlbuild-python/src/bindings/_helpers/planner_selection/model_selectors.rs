@@ -13,6 +13,7 @@ use sqlbuild_analysis::planner_selection::models::{
 };
 
 use crate::bindings::_helpers::boundary::python_calls::imported;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::model_config::typed_config::{config_value, model_values};
 use crate::bindings::_helpers::planner_selection::carrier::Carrier;
 use crate::bindings::_helpers::records::construct::new_record_with;
@@ -88,7 +89,7 @@ pub(crate) fn resolve_sqlbuild_model_selector_names<'py>(
     term: &Bound<'py, PyString>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = project.py();
-    let models: Vec<SelectableModel> = native_field(project, "models")?
+    let models: Vec<SelectableModel> = project_reads::models(project)?
         .try_iter()?
         .map(|model| selectable_model(&model?))
         .collect::<PyResult<_>>()?;

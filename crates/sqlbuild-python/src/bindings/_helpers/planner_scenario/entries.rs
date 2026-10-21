@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::planner_identity::metadata::build_compiled_function_fingerprint_sql;
 use crate::bindings::_helpers::planner_resolution::orchestration::resolve_function_sql;
 use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_UNKNOWN_SEED;
@@ -23,7 +24,7 @@ pub(super) fn seed_entries<'py>(
     relations: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py = project.py();
-    let seeds = by_attribute(&native_field(project, "seeds")?, "name")?;
+    let seeds = by_attribute(&project_reads::seeds(project)?, "name")?;
     let fixtures = native_field(graph, "seed_fixture_names")?;
     let mut result: Vec<Bound<'py, PyAny>> = Vec::new();
     for name in native_field(graph, "seed_names")?.try_iter()? {

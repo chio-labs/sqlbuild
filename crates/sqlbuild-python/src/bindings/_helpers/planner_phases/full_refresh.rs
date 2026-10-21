@@ -1,6 +1,7 @@
 //! Per-model full-refresh resolution and full-rebuild refusals.
 
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::model_config::typed_config::{config_value, model_values};
 use crate::bindings::_helpers::planner_phases::constants::FULL_REFRESH_DISABLED_REBUILD_CODE;
 use crate::bindings::_helpers::planner_phases::objects::{frozenset, planner_error, strings};
@@ -39,7 +40,7 @@ pub(crate) fn effectively_full_refreshed_model_names<'py>(
     cli_full_refresh: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
     let mut names: Vec<_> = Vec::new();
-    for model in native_field(project, "models")?.try_iter()? {
+    for model in project_reads::models(project)?.try_iter()? {
         let model = model?;
         if resolve_model_full_refresh(&model, cli_full_refresh)? {
             names.push(model_reads::name_object(&model)?);

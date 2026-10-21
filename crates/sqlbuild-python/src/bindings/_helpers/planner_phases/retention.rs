@@ -4,6 +4,7 @@ use sqlbuild_host::entries::models::AdapterHost;
 
 use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::model_config::typed_config::{config_value, typed_values};
 use crate::bindings::_helpers::native_host::host;
@@ -62,11 +63,8 @@ fn selected_models<'py>(
         .into_iter()
         .collect();
     let mut models: Vec<_> = Vec::new();
-    for model in native_field(
-        &runtime_field(runtime, |runtime| &runtime.project)?,
-        "models",
-    )?
-    .try_iter()?
+    for model in
+        project_reads::models(&runtime_field(runtime, |runtime| &runtime.project)?)?.try_iter()?
     {
         let model = model?;
         if names.contains(&model_reads::model_name(&model)?) {
@@ -94,7 +92,7 @@ pub(crate) fn plan_table_types<'py>(
     let mut declared: Vec<_> = Vec::new();
     for model in &models {
         if native_field(
-            &native_field(&native_field(model, "config")?, "table_type")?,
+            &native_field(&model_reads::config(model)?, "table_type")?,
             "declared",
         )?
         .is_truthy()?
@@ -595,7 +593,7 @@ pub(crate) fn plan_retention<'py>(
     let py = runtime.py();
     let mut models: Vec<_> = Vec::new();
     for model in selected_models(runtime, scope)? {
-        let retention = native_field(&native_field(&model, "config")?, "time_travel_retention")?;
+        let retention = native_field(&model_reads::config(&model)?, "time_travel_retention")?;
         if !native_field(&retention, "unmanaged")?.is_truthy()?
             && !native_field(&retention, "desired_days")?.is_none()
         {

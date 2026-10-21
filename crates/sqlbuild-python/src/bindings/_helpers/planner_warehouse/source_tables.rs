@@ -174,7 +174,7 @@ pub(crate) fn check_selected_source_tables_exist<'py>(
     }
     let message = missing_source_tables_message(&missing);
     let sources = PyDict::new(py);
-    for source in native_field(project, "sources")?.try_iter()? {
+    for source in project_reads::sources(project)?.try_iter()? {
         let source = source?;
         sources.set_item(native_field(&source, "name")?, source)?;
     }

@@ -314,3 +314,12 @@ pub(crate) fn deps<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>
     }
     native_field(model, "deps")
 }
+
+/// The model's enum columns by name.
+pub(crate) fn enum_columns<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = model.py();
+    if let Some(view) = native_model(model)? {
+        return Ok(view.enum_columns(py)?.into_bound(py).into_any());
+    }
+    native_field(model, "enum_columns")
+}

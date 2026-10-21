@@ -3,6 +3,7 @@
 use sqlbuild_host::entries::models::HostId;
 
 use crate::bindings::_helpers::boundary::python_calls::{call_with, keywords};
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::model_config::typed_config::{config_text, model_values};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::error_class;
@@ -150,7 +151,7 @@ pub(crate) fn by_name<'py>(
     field: &str,
 ) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
     let nodes = pyo3::types::PyDict::new(project.py());
-    for node in native_field(project, field)?.try_iter()? {
+    for node in project_reads::collection(project, field)?.try_iter()? {
         let node = node?;
         pyo3::types::PyDictMethods::set_item(&nodes, native_field(&node, "name")?, node)?;
     }

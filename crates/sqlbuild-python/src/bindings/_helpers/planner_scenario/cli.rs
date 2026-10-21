@@ -3,6 +3,7 @@
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_scenario::artifacts::build_scenario_hash_index;
 use crate::bindings::_helpers::planner_scenario::artifacts::build_scenario_relation_map;
@@ -138,7 +139,7 @@ fn namespace<'py>(
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let py = project.py();
     let models = PyDict::new(py);
-    for model in native_field(project, "models")?.try_iter()? {
+    for model in project_reads::models(project)?.try_iter()? {
         let model = model?;
         models.set_item(model_reads::name_object(&model)?, model)?;
     }

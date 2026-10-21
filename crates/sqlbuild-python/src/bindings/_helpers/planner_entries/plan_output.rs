@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::planner_entries::model_entries::scope_overlaps;
 use crate::bindings::_helpers::planner_entries::models::PlanOutputInputs;
 use crate::bindings::_helpers::planner_entries::values::{
@@ -104,7 +105,7 @@ fn seed_entries<'py>(
     let metadata_jsons = native_field(extras, "seed_metadata_jsons")?;
     let plan_reasons = native_field(extras, "seed_plan_reasons")?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
-    for seed in native_field(project, "seeds")?.try_iter()? {
+    for seed in project_reads::seeds(project)?.try_iter()? {
         let seed = seed?;
         if !selected_keys.contains(native_field(&seed, "key")?)? {
             continue;
@@ -404,7 +405,7 @@ fn function_entries<'py>(
     let functions = native_field(changes, "functions")?;
     let previous = native_field(&native_field(snapshot, "fingerprints")?, "functions")?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
-    for function in native_field(project, "functions")?.try_iter()? {
+    for function in project_reads::functions(project)?.try_iter()? {
         let function = function?;
         if !selected_keys.contains(native_field(&function, "key")?)? {
             continue;
@@ -464,7 +465,7 @@ pub(super) fn selected_test_entries<'py>(
 ) -> PyResult<SelectedTests<'py>> {
     let py = project.py();
     let mut selected: Vec<Bound<'py, PyAny>> = Vec::new();
-    for test in native_field(project, "sql_tests")?.try_iter()? {
+    for test in project_reads::sql_tests(project)?.try_iter()? {
         let test = test?;
         if !test_selected(&test, selected_keys, selection)? {
             continue;
