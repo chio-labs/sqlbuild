@@ -3,6 +3,7 @@
 use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::boundary::python_calls::call_with;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::column_objects::{config, model};
 use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
@@ -42,7 +43,7 @@ pub(super) fn retention<'py>(
     project: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     old_name_retention(
-        &native_field(&native_field(item, "config")?, "values")?,
+        &native_field(&model_reads::config(item)?, "values")?,
         project,
     )
 }
@@ -70,7 +71,7 @@ pub(super) fn recorded_view<'py>(
     let created = native_field(history, "created")?;
     let mut reused = py.None().into_bound(py);
     for item in models {
-        if relation(&native_field(item, "destination")?)?
+        if relation(&model_reads::destination(item)?)?
             .call_method1("matches", (native_field(history, "old")?,))?
             .is_truthy()?
         {

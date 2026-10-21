@@ -2,6 +2,8 @@
 
 use sqlbuild_host::entries::models::UserCodeHost;
 
+use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::graph::node_set::PyNodeSet;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_identity::metadata::build_function_local_hashes;
@@ -19,16 +21,13 @@ use std::collections::BTreeMap;
 pub(super) fn ordered<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let mut models: BTreeMap<String, Bound<'py, PyAny>> = BTreeMap::new();
     let mut dependencies: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for item in native_field(
-        &runtime_field(runtime, |runtime| &runtime.project)?,
-        "models",
-    )?
-    .try_iter()?
+    for item in
+        project_reads::models(&runtime_field(runtime, |runtime| &runtime.project)?)?.try_iter()?
     {
         let item = item?;
-        let name: String = native_field(&item, "name")?.extract()?;
+        let name: String = model_reads::name_object(&item)?.extract()?;
         let mut upstream: Vec<String> = Vec::new();
-        for dependency in native_field(&item, "deps")?.try_iter()? {
+        for dependency in model_reads::deps(&item)?.try_iter()? {
             let dependency = dependency?;
             if native_field(&dependency, "resource_type")?.eq("model")? {
                 upstream.push(native_field(&dependency, "name")?.extract()?);
@@ -63,8 +62,8 @@ pub(super) fn triggered(
     let relevant = relevant.0;
     let fingerprints = native_field(&native_field(snapshot, "fingerprints")?, "models")?;
     for item in models {
-        let name = native_field(item, "name")?;
-        if relevant.contains(native_field(item, "key")?)?
+        let name = model_reads::name_object(item)?;
+        if relevant.contains(model_reads::model_key(item)?)?
             && !fingerprints.contains(&name)?
             && !declared.contains(&name)?
         {
@@ -83,7 +82,7 @@ pub(super) fn metadata<'py>(
     let functions = object(
         py,
         build_function_local_hashes(
-            &native_field(&project, "functions")?,
+            &project_reads::functions(&project)?,
             native_field(&project, "sql_analysis_dialect")?
                 .extract::<Option<String>>()?
                 .as_deref(),
@@ -102,7 +101,7 @@ pub(super) fn metadata<'py>(
     let result = PyDict::new(py);
     for item in models {
         result.set_item(
-            native_field(item, "name")?,
+            model_reads::name_object(item)?,
             object(
                 py,
                 build_model_version_identity_metadata_json(

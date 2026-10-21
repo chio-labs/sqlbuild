@@ -1,6 +1,8 @@
 //! Resolve authored migration origins at the adapter and inspection boundaries.
 
 use crate::bindings::_helpers::boundary::python_calls::call_with;
+use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::planner_migrations::constants::QUALIFIED_RELATION_MAX_PARTS;
 use crate::bindings::_helpers::planner_migrations::models::ModelMigrationRequest;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
@@ -31,14 +33,11 @@ fn named<'py>(
     runtime: &Bound<'py, PyAny>,
     state: &Bound<'py, PyAny>,
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
-    for item in native_field(
-        &runtime_field(runtime, |runtime| &runtime.project)?,
-        "models",
-    )?
-    .try_iter()?
+    for item in
+        project_reads::models(&runtime_field(runtime, |runtime| &runtime.project)?)?.try_iter()?
     {
         let item = item?;
-        if native_field(&item, "name")?.eq(name)? {
+        if model_reads::name_object(&item)?.eq(name)? {
             return Ok((native_field(&item, "destination")?, name.clone()));
         }
     }
@@ -73,8 +72,8 @@ fn input_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
 pub(super) fn planning_database<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let project = runtime_field(runtime, |runtime| &runtime.project)?;
     let fallback = native_field(&project, "effective_target_database")?;
-    for item in native_field(&project, "models")?.try_iter()? {
-        let database = native_field(&native_field(&item?, "destination")?, "database")?;
+    for item in project_reads::models(&project)?.try_iter()? {
+        let database = native_field(&model_reads::destination(&item?)?, "database")?;
         if !database.is_none() {
             return Ok(database);
         }
@@ -85,13 +84,10 @@ pub(super) fn planning_database<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Bo
 /// The schemas the project's models write to.
 pub(super) fn project_schemas<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let schemas = PySet::empty(runtime.py())?;
-    for item in native_field(
-        &runtime_field(runtime, |runtime| &runtime.project)?,
-        "models",
-    )?
-    .try_iter()?
+    for item in
+        project_reads::models(&runtime_field(runtime, |runtime| &runtime.project)?)?.try_iter()?
     {
-        let schema = native_field(&native_field(&item?, "destination")?, "schema")?;
+        let schema = native_field(&model_reads::destination(&item?)?, "schema")?;
         if !schema.is_none() {
             schemas.add(schema)?;
         }
@@ -145,7 +141,7 @@ pub(super) fn resolve_origin<'py>(
         _ => super::column_objects::text(py, ""),
     };
     let item = request.model.clone();
-    let destination = native_field(&item, "destination")?;
+    let destination = model_reads::destination(&item)?;
     let mut parts: Vec<Bound<'py, PyAny>> = Vec::new();
     for part in raw.call_method1("split", (".",))?.try_iter()? {
         parts.push(
