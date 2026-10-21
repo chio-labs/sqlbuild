@@ -452,15 +452,17 @@ fn cancel(claims: &Bound<'_, PyDict>, token: u64) -> PyResult<()> {
 }
 
 /// Tell the user, once per stall, that one sink call outlived its timeout and what that costs.
-fn warn_blocked(py: Python<'_>, name: &str, timeout: Duration) -> PyResult<()> {
-    write_stderr(
+///
+/// Best-effort: a failing stderr must not stop the dispatcher delivering and counting events.
+fn warn_blocked(py: Python<'_>, name: &str, timeout: Duration) {
+    drop(write_stderr(
         py,
         &format!(
             "Warning: lifecycle sink '{name}' did not return from one call within {}s; \
              its events are dropped until that call returns.\n",
             timeout.as_secs_f64()
         ),
-    )
+    ));
 }
 
 impl DispatcherWorker {
@@ -546,7 +548,7 @@ impl DispatcherWorker {
         let blocked: Vec<String> = std::mem::take(&mut state.newly_blocked);
         drop(state);
         for name in blocked {
-            warn_blocked(py, &name, shared.invocation_timeout)?;
+            warn_blocked(py, &name, shared.invocation_timeout);
         }
         if notify {
             shared.notify_all(py)?;

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import threading
 import time
 from collections.abc import Callable, Mapping
@@ -939,4 +940,53 @@ def test_given_sink_slow_once_when_call_returns_then_later_and_outcome_events_ar
     assert delivered == ["event-1", "event-2", "event-4", "event-5", "event-6", "event-7"]
     assert summary.delivered == test_case.expected_delivered
     assert (summary.failed, summary.dropped) == (1, 1)
+    assert summary.delivered + summary.failed + summary.dropped == summary.accepted
+
+
+class _BrokenStream:
+    def write(self, text: str) -> int:
+        raise OSError(f"stderr is closed: {len(text)}")
+
+    def flush(self) -> None:
+        raise OSError("stderr is closed")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (EventExporterDispatcherTestCase("a failing stderr does not stop delivery", 2),),
+    ids=lambda case: case.description,
+)
+def test_given_failing_stderr_when_sink_stalls_then_delivery_and_counts_continue(
+    test_case: EventExporterDispatcherTestCase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    release: threading.Event = threading.Event()
+    slow_started: threading.Event = threading.Event()
+    delivered: list[str] = []
+
+    def record(*, event: LifecycleEvent) -> None:
+        delivered.append(event.event_id)
+        if event.event_id == "event-1":
+            slow_started.set()
+            _ = release.wait()
+
+    monkeypatch.setattr(sys, "stderr", _BrokenStream())
+    dispatcher: EventExporterDispatcher = EventExporterDispatcher(
+        exporters=(BoundEventExporter("recorder", record, {}),),
+        shutdown_timeout_seconds=5.0,
+        invocation_timeout_seconds=0.1,
+    )
+    dispatcher.enqueue(correlated_event(1, "statement_completed"))
+    assert slow_started.wait(timeout=1.0)
+    time.sleep(0.3)
+    dispatcher.enqueue(correlated_event(2, "statement_completed"))
+    time.sleep(0.05)
+    release.set()
+    time.sleep(0.1)
+    dispatcher.enqueue(correlated_event(3, "statement_completed"))
+    dispatcher.enqueue(lifecycle_event(4, "invocation_completed"))
+
+    summary: EventExportSummary = dispatcher.shutdown()
+
+    assert delivered == ["event-1", "event-3", "event-4"]
+    assert summary.delivered == test_case.expected_delivered
     assert summary.delivered + summary.failed + summary.dropped == summary.accepted
