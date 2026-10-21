@@ -1,3 +1,4 @@
+use crate::lint_text::constants::LINT_SENTINEL_PREFIX;
 use crate::sql_lint::_helpers::engine::token_depths;
 use crate::sql_lint::constants::{
     CTE_MACRO_PLACEHOLDER_LITERAL, POSITION_ARGUMENT_SEPARATOR, POSTFIX_CAST_PREFIX_TOKEN_COUNT,
@@ -8,6 +9,8 @@ use std::collections::{HashMap, HashSet};
 
 pub(super) struct ProtectedSql {
     pub sql: String,
+    /// The lower-case prefix every sentinel name starts with.
+    prefix: String,
     fragments: Vec<(String, String)>,
     in_functions: HashSet<String>,
 }
@@ -19,6 +22,14 @@ impl ProtectedSql {
             .map_err(|error| error.to_string())?;
         let mut positions: HashMap<String, Vec<usize>> = HashMap::new();
         for (index, token) in tokens.iter().enumerate() {
+            let prefixed = token
+                .text
+                .as_bytes()
+                .get(..self.prefix.len())
+                .is_some_and(|start| start.eq_ignore_ascii_case(self.prefix.as_bytes()));
+            if !prefixed {
+                continue;
+            }
             positions
                 .entry(token.text.to_ascii_lowercase())
                 .or_default()
@@ -101,8 +112,13 @@ pub(super) fn protect_syntax(
     expressions: bool,
 ) -> Result<ProtectedSql, String> {
     let mut prefix = "__sqlbuild_format_".to_string();
-    while sql.to_ascii_lowercase().contains(&prefix) {
+    let lowercase: String = sql.to_ascii_lowercase();
+    while lowercase.contains(&prefix) {
         prefix.push('_');
+    }
+    let mut cast_type_ends: HashMap<usize, usize> = HashMap::new();
+    for (start, end) in cast_types {
+        let _ = cast_type_ends.entry(*start).or_insert(*end);
     }
     let mut ranges: Vec<(usize, usize, String)> = Vec::new();
     let cte_macros = cte_macro_indices(tokens);
@@ -112,23 +128,23 @@ pub(super) fn protect_syntax(
     let mut index = 0;
     while index < tokens.len() {
         let token = &tokens[index];
-        let sentinel = format!("{prefix}{}__", ranges.len());
+        let sentinel = || format!("{prefix}{}__", ranges.len());
         if separators.contains(&index) {
             ranges.push((token.span.start, token.span.end, ",".to_string()));
             index += 1;
             continue;
         }
         let (end, replacement) = if cte_macros.contains(&index) {
-            (index, format!("{sentinel} AS (SELECT 1)"))
+            (index, format!("{} AS (SELECT 1)", sentinel()))
         } else if !expressions {
             index += 1;
             continue;
-        } else if let Some((_, end)) = cast_types.iter().find(|(start, _)| *start == index) {
-            (*end, sentinel)
+        } else if let Some(end) = cast_type_ends.get(&index) {
+            (*end, sentinel())
         } else if token.token_type == TokenType::DColon {
             (
                 postfix_type_end(tokens, index + 1)?,
-                format!("::{sentinel}"),
+                format!("::{}", sentinel()),
             )
         } else if token.token_type == TokenType::Colon
             && index > 0
@@ -144,7 +160,7 @@ pub(super) fn protect_syntax(
                     )
             })
         {
-            (index + 1, format!(".{sentinel}"))
+            (index + 1, format!(".{}", sentinel()))
         } else if is_typed_literal(tokens, index)
             || (matches!(token.token_type, TokenType::Var | TokenType::Identifier)
                 && tokens.get(index + 1).is_some_and(|next| {
@@ -154,12 +170,14 @@ pub(super) fn protect_syntax(
                     .get(index + 2)
                     .is_some_and(|next| next.token_type == TokenType::Arrow))
         {
-            (index + 1, sentinel)
-        } else if matches!(token.text.to_ascii_uppercase().as_str(), "MOD" | "POSITION")
+            (index + 1, sentinel())
+        } else if (token.text.eq_ignore_ascii_case("MOD")
+            || token.text.eq_ignore_ascii_case("POSITION"))
             && tokens
                 .get(index + 1)
                 .is_some_and(|next| next.token_type == TokenType::LParen)
         {
+            let sentinel: String = sentinel();
             if token.text.eq_ignore_ascii_case("POSITION") {
                 let separator = (index + 2..tokens.len())
                     .take_while(|&position| {
@@ -180,7 +198,7 @@ pub(super) fn protect_syntax(
             token.token_type,
             TokenType::String | TokenType::DollarString
         ) {
-            (index, format!("'{sentinel}'"))
+            (index, format!("'{}'", sentinel()))
         } else {
             index += 1;
             continue;
@@ -215,6 +233,7 @@ pub(super) fn protect_syntax(
     prepared.extend(&chars[cursor..]);
     Ok(ProtectedSql {
         sql: prepared,
+        prefix,
         fragments,
         in_functions,
     })
@@ -263,7 +282,7 @@ pub(super) fn cte_macro_indices(tokens: &[Token]) -> HashSet<usize> {
             scopes.insert(depths[index]);
         } else if token.token_type == TokenType::Select {
             scopes.remove(&depths[index]);
-        } else if token.text.starts_with("__sqb_lint_")
+        } else if token.text.starts_with(LINT_SENTINEL_PREFIX)
             && scopes.contains(&depths[index])
             && index > 0
             && matches!(

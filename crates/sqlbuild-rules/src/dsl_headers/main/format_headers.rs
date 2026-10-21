@@ -16,7 +16,11 @@ pub fn format_headers<P: HeaderParser>(
     let headers: Vec<HeaderSpan> = scan_headers(text, false);
     let trimmed: Vec<char> = without_trailing_whitespace(text, &headers);
     let (relocated, faults) = relocate_leading_comment(&trimmed, config, &headers, parser)?;
-    let relocated_headers: Vec<HeaderSpan> = scan_headers(&relocated, false);
+    let relocated_headers: Vec<HeaderSpan> = if relocated.as_slice() == text {
+        headers
+    } else {
+        scan_headers(&relocated, false)
+    };
     let wrapped: Vec<char> =
         wrap_descriptions(&relocated, &relocated_headers, config.line_width, parser)?;
     Ok((wrap_audits(&wrapped, config.line_width, parser)?, faults))

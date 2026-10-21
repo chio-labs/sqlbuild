@@ -132,6 +132,13 @@ pub(crate) struct FormatTestCase {
     pub expected_changed: bool,
 }
 
+pub(crate) struct ReprintTestCase {
+    pub description: &'static str,
+    pub sql: &'static str,
+    pub expected_changed: bool,
+    pub expected_reprints: usize,
+}
+
 pub(crate) struct InvalidRuleTestCase {
     pub description: &'static str,
     pub rule: &'static str,

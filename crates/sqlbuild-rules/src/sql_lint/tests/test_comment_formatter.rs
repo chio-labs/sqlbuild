@@ -51,3 +51,45 @@ fn given_leading_cte_comments_when_formatting_then_comments_stay_above_their_cte
     }
     Ok(())
 }
+
+#[test]
+fn given_trailing_comments_after_the_last_token_when_formatting_then_no_newline_is_added()
+-> Result<(), String> {
+    let test_cases = [
+        test_types::FormatTestCase {
+            description: "a trailing line comment ends the output without a newline",
+            sql: "SELECT 1 AS order_id\nFROM orders -- latest orders",
+            expected_sql: "SELECT 1 AS order_id\nFROM orders -- latest orders",
+            expected_changed: false,
+        },
+        test_types::FormatTestCase {
+            description: "line comments after the last token keep no trailing newline",
+            sql: "select 1 as order_id from orders\n\n-- first note\n\n-- second note",
+            expected_sql: "SELECT 1 AS order_id\nFROM orders -- first note\n -- second note",
+            expected_changed: true,
+        },
+        test_types::FormatTestCase {
+            description: "a trailing block comment ends the output",
+            sql: "SELECT 1 AS order_id\nFROM orders /* latest orders */",
+            expected_sql: "SELECT 1 AS order_id\nFROM orders /* latest orders */",
+            expected_changed: false,
+        },
+    ];
+    for test_case in &test_cases {
+        let response = format_json(
+            &json!({"version": 1, "sql": test_case.sql, "dialect": "duckdb"}).to_string(),
+        )?;
+        let payload: Value = serde_json::from_str(&response).map_err(|error| error.to_string())?;
+        assert_eq!(
+            payload["sql"], test_case.expected_sql,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            payload["changed"], test_case.expected_changed,
+            "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
