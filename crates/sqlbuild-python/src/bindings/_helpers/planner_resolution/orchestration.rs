@@ -6,7 +6,9 @@ use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_w
 use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
-use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
+use crate::bindings::_helpers::model_config::typed_config::{
+    config_node_of, config_text_is, config_text_object, config_value, model_values,
+};
 use crate::bindings::_helpers::planner_entries::models::ModelPlanContext;
 use crate::bindings::_helpers::planner_phases::contexts::class_field;
 use crate::bindings::_helpers::planner_resolution::cursor_model::compute_model_cursor_bounds;
@@ -19,12 +21,14 @@ use crate::bindings::_helpers::planner_resolution::sources::resolve_sources;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyString, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyList, PyString, PyTuple};
 use pyo3::{PyErr, pyfunction, wrap_pyfunction};
+use sqlbuild_model_config::config_values::models::ConfigNode;
+
+const APPEND_STRATEGY: &str = "append";
 
 /// What resolving one model's, hook's or function's references reads.
 pub(crate) struct Resolution<'py> {
@@ -194,11 +198,8 @@ pub(crate) fn resolve_model_sql<'py>(
 ) -> PyResult<String> {
     let model = &request.model;
     let py = model.py();
-    let cursor_type = authored_config_str(
-        &native_field(&native_field(model, "config")?, "values")?,
-        "cursor_type",
-    )?
-    .unwrap_or_else(|| py.None().into_bound(py));
+    let cursor_type = config_text_object(py, &model_values(model)?, "cursor_type")?
+        .unwrap_or_else(|| py.None().into_bound(py));
     let bounds = compute_model_cursor_bounds(request, context)?;
     let roles = resolve_cursor_input_roles(model)?;
     let filtering = CursorFiltering {
@@ -230,15 +231,14 @@ pub(crate) fn resolve_model_sql<'py>(
 
 /// Effective append cursor lower-bound inclusivity.
 fn append_cursor_inclusive(model: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let py = model.py();
-    let strategy = authored_config_str(
-        &native_field(&native_field(model, "config")?, "values")?,
-        "incremental_strategy",
-    )?
-    .unwrap_or_else(|| py.None().into_bound(py));
-    let raw = native_field(&native_field(model, "config")?, "values")?
-        .call_method1("get", ("append_cursor_inclusive",))?;
-    Ok(!strategy.eq("append")? || !raw.is_instance_of::<PyBool>() || raw.is_truthy()?)
+    let values = model_values(model)?;
+    let py: Python<'_> = model.py();
+    let append: bool = config_text_is(py, &values, "incremental_strategy", APPEND_STRATEGY)?;
+    let inclusive: bool = match *config_node_of(&values, "append_cursor_inclusive")? {
+        ConfigNode::Bool(flag) => flag,
+        _ => true,
+    };
+    Ok(!append || inclusive)
 }
 
 /// `__cursor_start()` / `__cursor_end()` replaced with the adapter's typed bound literals.
@@ -341,11 +341,15 @@ pub(crate) fn model_hook_entries<'py>(
     model: &Bound<'py, PyAny>,
     resolution: &Resolution<'py>,
 ) -> PyResult<Bound<'py, PyTuple>> {
-    let values = native_field(&native_field(model, "config")?, "values")?;
+    let py: Python<'py> = model.py();
+    let values = model_values(model)?;
     let name: String = model_reads::model_name(model)?;
     let mut hooks: Vec<Bound<'py, PyAny>> = Vec::new();
     for key in ["pre_hooks", "post_hooks"] {
-        hooks.push(resolution.hook(mapping_get(&values, key)?, &format!("Model '{name}' {key}"))?);
+        hooks.push(resolution.hook(
+            config_value(py, &values, key)?,
+            &format!("Model '{name}' {key}"),
+        )?);
     }
     PyTuple::new(model.py(), hooks)
 }

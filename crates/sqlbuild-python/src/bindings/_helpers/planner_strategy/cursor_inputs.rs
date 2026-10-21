@@ -11,7 +11,9 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::cursor::scalars::parse_value;
-use crate::bindings::_helpers::model_config::config_values::{config_cursor_bound, config_str};
+use crate::bindings::_helpers::model_config::typed_config::{
+    config_cursor_bound, config_text_object, config_value, model_values,
+};
 use crate::bindings::_helpers::planner_identity::metadata::or_empty;
 use crate::bindings::_helpers::planner_strategy::constants::{
     ENFORCED_CONTRACT, INCREMENTAL_MATERIALIZATION, MODEL_REFERENCE, SEED_REFERENCE,
@@ -27,17 +29,13 @@ use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 
-/// A model's authored config values.
-pub(crate) fn model_values<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    native_field(&native_field(model, "config")?, "values")
-}
-
 /// Whether a model is incremental with a cursor column.
 fn incremental_cursor_flag(
     model: &Bound<'_, PyAny>,
     cursor_column: &Bound<'_, PyAny>,
 ) -> PyResult<bool> {
-    let materialized: Option<Bound<'_, PyAny>> = config_str(&model_values(model)?, "materialized")?;
+    let materialized: Option<Bound<'_, PyAny>> =
+        config_text_object(model.py(), &model_values(model)?, "materialized")?;
     Ok(!cursor_column.is_none()
         && match materialized {
             Some(materialized) => materialized.eq(INCREMENTAL_MATERIALIZATION)?,
@@ -129,7 +127,8 @@ pub(crate) fn reject_unexposed_cursor_input_columns<'py>(
             if kind == MODEL_REFERENCE {
                 let upstream: Bound<'py, PyAny> = mapping_get(models_by_name, &name)?;
                 if upstream.is_none()
-                    || !mapping_get(&model_values(&upstream)?, "contract")?.eq(ENFORCED_CONTRACT)?
+                    || !config_value(py, &model_values(&upstream)?, "contract")?
+                        .eq(ENFORCED_CONTRACT)?
                 {
                     continue;
                 }
@@ -218,7 +217,7 @@ fn terminal_bound<'py>(
     let Some(producer) = producer else {
         return Ok(py.None().into_bound(py));
     };
-    match config_cursor_bound(&model_values(producer)?, key)? {
+    match config_cursor_bound(py, &model_values(producer)?, key)? {
         Some(raw) => parse_value(&raw, cursor_type),
         None => Ok(py.None().into_bound(py)),
     }
@@ -263,10 +262,11 @@ pub(crate) fn build_cursor_input_relations<'py>(
     let functions_by_name: &Bound<'py, PyAny> = &lookups.functions_by_name;
     let model_locations: &Bound<'py, PyAny> = &lookups.model_locations;
     let producers: &Bound<'py, PyAny> = &lookups.runtime_cursor_producer_names;
-    let cursor_type: Bound<'py, PyAny> = match config_str(&model_values(&model)?, "cursor_type")? {
-        Some(cursor_type) if cursor_type.is_truthy()? => cursor_type,
-        _ => PyString::new(py, TIMESTAMP_CURSOR).into_any(),
-    };
+    let cursor_type: Bound<'py, PyAny> =
+        match config_text_object(py, &model_values(&model)?, "cursor_type")? {
+            Some(cursor_type) if cursor_type.is_truthy()? => cursor_type,
+            _ => PyString::new(py, TIMESTAMP_CURSOR).into_any(),
+        };
     let mut relations: Vec<Bound<'py, PyAny>> = Vec::new();
     let watermarks: Bound<'py, PyAny> =
         native_field(&resolve_cursor_input_roles(&model)?, "watermark_inputs")?;
@@ -290,7 +290,7 @@ pub(crate) fn build_cursor_input_relations<'py>(
             None
         };
         let grain: Bound<'py, PyAny> = match &producer {
-            Some(producer) => config_str(&model_values(producer)?, "cursor_grain")?
+            Some(producer) => config_text_object(py, &model_values(producer)?, "cursor_grain")?
                 .unwrap_or_else(|| py.None().into_bound(py)),
             None => py.None().into_bound(py),
         };

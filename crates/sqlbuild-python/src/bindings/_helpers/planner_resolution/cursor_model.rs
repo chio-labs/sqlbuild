@@ -6,8 +6,8 @@ use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;
 use crate::bindings::_helpers::compiled_views::model_reads;
-use crate::bindings::_helpers::model_config::config_values::{
-    config_cursor_bound, config_str as authored_config_str,
+use crate::bindings::_helpers::model_config::typed_config::{
+    config_cursor_bound, config_text_object, model_values,
 };
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::plan_output::display::resolve_bounded_cursor_override;
@@ -35,13 +35,14 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::{IntoPyObject, PyErr};
 
 fn config<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
-    let values: Bound<'py, PyAny> = native_field(&native_field(model, "config")?, "values")?;
+    let py: Python<'py> = model.py();
+    let values = model_values(model)?;
     let value: Option<Bound<'py, PyAny>> = if key == CURSOR_START {
-        config_cursor_bound(&values, key)?
+        config_cursor_bound(py, &values, key)?
     } else {
-        authored_config_str(&values, key)?
+        config_text_object(py, &values, key)?
     };
-    Ok(value.unwrap_or_else(|| model.py().None().into_bound(model.py())))
+    Ok(value.unwrap_or_else(|| py.None().into_bound(py)))
 }
 
 fn unbounded(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {

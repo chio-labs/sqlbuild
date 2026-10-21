@@ -4,6 +4,7 @@ use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
+use crate::bindings::_helpers::model_config::typed_config::{config_node_of, model_values};
 use crate::bindings::_helpers::planner_entries::models::ModelPlanContext;
 use crate::bindings::_helpers::planner_entries::values::{
     native, planner_model, planner_type, string,
@@ -28,17 +29,21 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::PyRef;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PySet, PySetMethods, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PySet, PySetMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_model_config::config_values::models::ConfigNode;
+
+const ENABLED_KEY: &str = "enabled";
 
 const VIEW_MATERIALIZATION: &str = "view";
 const GRAPH_ARGUMENTS: [&str; 4] = ["selected", "upstream", "is_clonable", "is_view"];
 
 /// Whether a model is explicitly disabled with a boolean `enabled = false`.
 fn disabled_model(model: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let raw = native_field(&native_field(model, "config")?, "values")?
-        .call_method1("get", ("enabled",))?;
-    Ok(raw.is_instance_of::<PyBool>() && !raw.is_truthy()?)
+    Ok(matches!(
+        *config_node_of(&model_values(model)?, ENABLED_KEY)?,
+        ConfigNode::Bool(false)
+    ))
 }
 
 fn tuple_of<'py>(py: Python<'py>, items: Vec<Bound<'py, PyAny>>) -> PyResult<Bound<'py, PyAny>> {

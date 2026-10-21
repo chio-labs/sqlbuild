@@ -5,6 +5,7 @@ use sqlbuild_host::entries::models::AdapterHost;
 use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
+use crate::bindings::_helpers::model_config::typed_config::{config_value, typed_values};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_phases::constants::{
     BIGQUERY_ADAPTER, DECREASE_WARNING, DOWNGRADE_HISTORY_DAYS, PERMANENT_TABLE_TYPE,
@@ -27,6 +28,8 @@ use sqlbuild_analysis::planner_warehouse::main::retention_change::retention_chan
 use sqlbuild_analysis::planner_warehouse::main::retention_direction::retention_direction;
 use sqlbuild_analysis::planner_warehouse::main::table_type_copy_name::table_type_copy_name as copy_name;
 use std::collections::{BTreeMap, BTreeSet};
+
+const MATERIALIZED_KEY: &str = "materialized";
 
 /// The resolved config of the planned target, or defaults without one.
 #[pyfunction]
@@ -123,7 +126,7 @@ pub(crate) fn plan_table_types<'py>(
             &native_field(&materialization, "is_table_backed")?,
             &[(
                 "materialized",
-                native_field(&config, "values")?.call_method1("get", ("materialized",))?,
+                config_value(py, &typed_values(&config)?, MATERIALIZED_KEY)?,
             )],
         )?;
         if !backed.is_truthy()? {

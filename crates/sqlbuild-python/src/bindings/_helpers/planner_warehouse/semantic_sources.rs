@@ -3,6 +3,7 @@
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::model_config::typed_config::{config_node_of, model_values};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_phases::objects::{text, tuple};
 use crate::bindings::_helpers::planner_warehouse::constants::ACTIVE_CATALOG;
@@ -13,7 +14,10 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::PyDict as KeywordDict;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use sqlbuild_model_config::config_values::models::ConfigNode;
 use std::collections::BTreeSet;
+
+const SQL_ANALYSIS_KEY: &str = "sql_analysis";
 
 fn casefold(value: &Bound<'_, PyAny>) -> PyResult<String> {
     value.call_method0("casefold")?.extract()
@@ -190,11 +194,11 @@ pub(crate) fn semantic_source_columns<'py>(
     let mut required: BTreeSet<String> = BTreeSet::new();
     for model in native_field(project, "models")?.try_iter()? {
         let model = model?;
-        let analysis = native_field(&native_field(&model, "config")?, "values")?
-            .call_method1("get", ("sql_analysis",))?;
-        if !selected_keys.contains(model_reads::model_key(&model)?)?
-            || analysis.is(pyo3::types::PyBool::new(py, false))
-        {
+        let analysis_off: bool = matches!(
+            *config_node_of(&model_values(&model)?, SQL_ANALYSIS_KEY)?,
+            ConfigNode::Bool(false)
+        );
+        if !selected_keys.contains(model_reads::model_key(&model)?)? || analysis_off {
             continue;
         }
         for reference in native_field(&model, "references")?.try_iter()? {

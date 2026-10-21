@@ -1,5 +1,8 @@
 //! Conversions between the planner's Python models and the native strategy rows.
 
+use crate::bindings::_helpers::model_config::typed_config::{
+    config_value as typed_config_value, model_values,
+};
 use crate::bindings::_helpers::planner_changes::results::native_enum;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use pyo3::IntoPyObject;
@@ -40,7 +43,7 @@ pub(crate) fn config_value<'py>(
     model: &Bound<'py, PyAny>,
     key: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    native_field(&native_field(model, "config")?, "values")?.call_method1("get", (key,))
+    typed_config_value(model.py(), &model_values(model)?, key)
 }
 
 /// The materialization type of a model's `materialized` config.

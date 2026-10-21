@@ -7,9 +7,13 @@ use sqlbuild_core::text::main::python_casefold::python_casefold;
 
 use crate::bindings::_helpers::compiled_views::compiled_model_view::InferredRow;
 use crate::bindings::_helpers::compiled_views::model_reads::{inferred_rows, star_flags};
+use crate::bindings::_helpers::model_config::typed_config::{config_value, model_values};
+use crate::bindings::_helpers::planner_strategy::constants::ENFORCED_CONTRACT;
 use crate::bindings::_helpers::planner_strategy::fixture_values::columns;
 use crate::bindings::_helpers::planner_strategy::models::FixtureRelation;
 use crate::bindings::_helpers::records::fields::field as native_field;
+
+const CONTRACT_KEY: &str = "contract";
 
 /// The model's merged inferred and declared columns, authoritative unless its analysis saw a star.
 pub(crate) fn model_fixture_relation(model: &Bound<'_, PyAny>) -> PyResult<FixtureRelation> {
@@ -30,9 +34,8 @@ pub(crate) fn model_fixture_relation(model: &Bound<'_, PyAny>) -> PyResult<Fixtu
         });
     }
     let authoritative = !star_flags(model)?.0
-        && (native_field(&native_field(model, "config")?, "values")?
-            .call_method1("get", ("contract",))?
-            .eq("enforced")?
+        && (config_value(model.py(), &model_values(model)?, CONTRACT_KEY)?
+            .eq(ENFORCED_CONTRACT)?
             || inferred.is_some());
     Ok(FixtureRelation {
         columns: merge_metadata(inferred_columns, declared),

@@ -1,9 +1,9 @@
 //! Model-level cursor safety policy overrides over project configuration.
 
 use crate::bindings::_helpers::boundary::python_calls::call_with;
+use crate::bindings::_helpers::model_config::typed_config::{config_value, model_values};
 use crate::bindings::_helpers::records::construct::{enum_from_value, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
 use pyo3::types::PyString;
@@ -45,9 +45,9 @@ fn resolve_policy<'py>(
     } else {
         class.call0()?
     };
-    let values = native_field(&native_field(model, "config")?, "values")?;
-    let raw_distance = mapping_get(&values, fields.distance_key)?;
-    let raw_action = mapping_get(&values, fields.action_key)?;
+    let values = model_values(model)?;
+    let raw_distance = config_value(py, &values, fields.distance_key)?;
+    let raw_action = config_value(py, &values, fields.action_key)?;
     let mut distance = configured.getattr(fields.distance)?;
     if raw_distance.is_instance_of::<PyString>() {
         distance = if raw_distance.eq(POLICY_DISABLED)? {

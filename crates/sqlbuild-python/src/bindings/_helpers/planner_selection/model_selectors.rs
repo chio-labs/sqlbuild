@@ -13,10 +13,13 @@ use sqlbuild_analysis::planner_selection::models::{
 };
 
 use crate::bindings::_helpers::boundary::python_calls::imported;
+use crate::bindings::_helpers::model_config::typed_config::{config_value, model_values};
 use crate::bindings::_helpers::planner_selection::carrier::Carrier;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
+
+const TAGS_KEY: &str = "tags";
 
 const SHARED_EXCEPTIONS_MODULE: &str = "sqlbuild.errors.contracts.exceptions";
 
@@ -60,8 +63,7 @@ pub(crate) fn split_selector_expansion<'py>(
 }
 
 fn model_tags(model: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
-    let tags: Bound<'_, PyAny> =
-        native_field(&native_field(model, "config")?, "values")?.call_method1("get", ("tags",))?;
+    let tags: Bound<'_, PyAny> = config_value(model.py(), &model_values(model)?, TAGS_KEY)?;
     if !tags.is_instance_of::<PyTuple>() && !tags.is_instance_of::<PyList>() {
         return Ok(Vec::new());
     }

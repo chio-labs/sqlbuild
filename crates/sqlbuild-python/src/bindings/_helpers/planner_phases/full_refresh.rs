@@ -1,6 +1,7 @@
 //! Per-model full-refresh resolution and full-rebuild refusals.
 
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::model_config::typed_config::{config_value, model_values};
 use crate::bindings::_helpers::planner_phases::constants::FULL_REFRESH_DISABLED_REBUILD_CODE;
 use crate::bindings::_helpers::planner_phases::objects::{frozenset, planner_error, strings};
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -10,8 +11,10 @@ use pyo3::types::PyBool;
 use sqlbuild_analysis::planner_warehouse::main::full_rebuild_cause::full_rebuild_cause;
 use sqlbuild_analysis::planner_warehouse::models::FullRebuildFacts;
 
+const FULL_REFRESH_KEY: &str = "full_refresh";
+
 fn configured_full_refresh<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    native_field(&native_field(model, "config")?, "values")?.call_method1("get", ("full_refresh",))
+    config_value(model.py(), &model_values(model)?, FULL_REFRESH_KEY)
 }
 
 /// dbt-compatible nullable model full-refresh semantics.

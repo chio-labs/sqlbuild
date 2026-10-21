@@ -2,7 +2,9 @@
 
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::compiled_views::model_reads;
-use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
+use crate::bindings::_helpers::model_config::typed_config::{
+    config_text_is, config_text_object, model_values,
+};
 use crate::bindings::_helpers::planner_resolution::values::{method, string};
 use crate::bindings::_helpers::records::construct::enum_from_value;
 use crate::bindings::_helpers::records::construct::error_class;
@@ -14,6 +16,13 @@ use pyo3::prelude::{
 use pyo3::types::PyDict;
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_cursor::planner::main::override_kind::override_kind;
+
+const MATERIALIZED_KEY: &str = "materialized";
+const CURSOR_KEY: &str = "cursor";
+const CURSOR_TYPE_KEY: &str = "cursor_type";
+const INCREMENTAL: &str = "incremental";
+const INTEGER_CURSOR: &str = "integer";
+const TIMESTAMP_CURSOR: &str = "timestamp";
 
 #[pyfunction(name = "type_cursor_overrides")]
 #[pyo3(signature = (**kwargs))]
@@ -48,16 +57,15 @@ pub(crate) fn type_cursor_overrides<'py>(
     }
     let mut models: Vec<(String, String)> = Vec::new();
     for model in selected {
-        let values = native_field(&native_field(model, "config")?, "values")?;
-        let config = |key: &str| -> PyResult<Bound<'_, PyAny>> {
-            Ok(authored_config_str(&values, key)?.unwrap_or_else(|| py.None().into_bound(py)))
-        };
-        if !config("materialized")?.eq("incremental")? || config("cursor")?.is_none() {
+        let values = model_values(model)?;
+        let incremental: bool = config_text_is(py, &values, MATERIALIZED_KEY, INCREMENTAL)?;
+        if !incremental || config_text_object(py, &values, CURSOR_KEY)?.is_none() {
             continue;
         }
-        let kind = config("cursor_type")?;
-        if kind.eq("integer")? || kind.eq("timestamp")? {
-            models.push((model_reads::name_object(model)?.extract()?, kind.extract()?));
+        for kind in [INTEGER_CURSOR, TIMESTAMP_CURSOR] {
+            if config_text_is(py, &values, CURSOR_TYPE_KEY, kind)? {
+                models.push((model_reads::name_object(model)?.extract()?, kind.to_owned()));
+            }
         }
     }
     let mut integer_literals = true;

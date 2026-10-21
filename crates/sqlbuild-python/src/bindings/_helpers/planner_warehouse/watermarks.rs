@@ -1,6 +1,7 @@
 //! Validate reliable watermark column contracts before warehouse inspection.
 
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::model_config::typed_config::{config_value, model_values};
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::objects::{config_str, planner_error, text};
 use crate::bindings::_helpers::planner_strategy::cursor_types::classify_cursor_sql_type;
@@ -8,11 +9,13 @@ use crate::bindings::_helpers::planner_warehouse::constants::{
     CURSOR_TYPE_INTEGER, CURSOR_TYPE_TIMESTAMP, WATERMARK_CONTRACT_CODE,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::fields::mapping_get;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult};
 use pyo3::pyfunction;
 use pyo3::types::{PyDict, PyDictMethods};
 use std::collections::HashMap;
+
+const CONTRACT_KEY: &str = "contract";
+const ENFORCED_CONTRACT: &str = "enforced";
 
 /// Whether a declared column type can hold the model's cursor type.
 #[pyfunction]
@@ -92,8 +95,8 @@ pub(crate) fn validate_watermark_column<'py>(
                 (Some(WATERMARK_CONTRACT_CODE), None),
             ));
         }
-        let values = native_field(&native_field(&upstream, "config")?, "values")?;
-        if !mapping_get(&values, "contract")?.eq("enforced")? {
+        let contract = config_value(py, &model_values(&upstream)?, CONTRACT_KEY)?;
+        if !contract.eq(ENFORCED_CONTRACT)? {
             return Ok(());
         }
         let schema = native_field(&upstream, "schema_entry")?;

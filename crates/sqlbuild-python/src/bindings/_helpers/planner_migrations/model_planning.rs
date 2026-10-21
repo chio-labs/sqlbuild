@@ -2,6 +2,9 @@
 
 use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::model_config::typed_config::{
+    config_node_of, config_value, model_values,
+};
 use crate::bindings::_helpers::planner_changes::renames::plan_reference_renames;
 use crate::bindings::_helpers::planner_migrations::column_objects::{config, replace};
 use crate::bindings::_helpers::planner_migrations::discovery::discover_model_migrations;
@@ -16,18 +19,19 @@ use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
-use pyo3::types::{
-    PyBool, PyDict, PyDictMethods, PyFrozenSet, PySet, PySetMethods, PyString, PyTuple,
-};
+use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PySet, PySetMethods, PyString, PyTuple};
+use sqlbuild_model_config::config_values::models::ConfigNode;
+
+const MIGRATE_FROM_KEY: &str = "migrate_from";
+const MIGRATE_FORCE_KEY: &str = "migrate_force";
 
 fn declared<'py>(item: &Bound<'py, PyAny>) -> PyResult<Option<ModelMigrationRequest<'py>>> {
     let py = item.py();
-    let values = native_field(&native_field(item, "config")?, "values")?;
-    let origin = mapping_get(&values, "migrate_from")?;
+    let values = model_values(item)?;
+    let origin = config_value(py, &values, MIGRATE_FROM_KEY)?;
     if !origin.is_instance_of::<PyString>() {
         return Ok(None);
     }
@@ -38,7 +42,10 @@ fn declared<'py>(item: &Bound<'py, PyAny>) -> PyResult<Option<ModelMigrationRequ
         raw_origin: Some(origin.call_method0("strip")?),
         origin_location: None,
         origin_model: py.None().into_bound(py),
-        force: mapping_get(&values, "migrate_force")?.is(PyBool::new(py, true)),
+        force: matches!(
+            *config_node_of(&values, MIGRATE_FORCE_KEY)?,
+            ConfigNode::Bool(true)
+        ),
         identity_only: materialization.eq("table")? || materialization.eq("view")?,
     }))
 }
