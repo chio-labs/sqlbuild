@@ -1257,3 +1257,13 @@ class FormatWriteFailureTestCase:
     expected_replaced: tuple[bool, ...]
     expected_error: type[BaseException]
     expected_status: str
+
+
+@dataclass(frozen=True)
+class CompiledViewFallbacksTestCase:
+    """One command run over a natively compiled project."""
+
+    description: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_fallbacks: int

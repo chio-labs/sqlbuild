@@ -1011,6 +1011,41 @@ def typed_config_reads(*, project_dir: Path, extra_header: str) -> int:
     return native_module.compile_stage_work_info(reset=True).get("typed_config_reads", 0)
 
 
+def compiled_view_fallbacks(*, project_dir: Path, command: tuple[str, ...]) -> tuple[int, int]:
+    """The exit code of `command` over a native project and its reads that missed a native view."""
+
+    project_dir.mkdir(parents=True)
+    (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\ndefault_target = "dev"\n\n'
+        '[connections.local]\ndatabase = ":memory:"\n\n[targets.dev]\nschema = "main"\n',
+        encoding="utf-8",
+    )
+    models_dir: Path = project_dir / "models"
+    models_dir.mkdir()
+    (models_dir / "orders.sql").write_text(
+        'MODEL (description "Orders.", materialized table, contract enforced, '
+        'columns (order_id (type "INTEGER"), loaded_at (type "INTEGER")));\n\n'
+        "SELECT CAST(1 AS INTEGER) AS order_id, CAST(1 AS INTEGER) AS loaded_at\n",
+        encoding="utf-8",
+    )
+    (models_dir / "daily_orders.sql").write_text(
+        'MODEL (description "Orders per day.", materialized table);\n\n'
+        'SELECT order_id, loaded_at FROM __ref("orders")\n',
+        encoding="utf-8",
+    )
+    (models_dir / "order_view.sql").write_text(
+        'MODEL (description "Order ids.", materialized view);\n\n'
+        'SELECT order_id FROM __ref("daily_orders")\n',
+        encoding="utf-8",
+    )
+    _ = native_module.compile_stage_work_info(reset=True)
+    exit_code: int = main(["--project-dir", str(project_dir), *command])
+    fallbacks: int = native_module.compile_stage_work_info(reset=True).get(
+        "compiled_view_fallbacks", 0
+    )
+    return exit_code, fallbacks
+
+
 FORMAT_CACHE_UNFORMATTED_MODELS: dict[str, str] = {
     "orders.sql": (
         'MODEL (description "Orders placed by customers.", materialized table);\n'
