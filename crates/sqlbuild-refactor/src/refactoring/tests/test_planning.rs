@@ -405,8 +405,7 @@ fn given_unit_tests_of_model_when_renaming_or_moving_then_tests_follow() -> Resu
         },
     ];
     for test_case in test_cases {
-        let (changes, notes) =
-            followed_unit_tests(&test_case.request, tests, test_case.rebound)?;
+        let (changes, notes) = followed_unit_tests(&test_case.request, tests, test_case.rebound)?;
         assert_eq!(
             changes, test_case.expected_changes,
             "{}",

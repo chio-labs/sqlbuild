@@ -357,8 +357,7 @@ fn identity_key(identity: &Bound<'_, PyAny>) -> PyResult<String> {
     identity.repr()?.extract()
 }
 
-/// The scoped declarations the unit test file at `path` uses that would resolve differently
-/// from `destination`, or `None` when that cannot be worked out.
+/// Scoped declarations the test file at `path` uses that resolve differently from `destination`.
 pub(crate) fn unit_test_rebindings(
     project: &Bound<'_, PyAny>,
     paths: (&str, &str),

@@ -959,15 +959,19 @@ class _BrokenStream:
 def test_given_failing_stderr_when_sink_stalls_then_delivery_and_counts_continue(
     test_case: EventExporterDispatcherTestCase, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    release: threading.Event = threading.Event()
-    slow_started: threading.Event = threading.Event()
+    event_ids: tuple[str, ...] = tuple(f"event-{index}" for index in range(1, 5))
+    started: dict[str, threading.Event] = {event_id: threading.Event() for event_id in event_ids}
+    gates: dict[str, threading.Event] = {event_id: threading.Event() for event_id in event_ids}
+    for event_id in event_ids[1:]:
+        gates[event_id].set()
+    slow_started: threading.Event = started["event-1"]
+    release: threading.Event = gates["event-1"]
     delivered: list[str] = []
 
     def record(*, event: LifecycleEvent) -> None:
         delivered.append(event.event_id)
-        if event.event_id == "event-1":
-            slow_started.set()
-            _ = release.wait()
+        started[event.event_id].set()
+        _ = gates[event.event_id].wait()
 
     monkeypatch.setattr(sys, "stderr", _BrokenStream())
     dispatcher: EventExporterDispatcher = EventExporterDispatcher(

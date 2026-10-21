@@ -649,13 +649,15 @@ pub(super) fn owner_header_parts(
     Ok((described(&edits), manual))
 }
 
-/// Each planned test file as `original -> path` with the replacements made in it, and each
-/// `path: reason` note, when the scope host reports `rebound` for every test file.
+/// Planned test file changes with their replacements, and the plan's notes.
+type FollowedTests = (Vec<(String, Vec<String>)>, Vec<String>);
+
+/// Planned test file changes and `path: reason` notes when the scope host reports `rebound`.
 pub(super) fn followed_unit_tests(
     request: &RefactorRequest,
     tests: &[(&str, &str, &[&str])],
     rebound: &[&str],
-) -> Result<(Vec<(String, Vec<String>)>, Vec<String>), RefactorError> {
+) -> Result<FollowedTests, RefactorError> {
     let mut orders: ModelFacts = model("orders", Some("view"), "analytics");
     orders.path = "models/marts/orders.sql".to_owned();
     let mut project_facts = facts("/nonexistent/project", vec![orders]);

@@ -307,8 +307,7 @@ pub(crate) fn scope_move_preview(
     }
 }
 
-/// The scoped declarations the resources at `path` use that resolve differently from
-/// `destination`, or `None` when `destination` cannot hold them.
+/// Scoped declarations the resources at `path` use that resolve differently from `destination`.
 pub(crate) fn scope_rebound_usages(
     py: Python<'_>,
     lookup: &Bound<'_, PyAny>,

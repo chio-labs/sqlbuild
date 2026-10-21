@@ -20,14 +20,10 @@ pub(crate) struct FollowedModel<'a> {
     pub(crate) paths: (&'a str, &'a str),
 }
 
-/// Rename `TEST` names of tests that target only the model, and move files holding only them.
-///
-/// A file moves only when every macro, enum and constant it uses resolves to the same
-/// declaration from the destination folder; otherwise it is renamed in place, with a note.
+/// Rename `TEST` names of the model's own tests, and move their files when scopes allow.
 pub(crate) fn unit_test_parts(
     project_dir: &Path,
-    tests: &[UnitTestFacts],
-    files: &[ProjectSqlFile],
+    (tests, files): (&[UnitTestFacts], &[ProjectSqlFile]),
     model: &FollowedModel<'_>,
     host: &UnitTestScopeHost<'_>,
 ) -> Result<RefactorParts, RefactorError> {

@@ -12,8 +12,7 @@ use crate::refactoring::models::{RefactorFacts, RefactorOperation, RefactorPlan,
 
 use crate::refactoring::types::{DeclarationMoveHost, UnitTestScopeHost};
 
-/// Plan one refactoring without touching files; `host` finds declaration-file moves and
-/// `test_host` the declarations that keep a unit test file in its folder.
+/// Plan one refactoring without touching files, asking the hosts about declaration scopes.
 pub fn plan_refactor(
     facts: &RefactorFacts,
     request: &RefactorRequest,

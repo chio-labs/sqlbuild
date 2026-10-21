@@ -187,8 +187,7 @@ pub(crate) fn model_parts(
     let destination = target.destination();
     let tests = unit_test_parts(
         Path::new(&facts.project_dir),
-        &facts.unit_tests,
-        &files,
+        (&facts.unit_tests, &files),
         &FollowedModel {
             names: (old, new),
             paths: (&target.source_path, &destination),
