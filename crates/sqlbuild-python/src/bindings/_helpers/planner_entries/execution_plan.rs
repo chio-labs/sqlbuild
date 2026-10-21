@@ -26,7 +26,8 @@ use crate::bindings::_helpers::planner_phases::models::{
     PlanOutputContext, PlanWarningContext, PlannedModelEntries, StoragePolicyContext,
 };
 use crate::bindings::_helpers::planner_phases::output_assembly::{
-    add_plan_metadata, add_plan_warnings, add_storage_policies, base_plan_output,
+    add_deferred_origin_notes, add_plan_metadata, add_plan_warnings, add_storage_policies,
+    base_plan_output,
 };
 use crate::bindings::_helpers::planner_phases::runtime::warehouse_field;
 use crate::bindings::_helpers::planner_phases::scopes::resolve_planner_scopes;
@@ -193,6 +194,7 @@ fn planned_output<'py>(
         },
         (&source_freshness, &policies),
     )?;
+    let output = add_deferred_origin_notes(output, (&project, scopes), &deferral)?;
     let plan_output = add_plan_metadata(output, &source_freshness, &policies)?.build(py)?;
     let on_progress = args.value("on_progress")?;
     if !on_progress.is_none() {
