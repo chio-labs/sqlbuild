@@ -1,25 +1,45 @@
-//! The Python dependency manifests and lock files of a project in the checkout.
+//! The git-tracked Python dependency manifests and lock files of a project in the checkout.
 
-use crate::git_revisions::_helpers::dependency_files::{directories, is_dependency_file};
+use std::path::Path;
+
+use crate::git_revisions::_helpers::dependency_files::{
+    directories, is_dependency_file, normalised,
+};
+use crate::git_revisions::_helpers::failures::export_failed;
+use crate::git_revisions::_helpers::git_command::git_output;
+use crate::git_revisions::errors::GitRevisionError;
 use crate::git_revisions::models::GitBase;
 
-/// `(repository path, trimmed text)` of each dependency file in the checkout, sorted.
-pub fn current_dependency_files(base: &GitBase) -> std::io::Result<Vec<(String, String)>> {
+/// `(repository path, text)` of each tracked dependency file as the checkout has it, sorted.
+pub fn current_dependency_files(base: &GitBase) -> Result<Vec<(String, String)>, GitRevisionError> {
+    let root: &Path = &base.repository_root;
     let mut files: Vec<(String, String)> = Vec::new();
     for directory in directories(base) {
-        let entries: std::fs::ReadDir =
-            match std::fs::read_dir(base.repository_root.join(&directory)) {
-                Ok(entries) => entries,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-                Err(error) => return Err(error),
+        let listing: String = git_output(
+            root,
+            &[
+                "ls-files",
+                "-z",
+                "--full-name",
+                "--",
+                &format!("{directory}*"),
+            ],
+            &[],
+        )
+        .map_err(|failure| export_failed(base, failure.detail()))?;
+        for path in listing.split('\0').filter(|path| !path.is_empty()) {
+            let Some(name) = path.strip_prefix(directory.as_str()) else {
+                continue;
             };
-        for entry in entries {
-            let entry: std::fs::DirEntry = entry?;
-            let name: String = entry.file_name().to_string_lossy().into_owned();
-            if entry.path().is_file() && is_dependency_file(&name) {
-                let text: String = std::fs::read_to_string(entry.path())?;
-                files.push((format!("{directory}{name}"), text.trim().to_owned()));
+            if name.contains('/') || !is_dependency_file(name) {
+                continue;
             }
+            let text: String = match std::fs::read(root.join(path)) {
+                Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(export_failed(base, &error.to_string())),
+            };
+            files.push((path.to_owned(), normalised(&text)));
         }
     }
     files.sort();

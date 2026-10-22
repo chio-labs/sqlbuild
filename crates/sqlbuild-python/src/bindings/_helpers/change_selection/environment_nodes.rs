@@ -48,8 +48,12 @@ pub(crate) fn with_base_dependencies(
 
 /// `snapshot` of the working tree with its dependency files.
 pub(crate) fn with_current_dependencies(
+    py: Python<'_>,
     base: &GitBase,
     snapshot: &DefinitionSnapshot,
 ) -> PyResult<DefinitionSnapshot> {
-    Ok(add_dependencies(snapshot, &current_dependency_files(base)?))
+    let files: Vec<(String, String)> = py
+        .detach(|| current_dependency_files(base))
+        .map_err(|error| git_error(py, error))?;
+    Ok(add_dependencies(snapshot, &files))
 }

@@ -129,11 +129,11 @@ fn vars_json(cli_vars: &Bound<'_, PyAny>) -> PyResult<String> {
 
 /// Run the base compile of `tree` into `output` in a separate interpreter.
 fn compile_base_tree(
-    (stream, base): (&Bound<'_, PyAny>, &GitBase),
+    py: Python<'_>,
+    base: &GitBase,
     (tree, output): (&Path, &Path),
     (selected_target, vars): (Option<&str>, &str),
 ) -> PyResult<()> {
-    let py: Python<'_> = stream.py();
     let [_, executable, _, _] = interpreter_values(py)?;
     let finished: std::io::Result<Output> = py.detach(|| {
         Command::new(&executable)
@@ -149,11 +149,6 @@ fn compile_base_tree(
     });
     let finished: Output = finished.map_err(|error| io_failed(py, base, &error))?;
     if finished.status.success() && output.is_file() {
-        match std::fs::read_to_string(output.with_extension(NOTES_EXTENSION)) {
-            Ok(notes) => write(stream, &notes)?,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(io_failed(py, base, &error)),
-        }
         return Ok(());
     }
     Err(compile_failed(py, base, &failure_tail(&finished)))
@@ -161,18 +156,18 @@ fn compile_base_tree(
 
 /// Export the base tree, carry over the untracked local config, and compile it.
 fn compiled_base_snapshot(
-    stream: &Bound<'_, PyAny>,
+    py: Python<'_>,
     (base, project_dir, work): (&GitBase, &Path, &Path),
     (selected_target, vars): (Option<&str>, &str),
-) -> PyResult<DefinitionSnapshot> {
-    let py: Python<'_> = stream.py();
+) -> PyResult<(DefinitionSnapshot, String)> {
     let tree: PathBuf = work.join("project");
     let exported: bool = export_git_tree(base, &tree).map_err(|error| git_error(py, error))?;
     if !exported || !tree.join(PROJECT_CONFIG_FILE).is_file() {
-        return Ok(DefinitionSnapshot {
+        let empty: DefinitionSnapshot = DefinitionSnapshot {
             format: DEFINITION_SNAPSHOT_FORMAT,
             ..DefinitionSnapshot::default()
-        });
+        };
+        return Ok((empty, String::new()));
     }
     let local: PathBuf = project_dir.join(LOCAL_CONFIG_FILE);
     if local.is_file() && !tree.join(LOCAL_CONFIG_FILE).exists() {
@@ -180,11 +175,21 @@ fn compiled_base_snapshot(
             .map_err(|error| io_failed(py, base, &error))?;
     }
     let output: PathBuf = work.join("definitions.json");
-    compile_base_tree((stream, base), (&tree, &output), (selected_target, vars))?;
+    compile_base_tree(py, base, (&tree, &output), (selected_target, vars))?;
     let text: String =
         std::fs::read_to_string(&output).map_err(|error| io_failed(py, base, &error))?;
-    parse_definition_snapshot(&text)
-        .ok_or_else(|| compile_failed(py, base, "the base compile wrote an unreadable snapshot"))
+    let snapshot: DefinitionSnapshot = parse_definition_snapshot(&text)
+        .ok_or_else(|| compile_failed(py, base, "the base compile wrote an unreadable snapshot"))?;
+    Ok((snapshot, read_notes(py, base, &output)?))
+}
+
+/// The notes stored beside snapshot `path`, empty when there are none.
+fn read_notes(py: Python<'_>, base: &GitBase, path: &Path) -> PyResult<String> {
+    match std::fs::read_to_string(path.with_extension(NOTES_EXTENSION)) {
+        Ok(notes) => Ok(notes),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+        Err(error) => Err(io_failed(py, base, &error)),
+    }
 }
 
 /// Resolve `since` to its merge base and load, or compile and cache, the base snapshot.
@@ -229,6 +234,7 @@ pub(crate) fn base_comparison<'py>(
     };
     if let Some(snapshot) = stored {
         write(stream, &format!("Using cached base revision {short}\n"))?;
+        write(stream, &read_notes(py, &base, &cached)?)?;
         flush(stream)?;
         let snapshot: DefinitionSnapshot = with_base_dependencies(py, &base, &snapshot)?;
         return Ok(BaseComparison { base, snapshot });
@@ -238,12 +244,24 @@ pub(crate) fn base_comparison<'py>(
     let started: Instant = Instant::now();
     let work: PathBuf = cache_dir.join(work_directory_name(short));
     std::fs::create_dir_all(&work).map_err(|error| io_failed(py, &base, &error))?;
-    let compiled: PyResult<DefinitionSnapshot> =
-        compiled_base_snapshot(stream, (&base, &directory, &work), (target, vars));
+    let compiled: PyResult<(DefinitionSnapshot, String)> =
+        compiled_base_snapshot(py, (&base, &directory, &work), (target, vars));
     let _ = std::fs::remove_dir_all(&work);
-    let snapshot: DefinitionSnapshot = compiled?;
+    let (snapshot, notes) = compiled?;
+    write(stream, &notes)?;
     let staged: PathBuf = cached.with_extension(format!("{}.tmp", std::process::id()));
-    if let Ok(()) = std::fs::write(&staged, definition_snapshot_json(&snapshot)) {
+    let notes_path: PathBuf = cached.with_extension(NOTES_EXTENSION);
+    let notes_saved: std::io::Result<()> = if notes.is_empty() {
+        std::fs::remove_file(&notes_path).or_else(|error| match error.kind() {
+            std::io::ErrorKind::NotFound => Ok(()),
+            _ => Err(error),
+        })
+    } else {
+        std::fs::write(&notes_path, &notes)
+    };
+    if notes_saved.is_ok()
+        && let Ok(()) = std::fs::write(&staged, definition_snapshot_json(&snapshot))
+    {
         let _ = std::fs::rename(&staged, &cached);
     }
     prune_snapshots(&cache_dir).map_err(|error| io_failed(py, &base, &error))?;

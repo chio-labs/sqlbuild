@@ -306,17 +306,24 @@ fn given_project_absent_at_merge_base_when_exporting_tree_then_reports_no_projec
 fn given_dependency_files_when_reading_both_sides_then_lists_root_and_project_files() {
     let (root, _) = project_repository();
     write(&root, "uv.lock", "version = 1\n");
-    write(&root, "warehouse/requirements-dev.txt", "pytest\n");
+    write(
+        &root,
+        "warehouse/requirements-dev.txt",
+        "pytest\r\nruff\r\n",
+    );
+    write(&root, "warehouse/requirements-local.txt", "untracked\n");
     write(&root, "warehouse/notes.txt", "not a dependency file\n");
     git(&root, &["add", "uv.lock"]);
     git(&root, &["commit", "--quiet", "-m", "lock"]);
+    git(&root, &["add", "warehouse/requirements-dev.txt"]);
     let current: Vec<(&str, &str)> = vec![
         ("uv.lock", "version = 1"),
-        ("warehouse/requirements-dev.txt", "pytest"),
+        ("warehouse/requirements-dev.txt", "pytest\nruff"),
     ];
     let test_cases = [
         DependencyFilesTestCase {
-            description: "files added after the base are only in the checkout",
+            description: "tracked files added after the base are only in the checkout, with LF \
+                          line endings; untracked ones are ignored",
             reference: "main",
             expected_base: vec![],
             expected_current: current.clone(),

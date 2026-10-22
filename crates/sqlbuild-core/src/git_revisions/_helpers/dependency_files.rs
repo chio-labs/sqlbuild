@@ -20,3 +20,8 @@ pub(crate) fn directories(base: &GitBase) -> BTreeSet<String> {
     }
     directories
 }
+
+/// `text` with CRLF line endings as LF and surrounding whitespace removed, as git stores it.
+pub(crate) fn normalised(text: &str) -> String {
+    text.replace("\r\n", "\n").trim().to_owned()
+}

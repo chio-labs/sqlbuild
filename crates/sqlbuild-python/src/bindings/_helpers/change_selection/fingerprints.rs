@@ -258,13 +258,26 @@ pub(crate) fn referenced_environment(text: &str) -> BTreeSet<String> {
     names
 }
 
+/// The value of environment variable `name` in this process.
+pub(crate) fn process_environment(name: &str) -> Option<String> {
+    std::env::var_os(name).map(|value| value.to_string_lossy().into_owned())
+}
+
 /// The digest of the environment variables `names` by their current values, which it never shows.
 pub(crate) fn environment_digest(names: &BTreeSet<String>) -> String {
+    environment_digest_with(names, &process_environment)
+}
+
+/// The digest of the environment variables `names` by the values `lookup` gives them.
+pub(crate) fn environment_digest_with(
+    names: &BTreeSet<String>,
+    lookup: &dyn Fn(&str) -> Option<String>,
+) -> String {
     let mut parts: Vec<String> = Vec::new();
     for name in names {
         parts.push(name.clone());
-        parts.push(match std::env::var_os(name) {
-            Some(value) => definition_digest(&[&value.to_string_lossy()]),
+        parts.push(match lookup(name) {
+            Some(value) => definition_digest(&[&value]),
             None => "unset".to_owned(),
         });
     }

@@ -59,6 +59,7 @@ pub(crate) fn changed_project(
     base: BaseComparison,
 ) -> PyResult<ChangedProject> {
     let current: DefinitionSnapshot = with_current_dependencies(
+        project.py(),
         &base.base,
         &definition_snapshot(project, discovered, project_dir)?,
     )?;

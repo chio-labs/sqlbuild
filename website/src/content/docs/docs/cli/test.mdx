@@ -95,9 +95,10 @@ Some inputs reach every test, so a change to any of them selects every test:
 - the adapter, `[connection]` and `[connections]` (including connection settings and adapter
   extensions), `[targets]` and the target in use, and project-local adapter modules under
   `adapters/`. Their values are compared by digest and never printed;
-- the Python environment as the project records it: `pyproject.toml`, `uv.lock`, `poetry.lock`,
-  `pdm.lock`, `Pipfile.lock` and `requirements*.txt` in the project directory or at the repository
-  root.
+- the Python environment as the project records it: the git-tracked `pyproject.toml`, `uv.lock`,
+  `poetry.lock`, `pdm.lock`, `Pipfile.lock` and `requirements*.txt` in the project directory or at
+  the repository root, compared with line endings normalised. Untracked and ignored copies do not
+  count. Any edit to `pyproject.toml` counts, even one unrelated to dependencies.
 
 Environment variables a project reads with `${ENV:NAME}` in configuration or `@@ENV:NAME` in SQL
 are part of the cache key of the base compile and of the fingerprints of the SQL that reads them;
@@ -173,10 +174,12 @@ selected.
 
 SQL comparisons ignore layout and comments using a generic SQL tokenizer. In dialects where `--`
 starts a comment only when followed by whitespace, such as MySQL, `1--1` is read as `1` followed by
-a comment, so an edit inside such an expression can go unnoticed. The base tree is read from git
-objects without LFS smudging, including when a `.gitattributes` at the repository root marks files
-in a project subdirectory. A file stored with Git LFS, such as a seed, is a pointer file at the
-base and real content in the checkout, so it always counts as changed and selects what reads it.
+a comment, so an edit inside such an expression can go unnoticed. The base tree is written from git
+objects with the repository's filters. Git LFS content is restored for files that an unanchored
+`.gitattributes` pattern marks, such as `*.csv filter=lfs`, but a pattern anchored to a path, such
+as `/data/*.csv` at the repository root for a project in a subdirectory, does not match the
+exported paths. Such a file is an LFS pointer at the base and real content in the checkout, so it
+always counts as changed: at most extra tests run.
 
 `<ref>` is any git ref or commit, such as the merge request's target branch from a CI variable.
 `--since` always takes a value. A ref that does not exist, or a shallow clone that does not reach

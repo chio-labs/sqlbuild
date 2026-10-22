@@ -475,14 +475,25 @@ def test_given_changes_since_ref_when_testing_then_runs_only_affected_tests(
             ),
         ),
         SinceSelectionE2ETestCase(
-            description="a Python dependency lock file selects every test",
+            description="a tracked Python dependency lock file selects every test",
             edits={"uv.lock": "version = 1\n"},
+            git_after_edits=("add", "uv.lock"),
             command=_EXPLAINED_TESTS,
             expected_exit_code=0,
             expected_fragments=(
                 "Changed since main: 1 Python environment changed\n",
                 "Selected 13 of 13 tests",
                 "test_order_day\n    uses Python environment (changed)",
+            ),
+        ),
+        SinceSelectionE2ETestCase(
+            description="an untracked lock file is not part of the project",
+            edits={"uv.lock": "version = 1\n", "requirements-local.txt": "pytest\n"},
+            command=_TEST_COMMAND,
+            expected_exit_code=0,
+            expected_fragments=(
+                "Changed since main: no definition changes",
+                "No tests are affected by the changes since main",
             ),
         ),
         SinceSelectionE2ETestCase(
