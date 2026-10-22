@@ -14,6 +14,7 @@ use crate::sql_macros::_helpers::literal_positions::{
 };
 use crate::sql_macros::_helpers::parameters::{ParameterReference, parameter_references};
 use crate::sql_macros::_helpers::placement::{CallSite, cte_names, select_names};
+use crate::sql_macros::_helpers::query_parts::top_level_parts;
 use crate::sql_macros::constants::{
     ARGUMENT_CODE, CTE_NOUN, CYCLE_CODE, INVALID_DEFINITION_CODE, MISPLACED_CALL_CODE,
     NAME_CLASH_CODE,
@@ -21,9 +22,9 @@ use crate::sql_macros::constants::{
 use crate::sql_macros::errors::ExpansionFailure;
 use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::models::{
-    ArgumentShape, BodyExpansion, BoundArgument, CallPosition, InsertedNames, ParameterKind,
-    RenderedArgument, SqlMacroCall, SqlMacroDefinition, SqlMacroForm, SqlMacroLocation,
-    TextContext,
+    ArgumentCheck, ArgumentExpectation, ArgumentShape, BodyExpansion, BoundArgument, CallPosition,
+    CallScope, InsertedNames, ParameterKind, RenderedArgument, SqlMacroCall, SqlMacroCheck,
+    SqlMacroDefinition, SqlMacroForm, SqlMacroLocation, TextContext,
 };
 use crate::sql_macros::types::{ConstantShape, SqlMacroHost, SqlMacroScope};
 
@@ -35,7 +36,7 @@ pub(crate) fn sql_macro_calls(text: &str) -> Result<Vec<SqlMacroCall>, SqlMacroE
             "SQL has an unclosed quote or comment",
         )
     })?;
-    Ok(outer_sql_calls(&constructs)
+    let calls: Vec<SqlMacroCall> = outer_sql_calls(&constructs)
         .into_iter()
         .filter_map(|(construct, in_python)| match construct {
             AtConstruct::Sql {
@@ -47,10 +48,31 @@ pub(crate) fn sql_macro_calls(text: &str) -> Result<Vec<SqlMacroCall>, SqlMacroE
                 name: name.clone(),
                 start: *start,
                 end: *end,
+                replaced_end: *end,
                 arguments: *arguments,
                 in_python,
             }),
             _ => None,
+        })
+        .collect();
+    if calls.iter().all(|call| call.in_python) {
+        return Ok(calls);
+    }
+    let Ok(scanned) = tokens(text) else {
+        return Ok(calls);
+    };
+    Ok(calls
+        .into_iter()
+        .map(|call| {
+            if call.in_python {
+                return call;
+            }
+            let site: CallSite<'_> =
+                CallSite::new(text, &scanned, (call.start, call.end), call.end);
+            SqlMacroCall {
+                replaced_end: site.list_replaced_end(call.end),
+                ..call
+            }
         })
         .collect())
 }
@@ -120,7 +142,7 @@ pub(crate) fn expand_text<H: SqlMacroHost>(
         inserted = updated;
         spliced.push_str(&context.text[cursor..call.start]);
         spliced.push_str(&expansion);
-        cursor = call.end;
+        cursor = call.replaced_end;
     }
     spliced.push_str(&context.text[cursor..]);
     host.render_declarations(context.scope, &spliced)
@@ -189,7 +211,23 @@ pub(crate) fn expand_call<H: SqlMacroHost>(
     if call.in_python {
         return Ok((python_string(&expansion.sql), inserted));
     }
-    let site: CallSite<'_> = CallSite::new(context.text, scanned, call.start, call.end);
+    if matches!(context.scope, SqlMacroScope::Caller) && context.stack.is_empty() {
+        let check: SqlMacroCheck = SqlMacroCheck {
+            macro_name: definition.name.clone(),
+            scope: call_scope(context.text, scanned, call.start),
+            arguments: argument_checks(&definition, &bound, &rendered),
+            call: None,
+        };
+        if !check.arguments.is_empty() {
+            host.record_check(check, (call.start, call.end));
+        }
+    }
+    let site: CallSite<'_> = CallSite::new(
+        context.text,
+        scanned,
+        (call.start, call.end),
+        call.replaced_end,
+    );
     placed(&definition, (&site, inserted), &expansion, context.owner)
         .map_err(ExpansionFailure::Macro)
 }
@@ -300,10 +338,11 @@ fn placed(
                 return Err(SqlMacroError::new(MISPLACED_CALL_CODE, format!("expression macro {name}() is called where a CTE belongs"))
                     .helped("call an expression macro where an expression belongs, such as in a select list or WHERE clause"));
             }
+            let comma: &str = site.expression_separator();
             if site.expression_needs_parentheses() && !is_atomic(&expansion.sql) {
-                Ok((format!("({})", expansion.sql), inserted))
+                Ok((format!("({}){comma}", expansion.sql), inserted))
             } else {
-                Ok((expansion.sql.clone(), inserted))
+                Ok((format!("{}{comma}", expansion.sql), inserted))
             }
         }
         SqlMacroForm::CteList => {
@@ -340,6 +379,13 @@ fn placed(
                     ),
                 ));
             };
+            if site.has_alias() {
+                return Err(SqlMacroError::new(
+                    MISPLACED_CALL_CODE,
+                    format!("column-list macro {name}() cannot take an alias; it inserts several columns, each named in the macro"),
+                )
+                .helped(format!("remove the alias after @sql.{name}(...), or rename the columns in {}", definition.path)));
+            }
             let defined: Vec<(String, usize)> = select_names(site.sql, site.tokens, list);
             let inserted: InsertedNames = check_clashes(
                 definition,
@@ -467,4 +513,55 @@ fn check_adapter_types(
         return Err(error.at(macro_location(definition, 1, 1)));
     }
     Ok(())
+}
+
+/// The checks the caller's column types decide, for arguments the call itself passed.
+fn argument_checks(
+    definition: &SqlMacroDefinition,
+    bound: &[BoundArgument],
+    rendered: &[RenderedArgument],
+) -> Vec<ArgumentCheck> {
+    let mut checks: Vec<ArgumentCheck> = Vec::new();
+    for (argument, rendered) in bound.iter().zip(rendered) {
+        if argument.from_default {
+            continue;
+        }
+        let parameter = &definition.parameters[argument.parameter];
+        let expected: ArgumentExpectation = match (&parameter.kind, &rendered.shape) {
+            (ParameterKind::Relation { columns }, ArgumentShape::Identifier { .. }) => {
+                ArgumentExpectation::Relation {
+                    columns: columns.clone(),
+                }
+            }
+            (ParameterKind::ColumnOf { relation }, ArgumentShape::Identifier { .. }) => {
+                ArgumentExpectation::ColumnOf {
+                    relation: relation.clone(),
+                }
+            }
+            (
+                ParameterKind::Expression { data_type },
+                ArgumentShape::Expression | ArgumentShape::Identifier { .. },
+            ) if !rendered.sql.contains('@') && !rendered.sql.contains("__") => {
+                ArgumentExpectation::Typed {
+                    data_type: data_type.clone(),
+                }
+            }
+            _ => continue,
+        };
+        checks.push(ArgumentCheck {
+            parameter: parameter.name.clone(),
+            text: rendered.sql.trim().to_owned(),
+            expected,
+            declared_at: macro_location(definition, parameter.line, parameter.column),
+        });
+    }
+    checks
+}
+
+/// The top-level query part holding the byte `offset` of `text`.
+fn call_scope(text: &str, scanned: &[Token], offset: usize) -> CallScope {
+    match top_level_parts(text, scanned) {
+        Some(parts) => parts.scope_of(offset),
+        None => CallScope::Main,
+    }
 }

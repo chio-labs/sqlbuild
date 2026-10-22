@@ -168,3 +168,5 @@ pub(crate) const GROUPED_NAMED_ROLE_KINDS: [(&[&str], &str); 9] = [
 ];
 /// The keyword whose presence makes a lint request carry relation names.
 pub(crate) const CROSS_KEYWORD: &[u8] = b"cross";
+/// What a SQL macro expression body is formatted after, and removed from again.
+pub(crate) const EXPRESSION_SELECT_PREFIX: &str = "SELECT ";

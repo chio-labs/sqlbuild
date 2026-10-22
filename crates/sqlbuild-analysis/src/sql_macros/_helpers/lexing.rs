@@ -45,7 +45,19 @@ impl Token {
 const PUNCTUATION: &[u8] = b"()[]{},.;";
 
 /// Every token of `sql`, skipping whitespace and comments.
+///
+/// Doubled quotes escape a quote; text that leaves a quote unclosed that way is read again
+/// with backslash escapes, as BigQuery and Databricks strings use them.
 pub(crate) fn tokens(sql: &str) -> Result<Vec<Token>, LexError> {
+    match scanned_tokens(sql, false) {
+        Err(LexError::UnclosedQuote(start)) => {
+            scanned_tokens(sql, true).map_err(|_| LexError::UnclosedQuote(start))
+        }
+        scanned => scanned,
+    }
+}
+
+fn scanned_tokens(sql: &str, backslash_escapes: bool) -> Result<Vec<Token>, LexError> {
     let bytes: &[u8] = sql.as_bytes();
     let mut found: Vec<Token> = Vec::new();
     let mut index: usize = 0;
@@ -73,11 +85,13 @@ pub(crate) fn tokens(sql: &str) -> Result<Vec<Token>, LexError> {
         let start: usize = index;
         let kind: TokenKind = match byte {
             b'\'' => {
-                index = quoted_end(bytes, index).ok_or(LexError::UnclosedQuote(start))?;
+                index = quote_end(bytes, index, backslash_escapes)
+                    .ok_or(LexError::UnclosedQuote(start))?;
                 TokenKind::Text
             }
             b'"' | b'`' => {
-                index = quoted_end(bytes, index).ok_or(LexError::UnclosedQuote(start))?;
+                index = quote_end(bytes, index, backslash_escapes)
+                    .ok_or(LexError::UnclosedQuote(start))?;
                 TokenKind::Quoted
             }
             b'$' if dollar_end(bytes, index).is_some() => {
@@ -174,6 +188,30 @@ pub(crate) fn quoted_end(bytes: &[u8], start: usize) -> Option<usize> {
         }
         return Some(index + 1);
     }
+}
+
+/// The byte offset after the quoted text at `start`, where a backslash may escape the next byte.
+fn quote_end(bytes: &[u8], start: usize, backslash_escapes: bool) -> Option<usize> {
+    if !backslash_escapes {
+        return quoted_end(bytes, start);
+    }
+    let quote: u8 = bytes[start];
+    let mut index: usize = start + 1;
+    while let Some(byte) = bytes.get(index) {
+        if *byte == b'\\' {
+            index += 2;
+            continue;
+        }
+        if *byte == quote {
+            if bytes.get(index + 1) == Some(&quote) {
+                index += 2;
+                continue;
+            }
+            return Some(index + 1);
+        }
+        index += 1;
+    }
+    None
 }
 
 /// The byte offset after a `$tag$...$tag$` string starting at `start`, if one starts there.

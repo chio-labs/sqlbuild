@@ -14,8 +14,12 @@ from sqlbuild._native import (
     find_macro_call_names,
 )
 from sqlbuild.compiler.compile._helpers.render import user_macros as macros_module
-from sqlbuild.compiler.compile._helpers.render.user_macros import load_project_macros
+from sqlbuild.compiler.compile._helpers.render.user_macros import (
+    inventory_project_macros,
+    load_project_macros,
+)
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
+    SqlMacroInventoryTestCase,
     ExpandSqlMacrosErrorTestCase,
     ExpandSqlMacrosTestCase,
     FindMacroCallNamesTestCase,
@@ -760,3 +764,43 @@ def test_given_sql_with_at_tokens_when_finding_macro_calls_then_returns_real_uni
     test_case: FindMacroCallNamesTestCase,
 ) -> None:
     assert find_macro_call_names(test_case.sql) == test_case.expected_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlMacroInventoryTestCase(
+            description="an invalid SQL macro keeps the valid exports and names its own file",
+            macro_files={
+                "macros/sql/a_valid.sql": (
+                    'MACRO (description "Valid", arguments (v BIGINT), returns BIGINT);\n\n@v + 1\n'
+                ),
+                "macros/sql/z_invalid.sql": (
+                    'MACRO (description "Invalid", arguments (v BIGINT));\n\n@v + 1\n'
+                ),
+            },
+            expected_exports=("a_valid",),
+            expected_fault_paths=("macros/sql/z_invalid.sql",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_sql_macro_files_when_inventorying_then_each_file_stands_alone(
+    test_case: SqlMacroInventoryTestCase, tmp_path: Path
+) -> None:
+    macro_files: tuple[DiscoveredMacroFile, ...] = tuple(
+        DiscoveredMacroFile(
+            file_path=tmp_path / relative_path,
+            relative_path=Path(relative_path),
+            contents=contents,
+        )
+        for relative_path, contents in test_case.macro_files.items()
+    )
+
+    inventory = inventory_project_macros(macro_files=macro_files)
+
+    assert tuple(export.name for export in inventory.exports) == test_case.expected_exports
+    assert (
+        tuple(fault.relative_path.as_posix() for fault in inventory.faults)
+        == test_case.expected_fault_paths
+    )

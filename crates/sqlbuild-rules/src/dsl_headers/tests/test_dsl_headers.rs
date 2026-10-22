@@ -82,6 +82,47 @@ fn given_model_header_when_formatting_then_matches_python_rewrite() {
 }
 
 #[test]
+fn given_sql_macro_headers_when_formatting_then_each_is_laid_out_canonically_and_stays_so() {
+    let test_cases = [
+        FormatTestCase {
+            description: "a one-line header that fits keeps one line with normalised spacing",
+            text: "MACRO (description \"Net\",   arguments (a BIGINT,b BIGINT ), returns DECIMAL(18,2));\n\n@a\n",
+            line_width: 100,
+            expected_text: "MACRO (description \"Net\", arguments (a BIGINT, b BIGINT), returns DECIMAL(18, 2));\n\n@a\n",
+        },
+        FormatTestCase {
+            description: "a multi-line header puts one item per line and breaks a list too wide",
+            text: "MACRO (description \"Latest row per key\",\n arguments (src RELATION (updated_at TIMESTAMP), key COLUMN OF src));\n\nWITH x AS (SELECT 1)\n",
+            line_width: 50,
+            expected_text: "MACRO (\n  description \"Latest row per key\",\n  arguments (\n    src RELATION (updated_at TIMESTAMP),\n    key COLUMN OF src,\n  ),\n);\n\nWITH x AS (SELECT 1)\n",
+        },
+        FormatTestCase {
+            description: "a header with a comment is left as authored",
+            text: "MACRO (description \"X\",  -- note\n  returns BIGINT);\n\n1\n",
+            line_width: 100,
+            expected_text: "MACRO (description \"X\",  -- note\n  returns BIGINT);\n\n1\n",
+        },
+    ];
+
+    for test_case in test_cases {
+        let config = HeaderRulesConfig {
+            line_width: test_case.line_width,
+            max_description_lines: 10,
+        };
+        let Ok((formatted, _)) = format_headers(&chars(test_case.text), config, &CompactParser);
+        let Ok((again, _)) = format_headers(&formatted, config, &CompactParser);
+
+        assert_eq!(
+            formatted.iter().collect::<String>(),
+            test_case.expected_text,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(again, formatted, "{}", test_case.description);
+    }
+}
+
+#[test]
 fn given_description_text_when_wrapping_and_decoding_then_matches_python() {
     let test_cases = [ProseTestCase {
         description: "paragraphs, an unbreakable word and every escape form",

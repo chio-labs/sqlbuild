@@ -55,3 +55,16 @@ class SqlMacroFormatTestCase:
     files: dict[str, str]
     formatted_path: str
     expected_ending: str
+    expected_start: str = ""
+
+
+@dataclass(frozen=True)
+class SqlMacroRecompileTestCase:
+    """A compiled project whose macro file is edited, then compiled again, and the error then."""
+
+    description: str
+    files: dict[str, str]
+    edited_path: str
+    replaced_text: tuple[str, str]
+    expected_code: str
+    expected_fragment: str

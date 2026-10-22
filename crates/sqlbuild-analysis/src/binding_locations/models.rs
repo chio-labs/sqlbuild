@@ -42,4 +42,7 @@ pub struct LocatedDiagnostic {
     pub line: Option<usize>,
     pub column: Option<usize>,
     pub location: Option<AuthoredSpan>,
+    pub help: Option<String>,
+    /// A second authored location, `(label, path, line, column)`, adding context.
+    pub related: Option<(String, String, usize, usize)>,
 }

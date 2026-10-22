@@ -3,6 +3,7 @@
 use crate::dsl_headers::_helpers::formatting::{
     relocate_leading_comment, without_trailing_whitespace, wrap_audits, wrap_descriptions,
 };
+use crate::dsl_headers::_helpers::macro_header::layout_macro_headers;
 use crate::dsl_headers::main::scan_headers::scan_headers;
 use crate::dsl_headers::models::{HeaderRulesConfig, HeaderSpan, HeaderViolation};
 use crate::dsl_headers::types::HeaderParser;
@@ -23,5 +24,10 @@ pub fn format_headers<P: HeaderParser>(
     };
     let wrapped: Vec<char> =
         wrap_descriptions(&relocated, &relocated_headers, config.line_width, parser)?;
-    Ok((wrap_audits(&wrapped, config.line_width, parser)?, faults))
+    let audited: Vec<char> = wrap_audits(&wrapped, config.line_width, parser)?;
+    let macro_headers: Vec<HeaderSpan> = scan_headers(&audited, false);
+    Ok((
+        layout_macro_headers(&audited, &macro_headers, config.line_width),
+        faults,
+    ))
 }

@@ -110,6 +110,28 @@ _MOCK_TEST: str = (
             expected_fragments=("PASS=1",),
         ),
         SqlMacroCommandTestCase(
+            description="mock_of_a_column_list_call_without_commas_keeps_the_separators",
+            files={
+                **ALL_MACROS,
+                "models/marts/orders_audited.sql": (
+                    'MODEL (description "Audited orders");\n\n'
+                    "SELECT o.order_id @sql.audit_columns(o) o.status "
+                    'FROM __ref("stg_orders") AS o\n'
+                ),
+                "tests/unit/test_orders_audited.sql": (
+                    'TEST (name "orders_audited_with_mocked_columns");\n\nWITH\n'
+                    "__macro__audit_columns AS (SELECT 'NULL AS created_at, NULL AS updated_at, "
+                    "TRUE AS was_updated'),\n"
+                    "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status),\n"
+                    "__expected__orders_audited AS (SELECT 1 AS order_id, NULL AS created_at, "
+                    "NULL AS updated_at, TRUE AS was_updated, 'open' AS status)\n"
+                ),
+            },
+            command=("test",),
+            expected_returncode=0,
+            expected_fragments=("PASS=1",),
+        ),
+        SqlMacroCommandTestCase(
             description="cte_macro_in_a_model_test_with_list_is_rejected",
             files={
                 **ALL_MACROS,

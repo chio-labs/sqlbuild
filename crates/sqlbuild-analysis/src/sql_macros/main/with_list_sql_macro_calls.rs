@@ -25,7 +25,8 @@ pub fn with_list_sql_macro_calls(text: &str) -> Vec<SqlMacroCall> {
     calls
         .into_iter()
         .filter(|call| {
-            let site: CallSite<'_> = CallSite::new(text, &scanned, call.start, call.end);
+            let site: CallSite<'_> =
+                CallSite::new(text, &scanned, (call.start, call.end), call.end);
             site.position() == CallPosition::CteList
                 && site
                     .clause()

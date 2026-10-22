@@ -49,7 +49,7 @@ fn with_sql_macro_calls(sql: &str, row: ScanRow) -> ScanRow {
             let start: usize = sql[..call.start].chars().count();
             (
                 start,
-                start + sql[call.start..call.end].chars().count(),
+                start + sql[call.start..call.replaced_end].chars().count(),
                 call.name.clone(),
             )
         })

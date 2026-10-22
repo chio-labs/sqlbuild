@@ -1,5 +1,6 @@
 //! Plain-data request, deferrals and outcomes of the native model analysis session.
 
+use crate::sql_macros::models::{SqlMacroCheck, SqlMacroFinding};
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
@@ -42,6 +43,8 @@ pub struct ModelRequest {
     /// The SQL Python's dynamic pivot proof parses: placeholders replaced by their defaults.
     pub pivot_sql: String,
     pub dynamic_families: Vec<DynamicFamily>,
+    /// What the model's analysed SQL must show for its SQL macro calls' arguments to fit.
+    pub sql_macro_checks: Vec<SqlMacroCheck>,
 }
 
 /// The reference-derived fields of a `ModelRequest`.
@@ -258,6 +261,8 @@ pub struct ModelOutcome {
     pub deferred_cleaning: Option<DeferredCleaning>,
     pub validated_schema: Shapes,
     pub fused_binding_validated: bool,
+    /// The SQL macro call arguments the analysed SQL shows do not fit; never cached.
+    pub sql_macro_findings: Vec<SqlMacroFinding>,
 }
 
 /// The finished run of the session: what Python records from it.

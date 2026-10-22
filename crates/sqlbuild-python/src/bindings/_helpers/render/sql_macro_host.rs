@@ -19,7 +19,7 @@ use sqlbuild_analysis::sql_macros::main::parse_sql_macro::parse_sql_macro;
 use sqlbuild_analysis::sql_macros::main::render_inline_collection::render_inline_collection;
 use sqlbuild_analysis::sql_macros::main::sql_macro_calls::sql_macro_calls;
 use sqlbuild_analysis::sql_macros::models::{
-    InsertedNames, SqlMacroCall, SqlMacroDefinition, SqlMacroLocation, TextContext,
+    InsertedNames, SqlMacroCall, SqlMacroCheck, SqlMacroDefinition, SqlMacroLocation, TextContext,
 };
 use sqlbuild_analysis::sql_macros::types::{ConstantShape, SqlMacroHost, SqlMacroScope};
 
@@ -62,6 +62,9 @@ pub(crate) struct SqlMacroSource<'a, 'py> {
     /// Every loaded macro by name, for unscoped compiles whose context holds none.
     pub(crate) loaded_macros: Option<&'a Bound<'py, PyAny>>,
     pub(crate) origin: Option<SqlCallOrigin<'a>>,
+    /// The `DeclarationScopeResolver` whose project-wide declarations macro bodies resolve
+    /// from their own folder; `None` for unscoped compiles, where every declaration is public.
+    pub(crate) resolver: Option<&'a Bound<'py, PyAny>>,
 }
 
 /// The facts a declaration pass's SQL macro calls recorded.
@@ -70,6 +73,8 @@ pub(crate) struct SqlMacroFacts<'py> {
     pub(crate) usages: Vec<Bound<'py, PyAny>>,
     /// The SQL macros the calls used, top-level and nested, once each.
     pub(crate) names: Vec<String>,
+    /// What the analysed SQL must show for each top-level call's arguments to fit.
+    pub(crate) checks: Vec<SqlMacroCheck>,
 }
 
 struct PyHost<'r, 'a, 'py> {
@@ -77,7 +82,14 @@ struct PyHost<'r, 'a, 'py> {
     source: SqlMacroSource<'a, 'py>,
     facts: RefCell<SqlMacroFacts<'py>>,
     adapter: String,
+    /// The declaration context each SQL macro file's body resolves in, by file path.
+    macro_contexts: RefCell<HashMap<String, Bound<'py, PyAny>>>,
+    /// Every file-based enum and constant as `(kind, name, path, record, declaration)`.
+    declarations: RefCell<Option<Vec<ProjectDeclaration<'py>>>>,
 }
+
+/// One file-based enum or constant: whether it is an enum, its name, path, record and value.
+type ProjectDeclaration<'py> = (bool, String, String, Bound<'py, PyAny>, Bound<'py, PyAny>);
 
 /// Whether a scanned reference is a SQL macro call.
 pub(crate) fn is_sql_macro_reference(kind: u8) -> bool {
@@ -99,12 +111,15 @@ pub(crate) fn expanded_sql_macro_calls<'py>(
     let source: SqlMacroSource<'_, 'py> = request.sql_macros.unwrap_or(SqlMacroSource {
         loaded_macros: None,
         origin: None,
+        resolver: None,
     });
     let host: PyHost<'_, '_, 'py> = PyHost {
         request,
         source,
         facts: RefCell::new(SqlMacroFacts::default()),
         adapter: request.rendering.adapter_name(request.context.py()),
+        macro_contexts: RefCell::new(HashMap::new()),
+        declarations: RefCell::new(None),
     };
     let owner: String = owner_label(request)?;
     let context = TextContext {
@@ -134,7 +149,7 @@ pub(crate) fn expanded_sql_macro_calls<'py>(
             }
             Err(ExpansionFailure::Host(error)) => return Err(error),
             Err(ExpansionFailure::Macro(error)) => {
-                let located: SqlMacroError = match host.call_location(call.start) {
+                let located: SqlMacroError = match host.call_location((call.start, call.end)) {
                     Some(location) => error.at_call(location),
                     None => error,
                 };
@@ -145,31 +160,50 @@ pub(crate) fn expanded_sql_macro_calls<'py>(
     Ok((replacements, host.facts.into_inner()))
 }
 
-/// Where the call at byte `offset` of `sql` stands in the authored file `origin` names.
-fn authored_location(origin: SqlCallOrigin<'_>, sql: &str, offset: usize) -> SqlMacroLocation {
-    let char_offset: usize = sql[..offset].chars().count();
-    let query_start: usize = origin
-        .contents
-        .find(origin.query)
-        .map_or(0, |start| origin.contents[..start].chars().count());
+/// Where the call spanning bytes `start..end` of `sql` stands in the authored file `origin`.
+///
+/// When interpolation changed the text, the call is the same occurrence of its text in the
+/// authored query as in `sql`.
+fn authored_location(
+    origin: SqlCallOrigin<'_>,
+    sql: &str,
+    span: (usize, usize),
+) -> SqlMacroLocation {
+    authored_span(origin, sql, span).0
+}
+
+/// Where the call spanning bytes `start..end` of `sql` starts in the authored file `origin`,
+/// and the line and column where its text ends.
+fn authored_span(
+    origin: SqlCallOrigin<'_>,
+    sql: &str,
+    (start, end): (usize, usize),
+) -> (SqlMacroLocation, (usize, usize)) {
+    let char_offset: usize = sql[..start].chars().count();
+    let query_byte: usize = origin.contents.find(origin.query).unwrap_or(0);
+    let query_start: usize = origin.contents[..query_byte].chars().count();
     let authored: usize = if sql == origin.query {
         query_start + char_offset
     } else {
-        let call: &str = &sql[offset..];
-        let snippet: &str = &call[..call.find(')').map_or(call.len(), |close| close + 1)];
-        origin
-            .contents
-            .find(snippet)
-            .map_or(query_start + char_offset, |start| {
-                origin.contents[..start].chars().count()
+        let snippet: &str = &sql[start..end];
+        let ordinal: usize = sql[..start].match_indices(snippet).count();
+        origin.contents[query_byte..]
+            .match_indices(snippet)
+            .nth(ordinal)
+            .map_or(query_start + char_offset, |(found, _)| {
+                origin.contents[..query_byte + found].chars().count()
             })
     };
     let position = text_position(origin.contents, authored);
-    SqlMacroLocation {
-        path: origin.relative_path.to_owned(),
-        line: position.line,
-        column: position.column,
-    }
+    let ending = text_position(origin.contents, authored + sql[start..end].chars().count());
+    (
+        SqlMacroLocation {
+            path: origin.relative_path.to_owned(),
+            line: position.line,
+            column: position.column,
+        },
+        (ending.line, ending.column),
+    )
 }
 
 /// Reject the first call in an authored text that names no macro kind, located in its file.
@@ -187,7 +221,11 @@ pub(crate) fn reject_bare_macro_calls(request: &DeclarationExpansion<'_, '_>) ->
     .with_help(format!(
         "write @sql.{name}(...) to call a SQL macro or @py.{name}(...) to call a Python macro"
     ))
-    .at_call(authored_location(origin, request.sql, start));
+    .at_call(authored_location(
+        origin,
+        request.sql,
+        (start, start + 1 + name.len()),
+    ));
     Err(macro_error(request, &error))
 }
 
@@ -264,12 +302,12 @@ impl<'py> PyHost<'_, '_, 'py> {
         self.request.classes.compile_error.py()
     }
 
-    /// The authored location of byte `offset` of the caller's text.
-    fn call_location(&self, offset: usize) -> Option<SqlMacroLocation> {
+    /// The authored location of the call spanning bytes `span` of the caller's text.
+    fn call_location(&self, span: (usize, usize)) -> Option<SqlMacroLocation> {
         Some(authored_location(
             self.source.origin?,
             self.request.sql,
-            offset,
+            span,
         ))
     }
 
@@ -289,6 +327,89 @@ impl<'py> PyHost<'_, '_, 'py> {
             return Ok((Some(all.get_item(name)?), None));
         }
         Ok((None, inaccessible))
+    }
+
+    /// The loaded macro `name` as the SQL macro file at `macro_path` sees it.
+    fn loaded_from_macro(&self, name: &str, macro_path: &str) -> PyResult<LoadedMacro<'py>> {
+        let found: Option<Bound<'py, PyAny>> = match self.source.loaded_macros {
+            Some(all) if !all.is_none() && all.contains(name)? => Some(all.get_item(name)?),
+            _ => mapping(self.request.context, "macros")?.get_item(name)?,
+        };
+        let Some(found) = found else {
+            return self.loaded(name);
+        };
+        let path: String = path_posix(&native_field(&found, "relative_path")?)?;
+        if self.source.resolver.is_none() || declaration_visible_from_macro(&path, macro_path) {
+            return Ok((Some(found), None));
+        }
+        Ok((None, Some(found)))
+    }
+
+    /// The declaration context of `scope`: the caller's, or the macro file's own folder's.
+    fn scope_context(&self, scope: &SqlMacroScope) -> PyResult<Bound<'py, PyAny>> {
+        let SqlMacroScope::Macro(definition) = scope else {
+            return Ok(self.request.context.clone());
+        };
+        let Some(resolver) = self.source.resolver else {
+            return Ok(self.request.context.clone());
+        };
+        if let Some(found) = self.macro_contexts.borrow().get(&definition.path) {
+            return Ok(found.clone());
+        }
+        let built: Bound<'py, PyAny> = self.macro_context(resolver, &definition.path)?;
+        let _ = self
+            .macro_contexts
+            .borrow_mut()
+            .insert(definition.path.clone(), built.clone());
+        Ok(built)
+    }
+
+    /// The enums and constants the macro file at `macro_path` sees, and those it cannot see.
+    fn macro_context(
+        &self,
+        resolver: &Bound<'py, PyAny>,
+        macro_path: &str,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let py: Python<'py> = self.py();
+        if self.declarations.borrow().is_none() {
+            let listed: Vec<ProjectDeclaration<'py>> = project_declarations(resolver)?;
+            *self.declarations.borrow_mut() = Some(listed);
+        }
+        let fields: [Bound<'py, PyDict>; 4] = [
+            PyDict::new(py),
+            PyDict::new(py),
+            PyDict::new(py),
+            PyDict::new(py),
+        ];
+        let mut depths: HashMap<(bool, String), usize> = HashMap::new();
+        for (is_enum, name, path, record, declaration) in
+            self.declarations.borrow().iter().flatten()
+        {
+            let visible: bool = declaration_visible_from_macro(path, macro_path);
+            let slot: usize = usize::from(!*is_enum) + if visible { 0 } else { 2 };
+            if visible {
+                let depth: usize = path.matches('/').count();
+                let key: (bool, String) = (*is_enum, name.clone());
+                if depths.get(&key).is_some_and(|known| *known > depth) {
+                    continue;
+                }
+                let _ = depths.insert(key, depth);
+                fields[slot].set_item(name, declaration)?;
+            } else if !fields[slot].contains(name)? {
+                fields[slot].set_item(name, record)?;
+            }
+        }
+        let [enums, constants, inaccessible_enums, inaccessible_constants] = fields;
+        new_record_with(
+            py,
+            RecordId::DeclarationResolutionContext,
+            &[
+                ("enums", enums.into_any()),
+                ("constants", constants.into_any()),
+                ("inaccessible_enums", inaccessible_enums.into_any()),
+                ("inaccessible_constants", inaccessible_constants.into_any()),
+            ],
+        )
     }
 
     fn record_use(&self, name: &str) -> PyResult<()> {
@@ -337,30 +458,6 @@ impl<'py> PyHost<'_, '_, 'py> {
         }
         Ok(())
     }
-
-    /// The path of the declaration a reference names, as the caller sees it, if it is file-based.
-    fn declaration_path(&self, kind: u8, name: &str) -> PyResult<Option<Option<String>>> {
-        let context: &Bound<'py, PyAny> = self.request.context;
-        let (visible, inaccessible) = if kind == ENUM_REFERENCE_KIND {
-            ("enums", "inaccessible_enums")
-        } else {
-            ("constants", "inaccessible_constants")
-        };
-        if let Some(declaration) = mapping(context, visible)?.get_item(name)? {
-            if !native_field(&declaration, "model_name")?.is_none() {
-                return Ok(Some(None));
-            }
-            let path: String = path_posix(&native_field(&declaration, "relative_path")?)?;
-            return Ok(Some(Some(path)));
-        }
-        if let Some(record) = mapping(context, inaccessible)?.get_item(name)? {
-            if !native_field(&native_field(&record, "identity")?, "owner")?.is_none() {
-                return Ok(Some(None));
-            }
-            return Ok(Some(Some(native_field(&record, "path")?.extract()?)));
-        }
-        Ok(None)
-    }
 }
 
 impl<'py> SqlMacroHost for PyHost<'_, '_, 'py> {
@@ -371,10 +468,20 @@ impl<'py> SqlMacroHost for PyHost<'_, '_, 'py> {
         scope: &SqlMacroScope,
         name: &str,
     ) -> Result<Arc<SqlMacroDefinition>, ExpansionFailure<PyErr>> {
-        let (loaded, inaccessible) = host(self.loaded(name))?;
+        let (loaded, inaccessible) = match scope {
+            SqlMacroScope::Macro(calling) => host(self.loaded_from_macro(name, &calling.path))?,
+            SqlMacroScope::Caller => host(self.loaded(name))?,
+        };
         let loaded: Bound<'py, PyAny> = match (loaded, inaccessible) {
             (Some(loaded), _) => loaded,
             (None, Some(record)) => {
+                if let SqlMacroScope::Macro(calling) = scope {
+                    return Err(helped(
+                        BODY_SCOPE_CODE,
+                        format!("macro {name} is not visible from {}", calling.path),
+                        "a SQL macro body calls macros visible from its own folder; move the called macro where the calling macro can see it".to_owned(),
+                    ));
+                }
                 let path: String = host(field_text(&record, "path"))?;
                 return Err(helped(
                     INACCESSIBLE_CODE,
@@ -402,15 +509,6 @@ impl<'py> SqlMacroHost for PyHost<'_, '_, 'py> {
                 format!("call it as @py.{name}(...)"),
             ));
         }
-        if let SqlMacroScope::Macro(calling) = scope
-            && !declaration_visible_from_macro(&path, &calling.path)
-        {
-            return Err(helped(
-                BODY_SCOPE_CODE,
-                format!("macro {name} is not visible from {}", calling.path),
-                "a SQL macro body calls macros visible from its own folder; move the called macro where the calling macro can see it".to_owned(),
-            ));
-        }
         let source: String = host(field_text(&loaded, "raw_source"))?;
         let definition: Arc<SqlMacroDefinition> = Arc::new(parse_sql_macro(name, &path, &source)?);
         host(self.record_use(name))?;
@@ -426,6 +524,7 @@ impl<'py> SqlMacroHost for PyHost<'_, '_, 'py> {
         if references.is_empty() && stop.is_none() {
             return Ok(text.to_owned());
         }
+        let context: Bound<'py, PyAny> = host(self.scope_context(scope))?;
         if let SqlMacroScope::Macro(definition) = scope {
             for reference in &references {
                 let noun: &str = if reference.kind == ENUM_REFERENCE_KIND {
@@ -434,7 +533,7 @@ impl<'py> SqlMacroHost for PyHost<'_, '_, 'py> {
                     "constant"
                 };
                 let visible: bool =
-                    match host(self.declaration_path(reference.kind, &reference.name))? {
+                    match host(declaration_path(&context, reference.kind, &reference.name))? {
                         None => true,
                         Some(None) => false,
                         Some(Some(path)) => declaration_visible_from_macro(&path, &definition.path),
@@ -490,7 +589,7 @@ impl<'py> SqlMacroHost for PyHost<'_, '_, 'py> {
                 sql: text,
                 references: &references,
                 stop,
-                context: self.request.context,
+                context: &context,
                 consumer: self.request.consumer.clone(),
                 rendering: self.request.rendering,
                 classes: self.request.classes,
@@ -502,10 +601,11 @@ impl<'py> SqlMacroHost for PyHost<'_, '_, 'py> {
 
     fn constant_shape(
         &self,
-        _scope: &SqlMacroScope,
+        scope: &SqlMacroScope,
         name: &str,
     ) -> Result<ConstantShape, ExpansionFailure<PyErr>> {
-        let constants: Bound<'py, PyDict> = host(mapping(self.request.context, "constants"))?;
+        let context: Bound<'py, PyAny> = host(self.scope_context(scope))?;
+        let constants: Bound<'py, PyDict> = host(mapping(&context, "constants"))?;
         let Some(declaration) = host(constants.get_item(name))? else {
             return Ok(ConstantShape::Scalar);
         };
@@ -529,4 +629,76 @@ impl<'py> SqlMacroHost for PyHost<'_, '_, 'py> {
     fn adapter(&self) -> &str {
         &self.adapter
     }
+
+    fn record_check(&self, check: SqlMacroCheck, call: (usize, usize)) {
+        let Some(origin) = self.source.origin else {
+            return;
+        };
+        let (location, end) = authored_span(origin, self.request.sql, call);
+        self.facts.borrow_mut().checks.push(SqlMacroCheck {
+            call: Some((location, end)),
+            ..check
+        });
+    }
+}
+
+/// The path of the declaration a reference names, as `context` sees it, if it is file-based.
+fn declaration_path(
+    context: &Bound<'_, PyAny>,
+    kind: u8,
+    name: &str,
+) -> PyResult<Option<Option<String>>> {
+    let (visible, inaccessible) = if kind == ENUM_REFERENCE_KIND {
+        ("enums", "inaccessible_enums")
+    } else {
+        ("constants", "inaccessible_constants")
+    };
+    if let Some(declaration) = mapping(context, visible)?.get_item(name)? {
+        if !native_field(&declaration, "model_name")?.is_none() {
+            return Ok(Some(None));
+        }
+        let path: String = path_posix(&native_field(&declaration, "relative_path")?)?;
+        return Ok(Some(Some(path)));
+    }
+    if let Some(record) = mapping(context, inaccessible)?.get_item(name)? {
+        if !native_field(&native_field(&record, "identity")?, "owner")?.is_none() {
+            return Ok(Some(None));
+        }
+        return Ok(Some(Some(native_field(&record, "path")?.extract()?)));
+    }
+    Ok(None)
+}
+
+/// Every file-based enum and constant the resolver knows, with its record and declaration.
+fn project_declarations<'py>(
+    resolver: &Bound<'py, PyAny>,
+) -> PyResult<Vec<ProjectDeclaration<'py>>> {
+    let py: Python<'py> = resolver.py();
+    let enum_kind: Bound<'py, PyAny> = enum_member(py, RecordId::DeclarationKind, "ENUM")?;
+    let constant_kind: Bound<'py, PyAny> = enum_member(py, RecordId::DeclarationKind, "CONSTANT")?;
+    let values: Bound<'py, PyAny> =
+        native_field(resolver, "projection")?.getattr("declarations")?;
+    let records: Bound<'py, PyAny> = native_field(resolver, "lookup")?.getattr("declarations")?;
+    let mut listed: Vec<ProjectDeclaration<'py>> = Vec::new();
+    for pair in records.call_method0("items")?.try_iter()? {
+        let (identity, records_of): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair?.extract()?;
+        let kind: Bound<'py, PyAny> = native_field(&identity, "kind")?;
+        let is_enum: bool = kind.is(&enum_kind);
+        if !is_enum && !kind.is(&constant_kind) || !native_field(&identity, "owner")?.is_none() {
+            continue;
+        }
+        let Some(value) = values
+            .call_method1("get", (&identity,))
+            .ok()
+            .filter(|value| !value.is_none())
+        else {
+            continue;
+        };
+        let Some(record) = records_of.try_iter()?.next().transpose()? else {
+            continue;
+        };
+        let path: String = field_text(&record, "path")?;
+        listed.push((is_enum, field_text(&identity, "name")?, path, record, value));
+    }
+    Ok(listed)
 }

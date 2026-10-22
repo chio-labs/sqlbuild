@@ -75,3 +75,22 @@ pub(crate) const INHERITED_ROLES: [&str; 3] = ["macros", "enums", "constants"];
 pub(crate) const LOCAL_ROLES: [&str; 3] = ["_macros", "_enums", "_constants"];
 /// The folder grouping a resource folder's declaration roles.
 pub(crate) const DECLARATION_GROUP: &str = "_sqlbuild";
+/// The alias prefix of each argument a type probe selects.
+pub(crate) const PROBE_COLUMN_PREFIX: &str = "__sqlbuild_argument_";
+/// Clause keywords that end the `FROM ... WHERE ...` part a probe selects through.
+pub(crate) const PROBE_TAIL_ENDS: [&str; 11] = [
+    "GROUP",
+    "HAVING",
+    "QUALIFY",
+    "WINDOW",
+    "ORDER",
+    "LIMIT",
+    "UNION",
+    "INTERSECT",
+    "EXCEPT",
+    "OFFSET",
+    "FETCH",
+];
+/// The string type name inference reports, and the name messages show for it.
+pub(crate) const INFERRED_TEXT_TYPE: &str = "TEXT";
+pub(crate) const VARCHAR_TYPE: &str = "VARCHAR";

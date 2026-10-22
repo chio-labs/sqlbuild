@@ -47,6 +47,7 @@ pub(super) fn model_input(name: &str) -> ModelInputRecord<TestHost> {
         schema: None,
         sql_validation_enabled: true,
         macro_deps: Vec::new(),
+        sql_macro_checks: Vec::new(),
         expansion: ExpansionRecord {
             authored_sql: "SELECT 1".into(),
             expanded_sql: "SELECT 1".into(),

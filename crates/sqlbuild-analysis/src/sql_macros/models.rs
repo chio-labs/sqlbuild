@@ -195,6 +195,8 @@ pub struct SqlMacroCall {
     pub name: String,
     pub start: usize,
     pub end: usize,
+    /// Where the text the expansion replaces ends: past a comma right after a list call.
+    pub replaced_end: usize,
     pub arguments: (usize, usize),
     /// The call stands inside a Python macro call's arguments, so it expands to a string.
     pub in_python: bool,
@@ -238,4 +240,58 @@ pub(crate) enum TypeFamily {
     Time,
     Null,
     Unknown,
+}
+
+/// What the caller's analysed SQL must show for one call's arguments to fit their types.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SqlMacroCheck {
+    pub macro_name: String,
+    /// Where the call stands among the caller's top-level query parts.
+    pub scope: CallScope,
+    pub arguments: Vec<ArgumentCheck>,
+    /// The call's authored file location and where its text ends, when the host knows them.
+    pub call: Option<(SqlMacroLocation, (usize, usize))>,
+}
+
+/// The top-level part of the caller's query a call stands in.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CallScope {
+    /// Between the CTEs of the top-level `WITH` list.
+    WithList,
+    /// Inside the body of the named top-level CTE.
+    Cte(String),
+    /// In the query after the `WITH` list, or a query without one.
+    Main,
+}
+
+/// One argument whose fit the caller's column types decide.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ArgumentCheck {
+    pub parameter: String,
+    /// The argument as the caller wrote it, its declarations rendered.
+    pub text: String,
+    pub expected: ArgumentExpectation,
+    /// The parameter's declaration in the macro file.
+    pub declared_at: SqlMacroLocation,
+}
+
+/// What an argument must be.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ArgumentExpectation {
+    /// A relation with at least these columns, each of a compatible type.
+    Relation { columns: Vec<(String, String)> },
+    /// A column of the relation passed as the named parameter.
+    ColumnOf { relation: String },
+    /// An expression of a type compatible with this one.
+    Typed { data_type: String },
+}
+
+/// A call argument the caller's analysed SQL shows does not fit its parameter.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SqlMacroFinding {
+    pub message: String,
+    pub help: Option<String>,
+    pub call: SqlMacroLocation,
+    pub call_end: (usize, usize),
+    pub declared_at: SqlMacroLocation,
 }

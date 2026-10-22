@@ -1,5 +1,6 @@
 //! A model's compile input, read from the native compiled project that owns it.
 
+use sqlbuild_analysis::sql_macros::models::SqlMacroCheck;
 use sqlbuild_project::models as project_models;
 use sqlbuild_project::models::ExpansionRecord;
 use std::sync::Arc;
@@ -555,6 +556,18 @@ pub(crate) fn input_query_sql(model_input: &Bound<'_, PyAny>) -> PyResult<String
         });
     }
     native_field(model_input, "query_sql")?.extract()
+}
+
+/// What the analysed SQL of a native model input must show for its SQL macro calls to fit.
+pub(crate) fn input_sql_macro_checks(
+    model_input: &Bound<'_, PyAny>,
+) -> PyResult<Vec<SqlMacroCheck>> {
+    if let Ok(native) = model_input.cast::<NativeModelInput>() {
+        return native.get().read(model_input.py(), |record, _| {
+            Ok(record.sql_macro_checks.clone())
+        });
+    }
+    Ok(Vec::new())
 }
 
 /// Each reference of `model_input` as `(kind, name, package, call argument count)`.
