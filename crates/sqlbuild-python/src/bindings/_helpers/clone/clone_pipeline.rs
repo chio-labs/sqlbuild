@@ -8,10 +8,13 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
-use crate::bindings::_helpers::planner_entries::clone_plans::run_clone_planning;
+use crate::bindings::_helpers::planner_entries::clone_plans::{PhaseTimings, timed_clone_planning};
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
+
+/// The phase name of one target compile, before the target name.
+const COMPILE_PHASE_PREFIX: &str = "compile_";
 
 /// The `ClonePipelineResult` fields after the two projects, in `run_clone_planning` order.
 const PLANNED_FIELDS: [&str; 8] = [
@@ -111,8 +114,17 @@ fn read_target_name<'py>(
 /// Compile both environments, plan the clone and return the `ClonePipelineResult`.
 pub(crate) fn prepared_clone_pipeline<'py>(
     pipeline: &ClonePipeline<'py>,
-    (origin_target, destination_target): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    targets: (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<Bound<'py, PyAny>> {
+    Ok(timed_clone_pipeline(pipeline, targets)?.0)
+}
+
+/// `prepared_clone_pipeline`, with each phase's name and seconds in order.
+pub(crate) fn timed_clone_pipeline<'py>(
+    pipeline: &ClonePipeline<'py>,
+    (origin_target, destination_target): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+) -> PyResult<(Bound<'py, PyAny>, PhaseTimings)> {
+    let mut timings: PhaseTimings = Vec::new();
     let py: Python<'py> = origin_target.py();
     let origin_reads: Bound<'py, PyAny> = read_target_name(&pipeline.discovered, origin_target)?;
     let destination_reads: Bound<'py, PyAny> =
@@ -125,14 +137,19 @@ pub(crate) fn prepared_clone_pipeline<'py>(
         &destination_reads,
     ] {
         if environment(&compiled, target).is_err() {
+            let started = std::time::Instant::now();
             compiled.push((target.clone(), compiled_environment(pipeline, target)?));
+            timings.push((
+                format!("{COMPILE_PHASE_PREFIX}{}", target.str()?),
+                started.elapsed().as_secs_f64(),
+            ));
         }
     }
     let origin_project: Bound<'py, PyAny> = environment(&compiled, origin_target)?;
     let destination_project: Bound<'py, PyAny> = environment(&compiled, destination_target)?;
     let origin_source_project: Bound<'py, PyAny> = environment(&compiled, &origin_reads)?;
     let destination_source_project: Bound<'py, PyAny> = environment(&compiled, &destination_reads)?;
-    let planned: Bound<'py, PyTuple> = run_clone_planning(
+    let (planned, planning_timings): (Bound<'py, PyTuple>, PhaseTimings) = timed_clone_planning(
         py,
         Some(keywords(
             py,
@@ -147,9 +164,8 @@ pub(crate) fn prepared_clone_pipeline<'py>(
                 ("destination_source_project", destination_source_project),
             ],
         )?),
-    )
-    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
-    .downcast_into()?;
+    )?;
+    timings.extend(planning_timings);
     let mut fields: Vec<(&str, Bound<'py, PyAny>)> = vec![
         ("origin_project", origin_project),
         ("destination_project", destination_project),
@@ -157,7 +173,10 @@ pub(crate) fn prepared_clone_pipeline<'py>(
     for (index, name) in PLANNED_FIELDS.iter().enumerate() {
         fields.push((*name, planned.get_item(index)?));
     }
-    new_record_with(py, RecordId::ClonePipelineResult, &fields)
+    Ok((
+        new_record_with(py, RecordId::ClonePipelineResult, &fields)?,
+        timings,
+    ))
 }
 
 /// Run a clone pipeline with explicit compilation controls.

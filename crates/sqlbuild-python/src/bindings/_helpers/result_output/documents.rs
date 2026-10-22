@@ -444,11 +444,12 @@ pub(crate) fn format_load_execution_json<'py>(
 
 /// Format direct clone command execution results as JSON.
 #[pyfunction]
-#[pyo3(signature = (*, result, resource_types_by_name))]
+#[pyo3(signature = (*, result, resource_types_by_name, phase_timings = None))]
 pub(crate) fn format_clone_execution_json<'py>(
     py: Python<'py>,
     result: Bound<'py, PyAny>,
     resource_types_by_name: Bound<'py, PyAny>,
+    phase_timings: Option<Bound<'py, PyDict>>,
 ) -> PyResult<String> {
     let projection: Projection<'py> = Projection::installed(py)?;
     let mut assets: Vec<Bound<'py, PyDict>> = Vec::new();
@@ -482,7 +483,13 @@ pub(crate) fn format_clone_execution_json<'py>(
             assets,
             checks: Vec::new(),
         },
-        Extras::default(),
+        Extras {
+            trailing: phase_timings
+                .into_iter()
+                .map(|timings| ("phase_timings", timings.into_any()))
+                .collect(),
+            ..Extras::default()
+        },
     )
 }
 
