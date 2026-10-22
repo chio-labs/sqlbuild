@@ -19,7 +19,6 @@ const NEW_COLUMN: ColumnSpec = ColumnSpec {
     column_type: ColumnType::Integer,
     nullable: false,
 };
-
 #[test]
 fn given_sqlite_script_when_run_then_every_table_view_and_retention_statement_prepares() {
     let test_cases = [
@@ -134,7 +133,7 @@ fn given_clickhouse_statement_sets_when_rendered_then_every_statement_has_the_sh
                 .collect(),
             required_fragments: &[
                 "INSERT INTO `observability`.`recall_meta`",
-                "SELECT 'schema', 'schema_version', '2'",
+                "SELECT 'schema', 'schema_version', '3'",
             ],
             expected_count: 1,
         },

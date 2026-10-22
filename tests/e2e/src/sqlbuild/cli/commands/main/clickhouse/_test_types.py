@@ -253,3 +253,28 @@ class ClickHouseRecallUnrecordedBehindTestCase:
     stale_view: str
     expected_notice: str
     expected_version_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallViewEquivalenceTestCase:
+    description: str
+    replaced_views: tuple[str, ...]
+    all_views: tuple[str, ...]
+    expected_statuses: list[list[object]]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallTableReadsTestCase:
+    description: str
+    view: str
+    expected_tables: tuple[str, ...]
+    expected_primary_key_reads: int
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallPreviousVersionTestCase:
+    description: str
+    replaced_views: tuple[str, ...]
+    expected_notice: str
+    expected_ddl_fragments: tuple[str, ...]
+    expected_version: tuple[tuple[object, ...], ...]

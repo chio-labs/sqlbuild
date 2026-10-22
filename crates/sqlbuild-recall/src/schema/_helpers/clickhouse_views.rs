@@ -1,9 +1,45 @@
-//! The bodies of the supported views in ClickHouse: rows deduplicated by key, within retention.
+//! The bodies of the supported views in ClickHouse: each key counted once, within retention.
 
 use crate::schema::_helpers::rendering::clickhouse_table;
 use crate::schema::constants::{OUTPUT_TAIL_RECORDS, REPLACING_ENGINE};
 use crate::schema::main::table_spec::table_spec;
 use crate::schema::models::{DdlOptions, Table};
+
+/// The columns the `invocations` pass reads from its three sources, NULL (the terminal flag 0) where a source does not give them.
+const INVOCATION_SOURCE_COLUMNS: [(&str, &str, &str); 28] = [
+    ("ctx_command", "Nullable(String)", "NULL"),
+    ("ctx_subcommand", "Nullable(String)", "NULL"),
+    ("ctx_target", "Nullable(String)", "NULL"),
+    ("ctx_adapter", "Nullable(String)", "NULL"),
+    ("ctx_project_name", "Nullable(String)", "NULL"),
+    ("ctx_selection", "Nullable(String)", "NULL"),
+    ("ctx_exclusion", "Nullable(String)", "NULL"),
+    ("ctx_sqlbuild_version", "Nullable(String)", "NULL"),
+    ("ctx_git_revision", "Nullable(String)", "NULL"),
+    ("ctx_git_dirty", "Nullable(UInt8)", "NULL"),
+    ("ctx_host_token", "Nullable(String)", "NULL"),
+    ("ctx_pid", "Nullable(Int64)", "NULL"),
+    ("ctx_external_context", "Nullable(String)", "NULL"),
+    ("ctx_recall_filter_active", "Nullable(UInt8)", "NULL"),
+    ("heartbeat_at", "Nullable(DateTime64(6, 'UTC'))", "NULL"),
+    ("beat_stale_at", "Nullable(DateTime64(6, 'UTC'))", "NULL"),
+    ("beat_command", "Nullable(String)", "NULL"),
+    ("beat_subcommand", "Nullable(String)", "NULL"),
+    ("lifecycle_event", "Nullable(String)", "NULL"),
+    (
+        "event_occurred_at",
+        "Nullable(DateTime64(6, 'UTC'))",
+        "NULL",
+    ),
+    ("event_sequence", "Nullable(Int64)", "NULL"),
+    ("event_command", "Nullable(String)", "NULL"),
+    ("event_exit_code", "Nullable(Int64)", "NULL"),
+    ("event_duration_ms", "Nullable(Float64)", "NULL"),
+    ("event_error_type", "Nullable(String)", "NULL"),
+    ("event_error_code", "Nullable(String)", "NULL"),
+    ("event_error_message", "Nullable(String)", "NULL"),
+    ("event_is_terminal", "UInt8", "0"),
+];
 
 /// `table`'s rows within its TTL, one copy per key: `FINAL` for replacing tables, so filters on the sorting key reach the read, else the first ingested copy. SQL text outlives retention like its TTL, so every reference still within retention finds it.
 fn deduplicated(table: Table, options: &DdlOptions) -> String {
@@ -25,94 +61,197 @@ fn deduplicated(table: Table, options: &DdlOptions) -> String {
     )
 }
 
-/// Every fold groups by `invocation_id` and `invocation_started_at`, which an invocation's rows share, so a filter on either reaches the table reads instead of folding the whole retention window.
+/// `table`'s rows within its TTL that match `filter`, one copy per key (`FINAL`).
+fn retained(table: Table, options: &DdlOptions, filter: &str) -> String {
+    let spec = table_spec(table);
+    let days: u32 = options.retention_days.saturating_add(spec.ttl_extra_days);
+    let filter: String = if filter.is_empty() {
+        String::new()
+    } else {
+        format!(" AND {filter}")
+    };
+    format!(
+        "(SELECT * FROM {name} FINAL WHERE {expiry} >= now64(6) - INTERVAL {days} DAY{filter})",
+        name = clickhouse_table(spec.name, options),
+        expiry = spec.expiry_column,
+    )
+}
+
+/// The value `values` gives column `name`, if any.
+fn branch_value<'a>(values: &[(&str, &'a str)], name: &str) -> Option<&'a str> {
+    values
+        .iter()
+        .find(|(column, _)| *column == name)
+        .map(|(_, value)| *value)
+}
+
+/// One branch of a single-pass `UNION ALL` reading `from`: `invocation_id`, `invocation_started_at`, the `source` label, then every column of `columns` (name, type, default), taken from `values` where given and the default elsewhere. Column names differ from the tables' own, so no alias hides a table column.
+fn union_branch(
+    source: &str,
+    columns: &[(&str, &str, &str)],
+    values: &[(&str, &str)],
+    from: &str,
+) -> String {
+    let selected: Vec<String> = columns
+        .iter()
+        .map(|(name, column_type, default)| {
+            let value: &str = branch_value(values, name).unwrap_or(*default);
+            format!("        CAST({value} AS {column_type}) AS {name}")
+        })
+        .collect();
+    format!(
+        "    SELECT invocation_id, invocation_started_at, '{source}' AS source,\n{}\n    FROM {from}",
+        selected.join(",\n")
+    )
+}
+
+/// One pass over the context rows, heartbeats and lifecycle events, folded by `invocation_id` and `invocation_started_at`, which an invocation's rows share: each table is read once, a filter on either column reaches every read, and no join needs `join_use_nulls`.
 fn invocations(options: &DdlOptions) -> String {
-    let context = deduplicated(Table::Invocations, options);
-    let events = deduplicated(Table::Events, options);
-    let beats = deduplicated(Table::Heartbeats, options);
+    let context = retained(Table::Invocations, options, "");
+    let events = retained(
+        Table::Events,
+        options,
+        "event_type IN ('invocation_started', 'invocation_completed', 'invocation_failed')",
+    );
+    let beats = retained(Table::Heartbeats, options, "");
+    let columns = &INVOCATION_SOURCE_COLUMNS;
+    let context_rows = union_branch(
+        "context",
+        columns,
+        &[
+            ("ctx_command", "command"),
+            ("ctx_subcommand", "subcommand"),
+            ("ctx_target", "target"),
+            ("ctx_adapter", "adapter"),
+            ("ctx_project_name", "project_name"),
+            ("ctx_selection", "selection"),
+            ("ctx_exclusion", "exclusion"),
+            ("ctx_sqlbuild_version", "sqlbuild_version"),
+            ("ctx_git_revision", "git_revision"),
+            ("ctx_git_dirty", "git_dirty"),
+            ("ctx_host_token", "host_token"),
+            ("ctx_pid", "pid"),
+            ("ctx_external_context", "external_context"),
+            ("ctx_recall_filter_active", "recall_filter_active"),
+        ],
+        &context,
+    );
+    let beat_rows = union_branch(
+        "beat",
+        columns,
+        &[
+            ("heartbeat_at", "beat_at"),
+            ("beat_stale_at", "stale_at"),
+            ("beat_command", "command"),
+            ("beat_subcommand", "subcommand"),
+        ],
+        &beats,
+    );
+    let event_rows = union_branch(
+        "event",
+        columns,
+        &[
+            ("lifecycle_event", "event_type"),
+            ("event_occurred_at", "occurred_at"),
+            ("event_sequence", "invocation_sequence"),
+            ("event_command", "command"),
+            ("event_exit_code", "exit_code"),
+            ("event_duration_ms", "duration_ms"),
+            ("event_error_type", "error_type"),
+            ("event_error_code", "error_code"),
+            (
+                "event_error_message",
+                "JSONExtract(payload, 'error_message', 'Nullable(String)')",
+            ),
+            (
+                "event_is_terminal",
+                "event_type IN ('invocation_completed', 'invocation_failed')",
+            ),
+        ],
+        &events,
+    );
+    let order = "tuple(event_sequence, event_occurred_at)";
+    let context_fields: String = INVOCATION_SOURCE_COLUMNS
+        .iter()
+        .filter_map(|(name, _, _)| name.strip_prefix("ctx_"))
+        .map(|field| format!("        anyIf(ctx_{field}, source = 'context') AS context_{field},"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let terminal = |column: &str, alias: &str| {
+        format!("        argMaxIf({column}, {order}, event_is_terminal = 1) AS {alias},")
+    };
     format!(
         "WITH
-ids AS (
-    SELECT invocation_id, invocation_started_at
-    FROM (
-        SELECT invocation_id, invocation_started_at FROM {context}
-        UNION ALL SELECT invocation_id, invocation_started_at FROM {beats}
-        UNION ALL SELECT invocation_id, invocation_started_at FROM {events}
-            WHERE event_type IN ('invocation_started', 'invocation_completed', 'invocation_failed')
-    )
-    GROUP BY invocation_id, invocation_started_at
+source_rows AS (
+{context_rows}
+    UNION ALL
+{beat_rows}
+    UNION ALL
+{event_rows}
 ),
-started AS (
-    SELECT invocation_id, invocation_started_at, min(occurred_at) AS started_at,
-        any(command) AS command
-    FROM {events} WHERE event_type = 'invocation_started'
-    GROUP BY invocation_id, invocation_started_at
-),
-terminals AS (
+folded AS (
     SELECT invocation_id, invocation_started_at,
-        argMax(event_type, tuple(invocation_sequence, occurred_at)) AS terminal_type,
-        argMax(occurred_at, tuple(invocation_sequence, occurred_at)) AS terminal_at,
-        argMax(exit_code, tuple(invocation_sequence, occurred_at)) AS terminal_exit_code,
-        argMax(duration_ms, tuple(invocation_sequence, occurred_at)) AS terminal_duration_ms,
-        argMax(error_type, tuple(invocation_sequence, occurred_at)) AS terminal_error_type,
-        argMax(error_code, tuple(invocation_sequence, occurred_at)) AS terminal_error_code,
-        argMax(JSONExtract(payload, 'error_message', 'Nullable(String)'),
-            tuple(invocation_sequence, occurred_at)) AS terminal_error_message
-    FROM {events}
-    WHERE event_type IN ('invocation_completed', 'invocation_failed')
+{context_fields}
+        minIf(event_occurred_at, lifecycle_event = 'invocation_started') AS started_occurred_at,
+        anyIf(event_command, lifecycle_event = 'invocation_started') AS started_command,
+{terminal_type}
+{terminal_at}
+{terminal_exit_code}
+{terminal_duration_ms}
+{terminal_error_type}
+{terminal_error_code}
+{terminal_error_message}
+        maxIf(heartbeat_at, source = 'beat') AS last_heartbeat_at,
+        maxIf(beat_stale_at, source = 'beat') AS stale_at,
+        minIf(beat_command, source = 'beat') AS first_beat_command,
+        minIf(beat_subcommand, source = 'beat') AS first_beat_subcommand
+    FROM source_rows
     GROUP BY invocation_id, invocation_started_at
-),
-beats AS (
-    SELECT invocation_id, invocation_started_at, max(beat_at) AS last_heartbeat_at, max(stale_at) AS stale_at,
-        min(command) AS command, min(subcommand) AS subcommand
-    FROM {beats} GROUP BY invocation_id, invocation_started_at
 )
 SELECT
-    ids.invocation_id AS invocation_id,
-    ids.invocation_started_at AS invocation_started_at,
-    coalesce(started.started_at, ids.invocation_started_at) AS started_at,
+    invocation_id,
+    invocation_started_at,
+    coalesce(started_occurred_at, invocation_started_at) AS started_at,
     multiIf(
-        terminals.terminal_type = 'invocation_completed', 'completed',
-        terminals.terminal_type = 'invocation_failed', 'failed',
-        beats.stale_at IS NULL, 'unknown',
-        beats.stale_at >= now64(6), 'running',
+        terminal_type = 'invocation_completed', 'completed',
+        terminal_type = 'invocation_failed', 'failed',
+        stale_at IS NULL, 'unknown',
+        stale_at >= now64(6), 'running',
         'abandoned'
     ) AS status,
-    if(terminals.terminal_type IS NOT NULL, terminals.terminal_at,
-        if(beats.stale_at < now64(6), beats.last_heartbeat_at, NULL)) AS ended_at,
-    if(terminals.terminal_type IS NOT NULL, terminals.terminal_duration_ms,
-        if(beats.stale_at < now64(6),
-            toFloat64(dateDiff('millisecond', started_at, beats.last_heartbeat_at)), NULL))
+    if(terminal_type IS NOT NULL, terminal_at,
+        if(stale_at < now64(6), last_heartbeat_at, NULL)) AS ended_at,
+    if(terminal_type IS NOT NULL, terminal_duration_ms,
+        if(stale_at < now64(6),
+            toFloat64(dateDiff('millisecond', started_at, last_heartbeat_at)), NULL))
         AS duration_ms,
-    terminals.terminal_exit_code AS exit_code,
-    terminals.terminal_error_type AS error_type,
-    terminals.terminal_error_code AS error_code,
-    terminals.terminal_error_message AS error_message,
-    coalesce(context.command, started.command, beats.command) AS command,
-    coalesce(context.subcommand, beats.subcommand) AS subcommand,
-    context.target AS target,
-    context.adapter AS adapter,
-    context.project_name AS project_name,
-    context.selection AS selection,
-    context.exclusion AS exclusion,
-    context.sqlbuild_version AS sqlbuild_version,
-    context.git_revision AS git_revision,
-    context.git_dirty AS git_dirty,
-    context.host_token AS host_token,
-    context.pid AS pid,
-    context.external_context AS external_context,
-    context.recall_filter_active AS recall_filter_active,
-    beats.last_heartbeat_at AS last_heartbeat_at
-FROM ids
-LEFT JOIN {context} AS context ON context.invocation_id = ids.invocation_id
-    AND context.invocation_started_at = ids.invocation_started_at
-LEFT JOIN started ON started.invocation_id = ids.invocation_id
-    AND started.invocation_started_at = ids.invocation_started_at
-LEFT JOIN terminals ON terminals.invocation_id = ids.invocation_id
-    AND terminals.invocation_started_at = ids.invocation_started_at
-LEFT JOIN beats ON beats.invocation_id = ids.invocation_id
-    AND beats.invocation_started_at = ids.invocation_started_at
-SETTINGS join_use_nulls = 1"
+    terminal_exit_code AS exit_code,
+    terminal_error_type AS error_type,
+    terminal_error_code AS error_code,
+    terminal_error_message AS error_message,
+    coalesce(context_command, started_command, first_beat_command) AS command,
+    coalesce(context_subcommand, first_beat_subcommand) AS subcommand,
+    context_target AS target,
+    context_adapter AS adapter,
+    context_project_name AS project_name,
+    context_selection AS selection,
+    context_exclusion AS exclusion,
+    context_sqlbuild_version AS sqlbuild_version,
+    context_git_revision AS git_revision,
+    context_git_dirty AS git_dirty,
+    context_host_token AS host_token,
+    context_pid AS pid,
+    context_external_context AS external_context,
+    context_recall_filter_active AS recall_filter_active,
+    last_heartbeat_at
+FROM folded",
+        terminal_type = terminal("lifecycle_event", "terminal_type"),
+        terminal_at = terminal("event_occurred_at", "terminal_at"),
+        terminal_exit_code = terminal("event_exit_code", "terminal_exit_code"),
+        terminal_duration_ms = terminal("event_duration_ms", "terminal_duration_ms"),
+        terminal_error_type = terminal("event_error_type", "terminal_error_type"),
+        terminal_error_code = terminal("event_error_code", "terminal_error_code"),
+        terminal_error_message = terminal("event_error_message", "terminal_error_message"),
     )
 }
 
