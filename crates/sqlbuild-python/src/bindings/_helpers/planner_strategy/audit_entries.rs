@@ -193,8 +193,6 @@ fn plan_audit<'py>(
 }
 
 /// Select attached audits by their logical target and singular audits by dependency overlap.
-#[pyfunction]
-#[pyo3(signature = (*, audit, selected_keys))]
 pub(crate) fn audit_is_selected(
     audit: &Bound<'_, PyAny>,
     selected_keys: &Bound<'_, PyAny>,
@@ -223,8 +221,6 @@ pub(crate) fn audit_is_selected(
 }
 
 /// Assemble selected audits in compiled-project order without querying lineage for an empty selection.
-#[pyfunction]
-#[pyo3(signature = (**request))]
 pub(crate) fn build_selected_audit_entries<'py>(
     request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyList>> {

@@ -108,8 +108,6 @@ pub(crate) fn build_scenario_hash_index<'py>(
     Ok(result)
 }
 
-#[pyfunction]
-#[pyo3(signature = (*, logical_name, fixed_prefix, identifier_limit))]
 pub(crate) fn fit_scenario_artifact_logical_name(
     py: Python<'_>,
     logical_name: &str,
@@ -124,8 +122,6 @@ pub(crate) fn fit_scenario_artifact_logical_name(
     )
 }
 
-#[pyfunction]
-#[pyo3(signature = (*, hash_prefix, kind, logical_name, identifier_limit))]
 pub(crate) fn build_scenario_artifact_physical_name(
     hash_prefix: &str,
     kind: &str,

@@ -259,6 +259,25 @@ pytestmark: pytest.MarkDecorator = pytest.mark.dbt
             expected_path_translations=(),
         ),
         RealDbtInteropPlanTestCase(
+            description="translates backslash model path selector for real SQLBuild project",
+            args=("--select", "path:models\\marts"),
+            sqlbuild_model_contents_by_relative_path={
+                "marts/mart_orders.sql": "MODEL (description 'Test model mart_orders.');\n\nselect 1 as order_id\n",
+                "staging/stg_local.sql": "MODEL (description 'Test model stg_local.');\n\nselect 1 as order_id\n",
+            },
+            expected_sqlbuild_model_names=("mart_orders",),
+            expected_sqlbuild_command_argvs=(("sqb", "plan", "--select", "mart_orders"),),
+            expected_dbt_selected_unique_ids=(),
+            expected_dbt_required_unique_ids=(),
+            expected_dbt_required_selector_terms=(),
+            expected_supplemental_dbt_command_argvs=(),
+            expected_dbt_anchor_terms=(),
+            expected_dbt_anchor_unique_ids_by_term={},
+            expected_dbt_skip_reason=DbtInteropSkipReason.NO_DBT_WORK,
+            expected_sqlbuild_skip_reason=None,
+            expected_path_translations=(("path:models\\marts", "path:models/marts"),),
+        ),
+        RealDbtInteropPlanTestCase(
             description="preserves routed SQLBuild cursor args in real plan argv",
             args=("--select", "local_only", "--start-cursor-int", "10"),
             sqlbuild_model_contents_by_relative_path={

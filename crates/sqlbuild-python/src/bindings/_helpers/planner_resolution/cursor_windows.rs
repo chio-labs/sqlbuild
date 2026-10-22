@@ -42,8 +42,6 @@ fn decide_empty_cursor_inputs<'py>(
     )
 }
 
-#[pyfunction]
-#[pyo3(signature = (*, cursor_snapshot))]
 pub(crate) fn cursor_inputs_without_rows<'py>(
     cursor_snapshot: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -133,8 +131,6 @@ pub(crate) fn empty_input_rebuild_refusal(
     )
 }
 
-#[pyfunction]
-#[pyo3(signature = (*, model_name, cursor_type, input_names))]
 pub(crate) fn unreadable_cursor_inputs_error<'py>(
     py: Python<'py>,
     model_name: &str,
@@ -169,8 +165,6 @@ pub(crate) fn unreadable_cursor_inputs_error<'py>(
     )
 }
 
-#[pyfunction]
-#[pyo3(signature = (*, cursor_snapshot))]
 pub(crate) fn without_destination_cursor<'py>(
     cursor_snapshot: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -268,12 +262,9 @@ pub(crate) fn normalize_cursor_snapshot_grain<'py>(
 
 pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(decide_empty_cursor_inputs, module)?)?;
-    module.add_function(wrap_pyfunction!(cursor_inputs_without_rows, module)?)?;
     module.add_function(wrap_pyfunction!(empty_cursor_window, module)?)?;
     module.add_function(wrap_pyfunction!(cursor_window_override_flags, module)?)?;
     module.add_function(wrap_pyfunction!(empty_input_rebuild_refusal, module)?)?;
-    module.add_function(wrap_pyfunction!(unreadable_cursor_inputs_error, module)?)?;
-    module.add_function(wrap_pyfunction!(without_destination_cursor, module)?)?;
     module.add_function(wrap_pyfunction!(resolve_effective_timestamp_grain, module)?)?;
     module.add_function(wrap_pyfunction!(normalize_cursor_snapshot_grain, module)?)
 }

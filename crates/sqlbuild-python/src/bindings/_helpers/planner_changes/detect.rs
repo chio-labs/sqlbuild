@@ -159,40 +159,6 @@ pub(crate) fn detect_changes<'py>(
     )
 }
 
-/// Selected model changes, without inspecting functions.
-#[pyfunction]
-#[pyo3(signature = (**options))]
-pub(crate) fn detect_model_changes_in_scope<'py>(
-    py: Python<'py>,
-    options: Option<Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyDict>> {
-    let arguments: KeywordArguments<'py> = KeywordArguments::read(
-        py,
-        "detect_model_changes_in_scope",
-        options,
-        (
-            &["project", "scope", "snapshot"],
-            &[
-                "query_change_tracking",
-                "expected_version_hashes",
-                "expected_metadata_jsons",
-            ],
-        ),
-    )?;
-    scope_model_changes(
-        (
-            &arguments.value("project")?,
-            &arguments.value("scope")?,
-            &arguments.value("snapshot")?,
-        ),
-        arguments.value("query_change_tracking")?.extract()?,
-        (
-            arguments.value("expected_version_hashes")?,
-            arguments.value("expected_metadata_jsons")?,
-        ),
-    )
-}
-
 /// One model's change and backfill.
 #[pyfunction]
 #[pyo3(signature = (**options))]
@@ -784,7 +750,6 @@ impl<'py> ChangeResult<'py> {
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(detect_changes_of, module)?)?;
-    module.add_function(wrap_pyfunction!(detect_model_changes_in_scope, module)?)?;
     module.add_function(wrap_pyfunction!(detect_model_changes, module)?)?;
     module.add_function(wrap_pyfunction!(schema_changes, module)?)
 }

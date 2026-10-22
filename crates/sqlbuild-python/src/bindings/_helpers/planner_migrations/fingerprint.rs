@@ -64,8 +64,6 @@ pub(crate) fn fingerprint(
 }
 
 /// Every name whose rename identity can change the migration fingerprint.
-#[pyfunction]
-#[pyo3(signature = (*, query_sql, metadata_json))]
 pub(crate) fn migration_fingerprint_ref_names<'py>(
     py: Python<'py>,
     query_sql: &str,
@@ -79,14 +77,11 @@ pub(crate) fn migration_fingerprint_ref_names<'py>(
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(with_migration_fingerprints, module)?)?;
     module.add_function(wrap_pyfunction!(build_migration_fingerprint, module)?)?;
-    module.add_function(wrap_pyfunction!(migration_fingerprint_ref_names, module)?)
+    Ok(())
 }
 
 /// Attach persisted migration identities through the existing cache boundary.
-#[pyfunction]
-#[pyo3(signature = (**options))]
 pub(crate) fn with_migration_fingerprints<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,

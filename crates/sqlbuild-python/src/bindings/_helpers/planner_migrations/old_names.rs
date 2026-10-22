@@ -9,15 +9,14 @@ use crate::bindings::_helpers::planner_migrations::old_name_objects::relation;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::IntoPyObject;
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PySet, PyTuple};
-use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::planner_migrations::main::{
     declared_column_aliases as aliases, old_name_claim_message as claim, old_name_schemas,
     old_name_skip_reason,
 };
 
-#[pyfunction]
 pub(crate) fn declared_column_aliases<'py>(
     py: Python<'py>,
     model: &Bound<'py, PyAny>,
@@ -36,8 +35,6 @@ pub(crate) fn declared_column_aliases<'py>(
     PyTuple::new(py, aliases::declared_column_aliases(&columns))
 }
 
-#[pyfunction]
-#[pyo3(signature = (*, snapshot, needed))]
 pub(crate) fn old_name_schemas_to_read<'py>(
     py: Python<'py>,
     snapshot: &Bound<'py, PyAny>,
@@ -54,26 +51,6 @@ pub(crate) fn old_name_schemas_to_read<'py>(
         ),
     )
 }
-
-#[pyfunction]
-#[pyo3(signature = (**options))]
-fn old_name_claim_message<'py>(
-    py: Python<'py>,
-    options: Option<Bound<'py, PyDict>>,
-) -> PyResult<String> {
-    let arguments = KeywordArguments::read(
-        py,
-        "old_name_claim_message",
-        options,
-        (&["model_name", "view", "now"], &[]),
-    )?;
-    claim_message(
-        &arguments.value("model_name")?.extract::<String>()?,
-        &arguments.value("view")?,
-        &arguments.value("now")?,
-    )
-}
-
 fn claim_message(model: &str, view: &Bound<'_, PyAny>, now: &Bound<'_, PyAny>) -> PyResult<String> {
     let old = native_field(view, "old")?;
     let qualified: Option<String> = native_field(&old, "qualified_name")?.extract()?;
@@ -97,8 +74,6 @@ fn claim_message(model: &str, view: &Bound<'_, PyAny>, now: &Bound<'_, PyAny>) -
     ))
 }
 
-#[pyfunction]
-#[pyo3(signature = (**options))]
 pub(crate) fn old_name_claim_errors<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
@@ -156,8 +131,6 @@ pub(crate) fn old_name_claim_errors<'py>(
     PyTuple::new(py, errors)
 }
 
-#[pyfunction]
-#[pyo3(signature = (**options))]
 pub(crate) fn old_name_view_skip_reason<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
@@ -207,12 +180,4 @@ pub(crate) fn old_name_view_skip_reason<'py>(
         compatibility_view,
         arguments.value("origin_tracked")?.extract()?,
     ))
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(declared_column_aliases, module)?)?;
-    module.add_function(wrap_pyfunction!(old_name_schemas_to_read, module)?)?;
-    module.add_function(wrap_pyfunction!(old_name_claim_message, module)?)?;
-    module.add_function(wrap_pyfunction!(old_name_claim_errors, module)?)?;
-    module.add_function(wrap_pyfunction!(old_name_view_skip_reason, module)?)
 }

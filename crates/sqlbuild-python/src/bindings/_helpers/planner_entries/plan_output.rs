@@ -704,42 +704,7 @@ pub(crate) fn plan_output_fields<'py>(
     ])
 }
 
-/// Build one canonical function entry from resolved relation inputs.
-#[pyfunction]
-#[pyo3(signature = (**kwargs))]
-fn plan_function<'py>(
-    py: Python<'py>,
-    kwargs: Option<Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let args = KeywordArguments::read(
-        py,
-        "plan_function",
-        kwargs,
-        (
-            &["function", "adapter", "relations", "fingerprint_query_sql"],
-            &["previous_query_sql", "reason"],
-        ),
-    )?;
-    let reason = if args.passed("reason")? {
-        args.value("reason")?
-    } else {
-        planner_type(py, RecordId::PlanReason, "NO_CHANGE")?
-    };
-    function_entry(
-        &args.value("function")?,
-        &args.value("adapter")?,
-        &args.value("relations")?,
-        (
-            args.value("fingerprint_query_sql")?,
-            args.value("previous_query_sql")?,
-            reason,
-        ),
-    )
-}
-
 /// Plan SQL tests selected by name or overlapping one selection into a reusable result.
-#[pyfunction]
-#[pyo3(signature = (*, project, adapter, selected_keys, sql_test_selection))]
 pub(crate) fn plan_selected_sql_tests<'py>(
     project: &Bound<'py, PyAny>,
     adapter: &Bound<'py, PyAny>,
@@ -778,8 +743,6 @@ fn build_selected_test_entries<'py>(
 }
 
 pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(plan_function, module)?)?;
-    module.add_function(wrap_pyfunction!(plan_selected_sql_tests, module)?)?;
     module.add_function(wrap_pyfunction!(sql_test_model_chain_names_by_key, module)?)?;
     module.add_function(wrap_pyfunction!(build_selected_test_entries, module)?)
 }

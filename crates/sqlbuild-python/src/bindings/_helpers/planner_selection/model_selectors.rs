@@ -82,8 +82,6 @@ fn selectable_model(model: &Bound<'_, PyAny>) -> PyResult<SelectableModel> {
 }
 
 /// One SQLBuild-owned model selector core's model names, and its path selector when translated.
-#[pyfunction]
-#[pyo3(signature = (*, project, term))]
 pub(crate) fn resolve_sqlbuild_model_selector_names<'py>(
     project: &Bound<'py, PyAny>,
     term: &Bound<'py, PyString>,
@@ -117,8 +115,5 @@ pub(crate) fn resolve_sqlbuild_model_selector_names<'py>(
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(split_selector_expansion, module)?)?;
-    module.add_function(wrap_pyfunction!(
-        resolve_sqlbuild_model_selector_names,
-        module
-    )?)
+    Ok(())
 }

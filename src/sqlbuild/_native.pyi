@@ -2103,28 +2103,7 @@ class NativeProjectGraph:
         self, selected: list[_GraphKey], include: tuple[bool, bool, bool]
     ) -> list[_GraphKey]: ...
 
-def parse_project_selector(raw: str) -> ParsedSelector | PathSelector: ...
-def resolve_project_selectors(
-    *,
-    select: Sequence[str],
-    exclude: Sequence[str],
-    all_keys: Mapping[str, CompiledObjectKey],
-    upstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    downstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    tag_index: Mapping[str, Iterable[CompiledObjectKey]],
-    path_index: Mapping[CompiledObjectKey, str],
-) -> frozenset[CompiledObjectKey]: ...
-def split_project_unit_test_selectors(
-    *,
-    select: Sequence[str],
-    exclude: Sequence[str],
-    discovered_inputs: DiscoveredProjectInputs,
-    accepts_unit_tests: bool,
-) -> UnitTestSelectorSplit: ...
 def split_selector_expansion(raw: str) -> SelectorExpansion: ...
-def resolve_sqlbuild_model_selector_names(
-    *, project: CompiledProjectView, term: str
-) -> tuple[tuple[str, ...], str | None]: ...
 def run_compile(request: CompileCommandRequest) -> int: ...
 
 COMPILE_REUSE_RACY_WINDOW_NS: int

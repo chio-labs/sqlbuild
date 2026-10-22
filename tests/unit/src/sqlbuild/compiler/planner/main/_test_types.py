@@ -111,14 +111,6 @@ class SelectionStalenessClassifierTestCase:
 
 
 @dataclass(frozen=True)
-class SqlbuildModelSelectorNamesTestCase:
-    description: str
-    term: str
-    expected_model_names: tuple[str, ...]
-    expected_translation: str | None
-
-
-@dataclass(frozen=True)
 class InclusiveCursorEndTestCase:
     description: str
     end: str

@@ -199,8 +199,6 @@ pub(crate) fn source_inspection<'py>(
     Ok((result, frozenset(py, &listed)?))
 }
 
-#[pyfunction]
-#[pyo3(signature = (*, project, adapter, connection, source_entries))]
 pub(crate) fn gather_source_inspection<'py>(
     project: &Bound<'py, PyAny>,
     adapter: &Bound<'py, PyAny>,

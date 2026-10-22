@@ -1,8 +1,7 @@
 //! Adapter-bound rendering of fixture completion SQL.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods};
-use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::planner_fixtures::main::{
     empty_fixture_error::empty_fixture_error, empty_fixture_marker::empty_fixture_marker,
     render_completed::render_completed as native_render_completed, render_empty::render_empty,
@@ -15,7 +14,6 @@ use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::planner_strategy::models::FixtureRelation;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
-#[pyfunction(name = "is_empty_fixture_query")]
 pub(crate) fn fixture_marker(sql: &str) -> PyResult<bool> {
     empty_fixture_marker(sql).map_err(value_error)
 }
@@ -127,8 +125,4 @@ pub(crate) fn complete_typed_null_columns(
         },
         adapter,
     )
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(fixture_marker, module)?)
 }

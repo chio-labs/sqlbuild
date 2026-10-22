@@ -14,10 +14,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module
     )?)?;
     module.add_function(wrap_pyfunction!(
-        super::snapshot::gather_redirected_cursor_snapshots,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
         super::watermarks::watermark_type_is_compatible,
         module
     )?)?;
@@ -34,27 +30,11 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module
     )?)?;
     module.add_function(wrap_pyfunction!(
-        super::source_columns::gather_source_inspection,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
         super::semantic_sources::semantic_source_columns,
         module
     )?)?;
     module.add_function(wrap_pyfunction!(
         super::source_tables::check_selected_source_tables_exist_binding,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
-        super::source_deferral::build_source_read_map,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
-        super::source_deferral::with_declared_source_reads,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
-        super::source_freshness::source_freshness_unknown_warnings,
         module
     )?)?;
     module.add_function(wrap_pyfunction!(

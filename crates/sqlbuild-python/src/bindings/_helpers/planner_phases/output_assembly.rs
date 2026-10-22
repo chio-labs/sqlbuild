@@ -27,7 +27,6 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::pyfunction;
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
 
 fn concat<'py>(py: Python<'py>, parts: &[Bound<'py, PyAny>]) -> PyResult<Bound<'py, PyAny>> {
@@ -128,8 +127,6 @@ pub(crate) fn base_plan_output<'py>(
 }
 
 /// Attach near-match column rename hints to the model entries they describe.
-#[pyfunction]
-#[pyo3(signature = (*, entries, hints))]
 pub(crate) fn with_column_rename_hints<'py>(
     entries: &Bound<'py, PyAny>,
     hints: &Bound<'py, PyAny>,

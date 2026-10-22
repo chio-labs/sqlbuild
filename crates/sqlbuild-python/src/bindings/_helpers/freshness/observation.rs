@@ -589,20 +589,7 @@ fn observe_adapter_sources_freshness<'py>(
     observe_adapter_batch(&observer, &sources)
 }
 
-/// Build the state record of one observation.
-#[pyfunction]
-#[pyo3(signature = (*, observation, source, run_id))]
-fn source_freshness_record_from_observation<'py>(
-    observation: &Bound<'py, PyAny>,
-    source: &Bound<'py, PyAny>,
-    run_id: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    observation_record(observation, source, run_id)
-}
-
 /// An aware freshness `datetime` in UTC; a naive value is an observation error.
-#[pyfunction]
-#[pyo3(signature = (*, value, field_name))]
 pub(crate) fn require_aware_utc_datetime<'py>(
     value: &Bound<'py, PyAny>,
     field_name: &str,
@@ -634,15 +621,10 @@ pub(crate) fn normalize_observation(
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(require_aware_utc_datetime, module)?)?;
     module.add_function(wrap_pyfunction!(
         observe_configured_source_freshness,
         module
     )?)?;
     module.add_function(wrap_pyfunction!(observe_adapter_sources_freshness, module)?)?;
-    module.add_function(wrap_pyfunction!(
-        source_freshness_record_from_observation,
-        module
-    )?)?;
     Ok(())
 }

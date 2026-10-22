@@ -13,8 +13,6 @@ from sqlbuild._native import (
     MaterializationType,
     MissingUpstream,
     OnSchemaChange,
-    ParsedSelector,
-    PathSelector,
     PlanAction,
     PlanReason,
     PlanWarning,
@@ -296,37 +294,6 @@ class ExpandDownstreamTestCase:
     downstream: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]]
     key: CompiledObjectKey
     expected_keys: frozenset[CompiledObjectKey]
-
-
-@dataclass(frozen=True)
-class ParseSelectorTestCase:
-    description: str
-    raw: str
-    expected_result: ParsedSelector | PathSelector
-
-
-@dataclass(frozen=True)
-class ParseSelectorErrorTestCase:
-    description: str
-    raw: str
-    expected_error_type: type[Exception]
-
-
-@dataclass(frozen=True)
-class ResolveSelectorTestCase:
-    description: str
-    select: tuple[str, ...]
-    exclude: tuple[str, ...]
-    expected_names: frozenset[str]
-
-
-@dataclass(frozen=True)
-class ResolveSelectorErrorTestCase:
-    description: str
-    select: tuple[str, ...]
-    exclude: tuple[str, ...]
-    expected_error_type: type[Exception]
-    expected_error_fragment: str | None = None
 
 
 @dataclass(frozen=True)

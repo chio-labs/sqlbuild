@@ -212,8 +212,6 @@ pub(crate) fn direct_model_version_identities<'py>(
 }
 
 /// Planned write hashes replaced by hashes based on upstreams available this run.
-#[pyfunction]
-#[pyo3(signature = (**options))]
 pub(crate) fn with_honest_model_write_hashes<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
@@ -397,6 +395,5 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         build_direct_model_version_identities,
         module
     )?)?;
-    module.add_function(wrap_pyfunction!(with_honest_model_write_hashes, module)?)?;
     module.add_function(wrap_pyfunction!(merge_recomputed_model_changes, module)?)
 }

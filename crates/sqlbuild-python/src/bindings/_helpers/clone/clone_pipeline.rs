@@ -16,7 +16,7 @@ use crate::bindings::_helpers::records::ids::RecordId;
 /// The phase name of one target compile, before the target name.
 const COMPILE_PHASE_PREFIX: &str = "compile_";
 
-/// The `ClonePipelineResult` fields after the two projects, in `run_clone_planning` order.
+/// The `ClonePipelineResult` fields after the two projects, in `timed_clone_planning` order.
 const PLANNED_FIELDS: [&str; 8] = [
     "clone_plan",
     "destination_source_entries",
