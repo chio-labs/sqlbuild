@@ -512,7 +512,7 @@ fn origin_source_entries<'py>(
     )
 }
 
-/// `run_clone_planning`, with the seconds spent inspecting sources and planning.
+/// Plan a clone, with the seconds spent inspecting sources and planning.
 pub(crate) fn timed_clone_planning<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
@@ -520,7 +520,7 @@ pub(crate) fn timed_clone_planning<'py>(
     let started = std::time::Instant::now();
     let args = KeywordArguments::read(
         py,
-        "run_clone_planning",
+        "timed_clone_planning",
         kwargs,
         (
             &[

@@ -252,6 +252,17 @@ fn given_order_selectors_when_splitting_unit_tests_then_tests_and_resources_sepa
             )),
         },
         UnitTestSplitTestCase {
+            description: "a command that runs no unit tests rejects a bare test name",
+            select: texts(&["order_status"]),
+            exclude: Vec::new(),
+            accepts_unit_tests: false,
+            expected_split: Err(failure(
+                "S013",
+                "selector 'order_status' selects a unit test; only `sqb test` and `sqb build` accept unit-test selectors",
+                None,
+            )),
+        },
+        UnitTestSplitTestCase {
             description: "a command that runs no unit tests rejects test: selectors",
             select: texts(&["orders test:customer_status"]),
             exclude: Vec::new(),
@@ -263,6 +274,17 @@ fn given_order_selectors_when_splitting_unit_tests_then_tests_and_resources_sepa
             )),
         },
         UnitTestSplitTestCase {
+            description: "an unknown test: name suggests the nearest unit tests",
+            select: texts(&["test:order_stats"]),
+            exclude: Vec::new(),
+            accepts_unit_tests: true,
+            expected_split: Err(failure(
+                "S007",
+                "unknown unit test name 'order_stats'",
+                Some("did you mean 'order_status'?"),
+            )),
+        },
+        UnitTestSplitTestCase {
             description: "an unknown bare name suggests the closest unit test",
             select: texts(&["customer_stat"]),
             exclude: Vec::new(),
@@ -271,6 +293,28 @@ fn given_order_selectors_when_splitting_unit_tests_then_tests_and_resources_sepa
                 "S007",
                 "unknown selector name 'customer_stat'",
                 Some("did you mean 'customer_status'?"),
+            )),
+        },
+        UnitTestSplitTestCase {
+            description: "graph expansion of a unit test is refused",
+            select: texts(&["+order_status"]),
+            exclude: Vec::new(),
+            accepts_unit_tests: true,
+            expected_split: Err(failure(
+                "S013",
+                "selector '+order_status' expands a unit test with '+'; unit tests have no lineage, so select them by name without '+'",
+                None,
+            )),
+        },
+        UnitTestSplitTestCase {
+            description: "intersecting a unit test is refused",
+            select: texts(&["order_status,tag:daily"]),
+            exclude: Vec::new(),
+            accepts_unit_tests: true,
+            expected_split: Err(failure(
+                "S013",
+                "selector 'order_status,tag:daily' intersects a unit test with ','; unit tests can only be selected whole, by name",
+                None,
             )),
         },
         UnitTestSplitTestCase {
