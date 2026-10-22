@@ -15,9 +15,11 @@ from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse.helpers import (
     apply_printed_ddl,
     create_previous_views,
+    drop_database,
     execute_clickhouse_sql,
     fetch_clickhouse_rows,
     limited_user,
+    stale_views,
     write_recall_project,
 )
 from tests.integration.src.sqlbuild.cli.recall.helpers import recall_rows, run
@@ -28,24 +30,12 @@ _STORE_MANAGER_PRIVILEGES: str = (
 _CLOSING_STATUS: str = "sqb build completed successfully; only its Recall history is affected.\n"
 
 
-def _drop_database(*, config: dict[str, object], database: str) -> None:
-    execute_clickhouse_sql(config=config, statements=(f"DROP DATABASE {database} SYNC",))
-
-
-def _stale_views(*, config: dict[str, object], database: str) -> tuple[tuple[object, ...], ...]:
-    return fetch_clickhouse_rows(
-        config=config,
-        sql="SELECT countIf(position(create_table_query, 'join_use_nulls') > 0) "
-        f"FROM system.tables WHERE database = '{database}' AND engine = 'View'",
-    )
-
-
 @pytest.mark.parametrize(
     "test_case",
     [
         ClickHouseRecallDatabaseCreationTestCase(
-            description="an administrator's first write creates the database and says so",
-            writer_privileges=None,
+            description="a writer with every right on the database creates it and says so",
+            writer_privileges="ALL",
             expected_notice="Recall: created ClickHouse database `{database}` for the store.\n",
             expected_invocations=[[2]],
         ),
@@ -64,26 +54,19 @@ def test_given_a_missing_database_when_a_writer_may_create_it_then_recall_create
     clickhouse_e2e_config: dict[str, object],
     recall_database: str,
 ) -> None:
-    _drop_database(config=clickhouse_e2e_config, database=recall_database)
+    drop_database(config=clickhouse_e2e_config, database=recall_database)
     notice: str = test_case.expected_notice.format(database=recall_database)
 
-    if test_case.writer_privileges is None:
+    with limited_user(
+        config=clickhouse_e2e_config,
+        database=recall_database,
+        privileges=test_case.writer_privileges,
+    ) as writer:
         project_dir: Path = write_recall_project(
-            parent=tmp_path, config=clickhouse_e2e_config, database=recall_database
+            parent=tmp_path, config=writer, database=recall_database
         )
         first: subprocess.CompletedProcess[bytes] = run(project_dir, "build")
         second: subprocess.CompletedProcess[bytes] = run(project_dir, "build")
-    else:
-        with limited_user(
-            config=clickhouse_e2e_config,
-            database=recall_database,
-            privileges=test_case.writer_privileges,
-        ) as writer:
-            project_dir = write_recall_project(
-                parent=tmp_path, config=writer, database=recall_database
-            )
-            first = run(project_dir, "build")
-            second = run(project_dir, "build")
 
     stderr: str = first.stderr.decode(errors="replace")
     assert (first.returncode, second.returncode) == (0, 0), stderr
@@ -162,7 +145,7 @@ def test_given_a_missing_database_when_the_writer_may_not_create_it_then_the_sta
     clickhouse_e2e_config: dict[str, object],
     recall_database: str,
 ) -> None:
-    _drop_database(config=clickhouse_e2e_config, database=recall_database)
+    drop_database(config=clickhouse_e2e_config, database=recall_database)
 
     with limited_user(
         config=clickhouse_e2e_config,
@@ -207,24 +190,24 @@ def test_given_a_missing_database_when_the_writer_may_not_create_it_then_the_sta
     [
         ClickHouseRecallStaleViewsTestCase(
             description="previous views without a version row are replaced by an administrator",
-            version_row="DELETE",
-            limited_writer=False,
+            deleted_version_rows="1",
+            writer_privileges="ALL",
             expected_notices=0,
             expected_stale_views=((0,),),
             expected_version=((3,),),
         ),
         ClickHouseRecallStaleViewsTestCase(
             description="previous views recorded as current are replaced by an administrator",
-            version_row="KEEP",
-            limited_writer=False,
+            deleted_version_rows="0",
+            writer_privileges="ALL",
             expected_notices=0,
             expected_stale_views=((0,),),
             expected_version=((3,),),
         ),
         ClickHouseRecallStaleViewsTestCase(
             description="previous views without a version row make a SELECT, INSERT writer warn",
-            version_row="DELETE",
-            limited_writer=True,
+            deleted_version_rows="1",
+            writer_privileges="SELECT, INSERT",
             expected_notices=1,
             expected_stale_views=((4,),),
             expected_version=((0,),),
@@ -248,25 +231,25 @@ def test_given_views_of_the_previous_version_when_building_then_they_count_as_ol
         names=("invocations", "statements", "output_invocations", "artifacts"),
         prefix="",
     )
-    if test_case.version_row == "DELETE":
-        execute_clickhouse_sql(
-            config=clickhouse_e2e_config,
-            statements=(
-                f"ALTER TABLE {recall_database}.recall_meta DELETE WHERE 1 "
-                "SETTINGS mutations_sync = 2",
-            ),
-        )
+    execute_clickhouse_sql(
+        config=clickhouse_e2e_config,
+        statements=(
+            f"ALTER TABLE {recall_database}.recall_meta "
+            f"DELETE WHERE {test_case.deleted_version_rows} SETTINGS mutations_sync = 2",
+        ),
+    )
 
-    if test_case.limited_writer:
-        with limited_user(config=clickhouse_e2e_config, database=recall_database) as writer:
-            built: subprocess.CompletedProcess[bytes] = run(
-                write_recall_project(
-                    parent=tmp_path / "writer", config=writer, database=recall_database
-                ),
-                "build",
-            )
-    else:
-        built = run(admin, "build")
+    with limited_user(
+        config=clickhouse_e2e_config,
+        database=recall_database,
+        privileges=test_case.writer_privileges,
+    ) as writer:
+        built: subprocess.CompletedProcess[bytes] = run(
+            write_recall_project(
+                parent=tmp_path / "writer", config=writer, database=recall_database
+            ),
+            "build",
+        )
 
     stderr: str = built.stderr.decode(errors="replace")
     assert built.returncode == 0, stderr
@@ -274,7 +257,7 @@ def test_given_views_of_the_previous_version_when_building_then_they_count_as_ol
         stderr.count("is behind this SQLBuild version, and this user may not upgrade it")
         == test_case.expected_notices
     )
-    assert _stale_views(config=clickhouse_e2e_config, database=recall_database) == (
+    assert stale_views(config=clickhouse_e2e_config, database=recall_database) == (
         test_case.expected_stale_views
     )
     assert (

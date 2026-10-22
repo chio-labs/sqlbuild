@@ -304,7 +304,7 @@ class ClickHouseRecallReaderSettingsTestCase:
 @dataclass(frozen=True)
 class ClickHouseRecallDatabaseCreationTestCase:
     description: str
-    writer_privileges: str | None
+    writer_privileges: str
     expected_notice: str
     expected_invocations: list[list[object]]
 
@@ -327,8 +327,8 @@ class ClickHouseRecallMissingDatabaseTestCase:
 @dataclass(frozen=True)
 class ClickHouseRecallStaleViewsTestCase:
     description: str
-    version_row: str
-    limited_writer: bool
+    deleted_version_rows: str
+    writer_privileges: str
     expected_notices: int
     expected_stale_views: tuple[tuple[object, ...], ...]
     expected_version: tuple[tuple[object, ...], ...]

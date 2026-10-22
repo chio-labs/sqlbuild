@@ -1,9 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::schema::_helpers::clickhouse_views::clickhouse_view_bodies;
-use crate::schema::constants::{
-    RECALL_SCHEMA_VERSION, SUPERSEDED_CLICKHOUSE_VIEW_MARKERS, VIEW_NAMES,
-};
+use crate::schema::constants::{RECALL_SCHEMA_VERSION, VIEW_NAMES};
 use crate::schema::main::create_database_statement::create_database_statement;
 use crate::schema::main::schema_age::schema_age;
 use crate::schema::main::store_version_with_views::store_version_with_views;
@@ -268,71 +266,65 @@ fn given_view_definitions_when_versioned_then_views_an_older_version_wrote_make_
         ViewDefinitionsTestCase {
             description: "previous views with no version row are older, though columns match",
             store: StoreVersion::Unrecorded(SchemaAge::Current),
-            definitions: &[CURRENT_VIEW, PREVIOUS_VIEW],
+            definitions: vec![CURRENT_VIEW.to_owned(), PREVIOUS_VIEW.to_owned()],
             expected_store: StoreVersion::Unrecorded(SchemaAge::Older),
         },
         ViewDefinitionsTestCase {
             description: "previous views recorded as current count as the previous version",
             store: recorded(RECALL_SCHEMA_VERSION),
-            definitions: &[PREVIOUS_VIEW],
+            definitions: vec![PREVIOUS_VIEW.to_owned()],
             expected_store: recorded(RECALL_SCHEMA_VERSION - 1),
         },
         ViewDefinitionsTestCase {
             description: "current views keep the recorded version",
             store: recorded(RECALL_SCHEMA_VERSION),
-            definitions: &[CURRENT_VIEW],
+            definitions: vec![CURRENT_VIEW.to_owned()],
             expected_store: recorded(RECALL_SCHEMA_VERSION),
         },
         ViewDefinitionsTestCase {
             description: "current views with no version row stay current",
             store: StoreVersion::Unrecorded(SchemaAge::Current),
-            definitions: &[CURRENT_VIEW],
+            definitions: vec![CURRENT_VIEW.to_owned()],
             expected_store: StoreVersion::Unrecorded(SchemaAge::Current),
+        },
+        ViewDefinitionsTestCase {
+            description: "this build's own ClickHouse views keep the current version",
+            store: recorded(RECALL_SCHEMA_VERSION),
+            definitions: view_statements(Dialect::ClickHouse, &options(None))
+                .into_iter()
+                .map(|(_, statement)| statement)
+                .collect(),
+            expected_store: recorded(RECALL_SCHEMA_VERSION),
         },
         ViewDefinitionsTestCase {
             description: "a store recorded by a newer build is never made older",
             store: recorded(RECALL_SCHEMA_VERSION + 1),
-            definitions: &[PREVIOUS_VIEW],
+            definitions: vec![PREVIOUS_VIEW.to_owned()],
             expected_store: recorded(RECALL_SCHEMA_VERSION + 1),
         },
         ViewDefinitionsTestCase {
             description: "views with columns of a newer build are never made older",
             store: StoreVersion::Unrecorded(SchemaAge::Newer),
-            definitions: &[PREVIOUS_VIEW],
+            definitions: vec![PREVIOUS_VIEW.to_owned()],
             expected_store: StoreVersion::Unrecorded(SchemaAge::Newer),
         },
     ];
 
     for test_case in test_cases {
         assert_eq!(
-            store_version_with_views(test_case.store, test_case.definitions),
+            store_version_with_views(
+                test_case.store,
+                &test_case
+                    .definitions
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<&str>>()
+            ),
             test_case.expected_store,
             "{}",
             test_case.description
         );
     }
-}
-
-#[test]
-fn given_this_builds_clickhouse_views_when_checked_then_none_holds_a_superseded_marker() {
-    let statements: Vec<String> = view_statements(Dialect::ClickHouse, &options(None))
-        .into_iter()
-        .map(|(_, statement)| statement)
-        .collect();
-    let marked: Vec<&str> = SUPERSEDED_CLICKHOUSE_VIEW_MARKERS
-        .iter()
-        .map(|(marker, _)| *marker)
-        .filter(|marker| {
-            statements
-                .iter()
-                .any(|statement| statement.contains(marker))
-        })
-        .collect();
-
-    assert_eq!(
-        (statements.len(), marked),
-        (VIEW_NAMES.len(), Vec::<&str>::new())
-    );
 }
 
 #[test]

@@ -1,7 +1,6 @@
 import json
 import subprocess
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -17,6 +16,7 @@ from tests.integration.src.sqlbuild.cli.recall.helpers import (
     documented_commands,
     recall_rows,
     run,
+    selected_columns,
     worktree_project,
     write_project,
 )
@@ -85,11 +85,10 @@ def test_given_an_orchestrated_build_when_running_the_documented_queries_then_th
     assert built.returncode == 0, built.stderr
     assert len(commands) == 4
     assert answered.returncode == 0, answered.stderr
-    result: dict[str, list[Any]] = json.loads(answered.stdout)
-    positions: list[int] = [result["columns"].index(column) for column in test_case.columns]
-    assert [
-        [row[position] for position in positions] for row in result["rows"]
-    ] == test_case.expected_rows
+    assert (
+        selected_columns(result=json.loads(answered.stdout), columns=test_case.columns)
+        == test_case.expected_rows
+    )
     assert printed.returncode == 0, printed.stderr
     assert len(printed.stdout.splitlines()) == 50
     assert printed.stdout.endswith(built.stdout.splitlines(keepends=True)[-1])

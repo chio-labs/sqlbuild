@@ -16,6 +16,7 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 PYTHON_CLI: Path = Path(sys.executable).with_name("sqlbuild-python")
 NATIVE_SQB: Path = Path(sys.executable).with_name("sqb")
@@ -582,7 +583,7 @@ _BASH_BLOCK: re.Pattern[str] = re.compile(r"```bash\n(.*?)```", re.DOTALL)
 
 
 def documented_commands(*, invocation_id: str) -> list[list[str]]:
-    """The arguments of each command under the Recall page's common questions, for one invocation."""
+    """Each command's arguments under the Recall page's common questions, for one invocation."""
 
     page: str = RECALL_CONCEPT_PAGE.read_text(encoding="utf-8")
     section: str = page.split(_COMMON_QUESTIONS, 1)[1].split("\n### ", 1)[0]
@@ -590,3 +591,13 @@ def documented_commands(*, invocation_id: str) -> list[list[str]]:
         shlex.split(block.replace("<invocation_id>", invocation_id))[1:]
         for block in _BASH_BLOCK.findall(section)
     ]
+
+
+def selected_columns(*, result: dict[str, Any], columns: tuple[str, ...]) -> list[list[object]]:
+    """The `columns` of each row of a `--json` query result, in that order."""
+
+    positions: list[int] = [result["columns"].index(column) for column in columns]
+    rows: list[list[object]] = []
+    for row in result["rows"]:
+        rows.append([row[position] for position in positions])
+    return rows

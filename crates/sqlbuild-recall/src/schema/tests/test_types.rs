@@ -53,7 +53,7 @@ pub(crate) struct ViewColumnsTestCase {
 pub(crate) struct ViewDefinitionsTestCase {
     pub(crate) description: &'static str,
     pub(crate) store: crate::schema::models::StoreVersion,
-    pub(crate) definitions: &'static [&'static str],
+    pub(crate) definitions: Vec<String>,
     pub(crate) expected_store: crate::schema::models::StoreVersion,
 }
 

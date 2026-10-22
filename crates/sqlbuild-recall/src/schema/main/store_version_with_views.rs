@@ -8,11 +8,7 @@ use crate::schema::models::{SchemaAge, StoreVersion};
 pub fn store_version_with_views(store: StoreVersion, view_definitions: &[&str]) -> StoreVersion {
     let Some(views_version) = SUPERSEDED_CLICKHOUSE_VIEW_MARKERS
         .iter()
-        .filter(|(marker, _)| {
-            view_definitions
-                .iter()
-                .any(|definition| definition.contains(marker))
-        })
+        .filter(|(marker, _)| holds(view_definitions, marker))
         .map(|(_, version)| *version)
         .min()
     else {
@@ -33,4 +29,10 @@ pub fn store_version_with_views(store: StoreVersion, view_definitions: &[&str]) 
         StoreVersion::Unrecorded(SchemaAge::Current) => StoreVersion::Unrecorded(SchemaAge::Older),
         other => other,
     }
+}
+
+fn holds(view_definitions: &[&str], marker: &str) -> bool {
+    view_definitions
+        .iter()
+        .any(|definition| definition.contains(marker))
 }
