@@ -661,6 +661,22 @@ _CALL_X: dict[str, str] = orders_model("SELECT @sql.x(1) AS a\n")
             ),
         ),
         SqlMacroErrorTestCase(
+            description="relation_missing_a_column_behind_a_star_over_typed_sources",
+            files={
+                **CLEAN_ORDERS,
+                **orders_model(
+                    "WITH orders_raw AS (\n"
+                    '  SELECT o.order_id, o.updated_at, t.* FROM __ref("stg_orders") AS o\n'
+                    "  CROSS JOIN (SELECT 1 AS flag) AS t\n),\n"
+                    "@sql.clean_orders(orders_raw)\nSELECT order_id FROM latest\n"
+                ),
+            },
+            expected_code="P017",
+            expected_fragments=(
+                "argument src of macro clean_orders() needs column is_deleted BOOLEAN; orders_raw has no column is_deleted",
+            ),
+        ),
+        SqlMacroErrorTestCase(
             description="relation_column_of_an_incompatible_type",
             files={
                 **CLEAN_ORDERS,

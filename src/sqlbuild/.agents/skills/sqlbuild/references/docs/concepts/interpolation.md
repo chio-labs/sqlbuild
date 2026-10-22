@@ -30,7 +30,7 @@ The rule is simple: if it's any SQL that will be executed, it uses `@`. If it's 
 |--------|-------|----------|
 | `@enum("name").MEMBER` | Executable SQL | Compile time - expands to the validated enum member value |
 | `@const("name")` | Executable SQL | Compile time - expands to the named typed scalar, value list, native array, or object expression |
-| `@macro(args)` | Model SQL, SQL hooks, tests, audits, inline source expressions | Compile time - expands to macro return value |
+| `@sql.name(args)`, `@py.name(args)` | Model SQL, SQL hooks, tests, audits, inline source expressions | Compile time - expands to the macro's SQL |
 | `@@name` | Model SQL, SQL hooks, tests, audits, inline source expressions | Compile time - project variable substitution |
 | `@@ENV:NAME` | Model SQL, SQL hooks, tests, audits, inline source expressions | Compile time - environment variable |
 | `@@CTX:name` | SQL hooks only | Compile time - destination relation, target, run ID |
@@ -184,7 +184,7 @@ Use the quoted form for values rather than SQL identifiers or expressions:
 WHERE status = @'expected_status'
 ```
 
-This is distinct from `@@name` (project variables) and `@macro()` (macro calls), so there is no ambiguity. See [Audits](audits.md) for details on generic audit parameters.
+This is distinct from `@@name` (project variables) and `@sql.name()` or `@py.name()` (macro calls), so there is no ambiguity. See [Audits](audits.md) for details on generic audit parameters.
 
 ## Named SQL hook parameters
 

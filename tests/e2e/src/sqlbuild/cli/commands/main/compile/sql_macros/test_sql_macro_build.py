@@ -287,6 +287,34 @@ _NESTED_LOCAL: dict[str, str] = {
             expected_rows=[(2, True)],
         ),
         SqlMacroBuildTestCase(
+            description="relation_argument_with_a_star_over_unnest_is_not_checked",
+            files={
+                **CLEAN_ORDERS,
+                **orders_model(
+                    "WITH orders_raw AS (\n"
+                    '  SELECT o.order_id, o.updated_at, t.* FROM __ref("stg_orders") AS o\n'
+                    "  CROSS JOIN unnest([false]) AS t(is_deleted)\n),\n"
+                    "@sql.clean_orders(orders_raw)\nSELECT order_id FROM latest\n"
+                ),
+            },
+            query="SELECT order_id FROM orders ORDER BY order_id",
+            expected_rows=[(1,), (2,), (3,)],
+        ),
+        SqlMacroBuildTestCase(
+            description="relation_argument_with_a_star_over_a_table_function_is_not_checked",
+            files={
+                **CLEAN_ORDERS,
+                **orders_model(
+                    "WITH orders_raw AS (\n"
+                    '  SELECT o.order_id, o.updated_at, t.* FROM __ref("stg_orders") AS o\n'
+                    "  CROSS JOIN range(1) AS t(is_deleted)\n),\n"
+                    "@sql.clean_orders(orders_raw)\nSELECT order_id FROM latest\n"
+                ),
+            },
+            query="SELECT order_id FROM orders ORDER BY order_id",
+            expected_rows=[(1,), (2,), (3,)],
+        ),
+        SqlMacroBuildTestCase(
             description="macro_body_constant_resolves_in_the_macro_folder_for_a_subfolder_caller",
             files=_BODY_SCOPED,
             query="SELECT fee FROM orders",
@@ -353,7 +381,7 @@ def test_given_any_spelling_of_list_calls_when_building_then_the_model_holds_the
             inspected_paths=("target/compiled/models/marts/orders.sql",),
         ),
         SqlMacroCommandTestCase(
-            description="typed_argument_in_a_later_union_branch_reads_that_branch",
+            description="typed_argument_in_a_later_union_branch_is_not_checked",
             files={
                 **CENTS_TO_DOLLARS,
                 **_REFUNDS,
@@ -368,7 +396,7 @@ def test_given_any_spelling_of_list_calls_when_building_then_the_model_holds_the
             expected_fragments=("0 errors",),
         ),
         SqlMacroCommandTestCase(
-            description="typed_argument_in_a_scalar_subquery_reads_the_subquery",
+            description="typed_argument_in_a_scalar_subquery_is_not_checked",
             files={
                 **CENTS_TO_DOLLARS,
                 **_REFUNDS,

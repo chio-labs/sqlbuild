@@ -51,7 +51,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | Rules and formatting | Compiler-integrated native and custom diagnostics, reasoned suppressions, and separate canonical formatting | External tools | Built-in formatter plus external linting |
 | Compiler-integrated Rules | Native and custom rules over compiler-owned SQL, models, dependencies, contracts, tests, and project paths | Project conventions through packages and external tooling | Built-in audits and external linting |
 | SQL transpilation | For local E2E replay into DuckDB | No | For cross-dialect model execution |
-| Python macros | `@macro()` syntax | No (Jinja only) | SQLMesh macro syntax |
+| Python macros | `@py.name()` syntax | No (Jinja only) | SQLMesh macro syntax |
 | Compiler-enforced declaration scopes | Project, descendant-public, exact-owner-private, and model-private tiers with offline `sqb scope` inspection | No lexical declaration scopes | No lexical declaration scopes |
 | Jinja support | No (Python macros instead) | Yes (core templating) | Yes |
 
