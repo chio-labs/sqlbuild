@@ -1,3 +1,4 @@
+use crate::lint_text::_helpers::format_bodies::unwrapped_expression;
 use crate::lint_text::_helpers::sites::site_pattern;
 use crate::lint_text::_helpers::sql_diagnostics::interpolation_text_at;
 use crate::lint_text::constants::SITE_START_BYTES;
@@ -14,6 +15,7 @@ use crate::lint_text::tests::helpers::directive_finding;
 use crate::lint_text::tests::test_types::{
     Finding, FormatBodiesTestCase, LintBodiesTestCase, NeutralizeTestCase, ParameterTestCase,
     RestoreTestCase, SitePatternTestCase, SuppressionTestCase, TokenAtTestCase,
+    UnwrappedExpressionTestCase,
 };
 
 const SUPPRESSED_FILE: &str =
@@ -443,6 +445,38 @@ fn given_expanded_bodies_when_linting_then_findings_map_to_authored_lines() {
 
         assert_eq!(
             findings, test_case.expected_findings,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_a_formatted_expression_select_when_unwrapping_then_strings_keep_their_lines() {
+    let test_cases = [
+        UnwrappedExpressionTestCase {
+            description: "the expression is dedented one level",
+            formatted: "SELECT\n  ROUND(\n    @v,\n    2\n  )",
+            expected_expression: Some("ROUND(\n  @v,\n  2\n)"),
+        },
+        UnwrappedExpressionTestCase {
+            description: "lines inside a multi-line string literal are not dedented",
+            formatted: "SELECT\n  CONCAT(\n    'first\n    second',\n    @v\n  )",
+            expected_expression: Some("CONCAT(\n  'first\n    second',\n  @v\n)"),
+        },
+        UnwrappedExpressionTestCase {
+            description: "text that is not a select is not an expression",
+            formatted: "WITH a AS (SELECT 1)",
+            expected_expression: None,
+        },
+    ];
+
+    for test_case in test_cases {
+        let unwrapped: Option<String> = unwrapped_expression(test_case.formatted);
+
+        assert_eq!(
+            unwrapped.as_deref(),
+            test_case.expected_expression,
             "{}",
             test_case.description
         );

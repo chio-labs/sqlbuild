@@ -99,3 +99,8 @@ pub(crate) const FROM_KEYWORD: &str = "FROM";
 pub(crate) const STAR_PROJECTION: &str = "*";
 /// The type hint analysis reports for a column whose type it does not know.
 pub(crate) const UNKNOWN_TYPE_HINT: &str = "UNKNOWN";
+/// Words before a name in a `FROM` clause after which the name is a relation, not an alias.
+pub(crate) const ALIAS_PRECEDING_KEYWORDS: [&str; 13] = [
+    "FROM", "JOIN", "ON", "AND", "OR", "NOT", "WHERE", "USING", "LATERAL", "IN", "IS", "BY",
+    "SELECT",
+];

@@ -215,6 +215,7 @@ pub(crate) fn expand_call<H: SqlMacroHost>(
         let check: SqlMacroCheck = SqlMacroCheck {
             macro_name: definition.name.clone(),
             scope: call_scope(context.text, scanned, call.start),
+            plain_select: plain_select(context.text, scanned, call.start),
             arguments: argument_checks(&definition, &bound, &rendered),
             call: None,
         };
@@ -564,4 +565,9 @@ fn call_scope(text: &str, scanned: &[Token], offset: usize) -> CallScope {
         Some(parts) => parts.scope_of(offset),
         None => CallScope::Main,
     }
+}
+
+/// Whether the call at byte `offset` of `text` stands in its scope's one select.
+fn plain_select(text: &str, scanned: &[Token], offset: usize) -> bool {
+    top_level_parts(text, scanned).is_some_and(|parts| parts.plain_select(text, scanned, offset))
 }

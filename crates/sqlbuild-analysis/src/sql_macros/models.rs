@@ -248,6 +248,8 @@ pub struct SqlMacroCheck {
     pub macro_name: String,
     /// Where the call stands among the caller's top-level query parts.
     pub scope: CallScope,
+    /// Whether the call stands in its scope's one select, outside subqueries and set operations.
+    pub plain_select: bool,
     pub arguments: Vec<ArgumentCheck>,
     /// The call's authored file location and where its text ends, when the host knows them.
     pub call: Option<(SqlMacroLocation, (usize, usize))>,

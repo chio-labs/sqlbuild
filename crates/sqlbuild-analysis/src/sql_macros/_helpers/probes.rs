@@ -8,8 +8,8 @@ use crate::sql_macros::_helpers::header::unquoted;
 use crate::sql_macros::_helpers::lexing::{Token, TokenKind, tokens};
 use crate::sql_macros::_helpers::placement::{QueryParts, top_level_parts};
 use crate::sql_macros::constants::{
-    FROM_KEYWORD, INFERRED_TEXT_TYPE, PROBE_COLUMN_PREFIX, PROBE_TAIL_ENDS, STAR_PROJECTION,
-    UNKNOWN_TYPE_HINT, VARCHAR_TYPE,
+    ALIAS_PRECEDING_KEYWORDS, FROM_KEYWORD, INFERRED_TEXT_TYPE, PROBE_COLUMN_PREFIX,
+    PROBE_TAIL_ENDS, STAR_PROJECTION, UNKNOWN_TYPE_HINT, VARCHAR_TYPE,
 };
 use crate::sql_macros::models::{
     ArgumentCheck, ArgumentExpectation, CallScope, SqlMacroCheck, SqlMacroFinding,
@@ -101,9 +101,15 @@ fn scope_frame(sql: &str, parts: &QueryParts, scope: &CallScope) -> Option<(Stri
     }
 }
 
-/// The probe listing the columns of relation `name` as the call at `scope` sees it.
+/// The probe listing relation `name`'s columns at `scope`: a `FROM` alias first, then a CTE.
 fn relation_probe(sql: &str, parts: &QueryParts, scope: &CallScope, name: &str) -> Option<String> {
     let bare: String = unquoted(name);
+    let frame: Option<(String, String)> = scope_frame(sql, parts, scope);
+    if let Some((prefix, tail)) = &frame
+        && defines_alias(tail, &bare)
+    {
+        return Some(format!("{prefix}SELECT {name}.* {tail}"));
+    }
     if let Some(index) = parts
         .ctes
         .iter()
@@ -114,8 +120,34 @@ fn relation_probe(sql: &str, parts: &QueryParts, scope: &CallScope, name: &str) 
             with_prefix(sql, parts, index + 1)
         ));
     }
-    let (prefix, tail) = scope_frame(sql, parts, scope)?;
+    let (prefix, tail) = frame?;
     (!tail.is_empty()).then(|| format!("{prefix}SELECT {name}.* {tail}"))
+}
+
+/// Whether the `FROM` text `tail` defines `name` as an alias, as `t AS name` or `t name`.
+fn defines_alias(tail: &str, name: &str) -> bool {
+    let Ok(scanned) = tokens(tail) else {
+        return true;
+    };
+    scanned.iter().enumerate().any(|(index, token)| {
+        let named: bool = matches!(token.kind, TokenKind::Word | TokenKind::Quoted)
+            && unquoted(token.text(tail)).eq_ignore_ascii_case(name);
+        let qualifies: bool = scanned
+            .get(index + 1)
+            .is_some_and(|next| next.is(tail, "."));
+        let after_relation: bool = index
+            .checked_sub(1)
+            .and_then(|previous| scanned.get(previous))
+            .is_some_and(|previous| {
+                previous.is_word(tail, "AS")
+                    || previous.is(tail, ")")
+                    || matches!(previous.kind, TokenKind::Word | TokenKind::Quoted)
+                        && !ALIAS_PRECEDING_KEYWORDS
+                            .iter()
+                            .any(|keyword| previous.is_word(tail, keyword))
+            });
+        named && !qualifies && after_relation
+    })
 }
 
 /// The probes reading every check's evidence from the analysed query `sql`.
@@ -134,6 +166,10 @@ pub(crate) fn probe_plan(sql: &str, checks: &[SqlMacroCheck]) -> ProbePlan {
     };
     for check in checks {
         let mut evidence: Vec<Option<Evidence>> = vec![None; check.arguments.len()];
+        if !check.plain_select {
+            plan.evidence.push(evidence);
+            continue;
+        }
         let mut typed: Vec<String> = Vec::new();
         let mut typed_arguments: Vec<usize> = Vec::new();
         for (index, argument) in check.arguments.iter().enumerate() {
