@@ -242,6 +242,18 @@ fn given_plan_when_inspecting_then_lists_boundaries_and_counts_errors() {
             expected_text: "\nResolved test plan\n\norder_status [open_case]\n  mocked sources: raw_orders\n  mocked refs: stg\n  mocked seeds: none\n  mocked dbt refs: none\n  mocked table functions: none\n  real models: orders\n  expected models: orders\n  boundary: stg is replaced by __ref__stg\n\n  warning: careful\n  error: broken\nTest plan inspection failed: 1 selected, 1 errors.\n",
             expected_exit_code: 1,
         },
+        InspectionTestCase {
+            description: "a test selected by --since lists its reasons",
+            entries: vec![TestInspectionEntry {
+                label: "orders_rollup".to_owned(),
+                real_models: vec!["stg_orders".to_owned()],
+                selection_reasons: vec!["executes stg_orders (model SQL changed)".to_owned()],
+                ..TestInspectionEntry::default()
+            }],
+            warnings: Vec::new(),
+            expected_text: "\nResolved test plan\n\norders_rollup\n  mocked sources: none\n  mocked refs: none\n  mocked seeds: none\n  mocked dbt refs: none\n  mocked table functions: none\n  real models: stg_orders\n  expected models: none\n  selected: executes stg_orders (model SQL changed)\n\nTest plan inspection complete: 1 selected, 0 errors.\n",
+            expected_exit_code: 0,
+        },
     ];
 
     for test_case in test_cases {

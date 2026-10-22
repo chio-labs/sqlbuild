@@ -110,6 +110,9 @@ impl Run<'_> {
                 "test --inspect cannot be combined with --json or --json-output",
             ));
         }
+        if let Some(message) = since_error(&namespace) {
+            return Err(self.error(parser, message));
+        }
         if command == JANITOR_COMMAND
             && namespace.value("as_target") != Value::None
             && truthy(&namespace.value("auto_approve"))
@@ -144,6 +147,17 @@ impl Run<'_> {
             return Err(format!("{CONCURRENCY_ENV_VAR} must be >= 1"));
         }
         Ok(value)
+    }
+}
+
+/// The first rule `--since` and `--explain` break, on the commands that accept them.
+fn since_error(namespace: &Namespace) -> Option<&'static str> {
+    match namespace.value("since") {
+        Value::None if truthy(&namespace.value("explain")) => Some("--explain requires --since"),
+        Value::Str(reference) if reference.trim().is_empty() => {
+            Some("--since requires a git ref, such as origin/main or @base")
+        }
+        _ => None,
     }
 }
 

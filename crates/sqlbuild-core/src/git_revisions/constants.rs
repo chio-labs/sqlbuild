@@ -1,0 +1,16 @@
+//! The `--since` ref alias, git invocation details and error codes.
+
+/// The `--since` value that reads `[git] base_ref` from the project configuration.
+pub const BASE_REF_ALIAS: &str = "@base";
+/// Hex digits of a commit hash shown in progress and summaries.
+pub const SHORT_COMMIT_LENGTH: usize = 10;
+
+pub(crate) const GIT_PROGRAM: &str = "git";
+pub(crate) const INDEX_FILE_ENV: &str = "GIT_INDEX_FILE";
+pub(crate) const SHALLOW_TRUE: &str = "true";
+
+pub(crate) const NOT_A_REPOSITORY_CODE: &str = "C480";
+pub(crate) const UNKNOWN_REF_CODE: &str = "C481";
+pub(crate) const NO_MERGE_BASE_CODE: &str = "C482";
+pub(crate) const EXPORT_FAILED_CODE: &str = "C483";
+pub(crate) const BASE_REF_UNSET_CODE: &str = "C485";

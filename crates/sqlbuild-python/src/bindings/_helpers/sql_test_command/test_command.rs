@@ -1,12 +1,14 @@
 //! `sqb test`: compile the selected SQL unit tests, inspect or run them, and report.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
+use std::path::PathBuf;
 
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyInt, PyString, PyTuple};
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
+use sqlbuild_analysis::definition_changes::models::{ExecutedItem, SelectedItem};
 use sqlbuild_core::cli_text::models::CliStyle;
 use sqlbuild_core::test_command::main::render_test_completion::render_test_completion;
 use sqlbuild_core::test_command::main::render_test_inspection::render_test_inspection;
@@ -28,6 +30,12 @@ use crate::bindings::_helpers::build_progress::progress_text::{
 };
 use crate::bindings::_helpers::build_progress::result_text::test_label;
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
+use crate::bindings::_helpers::change_selection::base_snapshot::{
+    BaseComparison, BaseVariant, base_comparison,
+};
+use crate::bindings::_helpers::change_selection::selection::{
+    ChangedProject, changed_project, tests_and_models,
+};
 use crate::bindings::_helpers::command_runtime::concurrency::resolve_concurrency;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_reported_command_invocation;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::build_static_pipeline_result;
@@ -39,6 +47,7 @@ use crate::bindings::_helpers::planner_entries::command_plans::build_test_comman
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::result_output::documents::format_test_execution_json;
 use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
@@ -385,14 +394,23 @@ fn inspection_entry(entry: &Bound<'_, PyAny>) -> PyResult<TestInspectionEntry> {
         mocked_table_functions: strings(entry.getattr("mock_table_function_names")?)?,
         real_models,
         expected_models,
+        selection_reasons: Vec::new(),
     })
 }
 
 /// Write the resolved plan without executing it; returns the exit code.
-fn inspect(stream: &Bound<'_, PyAny>, plan_output: &Bound<'_, PyAny>) -> PyResult<i32> {
+fn inspect(
+    stream: &Bound<'_, PyAny>,
+    plan_output: &Bound<'_, PyAny>,
+    reasons: &HashMap<String, Vec<String>>,
+) -> PyResult<i32> {
     let entries: Vec<TestInspectionEntry> = native_field(plan_output, "test_entries")?
         .try_iter()?
-        .map(|entry| inspection_entry(&entry?))
+        .map(|entry| {
+            let mut entry: TestInspectionEntry = inspection_entry(&entry?)?;
+            entry.selection_reasons = reasons.get(&entry.label).cloned().unwrap_or_default();
+            Ok(entry)
+        })
         .collect::<PyResult<_>>()?;
     let warnings: Vec<TestPlanWarning> = native_field(plan_output, "warnings")?
         .try_iter()?
@@ -408,6 +426,50 @@ fn inspect(stream: &Bound<'_, PyAny>, plan_output: &Bound<'_, PyAny>) -> PyResul
     stream.call_method1("write", (rendered,))?;
     stream.call_method0("flush")?;
     Ok(code)
+}
+
+/// Keep only the planned tests that execute something changed since the base revision, write
+/// the summary, and return the narrowed pipeline with each kept test's reasons by label.
+fn select_changed<'py>(
+    (pipeline, stream): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    project_dir: &std::path::Path,
+    base: BaseComparison,
+    explain: bool,
+) -> PyResult<(Bound<'py, PyAny>, HashMap<String, Vec<String>>)> {
+    let py: Python<'py> = pipeline.py();
+    let project: Bound<'py, PyAny> = native_field(pipeline, "project")?;
+    let changed: ChangedProject = changed_project(&project, project_dir, base)?;
+    let (tests, models) = tests_and_models(&project)?;
+    let plan_output: Bound<'py, PyAny> = native_field(pipeline, "plan_output")?;
+    let mut kept: Vec<Bound<'py, PyAny>> = Vec::new();
+    let mut selected: Vec<SelectedItem> = Vec::new();
+    let mut reasons: HashMap<String, Vec<String>> = HashMap::new();
+    let mut total: usize = 0;
+    for entry in native_field(&plan_output, "test_entries")?.try_iter()? {
+        let entry: Bound<'py, PyAny> = entry?;
+        total += 1;
+        let item: ExecutedItem = changed.test_item(&entry, (&tests, &models))?;
+        let entry_reasons: Vec<String> = changed.reasons(&item);
+        if entry_reasons.is_empty() {
+            continue;
+        }
+        let label: String = inspection_entry(&entry)?.label;
+        reasons.insert(label.clone(), entry_reasons.clone());
+        selected.push(SelectedItem {
+            label,
+            reasons: entry_reasons,
+        });
+        kept.push(entry);
+    }
+    changed.report(stream, ("test", "tests"), (total, &selected, explain))?;
+    let plan_output: Bound<'py, PyAny> = replaced(
+        &plan_output,
+        &[("test_entries", PyTuple::new(py, kept)?.into_any())],
+    )?;
+    Ok((
+        replaced(pipeline, &[("plan_output", plan_output)])?,
+        reasons,
+    ))
 }
 
 /// Write the ready header and run the tests with nested progress; returns the results.
@@ -604,10 +666,32 @@ pub(crate) fn run_test_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> Py
         &record_class(py, RecordId::TestInvocation)?,
         !inspect_only,
     )?;
-    let pipeline: Bound<'_, PyAny> = compile_tests(request, &invocation)?;
     let stream: Bound<'_, PyAny> = invocation.getattr("progress_stream")?;
+    let project_dir: Bound<'_, PyAny> = native_field(&invocation, "effective_project_dir")?;
+    let since: Option<String> = native_field(request, "since")?.extract()?;
+    let base: Option<BaseComparison> = match since.as_deref() {
+        Some(since) => Some(base_comparison(
+            (&stream, &project_dir),
+            since,
+            &BaseVariant {
+                selected_target: native_field(request, "selected_target")?.extract()?,
+                cli_vars: native_field(request, "cli_vars")?,
+            },
+        )?),
+        None => None,
+    };
+    let mut pipeline: Bound<'_, PyAny> = compile_tests(request, &invocation)?;
+    let mut reasons: HashMap<String, Vec<String>> = HashMap::new();
+    if let Some(base) = base {
+        (pipeline, reasons) = select_changed(
+            (&pipeline, &stream),
+            &project_dir.extract::<PathBuf>()?,
+            base,
+            native_field(request, "explain")?.is_truthy()?,
+        )?;
+    }
     if inspect_only {
-        return inspect(&stream, &pipeline.getattr("plan_output")?);
+        return inspect(&stream, &pipeline.getattr("plan_output")?, &reasons);
     }
     let concurrency: i64 = resolve_concurrency(
         &request.getattr("concurrency")?,

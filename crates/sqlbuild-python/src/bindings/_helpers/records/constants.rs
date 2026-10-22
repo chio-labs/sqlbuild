@@ -581,6 +581,8 @@ const SCENARIO_TEST_COMMAND_REQUEST: RecordSpec = RecordSpec {
         FieldSpec::new("json_output", FieldDefault::False),
         FieldSpec::new("json_output_path", FieldDefault::None),
         FieldSpec::new("scenario_timeout", FieldDefault::None),
+        FieldSpec::new("since", FieldDefault::None),
+        FieldSpec::new("explain", FieldDefault::False),
     ],
 };
 const SCENARIO_CAPTURE_COMMAND_REQUEST: RecordSpec = RecordSpec {
@@ -645,6 +647,8 @@ const TEST_COMMAND_REQUEST: RecordSpec = RecordSpec {
         FieldSpec::new("case_name", FieldDefault::None),
         FieldSpec::new("inspect", FieldDefault::False),
         FieldSpec::new("test_timeout", FieldDefault::None),
+        FieldSpec::new("since", FieldDefault::None),
+        FieldSpec::new("explain", FieldDefault::False),
     ],
 };
 const REFACTOR_COMMAND_REQUEST: RecordSpec = RecordSpec {

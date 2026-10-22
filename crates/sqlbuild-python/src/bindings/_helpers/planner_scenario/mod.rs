@@ -6,7 +6,7 @@ mod constants;
 mod entries;
 pub(crate) mod execution;
 mod fixtures;
-mod graph;
+pub(crate) mod graph;
 mod helper_scope;
 mod models;
 pub(crate) mod registration;

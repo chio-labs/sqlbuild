@@ -1734,6 +1734,28 @@
        {
         "kind": "store",
         "options": [
+         "--since"
+        ],
+        "dest": "since",
+        "metavar": "REF",
+        "help": "run only the tests affected by changes since the merge base of REF and HEAD; @base reads [git] base_ref",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--explain"
+        ],
+        "dest": "explain",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "with --since, show why each test was selected",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
          "--json-output"
         ],
         "dest": "json_output",
@@ -5593,6 +5615,28 @@
              "dest": "scenario_timeout",
              "metavar": "DURATION",
              "help": "Per-scenario timeout for this run, such as '10m', or 'disabled'",
+             "group": 1
+            },
+            {
+             "kind": "store",
+             "options": [
+              "--since"
+             ],
+             "dest": "since",
+             "metavar": "REF",
+             "help": "run only the scenarios affected by changes since the merge base of REF and HEAD; @base reads [git] base_ref",
+             "group": 1
+            },
+            {
+             "kind": "store_true",
+             "options": [
+              "--explain"
+             ],
+             "dest": "explain",
+             "nargs": 0,
+             "const": true,
+             "default": false,
+             "help": "with --since, show why each scenario was selected",
              "group": 1
             },
             {

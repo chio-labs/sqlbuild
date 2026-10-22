@@ -14,9 +14,9 @@ use crate::project::_helpers::help::{
 };
 use crate::project::_helpers::keys::Place;
 use crate::project::_helpers::sections::{
-    load_constants, load_cost, load_cursors, load_dbt, load_diff, load_janitor, load_local_dbt,
-    load_microbatches, load_migrations, load_policy_flag, load_scenario, load_settings,
-    load_snapshots, setting_overrides,
+    load_constants, load_cost, load_cursors, load_dbt, load_diff, load_git, load_janitor,
+    load_local_dbt, load_microbatches, load_migrations, load_policy_flag, load_scenario,
+    load_settings, load_snapshots, setting_overrides,
 };
 use crate::project::_helpers::sinks::load_sinks;
 use crate::project::_helpers::targets::{
@@ -276,6 +276,7 @@ fn project_fields(payload: &Entries) -> Loaded<Fields> {
         recall_section(recall, RECALL_SECTION)
             .map_err(|message| ConfigFailure::at(PROJECT_FILE, message))?;
     }
+    load_git(get(payload, "git"), PROJECT_FILE)?;
     let mut fields = identity(payload)?;
     fields.extend(sections(payload)?);
     fields.push(("targets", targets(payload)?));
@@ -422,4 +423,12 @@ pub(crate) fn local_sql_analysis_failure(
         )
         .with_help(help),
     )
+}
+
+/// `[git] base_ref` of `sqlbuild_project.toml`, validated as project loading validates it.
+pub(crate) fn git_base_ref(paths: &ConfigPaths) -> Result<Option<String>, LoadFailure> {
+    let file = resolve(paths, false)?;
+    let table = load_toml_mapping(paths, file)?;
+    let payload = table.as_map().unwrap_or_default();
+    Ok(load_git(get(payload, "git"), PROJECT_FILE)?)
 }

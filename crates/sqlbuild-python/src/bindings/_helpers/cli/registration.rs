@@ -5,12 +5,12 @@ use pyo3::prelude::{Bound, PyModule, PyResult};
 use crate::bindings::_helpers::build_progress::{progress, progress_reporters, progress_text};
 use crate::bindings::_helpers::cli::{argv, entry, launch_state, namespace, observability};
 use crate::bindings::_helpers::{
-    audit_command, build_command, build_progress, check, clone, command_runtime, compute_logs,
-    contract_command, cost_command, cost_report, cost_telemetry, dbt_command, dbt_events,
-    dbt_interop, debug_command, diff_report, event_exporting, execution_history, format_command,
-    freshness, init_command, janitor, load, output_capture, plan_command, presentation_text,
-    query_command, recall, result_output, scenario_command, seed_command, sql_test_command,
-    workspace_commands,
+    audit_command, build_command, build_progress, change_selection, check, clone, command_runtime,
+    compute_logs, contract_command, cost_command, cost_report, cost_telemetry, dbt_command,
+    dbt_events, dbt_interop, debug_command, diff_report, event_exporting, execution_history,
+    format_command, freshness, init_command, janitor, load, output_capture, plan_command,
+    presentation_text, query_command, recall, result_output, scenario_command, seed_command,
+    sql_test_command, workspace_commands,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -43,6 +43,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     workspace_commands::registration::register(module)?;
     check::registration::register(module)?;
     sql_test_command::registration::register(module)?;
+    change_selection::registration::register(module)?;
     seed_command::registration::register(module)?;
     audit_command::registration::register(module)?;
     build_command::registration::register(module)?;

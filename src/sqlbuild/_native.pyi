@@ -6798,6 +6798,8 @@ class ScenarioTestCommandRequest(NativeRecord):
     json_output: bool
     json_output_path: Path | None
     scenario_timeout: str | None
+    since: str | None
+    explain: bool
     def __init__(
         self,
         project_dir: Path | None = None,
@@ -6816,6 +6818,8 @@ class ScenarioTestCommandRequest(NativeRecord):
         json_output: bool = False,
         json_output_path: Path | None = None,
         scenario_timeout: str | None = None,
+        since: str | None = None,
+        explain: bool = False,
     ) -> None: ...
 
 class ScenarioCaptureCommandRequest(NativeRecord):
@@ -6857,6 +6861,8 @@ class TestCommandRequest(NativeRecord):
     case_name: str | None
     inspect: bool
     test_timeout: str | None
+    since: str | None
+    explain: bool
     def __init__(
         self,
         project_dir: Path | None = None,
@@ -6872,6 +6878,8 @@ class TestCommandRequest(NativeRecord):
         case_name: str | None = None,
         inspect: bool = False,
         test_timeout: str | None = None,
+        since: str | None = None,
+        explain: bool = False,
     ) -> None: ...
 
 class RefactorCommandRequest(NativeRecord):

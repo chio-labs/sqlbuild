@@ -11,6 +11,7 @@ pub mod compiler;
 mod constants;
 pub mod contracts;
 pub mod dag_artifact;
+pub mod definition_changes;
 pub mod diff_selection;
 pub mod explicit_references;
 pub mod fingerprint_storage;
