@@ -22,14 +22,49 @@ sqb --project-dir <path> janitor [flags]
 | `--auto-approve` | Skip the confirmation prompt and run the planned actions immediately |
 | `--retention-days` | Override the configured retention period (days) before a stale relation is archived |
 | `--direct-state-history-versions` | Override how many state-history versions are kept per identity |
+| `--verbose`, `-v` | List every entry of each preview section and every skipped object with its reason. Without it, each section shows its first 10 entries and skipped objects are counted by reason |
+| `--json` | Print the plan and the result as one JSON document on stdout; the preview, prompt and progress go to stderr |
 | `--drop-old-name-view <name>` | Drop the [compatibility view](/docs/concepts/models/migrations#old-names) at a renamed model's old name before it expires. Repeat for several views. Fails with `C503` if no compatibility view is recorded at the name |
 | `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `query` [warehouse group](/docs/concepts/project-configuration#command-group-warehouses) and the connection warehouse |
+
+## Output
+
+After the preview and confirmation, each phase with work announces how many actions it runs, prints one line per action as it finishes, and closes with its duration. The run ends with one line of totals:
+
+```
+Archiving 3 relations...
+  1/3  archived  analytics.old_orders -> analytics._sqb_archive__20261022t101500z__old_orders        OK  0.21s
+  2/3  archived  analytics.old_customers -> analytics._sqb_archive__20261022t101500z__old_customers  OK  0.19s
+  3/3  archived  analytics.old_products -> analytics._sqb_archive__20261022t101500z__old_products    OK  0.24s
+Archived 3 relations. (0.64s)
+Deleting 1 expired archive...
+  1/1  deleted   analytics._sqb_archive__20261001t080000z__old_inventory  OK  0.12s
+Deleted 1 expired archive. (0.12s)
+
+✓ Janitor completed  archived 3, deleted 1, pruned 0  (0.81s)
+```
+
+The phases are archiving stale relations, deleting expired archives, dropping old-name views, dropping expired query artifacts and pruning direct state, in that order. If an action fails, its line shows `FAIL` and the error, no further action starts, and the run ends with `✗ Janitor failed` and the totals completed before the failure, exiting with `1`.
+
+Long preview sections show their first 10 entries and then `... and N more (use --verbose to show all)`. Skipped objects are counted by reason:
+
+```
+Skipped objects (385)
+  210  relation is newer than 14 days
+  175  relation is not tracked by SQLBuild
+```
+
+With `--json`, stdout holds one document with `status` (`completed`, `failed`, `cancelled`, `blocked`, `nothing_to_do`, `previewed` or `disabled`), the full `plan`, the `result` with counts and every action, and `error`. Errors before the cleanup starts, such as a refused confirmation, are reported on stderr only.
+
+## Speed
+
+The janitor reads each schema's relations once per run, and the definitions of compatibility views with one read per schema. On warehouses that run DDL concurrently (Snowflake, BigQuery and Databricks), the independent actions of each phase run on up to the target's [`concurrency`](/docs/concepts/project-configuration#target-concurrency) connections at once; phases still run one after another. DuckDB, SQLite and the other adapters apply one action at a time.
 
 ## Targets
 
 By default the janitor cleans up the active target. `--target <name>` selects another configured target, exactly like `sqb build --target`: the janitor connects with that target's connection and inspects and cleans that target's schemas and state tables. Other targets are never touched.
 
-`--as <name>` previews what the janitor would do in another target without changing anything, like [`sqb plan --as`](/docs/cli/plan). The project compiles for that target, and its schemas are inspected through the active target's connection, which can be the default target or the one given with `--target`. The janitor lists every relation it would archive, every archive it would delete, every compatibility view it would drop and every state table it would prune, then exits. It drops nothing, writes no audit or state rows, prunes nothing and does not prompt. `--drop-old-name-view` is allowed with `--as` and only previews the drop.
+`--as <name>` previews what the janitor would do in another target without changing anything, like [`sqb plan --as`](/docs/cli/plan). The project compiles for that target, and its schemas are inspected through the active target's connection, which can be the default target or the one given with `--target`. The janitor lists the relations it would archive, the archives it would delete, the compatibility views it would drop and the state tables it would prune (all of them with `--verbose`), then exits. It drops nothing, writes no audit or state rows, prunes nothing and does not prompt. `--drop-old-name-view` is allowed with `--as` and only previews the drop.
 
 ```
 Previewing janitor as target 'prod' through the connection of target 'dev' (inspection only).
@@ -106,6 +141,8 @@ Ages are only looked up for relations that are otherwise candidates, and not at 
 
 Every archive and every delete is recorded in an append-only `_sqlbuild_janitor_events` table in the affected schema. It records the original name, the archive name, the time and the invocation. The janitor never reads this table to decide what to do. It exists for auditing, and for restoring archives whose names were shortened.
 
+Events are written in batches of up to 100 per schema, after each batch of actions and after a failure. An archive whose name was shortened gets its event right after its rename. If the process is killed, at most one batch of actions in a schema can lack events; those archives still expire by the timestamp in their names.
+
 ## Restoring an archive
 
 Rename the archive back to its original name before it expires, using your warehouse's rename statement. For example, on Snowflake:
@@ -156,4 +193,4 @@ In addition to archiving stale relations, the janitor prunes old rows from `_sql
 
 ## Safety
 
-The janitor shows every planned archive and delete, with exact names, ages and expiry, then asks you to type an exact confirmation phrase. Relations whose names differ only by case from another relation in the same schema are reported and never dropped, and exclude patterns match regardless of case. Use `--auto-approve` only in automation, or when you're certain.
+The janitor shows the planned archives and deletes, with exact names, ages and expiry (every one of them with `--verbose`, or in the `--json` plan), then asks you to type an exact confirmation phrase. Relations whose names differ only by case from another relation in the same schema are reported and never dropped, and exclude patterns match regardless of case. Use `--auto-approve` only in automation, or when you're certain.
