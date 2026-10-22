@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use polyglot_sql::{DialectType, Expression, ParseOptions, ValidationSchema};
 
-use crate::query_analysis::compatibility_types::{NULL_TYPE, infer_outputs};
+use crate::query_analysis::compatibility_types::{NULL_TYPE, infer_complete_outputs};
 
-/// The output column names and inferred types of the one query in `sql`, without lineage.
+/// The output columns and inferred types of the one query in `sql`; `None` if a source is untyped.
 #[must_use]
 pub fn output_types(
     sql: &str,
@@ -25,7 +25,8 @@ pub fn output_types(
     }
     let expression: Expression = statements.pop()?;
     let mut outputs: Vec<(String, Option<String>)> = Vec::new();
-    for (name, data_type) in infer_outputs(&expression, Some(schema), &HashMap::new(), dialect) {
+    let inferred = infer_complete_outputs(&expression, Some(schema), &HashMap::new(), dialect)?;
+    for (name, data_type) in inferred {
         outputs.push((name, data_type.filter(|value| !is_null_type(value))));
     }
     Some(outputs)

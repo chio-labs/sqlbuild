@@ -167,15 +167,16 @@ SELECT
   o.order_id,
   o.customer_id,
   p.amount_cents AS total_cents,
-  @cents_to_dollars("p.amount_cents") AS total_dollars
+  @py.cents_to_dollars("p.amount_cents") AS total_dollars
 FROM __ref("stg_orders") o
 JOIN __ref("stg_payments") p USING (order_id)
 ```
 
-Macros are plain Python functions that return SQL, kept next to the models that use them:
+Python macros are plain functions that return SQL, kept next to the models that use them; SQL
+macros in `macros/sql/` cover logic-free fragments with typed, checked arguments:
 
 ```python
-# models/marts/_sqlbuild/_macros/currency.py
+# models/marts/_sqlbuild/_macros/python/currency.py
 def cents_to_dollars(column: str) -> str:
     """Convert a cents integer column to a dollars decimal with two decimal places."""
     return f"ROUND(({column}) / 100.0, 2)"

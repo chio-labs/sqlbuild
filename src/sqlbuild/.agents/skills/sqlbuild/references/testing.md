@@ -67,7 +67,7 @@ explicit (for example `SELECT *` from another CTE), SQLBuild compares every colu
 Helper CTEs can read other helpers and mocks by CTE name (for example `__ref__stg_orders`), so
 shared expected rows can live in one helper that both an `__expected__` CTE and an assertion use.
 
-Macros work inside tests, so reusable mock generators such as `@mock_orders(count=5)` are normal.
+Macros work inside tests, so reusable mock generators such as `@py.mock_orders(count=5)` are normal.
 Tests can also target a macro, UDF or table function directly: defining `__macro_actual__`,
 `__udf_actual__` or `__table_fn_actual__` selects that mode without a `mode` header field; see
 [docs/concepts/testing.md](docs/concepts/testing.md) for those modes.

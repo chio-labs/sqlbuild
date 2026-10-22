@@ -105,7 +105,7 @@ MODEL (
 SELECT 1 AS id
 ```
 
-Python hook arguments are ordinary configuration values and are not SQL-expanded. An argument containing `@@CTX:...` or `@macro()` reaches the function unchanged.
+Python hook arguments are ordinary configuration values and are not SQL-expanded. An argument containing `@@CTX:...` or `@py.name()` reaches the function unchanged.
 
 ## Signature validation
 

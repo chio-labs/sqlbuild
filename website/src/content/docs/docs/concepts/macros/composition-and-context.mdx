@@ -69,7 +69,7 @@ or `_macros/`.
 
 ## Macro output is final SQL
 
-Do not return SQL containing another `@macro()` call:
+Do not return SQL containing another `@py.name()` call:
 
 ```python
 # Invalid: creates another macro-expansion layer.
