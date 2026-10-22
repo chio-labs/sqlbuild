@@ -62,9 +62,14 @@ pub(crate) struct SqlMacroSource<'a, 'py> {
     /// Every loaded macro by name, for unscoped compiles whose context holds none.
     pub(crate) loaded_macros: Option<&'a Bound<'py, PyAny>>,
     pub(crate) origin: Option<SqlCallOrigin<'a>>,
-    /// The `DeclarationScopeResolver` whose project-wide declarations macro bodies resolve
-    /// from their own folder; `None` for unscoped compiles, where every declaration is public.
-    pub(crate) resolver: Option<&'a Bound<'py, PyAny>>,
+    /// Where macro bodies resolve their declarations; `None` outside the input loops.
+    pub(crate) scopes: Option<&'a dyn MacroScopes<'py>>,
+}
+
+/// The declaration contexts of macro files in a scoped compile.
+pub(crate) trait MacroScopes<'py> {
+    /// The context the file at `path` sees, or `None` when the compile is unscoped.
+    fn file_context(&self, path: &str) -> PyResult<Option<Bound<'py, PyAny>>>;
 }
 
 /// The facts a declaration pass's SQL macro calls recorded.
@@ -82,14 +87,7 @@ struct PyHost<'r, 'a, 'py> {
     source: SqlMacroSource<'a, 'py>,
     facts: RefCell<SqlMacroFacts<'py>>,
     adapter: String,
-    /// The declaration context each SQL macro file's body resolves in, by file path.
-    macro_contexts: RefCell<HashMap<String, Bound<'py, PyAny>>>,
-    /// Every file-based enum and constant as `(kind, name, path, record, declaration)`.
-    declarations: RefCell<Option<Vec<ProjectDeclaration<'py>>>>,
 }
-
-/// One file-based enum or constant: whether it is an enum, its name, path, record and value.
-type ProjectDeclaration<'py> = (bool, String, String, Bound<'py, PyAny>, Bound<'py, PyAny>);
 
 /// Whether a scanned reference is a SQL macro call.
 pub(crate) fn is_sql_macro_reference(kind: u8) -> bool {
@@ -111,15 +109,13 @@ pub(crate) fn expanded_sql_macro_calls<'py>(
     let source: SqlMacroSource<'_, 'py> = request.sql_macros.unwrap_or(SqlMacroSource {
         loaded_macros: None,
         origin: None,
-        resolver: None,
+        scopes: None,
     });
     let host: PyHost<'_, '_, 'py> = PyHost {
         request,
         source,
         facts: RefCell::new(SqlMacroFacts::default()),
         adapter: request.rendering.adapter_name(request.context.py()),
-        macro_contexts: RefCell::new(HashMap::new()),
-        declarations: RefCell::new(None),
     };
     let owner: String = owner_label(request)?;
     let context = TextContext {
@@ -160,10 +156,7 @@ pub(crate) fn expanded_sql_macro_calls<'py>(
     Ok((replacements, host.facts.into_inner()))
 }
 
-/// Where the call spanning bytes `start..end` of `sql` stands in the authored file `origin`.
-///
-/// When interpolation changed the text, the call is the same occurrence of its text in the
-/// authored query as in `sql`.
+/// Where the call spanning bytes `span` of `sql` starts in the authored file `origin`.
 fn authored_location(
     origin: SqlCallOrigin<'_>,
     sql: &str,
@@ -172,8 +165,7 @@ fn authored_location(
     authored_span(origin, sql, span).0
 }
 
-/// Where the call spanning bytes `start..end` of `sql` starts in the authored file `origin`,
-/// and the line and column where its text ends.
+/// Where the call at bytes `start..end` of `sql` starts and ends in the authored file `origin`.
 fn authored_span(
     origin: SqlCallOrigin<'_>,
     sql: &str,
@@ -339,7 +331,11 @@ impl<'py> PyHost<'_, '_, 'py> {
             return self.loaded(name);
         };
         let path: String = path_posix(&native_field(&found, "relative_path")?)?;
-        if self.source.resolver.is_none() || declaration_visible_from_macro(&path, macro_path) {
+        let scoped: bool = match self.source.scopes {
+            Some(scopes) => scopes.file_context(macro_path)?.is_some(),
+            None => false,
+        };
+        if !scoped || declaration_visible_from_macro(&path, macro_path) {
             return Ok((Some(found), None));
         }
         Ok((None, Some(found)))
@@ -347,69 +343,12 @@ impl<'py> PyHost<'_, '_, 'py> {
 
     /// The declaration context of `scope`: the caller's, or the macro file's own folder's.
     fn scope_context(&self, scope: &SqlMacroScope) -> PyResult<Bound<'py, PyAny>> {
-        let SqlMacroScope::Macro(definition) = scope else {
+        let (SqlMacroScope::Macro(definition), Some(scopes)) = (scope, self.source.scopes) else {
             return Ok(self.request.context.clone());
         };
-        let Some(resolver) = self.source.resolver else {
-            return Ok(self.request.context.clone());
-        };
-        if let Some(found) = self.macro_contexts.borrow().get(&definition.path) {
-            return Ok(found.clone());
-        }
-        let built: Bound<'py, PyAny> = self.macro_context(resolver, &definition.path)?;
-        let _ = self
-            .macro_contexts
-            .borrow_mut()
-            .insert(definition.path.clone(), built.clone());
-        Ok(built)
-    }
-
-    /// The enums and constants the macro file at `macro_path` sees, and those it cannot see.
-    fn macro_context(
-        &self,
-        resolver: &Bound<'py, PyAny>,
-        macro_path: &str,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let py: Python<'py> = self.py();
-        if self.declarations.borrow().is_none() {
-            let listed: Vec<ProjectDeclaration<'py>> = project_declarations(resolver)?;
-            *self.declarations.borrow_mut() = Some(listed);
-        }
-        let fields: [Bound<'py, PyDict>; 4] = [
-            PyDict::new(py),
-            PyDict::new(py),
-            PyDict::new(py),
-            PyDict::new(py),
-        ];
-        let mut depths: HashMap<(bool, String), usize> = HashMap::new();
-        for (is_enum, name, path, record, declaration) in
-            self.declarations.borrow().iter().flatten()
-        {
-            let visible: bool = declaration_visible_from_macro(path, macro_path);
-            let slot: usize = usize::from(!*is_enum) + if visible { 0 } else { 2 };
-            if visible {
-                let depth: usize = path.matches('/').count();
-                let key: (bool, String) = (*is_enum, name.clone());
-                if depths.get(&key).is_some_and(|known| *known > depth) {
-                    continue;
-                }
-                let _ = depths.insert(key, depth);
-                fields[slot].set_item(name, declaration)?;
-            } else if !fields[slot].contains(name)? {
-                fields[slot].set_item(name, record)?;
-            }
-        }
-        let [enums, constants, inaccessible_enums, inaccessible_constants] = fields;
-        new_record_with(
-            py,
-            RecordId::DeclarationResolutionContext,
-            &[
-                ("enums", enums.into_any()),
-                ("constants", constants.into_any()),
-                ("inaccessible_enums", inaccessible_enums.into_any()),
-                ("inaccessible_constants", inaccessible_constants.into_any()),
-            ],
-        )
+        Ok(scopes
+            .file_context(&definition.path)?
+            .unwrap_or_else(|| self.request.context.clone()))
     }
 
     fn record_use(&self, name: &str) -> PyResult<()> {
@@ -667,38 +606,4 @@ fn declaration_path(
         return Ok(Some(Some(native_field(&record, "path")?.extract()?)));
     }
     Ok(None)
-}
-
-/// Every file-based enum and constant the resolver knows, with its record and declaration.
-fn project_declarations<'py>(
-    resolver: &Bound<'py, PyAny>,
-) -> PyResult<Vec<ProjectDeclaration<'py>>> {
-    let py: Python<'py> = resolver.py();
-    let enum_kind: Bound<'py, PyAny> = enum_member(py, RecordId::DeclarationKind, "ENUM")?;
-    let constant_kind: Bound<'py, PyAny> = enum_member(py, RecordId::DeclarationKind, "CONSTANT")?;
-    let values: Bound<'py, PyAny> =
-        native_field(resolver, "projection")?.getattr("declarations")?;
-    let records: Bound<'py, PyAny> = native_field(resolver, "lookup")?.getattr("declarations")?;
-    let mut listed: Vec<ProjectDeclaration<'py>> = Vec::new();
-    for pair in records.call_method0("items")?.try_iter()? {
-        let (identity, records_of): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair?.extract()?;
-        let kind: Bound<'py, PyAny> = native_field(&identity, "kind")?;
-        let is_enum: bool = kind.is(&enum_kind);
-        if !is_enum && !kind.is(&constant_kind) || !native_field(&identity, "owner")?.is_none() {
-            continue;
-        }
-        let Some(value) = values
-            .call_method1("get", (&identity,))
-            .ok()
-            .filter(|value| !value.is_none())
-        else {
-            continue;
-        };
-        let Some(record) = records_of.try_iter()?.next().transpose()? else {
-            continue;
-        };
-        let path: String = field_text(&record, "path")?;
-        listed.push((is_enum, field_text(&identity, "name")?, path, record, value));
-    }
-    Ok(listed)
 }

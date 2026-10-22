@@ -1,7 +1,5 @@
 //! The session's phases: Python's uncached model analysis, wave by wave.
 
-use crate::assembly::analysis_session::_helpers::sql_macro_checks::checked_sql_macros;
-use crate::assembly::analysis_session::main::resolved_cleaned_sql::resolved_cleaned_sql;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -32,6 +30,7 @@ use crate::assembly::analysis_session::_helpers::mappings::{
 };
 use crate::assembly::analysis_session::_helpers::mappings::{producers, waves};
 use crate::assembly::analysis_session::constants::{UNKNOWN_NULLABILITY, UNKNOWN_TYPE};
+use crate::assembly::analysis_session::main::resolved_cleaned_sql::resolved_cleaned_sql;
 use crate::assembly::analysis_session::models::{
     AnalysisSession, ColumnFact, ContractProof, DeferredCleaning, FinishedSession, LineageFacts,
     LineageRow, ModelAnalysis, ModelOutcome, ModelRequest, Phase, PivotOutcome, PivotTables,
@@ -40,6 +39,7 @@ use crate::assembly::analysis_session::models::{
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::models::DiagnosticRow;
 use crate::semantic_validation::models::ProjectCatalog;
+use crate::sql_macros::main::check_sql_macro_arguments::check_sql_macro_arguments;
 
 /// What an internal native failure of the session names.
 const SESSION_CONTEXT: &str = "native model analysis";
@@ -292,9 +292,7 @@ impl AnalysisSession {
         self.check_sql_macros(models)
     }
 
-    /// Each model's SQL macro call arguments checked against its analysed column types.
-    ///
-    /// Findings are never cached, so cache hits are cleaned and checked like fresh analyses.
+    /// Each model's SQL macro call arguments checked against its analysed types, cache hits too.
     fn check_sql_macros(&mut self, models: &[usize]) -> Result<(), String> {
         let checked: Vec<usize> = models
             .iter()
@@ -314,7 +312,7 @@ impl AnalysisSession {
             let Ok(cleaned) = resolved_cleaned_sql(outcome) else {
                 continue;
             };
-            let findings = checked_sql_macros(
+            let findings = check_sql_macro_arguments(
                 &self.request.dialect,
                 (&cleaned, &schema),
                 &request.sql_macro_checks,

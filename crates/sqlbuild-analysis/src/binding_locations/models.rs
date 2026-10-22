@@ -43,6 +43,14 @@ pub struct LocatedDiagnostic {
     pub column: Option<usize>,
     pub location: Option<AuthoredSpan>,
     pub help: Option<String>,
-    /// A second authored location, `(label, path, line, column)`, adding context.
-    pub related: Option<(String, String, usize, usize)>,
+    pub related: Option<RelatedSpot>,
+}
+
+/// A second authored location that adds context to a diagnostic.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RelatedSpot {
+    pub label: String,
+    pub path: String,
+    pub line: usize,
+    pub column: usize,
 }

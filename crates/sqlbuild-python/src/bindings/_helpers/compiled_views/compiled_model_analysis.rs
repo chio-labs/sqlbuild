@@ -3,18 +3,18 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-use pyo3::IntoPyObject;
 use pyo3::exceptions::PyValueError;
-use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
+use pyo3::{IntoPyObject, IntoPyObjectExt};
 use sqlbuild_analysis::assembly::analysis_session::main::resolved_cleaned_sql::resolved_cleaned_sql;
 use sqlbuild_analysis::assembly::analysis_session::models::{
     ColumnFact, ContractProof, LineageFacts, LineageRow, ModelOutcome, PivotOutcome,
 };
 use sqlbuild_analysis::binding_locations::main::locate_binding_diagnostics::locate_binding_diagnostics;
 use sqlbuild_analysis::binding_locations::models::{
-    AuthoredSpan, BindingSource, LocatedDiagnostic,
+    AuthoredSpan, BindingSource, LocatedDiagnostic, RelatedSpot,
 };
 use sqlbuild_analysis::semantic_validation::models::{DiagnosticRow, Expansion};
 use sqlbuild_analysis::sql_macros::constants::ARGUMENT_CODE;
@@ -191,8 +191,7 @@ fn located(input: &ModelInputRecord, outcome: &ModelOutcome) -> PyResult<Vec<Loc
     locate_binding_diagnostics(rows, &source).map_err(PyValueError::new_err)
 }
 
-/// The binding diagnostics with each SQL macro finding, replacing the binding errors the same
-/// misfit causes inside the call it names.
+/// The SQL macro findings, then the binding diagnostics without unknown columns inside a call.
 fn with_sql_macro_findings(
     binding: Vec<LocatedDiagnostic>,
     outcome: &ModelOutcome,
@@ -234,12 +233,12 @@ fn finding_diagnostic(finding: &SqlMacroFinding) -> LocatedDiagnostic {
             end_column: Some(finding.call_end.1),
         }),
         help: finding.help.clone(),
-        related: Some((
-            PARAMETER_LABEL.to_owned(),
-            finding.declared_at.path.clone(),
-            finding.declared_at.line,
-            finding.declared_at.column,
-        )),
+        related: Some(RelatedSpot {
+            label: PARAMETER_LABEL.to_owned(),
+            path: finding.declared_at.path.clone(),
+            line: finding.declared_at.line,
+            column: finding.declared_at.column,
+        }),
     }
 }
 
@@ -442,22 +441,31 @@ fn compiler_diagnostic(
     if let Some(help) = &diagnostic.help {
         fields.set_item("help", help)?;
     }
-    if let Some((label, related_path, line, column)) = &diagnostic.related {
-        let place: Bound<'_, PyDict> = PyDict::new(py);
-        place.set_item(
-            "path",
-            PyModule::import(py, "pathlib")?
-                .getattr("Path")?
-                .call1((related_path,))?,
+    if let Some(RelatedSpot {
+        label,
+        path: related_path,
+        line,
+        column,
+    }) = &diagnostic.related
+    {
+        let place: Bound<'_, PyAny> = new_record_with(
+            py,
+            RecordId::SourceLocation,
+            &[
+                (
+                    "path",
+                    std::path::PathBuf::from(related_path).into_bound_py_any(py)?,
+                ),
+                ("line", line.into_bound_py_any(py)?),
+                ("column", column.into_bound_py_any(py)?),
+            ],
         )?;
-        place.set_item("line", line)?;
-        place.set_item("column", column)?;
         let related: Bound<'_, PyAny> = new_record_with(
             py,
             RecordId::RelatedLocation,
             &[
                 ("label", PyString::new(py, label).into_any()),
-                ("location", classes.source_location.call((), Some(&place))?),
+                ("location", place),
             ],
         )?;
         fields.set_item("related_locations", PyTuple::new(py, [related])?)?;

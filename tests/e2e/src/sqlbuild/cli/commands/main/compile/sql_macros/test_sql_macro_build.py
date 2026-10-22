@@ -75,8 +75,14 @@ _CTE_LIST_SPELLINGS: tuple[tuple[str, str], ...] = (
     ("commas_after", f"{_RAW},\n{_CLEAN},\n{_FIRST},\n{_FINAL}\nSELECT * FROM final\n"),
     ("commas_before", f"{_RAW}\n, {_CLEAN}\n, {_FIRST}\n, {_FINAL}\nSELECT * FROM final\n"),
     ("commas_on_both_sides", f"{_RAW},\n{_CLEAN}, {_FIRST},\n{_FINAL}\nSELECT * FROM final\n"),
-    ("last_call_before_the_query_with_a_comma", f"{_RAW},\n{_CLEAN},\n{_FIRST},\nSELECT order_id FROM firsts\n"),
-    ("last_call_before_the_query_without_a_comma", f"{_RAW},\n{_CLEAN}\n{_FIRST}\nSELECT order_id FROM firsts\n"),
+    (
+        "last_call_before_the_query_with_a_comma",
+        f"{_RAW},\n{_CLEAN},\n{_FIRST},\nSELECT order_id FROM firsts\n",
+    ),
+    (
+        "last_call_before_the_query_without_a_comma",
+        f"{_RAW},\n{_CLEAN}\n{_FIRST}\nSELECT order_id FROM firsts\n",
+    ),
 )
 _PLUS_ONE_HOUR: dict[str, str] = {
     "macros/sql/plus_one_hour.sql": (
@@ -233,32 +239,6 @@ _NESTED_LOCAL: dict[str, str] = {
             query="SELECT order_id, doubled FROM orders ORDER BY order_id",
             expected_rows=[(1, 2), (2, 4), (3, 6)],
         ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_a_model_calling_sql_macros_when_building_then_the_expanded_model_holds_the_rows(
-    test_case: SqlMacroBuildTestCase, tmp_path: Path
-) -> None:
-    project_dir, result = run_project(tmp_path=tmp_path, files=test_case.files, command=("build",))
-
-    assert result.returncode == 0, output(result)
-    assert (
-        query_duckdb(db_path=project_dir / DATABASE, sql=test_case.query) == test_case.expected_rows
-    )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        SqlMacroBuildTestCase(
-            description=f"cte_list_calls_{spelling}",
-            files={**CLEAN_ORDERS, **_FIRST_ORDERS, **orders_model(sql)},
-            query="SELECT order_id FROM orders ORDER BY order_id",
-            expected_rows=[(1,), (2,)],
-        )
-        for spelling, sql in _CTE_LIST_SPELLINGS
-    ]
-    + [
         SqlMacroBuildTestCase(
             description="column_list_call_without_a_comma_before_it",
             files={
@@ -310,6 +290,30 @@ def test_given_a_model_calling_sql_macros_when_building_then_the_expanded_model_
     ],
     ids=lambda case: case.description,
 )
+def test_given_a_model_calling_sql_macros_when_building_then_the_expanded_model_holds_the_rows(
+    test_case: SqlMacroBuildTestCase, tmp_path: Path
+) -> None:
+    project_dir, result = run_project(tmp_path=tmp_path, files=test_case.files, command=("build",))
+
+    assert result.returncode == 0, output(result)
+    assert (
+        query_duckdb(db_path=project_dir / DATABASE, sql=test_case.query) == test_case.expected_rows
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlMacroBuildTestCase(
+            description=f"cte_list_calls_{spelling}",
+            files={**CLEAN_ORDERS, **_FIRST_ORDERS, **orders_model(sql)},
+            query="SELECT order_id FROM orders ORDER BY order_id",
+            expected_rows=[(1,), (2,)],
+        )
+        for spelling, sql in _CTE_LIST_SPELLINGS
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_any_spelling_of_list_calls_when_building_then_the_model_holds_the_rows(
     test_case: SqlMacroBuildTestCase, tmp_path: Path
 ) -> None:
@@ -319,6 +323,7 @@ def test_given_any_spelling_of_list_calls_when_building_then_the_model_holds_the
     assert (
         query_duckdb(db_path=project_dir / DATABASE, sql=test_case.query) == test_case.expected_rows
     )
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -425,7 +430,7 @@ def test_given_a_project_with_macros_when_running_a_command_then_its_output_refl
                 **CENTS_TO_DOLLARS,
                 "models/marts/orders.sql": (
                     'MODEL (description "Orders", post_hooks [inline_sql("CREATE OR REPLACE TABLE '
-                    "hook_fee AS SELECT @sql.cents_to_dollars(50) AS fee\")]);\n\n"
+                    'hook_fee AS SELECT @sql.cents_to_dollars(50) AS fee")]);\n\n'
                     'SELECT DISTINCT order_id FROM __ref("stg_orders")\n'
                 ),
             },

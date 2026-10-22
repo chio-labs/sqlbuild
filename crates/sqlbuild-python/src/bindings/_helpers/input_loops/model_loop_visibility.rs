@@ -10,9 +10,11 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
 use crate::bindings::_helpers::input_loops::model_loop::{LoopContext, VisibleDeclarations};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::render::sql_macro_host::MacroScopes;
 use crate::bindings::_helpers::scopes::declaration_contexts::NativeDeclarationContexts;
 
 const NAME_FIELD: &str = "name";
+const NATIVE_CONTEXTS_ATTRIBUTE: &str = "native_contexts";
 const ENUMS_FIELD: &str = "enums";
 const CONSTANTS_FIELD: &str = "constants";
 const ENUM_VISIBILITY_FIELD: &str = "enum_visibility";
@@ -268,4 +270,18 @@ fn merged<'py>(
     let merged: Bound<'py, PyDict> = base.copy()?;
     merged.update(overlay.as_mapping())?;
     Ok(merged)
+}
+
+impl<'py> MacroScopes<'py> for VisibilityClasses<'py> {
+    fn file_context(&self, path: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
+        if !self.projects {
+            return Ok(None);
+        }
+        let contexts: Bound<'py, NativeDeclarationContexts> =
+            native_field(&self.resolver, NATIVE_CONTEXTS_ATTRIBUTE)?.downcast_into()?;
+        let (resolved, _) = contexts
+            .get()
+            .resolved_context(&self.resolver, path, None)?;
+        Ok(Some(resolved))
+    }
 }

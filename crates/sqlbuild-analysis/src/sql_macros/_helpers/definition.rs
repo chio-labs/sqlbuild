@@ -1,8 +1,8 @@
 //! A SQL macro file parsed into its definition, then checked on its own.
 
 use crate::sql_macros::_helpers::arguments::{ShapeContext, argument_shape, check_shape};
-use crate::sql_macros::_helpers::calls::{AtConstruct, at_constructs};
 use crate::sql_macros::_helpers::header::{Header, HeaderParser};
+use crate::sql_macros::_helpers::lexing::{AtConstruct, at_constructs};
 use crate::sql_macros::_helpers::lexing::{Token, TokenKind, line_column, tokens};
 use crate::sql_macros::_helpers::literal_positions::{
     LiteralRules, literal_error, non_literal_use,

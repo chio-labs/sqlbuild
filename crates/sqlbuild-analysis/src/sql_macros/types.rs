@@ -61,3 +61,8 @@ pub trait SqlMacroHost {
 
 /// The macros on the current call path, and the macros already known to be cycle-free.
 pub(crate) type Walk<'a> = (Vec<&'a str>, Vec<&'a str>);
+
+/// A probe's `(column, type)` list, or `None` where its analysis did not know every column.
+pub type ProbeColumns = Option<Vec<(String, Option<String>)>>;
+/// Each bound relation's name and `(column, type)` list.
+pub type RelationShapes = [(String, Vec<(String, String)>)];

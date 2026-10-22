@@ -10,6 +10,7 @@ from sqlbuild._native import (
     LoadedMacro,
     MacroContext,
     ScopeKind,
+    StaticMacroInventory,
     expand_sql_macros,
     find_macro_call_names,
 )
@@ -19,7 +20,6 @@ from sqlbuild.compiler.compile._helpers.render.user_macros import (
     load_project_macros,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
-    SqlMacroInventoryTestCase,
     ExpandSqlMacrosErrorTestCase,
     ExpandSqlMacrosTestCase,
     FindMacroCallNamesTestCase,
@@ -27,6 +27,7 @@ from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     LoadProjectMacrosTestCase,
     MacroDependencyTestCase,
     ScopedMacroImportErrorTestCase,
+    SqlMacroInventoryTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.compile._helpers.helpers import build_loaded_macros
 
@@ -797,7 +798,7 @@ def test_given_sql_macro_files_when_inventorying_then_each_file_stands_alone(
         for relative_path, contents in test_case.macro_files.items()
     )
 
-    inventory = inventory_project_macros(macro_files=macro_files)
+    inventory: StaticMacroInventory = inventory_project_macros(macro_files=macro_files)
 
     assert tuple(export.name for export in inventory.exports) == test_case.expected_exports
     assert (

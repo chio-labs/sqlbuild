@@ -514,8 +514,7 @@ impl<'py> HookRun<'_, '_, 'py> {
                         .as_any(),
                 ),
                 origin: None,
-                resolver: Some(&self.context.classes.visibility.resolver)
-                    .filter(|resolver| !resolver.is_none()),
+                scopes: Some(&self.context.classes.visibility),
             }),
         })
     }
