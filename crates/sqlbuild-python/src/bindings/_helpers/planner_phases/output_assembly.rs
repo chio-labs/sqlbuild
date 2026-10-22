@@ -306,17 +306,9 @@ pub(crate) fn add_plan_warnings<'py>(
     Ok(output)
 }
 
-/// Note each unselected upstream the deferred target provides under its pre-migration name.
-pub(crate) fn add_deferred_origin_notes<'py>(
-    mut output: PlanOutputFields<'py>,
-    (project, scopes): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
-    deferral: &Bound<'py, PyAny>,
-) -> PyResult<PlanOutputFields<'py>> {
-    let py = project.py();
-    let locations = native_field(deferral, "deferred_locations")?;
-    if locations.is_none() {
-        return Ok(output);
-    }
+/// The unselected models the selected scope reads, sorted.
+pub(crate) fn unselected_upstream_models(scopes: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+    let py = scopes.py();
     let selected = class_field(scopes, |s: &PlannerScopeResolution| &s.selected_scope)?;
     let selected_keys = native_field(&selected, "selected_keys")?;
     let upstream_deps = native_field(&selected, "upstream_deps")?;
@@ -337,6 +329,35 @@ pub(crate) fn add_deferred_origin_notes<'py>(
     }
     names.sort();
     names.dedup();
+    Ok(names)
+}
+
+/// Note unselected upstreams deferred to pre-migration names, and each lookup in `failures`.
+pub(crate) fn add_deferred_origin_notes<'py>(
+    mut output: PlanOutputFields<'py>,
+    (project, scopes): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    (deferral, failures): (&Bound<'py, PyAny>, &[(String, String)]),
+) -> PyResult<PlanOutputFields<'py>> {
+    let py = project.py();
+    let locations = native_field(deferral, "deferred_locations")?;
+    if locations.is_none() {
+        return Ok(output);
+    }
+    let names: Vec<String> = unselected_upstream_models(scopes)?;
+    let warning = |name: &str, message: &str| -> PyResult<Bound<'py, PyAny>> {
+        native(
+            py,
+            RecordId::PlanWarning,
+            &[
+                ("model_name", text(py, name)),
+                (
+                    "severity",
+                    enum_member(py, RecordId::WarningSeverity, "WARNING")?,
+                ),
+                ("message", text(py, message)),
+            ],
+        )
+    };
     let mut notes: Vec<Bound<'py, PyAny>> = Vec::new();
     for model in native_field(project, "models")?.try_iter()? {
         let model = model?;
@@ -352,24 +373,16 @@ pub(crate) fn add_deferred_origin_notes<'py>(
         {
             continue;
         }
-        notes.push(native(
-            py,
-            RecordId::PlanWarning,
-            &[
-                ("model_name", text(py, &name)),
-                ("severity", enum_member(py, RecordId::WarningSeverity, "WARNING")?),
-                (
-                    "message",
-                    text(
-                        py,
-                        &format!(
-                            "deferred to pre-migration name {}: the deferred target has not built model '{name}' under its current name yet",
-                            native_field(&location, "qualified_name")?
-                        ),
-                    ),
-                ),
-            ],
+        notes.push(warning(
+            &name,
+            &format!(
+                "deferred to pre-migration name {}: the deferred target has not built model '{name}' under its current name yet",
+                native_field(&location, "qualified_name")?
+            ),
         )?);
+    }
+    for (name, message) in failures {
+        notes.push(warning(name, message)?);
     }
     if !notes.is_empty() {
         let warnings = concat(py, &[output.field("warnings")?, tuple(py, notes)?])?;
