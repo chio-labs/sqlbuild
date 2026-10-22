@@ -70,10 +70,20 @@ class UnkeyedDiffMixin:
             else "__right_count - __left_count"
         )
         names: str = ", ".join(f"__c{index}" for index in range(len(columns)))
-        sql: str = f"{joined_sql} SELECT {names}, {surplus} FROM __joined WHERE {surplus} > 0"
+        sql: str = self._render_unkeyed_sample_sql(
+            joined_sql=joined_sql,
+            select_list=f"{names}, {surplus}",
+            predicate=f"{surplus} > 0",
+            limit=limit,
+        )
         cursor: Any = cast(BaseAdapter, self).execute(connection=connection, sql=sql)
+        try:
+            fetched_rows: list[Any] = cursor.fetchall()
+        finally:
+            if cursor is not connection:
+                cursor.close()
         rows: list[tuple[tuple[str, object], ...]] = []
-        for fetched in cursor.fetchmany(limit):
+        for fetched in fetched_rows:
             values: tuple[Any, ...] = tuple(fetched)
             row: tuple[tuple[str, object], ...] = tuple(
                 (column.name, value) for column, value in zip(columns, values[:-1], strict=True)
@@ -82,3 +92,10 @@ class UnkeyedDiffMixin:
             if len(rows) >= limit:
                 break
         return tuple(rows)
+
+    def _render_unkeyed_sample_sql(
+        self, *, joined_sql: str, select_list: str, predicate: str, limit: int
+    ) -> str:
+        """Render the bounded side-only sample query for LIMIT-capable engines."""
+
+        return f"{joined_sql} SELECT {select_list} FROM __joined WHERE {predicate} LIMIT {limit}"
