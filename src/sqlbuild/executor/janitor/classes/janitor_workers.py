@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import queue
 from collections.abc import Callable, Sequence
-from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
-from contextvars import copy_context
-from time import perf_counter
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from sqlbuild.executor.janitor.models import JanitorActionOutcome
+from sqlbuild.executor.janitor._helpers.worker_runs import (
+    attempt_janitor_action,
+    collect_janitor_outcomes,
+)
+from sqlbuild.executor.janitor.classes.pooled_janitor_attempt import PooledJanitorAttempt
+from sqlbuild.executor.janitor.models import JanitorActionOutcome, JanitorChunkOutcome
 
 
 class JanitorWorkers:
@@ -28,14 +31,10 @@ class JanitorWorkers:
         self,
         *,
         items: Sequence[ItemT],
-        action: Callable[[ItemT, Any], ResultT],
-        on_done: Callable[[int, JanitorActionOutcome[ResultT]], None],
-    ) -> BaseException | None:
-        """Run `action` on every item, reporting each on the calling thread as it finishes.
-
-        After a failure no further action starts; running ones finish and are reported. The
-        failure of the earliest item is returned.
-        """
+        action: Callable[..., ResultT],
+        on_done: Callable[..., None],
+    ) -> JanitorChunkOutcome[ResultT]:
+        """Run `action(item=, connection=)` per item until one fails, calling `on_done` per item."""
 
         if len(self.connections) == 1 or len(items) <= 1:
             return self._run_in_order(items=items, action=action, on_done=on_done)
@@ -43,19 +42,16 @@ class JanitorWorkers:
         connection: Any
         for connection in self.connections:
             connections.put(connection)
-
-        def attempt(item: ItemT) -> JanitorActionOutcome[ResultT]:
-            borrowed: Any = connections.get()
-            try:
-                return _attempt(action=action, item=item, connection=borrowed)
-            finally:
-                connections.put(borrowed)
-
         pool: ThreadPoolExecutor = ThreadPoolExecutor(
             max_workers=min(len(self.connections), len(items))
         )
         try:
-            return _collect(pool=pool, items=items, attempt=attempt, on_done=on_done)
+            return collect_janitor_outcomes(
+                pool=pool,
+                items=items,
+                attempt=PooledJanitorAttempt(action=action, connections=connections),
+                on_done=on_done,
+            )
         finally:
             pool.shutdown(wait=True, cancel_futures=True)
 
@@ -63,57 +59,18 @@ class JanitorWorkers:
         self,
         *,
         items: Sequence[ItemT],
-        action: Callable[[ItemT, Any], ResultT],
-        on_done: Callable[[int, JanitorActionOutcome[ResultT]], None],
-    ) -> BaseException | None:
+        action: Callable[..., ResultT],
+        on_done: Callable[..., None],
+    ) -> JanitorChunkOutcome[ResultT]:
+        outcomes: list[JanitorActionOutcome[ResultT] | None] = [None] * len(items)
         index: int
         item: ItemT
         for index, item in enumerate(items):
-            outcome: JanitorActionOutcome[ResultT] = _attempt(
+            outcome: JanitorActionOutcome[ResultT] = attempt_janitor_action(
                 action=action, item=item, connection=self.connection
             )
-            on_done(index, outcome)
+            outcomes[index] = outcome
+            on_done(index=index, outcome=outcome)
             if outcome.error is not None:
-                return outcome.error
-        return None
-
-
-def _attempt[ItemT, ResultT](
-    *, action: Callable[[ItemT, Any], ResultT], item: ItemT, connection: Any
-) -> JanitorActionOutcome[ResultT]:
-    started: float = perf_counter()
-    try:
-        result: ResultT = action(item, connection)
-    except BaseException as error:
-        return JanitorActionOutcome(error=error, duration_seconds=perf_counter() - started)
-    return JanitorActionOutcome(result=result, duration_seconds=perf_counter() - started)
-
-
-def _collect[ItemT, ResultT](
-    *,
-    pool: ThreadPoolExecutor,
-    items: Sequence[ItemT],
-    attempt: Callable[[ItemT], JanitorActionOutcome[ResultT]],
-    on_done: Callable[[int, JanitorActionOutcome[ResultT]], None],
-) -> BaseException | None:
-    futures: dict[Future[JanitorActionOutcome[ResultT]], int] = {
-        pool.submit(copy_context().run, attempt, item): index for index, item in enumerate(items)
-    }
-    failures: dict[int, BaseException] = {}
-    pending: set[Future[JanitorActionOutcome[ResultT]]] = set(futures)
-    while pending:
-        done: set[Future[JanitorActionOutcome[ResultT]]]
-        done, pending = wait(pending, return_when=FIRST_COMPLETED)
-        future: Future[JanitorActionOutcome[ResultT]]
-        for future in sorted(done, key=futures.__getitem__):
-            if future.cancelled():
-                continue
-            outcome: JanitorActionOutcome[ResultT] = future.result()
-            on_done(futures[future], outcome)
-            if outcome.error is None:
-                continue
-            if not failures:
-                for waiting in pending:
-                    _ = waiting.cancel()
-            failures[futures[future]] = outcome.error
-    return failures[min(failures)] if failures else None
+                break
+        return JanitorChunkOutcome(outcomes=tuple(outcomes))

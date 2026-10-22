@@ -197,10 +197,10 @@ class JanitorProgressE2ETestCase:
     stale_tables: int
     expected_exit_code: int
     expected_ordered_lines: tuple[str, ...]
-    expected_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_archive_events: int
     unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
     fail_rename: str | None = None
-    expected_archive_events: int | None = None
+    expected_remaining_tables: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -212,6 +212,7 @@ class JanitorJsonE2ETestCase:
     stale_tables: int
     expected_status: str
     expected_archived: int
+    expected_item_statuses: tuple[str, ...]
     expected_stderr_fragments: tuple[str, ...]
 
 
@@ -223,7 +224,10 @@ class JanitorInspectionCountE2ETestCase:
     stale_tables: dict[str, int]
     renamed_models: tuple[str, ...]
     expected_listings_per_schema: int
+    expected_multi_schema_listings: int
+    expected_existence_queries_per_schema: int
     expected_view_definition_reads: int
+    expected_batched_view_definition_reads: int
     expected_event_inserts: dict[str, int]
 
 
@@ -234,8 +238,21 @@ class JanitorConcurrencyE2ETestCase:
     description: str
     stale_tables: dict[str, int]
     concurrency: int
-    fail_rename: str | None
     expected_exit_code: int
+    expected_connection_line: str
+
+
+@dataclass(frozen=True)
+class JanitorConcurrentFailureE2ETestCase:
+    """Test case for one failing action among concurrent janitor actions."""
+
+    description: str
+    stale_tables: dict[str, int]
+    concurrency: int
+    fail_rename: str
+    expected_exit_code: int
+    expected_failed_lines: int
+    expected_fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -245,3 +262,5 @@ class JanitorShortenedArchiveE2ETestCase:
     description: str
     long_relation_name: str
     identifier_limit: int
+    expected_rows_in_event_insert: int
+    expected_event_count: int

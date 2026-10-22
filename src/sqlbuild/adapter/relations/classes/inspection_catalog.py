@@ -135,11 +135,7 @@ class InspectionCatalog:
     def prefetch_view_definitions(
         self, *, requests: tuple[tuple[str | None, str, tuple[str, ...]], ...]
     ) -> None:
-        """Read the definitions of these views with one batched read per schema.
-
-        Each request is a database, schema and view names. Adapters without
-        ``read_view_definitions`` keep reading each definition on demand.
-        """
+        """Read each (database, schema, names) request's view definitions in one batched read."""
 
         read_batch: ViewDefinitionBatchReader | None = getattr(
             self.adapter, "read_view_definitions", None

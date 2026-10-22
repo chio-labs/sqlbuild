@@ -34,7 +34,11 @@ pub fn render_janitor_plan(plan: &JanitorPlanText, verbose: bool, style: CliStyl
             )
         })
         .collect();
-    text.push_str(&listing((style, limit), "Skipped schemas", &skipped_schemas));
+    text.push_str(&listing(
+        (style, limit),
+        "Skipped schemas",
+        &skipped_schemas,
+    ));
     if !plan.direct_mode {
         let candidates: Vec<(String, Option<String>)> = plan
             .candidates

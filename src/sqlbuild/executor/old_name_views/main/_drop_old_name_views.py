@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.executor.janitor.models import JanitorOldNameView, JanitorOldNameViewPlanning
 from sqlbuild.executor.janitor.classes.janitor_workers import JanitorWorkers
+from sqlbuild.executor.janitor.models import JanitorOldNameView, JanitorOldNameViewPlanning
 from sqlbuild.executor.janitor.types import JanitorProgress
 from sqlbuild.executor.old_name_views._helpers.janitor import apply_old_name_view_drops
 

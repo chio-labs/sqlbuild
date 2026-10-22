@@ -36,7 +36,11 @@ class _ViewDefinitionAdapter(SnowflakeAdapter):
         if sql.startswith("SELECT TABLE_NAME, VIEW_DEFINITION"):
             return _Rows([row for row in self.stored if f"UPPER('{row[0]}')" in sql.upper()])
         return _Rows(
-            [(definition,) for name, definition in self.stored if f"'{name.upper()}'" in sql.upper()]
+            [
+                (definition,)
+                for name, definition in self.stored
+                if f"'{name.upper()}'" in sql.upper()
+            ]
         )
 
 

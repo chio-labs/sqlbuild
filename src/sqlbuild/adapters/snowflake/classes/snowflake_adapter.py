@@ -101,9 +101,9 @@ from sqlbuild.adapter.contract.types import (
 from sqlbuild.adapter.relations.classes.inspection_catalog import InspectionCatalog
 from sqlbuild.adapter.relations.constants import INSPECTION_IN_LIST_LIMIT
 from sqlbuild.adapter.relations.main.active_inspection_catalog import active_inspection_catalog
+from sqlbuild.adapter.relations.main.cached_view_definition import cached_view_definition
 from sqlbuild.adapter.relations.main.relation_age_timestamp import relation_age_timestamp_utc
 from sqlbuild.adapter.relations.main.render_inspection_sql import render_inspection_sql
-from sqlbuild.adapter.relations.main.cached_view_definition import cached_view_definition
 from sqlbuild.adapter.relations.main.run_bounded_inspections import run_bounded_inspections
 from sqlbuild.adapter.relations.main.run_recorded_inspection_query import (
     run_recorded_inspection_query,
@@ -3042,10 +3042,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def read_view_definitions(
         self, *, connection: Any, database: str | None, schema: str, names: tuple[str, ...]
     ) -> dict[str, str]:
-        """Read the stored definitions of several views in one schema with one query.
-
-        Names match case-insensitively, as ``read_view_definition`` matches one name.
-        """
+        """Read several views' definitions in one schema, matching names case-insensitively."""
 
         if not names:
             return {}
@@ -3054,9 +3051,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             if database is None
             else (f"{database}.INFORMATION_SCHEMA.VIEWS")
         )
-        literals: str = ", ".join(
-            "UPPER('" + name.replace("'", "''") + "')" for name in names
-        )
+        literals: str = ", ".join("UPPER('" + name.replace("'", "''") + "')" for name in names)
         rows: list[tuple[Any, ...]] = self.execute(
             connection=connection,
             sql=(

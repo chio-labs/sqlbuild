@@ -228,7 +228,8 @@ pub(crate) fn build_janitor_execution_plan<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = invocation.py();
     let started: Instant = Instant::now();
-    let status: Bound<'py, PyAny> = status_reporter(&output_stream(invocation)?, use_color(invocation)?)?;
+    let status: Bound<'py, PyAny> =
+        status_reporter(&output_stream(invocation)?, use_color(invocation)?)?;
     status.call_method1("start", ("Inspecting warehouse state...",))?;
     let janitor: Bound<'py, PyAny> = native_field(invocation, "discovered_inputs")?
         .getattr("project_config")?
@@ -243,36 +244,38 @@ pub(crate) fn build_janitor_execution_plan<'py>(
                     ("connection", connection.clone()),
                 ],
             )?;
-            let plan: Bound<'py, PyAny> = within(&catalog, |_| build_plan(
-                (
-                    &compiled.project,
-                    &Warehouse {
-                        adapter: compiled.adapter.clone(),
-                        connection: connection.clone(),
+            let plan: Bound<'py, PyAny> = within(&catalog, |_| {
+                build_plan(
+                    (
+                        &compiled.project,
+                        &Warehouse {
+                            adapter: compiled.adapter.clone(),
+                            connection: connection.clone(),
+                        },
+                    ),
+                    &JanitorSettings {
+                        retention_days: native_field(settings, "retention_days")?.extract()?,
+                        delete_tracked_only: native_field(&janitor, "delete_tracked_only")?
+                            .is_truthy()?,
+                        exclude_patterns: native_field(&janitor, "exclude_patterns")?.extract()?,
+                        direct_mode: true,
+                        state_history_versions: native_field(
+                            settings,
+                            "direct_state_history_versions",
+                        )?
+                        .extract()?,
+                        archive_retention_days: native_field(settings, "archive_retention_days")?
+                            .extract()?,
+                        early_old_name_view_drops: native_field(settings, "drop_old_name_views")?
+                            .extract()?,
                     },
-                ),
-                &JanitorSettings {
-                    retention_days: native_field(settings, "retention_days")?.extract()?,
-                    delete_tracked_only: native_field(&janitor, "delete_tracked_only")?
-                        .is_truthy()?,
-                    exclude_patterns: native_field(&janitor, "exclude_patterns")?.extract()?,
-                    direct_mode: true,
-                    state_history_versions: native_field(
-                        settings,
-                        "direct_state_history_versions",
-                    )?
-                    .extract()?,
-                    archive_retention_days: native_field(settings, "archive_retention_days")?
-                        .extract()?,
-                    early_old_name_view_drops: native_field(settings, "drop_old_name_views")?
-                        .extract()?,
-                },
-                &RelationScope {
-                    scan_keys: Vec::new(),
-                    protected_keys: Vec::new(),
-                    reasons: Vec::new(),
-                },
-            ))?;
+                    &RelationScope {
+                        scan_keys: Vec::new(),
+                        protected_keys: Vec::new(),
+                        reasons: Vec::new(),
+                    },
+                )
+            })?;
             let metadata: Bound<'py, PyDict> = PyDict::new(py);
             metadata.set_item("item_count", candidate_count(&plan)?)?;
             let options: Bound<'py, PyDict> = PyDict::new(py);

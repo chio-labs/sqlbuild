@@ -1,4 +1,4 @@
-"""Append-only janitor audit events, written in chunks per schema event table."""
+"""Append-only janitor audit events, written in multi-row chunks per schema event table."""
 
 from __future__ import annotations
 
@@ -18,13 +18,7 @@ type _SchemaKey = tuple[str | None, str]
 
 
 class JanitorEventWriter:
-    """Write each event at most once, reading the run's existing event IDs once per schema.
-
-    Events wait in memory until `flush`, which appends each schema's pending events with one
-    multi-row INSERT per chunk. `write_now` appends one event at once. Event IDs are
-    deterministic per run, so an ID already present is never inserted again, including when the
-    same invocation is retried.
-    """
+    """Write each deterministic event ID at most once, even across retries of one invocation."""
 
     def __init__(
         self,
@@ -37,7 +31,6 @@ class JanitorEventWriter:
         self._render_qualified_name: Callable[..., str | None] = render_qualified_name
         self._run_id: str = run_id
         self._written: set[str] = set()
-        self._pending: dict[_SchemaKey, list[JanitorEventRecord]] = {}
         self._lock: threading.Lock = threading.Lock()
 
     def read_existing(self, *, connection: Any, schemas: tuple[_SchemaKey, ...]) -> None:
@@ -55,66 +48,37 @@ class JanitorEventWriter:
                     render_qualified_name=self._render_qualified_name,
                 ),
             )
-            self._written.update(str(row[0]) for row in cursor.fetchall())
-
-    def add(self, record: JanitorEventRecord) -> None:
-        """Hold one event until the next `flush`, unless it is already written or held."""
-
-        with self._lock:
-            if record.event_id in self._written or any(
-                held.event_id == record.event_id
-                for held in self._pending.get(_schema_key(record), ())
-            ):
-                return
-            self._pending.setdefault(_schema_key(record), []).append(record)
-
-    def write_now(self, *, connection: Any, record: JanitorEventRecord) -> None:
-        """Append one event immediately on `connection`, unless it is already written."""
-
-        with self._lock:
-            if record.event_id in self._written:
-                return
-            self._written.add(record.event_id)
-        try:
-            self._insert(connection=connection, records=(record,))
-        except BaseException:
+            ids: set[str] = {str(row[0]) for row in cursor.fetchall()}
             with self._lock:
-                self._written.discard(record.event_id)
-            raise
+                self._written |= ids
 
-    def flush(self, *, connection: Any) -> None:
-        """Append every held event, one INSERT per schema and chunk of rows."""
+    def write(self, *, connection: Any, records: tuple[JanitorEventRecord, ...]) -> None:
+        """Append the unwritten events, one INSERT per schema and chunk of rows."""
 
         with self._lock:
-            pending: dict[_SchemaKey, list[JanitorEventRecord]] = self._pending
-            self._pending = {}
-        try:
-            key: _SchemaKey
-            records: list[JanitorEventRecord]
-            for key, records in list(pending.items()):
-                while records:
-                    chunk: tuple[JanitorEventRecord, ...] = tuple(
-                        records[:JANITOR_EVENT_CHUNK_SIZE]
-                    )
-                    self._insert(connection=connection, records=chunk)
-                    del records[: len(chunk)]
-                    with self._lock:
-                        self._written.update(record.event_id for record in chunk)
-                del pending[key]
-        finally:
-            if pending:
+            unwritten: dict[str, JanitorEventRecord] = {
+                record.event_id: record
+                for record in records
+                if record.event_id not in self._written
+            }
+        by_schema: dict[_SchemaKey, list[JanitorEventRecord]] = {}
+        record: JanitorEventRecord
+        for record in unwritten.values():
+            by_schema.setdefault((record.relation_database, record.relation_schema), []).append(
+                record
+            )
+        schema_records: list[JanitorEventRecord]
+        for schema_records in by_schema.values():
+            start: int
+            for start in range(0, len(schema_records), JANITOR_EVENT_CHUNK_SIZE):
+                chunk: tuple[JanitorEventRecord, ...] = tuple(
+                    schema_records[start : start + JANITOR_EVENT_CHUNK_SIZE]
+                )
+                _ = self._execute(
+                    connection=connection,
+                    sql=build_insert_many_sql(
+                        records=chunk, render_qualified_name=self._render_qualified_name
+                    ),
+                )
                 with self._lock:
-                    for key, records in pending.items():
-                        self._pending.setdefault(key, [])[:0] = records
-
-    def _insert(self, *, connection: Any, records: tuple[JanitorEventRecord, ...]) -> None:
-        _ = self._execute(
-            connection=connection,
-            sql=build_insert_many_sql(
-                records=records, render_qualified_name=self._render_qualified_name
-            ),
-        )
-
-
-def _schema_key(record: JanitorEventRecord) -> _SchemaKey:
-    return (record.relation_database, record.relation_schema)
+                    self._written |= {written.event_id for written in chunk}

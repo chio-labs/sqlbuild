@@ -8,6 +8,7 @@ from datetime import datetime
 from sqlbuild._native import OldNameViewDropReason, OldNameViewHistory
 from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
 from sqlbuild.executor.janitor.types import JanitorAction
+from sqlbuild.executor.janitor_events.models import JanitorEventRecord
 
 
 @dataclass(frozen=True, eq=False)
@@ -245,3 +246,19 @@ class JanitorActionOutcome[ResultT]:
     result: ResultT | None = None
     error: BaseException | None = None
     duration_seconds: float = 0.0
+
+
+@dataclass(frozen=True)
+class JanitorChunkOutcome[ResultT]:
+    """Each item's outcome in one chunk (none if it never started), and any interrupt."""
+
+    outcomes: tuple[JanitorActionOutcome[ResultT] | None, ...]
+    interruption: BaseException | None = None
+
+
+@dataclass(frozen=True)
+class JanitorActionDone:
+    """A finished action: the action taken when it differs from the described one, and its event."""
+
+    taken: JanitorAction | None = None
+    event: JanitorEventRecord | None = None

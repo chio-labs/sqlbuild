@@ -28,7 +28,10 @@ pub fn render_janitor_completion(
     .collect::<Vec<String>>()
     .join(", ");
     if let Some(seconds) = elapsed_seconds {
-        summary.push_str(&format!("  {}", style.muted(&format!("({})", duration(seconds)))));
+        summary.push_str(&format!(
+            "  {}",
+            style.muted(&format!("({})", duration(seconds)))
+        ));
     }
     let (state, label) = if failed {
         (CompletionState::Fail, "Janitor failed")

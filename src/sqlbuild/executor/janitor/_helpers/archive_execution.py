@@ -18,6 +18,7 @@ from sqlbuild.executor.janitor.classes.janitor_workers import JanitorWorkers
 from sqlbuild.executor.janitor.constants import ARCHIVE_NAME_SEPARATOR
 from sqlbuild.executor.janitor.main._run_janitor_phase import run_janitor_phase
 from sqlbuild.executor.janitor.models import (
+    JanitorActionDone,
     JanitorArchiveCandidate,
     JanitorArchivedRelation,
     JanitorPlan,
@@ -56,12 +57,7 @@ def apply_direct_archives(
     run_id: str,
     progress: JanitorProgress | None = None,
 ) -> tuple[tuple[JanitorArchiveCandidate, ...], tuple[JanitorArchivedRelation, ...]]:
-    """Rename stale relations to archives, then drop expired archives by name.
-
-    Audit events are written after each chunk of actions in a schema, and after a failure for
-    every action that succeeded. An archive whose name was shortened gets its event right after
-    its rename, because the event is the only record of its original name.
-    """
+    """Rename stale relations to archives, then drop expired archives, auditing each chunk."""
 
     schemas: tuple[tuple[str | None, str], ...] = _create_event_tables(
         adapter=adapter, connection=workers.connection, plan=plan
@@ -74,15 +70,12 @@ def apply_direct_archives(
     if schemas:
         events.read_existing(connection=workers.connection, schemas=schemas)
 
-    def flush_events() -> None:
-        events.flush(connection=workers.connection)
-
-    def archive_relation(candidate: JanitorArchiveCandidate, connection: Any) -> None:
+    def archive_relation(*, item: JanitorArchiveCandidate, connection: Any) -> JanitorActionDone:
         with OperationLifecycle(operation_kind="janitor", operation_name="janitor_cleanup_action"):
             _rename_relation(
                 adapter=adapter,
                 connection=connection,
-                candidate=candidate,
+                candidate=item,
                 recorder=recorder,
             )
         record: JanitorEventRecord = _event_record(
@@ -90,19 +83,19 @@ def apply_direct_archives(
             event_type=JanitorEventType.ARCHIVE,
             run_id=run_id,
             archive=JanitorArchivedRelation(
-                key=candidate.archive_key,
-                relation_type=candidate.relation.relation_type,
-                archived_at=candidate.archived_at,
-                expires_at=candidate.expires_at,
-                original_key=candidate.key,
+                key=item.archive_key,
+                relation_type=item.relation.relation_type,
+                archived_at=item.archived_at,
+                expires_at=item.expires_at,
+                original_key=item.key,
             ),
         )
-        if _shortened(candidate):
-            events.write_now(connection=connection, record=record)
-        else:
-            events.add(record)
+        if not _shortened(item):
+            return JanitorActionDone(event=record)
+        events.write(connection=connection, records=(record,))
+        return JanitorActionDone()
 
-    archived: tuple[JanitorArchiveCandidate, ...] = run_janitor_phase(
+    archived: tuple[tuple[JanitorArchiveCandidate, JanitorActionDone], ...] = run_janitor_phase(
         progress=progress,
         phase=JanitorPhase.ARCHIVE,
         items=plan.archive_candidates,
@@ -114,24 +107,24 @@ def apply_direct_archives(
         apply=archive_relation,
         workers=workers,
         chunks=_event_chunks(tuple(candidate.archive_key for candidate in plan.archive_candidates)),
-        after_chunk=flush_events,
+        after_chunk=lambda finished: events.write(
+            connection=workers.connection, records=_chunk_events(finished)
+        ),
     )
 
-    def delete_archive(archive: JanitorArchivedRelation, connection: Any) -> None:
+    def delete_archive(*, item: JanitorArchivedRelation, connection: Any) -> JanitorActionDone:
         with OperationLifecycle(operation_kind="janitor", operation_name="janitor_cleanup_action"):
-            _drop_archive(
-                adapter=adapter, connection=connection, archive=archive, recorder=recorder
-            )
-        events.add(
-            _event_record(
+            _drop_archive(adapter=adapter, connection=connection, archive=item, recorder=recorder)
+        return JanitorActionDone(
+            event=_event_record(
                 adapter=adapter,
                 event_type=JanitorEventType.DELETE,
                 run_id=run_id,
-                archive=archive,
+                archive=item,
             )
         )
 
-    deleted: tuple[JanitorArchivedRelation, ...] = run_janitor_phase(
+    deleted: tuple[tuple[JanitorArchivedRelation, JanitorActionDone], ...] = run_janitor_phase(
         progress=progress,
         phase=JanitorPhase.DELETE_ARCHIVES,
         items=plan.archive_deletion_candidates,
@@ -141,9 +134,18 @@ def apply_direct_archives(
         apply=delete_archive,
         workers=workers,
         chunks=_event_chunks(tuple(archive.key for archive in plan.archive_deletion_candidates)),
-        after_chunk=flush_events,
+        after_chunk=lambda finished: events.write(
+            connection=workers.connection, records=_chunk_events(finished)
+        ),
     )
-    return archived, deleted
+    return (
+        tuple(candidate for candidate, _ in archived),
+        tuple(archive for archive, _ in deleted),
+    )
+
+
+def _chunk_events(finished: tuple[JanitorActionDone, ...]) -> tuple[JanitorEventRecord, ...]:
+    return tuple(done.event for done in finished if done.event is not None)
 
 
 def _shortened(candidate: JanitorArchiveCandidate) -> bool:
@@ -162,11 +164,13 @@ def _event_chunks(keys: tuple[JanitorRelationKey, ...]) -> tuple[tuple[int, ...]
     key: JanitorRelationKey
     for index, key in enumerate(keys):
         by_schema.setdefault((key.database, key.schema), []).append(index)
-    return tuple(
-        tuple(positions[start : start + JANITOR_EVENT_CHUNK_SIZE])
-        for positions in by_schema.values()
-        for start in range(0, len(positions), JANITOR_EVENT_CHUNK_SIZE)
-    )
+    chunks: list[tuple[int, ...]] = []
+    positions: list[int]
+    for positions in by_schema.values():
+        start: int
+        for start in range(0, len(positions), JANITOR_EVENT_CHUNK_SIZE):
+            chunks.append(tuple(positions[start : start + JANITOR_EVENT_CHUNK_SIZE]))
+    return tuple(chunks)
 
 
 def _required_schema(key: JanitorRelationKey) -> str:

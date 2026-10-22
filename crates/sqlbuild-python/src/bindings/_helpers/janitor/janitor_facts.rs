@@ -271,7 +271,10 @@ fn list_target_schema_relations<'py>(
         let requests: Vec<Option<Vec<String>>> = if concrete.is_empty() {
             vec![None]
         } else {
-            concrete.into_iter().map(|schema| Some(vec![schema])).collect()
+            concrete
+                .into_iter()
+                .map(|schema| Some(vec![schema]))
+                .collect()
         };
         for schemas in requests {
             let listed: Bound<'py, PyAny> =

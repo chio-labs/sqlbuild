@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sys
-import time
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -13,6 +12,10 @@ from sqlbuild.executor.janitor._helpers.archive_execution import (
     janitor_run_id,
 )
 from sqlbuild.executor.janitor._helpers.deletion import apply_janitor_deletions
+from sqlbuild.executor.janitor._helpers.workers import (
+    janitor_worker_count,
+    open_janitor_worker_connections,
+)
 from sqlbuild.executor.janitor.classes.janitor_workers import JanitorWorkers
 from sqlbuild.executor.janitor.main._run_janitor_phase import run_janitor_phase
 from sqlbuild.executor.janitor.models import (
@@ -33,9 +36,8 @@ from sqlbuild.executor.janitor.types import (
     JanitorProgress,
 )
 from sqlbuild.executor.old_name_views.main._drop_old_name_views import drop_old_name_views
-from sqlbuild.executor.pipeline._helpers.connections import (
-    close_connections,
-    open_worker_connections,
+from sqlbuild.executor.pipeline.main._close_worker_connection_pool import (
+    close_worker_connection_pool,
 )
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
@@ -50,21 +52,17 @@ def execute_janitor_plan(
     concurrency: int = 1,
     connection_progress: JanitorConnectionProgress | None = None,
 ) -> JanitorExecutionResult:
-    """Delete all candidates in a janitor plan, reporting each phase and action to `progress`.
-
-    Up to `concurrency` independent actions of one phase run at once, each on its own
-    connection, when the adapter allows concurrent DDL; phases still run one after another.
-    """
+    """Apply a janitor plan phase by phase, running each phase's actions on up to `concurrency`."""
 
     with OperationLifecycle(
         operation_kind="janitor",
         operation_name="janitor_execution",
         metadata={"item_count": _janitor_action_count(plan)},
     ):
-        extra: tuple[Any, ...] = _open_worker_connections(
+        extra: tuple[Any, ...] = open_janitor_worker_connections(
             adapter=adapter,
             connection_config=connection_config,
-            count=_worker_count(plan=plan, adapter=adapter, concurrency=concurrency) - 1,
+            count=janitor_worker_count(plan=plan, adapter=adapter, concurrency=concurrency) - 1,
             progress=connection_progress,
         )
         try:
@@ -75,48 +73,9 @@ def execute_janitor_plan(
                 progress=progress,
             )
         finally:
-            close_connections(adapter=adapter, connections=extra, active_error=sys.exc_info()[1])
-
-
-def _worker_count(*, plan: JanitorPlan, adapter: BaseAdapter, concurrency: int) -> int:
-    largest_phase: int = max(
-        len(() if plan.direct_mode else plan.candidates),
-        len(plan.archive_candidates) if plan.direct_mode else 0,
-        len(plan.archive_deletion_candidates) if plan.direct_mode else 0,
-        len(plan.old_name_views.drops) + len(plan.old_name_views.missing),
-        len(plan.query_diff_artifact_candidates),
-        len(plan.direct_state_prune_candidates),
-    )
-    return max(1, min(concurrency, int(adapter.concurrent_ddl_limit), largest_phase))
-
-
-def _open_worker_connections(
-    *,
-    adapter: BaseAdapter,
-    connection_config: dict[str, object] | None,
-    count: int,
-    progress: JanitorConnectionProgress | None,
-) -> tuple[Any, ...]:
-    if count <= 0 or connection_config is None:
-        return ()
-    if progress is not None:
-        progress.on_connection_start(count)
-    started: float = time.monotonic()
-    try:
-        connections: tuple[Any, ...] = open_worker_connections(
-            adapter=adapter, connection_config=connection_config, connection_count=count
-        )
-    except BaseException:
-        if progress is not None:
-            progress.on_connection_error(
-                connection_count=count, elapsed_seconds=time.monotonic() - started
+            _ = close_worker_connection_pool(
+                adapter=adapter, connections=extra, active_error=sys.exc_info()[1]
             )
-        raise
-    if progress is not None:
-        progress.on_connection_complete(
-            connection_count=count, elapsed_seconds=time.monotonic() - started
-        )
-    return connections
 
 
 def _execute_janitor_plan(
@@ -128,16 +87,16 @@ def _execute_janitor_plan(
 ) -> JanitorExecutionResult:
     recorder: StatementRecorder = StatementRecorder()
 
-    def drop_candidate(candidate: JanitorDeleteCandidate, connection: Any) -> None:
+    def drop_candidate(*, item: JanitorDeleteCandidate, connection: Any) -> None:
         with OperationLifecycle(operation_kind="janitor", operation_name="janitor_cleanup_action"):
             adapter.drop(
                 connection=connection,
-                destination=candidate.key.display_name(),
+                destination=item.key.display_name(),
                 if_exists=True,
                 statement_recorder=recorder,
             )
 
-    run_janitor_phase(
+    _ = run_janitor_phase(
         progress=progress,
         phase=JanitorPhase.DELETE_RELATIONS,
         items=() if plan.direct_mode else plan.candidates,
@@ -170,25 +129,25 @@ def _execute_janitor_plan(
         progress=progress,
     )
 
-    def drop_query_artifact(candidate: JanitorQueryDiffArtifactCandidate, connection: Any) -> None:
+    def drop_query_artifact(*, item: JanitorQueryDiffArtifactCandidate, connection: Any) -> None:
         with OperationLifecycle(operation_kind="janitor", operation_name="janitor_cleanup_action"):
             query_artifact_destination: str | None = adapter.render_qualified_name(
-                database=candidate.key.database,
-                schema=candidate.key.schema,
-                name=candidate.key.name,
+                database=item.key.database,
+                schema=item.key.schema,
+                name=item.key.name,
             )
             adapter.drop(
                 connection=connection,
                 destination=(
                     query_artifact_destination
                     if query_artifact_destination is not None
-                    else candidate.key.display_name()
+                    else item.key.display_name()
                 ),
                 if_exists=True,
                 statement_recorder=recorder,
             )
 
-    run_janitor_phase(
+    _ = run_janitor_phase(
         progress=progress,
         phase=JanitorPhase.DROP_QUERY_ARTIFACTS,
         items=plan.query_diff_artifact_candidates,
@@ -200,8 +159,8 @@ def _execute_janitor_plan(
     )
     pruned_direct_state: tuple[JanitorDirectStatePruneCandidate, ...] = apply_janitor_deletions(
         candidates=plan.direct_state_prune_candidates,
-        delete=lambda direct_state_candidate, connection: adapter.execute(
-            connection=connection, sql=direct_state_candidate.prune_sql
+        delete=lambda *, candidate, connection: adapter.execute(
+            connection=connection, sql=candidate.prune_sql
         ),
         workers=workers,
         progress=progress,

@@ -40,5 +40,8 @@ pub(crate) fn duration(seconds: f64) -> String {
 
 /// `name -> destination`, or the name alone.
 pub(crate) fn flow(name: &str, destination: Option<&str>) -> String {
-    destination.map_or_else(|| name.to_owned(), |destination| format!("{name} -> {destination}"))
+    destination.map_or_else(
+        || name.to_owned(),
+        |destination| format!("{name} -> {destination}"),
+    )
 }

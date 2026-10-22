@@ -99,7 +99,10 @@ pub(crate) fn plan_payload(plan: &JanitorPlanText) -> JsonValue {
     object(vec![
         ("direct_mode", JsonValue::Bool(plan.direct_mode)),
         ("retention_days", integer(plan.retention_days)),
-        ("archive_retention_days", integer(plan.archive_retention_days)),
+        (
+            "archive_retention_days",
+            integer(plan.archive_retention_days),
+        ),
         (
             "age_metadata_supported",
             JsonValue::Bool(plan.age_metadata_supported),
@@ -208,8 +211,14 @@ fn counts_payload(counts: &JanitorResultCounts) -> JsonValue {
         ("archived", integer(counts.archived)),
         ("deleted", integer(counts.deleted)),
         ("deleted_archives", integer(counts.deleted_archives)),
-        ("deleted_query_artifacts", integer(counts.deleted_query_artifacts)),
-        ("dropped_old_name_views", integer(counts.dropped_old_name_views)),
+        (
+            "deleted_query_artifacts",
+            integer(counts.deleted_query_artifacts),
+        ),
+        (
+            "dropped_old_name_views",
+            integer(counts.dropped_old_name_views),
+        ),
         ("pruned_direct_state", integer(counts.pruned_direct_state)),
     ])
 }
@@ -227,7 +236,8 @@ fn item_payload(item: &JanitorItemText) -> JsonValue {
         ("error", optional_text(item.error.as_deref())),
         (
             "duration_seconds",
-            item.duration_seconds.map_or(JsonValue::Null, JsonValue::Float),
+            item.duration_seconds
+                .map_or(JsonValue::Null, JsonValue::Float),
         ),
     ])
 }

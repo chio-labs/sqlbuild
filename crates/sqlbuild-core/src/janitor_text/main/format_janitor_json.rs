@@ -25,7 +25,10 @@ pub fn format_janitor_json(
             "status".to_owned(),
             JsonValue::String(outcome.value().to_owned()),
         ),
-        ("plan".to_owned(), plan.map_or(JsonValue::Null, plan_payload)),
+        (
+            "plan".to_owned(),
+            plan.map_or(JsonValue::Null, plan_payload),
+        ),
         (
             "result".to_owned(),
             run.map_or(JsonValue::Null, run_payload),

@@ -56,6 +56,4 @@ JANITOR_EVENT_COLUMN_TYPES: dict[str, StateSqlValueType] = {
     COLUMN_ARCHIVED_AT: StateSqlValueType.TEXT_TIMESTAMP,
 }
 
-# Rows per multi-row INSERT: below every adapter's VALUES-list limit (SQL Server allows 1,000 and
-# SQLite 500), and at most this many completed actions can lack events after a crash.
 JANITOR_EVENT_CHUNK_SIZE: int = 100

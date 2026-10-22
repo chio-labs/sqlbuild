@@ -209,8 +209,16 @@ fn given_finished_actions_when_counting_then_only_successes_count_by_kind() {
         ),
         item(JanitorPhase::DeleteArchives, ("deleted", "e", None), None),
         item(JanitorPhase::DropOldNameViews, ("dropped", "f", None), None),
-        item(JanitorPhase::DropOldNameViews, ("recorded", "g", None), None),
-        item(JanitorPhase::DropQueryArtifacts, ("dropped", "h", None), None),
+        item(
+            JanitorPhase::DropOldNameViews,
+            ("recorded", "g", None),
+            None,
+        ),
+        item(
+            JanitorPhase::DropQueryArtifacts,
+            ("dropped", "h", None),
+            None,
+        ),
         item(JanitorPhase::PruneDirectState, ("pruned", "i", None), None),
     ];
 
@@ -340,7 +348,6 @@ fn given_outcome_when_formatting_json_then_document_carries_plan_result_and_erro
         }
     }
     assert!(
-        format_janitor_json(None, JanitorOutcome::Disabled, None, None)
-            .contains("\"plan\": null")
+        format_janitor_json(None, JanitorOutcome::Disabled, None, None).contains("\"plan\": null")
     );
 }

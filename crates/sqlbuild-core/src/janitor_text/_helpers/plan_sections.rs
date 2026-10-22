@@ -345,7 +345,10 @@ pub(crate) fn skipped_objects(
     }
     let mut groups: Vec<(usize, &str)> = Vec::new();
     for (_, reason) in &plan.skipped_relations {
-        match groups.iter_mut().find(|(_, known)| *known == reason.as_str()) {
+        match groups
+            .iter_mut()
+            .find(|(_, known)| *known == reason.as_str())
+        {
             Some((count, _)) => *count += 1,
             None => groups.push((1, reason.as_str())),
         }

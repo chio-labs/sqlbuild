@@ -23,6 +23,7 @@ from sqlbuild.adapter.type_system.main.normalize_relation_type import normalize_
 from sqlbuild.executor.janitor.classes.janitor_workers import JanitorWorkers
 from sqlbuild.executor.janitor.main._run_janitor_phase import run_janitor_phase
 from sqlbuild.executor.janitor.models import (
+    JanitorActionDone,
     JanitorOldNameView,
     JanitorOldNameViewPlanning,
     JanitorProgressItem,
@@ -43,16 +44,13 @@ def apply_old_name_view_drops(
 ) -> tuple[JanitorOldNameView, ...]:
     """Drop expired or requested views, then record every drop and every vanished view."""
 
-    dropped: set[int] = set()
-
-    def apply(entry: tuple[int, JanitorOldNameView, bool], connection: Any) -> JanitorAction | None:
-        position: int
+    def apply(*, item: tuple[JanitorOldNameView, bool], connection: Any) -> JanitorActionDone:
         view: JanitorOldNameView
         planned_missing: bool
-        position, view, planned_missing = entry
+        view, planned_missing = item
         if planned_missing:
             _record_drop(adapter=adapter, connection=connection, view=view, run_id=run_id)
-            return None
+            return JanitorActionDone()
         if not is_compatibility_view(adapter=adapter, connection=connection, view=view):
             _record_drop(
                 adapter=adapter,
@@ -60,7 +58,7 @@ def apply_old_name_view_drops(
                 view=_with_reason(view=view, reason=OldNameViewDropReason.MISSING),
                 run_id=run_id,
             )
-            return JanitorAction.RECORDED
+            return JanitorActionDone(taken=JanitorAction.RECORDED)
         adapter.drop_view(
             connection=connection,
             destination=resolve_qualified_name_parts(
@@ -73,24 +71,29 @@ def apply_old_name_view_drops(
             statement_recorder=recorder,
         )
         _record_drop(adapter=adapter, connection=connection, view=view, run_id=run_id)
-        dropped.add(position)
-        return None
+        return JanitorActionDone()
 
-    run_janitor_phase(
-        progress=progress,
-        phase=JanitorPhase.DROP_OLD_NAME_VIEWS,
-        items=(
-            *((index, view, False) for index, view in enumerate(plan.drops)),
-            *((len(plan.drops), view, True) for view in plan.missing),
-        ),
-        describe=lambda entry: JanitorProgressItem(
-            action=JanitorAction.RECORDED if entry[2] else JanitorAction.DROPPED,
-            name=entry[1].key.display_name(),
-        ),
-        apply=apply,
-        workers=workers,
+    finished: tuple[tuple[tuple[JanitorOldNameView, bool], JanitorActionDone], ...] = (
+        run_janitor_phase(
+            progress=progress,
+            phase=JanitorPhase.DROP_OLD_NAME_VIEWS,
+            items=(
+                *((view, False) for view in plan.drops),
+                *((view, True) for view in plan.missing),
+            ),
+            describe=lambda entry: JanitorProgressItem(
+                action=JanitorAction.RECORDED if entry[1] else JanitorAction.DROPPED,
+                name=entry[0].key.display_name(),
+            ),
+            apply=apply,
+            workers=workers,
+        )
     )
-    return tuple(view for index, view in enumerate(plan.drops) if index in dropped)
+    return tuple(
+        view
+        for (view, planned_missing), done in finished
+        if not planned_missing and done.taken is None
+    )
 
 
 def _record_drop(

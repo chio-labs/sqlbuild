@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
+import re
 import subprocess
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from itertools import product
 from pathlib import Path
 from textwrap import dedent
 from types import MappingProxyType
@@ -233,7 +236,7 @@ class AgedJanitorDuckDbAdapter(DuckDbAdapter):
         return True
 
     def maximum_identifier_length(self) -> int:
-        return int(_settings().get("identifier_limit", super().maximum_identifier_length()))
+        return int(_settings().get("identifier_limit") or super().maximum_identifier_length())
 
     def list_relations(
         self,
@@ -493,7 +496,7 @@ class ProbeJanitorDuckDbAdapter(DuckDbAdapter):
         return int(_settings().get("concurrent_ddl_limit", 1))
 
     def maximum_identifier_length(self) -> int:
-        return int(_settings().get("identifier_limit", super().maximum_identifier_length()))
+        return int(_settings().get("identifier_limit") or super().maximum_identifier_length())
 
     def _execute(self, *, connection: Any, sql: str) -> Any:
         settings = _settings()
@@ -507,6 +510,16 @@ class ProbeJanitorDuckDbAdapter(DuckDbAdapter):
 """
 
 
+ARCHIVE_ITEM_LINE: re.Pattern[str] = re.compile(
+    r"^\s+(?P<index>\d+)/(?P<total>\d+)  archived  ", re.MULTILINE
+)
+
+
+def _probe_model_sql(*, schema: str, migrate_from: str) -> str:
+    migration: str = {"": ""}.get(migrate_from, f', migrate_from "{migrate_from}"')
+    return f"MODEL (description 'Test model.', schema {schema}{migration});\n\nSELECT 1 AS id\n"
+
+
 def prepare_probe_janitor_project(
     *,
     tmp_path: Path,
@@ -515,18 +528,12 @@ def prepare_probe_janitor_project(
     renamed_models: tuple[str, ...] = (),
     concurrency: int = 1,
 ) -> Path:
-    """Build a DuckDB project with stale tables, an expired archive and old-name views per schema.
+    """Build a DuckDB project with stale tables and an expired archive in each schema."""
 
-    Every schema in `stale_tables` gets one live model, each name in `renamed_models` renamed
-    once (leaving a compatibility view at its old name), `stale_tables[schema]` stale tables
-    and one expired archive. Builds use DuckDB; janitor then runs on the probe adapter, which
-    logs statements once settings enable it.
-    """
-
-    def model(schema: str, migrate_from: str = "") -> str:
-        migration: str = f', migrate_from "{migrate_from}"' if migrate_from else ""
-        return f"MODEL (description 'Test model.', schema {schema}{migration});\n\nSELECT 1 AS id\n"
-
+    models: dict[str, str] = {
+        f"models/{schema}_{name}.sql": _probe_model_sql(schema=schema, migrate_from="")
+        for schema, name in product(stale_tables, ("orders", *renamed_models))
+    }
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
         project_name=project_name,
@@ -547,23 +554,13 @@ def prepare_probe_janitor_project(
                 'materialized = "table"\n'
             ),
             f"adapters/{PROBE_JANITOR_ADAPTER_NAME}.py": PROBE_JANITOR_ADAPTER_SOURCE,
-            **{
-                f"models/{schema}_{name}.sql": model(schema)
-                for schema in stale_tables
-                for name in ("orders", *renamed_models)
-            },
+            **models,
         },
     )
     _build(project_dir)
-    if renamed_models:
-        for schema in stale_tables:
-            for name in renamed_models:
-                (project_dir / "models" / f"{schema}_{name}.sql").unlink()
-                (project_dir / "models" / f"{schema}_{name}_v2.sql").write_text(
-                    model(schema, migrate_from=f"{schema}.{schema}_{name}"), encoding="utf-8"
-                )
-        _build(project_dir)
     db_path: Path = project_dir / "janitor.duckdb"
+    schema: str
+    count: int
     for schema, count in stale_tables.items():
         tables: str = "; ".join(
             f"CREATE TABLE {schema}.old_orders_{index:03d} AS SELECT {index} AS id"
@@ -573,10 +570,23 @@ def prepare_probe_janitor_project(
             db_path=db_path,
             sql=f'{tables}; CREATE TABLE {schema}."{EXPIRED_ARCHIVE_NAME}" AS SELECT 1 AS id',
         )
-    (project_dir / "sqlbuild_local.toml").write_text(
-        f'adapter = "{PROBE_JANITOR_ADAPTER_NAME}"\n', encoding="utf-8"
-    )
     return project_dir
+
+
+def rename_probe_models(
+    *, project_dir: Path, schemas: tuple[str, ...], renamed_models: tuple[str, ...]
+) -> None:
+    """Rename each model with `migrate_from` and rebuild, leaving compatibility views behind."""
+
+    schema: str
+    name: str
+    for schema, name in product(schemas, renamed_models):
+        (project_dir / "models" / f"{schema}_{name}.sql").unlink()
+        (project_dir / "models" / f"{schema}_{name}_v2.sql").write_text(
+            _probe_model_sql(schema=schema, migrate_from=f"{schema}.{schema}_{name}"),
+            encoding="utf-8",
+        )
+    _build(project_dir)
 
 
 def _build(project_dir: Path) -> None:
@@ -593,31 +603,78 @@ def write_probe_settings(
     fail_rename: str | None = None,
     identifier_limit: int | None = None,
 ) -> None:
-    """Enable statement logging and set the probe adapter's concurrency and fault switches."""
+    """Run janitor on the probe adapter with statement logging and these fault switches."""
 
-    import json
-
-    payload: dict[str, object] = {"log": True, "concurrent_ddl_limit": concurrent_ddl_limit}
-    if fail_rename is not None:
-        payload["fail_rename"] = fail_rename
-    if identifier_limit is not None:
-        payload["identifier_limit"] = identifier_limit
+    (project_dir / "sqlbuild_local.toml").write_text(
+        f'adapter = "{PROBE_JANITOR_ADAPTER_NAME}"\n', encoding="utf-8"
+    )
+    (project_dir / PROBE_STATEMENT_LOG_FILENAME).write_text("", encoding="utf-8")
     (project_dir / PROBE_JANITOR_SETTINGS_FILENAME).write_text(
-        json.dumps(payload), encoding="utf-8"
+        json.dumps(
+            {
+                "log": True,
+                "concurrent_ddl_limit": concurrent_ddl_limit,
+                "fail_rename": fail_rename,
+                "identifier_limit": identifier_limit,
+            }
+        ),
+        encoding="utf-8",
     )
 
 
 def read_probe_statements(*, project_dir: Path) -> tuple[str, ...]:
     """Return every statement the probe adapter logged, in order."""
 
-    log: Path = project_dir / PROBE_STATEMENT_LOG_FILENAME
-    if not log.exists():
-        return ()
-    return tuple(log.read_text(encoding="utf-8").splitlines())
+    return tuple(
+        (project_dir / PROBE_STATEMENT_LOG_FILENAME).read_text(encoding="utf-8").splitlines()
+    )
 
 
-def janitor_end_state(*, db_path: Path) -> tuple[tuple[object, ...], ...]:
-    """Every relation with archive timestamps masked, then every audit event without its run."""
+def count_statements(
+    *, statements: tuple[str, ...], fragments: tuple[str, ...], excluded: tuple[str, ...] = ()
+) -> int:
+    """Count statements containing every fragment and none of the excluded fragments."""
+
+    return len(
+        tuple(
+            filter(
+                lambda statement: (
+                    all(fragment in statement for fragment in fragments)
+                    and not any(fragment in statement for fragment in excluded)
+                ),
+                statements,
+            )
+        )
+    )
+
+
+def statement_index(*, statements: tuple[str, ...], prefix: str) -> int:
+    """The position of the first statement starting with `prefix`."""
+
+    return [statement.startswith(prefix) for statement in statements].index(True)
+
+
+def archive_line_positions(output: str) -> tuple[tuple[int, int], ...]:
+    """The `n/N` counter of every archived action line, in printed order."""
+
+    return tuple(
+        (int(match["index"]), int(match["total"])) for match in ARCHIVE_ITEM_LINE.finditer(output)
+    )
+
+
+def assert_in_order(*, output: str, lines: tuple[str, ...]) -> None:
+    """Assert each line appears in `output` after the previous one."""
+
+    position: int = 0
+    line: str
+    for line in lines:
+        found: int = output.find(line, position)
+        assert found >= 0, f"{line!r} missing after position {position} in:\n{output}"
+        position = found + len(line)
+
+
+def janitor_end_state(*, db_path: Path, schemas: tuple[str, ...]) -> tuple[tuple[object, ...], ...]:
+    """Every relation and every audit event in `schemas`, with archive timestamps masked."""
 
     relations: list[tuple[object, ...]] = query_duckdb(
         db_path=db_path,
@@ -628,9 +685,8 @@ def janitor_end_state(*, db_path: Path) -> tuple[tuple[object, ...], ...]:
         ),
     )
     events: list[tuple[object, ...]] = []
-    for schema in sorted({str(row[0]) for row in relations}):
-        if (schema, "_sqlbuild_janitor_events") not in relations:
-            continue
+    schema: str
+    for schema in schemas:
         events.extend(
             query_duckdb(
                 db_path=db_path,

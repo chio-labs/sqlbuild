@@ -288,7 +288,9 @@ pub(crate) fn plan_old_name_views<'py>(
             .find(|(database, listed, _)| *database == key.database && listed == schema)
         {
             Some((_, _, names)) => names.push(key.name.clone()),
-            None => definitions.push((key.database.clone(), schema.clone(), vec![key.name.clone()])),
+            None => {
+                definitions.push((key.database.clone(), schema.clone(), vec![key.name.clone()]))
+            }
         }
     }
     warehouse.prefetch_view_definitions(&definitions)?;

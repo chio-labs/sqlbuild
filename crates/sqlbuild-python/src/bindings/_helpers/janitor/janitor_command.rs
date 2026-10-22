@@ -34,8 +34,8 @@ use crate::bindings::_helpers::janitor::janitor_phases::{
     JanitorCompiled, build_janitor_execution_plan, close_janitor_warehouse,
     compile_janitor_project, connect_janitor_warehouse, execute_janitor_cleanup, output_stream,
 };
-use crate::bindings::_helpers::janitor::janitor_progress::JanitorProgressPrinter;
 use crate::bindings::_helpers::janitor::janitor_plan::{janitor_plan_text, janitor_result_counts};
+use crate::bindings::_helpers::janitor::janitor_progress::JanitorProgressPrinter;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::construct::error_class;
@@ -246,7 +246,12 @@ fn apply(
                     render_janitor_completion(&run.counts, Some(elapsed_seconds), false, style)
                 ),
             )?;
-            write_json((request, Some(plan)), JanitorOutcome::Completed, Some(&run), None)?;
+            write_json(
+                (request, Some(plan)),
+                JanitorOutcome::Completed,
+                Some(&run),
+                None,
+            )?;
             Ok(0)
         }
         Err(error) => {
@@ -297,7 +302,12 @@ fn clean(
             &stream,
             &janitor_preview_complete_text(&as_target, active.as_deref(), style),
         )?;
-        write_json((request, Some(&plan)), JanitorOutcome::Previewed, None, None)?;
+        write_json(
+            (request, Some(&plan)),
+            JanitorOutcome::Previewed,
+            None,
+            None,
+        )?;
         return Ok(blocked);
     }
     if blocked != 0 {
@@ -306,12 +316,22 @@ fn clean(
     }
     if !janitor_plan_has_work(&plan) {
         write(&stream, &janitor_nothing_to_do_text(style))?;
-        write_json((request, Some(&plan)), JanitorOutcome::NothingToDo, None, None)?;
+        write_json(
+            (request, Some(&plan)),
+            JanitorOutcome::NothingToDo,
+            None,
+            None,
+        )?;
         return Ok(0);
     }
     if !native_field(request, "auto_approve")?.extract::<bool>()? && !confirmed(&stream, &plan)? {
         write(&stream, "Janitor cancelled.\n")?;
-        write_json((request, Some(&plan)), JanitorOutcome::Cancelled, None, None)?;
+        write_json(
+            (request, Some(&plan)),
+            JanitorOutcome::Cancelled,
+            None,
+            None,
+        )?;
         return Ok(1);
     }
     apply(
@@ -350,11 +370,7 @@ pub(crate) fn run_janitor_command(py: Python<'_>, request: &Bound<'_, PyAny>) ->
     }
     let compiled: JanitorCompiled<'_> = compile_janitor_project(&invocation)?;
     let connection: Bound<'_, PyAny> = connect_janitor_warehouse(&invocation, &compiled)?;
-    let outcome: PyResult<i32> = clean(
-        request,
-        (&invocation, &settings),
-        (&compiled, &connection),
-    );
+    let outcome: PyResult<i32> = clean(request, (&invocation, &settings), (&compiled, &connection));
     let closed: PyResult<()> = close_janitor_warehouse(&compiled, &connection);
     let code: i32 = outcome?;
     closed?;
