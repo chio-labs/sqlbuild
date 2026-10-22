@@ -68,8 +68,9 @@ uncommitted edits included. A test is selected when:
 A node changed when its definition fingerprint differs. The fingerprint covers the model SQL with
 formatting and comments ignored, the header configuration, columns and contract, attached audits,
 and every macro, enum, constant, function and seed the node uses, resolved through
-[scopes](/docs/concepts/declaration-scopes). Descriptions do not count. A macro counts as changed
-when the Python file that defines it changes. Added nodes count as changed. A model renamed with
+[scopes](/docs/concepts/declaration-scopes). Descriptions and `meta` do not count. A macro counts as
+changed when the Python file that defines it changes, and an enum, constant or audit when its
+declaration file changes other than in formatting and comments. Added nodes count as changed. A model renamed with
 `migrate_from` is compared with its old definition, so a pure rename selects nothing. Deleted
 nodes select nothing and are listed in the summary.
 
@@ -85,10 +86,12 @@ sqb test stg_orders --since origin/main --explain
 ```
 
 Selectors still apply: `--select` and positional selectors intersect with the affected tests, and
-`--exclude` removes tests. `--explain`, or `--inspect`, prints the reasons for each selected test:
+`--exclude` removes tests. `--explain` prints the reasons for each selected test, and `--inspect`
+adds them to the resolved plan as `selected:` lines:
 
 ```text
 Comparing with origin/main (merge base 1a2b3c4d5e)
+Compiling base revision 1a2b3c4d5e...
 Compiled base revision 1a2b3c4d5e (2.31s)
 Changed since origin/main: 1 model, 1 macro changed; deleted: model legacy_orders
 Selected 2 of 9 tests

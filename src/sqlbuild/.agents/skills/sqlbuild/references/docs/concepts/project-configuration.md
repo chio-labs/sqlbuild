@@ -21,6 +21,7 @@ Online: https://sqlbuild.com/docs/concepts/project-configuration/
 - Janitor
 - Migrations
 - Scenario
+- Git
 - dbt
 - Skills
 - Project Python
@@ -881,6 +882,19 @@ Local type overrides for DuckDB replay are configured per adapter dialect:
 ```
 
 See [Scenarios](scenarios.md) for details on local type overrides and capture limits.
+
+## Git
+
+The branch that `--since @base` compares against:
+
+```toml
+[git]
+base_ref = "origin/main"
+```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `base_ref` | unset | Git ref that [`sqb test --since @base`](../cli/test.md#run-only-affected-tests) and `sqb scenario test --since @base` read. Use a ref every checkout has, such as the remote default branch. |
 
 ## dbt
 

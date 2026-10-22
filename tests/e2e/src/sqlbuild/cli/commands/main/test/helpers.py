@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -2150,3 +2153,134 @@ def build_shared_partial_fixture_project_files(
             "SELECT 1\n"
         ),
     }
+
+
+def build_since_project_files() -> dict[str, str]:
+    """Build a DuckDB orders project whose tests and scenarios execute different nodes."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "since_orders"\nadapter = "duckdb"\n\n'
+            '[connection]\ndatabase = "since_orders.duckdb"\n\n'
+            '[defaults]\nmaterialized = "table"\n'
+        ),
+        ".gitignore": "target/\n*.duckdb\n*.duckdb.wal\n",
+        "models/_macros/money.py": (
+            "def cents_to_dollars(expression: str) -> str:\n"
+            '    return f"CAST({expression} AS DOUBLE) / 100"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n    description: Raw orders.\n"
+            "    schema: main\n    table: raw_orders\n"
+            "    columns:\n"
+            "      - name: order_id\n        type: INTEGER\n"
+            "      - name: status\n        type: VARCHAR\n"
+            "      - name: amount_cents\n        type: INTEGER\n"
+        ),
+        "models/stg_orders.sql": (
+            "MODEL (description 'Cleaned orders.');\n\n"
+            'SELECT order_id, status, amount_cents FROM __source("raw_orders")\n'
+        ),
+        "models/order_totals.sql": (
+            "MODEL (description 'Order totals in dollars.');\n\n"
+            'SELECT order_id, @cents_to_dollars("amount_cents") AS amount\n'
+            'FROM __ref("stg_orders")\n'
+        ),
+        "models/open_orders.sql": (
+            "MODEL (description 'Open orders.');\n\n"
+            "SELECT order_id FROM __ref(\"stg_orders\") WHERE status = 'open'\n"
+        ),
+        "tests/unit/test_stg_orders.sql": (
+            "TEST ();\n\nWITH\n"
+            "__source__raw_orders AS (\n"
+            "  SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents\n"
+            "),\n"
+            "__expected__stg_orders AS (SELECT 1 AS order_id, 'open' AS status)\nSELECT 1\n"
+        ),
+        "tests/unit/test_order_totals.sql": (
+            "TEST ();\n\nWITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents),\n"
+            "__expected__order_totals AS (SELECT 1 AS order_id, 2.5 AS amount)\nSELECT 1\n"
+        ),
+        "tests/unit/test_open_orders.sql": (
+            "TEST ();\n\nWITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents),\n"
+            "__expected__open_orders AS (SELECT 1 AS order_id)\nSELECT 1\n"
+        ),
+        "tests/scenarios/order_totals_end_to_end.sql": (
+            "SCENARIO (description 'Order totals from raw orders');\n\nWITH\n"
+            "__source__raw_orders AS (\n"
+            "  SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents\n"
+            "),\n"
+            "__expected__order_totals AS (SELECT 1 AS order_id, 2.5 AS amount)\nSELECT 1\n"
+        ),
+        "tests/scenarios/open_orders_from_fixture.sql": (
+            "SCENARIO (description 'Open orders from a staged fixture');\n\nWITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents),\n"
+            "__expected__open_orders AS (SELECT 1 AS order_id)\nSELECT 1\n"
+        ),
+    }
+
+
+_GIT_IDENTITY: dict[str, str] = {
+    "GIT_AUTHOR_NAME": "Example",
+    "GIT_AUTHOR_EMAIL": "dev@example.com",
+    "GIT_COMMITTER_NAME": "Example",
+    "GIT_COMMITTER_EMAIL": "dev@example.com",
+}
+
+
+def run_git(*, repository: Path, arguments: tuple[str, ...]) -> str:
+    """Run git in `repository` with a fixed identity and return its stdout."""
+
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        ("git", "-c", "commit.gpgsign=false", *arguments),
+        cwd=repository,
+        env={**os.environ, **_GIT_IDENTITY},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return result.stdout.strip()
+
+
+def commit_project_on_main(*, repository: Path) -> None:
+    """Commit everything on `main`, then continue on a `feature` branch."""
+
+    run_git(repository=repository, arguments=("init", "--quiet", "--initial-branch", "main"))
+    run_git(repository=repository, arguments=("add", "--all"))
+    run_git(repository=repository, arguments=("commit", "--quiet", "-m", "orders"))
+    run_git(repository=repository, arguments=("checkout", "--quiet", "-b", "feature"))
+
+
+def write_project_files(*, project_dir: Path, files: Mapping[str, str]) -> None:
+    """Write each file below `project_dir`, creating parent directories."""
+
+    relative_path: str
+    contents: str
+    for relative_path, contents in files.items():
+        path: Path = project_dir / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents, encoding="utf-8")
+
+
+def delete_project_files(*, project_dir: Path, relative_paths: tuple[str, ...]) -> None:
+    """Delete each file below `project_dir`."""
+
+    relative_path: str
+    for relative_path in relative_paths:
+        (project_dir / relative_path).unlink()
+
+
+def prepare_since_repository(*, tmp_path: Path, extra_files: Mapping[str, str]) -> Path:
+    """Write the since project with `extra_files`, commit it on `main` and branch to `feature`."""
+
+    project: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="since_orders",
+        repo_files={**build_since_project_files(), **extra_files},
+    )
+    commit_project_on_main(repository=project)
+    return project

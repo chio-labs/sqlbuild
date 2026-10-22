@@ -6,6 +6,13 @@
 
 Online: https://sqlbuild.com/docs/cli/test/
 
+## Contents
+
+- Usage
+- Flags
+- Run only affected tests
+- Examples
+
 Runs SQL unit tests, independently reported parameterized cases, and multi-model tests without
 building models. Useful for validating test logic independently.
 
@@ -27,6 +34,8 @@ Positional `SELECTOR` arguments work like `--select`, and both forms can be comb
 | `--exclude` | Exclude tests by name, or the tests targeting specific models |
 | `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `query` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
 | `--test-timeout <duration>` | Time limit for each test in this run, such as `30s` or `2m`, or `disabled`; overrides `TEST(timeout ...)`, the target and `[settings] test_timeout` |
+| `--since <ref>` | Run only the tests affected by changes since the merge base of `<ref>` and `HEAD` (see [Run only affected tests](#run-only-affected-tests)); `@base` reads `[git] base_ref` |
+| `--explain` | With `--since`, print why each selected test was selected |
 
 Test names are globally unique, so a bare test name selects exactly that test. `test:<name>` is the
 explicit form and accepts the same glob patterns as names, such as `test:orders_*`. A bare pattern
@@ -50,6 +59,64 @@ counted under `TIMEOUT=` and excluded from `FAIL=` in the summary line
 (`PASS=4  FAIL=0  TIMEOUT=1  TOTAL=5`), and the run continues with the remaining tests. In `--json`
 output, `summary.fail_count` still includes timed-out tests, and `summary.timeout_count` reports how
 many of them timed out. A timeout still fails the run: `sqb test` exits non-zero.
+
+## Run only affected tests
+
+`--since <ref>` runs only the tests a change can affect, which keeps CI on branch pushes from
+running the whole suite. SQLBuild compiles the project as it was at the merge base of `<ref>` and
+`HEAD`, straight from git objects without a checkout, and compares it with the working tree,
+uncommitted edits included. A test is selected when:
+
+- its own file changed or is new, or
+- any node it actually executes changed: the models in its chain, the seeds and functions they
+  read, and the macros, enums and constants they use. The resolution is the one `--inspect`
+  shows, so a test that mocks a changed model, seed or macro is not selected, while a downstream
+  test that really runs it is.
+
+A node changed when its definition fingerprint differs. The fingerprint covers the model SQL with
+formatting and comments ignored, the header configuration, columns and contract, attached audits,
+and every macro, enum, constant, function and seed the node uses, resolved through
+[scopes](../concepts/declaration-scopes.md). Descriptions and `meta` do not count. A macro counts as
+changed when the Python file that defines it changes, and an enum, constant or audit when its
+declaration file changes other than in formatting and comments. Added nodes count as changed. A model renamed with
+`migrate_from` is compared with its old definition, so a pure rename selects nothing. Deleted
+nodes select nothing and are listed in the summary.
+
+```bash
+# Tests affected by this branch
+sqb test --since origin/main
+
+# Read the ref from [git] base_ref in sqlbuild_project.toml
+sqb test --since @base
+
+# Only affected tests that target stg_orders, and say why each runs
+sqb test stg_orders --since origin/main --explain
+```
+
+Selectors still apply: `--select` and positional selectors intersect with the affected tests, and
+`--exclude` removes tests. `--explain` prints the reasons for each selected test, and `--inspect`
+adds them to the resolved plan as `selected:` lines:
+
+```text
+Comparing with origin/main (merge base 1a2b3c4d5e)
+Compiling base revision 1a2b3c4d5e...
+Compiled base revision 1a2b3c4d5e (2.31s)
+Changed since origin/main: 1 model, 1 macro changed; deleted: model legacy_orders
+Selected 2 of 9 tests
+  orders_rollup
+    executes stg_orders (model SQL changed)
+  order_timestamps
+    executes macro to_utc (changed)
+```
+
+The base compile is cached per merge-base commit under `target/since/`, so `sqb test --since` and
+`sqb scenario test --since` in the same CI job compile the base once and compare against the same
+changed set. When no test is affected, the command says so and exits successfully.
+
+`<ref>` is any git ref or commit, such as the merge request's target branch from a CI variable.
+`--since` always takes a value. A ref that does not exist, or a shallow clone that does not reach
+the merge base, fails with an error that says what to fetch, such as `git fetch --unshallow` or a
+larger clone depth; it never silently selects nothing.
 
 ## Examples
 
