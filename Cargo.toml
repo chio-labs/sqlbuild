@@ -55,7 +55,7 @@ python-boundary = "sqlbuild-python"
 polyglot-floor = "sqlbuild-analysis"
 
 [workspace.package]
-version = "0.167.2"
+version = "0.168.0"
 edition = "2024"
 license = "Apache-2.0"
 publish = false
