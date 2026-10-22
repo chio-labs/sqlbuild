@@ -27,7 +27,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
     write_orders_project,
 )
 
-_CENTS: str = "models/staging/_sqlbuild/_macros/cents.py"
+_CENTS: str = "models/staging/_sqlbuild/_macros/python/cents.py"
 _COMPILE_STARTS: tuple[str, ...] = (
     "Compiling project...",
     "Verifying the edited project compiles...",
@@ -41,7 +41,7 @@ _BOTH_USERS: tuple[str, ...] = (
 _EXPECTED_MOVED: dict[str, str] = {
     "models/staging/stg_order_cents.sql": "models/finance/stg_order_cents.sql",
     "models/staging/stg_order_refunds.sql": "models/finance/stg_order_refunds.sql",
-    _CENTS: "models/finance/_sqlbuild/_macros/cents.py",
+    _CENTS: "models/finance/_sqlbuild/_macros/python/cents.py",
 }
 
 
@@ -105,7 +105,9 @@ def test_given_moves_invalid_one_at_a_time_when_moved_together_then_one_verifica
         SingleMoveOfBatchE2ETestCase(
             description="moving one user alone needs a group in the top-level role",
             move=("stg_order_cents", "models/finance/"),
-            expected_reason="macro:to_cents must move to macros/, which keeps its files in group",
+            expected_reason=(
+                "macro:to_cents must move to macros/python/, which keeps its files in group"
+            ),
         ),
     ],
     ids=lambda case: case.description,
@@ -178,9 +180,9 @@ def test_given_one_move_of_the_batch_alone_when_moving_then_it_is_refused(
                 "models/finance/",
             ),
             expected_reason=(
-                "models/marts/_sqlbuild/_macros/helpers.py and "
-                "models/staging/_sqlbuild/_macros/helpers.py would both move to "
-                "models/finance/_sqlbuild/_macros/helpers.py; rename one of them first"
+                "models/marts/_sqlbuild/_macros/python/helpers.py and "
+                "models/staging/_sqlbuild/_macros/python/helpers.py would both move to "
+                "models/finance/_sqlbuild/_macros/python/helpers.py; rename one of them first"
             ),
         ),
     ],
@@ -210,7 +212,7 @@ def test_given_conflicting_moves_when_moved_together_then_batch_is_refused_and_n
                 "Move 2 models",
                 "├── stg_order_cents  ->  models/finance/stg_order_cents.sql",
                 "└── stg_order_refunds  ->  models/finance/stg_order_refunds.sql",
-                f"├── models/finance/_sqlbuild/_macros/cents.py  (moved from {_CENTS})",
+                f"├── models/finance/_sqlbuild/_macros/python/cents.py  (moved from {_CENTS})",
                 "Dry run: compiles, 3 files would change; nothing written",
             ),
         ),

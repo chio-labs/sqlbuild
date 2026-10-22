@@ -71,20 +71,22 @@ _PRIORITY_ENUM: dict[str, str] = {
             model="stg_order_cents",
             extra_files=grouped_role_files(
                 cents_path=_GROUPED_CENTS,
-                labels_path="models/staging/_sqlbuild/macros/text/labels.py",
+                labels_path="models/staging/_sqlbuild/macros/python/text/labels.py",
             ),
             destination="models/staging/eu/",
-            expected_moved={_GROUPED_CENTS: "models/staging/_sqlbuild/macros/money/cents.py"},
+            expected_moved={
+                _GROUPED_CENTS: "models/staging/_sqlbuild/macros/python/money/cents.py"
+            },
         ),
         DeclarationMoveE2ETestCase(
             description="a grouped macro drops its group in a direct destination role",
             model="stg_order_cents",
             extra_files=grouped_role_files(
                 cents_path=_GROUPED_CENTS,
-                labels_path="models/staging/_sqlbuild/macros/labels.py",
+                labels_path="models/staging/_sqlbuild/macros/python/labels.py",
             ),
             destination="models/staging/eu/",
-            expected_moved={_GROUPED_CENTS: "models/staging/_sqlbuild/macros/cents.py"},
+            expected_moved={_GROUPED_CENTS: "models/staging/_sqlbuild/macros/python/cents.py"},
         ),
     ],
     ids=lambda case: case.description,
@@ -119,11 +121,12 @@ def test_given_scoped_declarations_when_moving_model_then_they_follow_placement_
             description="a direct macro cannot join a grouped destination role",
             model="stg_order_cents",
             extra_files=grouped_role_files(
-                cents_path=_CENTS, labels_path="models/staging/_sqlbuild/macros/text/labels.py"
+                cents_path=_CENTS,
+                labels_path="models/staging/_sqlbuild/macros/python/text/labels.py",
             ),
             destination="models/staging/eu/",
             expected_message=(
-                "macro:to_cents must move to models/staging/_sqlbuild/macros/, which keeps its "
+                "macro:to_cents must move to models/staging/_sqlbuild/macros/python/, which keeps its "
                 f"files in group folders, but {_CENTS} is not in a group; move it into a group "
                 "folder of its current role first"
             ),

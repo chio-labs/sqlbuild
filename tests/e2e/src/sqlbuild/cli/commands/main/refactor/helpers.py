@@ -130,11 +130,13 @@ def grouped_role_files(*, cents_path: str, labels_path: str) -> dict[str, str]:
 
     return {
         "sqlbuild_project.toml": project_toml() + _LAYOUT_RULES,
-        cents_path: CENTS_MACRO["models/staging/_sqlbuild/_macros/cents.py"],
+        cents_path: CENTS_MACRO["models/staging/_sqlbuild/_macros/python/cents.py"],
         "models/staging/stg_order_cents.sql": CENTS_MACRO["models/staging/stg_order_cents.sql"],
         "models/staging/stg_order_refunds.sql": ORDER_REFUNDS[
             "models/staging/stg_order_refunds.sql"
-        ].replace("AS refund_cents\n", "AS refund_cents,\n  @upper_label(\"'refund'\") AS label\n"),
+        ].replace(
+            "AS refund_cents\n", "AS refund_cents,\n  @py.upper_label(\"'refund'\") AS label\n"
+        ),
         labels_path: _LABEL_MACRO,
         "models/staging/eu/stg_order_labels.sql": _label_model("stg_order_labels"),
     }
@@ -151,7 +153,7 @@ def shared_cents_with_grouped_global_role() -> dict[str, str]:
         "sqlbuild_project.toml": project_toml() + _LAYOUT_RULES,
         **CENTS_MACRO,
         **ORDER_REFUNDS,
-        "macros/text/labels.py": _LABEL_MACRO,
+        "macros/python/text/labels.py": _LABEL_MACRO,
         "models/staging/stg_order_labels.sql": _label_model("stg_order_labels"),
         "models/marts/order_labels.sql": _label_model("order_labels"),
     }
@@ -161,11 +163,11 @@ def same_named_local_macros() -> dict[str, str]:
     """Return two models in different folders, each using its own local ``helpers.py`` macro."""
 
     return {
-        "models/staging/_sqlbuild/_macros/helpers.py": CENTS_MACRO[
-            "models/staging/_sqlbuild/_macros/cents.py"
+        "models/staging/_sqlbuild/_macros/python/helpers.py": CENTS_MACRO[
+            "models/staging/_sqlbuild/_macros/python/cents.py"
         ],
         "models/staging/stg_order_cents.sql": CENTS_MACRO["models/staging/stg_order_cents.sql"],
-        "models/marts/_sqlbuild/_macros/helpers.py": _LABEL_MACRO,
+        "models/marts/_sqlbuild/_macros/python/helpers.py": _LABEL_MACRO,
         "models/marts/order_labels.sql": _label_model("order_labels"),
     }
 
@@ -173,7 +175,7 @@ def same_named_local_macros() -> dict[str, str]:
 def _label_model(name: str) -> str:
     return (
         f"MODEL (description 'Test model {name}.',\n  materialized view,\n);\n\n"
-        'SELECT\n  order_id,\n  @upper_label("\'order\'") AS label\nFROM __ref("stg_orders")\n'
+        'SELECT\n  order_id,\n  @py.upper_label("\'order\'") AS label\nFROM __ref("stg_orders")\n'
     )
 
 

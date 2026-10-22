@@ -128,30 +128,30 @@ fn shared_cents(cents_path: &str, labels_path: Option<&str>) -> PlacementIndex {
 
 /// A grouped `cents` and an empty descendant-public role.
 pub(super) fn grouped_cents_empty_role() -> PlacementIndex {
-    shared_cents("models/sales/_sqlbuild/_macros/money/cents.py", None)
+    shared_cents("models/sales/_sqlbuild/_macros/python/money/cents.py", None)
 }
 
 /// A grouped `cents` and a descendant-public role keeping its files in groups.
 pub(super) fn grouped_cents_grouped_role() -> PlacementIndex {
     shared_cents(
-        "models/sales/_sqlbuild/_macros/money/cents.py",
-        Some("models/sales/_sqlbuild/macros/text/labels.py"),
+        "models/sales/_sqlbuild/_macros/python/money/cents.py",
+        Some("models/sales/_sqlbuild/macros/python/text/labels.py"),
     )
 }
 
 /// A direct `cents` and a descendant-public role keeping its files in groups.
 pub(super) fn direct_cents_grouped_role() -> PlacementIndex {
     shared_cents(
-        "models/sales/_sqlbuild/_macros/cents.py",
-        Some("models/sales/_sqlbuild/macros/text/labels.py"),
+        "models/sales/_sqlbuild/_macros/python/cents.py",
+        Some("models/sales/_sqlbuild/macros/python/text/labels.py"),
     )
 }
 
 /// A grouped `cents` and a descendant-public role keeping its files directly.
 pub(super) fn grouped_cents_direct_role() -> PlacementIndex {
     shared_cents(
-        "models/sales/_sqlbuild/_macros/money/cents.py",
-        Some("models/sales/_sqlbuild/macros/labels.py"),
+        "models/sales/_sqlbuild/_macros/python/money/cents.py",
+        Some("models/sales/_sqlbuild/macros/python/labels.py"),
     )
 }
 
