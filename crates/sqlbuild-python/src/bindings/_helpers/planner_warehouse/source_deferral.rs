@@ -5,6 +5,7 @@ use sqlbuild_host::entries::models::UserCodeHost;
 use crate::bindings::_helpers::authored_values::project_vars::render_project_var_text;
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::model_config::typed_config::{config_value, model_values};
 use crate::bindings::_helpers::native_host::host;
@@ -27,7 +28,7 @@ use std::collections::BTreeSet;
 
 fn managed_names(project: &Bound<'_, PyAny>) -> PyResult<BTreeSet<String>> {
     let mut names: BTreeSet<_> = BTreeSet::new();
-    for source in native_field(project, "sources")?.try_iter()? {
+    for source in project_reads::sources(project)?.try_iter()? {
         let entry = native_field(&source?, "source_entry")?;
         if !native_field(&entry, "loader")?.is_none() {
             names.insert(native_field(&entry, "name")?.extract()?);
@@ -87,7 +88,7 @@ fn selected_managed_refs(
     managed: &BTreeSet<String>,
 ) -> PyResult<BTreeSet<String>> {
     let mut names: BTreeSet<_> = BTreeSet::new();
-    for model in native_field(project, "models")?.try_iter()? {
+    for model in project_reads::models(project)?.try_iter()? {
         let model = model?;
         if !selected.contains(model_reads::model_key(&model)?)? {
             continue;
@@ -95,7 +96,7 @@ fn selected_managed_refs(
         names.extend(sql_source_reads(&model_reads::query_sql(&model)?, managed)?);
         names.extend(hook_source_reads(&model, managed)?);
     }
-    for function in native_field(project, "functions")?.try_iter()? {
+    for function in project_reads::functions(project)?.try_iter()? {
         let function = function?;
         if selected.contains(native_field(&function, "key")?)? {
             names.extend(sql_source_reads(
@@ -104,7 +105,7 @@ fn selected_managed_refs(
             )?);
         }
     }
-    for audit in native_field(project, "audits")?.try_iter()? {
+    for audit in project_reads::audits(project)?.try_iter()? {
         let audit = audit?;
         let deps = native_field(&audit, "scope_deps")?;
         if deps.is_truthy()? {
@@ -309,7 +310,7 @@ pub(crate) fn build_source_read_map<'py>(
     let target = resolve_target(project_config, local_config, target_name)?;
     let effective_vars = native_field(project, "effective_vars")?;
     let result = source_map.copy()?;
-    for source in native_field(project, "sources")?.try_iter()? {
+    for source in project_reads::sources(project)?.try_iter()? {
         let source = source?;
         let name: String =
             native_field(&native_field(&source, "source_entry")?, "name")?.extract()?;
@@ -344,7 +345,7 @@ pub(crate) fn with_declared_source_reads<'py>(
         return Ok(source_map.clone());
     }
     let result = source_map.copy()?;
-    for source in native_field(project, "sources")?.try_iter()? {
+    for source in project_reads::sources(project)?.try_iter()? {
         let entry = native_field(&source?, "source_entry")?;
         let name: String = native_field(&entry, "name")?.extract()?;
         if missing.contains(&name) {

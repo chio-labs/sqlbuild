@@ -45,7 +45,7 @@ pub(super) fn candidates<'py>(
         let warehouse = native_field(&snapshot, "existing_columns")?
             .call_method1("get", (&name, PyTuple::empty(py)))?;
         let declared = PyDict::new(py);
-        let schema = native_field(&model, "schema_entry")?;
+        let schema = model_reads::schema_entry(&model)?;
         if !schema.is_none() {
             for column in native_field(&schema, "columns")?.try_iter()? {
                 let column = column?;

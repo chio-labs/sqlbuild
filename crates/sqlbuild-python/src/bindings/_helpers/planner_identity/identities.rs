@@ -180,7 +180,7 @@ pub(crate) fn direct_model_version_identities<'py>(
         graph.nodes.insert(
             key_of(MODEL_RESOURCE, &name),
             IdentityNode {
-                upstream_keys: graph_keys(&native_field(&model, "deps")?)?,
+                upstream_keys: graph_keys(&model_reads::deps(&model)?)?,
                 local_hash: Some(local_hash),
             },
         );
@@ -291,7 +291,7 @@ pub(crate) fn with_honest_model_write_hashes<'py>(
         graph.nodes.insert(
             key_of(MODEL_RESOURCE, &name.extract::<String>()?),
             IdentityNode {
-                upstream_keys: graph_keys(&native_field(&model, "deps")?)?,
+                upstream_keys: graph_keys(&model_reads::deps(&model)?)?,
                 local_hash: mapping_get(&local_hashes, &name)?.extract()?,
             },
         );

@@ -3,6 +3,7 @@
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::fingerprints::storage_io::read_latest_fingerprints;
 use crate::bindings::_helpers::planner_entries::models::RelationsRequest;
 use crate::bindings::_helpers::planner_entries::plan_output::{
@@ -159,7 +160,7 @@ pub(crate) fn build_audit_command_plan<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = project.py();
     let materializations = PyDict::new(py);
-    for model in native_field(project, "models")?.try_iter()? {
+    for model in project_reads::models(project)?.try_iter()? {
         let model = model?;
         materializations.set_item(
             model_reads::name_object(&model)?,
@@ -200,7 +201,7 @@ fn called_function_keys<'py>(
 ) -> PyResult<Bound<'py, PySet>> {
     let py: Python<'py> = project.py();
     let functions: Bound<'py, PyDict> = PyDict::new(py);
-    for function in native_field(project, "functions")?.try_iter()? {
+    for function in project_reads::functions(project)?.try_iter()? {
         let function = function?;
         functions.set_item(native_field(&function, "key")?, function)?;
     }
@@ -254,7 +255,7 @@ pub(crate) fn build_test_command_plan<'py>(
     )?;
     let (entries, warnings) = (selected.entries, selected.warnings);
     let mut case_names: BTreeSet<String> = BTreeSet::new();
-    for test in native_field(&project, "sql_tests")?.try_iter()? {
+    for test in project_reads::sql_tests(&project)?.try_iter()? {
         let test = test?;
         let case_name = native_field(&test, "case_name")?;
         if !case_name.is_none() && test_selected(&test, &selected_keys, &selection)? {
@@ -271,7 +272,7 @@ pub(crate) fn build_test_command_plan<'py>(
     }
     let function_keys = called_function_keys(&project, function_keys)?;
     let mut functions: Vec<Bound<'py, PyAny>> = Vec::new();
-    for function in native_field(&project, "functions")?.try_iter()? {
+    for function in project_reads::functions(&project)?.try_iter()? {
         let function = function?;
         if !function_keys.contains(native_field(&function, "key")?)? {
             continue;
@@ -331,7 +332,7 @@ pub(crate) fn build_seed_command_plan<'py>(
     };
     let selected_keys = native_field(scope, "selected_keys")?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
-    for seed in native_field(project, "seeds")?.try_iter()? {
+    for seed in project_reads::seeds(project)?.try_iter()? {
         let seed = seed?;
         if !selected_keys.contains(native_field(&seed, "key")?)? {
             continue;

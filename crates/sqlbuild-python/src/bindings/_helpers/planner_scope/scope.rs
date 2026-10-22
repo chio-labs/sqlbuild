@@ -1,6 +1,8 @@
 //! Planner scope assembly using native graph and selector operations.
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
+use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::graph::keys::KeyCache;
 use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
 use crate::bindings::_helpers::graph::views::lineage_graph_names;
@@ -33,7 +35,7 @@ pub(crate) fn managed_source_upstream_keys<'py>(
     project: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyFrozenSet>> {
     let mut managed: HashSet<String> = HashSet::new();
-    for source in native_field(project, "sources")?.try_iter()? {
+    for source in project_reads::sources(project)?.try_iter()? {
         let source = source?;
         if !native_field(&native_field(&source, "source_entry")?, "loader")?.is_none() {
             managed.insert(native_field(&source, "name")?.extract()?);
@@ -119,9 +121,9 @@ pub(crate) fn build_planner_scope<'py>(
     let origins = build_execution_edge_origins(&project)?.into_any();
     let order = topologically_order_keys(&upstream, Some(origins))?.into_any();
     let models = PyDict::new(py);
-    for model in native_field(&project, "models")?.try_iter()? {
+    for model in project_reads::models(&project)?.try_iter()? {
         let model = model?;
-        models.set_item(native_field(&model, "name")?, model)?;
+        models.set_item(model_reads::name_object(&model)?, model)?;
     }
     let mut reads = args.value("python_read_source_names")?;
     if reads.is_none() {

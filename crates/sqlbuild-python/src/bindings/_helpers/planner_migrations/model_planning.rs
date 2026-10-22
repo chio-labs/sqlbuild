@@ -2,6 +2,8 @@
 
 use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::model_config::typed_config::{
     config_node_of, config_value, model_values,
 };
@@ -97,11 +99,8 @@ fn discover<'py>(
     let scope = phase.scope.clone();
     let snapshot = phase.snapshot.clone();
     let mut declared_requests: Vec<ModelMigrationRequest<'py>> = Vec::new();
-    for item in native_field(
-        &runtime_field(&runtime, |runtime| &runtime.project)?,
-        "models",
-    )?
-    .try_iter()?
+    for item in
+        project_reads::models(&runtime_field(&runtime, |runtime| &runtime.project)?)?.try_iter()?
     {
         if let Some(request) = declared(&item?)? {
             declared_requests.push(request);
@@ -117,7 +116,7 @@ fn discover<'py>(
     for request in &declared_requests {
         let (origin_location, origin_model) = resolve_origin(request, &runtime, state)?;
         declarations.push(ModelMigrationDeclaration {
-            model_name: native_field(&request.model, "name")?,
+            model_name: model_reads::name_object(&request.model)?,
             origin_location,
             origin_model,
         });
@@ -183,7 +182,7 @@ fn finish<'py>(
         let policy = super::planning_boundary::missing_origin_policy(&runtime)?;
         for (request, origin, origin_model) in resolved {
             let item = request.model.clone();
-            let name = native_field(&item, "name")?;
+            let name = model_reads::name_object(&item)?;
             let decided = super::model_entries::decide(&MigrationDecisionRequest {
                 runtime: runtime.clone(),
                 request,

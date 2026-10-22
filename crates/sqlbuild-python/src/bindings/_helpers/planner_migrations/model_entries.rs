@@ -3,6 +3,7 @@
 use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::boundary::python_calls::call_with;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::column_objects::{lower, model, replace, text};
 use crate::bindings::_helpers::planner_migrations::compatibility::check_migration_compatibility;
@@ -73,7 +74,7 @@ pub(super) fn decide<'py>(
     let py = runtime.py();
     let request = decision_request.request;
     let item = request.model.clone();
-    let destination = native_field(&item, "destination")?;
+    let destination = model_reads::destination(&item)?;
     let origin = decision_request.origin.clone();
     let snapshot = decision_request.snapshot.clone();
     let state = decision_request.state.clone();
@@ -99,7 +100,7 @@ pub(super) fn decide<'py>(
         py,
         RecordId::ModelMigrationPlanEntry,
         &[
-            ("model_name", native_field(&item, "name")?),
+            ("model_name", model_reads::name_object(&item)?),
             ("discovery", request.discovery.clone()),
             (
                 "decision",
@@ -160,7 +161,7 @@ pub(super) fn decide<'py>(
         }
         let inherited = if recorded && !applies(&item, &newest, &snapshot)? {
             native_field(&native_field(&snapshot, "fingerprints")?, "models")?
-                .call_method1("get", (native_field(&item, "name")?,))?
+                .call_method1("get", (model_reads::name_object(&item)?,))?
         } else {
             empty_version(&item, &fingerprint)?
         };

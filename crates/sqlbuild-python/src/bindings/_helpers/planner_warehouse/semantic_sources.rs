@@ -3,6 +3,7 @@
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::model_config::typed_config::{config_node_of, model_values};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_phases::objects::{text, tuple};
@@ -192,7 +193,7 @@ pub(crate) fn semantic_source_columns<'py>(
         return Ok(columns.clone());
     }
     let mut required: BTreeSet<String> = BTreeSet::new();
-    for model in native_field(project, "models")?.try_iter()? {
+    for model in project_reads::models(project)?.try_iter()? {
         let model = model?;
         let analysis_off: bool = matches!(
             *config_node_of(&model_values(&model)?, SQL_ANALYSIS_KEY)?,
@@ -201,7 +202,7 @@ pub(crate) fn semantic_source_columns<'py>(
         if !selected_keys.contains(model_reads::model_key(&model)?)? || analysis_off {
             continue;
         }
-        for reference in native_field(&model, "references")?.try_iter()? {
+        for reference in model_reads::references(&model)?.try_iter()? {
             let reference = reference?;
             if native_field(&reference, "ref_kind")?.eq("source")? {
                 required.insert(native_field(&reference, "ref_name")?.extract()?);

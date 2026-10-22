@@ -86,8 +86,7 @@ impl<'py> ReferenceGraph for ProjectLineage<'py> {
 
     fn producer_facts(&self, name: &str) -> PyResult<ProducerFacts> {
         let producer: Bound<'py, PyAny> = self.models_by_name.get_item(name)?;
-        let values: Bound<'py, PyAny> =
-            native_field(&native_field(&producer, "config")?, "values")?;
+        let values: Bound<'py, PyAny> = native_field(&model_reads::config(&producer)?, "values")?;
         let capped: bool = match microbatch_limit_config(&values)?.1 {
             Some(action) => CAP_ACTIONS.contains(&text(&action)?.as_str()),
             None => false,

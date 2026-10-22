@@ -43,3 +43,10 @@ class RichLineageAnalysisScalingTestCase:
 class ExpectedCountTestCase:
     description: str
     expected_count: int
+
+
+@dataclass(frozen=True)
+class PythonRecordFallbackTestCase:
+    description: str
+    expected_upstream_resource: str
+    expected_fallbacks_counted: bool

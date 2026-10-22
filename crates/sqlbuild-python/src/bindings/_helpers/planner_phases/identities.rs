@@ -1,6 +1,7 @@
 //! Expected version identities and stale-warning change detection.
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::planner_changes::detect::scope_model_changes;
 use crate::bindings::_helpers::planner_identity::identities::direct_model_version_identities;
 use crate::bindings::_helpers::planner_phases::contexts::class_field;
@@ -49,10 +50,10 @@ fn version_identities<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     identity_work(project.py())?.identity_builds += 1;
     direct_model_version_identities(
-        (&native_field(project, "functions")?, &scope),
+        (&project_reads::functions(project)?, &scope),
         native_field(project, "sql_analysis_dialect")?.extract()?,
         (
-            &native_field(project, "seeds")?,
+            &project_reads::seeds(project)?,
             &project.py().None().into_bound(project.py()),
             &native_field(project, "hook_functions")?,
         ),

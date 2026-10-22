@@ -3,6 +3,7 @@
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::compiled_views::records::compiled_model_record;
 use crate::bindings::_helpers::planner_entries::model_entries::plan_model;
 use crate::bindings::_helpers::planner_entries::models::ModelPlanContext;
@@ -89,9 +90,9 @@ pub(crate) fn build_scenario_execution_plan<'py>(
     } else {
         analysis.is_truthy()?
     };
-    let models = by_attribute(&native_field(&project, "models")?, "name")?;
-    let functions = by_attribute(&native_field(&project, "functions")?, "key")?;
-    let locations = build_function_locations(&native_field(&project, "functions")?)?.into_any();
+    let models = by_attribute(&project_reads::models(&project)?, "name")?;
+    let functions = by_attribute(&project_reads::functions(&project)?, "key")?;
+    let locations = build_function_locations(&project_reads::functions(&project)?)?.into_any();
     let upstream = build_execution_upstream_deps(&project)?.into_any();
     let ordered = object(py, topologically_order_keys(&upstream, None)?)?;
     let mut model_keys: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -267,7 +268,7 @@ fn model_context<'py>(
         ModelPlanContext {
             model_locations: native_field(&context.relations, "model_locations")?.unbind(),
             models_by_name: models.clone().into_any().unbind(),
-            functions_by_name: by_attribute(&native_field(project, "functions")?, "name")?
+            functions_by_name: by_attribute(&project_reads::functions(project)?, "name")?
                 .into_any()
                 .unbind(),
             seed_locations: native_field(&context.relations, "seed_locations")?.unbind(),

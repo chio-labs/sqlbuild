@@ -3,6 +3,7 @@
 use sqlbuild_host::entries::models::{ExecutorHost, UserCodeHost};
 
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::contracts::spec_resolution::matching_dynamic_families;
 use crate::bindings::_helpers::model_config::typed_config::{config_text, model_values};
 use crate::bindings::_helpers::planner_changes::results::native_enum;
@@ -107,7 +108,7 @@ pub(crate) fn detect_changes<'py>(
     let query_change_tracking: bool =
         native_field(&native_field(project, "settings")?, "query_change_tracking")?.is_truthy()?;
     let dialect: Option<String> = native_field(snapshot, "column_dialect")?.extract()?;
-    for function in native_field(project, "functions")?.try_iter()? {
+    for function in project_reads::functions(project)?.try_iter()? {
         let function: Bound<'py, PyAny> = function?;
         let name: Bound<'py, PyAny> = native_field(&function, "name")?;
         let fingerprint_sql: String = compiled_function_fingerprint_sql(&function)?;
@@ -248,7 +249,7 @@ pub(crate) fn scope_model_changes<'py>(
         }
     };
     let function_local_hashes: Bound<'py, PyAny> = function_local_hashes(
-        &native_field(project, "functions")?,
+        &project_reads::functions(project)?,
         native_field(project, "sql_analysis_dialect")?
             .extract::<Option<String>>()?
             .as_deref(),
@@ -530,7 +531,7 @@ fn model_schema_findings<'py>(
     for column in &validity {
         warehouse.retain(|(name, _)| !column.eq_ignore_ascii_case(name));
     }
-    let schema_entry: Bound<'py, PyAny> = native_field(model, "schema_entry")?;
+    let schema_entry: Bound<'py, PyAny> = model_reads::schema_entry(model)?;
     let mut yml: Vec<(String, String)> = Vec::new();
     let mut type_enforcement: bool = false;
     let mut dynamic: Option<Bound<'py, PyAny>> = None;

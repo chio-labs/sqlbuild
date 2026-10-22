@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::planner_entries::models::PlanOutputInputs;
 use crate::bindings::_helpers::planner_entries::plan_output::plan_output_fields;
 use crate::bindings::_helpers::planner_identity::staleness::build_stale_out_of_selection_warnings;
@@ -175,11 +176,8 @@ pub(crate) fn add_storage_policies<'py>(
     let mut entries = output.field("model_entries")?;
     if native_field(policies, "record_migration_fingerprints")?.is_truthy()? {
         let models = PyDict::new(py);
-        for model in native_field(
-            &runtime_field(runtime, |runtime| &runtime.project)?,
-            "models",
-        )?
-        .try_iter()?
+        for model in project_reads::models(&runtime_field(runtime, |runtime| &runtime.project)?)?
+            .try_iter()?
         {
             let model = model?;
             models.set_item(model_reads::name_object(&model)?, model)?;
