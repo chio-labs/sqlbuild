@@ -54,6 +54,28 @@ fn given_dbt_events_when_consuming_then_reports_starts_and_first_results() {
                 ),
             ],
         },
+        StreamTestCase {
+            description: "an error-level result with a message still streams its row",
+            events: vec![
+                message_event("model.a.payments", "relation missing"),
+                DbtEvent {
+                    level: Some("error".to_owned()),
+                    info_msg: Some("1 of 2 ERROR creating table model payments".to_owned()),
+                    ..result_event("LogModelResult", "model.a.payments", "ERROR")
+                },
+            ],
+            expected_updates: vec![
+                None,
+                finished(
+                    "model.a.payments",
+                    ("ERROR", 1),
+                    vec![DbtNodeMessage {
+                        level: "error".to_owned(),
+                        message: "relation missing".to_owned(),
+                    }],
+                ),
+            ],
+        },
     ];
 
     for test_case in test_cases {
