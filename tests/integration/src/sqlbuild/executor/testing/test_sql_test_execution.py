@@ -24,7 +24,10 @@ from sqlbuild.executor.testing.models import (
 )
 from sqlbuild.executor.testing.types import SqlTestDifferenceDirection, SqlTestOutcome
 from tests.integration.src.sqlbuild.executor.testing._test_types import (
+    EngineInternalErrorTestCase,
     ExpectedBooleanTestCase,
+    LaterStepStorageTestCase,
+    OutputStorageTestCase,
     SqlTestComparisonSqlTestCase,
     SqlTestDiagnosticsTestCase,
     SqlTestDifferenceSqlTestCase,
@@ -46,6 +49,66 @@ class FailingDifferenceSampleDuckDbAdapter(DuckDbAdapter):
     def execute(self, *, connection: Any, sql: str) -> Any:
         if "__sqlbuild_difference" in sql:
             raise RuntimeError("controlled difference sampling failure")
+        return super().execute(connection=connection, sql=sql)
+
+
+class StorageFailingDuckDbAdapter(DuckDbAdapter):
+    """Fails to store a test output; with ``output_fails`` the output query itself errors.
+
+    The output query failing while inline comparisons pass is how a warehouse that prunes
+    unread columns behaves when a fixture breaks a column the expected rows leave out.
+    """
+
+    def __init__(self, *, error: str, output_fails: bool) -> None:
+        super().__init__()
+        self._error: str = error
+        self._output_fails: bool = output_fails
+        self._outputs: set[str] = set()
+
+    def create_sql_test_output(self, *, connection: Any, sql: str, name: str) -> str | None:
+        self._outputs.add(sql)
+        raise RuntimeError(self._error)
+
+    def execute(self, *, connection: Any, sql: str) -> Any:
+        if self._output_fails and sql in self._outputs:
+            raise RuntimeError(self._error)
+        return super().execute(connection=connection, sql=sql)
+
+
+class SecondStorageFailingDuckDbAdapter(DuckDbAdapter):
+    """Stores the first test output and refuses every later one, as a session at its limit may."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._stored: int = 0
+
+    def create_sql_test_output(self, *, connection: Any, sql: str, name: str) -> str | None:
+        self._stored += 1
+        if self._stored > 1:
+            raise RuntimeError("no more temporary tables in this session")
+        return super().create_sql_test_output(connection=connection, sql=sql, name=name)
+
+
+class InternalException(Exception):
+    """Stands in for DuckDB's engine assertion error, which the adapter matches by class name."""
+
+
+class InternalErrorOnStoreDuckDbAdapter(DuckDbAdapter):
+    """With ``fail``, the bare output query hits an engine assertion error; comparisons do not."""
+
+    def __init__(self, *, fail: bool) -> None:
+        super().__init__()
+        self._fail: bool = fail
+        self._outputs: set[str] = set()
+
+    def create_sql_test_output(self, *, connection: Any, sql: str, name: str) -> str | None:
+        self._outputs.add(sql)
+        return super().create_sql_test_output(connection=connection, sql=sql, name=name)
+
+    def execute(self, *, connection: Any, sql: str) -> Any:
+        stored: bool = sql.startswith("CREATE TEMPORARY TABLE")
+        if self._fail and (stored or sql in self._outputs):
+            raise InternalException('INTERNAL Error: Failed to bind column reference ""')
         return super().execute(connection=connection, sql=sql)
 
 
@@ -700,3 +763,135 @@ def test_given_oversized_unit_test_sql_when_executing_then_it_returns_clear_erro
     assert "maximum of 80 bytes" in result.error_message
     assert "scenario test" in result.error_message
     verify_test_result(result=result, test_case=test_case)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        OutputStorageTestCase(
+            description="an output query the warehouse cannot compute errors the test",
+            chain_steps=(("orders", "SELECT 1 AS order_id", "SELECT 1 AS order_id"),),
+            storage_error="Numeric value 'cluster::r1' is not recognized",
+            output_fails=True,
+            expected_outcome=SqlTestOutcome.ERROR,
+            expected_error_fragment="Numeric value 'cluster::r1' is not recognized",
+        ),
+        OutputStorageTestCase(
+            description="a session that cannot store outputs still compares inline",
+            chain_steps=(("orders", "SELECT 1 AS order_id", "SELECT 1 AS order_id"),),
+            storage_error="temporary tables are not allowed in this session",
+            output_fails=False,
+            expected_outcome=SqlTestOutcome.PASS,
+            expected_error_fragment="",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_output_that_cannot_be_stored_when_executing_then_only_query_errors_fail(
+    test_case: OutputStorageTestCase, connection: Any
+) -> None:
+    result: SqlTestExecutionResult = execute_sql_test(
+        test_entry=build_sql_test_plan_entry(name="orders_ids", chain_steps=test_case.chain_steps),
+        adapter=StorageFailingDuckDbAdapter(
+            error=test_case.storage_error, output_fails=test_case.output_fails
+        ),
+        connection=connection,
+    )
+
+    assert result.outcome == test_case.expected_outcome, result.error_message
+    assert test_case.expected_error_fragment in (result.error_message or "")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        LaterStepStorageTestCase(
+            description="a computable second output that cannot be stored compares inline",
+            chain_steps=(
+                ("stg_orders", "SELECT 1 AS order_id", "SELECT 1 AS order_id"),
+                (
+                    "orders",
+                    "WITH __ref__stg_orders AS (SELECT 1 AS order_id)\n"
+                    "SELECT order_id + 1 AS order_id FROM __ref__stg_orders",
+                    "SELECT 2 AS order_id",
+                ),
+            ),
+            expected_outcome=SqlTestOutcome.PASS,
+            expected_error_fragment="",
+            unexpected_error_fragment="does not exist",
+        ),
+        LaterStepStorageTestCase(
+            description="a second output that fails on its own reports the warehouse error",
+            chain_steps=(
+                ("stg_orders", "SELECT 1 AS order_id", "SELECT 1 AS order_id"),
+                (
+                    "orders",
+                    "WITH __ref__stg_orders AS (SELECT 1 AS order_id)\n"
+                    "SELECT order_id + CAST('cluster::r1' AS INTEGER) AS order_id "
+                    "FROM __ref__stg_orders",
+                    "SELECT 2 AS order_id",
+                ),
+            ),
+            expected_outcome=SqlTestOutcome.ERROR,
+            expected_error_fragment="Could not convert string",
+            unexpected_error_fragment="does not exist",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_later_step_that_cannot_be_stored_when_executing_then_it_is_checked_inline(
+    test_case: LaterStepStorageTestCase, connection: Any
+) -> None:
+    result: SqlTestExecutionResult = execute_sql_test(
+        test_entry=build_sql_test_plan_entry(name="orders_ids", chain_steps=test_case.chain_steps),
+        adapter=SecondStorageFailingDuckDbAdapter(),
+        connection=connection,
+    )
+
+    assert result.outcome == test_case.expected_outcome, result.error_message
+    assert test_case.expected_error_fragment in (result.error_message or "")
+    assert test_case.unexpected_error_fragment not in (result.error_message or "")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        EngineInternalErrorTestCase(
+            description="an engine assertion error storing the output compares inline",
+            chain_steps=(("orders", "SELECT 1 AS order_id", "SELECT 1 AS order_id"),),
+            raise_internal_error=True,
+            expected_outcome=SqlTestOutcome.PASS,
+        ),
+        EngineInternalErrorTestCase(
+            description="an engine assertion error does not hide a mismatch",
+            chain_steps=(("orders", "SELECT 1 AS order_id", "SELECT 2 AS order_id"),),
+            raise_internal_error=True,
+            expected_outcome=SqlTestOutcome.FAIL,
+        ),
+        EngineInternalErrorTestCase(
+            description="two equal windows over a grouped constant fixture pass",
+            chain_steps=(
+                (
+                    "orders",
+                    "SELECT MAX(amount) OVER (PARTITION BY order_id) AS high, "
+                    "MAX(amount) OVER (PARTITION BY order_id) AS top "
+                    "FROM (SELECT 1 AS order_id, 1 AS amount) GROUP BY order_id, amount",
+                    "SELECT 1 AS high, 1 AS top",
+                ),
+            ),
+            raise_internal_error=False,
+            expected_outcome=SqlTestOutcome.PASS,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_engine_internal_error_storing_output_when_executing_then_compares_inline(
+    test_case: EngineInternalErrorTestCase, connection: Any
+) -> None:
+    result: SqlTestExecutionResult = execute_sql_test(
+        test_entry=build_sql_test_plan_entry(name="orders_ids", chain_steps=test_case.chain_steps),
+        adapter=InternalErrorOnStoreDuckDbAdapter(fail=test_case.raise_internal_error),
+        connection=connection,
+    )
+
+    assert result.outcome == test_case.expected_outcome, result.error_message

@@ -64,3 +64,36 @@ class SqlTestBuildParityTestCase:
     model_name: str
     expected_whole_body_rendered: bool
     expected_verbatim_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class OutputStorageTestCase:
+    """A tested output that cannot be stored, and whether the test still runs inline."""
+
+    description: str
+    chain_steps: tuple[tuple[str, str, str | None], ...]
+    storage_error: str
+    output_fails: bool
+    expected_outcome: SqlTestOutcome
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class LaterStepStorageTestCase:
+    """A chain whose first output is stored and whose second cannot be, and how the test ends."""
+
+    description: str
+    chain_steps: tuple[tuple[str, str, str | None], ...]
+    expected_outcome: SqlTestOutcome
+    expected_error_fragment: str
+    unexpected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class EngineInternalErrorTestCase:
+    """A tested output DuckDB fails to store with an engine assertion error."""
+
+    description: str
+    chain_steps: tuple[tuple[str, str, str | None], ...]
+    raise_internal_error: bool
+    expected_outcome: SqlTestOutcome

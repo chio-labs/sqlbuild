@@ -2096,3 +2096,20 @@ def slow_promotion_files(
             f"SELECT {customer_id} AS customer_id\n"
         ),
     }
+
+
+def order_totals_test_files(total_sql: str) -> dict[str, str]:
+    """Return an order_totals model computing ``total_sql`` and a test expecting both models."""
+
+    return {
+        "models/order_totals.sql": (
+            "MODEL (description 'Test model order_totals.');\n\n"
+            f'SELECT order_id, {total_sql} AS total FROM __ref("orders")\n'
+        ),
+        "tests/unit/test_orders.sql": (
+            'TEST (name "orders_ids");\n\nWITH\n'
+            "__source__raw_orders AS (\n  SELECT 1 AS order_id, '7' AS code\n),\n"
+            "__expected__orders AS (\n  SELECT 1 AS order_id\n),\n"
+            "__expected__order_totals AS (\n  SELECT 1 AS order_id\n)\nSELECT 1\n"
+        ),
+    }

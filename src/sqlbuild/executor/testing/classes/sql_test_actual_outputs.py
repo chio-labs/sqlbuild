@@ -50,22 +50,19 @@ class SqlTestActualOutputs:
         """Store each compared step's output, or return no relations to compare inline."""
 
         token: str = uuid4().hex[:12]
+        storing: int | None = None
         try:
             for index in range(len(self._test_entry.chain)):
-                (sql,) = render_sql_test_comparison_sql(
-                    (self._test_entry,),
-                    set_difference_operator=self._adapter.render_set_difference_operator(),
-                    sql_analysis_dialect=self._adapter.sql_analysis_dialect(),
-                    output_step_index=index,
-                    actual_relations=dict(self.relations),
-                )
+                sql: str = self._output_sql(index=index, relations=dict(self.relations))
                 if not sql:
                     continue
+                storing = index
                 relation: str | None = self._adapter.create_sql_test_output(
                     connection=self._connection,
                     sql=sql,
                     name=f"{_OUTPUT_PREFIX}_{token}_{index}",
                 )
+                storing = None
                 if relation is None:
                     self.release()
                     return {}
@@ -75,15 +72,49 @@ class SqlTestActualOutputs:
         except (ItemTimeoutError, ExecutionDurationLimitError):
             raise
         except Exception as error:
+            self.release()
+            self._evaluate_output(index=storing, storage_error=error)
             log_debug_event(
                 logger=_LOGGER,
                 message="SQL test output could not be stored; comparing inline",
                 test_name=self._test_entry.name,
                 sqlbuild_error=DiagnosticRecordRedactor.text(str(error)),
             )
-            self.release()
             return {}
         return dict(self.relations)
+
+    def _output_sql(self, *, index: int, relations: dict[int, str]) -> str:
+        """The SQL of step ``index``'s output, reading the given stored outputs of earlier steps."""
+
+        (sql,) = render_sql_test_comparison_sql(
+            (self._test_entry,),
+            set_difference_operator=self._adapter.render_set_difference_operator(),
+            sql_analysis_dialect=self._adapter.sql_analysis_dialect(),
+            output_step_index=index,
+            actual_relations=relations,
+        )
+        return sql
+
+    def _evaluate_output(self, *, index: int | None, storage_error: Exception) -> None:
+        """Run a step that could not be stored fully inline, raising the query's own error."""
+
+        if index is None:
+            return
+        try:
+            cursor: Any = self._adapter.execute(
+                connection=self._connection, sql=self._output_sql(index=index, relations={})
+            )
+            _ = cursor.fetchall()
+        except (ItemTimeoutError, ExecutionDurationLimitError):
+            raise
+        except Exception:
+            log_debug_event(
+                logger=_LOGGER,
+                message="SQL test output could not be stored, and its query fails on its own",
+                test_name=self._test_entry.name,
+                sqlbuild_error=DiagnosticRecordRedactor.text(str(storage_error)),
+            )
+            raise
 
     def release(self) -> None:
         """Drop every stored output; later comparisons run inline."""
