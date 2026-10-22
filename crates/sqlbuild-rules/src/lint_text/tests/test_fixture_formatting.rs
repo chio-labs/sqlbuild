@@ -1,5 +1,5 @@
+use crate::lint_text::_helpers::fixture_formatting::simplify_fixture_nulls;
 use crate::lint_text::main::format_fixture_blocks::format_fixture_blocks;
-use crate::lint_text::main::simplify_fixture_nulls::simplify_fixture_nulls;
 use crate::lint_text::models::{FixtureFormatBlock, FixtureFormatRelation};
 use crate::lint_text::tests::test_types::FixtureBlockTestCase;
 use crate::lint_text::tests::test_types::FixtureFormattingTestCase;

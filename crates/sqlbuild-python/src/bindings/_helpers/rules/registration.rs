@@ -5,10 +5,9 @@ use pyo3::prelude::{Bound, PyModule, PyResult};
 use pyo3::{types::PyModuleMethods, wrap_pyfunction};
 
 use crate::bindings::_helpers::rules::{
-    builtin_catalogue, catalogue, custom_rule_cache, custom_rule_evidence, dsl_headers,
-    early_sql_lint, evaluation, guidance, lint, lint_expansion, lint_sql_bodies, lint_text,
-    results, rule_api, rule_cache, rule_plan, rule_run, rules_config, run_lint, selection,
-    sql_rules,
+    catalogue, custom_rule_cache, custom_rule_evidence, dsl_headers, early_sql_lint, evaluation,
+    guidance, lint, lint_expansion, lint_sql_bodies, lint_text, results, rule_api, rule_cache,
+    rule_plan, rule_run, rules_config, run_lint, selection, sql_rules,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -42,7 +41,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     sql_rules::register(module)?;
     early_sql_lint::register(module)?;
     custom_rule_cache::register(module)?;
-    builtin_catalogue::register(module)?;
     catalogue::register(module)?;
     rules_config::register(module)?;
     run_lint::register(module)?;

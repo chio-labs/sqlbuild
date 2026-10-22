@@ -380,24 +380,6 @@ def deferred_valid_count(*, expected: list[object], actual: list[object]) -> int
     )
 
 
-def _is_harmful(expected: object, actual: object) -> bool:
-    return actual != DEFERRED and actual != expected
-
-
-def harmful_mismatches(
-    *, inputs: list[object], expected: list[object], actual: list[object]
-) -> list[tuple[object, object, object]]:
-    """Return the first few cases where the native reader accepts a different result.
-
-    A native failure defers the file to the Python loader, so only an accepted value that
-    differs from Python's outcome, including accepting what Python rejects, is harmful.
-    """
-
-    return list(
-        compress(zip(inputs, expected, actual, strict=True), map(_is_harmful, expected, actual))
-    )[:3]
-
-
 def toml_harmful_mismatches(
     *, inputs: list[object], expected: list[object], actual: list[object]
 ) -> list[tuple[object, object, object]]:

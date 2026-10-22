@@ -5,7 +5,6 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyDictMethods, PyStringMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_rules::lint_text::main::format_fixture_blocks::format_fixture_blocks;
-use sqlbuild_rules::lint_text::main::simplify_fixture_nulls::simplify_fixture_nulls;
 use sqlbuild_rules::lint_text::models::FixtureFormatBlock;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
@@ -15,13 +14,6 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::rules::constants::MODEL_TEST_MODE;
 use crate::bindings::_helpers::rules::fixture_schemas;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
-
-#[pyfunction]
-#[pyo3(signature = (*, sql, relation))]
-fn simplify_fixture_null_projections(sql: &str, relation: &Bound<'_, PyAny>) -> PyResult<String> {
-    let columns = fixture_schemas::columns(&native_field(relation, "columns")?)?;
-    compiler_guard(|| simplify_fixture_nulls(sql, &columns).map_err(value_error))
-}
 
 #[pyfunction]
 #[pyo3(signature = (*, files, project_dir, discovered_inputs, sql_lexical_syntax))]
@@ -85,6 +77,5 @@ pub(crate) fn format_redundant_fixture_nulls<'py>(
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(simplify_fixture_null_projections, module)?)?;
     module.add_function(wrap_pyfunction!(format_redundant_fixture_nulls, module)?)
 }

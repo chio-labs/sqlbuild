@@ -140,16 +140,6 @@ pub struct ModelLoopSettings {
     pub require_sql_analysis: bool,
 }
 
-/// The `description` config value's shape.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub enum DescriptionShape {
-    #[default]
-    Absent,
-    Text(String),
-    /// Present but not a non-blank string.
-    Invalid,
-}
-
 /// The per-model `sql_analysis` / legacy `sql_validation` override.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum AnalysisOverride {

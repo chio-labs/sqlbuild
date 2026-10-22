@@ -32,7 +32,6 @@ pub const OUTCOME_EVENT_TYPES: [&str; 6] = [
 pub const OUTCOME_RESERVE_FRACTION: f64 = 0.25;
 pub const RETRY_EVENT_TYPE: &str = "retry_scheduled";
 pub const RETRY_EVENT_KIND: &str = "retry";
-pub const RESOURCE_EVENT_PREFIX: &str = "resource";
 pub const FAILED_EVENT_SUFFIX: &str = "_failed";
 pub const FAILED_EVENT_PRIORITY: u8 = 3;
 pub const TERMINAL_EVENT_PRIORITY: u8 = 2;

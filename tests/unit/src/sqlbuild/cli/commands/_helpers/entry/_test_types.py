@@ -98,15 +98,6 @@ class UntypedCursorParsingTestCase:
 
 
 @dataclass(frozen=True)
-class HiddenOptionTestCase:
-    """A help page and an option that must not appear on it."""
-
-    description: str
-    option: str
-    expected_listed: bool
-
-
-@dataclass(frozen=True)
 class ChoiceListTestCase:
     """One option whose choices come from a Python enum."""
 

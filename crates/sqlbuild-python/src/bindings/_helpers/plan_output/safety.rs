@@ -156,12 +156,6 @@ pub(crate) fn maximum_start_safety<'py>(
     .into_any())
 }
 
-/// Serialize future-cursor safety evidence; `None` stays `None`.
-#[pyfunction]
-fn serialize_future_cursor_safety<'py>(evidence: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    future_cursor_safety(&evidence)
-}
-
 /// Serialize maximum automatic-start safety evidence; `None` stays `None`.
 #[pyfunction]
 fn serialize_maximum_start_safety<'py>(evidence: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -169,6 +163,5 @@ fn serialize_maximum_start_safety<'py>(evidence: Bound<'py, PyAny>) -> PyResult<
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(serialize_future_cursor_safety, module)?)?;
     module.add_function(wrap_pyfunction!(serialize_maximum_start_safety, module)?)
 }

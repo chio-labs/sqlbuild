@@ -37,7 +37,6 @@ from sqlbuild.adapter.contract.types import (
     TypeDialect,
 )
 from sqlbuild.adapter.relations.models import InspectionQueryRecord, StatementMetadataEffect
-from sqlbuild.cli.compile_reuse.models import CompileReuseRequest
 from sqlbuild.compiler.auditing.types import (
     AuditAttachmentKind,
     AuditEvaluationMode,
@@ -99,10 +98,6 @@ from sqlbuild.executor.python_nodes.models import (
 from sqlbuild.executor.run.models import (
     MicrobatchBatchProgress,
     ModelExecutionResult,
-)
-from sqlbuild.executor.scenario.models import (
-    ScenarioRunResult,
-    ScenarioSnapshotCaptureRunResult,
 )
 from sqlbuild.executor.testing.models import (
     SqlTestExecutionResult,
@@ -282,9 +277,6 @@ class LintPreparationRequest(TypedDict):
     prior_sites: list[int]
     dialect: str
 
-def analyze_column_references_json(request_json: str) -> str: ...
-def selected_sql_rule_codes(*, select: list[str], ignore: list[str]) -> list[str]: ...
-
 class NativeRulesRequest:
     """A natively built rules request held until it is evaluated once."""
 
@@ -301,7 +293,6 @@ def build_rules_request(
     include_type_proof: bool,
     cache_directory: str | None = None,
 ) -> NativeRulesRequest: ...
-def evaluate_rules_request(request: NativeRulesRequest) -> NativeRulesEvaluation: ...
 def emit_orjson_report(report: object) -> str: ...
 def emit_json_report(report: object) -> str: ...
 
@@ -418,32 +409,6 @@ class NativeResourceFailure:
     def index(self) -> int: ...
     @property
     def error(self) -> Exception: ...
-
-class NativeModelFacts:
-    @property
-    def deps(self) -> list[tuple[str, str]]: ...
-    @property
-    def dynamic_contract(
-        self,
-    ) -> (
-        tuple[
-            bool,
-            list[tuple[str, str | None, str]],
-            list[tuple[str, str | None]],
-            list[str],
-            str | None,
-            bool,
-        ]
-        | None
-    ): ...
-    @property
-    def syntax_valid(self) -> bool: ...
-
-class NativeProjectFacts:
-    @property
-    def models(self) -> tuple[NativeModelFacts, ...]: ...
-    @property
-    def resources(self) -> NativeProjectResources: ...
 
 type FixtureKey = tuple[CompiledResourceType, str]
 type InputColumns = Callable[[str, str], frozenset[str] | None]
@@ -1138,22 +1103,6 @@ class QueryShape(NativeRecord):
         clause_references: frozenset[str] = ...,
     ) -> None: ...
     def __replace__(self, **changes: Any) -> QueryShape: ...
-
-class PlanOutputExtras(NativeRecord):
-    """Optional supplemental seed fingerprints and precomputed SQL tests for plan assembly."""
-
-    seed_version_hashes: dict[str, str] | None
-    seed_metadata_jsons: dict[str, str] | None
-    seed_plan_reasons: dict[str, PlanReason] | None
-    planned_sql_tests: PlannedSqlTests | None
-    def __init__(
-        self,
-        seed_version_hashes: dict[str, str] | None = ...,
-        seed_metadata_jsons: dict[str, str] | None = ...,
-        seed_plan_reasons: dict[str, PlanReason] | None = ...,
-        planned_sql_tests: PlannedSqlTests | None = ...,
-    ) -> None: ...
-    def __replace__(self, **changes: Any) -> PlanOutputExtras: ...
 
 class PlannedSqlTests(NativeRecord):
     """SQL test entries planned for one selection; reusable only for the same selection."""
@@ -1957,9 +1906,6 @@ def apply_typed_cursor_replay_policy(
     backfill_duration: Duration | str | None,
     has_start_override: bool,
 ) -> CursorScalar: ...
-def cursor_inputs_without_rows(
-    *, cursor_snapshot: ModelCursorSnapshot
-) -> EmptyCursorInputDecision: ...
 def decide_empty_cursor_inputs(
     *,
     empty_input_names: tuple[str, ...],
@@ -1975,13 +1921,6 @@ def empty_input_rebuild_refusal(
     input_names: tuple[str, ...],
     cursor_type: str | None,
 ) -> tuple[str, str]: ...
-def unreadable_cursor_inputs_error(
-    *,
-    model_name: str,
-    cursor_type: str | None,
-    input_names: tuple[str, ...],
-) -> PlannerInputError: ...
-def without_destination_cursor(*, cursor_snapshot: ModelCursorSnapshot) -> ModelCursorSnapshot: ...
 def resolve_effective_timestamp_grain(
     *,
     cursor_type: str | None,
@@ -2041,90 +1980,18 @@ def compiled_seed_record(seed: CompiledSeedView) -> CompiledSeed: ...
 def compiled_project_record(
     project: CompiledProjectView, *, include_sql_expansions: bool = True
 ) -> CompiledProject: ...
-def with_binding_diagnostics(
-    *, model: CompiledModelView, diagnostics: tuple[CompilerDiagnostic, ...]
-) -> CompiledModelView: ...
-def with_type_recovery(
-    *,
-    model: CompiledModelView,
-    diagnostics: tuple[CompilerDiagnostic, ...],
-    poisoned: frozenset[tuple[str, str]],
-) -> CompiledModelView: ...
 def project_with(*, project: CompiledProjectView, **changes: Any) -> CompiledProjectView: ...
 def inputs_with(*, inputs: CompileInputsView, **changes: Any) -> CompileInputsView: ...
-def compile_inputs_view(
-    *, fields: dict[str, Any], native_project: NativeCompiledProject | None
-) -> CompileInputsView: ...
-def plain_typed_value(value: SqlValue) -> object: ...
 def declaration_rows(
     *, enums: Sequence[EnumDeclaration], constants: Sequence[ConstantDeclaration]
 ) -> tuple[list[tuple[object, ...]], list[tuple[object, ...]]]: ...
-def record_model_analyses(
-    *, project: NativeCompiledProject, models: Sequence[CompiledModelView]
-) -> int: ...
 def compiled_project_facts(project: CompiledProjectView) -> NativeCompiledProject: ...
-def attach_resources(
-    *,
-    discovered_inputs: DiscoveredProjectInputs,
-    native_project: NativeCompiledProject,
-    settings: tuple[SettingsConfig, TargetConfig | None, str],
-    no_sql_validation: bool,
-    python_functions_inherit_default_namespace: bool,
-) -> tuple[tuple[SeedInput, ...], tuple[FunctionInput, ...], tuple[SourceInput, ...]]: ...
-def attach_checks(
-    *,
-    discovered_inputs: DiscoveredProjectInputs,
-    native_project: NativeCompiledProject,
-    settings: tuple[SettingsConfig, TypedSqlValueRenderer, SqlLexicalSyntax],
-    scan_cache: SqlTestScanCache,
-    source_inputs: tuple[SourceInput, ...],
-) -> tuple[
-    tuple[CompileSqlTestInput, ...],
-    tuple[CompileSqlScenarioInput, ...],
-    tuple[AuditInput, ...],
-    tuple[CompilerDiagnostic, ...],
-]: ...
-def build_effective_connection(
-    *,
-    project_config: ProjectConfig,
-    local_config: LocalConfig,
-    target_config: TargetConfig | None,
-    effective_vars: dict[str, object],
-) -> dict[str, object]: ...
-def build_effective_settings(
-    *, project_config: ProjectConfig, local_config: LocalConfig
-) -> SettingsConfig: ...
-def build_effective_vars(
-    *,
-    project_config: ProjectConfig,
-    local_config: LocalConfig,
-    target_config: TargetConfig | None,
-    cli_vars: dict[str, object],
-) -> dict[str, object]: ...
 def native_model_config_session(
     *, inputs: NativeModelConfigInputs, validator: NativeModelValidator
 ) -> NativeModelConfigSession: ...
-def build_model_inputs(
-    *,
-    discovered_inputs: DiscoveredProjectInputs,
-    context: ModelInputBuildContext,
-    no_sql_validation: bool = False,
-    defer_model_sql_validation: bool = False,
-    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
-    native_project: NativeCompiledProject,
-) -> tuple[ModelInput, ...]: ...
 def build_compile_target_context(
     *, discovered_inputs: DiscoveredProjectInputs, selected_target: str | None, no_cache: bool
 ) -> tuple[str | None, TargetConfig | None, Path | None]: ...
-def build_effective_target_namespace(
-    *,
-    discovered_inputs: DiscoveredProjectInputs,
-    selected_target: str | None,
-    connection_database: object | None,
-    connection_schema: object | None,
-    default_database: str | None,
-    default_schema: str | None,
-) -> tuple[str | None, TargetConfig | None, str | None, str | None]: ...
 def build_declaration_scope(
     *,
     discovered_inputs: DiscoveredProjectInputs,
@@ -2160,21 +2027,6 @@ class NativeMacroExpansion:
     def declaration_read(self, kind: str, name: str) -> None: ...
     def block_memo(self) -> None: ...
 
-class NativeModelLoop:
-    def __init__(
-        self,
-        checks: tuple[object, dict[str, object], dict[str, object]],
-        syntax: dict[str, object],
-        reserved_markers: list[str],
-        settings: tuple[tuple[bool, bool, bool, bool], str],
-    ) -> None: ...
-    def run(
-        self,
-        project: NativeCompiledProject,
-        host: object,
-        model_files: list[DiscoveredSqlModelFile],
-    ) -> list[NativeModelInput]: ...
-
 def relation_key_row(
     kind: str, name: str, values: dict[str, object], entry: object
 ) -> RelationKeyRow: ...
@@ -2198,15 +2050,6 @@ def prepare_lint_body(
     context: SqlExpansionContext,
     dialect: str,
 ) -> LintBody: ...
-def plan_rule_fixes(
-    *,
-    project_dir: Path,
-    files: dict[Path, str],
-    config: LintConfig,
-    adapter: TypedSqlValueRenderer | None,
-    discovered_inputs: DiscoveredProjectInputs | None,
-    enabled: bool,
-) -> tuple[dict[Path, str], tuple[RuleFixResult, ...], list[LintViolation]]: ...
 def fix_verdict(
     *, before: CompileFacts, after: CompileFacts, edited: frozenset[Path]
 ) -> FixVerdict: ...
@@ -2218,7 +2061,6 @@ def build_lint_expansion_context(
     declaration_scope: DeclarationScopeBuild | None = None,
     static_declaration_scope: DeclarationScopeBuild | None = None,
 ) -> SqlExpansionContext: ...
-def write_atomically(*, path: Path, contents: str) -> None: ...
 def build_dag_json(
     *, graph: ProjectGraph, project_name: str, python_graph: PythonNodeGraph | None = None
 ) -> str: ...
@@ -2262,12 +2104,6 @@ class NativeProjectGraph:
     ) -> list[_GraphKey]: ...
 
 def parse_project_selector(raw: str) -> ParsedSelector | PathSelector: ...
-def resolve_graph_selection(
-    *, graph: NativeProjectGraph, select: Sequence[str], exclude: Sequence[str]
-) -> frozenset[CompiledObjectKey]: ...
-def select_project_graph(
-    *, graph: ProjectGraph, select: Sequence[str], exclude: Sequence[str]
-) -> frozenset[CompiledObjectKey]: ...
 def resolve_project_selectors(
     *,
     select: Sequence[str],
@@ -2278,28 +2114,6 @@ def resolve_project_selectors(
     tag_index: Mapping[str, Iterable[CompiledObjectKey]],
     path_index: Mapping[CompiledObjectKey, str],
 ) -> frozenset[CompiledObjectKey]: ...
-def resolve_project_selector_tokens(
-    *,
-    selectors: Sequence[str],
-    all_keys: Mapping[str, CompiledObjectKey],
-    upstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    downstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    tag_index: Mapping[str, Iterable[CompiledObjectKey]],
-    path_index: Mapping[CompiledObjectKey, str],
-) -> frozenset[CompiledObjectKey]: ...
-def match_project_selector(
-    *,
-    parsed: ParsedSelector,
-    all_keys: Mapping[str, CompiledObjectKey],
-    tag_index: Mapping[str, Iterable[CompiledObjectKey]],
-    path_index: Mapping[CompiledObjectKey, str],
-) -> frozenset[CompiledObjectKey]: ...
-def expand_project_upstream_keys(
-    *,
-    key: CompiledObjectKey,
-    upstream_deps: Mapping[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-) -> frozenset[CompiledObjectKey]: ...
-def unit_test_selector_error(*, selector: str) -> PlannerInputError: ...
 def split_project_unit_test_selectors(
     *,
     select: Sequence[str],
@@ -2307,80 +2121,14 @@ def split_project_unit_test_selectors(
     discovered_inputs: DiscoveredProjectInputs,
     accepts_unit_tests: bool,
 ) -> UnitTestSelectorSplit: ...
-def split_unit_test_selectors(
-    *,
-    select: Sequence[str],
-    exclude: Sequence[str],
-    discovered_inputs: DiscoveredProjectInputs,
-) -> UnitTestSelectorSplit: ...
-def reject_unit_test_selectors(
-    *,
-    select: Sequence[str],
-    exclude: Sequence[str],
-    discovered_inputs: DiscoveredProjectInputs,
-) -> UnitTestSelectorSplit: ...
 def split_selector_expansion(raw: str) -> SelectorExpansion: ...
 def resolve_sqlbuild_model_selector_names(
     *, project: CompiledProjectView, term: str
 ) -> tuple[tuple[str, ...], str | None]: ...
-
-class NativeReuseAttempt:
-    def outcome(self) -> str: ...
-    def store_path(self) -> str: ...
-    def replay_failed(self) -> bool: ...
-    def snapshot_paths(self) -> int: ...
-    def pending_digest_bytes(self) -> int: ...
-    def replay(self, timings: list[tuple[str, int]]) -> tuple[str, list[str], int] | None: ...
-    def digested_files(self) -> int: ...
-    def launch_identity(self) -> tuple[str, dict[str, str], list[str]]: ...
-    def record(self, record: dict[str, object]) -> tuple[str, int]: ...
-
-def check_compile_reuse(check: dict[str, object]) -> NativeReuseAttempt: ...
 def run_compile(request: CompileCommandRequest) -> int: ...
-
-class CompileReuseAttempt:
-    """Result of checking for a reusable compile, carried into a full compile on a miss."""
-
-    outcome: str
-    project_dir: Path
-    started: float
-    check_ms: int
-    exit_code: int | None
-    entry_path: Path | None
-    native: NativeReuseAttempt | None
-    selected_target: str | None
-    json_output: bool
-    def __init__(
-        self,
-        *,
-        outcome: str,
-        project_dir: Path,
-        started: float,
-        check_ms: int = 0,
-        exit_code: int | None = None,
-        entry_path: Path | None = None,
-        native: NativeReuseAttempt | None = None,
-        selected_target: str | None = None,
-        json_output: bool = False,
-    ) -> None: ...
 
 COMPILE_REUSE_RACY_WINDOW_NS: int
 COMPILE_REUSE_EXCLUDED_ROOT_DIRECTORIES: frozenset[str]
-
-def attempt_compile_reuse(*, request: CompileReuseRequest) -> CompileReuseAttempt: ...
-
-class CompileArtifactWrites:
-    @property
-    def artifacts(self) -> dict[str, tuple[str | None, int | None, int | None]]: ...
-
-class RecordedCompileOutput:
-    def print_stderr_line(self, line: str) -> None: ...
-    def record_stdout(self, text: str) -> None: ...
-    def print_stdout(self) -> None: ...
-    @property
-    def stderr_lines(self) -> list[str]: ...
-    @property
-    def stdout(self) -> str | None: ...
 
 def format_plan(
     *,
@@ -2484,7 +2232,6 @@ def write_cost_run(*, project_dir: Path, record: CostRunRecord) -> Path: ...
 def read_cost_run(*, project_dir: Path, run_id: str) -> CostRunRecord | None: ...
 def list_cost_runs(*, project_dir: Path) -> tuple[CostRunRecord, ...]: ...
 def resolve_cost_run(*, project_dir: Path, selector: str) -> CostRunRecord | None: ...
-def format_cost_json(record: CostRunRecord) -> str: ...
 def resolve_defer_clone_selection(*, scope: PlannerScope) -> tuple[list[str], list[str], int]: ...
 def run_check_read_side_dependencies(
     *,
@@ -2500,16 +2247,6 @@ def run_check_read_side_dependencies(
     providers: ProviderContainer | None = None,
 ) -> tuple[PythonNodeExecutionResult, ...]: ...
 def finalize_build_cost(finalization: BuildCostFinalization) -> CostRunRecord | None: ...
-def persist_cost_run(
-    *, project_dir: Path, record: CostRunRecord, output_stream: TextIO, stage: str
-) -> None: ...
-def write_build_cost_breakdown(
-    *, record: CostRunRecord, output_stream: TextIO, use_color: bool
-) -> None: ...
-def format_cost_history_json(
-    *, records: tuple[CostRunRecord, ...], matching_count: int | None = None
-) -> str: ...
-def cost_output_payload(*, record: CostRunRecord) -> dict[str, object]: ...
 def format_cost_breakdown(
     *,
     record: CostRunRecord,
@@ -2518,32 +2255,10 @@ def format_cost_breakdown(
     terminal_width: int | None = None,
     show_run_id: bool = True,
 ) -> str: ...
-def format_cost_history(
-    *, records: tuple[CostRunRecord, ...], matching_count: int, use_color: bool
-) -> str: ...
 def format_summary_footer(
     *, counts: tuple[tuple[str, int], ...], use_color: bool, elapsed: str | None = None
 ) -> str: ...
 def format_count_noun(*, count: int, singular: str, plural: str | None = None) -> str: ...
-def format_completion_line(
-    *, style: CliStyle, state: CompletionState, label: str, summary: str | None = None
-) -> str: ...
-def format_status_cell(*, style: CliStyle, status: str, width: int = 6) -> str: ...
-def format_aligned_name_value(
-    *,
-    plain_name: str,
-    styled_name: str,
-    value: str,
-    name_column_width: int,
-    prefix: str = "  ",
-) -> str: ...
-def resolve_name_column_width(
-    *, names: list[str] | tuple[str, ...], min_width: int = 20
-) -> int: ...
-def append_overflow_line(
-    *, lines: list[str], total_count: int, visible_count: int, indent: str, options: DisplayOptions
-) -> list[str]: ...
-def visible_entries[T](*, entries: Sequence[T], options: DisplayOptions) -> Sequence[T]: ...
 
 class CountHeaderStyle:
     def __call__(self, text: str) -> str: ...
@@ -2580,32 +2295,7 @@ def update_sqlbuild_skills(
 ) -> SkillUpdateResult: ...
 def maintain_sqlbuild_skills(*, project_dir: Path) -> SkillMaintenanceResult: ...
 def load_packaged_skill_files() -> dict[str, str]: ...
-def run_skills_command(
-    *,
-    project_dir: Path | None,
-    global_install: bool = False,
-    targets: tuple[str, ...] = (),
-    force: bool = False,
-) -> int: ...
 def run_playground_command(request: PlaygroundCommandRequest) -> int: ...
-def validate_cli_warehouse(*, cli_warehouse: str | None, project_dir: Path) -> None: ...
-def resolve_command_warehouse(
-    *,
-    discovered_inputs: DiscoveredProjectInputs | None,
-    selected_target: str | None,
-    group: WarehouseGroup | None,
-    cli_warehouse: str | None,
-    connection_config: dict[str, object],
-    cli_vars: dict[str, object] | None = None,
-) -> ResolvedWarehouse: ...
-def apply_command_warehouse(
-    *,
-    config: dict[str, object],
-    adapter_name: str,
-    project_dir: Path | None,
-    discovered_inputs: DiscoveredProjectInputs | None,
-    selected_target: str | None,
-) -> dict[str, object]: ...
 def describe_connection_warehouse(
     *,
     discovered_inputs: DiscoveredProjectInputs,
@@ -2636,49 +2326,15 @@ def resolve_target_connection_config(
     target_name: str,
     cli_vars: dict[str, object] | None = None,
 ) -> dict[str, object]: ...
-def validate_preview_target(
-    *, discovered_inputs: DiscoveredProjectInputs, as_target: str | None, command_name: str
-) -> None: ...
 def normalize_dbt_profile_connection(
     *, resolved: ResolvedDbtProfileOutput
 ) -> NormalizedDbtProfileConnection: ...
 def coerce_dbt_profile_bool(value: object) -> bool: ...
 def coerce_dbt_profile_number(value: object) -> int | float: ...
-def build_dbt_init_project_toml(
-    *,
-    project_name: str,
-    adapter: str,
-    target_name: str,
-    profile_name: str,
-    dbt_project_dir: str,
-    profiles_dir: str,
-    target_path: str,
-    target_schema: str | None,
-    target_database: str | None,
-) -> str: ...
-def load_dbt_manifest_index(*, manifest_path: Path) -> DbtManifestIndex: ...
-def build_compile_dbt_manifest_index(
-    *, manifest_contents: str | None
-) -> DbtManifestIndex | None: ...
 def build_dbt_manifest_index(*, raw_data: object) -> DbtManifestIndex: ...
 def resolve_dbt_manifest_model(
     *, manifest: DbtManifestIndex, name: str, package_name: str | None = None
 ) -> DbtManifestModel: ...
-def validate_compile_dbt_model_names(
-    *, known_model_names: Iterable[str], dbt_manifest: DbtManifestIndex | None
-) -> None: ...
-def validate_compile_dbt_model_reference(
-    *,
-    reference: CompileSqlReference,
-    model_relative_path: Path,
-    dbt_manifest: DbtManifestIndex | None,
-) -> None: ...
-def resolve_sqlbuild_model_dbt_refs(
-    *,
-    project: CompiledProjectView,
-    manifest: DbtManifestIndex,
-    selected_model_names: Iterable[str] | None = None,
-) -> tuple[tuple[CompiledModelView, DbtManifestModel], ...]: ...
 
 class DbtCombinedGraph:
     @property
@@ -2709,16 +2365,12 @@ def build_merged_dbt_execution_argv(
     routed_args: Sequence[str],
     plan: DbtInteropPlan,
 ) -> tuple[str, ...] | None: ...
-def dbt_execution_ls_argv(*, argv: Sequence[str]) -> list[str] | None: ...
 def build_failed_sqlbuild_model_names(
     *,
     graph: DbtCombinedGraph,
     manifest: DbtManifestIndex,
     node_results: Sequence[DbtNodeExecutionResult],
 ) -> tuple[str, ...]: ...
-def render_dbt_execution_summary_footer(
-    *, node_results: Sequence[DbtNodeExecutionResult], use_color: bool
-) -> str | None: ...
 def plan_dbt_interop_command(
     *,
     command: DbtInteropCommand | str,
@@ -2729,7 +2381,6 @@ def plan_dbt_interop_command(
     dbt_options: DbtCliOptions,
     command_args: DbtInteropCommandArgs,
 ) -> DbtInteropPlan: ...
-def resolve_dbt_executable() -> str: ...
 
 class DbtRunner:
     dbt_executable: str
@@ -2765,20 +2416,12 @@ def execute_dbt_json_event_stream(
     enable_status: bool = True,
 ) -> tuple[int, tuple[DbtNodeExecutionResult, ...]]: ...
 def build_dbt_init_project(*, request: DbtInitRequest) -> DbtInitResult: ...
-def validate_dbt_init_project(*, request: DbtInitRequest) -> None: ...
 def build_dbt_compile_argv(
     *, dbt_executable: str, options: DbtCliOptions, full_refresh: bool = False
 ) -> tuple[str, ...]: ...
 def build_dbt_deps_argv(*, dbt_executable: str, options: DbtCliOptions) -> tuple[str, ...]: ...
 def build_dbt_debug_argv(
     *, dbt_executable: str, options: DbtCliOptions, args: Sequence[str] | None = None
-) -> tuple[str, ...]: ...
-def build_dbt_command_argv(
-    *,
-    dbt_executable: str,
-    command: str,
-    options: DbtCliOptions,
-    args: Sequence[str] | None = None,
 ) -> tuple[str, ...]: ...
 def build_dbt_ls_argv(
     *,
@@ -2814,12 +2457,6 @@ def debug_dbt_from_project(
     stdout_stream: TextIO,
     stderr_stream: TextIO,
 ) -> int: ...
-def resolve_dbt_connection_config(
-    *,
-    request: DbtInteropExecutionRequest,
-    invocation: DbtInteropInvocation,
-    compiled: DbtInteropCompiledProject,
-) -> dict[str, object]: ...
 def write_dbt_execution_plan_text(
     *,
     request: DbtInteropExecutionRequest,
@@ -2848,35 +2485,12 @@ def resolve_sqlbuild_execution_plan_output(
     plan: DbtInteropPlan,
     failed_sqlbuild_model_names: tuple[str, ...],
 ) -> PlanOutput | None: ...
-def run_dbt_sqlbuild_work(
-    *,
-    request: DbtInteropExecutionRequest,
-    invocation: DbtInteropInvocation,
-    compiled: DbtInteropCompiledProject,
-    plan_output: PlanOutput,
-    connection_config: dict[str, object],
-) -> int: ...
 def write_sqlbuild_skip_notice(
     *,
     request: DbtInteropExecutionRequest,
     invocation: DbtInteropInvocation,
     message: str,
 ) -> None: ...
-def execute_dbt_sqlbuild_work(
-    *,
-    context: DbtSqlbuildWorkContext,
-    command: DbtInteropCommand,
-    project: CompiledProjectView,
-    project_dir: Path,
-    fail_fast: bool,
-    verbose: bool,
-) -> int: ...
-def build_sqlbuild_plan_output(
-    *,
-    environment: DbtPlanEnvironment,
-    request: DbtSqlbuildPlanRequest,
-    hooks: ConnectionHooks,
-) -> PlanOutput | None: ...
 def attach_sqlbuild_plan_output(
     *,
     plan: DbtInteropPlan,
@@ -2887,7 +2501,6 @@ def attach_sqlbuild_plan_output(
     connection_progress: Any | None,
     on_progress: Callable[[str], None] | None,
 ) -> DbtInteropPlan: ...
-def dbt_failure_detail(result: DbtCommandResult) -> str | None: ...
 def load_compiled_dbt_manifest(
     *,
     runner: DbtRunner,
@@ -2966,9 +2579,6 @@ class DbtCompileReferenceResolver:
 def build_compile_reference_resolver(
     *, manifest_contents: str | None
 ) -> ExternalSqlReferenceResolver | None: ...
-def resolve_external_sql_reference_resolver(
-    *, project_dir: Path, discovered_inputs: DiscoveredProjectInputs
-) -> ExternalSqlReferenceResolver | None: ...
 def resolve_dbt_config(
     *,
     project_root: Path,
@@ -2977,13 +2587,6 @@ def resolve_dbt_config(
     require_project_dir: bool,
     local_config: LocalDbtConfig | None = None,
 ) -> ResolvedDbtConfig: ...
-def resolve_dbt_reference_relation(
-    *,
-    manifest: DbtManifestIndex | None,
-    ref_kind: str,
-    ref_name: str,
-    ref_package: str | None,
-) -> str | None: ...
 def build_dbt_interop_plan(
     *,
     command: DbtInteropCommand | str,
@@ -3084,19 +2687,9 @@ def render_diff_output(
     suppress_example_values: bool = ...,
     outcome: str | None = ...,
 ) -> str: ...
-def render_diff_error_json(
-    *,
-    status: str,
-    code: str,
-    message: str,
-    help_text: str | None = ...,
-    size_guard: dict[str, object] | None = ...,
-) -> str: ...
-def run_diff_command(*, request: DiffCommandRequest) -> int: ...
 def execute_query_diff(
     *, request: DiffCommandRequest, preparation: QueryDiffPreparation
 ) -> DiffExecutionResult: ...
-def machine_output_mode(args: CliNamespace, /) -> bool: ...
 
 class CliObservabilityScope:
     def __enter__(self) -> EventDispatcher: ...
@@ -3211,11 +2804,6 @@ class EventExporterDispatcher:
     def finalize_when_idle(self, finalizer: Callable[[], object], /) -> None: ...
     def summary(self) -> EventExportSummary: ...
 
-class DispatcherWorker:
-    def __call__(self) -> None: ...
-
-def stop_event_exporter_threads() -> None: ...
-
 class EventExporterCommandScope:
     """Bind discovered typed sinks and own their command-scoped provider session."""
 
@@ -3254,16 +2842,6 @@ class EventExporterCommandScope:
     def close(self) -> EventExportSummary: ...
     def export_output(self, records: tuple[CommandOutputRecord, ...]) -> None: ...
 
-class ProviderSessionCloser:
-    def __call__(self) -> None: ...
-
-class EventExporterScopeContext:
-    def __enter__(self) -> EventExporterCommandScope: ...
-    def __exit__(self, *exc_info: object) -> bool: ...
-
-def event_exporter_command_scope(
-    scope: EventExporterCommandScope, /
-) -> EventExporterScopeContext: ...
 def current_event_exporter_command_scope() -> EventExporterCommandScope | None: ...
 def cached_event_exporter_extensions(
     *, project_dir: Path
@@ -3302,11 +2880,6 @@ class OutputCaptureDispatcher:
     ) -> None: ...
     def append(self, *, stream: CommandOutputStream, text: str) -> None: ...
     def close(self) -> CommandOutputCaptureSummary: ...
-
-class OutputDeliveryWorker:
-    def __call__(self) -> None: ...
-
-def stop_output_capture_threads() -> None: ...
 
 class CommandOutputContext:
     def __enter__(self) -> None: ...
@@ -3508,18 +3081,6 @@ class DbtEventStream:
     ) -> None: ...
     def consume(self, line: str) -> DbtEventStreamUpdate | None: ...
 
-def render_dbt_node_result(
-    *,
-    result: DbtNodeExecutionResult,
-    use_color: bool,
-    display_index: int | None = None,
-    display_total: int | None = None,
-    detail: str = "",
-) -> str: ...
-def format_dbt_active_node_status(
-    *, active_nodes: Sequence[tuple[str, float]], now: float
-) -> str: ...
-
 class CliNamespace:
     command: str | None
     project_dir: str | None
@@ -3700,11 +3261,6 @@ class CliNamespace:
 
     def __init__(self) -> None: ...
 
-class DbtInitProgressReporter:
-    def __init__(self, *, stream: TextIO, use_color: bool) -> None: ...
-    def start(self, message: str) -> None: ...
-    def complete(self, message: str) -> None: ...
-
 class PlanningProgressReporter:
     def __init__(self, *, stream: TextIO, use_color: bool = False) -> None: ...
     def on_progress(self, message: str) -> None: ...
@@ -3722,11 +3278,9 @@ class VerboseInspectionWriter:
     @staticmethod
     def format_record(*, record: InspectionQueryRecord) -> str: ...
 
-def format_execution_header(*, command: str, target: str | None, concurrency: int) -> str: ...
 def write_execution_header(
     *, stream: TextIO, command: str, target: str | None, concurrency: int, use_color: bool
 ) -> None: ...
-def format_expectation_name(model_name: str) -> str: ...
 def format_expectation_detail(step_result: StepResult) -> str: ...
 def format_build_footer(
     *,
@@ -3781,21 +3335,6 @@ def format_audit_execution_json(
     configured_concurrency: int = 1,
     worker_count: int | None = None,
 ) -> str: ...
-def format_scenario_execution_json(
-    *,
-    results: tuple[ScenarioRunResult, ...],
-    local: bool = False,
-    run_namespace: str | None = None,
-    namespace_source: str = "unset",
-    duration_ms: float | None = None,
-) -> str: ...
-def format_scenario_snapshot_execution_json(
-    *,
-    results: tuple[ScenarioSnapshotCaptureRunResult, ...],
-    refresh: bool = False,
-    run_namespace: str | None = None,
-    namespace_source: str = "unset",
-) -> str: ...
 def format_degradable_build_execution_json(
     *,
     result: BuildExecutionResult,
@@ -3807,30 +3346,12 @@ def format_degradable_build_execution_json(
     run_id: str | None = None,
     cost: dict[str, object] | None = None,
 ) -> str: ...
-def write_execution_json_output(
-    *, payload: str, json_output: bool, json_output_path: Path | None
-) -> None: ...
 def format_plan_json(
     *, plan: PlanOutput, python_plan_entries: tuple[PythonPlanEntry, ...] = ()
 ) -> str: ...
-def serialize_future_cursor_safety(
-    evidence: FutureCursorSafetyEvidence | None,
-) -> dict[str, object] | None: ...
 def serialize_maximum_start_safety(
     evidence: MaximumStartSafetyEvidence | None,
 ) -> dict[str, object] | None: ...
-def write_reusable_compile(
-    *,
-    attempt: CompileReuseAttempt,
-    output: RecordedCompileOutput,
-    exit_code: int,
-    input_reads: CompileInputReads,
-    artifact_writes: CompileArtifactWrites,
-    compile_cache_enabled: bool,
-    artifacts_written: bool,
-    dag_artifact_path: Path | None,
-    json_output: bool,
-) -> None: ...
 def format_compile_text(
     *,
     graph: ProjectGraph,
@@ -3855,12 +3376,6 @@ def format_compile_json(
     selected_keys: frozenset[CompiledObjectKey] | None = None,
     sql_validation_enabled: bool = True,
 ) -> str: ...
-def format_compile_error_json(
-    *, code: str, message: str, help_text: str | None, location: SourceLocation | None = None
-) -> str: ...
-
-class PlannedStaticSqlTests: ...
-
 def write_static_compile_target(
     *,
     target_dir: Path,
@@ -3875,12 +3390,6 @@ def write_compile_target(
     plan_output: PlanOutput,
     manifest: NativeManifest | None = None,
 ) -> WrittenTarget: ...
-def static_sql_test_planning_diagnostics(
-    *, target_dir: Path, adapter: BaseAdapter, project: CompiledProjectView
-) -> tuple[CompilerDiagnostic, ...]: ...
-def plan_static_sql_tests(
-    *, target_dir: Path, adapter: BaseAdapter, project: CompiledProjectView
-) -> PlannedStaticSqlTests: ...
 
 class PreparedCompileArtifacts:
     min_prepared_models: int
@@ -3905,41 +3414,18 @@ class PreparedCompileArtifacts:
     ) -> WrittenTarget | None: ...
     def planning_diagnostics(self) -> tuple[CompilerDiagnostic, ...] | None: ...
 
-def finalize_rule_findings_rows(
-    *,
-    config: RulesConfig,
-    project_dir: Path,
-    evaluated_codes: Sequence[str],
-    findings: Sequence[Finding],
-) -> tuple[Finding, ...]: ...
-def run_custom_host_json(spec_json: str) -> str: ...
 def format_sql_json(request_json: str) -> str: ...
-def format_sql_batch_json(request_json: str) -> str: ...
 def query_fingerprint(sql: str, dialect: str) -> str: ...
 def lint_sql_json(request_json: str) -> str: ...
-def lint_sql_batch_json(request_json: str) -> str: ...
 def prepare_lint_sql(
     request: LintPreparationRequest,
 ) -> tuple[str, list[tuple[str, int, int, int, int, str]], list[str]] | None: ...
-def lint_backtick_identifiers(dialect: str) -> bool: ...
 def neutralize_lint_interpolation(
     body: str, dialect: str, for_formatting: bool = False
-) -> tuple[str, list[tuple[str, int, int, int, int, str]]]: ...
-def neutralize_lint_context_interpolation(
-    body: str,
-) -> tuple[str, list[tuple[str, int, int, int, int, str]]]: ...
-def neutralize_lint_audit_parameters(
-    body: str,
 ) -> tuple[str, list[tuple[str, int, int, int, int, str]]]: ...
 def restore_lint_interpolation(
     fixed: str, sites: list[tuple[str, int, int, int, int, str]]
 ) -> tuple[bool, str]: ...
-def lint_interpolation_text_at(body: str, start: int, dialect: str) -> str | None: ...
-def scan_fixture_typed_null_candidates(
-    project_dir: Path, selected_paths: frozenset[Path] | None = None
-) -> tuple[frozenset[Path], frozenset[str]]: ...
-def simplify_fixture_null_projections(*, sql: str, relation: Any) -> str: ...
-def is_empty_fixture_query(sql: str) -> bool: ...
 def fixture_read_cache_info(*, reset: bool = False) -> tuple[int, int]: ...
 def fixture_planning_work_info(*, reset: bool = False) -> tuple[int, int]: ...
 def planner_identity_work_info(*, reset: bool = False) -> tuple[int, dict[str, int]]: ...
@@ -3974,11 +3460,6 @@ def reject_lint_suppressions(
     project_dir: Path,
 ) -> list[LintViolation]: ...
 def load_rules_config(*, project_dir: Path) -> RulesConfig: ...
-def valid_rules_config(*, project_dir: Path) -> RulesConfig | None: ...
-def selected_rule_codes(
-    *, config: RulesConfig, custom_payloads: list[dict[str, object]]
-) -> list[str]: ...
-def rule_selected(*, config: RulesConfig, code: str) -> bool: ...
 def build_rule_catalogue(
     *, config: RulesConfig, project_dir: Path, include_custom: bool | None = None
 ) -> tuple[Rule, ...]: ...
@@ -3989,25 +3470,11 @@ def select_catalogue_rules(
     project_dir: Path,
     custom_payloads: list[dict[str, object]] | None = None,
 ) -> tuple[Rule, ...]: ...
-def resolve_rule_ignore_selectors(
-    *, config: RulesConfig, project: CompiledProjectView
-) -> RulesConfig: ...
 def format_rule(*, rule: Rule, config: RulesConfig | None = None) -> str: ...
 def install_rules_skills(*, config: RulesConfig, project_dir: Path, check: bool) -> bool: ...
-def match_model_headers(contents: list[str]) -> list[tuple[int, int, int] | None]: ...
-def parse_model_headers(
-    headers: list[str],
-) -> list[tuple[dict[str, object] | None, list[tuple[str, int, int]] | None, str | None]]: ...
-def tokenize_model_header(header: str) -> list[tuple[int, str, int]]: ...
-def model_output_columns(
-    contents: str, implicit_aliases: bool
-) -> list[tuple[str, int, int, int, int]]: ...
 def model_header_column_locations(
     contents: str, header: str, header_start: int
 ) -> tuple[list[tuple[str, int, int, int, int]] | None, str | None]: ...
-def model_header_failure(
-    error: str, header: str, header_line: int | None
-) -> tuple[str, str | None, int | None]: ...
 
 class NativeProjectTree:
     def __init__(self, project_dir: str) -> None: ...
@@ -4023,7 +3490,6 @@ class NativeDirectorySnapshotScope:
     def __exit__(self, *exc_info: object) -> bool: ...
 
 def directory_snapshot_scope(*, project_dir: Path) -> NativeDirectorySnapshotScope: ...
-def active_directory_snapshot(*, project_dir: Path) -> NativeDirectorySnapshot | None: ...
 
 class DiscoveredSqlModelFile:
     """A discovered SQL model file and its raw contents."""
@@ -4065,18 +3531,6 @@ class DiscoveredSqlModelFile:
 
 def parse_schema_document(loaded: object, path: str, /) -> tuple[SchemaSeedEntry, ...]: ...
 def parse_sources_document(loaded: object, path: str, /) -> tuple[SourceEntry, ...]: ...
-def analyze_compile_project(
-    *,
-    project_dir: Path,
-    no_sql_validation: bool,
-    selected_target: str | None,
-    lineage_mode: CompileLineageMode,
-    cli_vars: dict[str, object] | None,
-    profile_flags: CompileProfileFlags,
-    analysis_selection: CompileAnalysisSelection,
-    status: TransientStatusReporter | None,
-    prepared_artifacts: PreparedCompileArtifacts | None = None,
-) -> CompileAnalysis: ...
 def build_compiled_project(
     *,
     discovered_inputs: DiscoveredProjectInputs,
@@ -4129,19 +3583,6 @@ def assembly_stage_inputs(
     analysis_cache_dir: Path | None = None,
     analysis_model_names: frozenset[str] | None = None,
 ) -> dict[str, Any] | None: ...
-def build_project_graph_with_analysis_selection(
-    *,
-    discovered_inputs: DiscoveredProjectInputs,
-    adapter: BaseAdapter,
-    analysis_selection: CompileAnalysisSelection,
-    selected_target: str | None = None,
-    no_sql_validation: bool = False,
-    skip_column_inference: bool = False,
-    column_lineage_mode: ColumnLineageMode = ...,
-    cli_vars: dict[str, object] | None = None,
-    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
-    on_progress: Callable[[str], None] | None = None,
-) -> ProjectGraph: ...
 def build_project_graph(
     *,
     discovered_inputs: DiscoveredProjectInputs,
@@ -4182,34 +3623,10 @@ def validate_project_targets(*, adapter_name: str, project: CompiledProjectView)
 def validate_managed_write_schemas(
     *, adapter: BaseAdapter, project: CompiledProjectView
 ) -> None: ...
-def resolve_cursor_input_roles(*, model: CompiledModelView) -> CursorInputRoles: ...
 def model_placeholders(model_input: ModelInput, /) -> dict[str, str] | None: ...
-def model_syntax_checks(
-    *,
-    model_inputs: tuple[ModelInput, ...],
-    analysis_model_names: frozenset[str] | None,
-    analysis_succeeded: frozenset[str],
-) -> tuple[tuple[tuple[str, dict[str, str] | None], ...], ...]: ...
-def standalone_pivot_models(
-    *, model_inputs: tuple[ModelInput, ...], analysed: Mapping[str, int]
-) -> dict[int, tuple[str, tuple[SchemaDynamicColumnFamily, ...]]]: ...
-def resolve_compile_analysis_selection(
-    *, options: CompilePipelineOptions, discovered_inputs: DiscoveredProjectInputs
-) -> CompileAnalysisSelection | None: ...
-def build_project_graph_from_compiled_project(*, project: CompiledProjectView) -> ProjectGraph: ...
 def plan_has_executable_work(
     *, plan: PlanOutput, python_plan_entries: tuple[PythonPlanEntry, ...] = ()
 ) -> bool: ...
-def build_static_pipeline_result(
-    *, context: StaticCommandContext, plan_output: PlanOutput
-) -> CompilePipelineResult: ...
-def run_compile_only_pipeline(
-    *,
-    discovered_inputs: DiscoveredProjectInputs,
-    adapter: BaseAdapter,
-    options: CompilePipelineOptions,
-    on_progress: Callable[[str], None] | None = None,
-) -> CompilePipelineResult: ...
 def build_deferred_locations(
     *,
     project: CompiledProjectView,
@@ -4219,23 +3636,6 @@ def build_deferred_locations(
     default_database: str | None,
     render_qualified_name: Callable[..., str | None],
 ) -> dict[str, CompiledRelationLocation]: ...
-def resolve_deferred_target_config(
-    *, discovered_inputs: DiscoveredProjectInputs, defer_to: str, current_target_name: str | None
-) -> TargetConfig: ...
-def gather_deferred_relations(
-    *,
-    adapter: BaseAdapter,
-    connection: Any,
-    deferred_locations: dict[str, CompiledRelationLocation],
-) -> dict[str, RelationInfo]: ...
-def resolve_model_deferral_inputs(
-    *,
-    project: CompiledProjectView,
-    discovered_inputs: DiscoveredProjectInputs,
-    adapter: BaseAdapter,
-    connection: Any,
-    defer_to: str | None,
-) -> DeferralInputs: ...
 def build_python_relation_targets(
     *,
     adapter: BaseAdapter,
@@ -4243,48 +3643,15 @@ def build_python_relation_targets(
     plan_output: PlanOutput,
     required_refs: frozenset[SqlResourceRef] | None = None,
 ) -> dict[SqlResourceRef, str]: ...
-def build_project_relation_targets(
-    *, adapter: BaseAdapter, plan_output: PlanOutput
-) -> dict[SqlResourceRef, str] | None: ...
 def resolve_diff_model_names(
     *, project: CompiledProjectView, select: tuple[str, ...], exclude: tuple[str, ...]
 ) -> tuple[str, ...]: ...
-def run_diff_pipeline(
-    *,
-    discovered_inputs: DiscoveredProjectInputs,
-    adapter: BaseAdapter,
-    from_target: str,
-    to_target: str,
-    resolved_connection: dict[str, object],
-    no_sql_validation: bool,
-    select: tuple[str, ...],
-    exclude: tuple[str, ...],
-    cli_vars: dict[str, object] | None = None,
-    external_sql_reference_resolver: ExternalSqlReferenceResolver | None = None,
-) -> tuple[CompiledProjectView, CompiledProjectView, tuple[str, ...]]: ...
-def python_read_source_names_for(
-    *, discovered_inputs: DiscoveredProjectInputs, python_node_names: frozenset[str]
-) -> frozenset[str]: ...
-def build_python_run_plan_outputs(
-    *,
-    discovered_inputs: DiscoveredProjectInputs,
-    plan_output: PlanOutput,
-    run_selection: PythonSqlRunSelection | None,
-    selected_python_node_names: frozenset[str],
-) -> PythonRunPlanOutputs: ...
 def build_python_plan_entries(
     *,
     lifecycle_plan: PythonSqlRunLifecyclePlan,
     python_graph: PythonNodeGraph,
     previous_identities: dict[tuple[str, str], Fingerprint] | None = None,
 ) -> tuple[PythonPlanEntry, ...]: ...
-def compile_project_phase(
-    *,
-    discovered_inputs: DiscoveredProjectInputs,
-    adapter: BaseAdapter,
-    options: CompilePipelineOptions | None = None,
-    on_progress: Callable[[str], None] | None = None,
-) -> CompiledProjectPhaseResult: ...
 def run_compile_pipeline(
     *,
     discovered_inputs: DiscoveredProjectInputs,
@@ -4306,14 +3673,6 @@ def build_compile_inputs(
     no_cache: bool = False,
 ) -> CompileInputsView: ...
 def defer_compile_teardown_to_exit() -> None: ...
-def run_compile_command(
-    request: CompileCommandRequest, reuse_attempt: CompileReuseAttempt | None = None
-) -> int: ...
-def validate_authored_sql_test_ctes(
-    test_files: tuple[DiscoveredSqlTestFile, ...],
-    scenario_files: tuple[DiscoveredSqlScenarioFile, ...],
-    syntax: dict[str, object],
-) -> None: ...
 def validate_hook_sql_syntax(
     value: object,
     hook_name: str,
@@ -4325,43 +3684,15 @@ def validate_sql_syntax(
     model: tuple[str, Path],
     parsing: tuple[dict[str, str] | None, str | None] = (None, None),
 ) -> None: ...
-def hook_sql_statements(value: object) -> list[str]: ...
 def analyze_resolved_column_reads(
     *, query_sql: str, references: Sequence[CompileSqlReference], dialect: str | None
 ) -> tuple[CompiledLineageSourceFact, ...]: ...
-def build_effective_target_config(
-    *, discovered_inputs: DiscoveredProjectInputs, selected_target: str | None = None
-) -> TargetConfig | None: ...
-def build_effective_connection_config(
-    *,
-    discovered_inputs: DiscoveredProjectInputs,
-    selected_target: str | None = None,
-    cli_vars: dict[str, object] | None = None,
-) -> dict[str, object]: ...
 def build_effective_runtime_config(
     *,
     discovered_inputs: DiscoveredProjectInputs,
     selected_target: str | None = None,
     cli_vars: dict[str, object] | None = None,
 ) -> tuple[str | None, dict[str, object], str]: ...
-def build_sql_expansion_context(
-    *,
-    project_dir: Path,
-    value_renderer: TypedSqlValueRenderer,
-    cli_vars: dict[str, object] | None = None,
-    discovered_inputs: DiscoveredProjectInputs | None = None,
-    declaration_scope: DeclarationScopeBuild | None = None,
-    static_declaration_scope: DeclarationScopeBuild | None = None,
-) -> SqlExpansionContext: ...
-def build_effective_settings_config(
-    *, discovered_inputs: DiscoveredProjectInputs
-) -> SettingsConfig: ...
-def public_declaration_indexes(
-    inputs: DiscoveredProjectInputs,
-) -> tuple[dict[str, EnumDeclaration], dict[str, ConstantDeclaration]]: ...
-def public_model_schema_index(
-    inputs: DiscoveredProjectInputs,
-) -> dict[str, ModelSchemaDeclaration]: ...
 def validate_discovered_project_inputs(
     inputs: DiscoveredProjectInputs, nodes: list[dict[str, object]], /
 ) -> None: ...
@@ -4427,13 +3758,10 @@ def discover_macro_files(
     *, project_dir: Path, isolate_declaration_kind: bool = False
 ) -> tuple[DiscoveredMacroFile, ...]: ...
 def discover_seed_files(*, project_dir: Path) -> tuple[DiscoveredSeedFile, ...]: ...
-def discover_adapter_file(*, project_dir: Path) -> DiscoveredAdapterFile | None: ...
-def retained_discovery_session(*, project_dir: Path) -> NativeDiscoverySession | None: ...
 def discover_scope_snapshot(*, project_dir: Path) -> TolerantScopeDiscovery: ...
 def discover_python_module_files(
     *, project_dir: Path, root: str, public_only: bool
 ) -> tuple[Path, ...]: ...
-def discover_python_hook_files(*, project_dir: Path) -> tuple[dict[str, Any], ...]: ...
 def discover_python_function_files(
     *, project_dir: Path
 ) -> tuple[DiscoveredPythonFunctionFile, ...]: ...
@@ -4459,26 +3787,6 @@ class NativeDeclarationContexts:
         self, resolver: object, file_path: object, resource: object | None = None
     ) -> tuple[Any, bool]: ...
 
-class NativeScopeIndex:
-    @property
-    def index(self) -> ScopeIndex: ...
-    @property
-    def has_scoped_relationship_declarations(self) -> bool: ...
-    def grant_relationships(
-        self,
-        *,
-        discovered_inputs: DiscoveredProjectInputs,
-        syntax: SqlLexicalSyntax,
-        scan_store: tuple[SqlTestScanStore | None, str],
-    ) -> tuple[tuple[Path, str], ...]: ...
-    def index_with_relationships(self) -> ScopeIndex: ...
-
-def open_native_scope_index(
-    *,
-    discovered_inputs: DiscoveredProjectInputs,
-    loaded_macros: Mapping[str, LoadedMacro],
-    static_macros: tuple[StaticMacroExport, ...] = (),
-) -> NativeScopeIndex: ...
 def build_scope_index(
     *,
     discovered_inputs: DiscoveredProjectInputs,
@@ -4495,9 +3803,6 @@ def relocate_declarations_for_move(
     *, index: ScopeIndex, resource: ResourceIdentity, destination: str
 ) -> tuple[DeclarationRecord, ...] | None: ...
 def validate_scope_index(*, index: ScopeIndex) -> None: ...
-
-class NativeScopeLookup: ...
-
 def query_scope_target(*, lookup: ScopeLookup, target: ScopeQueryTarget) -> ScopeTargetQuery: ...
 def resolve_scope_visibility(
     *, lookup: ScopeLookup, target: ResourceIdentity | str | PurePath
@@ -4557,21 +3862,6 @@ def render_scope_result(
     use_color: bool = False,
 ) -> str: ...
 def scope_metadata_projection(*, index: ScopeIndex) -> dict[str, JsonValue]: ...
-def effective_config_target_name(
-    project_config: object, local_config: object, selected: str | None, /
-) -> tuple[str | None, str | None]: ...
-def effective_config_target_fields(
-    configs: tuple[object, object], target_name: str, default_target: object, /
-) -> tuple[list[tuple[str | None, str, object]] | None, str | None]: ...
-def effective_config_vars(
-    configs: tuple[object, object], target_config: object | None, cli_vars: dict[str, object], /
-) -> dict[str, object]: ...
-def effective_config_connection(
-    project_config: object, local_config: object, target_config: object | None, /
-) -> tuple[dict[str, object] | None, str | None]: ...
-def effective_config_settings(
-    settings: tuple[object, object], overrides: frozenset[str], names: list[str], /
-) -> dict[str, object]: ...
 def yaml_entry_line(*, contents: str, name: str) -> int | None: ...
 
 class CollectedCompileDiagnostics:
@@ -4656,27 +3946,14 @@ def snippet_help(*, purpose: str, target: str, lines: tuple[str, ...]) -> str: .
 def open_connection_with_hooks(
     *, adapter: BaseAdapter, connection_config: dict[str, object], hooks: ConnectionHooks
 ) -> Any: ...
-def build_analysis_cache_context(
-    *,
-    root: Path | None,
-    inference_profile: ExpressionInferenceProfile,
-    allow_compact_analysis: bool,
-    rich_type_inference: bool = True,
-    signature_namespace: object = None,
-) -> AnalysisCacheContext | None: ...
 
 class CompileInputRecording:
     def __enter__(self) -> CompileInputReads: ...
     def __exit__(self, *exception: object) -> bool: ...
 
 def record_compile_input_reads() -> CompileInputRecording: ...
-def record_settings_class_read(settings_class: type) -> None: ...
-def report_compile_diagnostic(*, key: tuple[str, ...], diagnostic: CompilerDiagnostic) -> None: ...
 def compiler_cache_directory(project_dir: Path, /) -> Path: ...
 def project_relative_path(*, path: Path, project_dir: Path) -> Path: ...
-def resolve_target_name(
-    *, project_config: ProjectConfig, local_config: LocalConfig, selected_target: str | None
-) -> str | None: ...
 def resolve_target_config(
     *, project_config: ProjectConfig, local_config: LocalConfig, target_name: str
 ) -> TargetConfig: ...
@@ -4705,30 +3982,6 @@ def resolve_effective_scenario_config(
 def scenario_local_type_overrides_for_dialect(
     *, scenario_config: ScenarioConfig, sql_analysis_dialect: str | None
 ) -> dict[str, str]: ...
-def apply_unit_test_selectors(
-    *, options: CompilePipelineOptions | None, discovered_inputs: DiscoveredProjectInputs
-) -> CompilePipelineOptions: ...
-def resolve_configured_rule_selection(
-    *,
-    options: CompilePipelineOptions,
-    discovered_inputs: DiscoveredProjectInputs,
-    project: CompiledProjectView,
-) -> frozenset[CompiledObjectKey] | None: ...
-def resolve_analysis_model_names(
-    *,
-    compile_inputs: CompileInputsView,
-    inference_profile: ExpressionInferenceProfile,
-    selection: CompileAnalysisSelection | None,
-) -> frozenset[str] | None: ...
-def compile_static_command_context(
-    *,
-    discovered_inputs: DiscoveredProjectInputs,
-    adapter: BaseAdapter,
-    options: CompilePipelineOptions,
-    selected_keys: frozenset[CompiledObjectKey] | None = None,
-    relation_keys: frozenset[CompiledObjectKey] | None = None,
-    on_progress: Callable[[str], None] | None = None,
-) -> StaticCommandContext: ...
 def run_clone_pipeline_with_options(
     *,
     discovered_inputs: DiscoveredProjectInputs,
@@ -4813,11 +4066,8 @@ def build_microbatch_create_index_sqls(
 CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION: int
 CURRENT_DIAGNOSTIC_LOG_SCHEMA_VERSION: int
 LIFECYCLE_EVENT_SCHEMA_VERSIONS: frozenset[int]
-HOOK_PHASES: frozenset[str]
-HOOK_TYPES: frozenset[str]
 OPERATION_ADAPTERS: frozenset[str]
 OPERATION_KINDS: frozenset[str]
-OPERATION_METADATA_FIELDS: frozenset[str]
 OPERATION_NAMES: frozenset[str]
 OPERATION_PHASES: frozenset[str]
 OPERATION_SCOPES: frozenset[str]
@@ -4832,8 +4082,6 @@ def validate_lifecycle_schema_version(*, value: object) -> None: ...
 def freeze_lifecycle_json(*, value: object, path: str) -> JSONValue: ...
 def validate_lifecycle_required_text(*, value: object, field_name: str) -> None: ...
 def validate_lifecycle_optional_text(*, value: object, field_name: str) -> None: ...
-def validate_lifecycle_timestamp(*, value: object) -> None: ...
-def validate_known_lifecycle_event(*, event: LifecycleEvent) -> None: ...
 def validate_lifecycle_event(*, event: LifecycleEvent) -> None: ...
 def validate_lifecycle_invocation_sequence(*, value: object) -> None: ...
 def validate_diagnostic_log(*, record: DiagnosticLog) -> None: ...
@@ -4867,18 +4115,7 @@ def render_insert_source_freshness_records_sql(
 def model_header_declarations(
     header: tuple[object | None, object | None], model_name: str, relative_path: Path, /
 ) -> tuple[tuple[object, ...], tuple[object, ...]]: ...
-def unknown_mapping_keys(
-    keys: list[tuple[str, bool]], allowed: list[str], /
-) -> tuple[str, str] | None: ...
-def unsupported_keys_help(keys: list[str], supported_keys: list[str], /) -> str: ...
 def semantic_help_catalogue() -> list[tuple[str, str]]: ...
-def resource_sql_diagnostics_of(
-    catalog: object,
-    project: Any,
-    shapes: dict[str, dict[str, str]],
-    profile: ExpressionInferenceProfile,
-    /,
-) -> tuple[CompilerDiagnostic, ...]: ...
 def compute_query_hash(*, query_sql: str, dialect: str | None) -> str: ...
 def compute_function_definition_hash(
     *, fingerprint_sql: str, language: str, dialect: str | None
@@ -4938,30 +4175,15 @@ def select_latest_fingerprints(
     node_names: tuple[str, ...],
     filtered_node_types: tuple[str, ...] = (),
 ) -> FingerprintSet: ...
-def find_python_string_locations(
-    *,
-    project_dir: Path,
-    discovered: DiscoveredProjectInputs,
-    names: tuple[str, ...],
-    reason: str,
-    context: str | None = None,
-) -> tuple[ManualLocation, ...]: ...
 def validate_resource_identity(
     *, name: str, kind: str, path: Path, private_identity: bool = False
 ) -> None: ...
 def function_node_type(*, return_columns: tuple[object, ...]) -> str: ...
 def load_project_config_file(project_dir: Path, /) -> ProjectConfig: ...
 def load_local_config_file(project_dir: Path, /) -> LocalConfig: ...
-def resolve_config_file_path(project_dir: Path, local: bool, /) -> Path: ...
-def validate_local_sql_analysis(project_dir: Path, flags: tuple[bool, bool, bool], /) -> None: ...
 def normalize_scope_path(*, path: str | PurePath) -> str: ...
 def scope_index_fingerprint(*, project_dir: Path) -> str | None: ...
 def load_or_build_scope_index(*, project_dir: Path, no_cache: bool = False) -> ScopeIndex: ...
-def model_schema_scope_usages(
-    schema_files: Sequence[DiscoveredModelSchemaFile],
-    resolver: DeclarationScopeResolver | None,
-    /,
-) -> tuple[UsageRecord, ...]: ...
 
 class NativeConfigError:
     class_name: str
@@ -4977,9 +4199,6 @@ def parse_schema_columns(
     options: tuple[bool, bool, bool],
     column_locations: dict[str, SourceLocation],
 ) -> tuple[SchemaColumn, ...]: ...
-def column_migration_problem(
-    model_name: str, values: dict[str, object], columns: list[tuple[str, str | None]]
-) -> NativeConfigError | None: ...
 def expand_template_data(
     *,
     value: object,
@@ -5061,9 +4280,6 @@ def scope_expected_model_names(
 def supports_color() -> bool: ...
 def parse_cli_invocation(argv: Sequence[str], *, use_color: bool) -> ParsedCliInvocation: ...
 def run_cli(argv: Sequence[str] | None = None, handlers: object | None = None) -> int: ...
-def extract_sql_test_ctes(
-    *, sql: str, file_label: str, syntax: SqlLexicalSyntax
-) -> tuple[CompileSqlTestCte, ...]: ...
 def scope_test_ctes(
     texts: list[tuple[str, str]], syntax: dict[str, object]
 ) -> list[tuple[str | None, list[tuple[str, str]]]]: ...
@@ -5163,7 +4379,6 @@ def cursor_intrinsics_analysis_sql(*, sql: str, cursor_type: object) -> str: ...
 def resolve_cursor_intrinsics(
     *, sql: str, start_sql: str | None = None, end_sql: str | None = None
 ) -> tuple[str, bool]: ...
-def parse_macro_arguments(text: str, nested: list[tuple[int, int]]) -> tuple[object, ...]: ...
 def scan_macro_call_sites(
     sql: str,
 ) -> tuple[
@@ -5255,14 +4470,6 @@ def build_native_declaration_contexts(
     lookup: ScopeLookup,
     declarations: Mapping[DeclarationIdentity, EnumDeclaration | ConstantDeclaration | LoadedMacro],
 ) -> NativeDeclarationContexts: ...
-def render_constant_declaration(
-    *,
-    declaration: ConstantDeclaration,
-    value_renderer: TypedSqlValueRenderer,
-    collection_rendering: CollectionRendering,
-    file_path: Path | None = None,
-) -> str: ...
-def render_enum_member_value(*, value: str | int) -> str: ...
 def resolve_declaration_context(
     *,
     resolver: DeclarationScopeResolver,
@@ -5313,9 +4520,6 @@ def inventory_macro_modules(
     list[tuple[int, str]],
     list[tuple[int, str, list[str]]] | None,
 ]: ...
-def splice_macro_calls(
-    sql: str, sites: list[tuple[int, int]], outputs: list[str]
-) -> tuple[str, list[tuple[int, int, int, int]]]: ...
 
 class MacroCallMemo:
     def __init__(self) -> None: ...
@@ -5386,14 +4590,6 @@ type _PivotContractRow = tuple[
     | None,
 ]
 
-def locate_model_binding_diagnostics(
-    rows: list[_AnalysisDiagnosticRow],
-    texts: tuple[str, str, str],
-    expansion: tuple[str, list[list[tuple[int, int, int, int]]]] | None,
-) -> list[
-    tuple[str, str, str, int | None, int | None, tuple[int, int, int | None, int | None] | None]
-]: ...
-
 class NativeModelAnalysisSession:
     @property
     def fact_models(self) -> list[str]: ...
@@ -5411,12 +4607,6 @@ def session_outcome_analysis(
     *, session: Any, position: int, placeholders: dict[str, str] | None
 ) -> Any: ...
 def dynamic_contract_proof(row: Any, /) -> Any: ...
-def infer_native_query_column_rows(
-    *,
-    queries: Sequence[Any],
-    profile: Any,
-    column_nullability_by_table: Mapping[str, Mapping[str, Any]] | None = None,
-) -> list[tuple[bool, list[tuple[str, str | None, str]] | None, bool]]: ...
 def infer_native_query_columns(
     *,
     queries: Sequence[Any],
@@ -5449,14 +4639,6 @@ def _oracle_cte_fact_recovery(
 
 # Native analysis: semantic completion.
 def semantic_shapes(*, project: Any, profile: Any | None = None) -> dict[str, dict[str, str]]: ...
-def published_model_shape(
-    *, model: Any, columns: dict[str, str], inputs: dict[str, dict[str, str]], profile: Any
-) -> dict[str, str]: ...
-def model_binding_inputs(
-    model: Any, shapes: dict[str, dict[str, str]], /
-) -> dict[str, dict[str, str]]: ...
-def binding_relation_names(references: Sequence[Any], /) -> frozenset[str]: ...
-def semantic_coverage(project: Any, /) -> dict[str, tuple[str, ...]]: ...
 def source_binding_diagnostics(
     *, project: Any, columns: Mapping[str, Any], profile: Any, selected_keys: frozenset[Any]
 ) -> tuple[Any, ...]: ...
@@ -5538,14 +4720,6 @@ def optional_named_bool[D: (bool, None)](
     error_class: type[Exception],
     default: D,
 ) -> bool | D: ...
-def render_project_var_text(*, value: object, label: str) -> str: ...
-def compare_contracts(
-    *,
-    adapter: BaseAdapter,
-    connection: object,
-    models: tuple[CompiledModelView, ...],
-    sources: tuple[CompiledSourceView, ...],
-) -> tuple[ContractEvidence, ...]: ...
 def compare_contract_evidence(
     *,
     item: ContractEvidence,
@@ -5555,16 +4729,6 @@ def compare_contract_evidence(
 def edit_contract_model(
     *, model: CompiledModelView, physical_columns: tuple[ColumnInfo, ...], overwrite: bool
 ) -> tuple[str | None, str | None]: ...
-def edit_contract_source(
-    *,
-    source: CompiledSourceView,
-    physical_columns: tuple[ColumnInfo, ...],
-    overwrite: bool,
-    contents: str | None = None,
-) -> tuple[str | None, str | None]: ...
-def remaining_contract_findings(
-    *, findings: tuple[ContractFinding, ...], overwrite: bool, conflict: str | None
-) -> tuple[ContractFinding, ...]: ...
 def evaluate_model_contracts(
     *, project: CompiledProjectView, dialect: TypeDialect | str | None = None
 ) -> ContractValidationResult: ...
@@ -5578,12 +4742,6 @@ def build_project_column_lineage(
     model_names: frozenset[str] | None,
     /,
 ) -> ProjectColumnLineage | None: ...
-def build_direct_semantic_uses(
-    project: CompiledProjectView,
-    dialect: str | None,
-    model_names: frozenset[str],
-    /,
-) -> tuple[DirectSemanticColumnUse, ...]: ...
 
 class ProjectColumnLineage:
     """Project-level column lineage graph with lazily materialized public views."""
@@ -5615,19 +4773,11 @@ class ProjectColumnLineage:
         self, *, resource_name: str, column_name: str
     ) -> tuple[ColumnLineageEdge, ...]: ...
 
-def relation_lineage_fingerprint(
-    project_dir: Path, prefix: bytes, interrupted_listing_uncacheable: bool, /
-) -> str | None: ...
 def lineage_cache_fingerprint(
     *, project_dir: Path, cli_vars: dict[str, object] | None
 ) -> str | None: ...
-def run_lineage_command(*, request: LineageCommandRequest) -> int: ...
 def run_refactor_command(*, request: RefactorCommandRequest) -> int: ...
-def run_janitor_command(*, request: JanitorCommandRequest) -> int: ...
-def run_freshness_command(*, request: FreshnessCommandRequest) -> int: ...
-def run_clone_command(*, request: CloneCommandRequest) -> int: ...
 def run_load_command(*, request: LoadCommandRequest) -> int: ...
-def run_check_command(*, request: CheckCommandRequest) -> int: ...
 def write_check_results(
     *,
     stream: TextIO,
@@ -5638,7 +4788,6 @@ def write_check_results(
 ) -> None: ...
 def format_check_json(*, results: tuple[PythonCheckExecutionResult, ...]) -> str: ...
 def run_test_command(*, request: TestCommandRequest) -> int: ...
-def run_seed_command(*, request: SeedCommandRequest) -> int: ...
 def run_build_command(*, request: BuildCommandRequest) -> int: ...
 def enforce_plan_safety_policies(
     *,
@@ -5657,7 +4806,6 @@ def enforce_model_execution_limit(
     refusal_note: str,
 ) -> None: ...
 def run_audit_command(*, request: AuditCommandRequest) -> int: ...
-def run_contract_command(*, request: ContractCommandRequest) -> int: ...
 def run_init_command(project_dir: Path | None = None) -> int: ...
 def run_cost_command(request: CostCommandRequest) -> int: ...
 def run_dbt_command(
@@ -5725,12 +4873,6 @@ def build_scenario_hash_index(
 def build_scenario_artifact_name(
     *, hash_prefix: str, kind: str, logical_name: str, identifier_limit: int = 63
 ) -> str: ...
-def build_scenario_artifact_physical_name(
-    *, hash_prefix: str, kind: str, logical_name: str, identifier_limit: int
-) -> str: ...
-def fit_scenario_artifact_logical_name(
-    *, logical_name: str, fixed_prefix: str, identifier_limit: int
-) -> str: ...
 def parse_scenario_artifact_physical_name(name: str) -> ParsedScenarioArtifactName | None: ...
 def is_scenario_artifact_physical_name(name: str) -> bool: ...
 def build_scenario_relation_map(
@@ -5758,12 +4900,6 @@ def build_scenario_fixture_plans(
     source_lexical_syntax: SqlLexicalSyntax,
     fixture_sql_overrides: dict[tuple[CompiledResourceType, str], str] | None = None,
 ) -> tuple[ScenarioFixturePlan, ...]: ...
-def build_scenario_seed_entries(
-    *,
-    project: CompiledProjectView,
-    graph_plan: ScenarioGraphPlan,
-    relation_plan: ScenarioRelationPlan,
-) -> tuple[SeedPlanEntry, ...]: ...
 def build_scenario_execution_plan(
     *,
     scenario: CompiledSqlScenario,
@@ -5776,34 +4912,16 @@ def build_scenario_execution_plan(
     source_warehouse_columns: dict[str, tuple[ColumnInfo, ...]] | None = None,
     sql_analysis_enabled: bool = True,
 ) -> tuple[ScenarioExecutionPlan, tuple[PlanWarning, ...]]: ...
-def run_scenario_capture_command(*, request: ScenarioCaptureCommandRequest) -> int: ...
-def sql_analysis_off_guidance(
-    *, discovered_inputs: DiscoveredProjectInputs, purpose: str
-) -> tuple[str, str] | None: ...
 def serialize_hook_entries(
     *,
     value: object,
     sql_fields: tuple[str, ...],
     python_hook_fields: Mapping[str, Mapping[str, object]] | None = None,
 ) -> list[dict[str, object]]: ...
-def named_declaration_role_kind(*, relative_path: PurePath) -> DeclarationKind | None: ...
 def discover_model_description_inputs(*, project_dir: Path) -> DiscoveredProjectInputs: ...
 def microbatch_guidance() -> tuple[str, str]: ...
 def sql_analysis_opt_out_help(*, model_owned: bool = True) -> str: ...
 def explicit_references_help(*, allowed: str) -> str: ...
-def run_format_command(
-    *,
-    project_dir: Path | None,
-    select: tuple[str, ...] = (),
-    exclude: tuple[str, ...] = (),
-    check: bool = False,
-    diff: bool = False,
-    fixtures_only: bool = False,
-    fix: bool = False,
-    json_output: bool = False,
-    no_color: bool = False,
-    no_cache: bool = False,
-) -> int: ...
 def format_parameterized_test_label(
     *,
     name: str,
@@ -5843,8 +4961,6 @@ def write_runtime_target(
     *, target_dir: Path, plan_output: PlanOutput, result: BuildExecutionResult
 ) -> None: ...
 def run_plan_command(*, request: PlanCommandRequest) -> int: ...
-def run_rules_command(*, request: RulesCommandRequest) -> int: ...
-def stop_progress_spinners() -> None: ...
 
 class TransientStatusReporter:
     def __init__(
@@ -6061,32 +5177,17 @@ def assemble_native_sql_tests(
 ) -> tuple[NativeSqlTestAssembly, ...]: ...
 
 # Native analysis: compiled project assembly.
-def sql_syntax_error(
-    sql: str,
-    placeholders: Mapping[str, str] | None,
-    dialect: str | None,
-    parse_one: bool = False,
-) -> str | None: ...
 def assemble_native_project_resources(
     *,
     inputs: CompileInputsView,
     dialect: str | None,
     syntax_checks: tuple[tuple[tuple[str, dict[str, str] | None], ...], ...],
 ) -> NativeProjectResources: ...
-def explicit_reference_report(
-    *,
-    project: CompiledProjectView,
-    discovered_inputs: DiscoveredProjectInputs,
-    enforce_explicit: bool,
-) -> PythonSqlReferenceReport: ...
 def hard_coded_relation_remedy(
     *,
     owner_kind: HardCodedRelationOwnerKind,
     ref: SqlResourceRef,
     upstream_loader_by_source: Mapping[str, str] | None = None,
-) -> str: ...
-def old_name_reference_message(
-    *, owner_label: str, written: str, method: str, model_name: str
 ) -> str: ...
 def transitive_closure[K](
     *, start: K, edges: Mapping[K, Iterable[K]], max_depth: int | None = None
@@ -6104,16 +5205,8 @@ def invert_edges[K](
 def path_nodes[K](
     *, start: K, end: K, downstream: Mapping[K, Iterable[K]]
 ) -> frozenset[K] | None: ...
-def attached_audit_gate_edges(
-    *, project: CompiledProjectView
-) -> tuple[AttachedAuditGateEdge, ...]: ...
-def hook_read_edges(*, project: CompiledProjectView) -> tuple[HookReadEdge, ...]: ...
-def model_python_hook_names(*, model: CompiledModelView) -> tuple[str, ...]: ...
 def resolve_python_node_selection(
     *, graph: PythonNodeGraph, select: Sequence[str], exclude: Sequence[str]
-) -> frozenset[str]: ...
-def resolve_python_check_excludes(
-    *, graph: PythonNodeGraph, exclude: Sequence[str]
 ) -> frozenset[str]: ...
 def resolve_python_sql_run_selection(
     *,
@@ -6122,21 +5215,7 @@ def resolve_python_sql_run_selection(
     select: Sequence[str],
     exclude: Sequence[str],
 ) -> tuple[list[tuple[str, str]], list[str]]: ...
-def python_node_graph_indexes(
-    nodes: list[tuple[str, tuple[str, ...], str, list[str]]], /
-) -> tuple[
-    list[tuple[str, str]],
-    list[tuple[str, list[str]]],
-    list[tuple[str, list[str]]],
-    list[tuple[str, list[str]]],
-    list[tuple[str, str]],
-]: ...
-def sql_ref_key(reference: SqlResourceRef, /) -> CompiledObjectKey: ...
-def native_graph_key(key: CompiledObjectKey, /) -> tuple[str, str]: ...
-def native_graph_keys(keys: Iterable[CompiledObjectKey], /) -> list[tuple[str, str]]: ...
 def compiled_graph_keys(keys: Iterable[tuple[str, str]], /) -> frozenset[CompiledObjectKey]: ...
-def lineage_graph_names(graph: NativeProjectGraph, /) -> dict[str, CompiledObjectKey]: ...
-def lineage_graph_views(graph: NativeProjectGraph, /) -> LineageGraphViews: ...
 def project_lineage_views(project: CompiledProjectView, /) -> LineageGraphViews: ...
 def native_graph_from_views(
     *,
@@ -6145,11 +5224,6 @@ def native_graph_from_views(
     downstream: Mapping[CompiledObjectKey, Iterable[CompiledObjectKey]],
     tag_index: Mapping[str, Iterable[CompiledObjectKey]],
     path_index: Mapping[CompiledObjectKey, str],
-) -> NativeProjectGraph: ...
-def native_graph_from_edges(
-    *,
-    upstream: Mapping[CompiledObjectKey, Iterable[CompiledObjectKey]],
-    downstream: Mapping[CompiledObjectKey, Iterable[CompiledObjectKey]],
 ) -> NativeProjectGraph: ...
 
 class BindingCatalog:
@@ -6182,7 +5256,6 @@ class BindingCatalog:
 def schema_validations(
     *, requests: Sequence[SqlSchemaValidationRequest]
 ) -> tuple[SqlBindingResult, ...]: ...
-def ignores_quoted_case(*, connection: Mapping[str, object], dialect: str | None) -> bool: ...
 def _oracle_json_dumps(dialect_json: str, value_json: str) -> str: ...
 def _oracle_text_positions(
     data: bytes, byte_offsets: list[int]
@@ -6227,15 +5300,6 @@ def read_migration_state_events(
     render_qualified_name: Callable[..., str | None],
     stored_columns: Iterable[str] | None = None,
 ) -> tuple[Any, ...]: ...
-def read_old_name_view_histories(
-    *,
-    connection: Any,
-    execute: AdapterExecute[Any, Any],
-    database: str | None,
-    schema: str,
-    stored_columns: Iterable[str],
-    render_qualified_name: Callable[..., str | None],
-) -> tuple[OldNameViewHistory, ...]: ...
 def read_recorded_column_renames(
     *,
     connection: Any,
@@ -6305,9 +5369,6 @@ def newest_column_migration_event_mentioning(
 def project_old_name_views(
     *, moves: Iterable[MigrationEvent], facts: Iterable[OldNameViewEvent]
 ) -> tuple[OldNameViewHistory, ...]: ...
-def resolve_old_name_view_retention(
-    *, config_values: Mapping[str, object], project_retention: str | None
-) -> str | None: ...
 def source_freshness_data_version_hash(
     *,
     source_name: str,
@@ -6330,7 +5391,6 @@ def evaluate_source_freshness_age_policy(
     data_version: object,
     observed_at: datetime,
 ) -> SourceFreshnessAgeStatus | None: ...
-def require_aware_utc_datetime(*, value: datetime, field_name: str) -> datetime: ...
 def build_source_freshness_read_latest_sql(
     *, database: str | None, schema: str, render_qualified_name: Callable[..., str | None]
 ) -> str: ...
@@ -6379,9 +5439,6 @@ def observe_adapter_sources_freshness(
     sources: tuple[SourceEntry, ...],
     observed_at: datetime,
 ) -> AdapterSourceFreshnessBatch: ...
-def source_freshness_record_from_observation(
-    *, observation: SourceFreshnessObservation, source: SourceEntry, run_id: str
-) -> SourceFreshnessRecord: ...
 def build_direct_source_freshness_planning_result(
     *,
     adapter: StrictAdapter,
@@ -6428,21 +5485,9 @@ def safe_diagnostic_extra_fields(record: logging.LogRecord) -> dict[str, object]
 def compute_diagnostic_log_fields(
     *, record: logging.LogRecord, invocation_id: str, include_sql_text: bool
 ) -> dict[str, object] | None: ...
-def sql_rule_lint_key(*, config: LintConfig) -> str: ...
-def sql_model_rule_keys(
-    *, lint_key: str, codes: list[str], models: list[tuple[str, str, str, str | None]]
-) -> dict[str, str]: ...
-def sql_file_rule_key(
-    *, lint_key: str, codes: list[str], relative_path: str, contents: str, expanded: bool
-) -> str | None: ...
 def load_sql_rule_cache(*, path: Path) -> dict[str, tuple[str, str]]: ...
-def lookup_sql_rule_cache(
-    *, entries: dict[str, tuple[str, str]], keys: list[tuple[str, str]]
-) -> dict[str, list[Finding]]: ...
 def encode_sql_rule_findings(*, findings: list[Finding]) -> str: ...
-def write_sql_rule_cache(*, path: Path, entries: dict[str, tuple[str, str]]) -> None: ...
 def cursor_parse(*, raw: object, cursor_type: str) -> CursorScalar: ...
-def cursor_try_parse(*, raw: object, cursor_type: str) -> CursorScalar | None: ...
 def cursor_render(*, value: CursorScalar) -> str: ...
 def cursor_sentinel_to_token(*, sentinel: Bound) -> str: ...
 def cursor_sentinel_from_token(*, token: str) -> BoundSentinel | None: ...
@@ -6465,28 +5510,6 @@ def apply_maximum_start_policy(
     policy: MaximumStartPolicyInputs,
     has_start_override: bool,
 ) -> CursorBounds: ...
-def plan_function(
-    *,
-    function: CompiledFunctionView,
-    adapter: BaseAdapter,
-    relations: PlannerRelationsContext,
-    fingerprint_query_sql: str,
-    previous_query_sql: str | None = None,
-    reason: PlanReason = ...,
-) -> FunctionPlanEntry: ...
-def plan_selected_sql_tests(
-    *,
-    project: CompiledProjectView,
-    adapter: BaseAdapter,
-    selected_keys: frozenset[CompiledObjectKey],
-    sql_test_selection: SqlTestSelection,
-) -> PlannedSqlTests: ...
-def sql_test_is_selected(
-    *,
-    test: CompiledSqlTest,
-    selected_keys: frozenset[CompiledObjectKey],
-    sql_test_selection: SqlTestSelection,
-) -> bool: ...
 def build_selected_test_entries(
     *,
     project: CompiledProjectView,
@@ -6530,32 +5553,9 @@ def build_seed_command_plan(
     relations: PlannerRelationsContext,
     fingerprints: dict[str, Fingerprint] | None = None,
 ) -> PlanOutput: ...
-def build_relation_command_plan(
-    *, project: CompiledProjectView, scope: PlannerScope, relations: PlannerRelationsContext
-) -> PlanOutput: ...
 def read_selected_seed_fingerprints(
     *, adapter: BaseAdapter, connection: Any, seeds: tuple[CompiledSeedView, ...]
 ) -> dict[str, Fingerprint]: ...
-def run_clone_planning(
-    *,
-    project: CompiledProjectView,
-    select: tuple[str, ...],
-    exclude: tuple[str, ...],
-    adapter: BaseAdapter,
-    connection: Any,
-    origin_project: CompiledProjectView,
-    origin_source_project: CompiledProjectView,
-    destination_source_project: CompiledProjectView,
-) -> tuple[
-    PlanOutput,
-    tuple[CloneSourcePlanEntry, ...],
-    tuple[ModelPlanEntry, ...],
-    tuple[SeedPlanEntry, ...],
-    tuple[FunctionPlanEntry, ...],
-    tuple[ModelPlanEntry, ...],
-    tuple[SeedPlanEntry, ...],
-    tuple[CloneSourcePlanEntry, ...],
-]: ...
 def resolve_clone_boundary[K](
     *,
     selected: frozenset[K],
@@ -6600,19 +5600,12 @@ def start_sql_test_planning(
     sql_test_selection: SqlTestSelection,
     enabled: bool,
 ) -> SqlTestPlanning: ...
-def join_sql_test_planning_threads() -> None: ...
 def build_display_only_sqlbuild_plan(
     *, project: CompiledProjectView, selected_model_names: tuple[str, ...], full_refresh: bool
 ) -> PlanOutput: ...
 def format_pre_build_work(
     *, lines: list[str], plan: PlanOutput, display_options: DisplayOptions
 ) -> list[str]: ...
-def resolve_future_cursor_config(
-    *, model: CompiledModelView, project_config: FutureCursorsConfig | None
-) -> FutureCursorsConfig | None: ...
-def resolve_start_cursor_config(
-    *, model: CompiledModelView, project_config: StartCursorsConfig | None
-) -> StartCursorsConfig | None: ...
 def future_cursor_cap_warning(bounds: CursorBounds | None, /) -> str | None: ...
 def maximum_start_cap_warning(bounds: CursorBounds | None, /) -> str | None: ...
 def compute_plan_cursor_bounds(
@@ -6645,15 +5638,6 @@ def compute_microbatch_range(
     replaces_relation: bool = False,
     cursor_input_relations: tuple[CursorInputRelation, ...] = (),
 ) -> CursorBounds | None: ...
-def resolve_empty_cursor_inputs(
-    *,
-    model: CompiledModelView,
-    snapshot: WarehouseSnapshot,
-    full_refresh: bool,
-    runtime_owned_cursor_bounds: bool,
-    start_cursor_override: str | None,
-    end_cursor_override: str | None,
-) -> tuple[tuple[str, ...], bool]: ...
 def resolve_cursor_overrides(
     *,
     model: CompiledModelView,
@@ -6673,9 +5657,6 @@ def build_planner_relations_context(
     known_source_columns: dict[str, tuple[ColumnInfo, ...]] | None = None,
     relation_keys: frozenset[CompiledObjectKey] | None = None,
 ) -> PlannerRelationsContext: ...
-def build_model_materializations(
-    model_entries: tuple[ModelPlanEntry, ...], /
-) -> dict[str, str]: ...
 def scope_overlaps(
     *, scope_deps: tuple[CompiledObjectKey, ...], selected_keys: frozenset[CompiledObjectKey]
 ) -> bool: ...
@@ -6689,7 +5670,6 @@ def resolve_future_cursor_safety(
     has_complete_override: bool,
     input_evidence: tuple[CursorInputEvidence, ...] = (),
 ) -> CursorBounds: ...
-def cursor_sort_key(*, raw: object, cursor_type: str) -> datetime | int: ...
 def cursor_max_bound[T](*, values: tuple[T, ...] | list[T], cursor_type: str) -> T: ...
 def cursor_min_bound[T](*, values: tuple[T, ...] | list[T], cursor_type: str) -> T: ...
 def cursor_floor_to_grain(*, value: CursorScalar, grain: CursorGrain) -> CursorScalar: ...
@@ -6715,11 +5695,6 @@ def cursor_split_into_batches(
 ) -> tuple[AlignedInterval, ...]: ...
 def cursor_cap_from_start[T](*, intervals: tuple[T, ...], count: int) -> tuple[T, ...]: ...
 def cursor_cap_from_end[T](*, intervals: tuple[T, ...], count: int) -> tuple[T, ...]: ...
-def validate_cursor_interval(
-    *, start: CursorScalar, end: CursorScalar, grain: CursorGrain | None
-) -> None: ...
-def parse_cursor_duration(value: str) -> tuple[int, int, int, int, int, int] | None: ...
-def shift_by_cursor_duration[M: date](*, moment: M, duration: Duration, direction: int) -> M: ...
 def get_config_str(*, values: Mapping[str, object], key: str) -> str | None: ...
 def get_config_bool(*, values: Mapping[str, object], key: str) -> bool | None: ...
 def get_config_int(*, values: Mapping[str, object], key: str) -> int | None: ...
@@ -6734,7 +5709,6 @@ def finding_position(
     *, path: Path, line: int | None, column: int | None, node: object
 ) -> tuple[int, int]: ...
 def rule_option_toml_value(value: object) -> str: ...
-def validate_project_relative(path: str) -> None: ...
 def project_tree_paths(root: Path) -> tuple[ProjectPath, ...]: ...
 def project_tree_read_text(root: Path, path: str) -> str: ...
 def fact_value_digest(value: object) -> str | None: ...
@@ -6756,21 +5730,6 @@ def startup_input_stamps(
 ) -> list[tuple[str, int | None, int | None]]: ...
 def custom_rule_implementation_fingerprint(
     *, rule: Rule, project_dir: Path, import_closure: tuple[Path, ...] | None = None
-) -> str: ...
-def custom_rule_identity(
-    *,
-    code_identity: str,
-    runtime_version: str,
-    code: str,
-    family: str,
-    slug: str,
-    message: str,
-    remediation: str,
-    subject: str | None,
-    implementation_fingerprint: str,
-    config: RulesConfig,
-    dialect: str,
-    project_dir: str,
 ) -> str: ...
 def evaluate_project_rules(
     *,
@@ -6819,25 +5778,10 @@ class CustomHostObserver:
 
 custom_host_observer: CustomHostObserver | None
 
-def evaluate_rules(
-    *,
-    graph: ProjectGraph,
-    discovered_inputs: DiscoveredProjectInputs,
-    config: RulesConfig,
-    project_dir: Path,
-    dialect: str,
-    selected_keys: frozenset[CompiledObjectKey] | None = None,
-    early_lint: EarlySqlLint | None = None,
-    no_sql_analysis: bool = False,
-) -> RulesRunResult: ...
 def custom_rule_test_evidence(
     *, rule: Rule, project_dir: Path
 ) -> list[tuple[str, int, int, str]]: ...
 def format_rules_result(*, result: RulesResult, json_output: bool) -> str: ...
-def format_skipped_type_proof_rules(*, codes: tuple[str, ...]) -> str | None: ...
-def finish_rule_run(
-    *, plan: RuleRunPlan, sql_result: SqlRulesEvaluation, result: RulesResult
-) -> RulesRunResult: ...
 def run_rules(
     *,
     graph: ProjectGraph,
@@ -6850,14 +5794,6 @@ def run_rules(
     no_sql_analysis: bool = False,
 ) -> RulesRunResult: ...
 def rules_bulk_cache_path(*, project_dir: Path, file_name: str) -> Path: ...
-def plan_rule_run(
-    *,
-    graph: ProjectGraph,
-    config: RulesConfig,
-    project_dir: Path,
-    selected_keys: frozenset[CompiledObjectKey] | None,
-    no_sql_analysis: bool,
-) -> RuleRunPlan: ...
 def run_planned_sql_rules(
     *,
     plan: RuleRunPlan,
@@ -6878,17 +5814,10 @@ class EarlySqlLint:
     def start(self, *, inputs: CompileInputsView, dialect: str) -> None: ...
     def stop(self) -> int: ...
 
-class PreparedSqlLint:
-    """One early SQL lint running on a native thread, for one project and SQL rule codes."""
-
-def with_duplicate_literal_hints(
-    *, findings: tuple[Finding, ...], project_dir: Path
-) -> tuple[Finding, ...]: ...
 def scan_headers(*, contents: str, first_only: bool = False) -> tuple[HeaderSpan, ...]: ...
 def sql_body_ranges(
     *, contents: str, headers: tuple[HeaderSpan, ...]
 ) -> tuple[tuple[int, int], ...]: ...
-def measurement_body_ranges(*, contents: str) -> tuple[tuple[int, int], ...]: ...
 def run_lint(
     *,
     project_dir: Path,
@@ -6911,13 +5840,6 @@ def lint_native_headers(
 def format_native_headers(
     *, contents: str, file_path: Path, config: LintConfig
 ) -> tuple[str, tuple[LintViolation, ...]]: ...
-def safe_format_files(
-    *, files: dict[Path, str], config: LintConfig
-) -> tuple[dict[Path, str], dict[Path, str]]: ...
-def reject_unparseable_header_rewrites(
-    *, updated: dict[Path, str], config: LintConfig, faults: list[LintViolation]
-) -> tuple[dict[Path, str], list[LintViolation]]: ...
-def prepare_model_header_tokens(headers: Sequence[str], /) -> None: ...
 def parse_header_values(
     *,
     header: str,
@@ -6930,17 +5852,9 @@ def model_output_column_locations(
     *, contents: str, relative_path: object, extract_implicit_alias_columns: bool = True
 ) -> dict[str, Any]: ...
 def inclusive_cursor_end(*, end: str, cursor_type: str | None, cursor_grain: str | None) -> str: ...
-def resolve_bounded_cursor_override(
-    *,
-    start_cursor_override: str | None,
-    end_cursor_override: str | None,
-    cursor_type: str | None,
-    cursor_grain: str | None,
-) -> CursorBounds | None: ...
 def cursor_bound_display(
     *, value: str, cursor_type: str | None, cursor_grain: str | None
 ) -> str: ...
-def model_materialization_label(entry: ModelPlanEntry) -> str: ...
 def detect_changes(
     *,
     project: CompiledProjectView,
@@ -6950,15 +5864,6 @@ def detect_changes(
     expected_version_hashes: dict[str, str] | None = None,
     expected_metadata_jsons: dict[str, str] | None = None,
 ) -> PlannerChangeResults: ...
-def detect_model_changes_in_scope(
-    *,
-    project: CompiledProjectView,
-    scope: PlannerScope,
-    snapshot: WarehouseSnapshot,
-    query_change_tracking: bool | None = None,
-    expected_version_hashes: dict[str, str] | None = None,
-    expected_metadata_jsons: dict[str, str] | None = None,
-) -> dict[str, ChangeDetectionResult]: ...
 def parse_query_shape(*, query_sql: str, dialect: str | None) -> QueryShape | None: ...
 def renames_explain_change(
     *,
@@ -6970,21 +5875,6 @@ def renames_explain_change(
 def build_migration_fingerprint(
     *, query_sql: str, metadata_json: str, ref_identities: Mapping[str, str], dialect: str | None
 ) -> str | None: ...
-def migration_fingerprint_ref_names(*, query_sql: str, metadata_json: str) -> frozenset[str]: ...
-def migration_incremental_blocking_findings(
-    *,
-    model: CompiledModelView,
-    findings: tuple[SchemaFinding, ...],
-    dialect: str | None,
-) -> tuple[str, ...]: ...
-def migration_snapshot_blocking_findings(
-    *,
-    model: CompiledModelView,
-    findings: tuple[SchemaFinding, ...],
-    dialect: str | None,
-    snapshots_config: SnapshotsConfig,
-) -> tuple[str, ...]: ...
-def declared_column_aliases(model: CompiledModelView) -> tuple[tuple[str, str], ...]: ...
 def plan_column_migrations(
     *,
     runtime: PlannerRuntime,
@@ -6996,30 +5886,6 @@ def plan_column_migrations(
     deferral: DeferralInputs,
     source_columns: Mapping[str, tuple[ColumnInfo, ...]],
 ) -> None: ...
-def old_name_schemas_to_read(*, snapshot: WarehouseSnapshot, needed: set[str]) -> set[str]: ...
-def old_name_claim_message(*, model_name: str, view: OldNameView, now: datetime) -> str: ...
-def old_name_claim_errors(
-    *,
-    selected: Iterable[CompiledModelView],
-    snapshot: WarehouseSnapshot,
-    views: tuple[OldNameView, ...],
-    now: datetime,
-) -> tuple[PlanWarning, ...]: ...
-def old_name_view_skip_reason(
-    *,
-    origin: CompiledRelationLocation,
-    origin_tracked: bool | None,
-    retention: str | None,
-    models: Iterable[CompiledModelView],
-    views: tuple[OldNameView, ...],
-) -> str | None: ...
-def with_migration_fingerprints(
-    *,
-    entries: tuple[ModelPlanEntry, ...],
-    models_by_name: Mapping[str, CompiledModelView],
-    fingerprints: MigrationFingerprintCache,
-    dialect: str | None,
-) -> tuple[ModelPlanEntry, ...]: ...
 def identical_renames(
     *,
     previous: QueryShape,
@@ -7048,18 +5914,6 @@ def detect_model_changes(
     expected_version_hash: str | None = None,
     expected_metadata_json: str | None = None,
 ) -> ChangeDetectionResult: ...
-def resolve_model_actions(
-    *, scope: PlannerScope, changes: PlannerChangeResults
-) -> PlannerResolvedActions: ...
-def plan_reference_renames(
-    *,
-    runtime: PlannerRuntime,
-    scope: PlannerScope,
-    snapshot: WarehouseSnapshot,
-    state: MigrationStateInspection,
-    schemas: set[str],
-    planned: dict[str, str],
-) -> tuple[ReferenceRename, ...]: ...
 def replaces_incremental_relation(
     *, materialization_type: MaterializationType, action: PlanAction
 ) -> bool: ...
@@ -7107,7 +5961,6 @@ def runtime_cursor_producer_names(
 def resolve_microbatch_lookback(
     *, model: CompiledModelView, effective_grain: str | None = None
 ) -> str | None: ...
-def extract_seed_columns(seed: CompiledSeedView) -> tuple[ColumnInfo, ...]: ...
 def plan_audit(
     *,
     audit: CompiledAuditView,
@@ -7119,17 +5972,6 @@ def plan_audit(
     lineage_downstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
     model_materializations: dict[str, str],
 ) -> AuditPlanEntry: ...
-def audit_is_selected(
-    *, audit: CompiledAuditView, selected_keys: frozenset[CompiledObjectKey]
-) -> bool: ...
-def build_selected_audit_entries(
-    *,
-    project: CompiledProjectView,
-    adapter: BaseAdapter,
-    scope: PlannerScope,
-    relations: PlannerRelationsContext,
-    model_materializations: dict[str, str],
-) -> list[AuditPlanEntry]: ...
 def resolve_attachment_kind(
     *,
     audit: CompiledAuditView,
@@ -7143,7 +5985,6 @@ def reads_outside_target_lineage(
 def resolve_effective_run_scope(
     *, requested_run_scope: AuditRunScope, attached_model_materialization: str | None
 ) -> AuditRunScope: ...
-def classify_cursor_sql_type(sql_type: str) -> CursorType | None: ...
 def check_cursor_type_consistency(
     *,
     model_name: str,
@@ -7161,22 +6002,6 @@ def apply_configured_microbatch_limits(
 def microbatch_limit_warning(
     *, model_name: str, max_batches: int | None, batch_count: int, action: MicrobatchLimitAction
 ) -> str | None: ...
-def resolve_microbatch_limit_config(
-    *, values: Mapping[str, object]
-) -> tuple[int | None, MicrobatchLimitAction | None]: ...
-def resolve_lineage_reference(
-    *,
-    model: CompiledModelView,
-    input_name: str,
-    models_by_name: Mapping[str, CompiledModelView],
-    functions_by_name: Mapping[str, CompiledFunctionView],
-) -> CompileSqlReference: ...
-def validate_capped_watermark_inputs(
-    *,
-    model: CompiledModelView,
-    models_by_name: Mapping[str, CompiledModelView],
-    functions_by_name: Mapping[str, CompiledFunctionView] | None = None,
-) -> None: ...
 def detect_schema_changes(
     *,
     yml_columns: tuple[ColumnInfo, ...],
@@ -7225,14 +6050,6 @@ def build_direct_model_version_identities(
     source_version_hashes: Mapping[str, str] | None = None,
     hook_functions: Iterable[DiscoveredHookFunction] = (),
 ) -> DirectModelVersionIdentities: ...
-def with_honest_model_write_hashes(
-    *,
-    scope: PlannerScope,
-    snapshot: WarehouseSnapshot,
-    changes: PlannerChangeResults,
-    version_identities: DirectModelVersionIdentities,
-    available_model_hashes: Mapping[str, str] | None = None,
-) -> PlannerChangeResults: ...
 def merge_recomputed_model_changes(
     *, resolved_actions: PlannerResolvedActions, changes: PlannerChangeResults
 ) -> PlannerResolvedActions: ...
@@ -7282,31 +6099,11 @@ def missing_upstream_message(
     missing: tuple[MissingUpstream, ...],
     edge_origins: Mapping[tuple[CompiledObjectKey, CompiledObjectKey], str],
 ) -> str: ...
-def model_resource_type(entry: ModelPlanEntry | None) -> str: ...
-def model_execution_annotation(entry: ModelPlanEntry | None) -> str: ...
-def materialization_type_display(resource_kind: ExecutionResourceKind) -> str: ...
-def format_no_input_rows(input_names: tuple[str, ...]) -> str: ...
 def format_waiting_on_empty_inputs(input_names: tuple[str, ...]) -> str: ...
 def resolve_effective_microbatch_batch_size(*, batch_size: str, effective_grain: str) -> str: ...
 def aligned_timestamp_bounds(
     *, start: DateValue | TimestampValue, end: DateValue | TimestampValue
 ) -> tuple[datetime, datetime]: ...
-def build_planner_scope(
-    *,
-    project: CompiledProjectView,
-    select: tuple[str, ...] = (),
-    exclude: tuple[str, ...] = (),
-    auto_load_sources: bool = False,
-    selected_keys: frozenset[CompiledObjectKey] | None = None,
-    python_read_source_names: frozenset[str] = frozenset(),
-    sql_test_selection: SqlTestSelection | None = None,
-) -> PlannerScope: ...
-def managed_source_upstream_keys(
-    *,
-    selected_keys: frozenset[CompiledObjectKey],
-    upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
-    project: CompiledProjectView,
-) -> frozenset[CompiledObjectKey]: ...
 def expand_selected_loader_dependencies(
     *,
     project: CompiledProjectView,
@@ -7321,17 +6118,7 @@ def upstream_loader_dependency_names(
     loader_function: DiscoveredLoaderFunction,
     loader_functions: tuple[DiscoveredLoaderFunction, ...],
 ) -> tuple[str, ...]: ...
-def loader_to_source_entry(
-    *,
-    project: CompiledProjectView,
-    loader: DiscoveredLoaderFunction,
-) -> SourceEntry: ...
 def build_intermediate_source_map(
-    *,
-    project: CompiledProjectView,
-    selected_keys: frozenset[CompiledObjectKey],
-) -> dict[str, SourceEntry]: ...
-def build_upstream_intermediate_source_map(
     *,
     project: CompiledProjectView,
     selected_keys: frozenset[CompiledObjectKey],
@@ -7349,9 +6136,6 @@ def build_source_load_entries(
     source_map: dict[str, SourceEntry],
     is_reload: bool,
 ) -> tuple[SourceLoadPlanEntry, ...]: ...
-def format_model_migrations(
-    *, lines: list[str], plan: PlanOutput, display_options: DisplayOptions
-) -> list[str]: ...
 def old_name_rows(*, entry: OldNameViewPlanEntry, style: CliStyle) -> list[str]: ...
 
 class MigrationFingerprintCache:
@@ -7379,19 +6163,6 @@ def gather_warehouse_snapshot(
     deferred_locations: dict[str, CompiledRelationLocation] | None = None,
     cursor_scope: CursorSnapshotScope | None = None,
 ) -> WarehouseSnapshot: ...
-def gather_redirected_cursor_snapshots(
-    *,
-    project: CompiledProjectView,
-    adapter: BaseAdapter,
-    connection: Any,
-    existing_relations: dict[str, RelationInfo],
-    target_relations: dict[str, str],
-    cursor_scope: CursorSnapshotScope,
-    full_refresh_model_names: frozenset[str],
-    deferred_locations: dict[str, CompiledRelationLocation] | None = None,
-    on_progress: Callable[[str], None] | None = None,
-    origin_cursor_columns: dict[str, str] | None = None,
-) -> dict[str, ModelCursorSnapshot]: ...
 def watermark_type_is_compatible(*, declared_type: str, cursor_type: str | None) -> bool: ...
 def gather_source_columns(
     *,
@@ -7400,13 +6171,6 @@ def gather_source_columns(
     connection: Any,
     source_entries: tuple[SourceEntry, ...] | None = None,
 ) -> dict[str, tuple[ColumnInfo, ...]]: ...
-def gather_source_inspection(
-    *,
-    project: CompiledProjectView,
-    adapter: BaseAdapter,
-    connection: Any,
-    source_entries: tuple[SourceEntry, ...] | None,
-) -> tuple[dict[str, tuple[ColumnInfo, ...]], frozenset[str]]: ...
 def get_semantic_source_columns(
     *,
     project: CompiledProjectView,
@@ -7424,25 +6188,6 @@ def check_selected_source_tables_exist(
     scope: PlannerScope,
     relations: PlannerRelationsContext,
 ) -> None: ...
-def build_source_read_map(
-    *,
-    project: CompiledProjectView,
-    source_map: dict[str, SourceEntry],
-    selected_keys: frozenset[CompiledObjectKey],
-    project_config: ProjectConfig | None,
-    local_config: LocalConfig | None,
-    defer_sources_to: str | None,
-    read_source_names: frozenset[str] | None = None,
-) -> dict[str, SourceEntry]: ...
-def with_declared_source_reads(
-    *,
-    project: CompiledProjectView,
-    source_map: dict[str, SourceEntry],
-    source_names: frozenset[str],
-) -> dict[str, SourceEntry]: ...
-def build_source_freshness_unknown_warnings(
-    *, source_freshness: DirectSourceFreshnessPlanningResult
-) -> tuple[PlanWarning, ...]: ...
 def build_planner_source_freshness_result(
     *,
     project: CompiledProjectView,
@@ -7458,12 +6203,6 @@ def resolve_planner_scopes(
     selection: PlannerSelection,
     policies: PlannerPolicies,
 ) -> PlannerScopeResolution: ...
-def build_planner_identity_context(
-    *,
-    project: CompiledProjectView,
-    scopes: PlannerScopeResolution,
-    include_stale_warning_identities: bool = True,
-) -> PlannerIdentityContext: ...
 def detect_stale_warning_changes(
     *,
     project: CompiledProjectView,
@@ -7472,24 +6211,12 @@ def detect_stale_warning_changes(
     identities: PlannerIdentityContext,
     execution_changes: PlannerChangeResults,
 ) -> PlannerChangeResults: ...
-def check_selected_scope_buildability(
-    *,
-    runtime: PlannerRuntime,
-    scopes: PlannerScopeResolution,
-    warehouse: PlannerWarehouseState,
-    deferral: DeferralInputs,
-) -> None: ...
-def resolve_model_full_refresh(*, model: CompiledModelView, cli_full_refresh: bool) -> bool: ...
-def effectively_full_refreshed_model_names(
-    *, project: CompiledProjectView, cli_full_refresh: bool
-) -> frozenset[str]: ...
 def describe_full_rebuild_cause(
     *, change_result: ChangeDetectionResult, full_refresh: bool
 ) -> str: ...
 def check_full_rebuild_allowed(
     *, model: CompiledModelView, change_result: ChangeDetectionResult, full_rebuild_cause: str
 ) -> None: ...
-def effective_target_config(*, runtime: PlannerRuntime) -> TargetConfig: ...
 def table_type_copy_name(*, target_name: str, identifier_limit: int) -> str: ...
 def plan_table_types(
     *, runtime: PlannerRuntime, warehouse: PlannerWarehouseState, scope: PlannerScope
@@ -7497,16 +6224,6 @@ def plan_table_types(
 def plan_retention(
     *, runtime: PlannerRuntime, warehouse: PlannerWarehouseState, scope: PlannerScope
 ) -> tuple[RetentionPlanEntry, ...]: ...
-def with_column_rename_hints(
-    *, entries: tuple[ModelPlanEntry, ...], hints: tuple[ColumnRenameHint, ...]
-) -> tuple[ModelPlanEntry, ...]: ...
-def gather_planner_warehouse_state(
-    *,
-    runtime: PlannerRuntime,
-    scopes: PlannerScopeResolution,
-    overrides: PlannerOverrides,
-    deferral: DeferralInputs,
-) -> PlannerWarehouseState: ...
 def planner_metadata_name_filter(
     *, project: CompiledProjectView, selected_keys: frozenset[CompiledObjectKey] | None = None
 ) -> tuple[str, ...] | None: ...
@@ -7657,31 +6374,6 @@ class AuditCommandRequest(NativeRecord):
         json_output_path: Path | None = None,
     ) -> None: ...
 
-class AuditInvocation(NativeRecord):
-    """Resolved project, adapter, and reporter context for the audit command."""
-
-    effective_project_dir: Path
-    discovered_inputs: DiscoveredProjectInputs
-    adapter_name: str
-    adapter: BaseAdapter
-    connection_config: dict[str, object]
-    use_color: bool
-    progress_stream: TextIO
-    connection_progress: ConnectionProgressReporter
-    planning_progress: PlanningProgressReporter
-    def __init__(
-        self,
-        effective_project_dir: Path,
-        discovered_inputs: DiscoveredProjectInputs,
-        adapter_name: str,
-        adapter: BaseAdapter,
-        connection_config: dict[str, object],
-        use_color: bool,
-        progress_stream: TextIO,
-        connection_progress: ConnectionProgressReporter,
-        planning_progress: PlanningProgressReporter,
-    ) -> None: ...
-
 class BuildCommandRequest(NativeRecord):
     """CLI inputs for one build command invocation."""
 
@@ -7759,89 +6451,6 @@ class BuildCommandRequest(NativeRecord):
         test_timeout: str | None = None,
     ) -> None: ...
 
-class BuildInvocation(NativeRecord):
-    """Resolved project, adapter, and reporter context for the build command."""
-
-    effective_project_dir: Path
-    discovered_inputs: DiscoveredProjectInputs
-    effective_defer_clone_from: str | None
-    adapter_name: str
-    adapter: BaseAdapter
-    connection_config: dict[str, object]
-    use_color: bool
-    progress_stream: TextIO
-    connection_progress: ConnectionProgressReporter
-    planning_progress: PlanningProgressReporter
-    should_load_sources: bool
-    effective_target_name: str | None
-    execution_limits: ExecutionLimitsConfig
-    def __init__(
-        self,
-        effective_project_dir: Path,
-        discovered_inputs: DiscoveredProjectInputs,
-        effective_defer_clone_from: str | None,
-        adapter_name: str,
-        adapter: BaseAdapter,
-        connection_config: dict[str, object],
-        use_color: bool,
-        progress_stream: TextIO,
-        connection_progress: ConnectionProgressReporter,
-        planning_progress: PlanningProgressReporter,
-        should_load_sources: bool,
-        effective_target_name: str | None = None,
-        execution_limits: ExecutionLimitsConfig = ...,
-    ) -> None: ...
-
-class CheckCommandRequest(NativeRecord):
-    """CLI inputs for one check command invocation."""
-
-    project_dir: Path | None
-    no_sql_validation: bool
-    no_color: bool
-    selected_target: str | None
-    select: tuple[str, ...]
-    exclude: tuple[str, ...]
-    cli_vars: dict[str, object] | None
-    json_output: bool
-    json_output_path: Path | None
-    def __init__(
-        self,
-        project_dir: Path | None = None,
-        no_sql_validation: bool = False,
-        no_color: bool = False,
-        selected_target: str | None = None,
-        select: tuple[str, ...] = (),
-        exclude: tuple[str, ...] = (),
-        cli_vars: dict[str, object] | None = None,
-        json_output: bool = False,
-        json_output_path: Path | None = None,
-    ) -> None: ...
-
-class CheckInvocation(NativeRecord):
-    """Resolved project, adapter, and reporter context for the check command."""
-
-    effective_project_dir: Path
-    discovered_inputs: DiscoveredProjectInputs
-    adapter_name: str
-    adapter: BaseAdapter
-    connection_config: dict[str, object]
-    use_color: bool
-    progress_stream: TextIO
-    connection_progress: ConnectionProgressReporter
-    planning_progress: PlanningProgressReporter
-    def __init__(
-        self,
-        effective_project_dir: Path,
-        discovered_inputs: DiscoveredProjectInputs,
-        adapter_name: str,
-        adapter: BaseAdapter,
-        connection_config: dict[str, object],
-        use_color: bool,
-        progress_stream: TextIO,
-        connection_progress: ConnectionProgressReporter,
-        planning_progress: PlanningProgressReporter,
-    ) -> None: ...
-
 class CloneCommandRequest(NativeRecord):
     """CLI inputs for one clone command invocation."""
 
@@ -7871,31 +6480,6 @@ class CloneCommandRequest(NativeRecord):
         cli_vars: dict[str, object] | None = None,
         json_output_path: Path | None = None,
         event_output_path: Path | None = None,
-    ) -> None: ...
-
-class DbtSqlbuildWorkContext(NativeRecord):
-    """Shared execution context for one dbt interop SQLBuild work run."""
-
-    plan_output: PlanOutput
-    connection_config: dict[str, object]
-    adapter: BaseAdapter
-    adapter_name: str
-    output_stream: TextIO
-    use_color: bool
-    snapshots_config: SnapshotsConfig
-    execution_limits: ExecutionLimitsConfig
-    concurrency: int
-    def __init__(
-        self,
-        plan_output: PlanOutput,
-        connection_config: dict[str, object],
-        adapter: BaseAdapter,
-        adapter_name: str,
-        output_stream: TextIO,
-        use_color: bool,
-        snapshots_config: SnapshotsConfig,
-        execution_limits: ExecutionLimitsConfig,
-        concurrency: int,
     ) -> None: ...
 
 class PlanSafetyGates(NativeRecord):
@@ -8112,40 +6696,6 @@ class JanitorCommandRequest(NativeRecord):
         as_target: str | None = None,
     ) -> None: ...
 
-class JanitorInvocation(NativeRecord):
-    """Resolved project discovery and output context for janitor."""
-
-    effective_project_dir: Path
-    discovered_inputs: DiscoveredProjectInputs
-    use_color: bool
-    selected_target: str | None
-    active_target_name: str | None
-    as_target: str | None
-    def __init__(
-        self,
-        effective_project_dir: Path,
-        discovered_inputs: DiscoveredProjectInputs,
-        use_color: bool,
-        selected_target: str | None = None,
-        active_target_name: str | None = None,
-        as_target: str | None = None,
-    ) -> None: ...
-
-class JanitorSettings(NativeRecord):
-    """Validated effective janitor settings."""
-
-    retention_days: int
-    direct_state_history_versions: int
-    archive_retention_days: int
-    drop_old_name_views: tuple[str, ...]
-    def __init__(
-        self,
-        retention_days: int,
-        direct_state_history_versions: int,
-        archive_retention_days: int = 14,
-        drop_old_name_views: tuple[str, ...] = (),
-    ) -> None: ...
-
 class LoadCommandRequest(NativeRecord):
     """CLI inputs for one load command invocation."""
 
@@ -8233,19 +6783,6 @@ class PlaygroundCommandRequest(NativeRecord):
         template: str = ...,
     ) -> None: ...
 
-class AdapterConnectionContext(NativeRecord):
-    """Resolved adapter and connection configuration for one CLI command."""
-
-    adapter_name: str
-    adapter: BaseAdapter
-    connection_config: dict[str, object]
-    def __init__(
-        self,
-        adapter_name: str,
-        adapter: BaseAdapter,
-        connection_config: dict[str, object],
-    ) -> None: ...
-
 class ScenarioSnapshotLimitInputs(NativeRecord):
     """CLI snapshot capture-limit overrides for one scenario run."""
 
@@ -8323,52 +6860,6 @@ class ScenarioCaptureCommandRequest(NativeRecord):
         exclude: tuple[str, ...] = (),
         retain: bool = False,
         limit_inputs: ScenarioSnapshotLimitInputs = ...,
-    ) -> None: ...
-
-class SeedCommandRequest(NativeRecord):
-    """CLI inputs for one seed command invocation."""
-
-    project_dir: Path | None
-    no_color: bool
-    selected_target: str | None
-    select: tuple[str, ...]
-    exclude: tuple[str, ...]
-    concurrency: int | None
-    cli_vars: dict[str, object] | None
-    json_output: bool
-    json_output_path: Path | None
-    def __init__(
-        self,
-        project_dir: Path | None,
-        no_color: bool = False,
-        selected_target: str | None = None,
-        select: tuple[str, ...] = (),
-        exclude: tuple[str, ...] = (),
-        concurrency: int | None = None,
-        cli_vars: dict[str, object] | None = None,
-        json_output: bool = False,
-        json_output_path: Path | None = None,
-    ) -> None: ...
-
-class SeedInvocation(NativeRecord):
-    """Resolved project, adapter, connection, and output context for seed."""
-
-    effective_project_dir: Path
-    discovered_inputs: DiscoveredProjectInputs
-    adapter_name: str
-    adapter: BaseAdapter
-    connection_config: dict[str, object]
-    use_color: bool
-    progress_stream: TextIO
-    def __init__(
-        self,
-        effective_project_dir: Path,
-        discovered_inputs: DiscoveredProjectInputs,
-        adapter_name: str,
-        adapter: BaseAdapter,
-        connection_config: dict[str, object],
-        use_color: bool,
-        progress_stream: TextIO,
     ) -> None: ...
 
 class TestCommandRequest(NativeRecord):
@@ -8484,31 +6975,6 @@ class ScopeCommandRequest(NativeRecord):
         no_color: bool = False,
     ) -> None: ...
 
-class TestInvocation(NativeRecord):
-    """Resolved project, adapter, and reporter context for the test command."""
-
-    effective_project_dir: Path
-    discovered_inputs: DiscoveredProjectInputs
-    adapter_name: str
-    adapter: BaseAdapter
-    connection_config: dict[str, object]
-    use_color: bool
-    progress_stream: TextIO
-    connection_progress: ConnectionProgressReporter
-    planning_progress: PlanningProgressReporter
-    def __init__(
-        self,
-        effective_project_dir: Path,
-        discovered_inputs: DiscoveredProjectInputs,
-        adapter_name: str,
-        adapter: BaseAdapter,
-        connection_config: dict[str, object],
-        use_color: bool,
-        progress_stream: TextIO,
-        connection_progress: ConnectionProgressReporter,
-        planning_progress: PlanningProgressReporter,
-    ) -> None: ...
-
 class RulesCommandRequest(NativeRecord):
     """Inputs for focused rule execution, inspection, or skill generation."""
 
@@ -8600,33 +7066,6 @@ class BuildCostFinalization(NativeRecord):
         cost_status: CostStatus = ...,
         cost_message: str = ...,
         had_executable_work: bool | None = True,
-    ) -> None: ...
-
-class ContractCommandRequest(NativeRecord):
-    """CLI inputs for physical contract comparison and repository adoption."""
-
-    action: str
-    from_target: str
-    project_dir: Path | None
-    select: tuple[str, ...]
-    exclude: tuple[str, ...]
-    write: bool
-    overwrite: bool
-    json_output: bool
-    no_color: bool
-    cli_vars: dict[str, object] | None
-    def __init__(
-        self,
-        action: str,
-        from_target: str,
-        project_dir: Path | None = None,
-        select: tuple[str, ...] = (),
-        exclude: tuple[str, ...] = (),
-        write: bool = False,
-        overwrite: bool = False,
-        json_output: bool = False,
-        no_color: bool = False,
-        cli_vars: dict[str, object] | None = None,
     ) -> None: ...
 
 class LineageCommandRequest(NativeRecord):
@@ -8866,49 +7305,6 @@ class SkillUpdateResult(NativeRecord):
     def __init__(
         self,
         written_paths: tuple[Path, ...],
-    ) -> None: ...
-
-class CompileAnalysis(NativeRecord):
-    """Compiled project analysis shared by compile output phases."""
-
-    discovered_inputs: DiscoveredProjectInputs
-    adapter: BaseAdapter
-    graph: ProjectGraph
-    selected_keys: frozenset[CompiledObjectKey]
-    lineage: ProjectColumnLineage | None
-    diagnostics: tuple[CompilerDiagnostic, ...]
-    discover_ms: int
-    graph_ms: int
-    lineage_ms: int
-    contract_ms: int
-    contract_cpu_ms: int
-    built_in_rules_ms: int
-    custom_rules_ms: int
-    custom_rules_cpu_ms: int
-    early_lint_wait_ms: int
-    rule_cache_hits: int
-    rule_cache_misses: int
-    skipped_type_proof_rules: tuple[str, ...]
-    def __init__(
-        self,
-        discovered_inputs: DiscoveredProjectInputs,
-        adapter: BaseAdapter,
-        graph: ProjectGraph,
-        selected_keys: frozenset[CompiledObjectKey],
-        lineage: ProjectColumnLineage | None,
-        diagnostics: tuple[CompilerDiagnostic, ...],
-        discover_ms: int,
-        graph_ms: int,
-        lineage_ms: int,
-        contract_ms: int,
-        contract_cpu_ms: int,
-        built_in_rules_ms: int = 0,
-        custom_rules_ms: int = 0,
-        custom_rules_cpu_ms: int = 0,
-        early_lint_wait_ms: int = 0,
-        rule_cache_hits: int = 0,
-        rule_cache_misses: int = 0,
-        skipped_type_proof_rules: tuple[str, ...] = (),
     ) -> None: ...
 
 class DbtManifestModel(NativeRecord):
@@ -9299,36 +7695,6 @@ class DbtInteropCommandArgs(NativeRecord):
         sqlbuild_command_args: tuple[str, ...] = (),
         dbt_executable: str = "dbt",
         sqlbuild_executable: str = "sqb",
-    ) -> None: ...
-
-class DbtPlanEnvironment(NativeRecord):
-    """Compiled project and adapter environment for dbt plan-output builds."""
-
-    project_dir: Path
-    discovered_inputs: DiscoveredProjectInputs
-    project: CompiledProjectView
-    adapter: BaseAdapter
-    adapter_name: str
-    def __init__(
-        self,
-        project_dir: Path,
-        discovered_inputs: DiscoveredProjectInputs,
-        project: CompiledProjectView,
-        adapter: BaseAdapter,
-        adapter_name: str,
-    ) -> None: ...
-
-class DbtSqlbuildPlanRequest(NativeRecord):
-    """Selection and native planner inputs for a SQLBuild plan-output build."""
-
-    selected_model_names: tuple[str, ...]
-    sqlbuild_args: tuple[str, ...]
-    external_blocked_model_names: tuple[str, ...]
-    def __init__(
-        self,
-        selected_model_names: tuple[str, ...],
-        sqlbuild_args: tuple[str, ...],
-        external_blocked_model_names: tuple[str, ...] = (),
     ) -> None: ...
 
 class SourceFreshnessComparableRecord(Protocol):
@@ -9728,13 +8094,6 @@ class SqlValueLimits(NativeRecord):
 class SqlValueValidationError(ValueError):
     """An authored value cannot be represented by the typed SQL value domain."""
 
-class CompletionState(StrEnum):
-    """Overall outcome state for a completion summary line."""
-
-    OK = "ok"
-    WARN = "warn"
-    FAIL = "fail"
-
 class PartialBuildPhaseTimings(NativeRecord):
     """Available disjoint phase durations after an exceptional build."""
 
@@ -9774,60 +8133,6 @@ class QueryExecutionError(CliUserError):
 
     exit_code: int
 
-class QueryDiffOutcomeError(CliUserError):
-    """Expected query-diff failure with an explicit outcome and exit code."""
-
-    status: str
-    exit_code: int
-    def __init__(
-        self,
-        message: str,
-        *,
-        status: str,
-        exit_code: int,
-        code: str | None = None,
-        help: str | None = None,
-    ) -> None: ...
-
-class QueryDiffIncompleteError(QueryDiffOutcomeError):
-    """Safety or preflight prevented complete value evidence."""
-
-    def __init__(
-        self, message: str, *, code: str | None = None, help: str | None = None
-    ) -> None: ...
-
-class QueryDiffExecutionError(QueryDiffOutcomeError):
-    """Setup, execution, ownership publication, or cleanup failed."""
-
-    def __init__(
-        self, message: str, *, code: str | None = None, help: str | None = None
-    ) -> None: ...
-
-class DiffSizeGuardError(CliUserError):
-    """A default full model diff stopped before reading data because of table sizes."""
-
-    status: str
-    exit_code: int
-    details: dict[str, object]
-    def __init__(
-        self,
-        message: str,
-        *,
-        details: dict[str, object],
-        code: str | None = None,
-        help: str | None = None,
-    ) -> None: ...
-
-class MigrationStateError(ValueError):
-    """Raised when model migration state inputs or rows are invalid."""
-
-    code: str
-    message: str
-    help: str | None
-    def __init__(
-        self, message: str, *, code: str | None = None, help: str | None = None
-    ) -> None: ...
-
 class ContractFindingKind(StrEnum):
     """Stable physical-to-authored contract difference categories."""
 
@@ -9844,13 +8149,6 @@ class CompilerStage(StrEnum):
     DISCOVERED_PROJECT_INPUTS = "discovered_project_inputs"
     COMPILE_PROJECT_INPUTS = "compile_project_inputs"
     COMPILED_PROJECT = "compiled_project"
-
-class HookReadType(StrEnum):
-    """Kind of model hook that declares or writes a read."""
-
-    PYTHON = "Python"
-    SQL = "SQL"
-    INLINE_SQL = "inline SQL"
 
 class LintSeverity(StrEnum):
     """Severity assigned to one lint violation."""
@@ -9919,12 +8217,6 @@ class ProjectPathError(DiscoveryError):
 class ResourceIdentityError(DiscoveryError):
     """Raised when an authored resource identity is not canonical snake_case."""
 
-class MeasurementAuditError(ValueError):
-    """Raised when a measurement audit contract or value is invalid."""
-
-class ContractAdoptionError(RuntimeError):
-    """Raised when safe contract source editing cannot continue."""
-
 class FingerprintInputError(ValueError):
     """Raised when fingerprint storage inputs or rows are invalid."""
 
@@ -9940,15 +8232,6 @@ class QueryFingerprintError(ValueError):
 
 class NativeStageMismatchError(RuntimeError):
     """Raised when native state the compiler replays is inconsistent with its inputs."""
-
-class UnknownLineageDialectError(ValueError):
-    """Raised, as Python's parser raised `ValueError`, for a dialect Polyglot does not know."""
-
-class RefactorValueError(ValueError):
-    """An unhandled value failure the Python planner also leaves to the caller."""
-
-class RefactorIOError(OSError):
-    """A file read or write failure the Python planner also leaves to the caller."""
 
 class ScopeError(ValueError):
     """Base error for invalid scope-domain input."""
@@ -9966,16 +8249,10 @@ class InvalidScopePathError(ScopeError):
 class InvalidQualifiedIdentityError(ScopeError):
     """Raised when a qualified scope identity cannot be parsed."""
 
-class UnindexableScopeError(ScopeError):
-    """Raised when the native scope index cannot place a discovered path or resource kind."""
-
 class ScopeValidationError(ScopeError):
     """Aggregate error raised only when strict scope validation is requested."""
 
     diagnostics: Any
-
-class UnsupportedLexicalSyntaxError(ValueError):
-    """Raised when an adapter declares lexical rules the native SQL scanners do not support."""
 
 class LintError(Exception):
     """A lint or format run could not proceed."""
@@ -9987,14 +8264,8 @@ class LintError(Exception):
         self, message: str, *, code: str | None = None, help: str | None = None
     ) -> None: ...
 
-class NativeLintError(LintError):
-    """The SQLBuild-owned native lint engine rejected a request or response."""
-
 class ProjectCompileError(LintError):
     """The project could not be compiled, so its SQL cannot be linted."""
-
-class LintStoppedError(Exception):
-    """A speculative lint run was stopped because its result is no longer needed."""
 
 class SpecConfigError(RuntimeError):
     """Raised when project specification configuration is invalid."""
@@ -10103,17 +8374,6 @@ class ContractEvidence(NativeRecord):
         findings: tuple[ContractFinding, ...] = ...,
     ) -> None: ...
 
-class ContractAdoptionResult(NativeRecord):
-    from_target: str
-    evidence: tuple[ContractEvidence, ...]
-    written_paths: tuple[Path, ...]
-    def __init__(
-        self,
-        from_target: str,
-        evidence: tuple[ContractEvidence, ...],
-        written_paths: tuple[Path, ...] = ...,
-    ) -> None: ...
-
 class ContractValidationResult(NativeRecord):
     """Diagnostics emitted by model contract validation."""
 
@@ -10138,38 +8398,6 @@ class LineageGraphViews(NativeRecord):
         tag_index: dict[str, frozenset[CompiledObjectKey]],
         path_index: dict[CompiledObjectKey, str],
         all_keys: dict[str, CompiledObjectKey],
-    ) -> None: ...
-
-class AttachedAuditGateEdge(NativeRecord):
-    """One ordering edge: the gated node waits for a resource its attached audit reads."""
-
-    audit_name: str
-    target: CompiledObjectKey
-    gated: CompiledObjectKey
-    read: CompiledObjectKey
-    def __init__(
-        self,
-        audit_name: str,
-        target: CompiledObjectKey,
-        gated: CompiledObjectKey,
-        read: CompiledObjectKey,
-    ) -> None: ...
-
-class HookReadEdge(NativeRecord):
-    """One ordering edge: a model waits for a resource one of its hooks reads."""
-
-    hook_name: str
-    gated: CompiledObjectKey
-    read: CompiledObjectKey
-    hook_type: HookReadType
-    hook_path: Path | None
-    def __init__(
-        self,
-        hook_name: str,
-        gated: CompiledObjectKey,
-        read: CompiledObjectKey,
-        hook_type: HookReadType = ...,
-        hook_path: Path | None = ...,
     ) -> None: ...
 
 class QualifiedLineageColumn(NativeRecord):
@@ -10213,27 +8441,6 @@ class ColumnLineageEdge(NativeRecord):
         confidence: ColumnLineageConfidence = ...,
     ) -> None: ...
 
-class DirectSemanticColumnUse(NativeRecord):
-    """One direct non-projection use of a resolved resource column."""
-
-    consumer_model: str
-    context: str
-    expression_sql: str
-    source: QualifiedLineageColumn
-    confidence: ColumnLineageConfidence
-    line: int | None
-    column: int | None
-    def __init__(
-        self,
-        consumer_model: str,
-        context: str,
-        expression_sql: str,
-        source: QualifiedLineageColumn,
-        confidence: ColumnLineageConfidence = ...,
-        line: int | None = ...,
-        column: int | None = ...,
-    ) -> None: ...
-
 class ColumnLineage(NativeRecord):
     """Lineage for one output column in one model."""
 
@@ -10264,34 +8471,6 @@ class ModelColumnLineage(NativeRecord):
         model_name: str,
         columns: tuple[ColumnLineage, ...],
         has_star: bool = ...,
-    ) -> None: ...
-
-class RefactorProject(NativeRecord):
-    """Compiler facts of one project, as the refactoring planner reads them."""
-
-    project_dir: Path
-    graph: ProjectGraph
-    discovered: DiscoveredProjectInputs
-    def __init__(
-        self,
-        project_dir: Path,
-        graph: ProjectGraph,
-        discovered: DiscoveredProjectInputs,
-    ) -> None: ...
-
-class ManualLocation(NativeRecord):
-    """A location a refactoring cannot rewrite safely."""
-
-    path: str
-    line: int | None
-    column: int | None
-    reason: str
-    def __init__(
-        self,
-        path: str,
-        line: int | None,
-        column: int | None,
-        reason: str,
     ) -> None: ...
 
 class NativeSqlTestFailure(NativeRecord):
@@ -10442,23 +8621,6 @@ class LintViolation(NativeRecord):
         fix_unavailable_reason: str | None = ...,
     ) -> None: ...
 
-class RuleFixResult(NativeRecord):
-    """One applied, refused, or unavailable semantic Rule fix."""
-
-    file_path: Path
-    code: str
-    line: int
-    status: RuleFixStatus
-    reason: str
-    def __init__(
-        self,
-        file_path: Path,
-        code: str,
-        line: int,
-        status: RuleFixStatus,
-        reason: str,
-    ) -> None: ...
-
 class LintConfig(NativeRecord):
     """Resolved lint and format configuration for one run."""
 
@@ -10603,44 +8765,6 @@ class ColumnLineageMode(StrEnum):
 
     RICH = "rich"
     FAST = "fast"
-
-class PolyglotAnalysisDialect(StrEnum):
-    """Dialect names accepted by Polyglot analyze_query."""
-
-    GENERIC = "generic"
-    POSTGRESQL = "postgresql"
-    MYSQL = "mysql"
-    BIGQUERY = "bigquery"
-    SNOWFLAKE = "snowflake"
-    DUCKDB = "duckdb"
-    SQLITE = "sqlite"
-    HIVE = "hive"
-    SPARK = "spark"
-    TRINO = "trino"
-    PRESTO = "presto"
-    REDSHIFT = "redshift"
-    TSQL = "tsql"
-    ORACLE = "oracle"
-    CLICKHOUSE = "clickhouse"
-    DATABRICKS = "databricks"
-    ATHENA = "athena"
-    TERADATA = "teradata"
-    DORIS = "doris"
-    STARROCKS = "starrocks"
-    MATERIALIZE = "materialize"
-    RISINGWAVE = "risingwave"
-    SINGLESTORE = "singlestore"
-    COCKROACHDB = "cockroachdb"
-    TIDB = "tidb"
-    DRUID = "druid"
-    SOLR = "solr"
-    TABLEAU = "tableau"
-    DUNE = "dune"
-    FABRIC = "fabric"
-    DRILL = "drill"
-    DREMIO = "dremio"
-    EXASOL = "exasol"
-    DATAFUSION = "datafusion"
 
 class MigrationDiscovery(StrEnum):
     """How a migration was requested."""
@@ -10793,17 +8917,6 @@ class CompileModelConfig(NativeRecord):
         table_type: ResolvedTableType = ...,
     ) -> None: ...
 
-class CursorInputRoles(NativeRecord):
-    """Effective filter and watermark inputs for one compiled model."""
-
-    filter_inputs: dict[str, str]
-    watermark_inputs: dict[str, str]
-    def __init__(
-        self,
-        filter_inputs: dict[str, str],
-        watermark_inputs: dict[str, str],
-    ) -> None: ...
-
 class DeclarationRuntimeProjection(NativeRecord):
     """Process-only declaration values keyed by canonical static identity."""
 
@@ -10864,35 +8977,6 @@ class MacroExpansionResult(NativeRecord):
         dependencies: tuple[DeclarationIdentity, ...] = ...,
         usages: tuple[UsageRecord, ...] = ...,
         argument_references: tuple[CompileSqlReference, ...] = ...,
-    ) -> None: ...
-
-class VisibleModelDeclarations(NativeRecord):
-    """One model's visible declarations and macros, as the native model loop resolves them."""
-
-    local_enums: dict[str, EnumDeclaration]
-    local_constants: dict[str, ConstantDeclaration]
-    enums: dict[str, EnumDeclaration]
-    constants: dict[str, ConstantDeclaration]
-    inaccessible_enums: dict[str, DeclarationRecord]
-    inaccessible_constants: dict[str, DeclarationRecord]
-    enum_visibility: dict[str, tuple[VisibilityRecord, ...]]
-    constant_visibility: dict[str, tuple[VisibilityRecord, ...]]
-    macros: dict[str, LoadedMacro]
-    macro_records: dict[str, DeclarationRecord]
-    inaccessible_macros: dict[str, DeclarationRecord]
-    def __init__(
-        self,
-        local_enums: dict[str, EnumDeclaration],
-        local_constants: dict[str, ConstantDeclaration],
-        enums: dict[str, EnumDeclaration],
-        constants: dict[str, ConstantDeclaration],
-        inaccessible_enums: dict[str, DeclarationRecord],
-        inaccessible_constants: dict[str, DeclarationRecord],
-        enum_visibility: dict[str, tuple[VisibilityRecord, ...]],
-        constant_visibility: dict[str, tuple[VisibilityRecord, ...]],
-        macros: dict[str, LoadedMacro],
-        macro_records: dict[str, DeclarationRecord],
-        inaccessible_macros: dict[str, DeclarationRecord],
     ) -> None: ...
 
 class DeclarationExpansionContext(NativeRecord):
@@ -10991,19 +9075,6 @@ class PolyglotAnalysisResult(NativeRecord):
         binding_validated: bool = ...,
     ) -> None: ...
 
-class AnalysisCacheContext(NativeRecord):
-    """Shared project-local analysis cache identity for one compile invocation."""
-
-    root: Path
-    shared_fingerprint: str
-    signature_namespace: str
-    def __init__(
-        self,
-        root: Path,
-        shared_fingerprint: str,
-        signature_namespace: str = ...,
-    ) -> None: ...
-
 class CompileAnalysisSelection(NativeRecord):
     """Deep-analysis selection and invocation-local preparation observer."""
 
@@ -11052,37 +9123,6 @@ class FunctionReturnColumn(NativeRecord):
         self,
         name: str,
         type: str,
-    ) -> None: ...
-
-class HandBuiltAnalysis(NativeRecord):
-    """A hand-built model input's session position, fallback columns and standalone proof."""
-
-    session: tuple[Any, int] | None
-    fallback: list[tuple[str, str | None, str]] | None
-    standalone_proof: (
-        tuple[
-            bool,
-            list[tuple[str, str | None, str]],
-            list[tuple[str, str | None]],
-            list[str],
-            str | None,
-            bool,
-        ]
-        | None
-    )
-    def __init__(
-        self,
-        session: tuple[Any, int] | None,
-        fallback: list[tuple[str, str | None, str]] | None,
-        standalone_proof: tuple[
-            bool,
-            list[tuple[str, str | None, str]],
-            list[tuple[str, str | None]],
-            list[str],
-            str | None,
-            bool,
-        ]
-        | None,
     ) -> None: ...
 
 class ModelSqlAnalysis(NativeRecord):
@@ -11285,17 +9325,6 @@ class CompiledFunction(NativeRecord):
         packages: tuple[str, ...] = ...,
         tags: tuple[str, ...] = ...,
         description: str | None = ...,
-    ) -> None: ...
-
-class PythonSqlReferenceReport(NativeRecord):
-    """P008 diagnostics plus literal SQL relations that named no project relation."""
-
-    diagnostics: tuple[CompilerDiagnostic, ...]
-    unmatched: tuple[LiteralSqlRelation, ...]
-    def __init__(
-        self,
-        diagnostics: tuple[CompilerDiagnostic, ...] = ...,
-        unmatched: tuple[LiteralSqlRelation, ...] = ...,
     ) -> None: ...
 
 class CompileSqlTestCte(NativeRecord):
@@ -11968,49 +9997,6 @@ class PythonPlanEntry(NativeRecord):
         current_metadata_json: str | None = ...,
         previous_metadata_json: str | None = ...,
         provider_usages: tuple[DiscoveredProviderUsage, ...] = ...,
-    ) -> None: ...
-
-class PythonRunPlanOutputs(NativeRecord):
-    """Plan output and Python entries after python-aware run selection."""
-
-    plan_output: PlanOutput
-    python_plan_entries: tuple[PythonPlanEntry, ...]
-    selected_python_node_names: frozenset[str]
-    def __init__(
-        self,
-        plan_output: PlanOutput,
-        python_plan_entries: tuple[PythonPlanEntry, ...],
-        selected_python_node_names: frozenset[str],
-    ) -> None: ...
-
-class CompiledProjectPhaseResult(NativeRecord):
-    """Canonical project compilation output before command-specific planning."""
-
-    project: CompiledProjectView
-    connection_config: dict[str, object]
-    compile_seconds: float
-    def __init__(
-        self,
-        project: CompiledProjectView,
-        connection_config: dict[str, object],
-        compile_seconds: float,
-    ) -> None: ...
-
-class StaticCommandContext(NativeRecord):
-    """Shared compile, selection, and relation phases for focused commands."""
-
-    project: CompiledProjectView
-    scope: PlannerScope
-    relations: PlannerRelationsContext
-    connection_config: dict[str, object]
-    compile_seconds: float
-    def __init__(
-        self,
-        project: CompiledProjectView,
-        scope: PlannerScope,
-        relations: PlannerRelationsContext,
-        connection_config: dict[str, object],
-        compile_seconds: float,
     ) -> None: ...
 
 class ClonePipelineOptions(NativeRecord):
@@ -12725,27 +10711,6 @@ class RulesRunResult(NativeRecord):
         skipped_type_proof_rules: tuple[str, ...] = ...,
     ) -> None: ...
 
-class NativeRulesEvaluation(NativeRecord):
-    """The built-in rules response, decoded natively."""
-
-    findings: tuple[Finding, ...]
-    selected_codes: tuple[str, ...]
-    evaluated_models: int
-    cache_hits: int
-    cache_misses: int
-    built_in_ms: int
-    reused: bool
-    def __init__(
-        self,
-        findings: tuple[Finding, ...],
-        selected_codes: tuple[str, ...],
-        evaluated_models: int,
-        cache_hits: int,
-        cache_misses: int,
-        built_in_ms: int,
-        reused: bool,
-    ) -> None: ...
-
 class CustomRulesOutcome(NativeRecord):
     """Custom-rule findings in canonical order and their cache accounting."""
 
@@ -13236,19 +11201,6 @@ class ScopeReportFilters(NativeRecord):
         page_size: int = ...,
         nearby_depth: int = ...,
         globals: str = ...,
-    ) -> None: ...
-
-class ScopeSourceLocation(NativeRecord):
-    """Safe project-relative source location."""
-
-    path: str
-    line: int
-    column: int
-    def __init__(
-        self,
-        path: str,
-        line: int,
-        column: int,
     ) -> None: ...
 
 class VisibilityProvenance(NativeRecord):
@@ -15305,9 +13257,6 @@ class PlannerInputError(ValueError):
         self, message: str, *, code: str | None = None, help: str | None = None
     ) -> None: ...
 
-class NativeSqlTestPlanningError(PlannerInputError):
-    """Raised when the native SQL-test planning boundary returns invalid data."""
-
 class FutureCursorSafetyError(PlannerInputError):
     """Raised when an effective cursor exceeds the configured future limit."""
 
@@ -16322,29 +14271,6 @@ class CompileInputError(ValueError):
         self, message: str, *, code: str | None = None, help: str | None = None
     ) -> None: ...
 
-class MacroArgumentError(CompileInputError):
-    """Raised when one macro call's arguments do not parse; `offset` is in the expanded SQL."""
-
-    detail: str
-    macro_name: str
-    file_path: Path
-    offset: int
-    relative_position: tuple[int, int]
-    location: SourceLocation | None
-    def __init__(
-        self,
-        *,
-        detail: str,
-        help: str,
-        macro_name: str,
-        file_path: Path,
-        offset: int,
-        relative_position: tuple[int, int],
-        location: SourceLocation | None = None,
-    ) -> None: ...
-    def shifted(self, by: int) -> MacroArgumentError: ...
-    def located(self, location: SourceLocation) -> MacroArgumentError: ...
-
 class SqlTestReferenceError(CompileInputError):
     """Raised when a SQL-test CTE calls a reference the test query cannot resolve."""
 
@@ -17186,43 +15112,6 @@ class DeclarationResolutionContext(NativeRecord):
         inaccessible_macros: dict[str, DeclarationRecord] = ...,
         consumer: ResourceIdentity | DeclarationIdentity | None = ...,
     ) -> None: ...
-
-class ModelInputBuildContext(NativeRecord):
-    """Run-constant config and macros for building model compile inputs."""
-
-    effective_vars: dict[str, object]
-    effective_settings: SettingsConfig
-    target_config: TargetConfig | None
-    effective_target_name: str | None
-    run_id: str
-    macro_context: MacroContext
-    loaded_macros: dict[str, LoadedMacro]
-    value_renderer: TypedSqlValueRenderer
-    collection_rendering: CollectionRendering
-    sql_lexical_syntax: SqlLexicalSyntax
-    public_enums: dict[str, EnumDeclaration]
-    public_constants: dict[str, ConstantDeclaration]
-    public_model_schemas: dict[str, ModelSchemaDeclaration]
-    declaration_resolver: DeclarationScopeResolver | None
-    def __init__(
-        self,
-        effective_vars: dict[str, object],
-        effective_settings: SettingsConfig,
-        target_config: TargetConfig | None,
-        effective_target_name: str | None,
-        run_id: str,
-        macro_context: MacroContext,
-        loaded_macros: dict[str, LoadedMacro],
-        value_renderer: TypedSqlValueRenderer,
-        collection_rendering: CollectionRendering,
-        sql_lexical_syntax: SqlLexicalSyntax,
-        public_enums: dict[str, EnumDeclaration] = ...,
-        public_constants: dict[str, ConstantDeclaration] = ...,
-        public_model_schemas: dict[str, ModelSchemaDeclaration] = ...,
-        declaration_resolver: DeclarationScopeResolver | None = ...,
-    ) -> None: ...
-    @property
-    def declaration_expansion(self) -> DeclarationExpansionContext: ...
 
 class CompileSqlReference(NativeRecord):
     """One logical SQL reference discovered from compiled SQL text."""

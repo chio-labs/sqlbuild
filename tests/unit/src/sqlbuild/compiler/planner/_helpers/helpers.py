@@ -1119,57 +1119,6 @@ def build_audit_source_map(
     }
 
 
-def build_cursor_ref(ref_name: str) -> CompileSqlReference:
-    """Build a ref-type SQL reference for cursor resolution tests."""
-
-    return CompileSqlReference(
-        ref_kind=SqlReferenceKind.REF,
-        ref_name=ref_name,
-    )
-
-
-def build_cursor_model_map(
-    ref_name: str,
-    qualified_name: str | None,
-) -> dict[str, CompiledModelView]:
-    """Build a model map with one entry for cursor resolution tests."""
-
-    model_map: dict[str, CompiledModelView] = {
-        ref_name: CompiledModel(
-            key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=ref_name),
-            deps=(),
-            name=ref_name,
-            relative_path=Path(f"models/{ref_name}.sql"),
-            query_sql="SELECT 1",
-            config=CompileModelConfig(),
-            destination=CompiledRelationLocation(
-                database=None,
-                schema=None,
-                name=ref_name,
-                qualified_name=qualified_name,
-            ),
-        ),
-    }
-    return ({}, model_map)[qualified_name is not None]
-
-
-def build_cursor_deferred_locations(
-    ref_name: str,
-    qualified_name: str | None,
-) -> dict[str, CompiledRelationLocation] | None:
-    """Build deferred locations dict with one entry, or None."""
-
-    locations: dict[str, CompiledRelationLocation] = {
-        ref_name: CompiledRelationLocation(
-            database=None,
-            schema=None,
-            name=ref_name,
-            qualified_name=qualified_name,
-        ),
-    }
-    return (None, locations)[qualified_name is not None]
-
-
 def build_cursor_override_model(cursor_type: str | None) -> CompiledModelView:
     """Build a minimal model with optional cursor_type for override resolution tests."""
 

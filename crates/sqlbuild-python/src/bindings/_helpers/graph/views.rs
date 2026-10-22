@@ -17,12 +17,6 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 
-/// The native graph's `(resource type, name)` pair for `key`.
-#[pyfunction]
-fn native_graph_key(key: &Bound<'_, PyAny>) -> PyResult<ObjectKey> {
-    native_key(key)
-}
-
 /// The native graph's pairs for `keys`, in order.
 #[pyfunction]
 fn native_graph_keys(keys: &Bound<'_, PyAny>) -> PyResult<Vec<ObjectKey>> {
@@ -201,7 +195,6 @@ pub(crate) fn native_graph_from_edges(
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(native_graph_key, module)?)?;
     module.add_function(wrap_pyfunction!(native_graph_keys, module)?)?;
     module.add_function(wrap_pyfunction!(compiled_graph_keys, module)?)?;
     module.add_function(wrap_pyfunction!(lineage_graph_names, module)?)?;

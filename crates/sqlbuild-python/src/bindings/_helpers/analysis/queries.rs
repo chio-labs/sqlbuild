@@ -14,28 +14,6 @@ fn query_fingerprint(py: Python<'_>, sql: &str, dialect: &str) -> PyResult<Strin
     .map_err(value_error)
 }
 
-#[pyfunction(name = "validate_sql_with_schema_json")]
-fn schema_validation_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.compiler_detach(|| {
-        sqlbuild_analysis::semantic_validation::main::validation_json(request_json)
-    })
-    .map_err(value_error)
-}
-
-#[pyfunction]
-fn analyze_sql_uses_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.compiler_detach(|| sqlbuild_analysis::semantic_usage::main::analyze_json(request_json))
-        .map_err(value_error)
-}
-
-#[pyfunction]
-fn analyze_column_references_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.compiler_detach(|| {
-        sqlbuild_analysis::column_references::main::analyze::analyze_json(request_json)
-    })
-    .map_err(value_error)
-}
-
 #[pyfunction]
 fn analyze_queries_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
     py.compiler_detach(|| {
@@ -68,9 +46,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     crate::bindings::_helpers::references::explicit_references::register(module)?;
     crate::bindings::_helpers::analysis::binding_locations::register(module)?;
     module.add_function(wrap_pyfunction!(query_fingerprint, module)?)?;
-    module.add_function(wrap_pyfunction!(schema_validation_json, module)?)?;
-    module.add_function(wrap_pyfunction!(analyze_sql_uses_json, module)?)?;
-    module.add_function(wrap_pyfunction!(analyze_column_references_json, module)?)?;
     module.add_function(wrap_pyfunction!(analyze_queries_json, module)?)?;
     module.add_function(wrap_pyfunction!(analyze_project_queries_json, module)?)?;
     module.add_function(wrap_pyfunction!(

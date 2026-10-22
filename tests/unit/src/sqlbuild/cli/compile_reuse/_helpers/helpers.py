@@ -5,22 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import ClassVar
 
-import pytest
 from pydantic import AliasChoices, BaseModel, Field
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 from sqlbuild.cli.compile_reuse.models import (
-    SettingsEnvironmentInputs,
     SettingsInputsResult,
 )
-
-
-def write_file(path: Path, contents: str) -> None:
-    """Write one file, creating parent folders."""
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(contents, encoding="utf-8")
-
 
 SETTINGS_TOKEN_ENV_VAR: str = "ORDERS_API_TOKEN"
 SETTINGS_ENV_FILE_NAME: str = "orders_api.env"
@@ -104,30 +94,6 @@ class CommandLineOrdersSettings(BaseSettings):
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(cli_parse_args=False)
 
     orders_api_token: str = ""
-
-
-def file_settings_inputs(*, root: Path) -> SettingsEnvironmentInputs:
-    """Describe FileOrdersSettings as if read from root, the process working directory."""
-
-    return SettingsEnvironmentInputs(
-        case_sensitive=False,
-        names=("orders_api_token",),
-        prefixes=(),
-        env_files=(str(root / SETTINGS_ENV_FILE_NAME),),
-        secrets_dirs=(str(root / SETTINGS_SECRETS_DIR_NAME),),
-    )
-
-
-def set_token(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
-    """Set the tracked token variable."""
-
-    monkeypatch.setenv(SETTINGS_TOKEN_ENV_VAR, value)
-
-
-def write_settings_file(root: Path, relative_path: str, contents: str) -> None:
-    """Write one env file or secrets file below root."""
-
-    write_file(root / relative_path, contents)
 
 
 def described_settings_inputs(

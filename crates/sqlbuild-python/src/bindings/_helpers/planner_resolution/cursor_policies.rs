@@ -82,16 +82,6 @@ pub(crate) fn start_cursor_config<'py>(
     resolve_policy(model, project_config, &START_POLICY)
 }
 
-/// Resolve future-end policy with model config taking precedence.
-#[pyfunction]
-#[pyo3(signature = (*, model, project_config))]
-fn resolve_future_cursor_config<'py>(
-    model: &Bound<'py, PyAny>,
-    project_config: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    future_cursor_config(model, project_config)
-}
-
 /// Resolve automatic-start policy with model config taking precedence.
 #[pyfunction]
 #[pyo3(signature = (*, model, project_config))]
@@ -103,6 +93,5 @@ pub(crate) fn resolve_start_cursor_config<'py>(
 }
 
 pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(resolve_future_cursor_config, module)?)?;
     module.add_function(wrap_pyfunction!(resolve_start_cursor_config, module)?)
 }

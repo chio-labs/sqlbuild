@@ -7,14 +7,13 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyDict, PyDictMethods};
+use pyo3::types::PyDict;
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use serde_json::{Value, json};
 use sqlbuild_rules::rule_cache::main::file_rule_key::file_rule_key;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::rules::findings::FindingClasses;
 use sqlbuild_rules::rule_cache::main::lint_key::lint_key;
 use sqlbuild_rules::rule_cache::main::lookup_rule_cache::lookup_rule_cache;
 use sqlbuild_rules::rule_cache::main::model_rule_keys::model_rule_keys as parallel_model_rule_keys;
@@ -44,13 +43,6 @@ pub(crate) fn settings_lint_key(settings: &LintSettings) -> String {
     })
 }
 
-/// The lint settings part of every SQL rule cache key.
-#[pyfunction]
-#[pyo3(signature = (*, config))]
-fn sql_rule_lint_key(config: &Bound<'_, PyAny>) -> PyResult<String> {
-    Ok(settings_lint_key(&LintSettings::from_record(config)?))
-}
-
 positional_record! {
     extract;
     /// One model's path, authored SQL, query SQL and contract.
@@ -60,18 +52,6 @@ positional_record! {
         pub(crate) query_sql: String,
         pub(crate) contract: Option<String>,
     }
-}
-
-/// Each model path's SQL rule cache key from `(path, authored_sql, query_sql, contract)`.
-#[pyfunction]
-#[pyo3(signature = (*, lint_key, codes, models))]
-fn sql_model_rule_keys(
-    py: Python<'_>,
-    lint_key: &str,
-    codes: Vec<String>,
-    models: Vec<ModelRuleRow>,
-) -> BTreeMap<String, String> {
-    model_rule_keys(py, lint_key, &codes, &models)
 }
 
 /// Each model path's SQL rule cache key, hashed in parallel with the GIL released.
@@ -213,29 +193,6 @@ pub(crate) fn encoded_findings(findings: &[&RuleFinding]) -> PyResult<String> {
     serde_json::to_string(&payloads).map_err(invalid)
 }
 
-/// The stored findings of each path whose key matches; undecodable stored findings miss.
-#[pyfunction]
-#[pyo3(signature = (*, entries, keys))]
-fn lookup_sql_rule_cache<'py>(
-    py: Python<'py>,
-    entries: StoredEntries,
-    keys: Vec<(String, String)>,
-) -> PyResult<BTreeMap<String, Vec<Bound<'py, PyAny>>>> {
-    let lookup: CacheLookup = lookup_rule_cache(&cached_entries(&entries)?, &keys);
-    let classes = FindingClasses::new(py)?;
-    let mut hits: BTreeMap<String, Vec<Bound<'py, PyAny>>> = BTreeMap::new();
-    for (path, findings) in lookup.hits {
-        let decoded: Option<Vec<Bound<'py, PyAny>>> = findings
-            .iter()
-            .map(|finding| classes.finding_of_payload(finding))
-            .collect::<PyResult<_>>()?;
-        if let Some(decoded) = decoded {
-            hits.insert(path, decoded);
-        }
-    }
-    Ok(hits)
-}
-
 fn finding_payload(finding: &Bound<'_, PyAny>) -> PyResult<Value> {
     let path: String = native_field(finding, "path")?
         .call_method0("as_posix")?
@@ -264,17 +221,6 @@ fn encode_sql_rule_findings(findings: Vec<Bound<'_, PyAny>>) -> PyResult<String>
 }
 
 /// Replace the cache file at `path` atomically with `entries`.
-#[pyfunction]
-#[pyo3(signature = (*, path, entries))]
-fn write_sql_rule_cache(path: PathBuf, entries: &Bound<'_, PyDict>) -> PyResult<()> {
-    let mut stored = StoredEntries::new();
-    for (key, value) in entries.iter() {
-        stored.insert(key.extract()?, value.extract()?);
-    }
-    write_rule_cache(&path, &stored)
-}
-
-/// Replace the cache file at `path` atomically with `entries`.
 pub(crate) fn write_rule_cache(path: &Path, stored: &StoredEntries) -> PyResult<()> {
     let text: String = rule_cache_text(&cached_entries(stored)?);
     if let Some(parent) = path.parent() {
@@ -287,12 +233,8 @@ pub(crate) fn write_rule_cache(path: &Path, stored: &StoredEntries) -> PyResult<
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(sql_rule_lint_key, module)?)?;
-    module.add_function(wrap_pyfunction!(sql_model_rule_keys, module)?)?;
     module.add_function(wrap_pyfunction!(sql_file_rule_key, module)?)?;
     module.add_function(wrap_pyfunction!(load_sql_rule_cache, module)?)?;
-    module.add_function(wrap_pyfunction!(lookup_sql_rule_cache, module)?)?;
     module.add_function(wrap_pyfunction!(encode_sql_rule_findings, module)?)?;
-    module.add_function(wrap_pyfunction!(write_sql_rule_cache, module)?)?;
     Ok(())
 }

@@ -285,19 +285,7 @@ pub(crate) fn rules_config_of(
     }
 }
 
-/// The project's rules configuration, or `None` when it is invalid and the rules phase reports it.
-#[pyfunction]
-#[pyo3(signature = (*, project_dir))]
-fn valid_rules_config(py: Python<'_>, project_dir: PathBuf) -> PyResult<Option<Py<PyAny>>> {
-    match load_rules_config(py, project_dir) {
-        Ok(config) => Ok(Some(config)),
-        Err(error) if error.is_instance(py, &error_class(py, ErrorId::Rules)?) => Ok(None),
-        Err(error) => Err(error),
-    }
-}
-
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(load_rules_config, module)?)?;
-    module.add_function(wrap_pyfunction!(valid_rules_config, module)?)?;
     Ok(())
 }

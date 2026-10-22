@@ -8,9 +8,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyString};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_rules::lint_text::errors::LintTextError;
 use sqlbuild_rules::lint_text::main::format_sql_bodies::format_sql_bodies;
-use sqlbuild_rules::lint_text::main::interpolation_text_at::interpolation_text_at;
 use sqlbuild_rules::lint_text::main::named_declaration_role_kind::named_declaration_role_kind as role_kind;
-use sqlbuild_rules::lint_text::main::neutralize_audit_parameters::neutralize_audit_parameters;
 use sqlbuild_rules::lint_text::main::neutralize_context_interpolation::neutralize_context_interpolation;
 use sqlbuild_rules::lint_text::main::neutralize_interpolation::neutralize_interpolation;
 use sqlbuild_rules::lint_text::main::reject_inline_suppressions::reject_inline_suppressions;
@@ -60,13 +58,6 @@ fn neutralize_lint_context_interpolation(
     compiler_guard(|| Ok(site_tuples(neutralize_context_interpolation(body))))
 }
 
-#[pyfunction]
-fn neutralize_lint_audit_parameters(
-    body: &str,
-) -> PyResult<(String, Vec<Positional<InterpolationSite>>)> {
-    compiler_guard(|| Ok(site_tuples(neutralize_audit_parameters(body))))
-}
-
 /// Restored text, or `(False, reason)` when a sentinel is missing or repeated.
 #[pyfunction]
 fn restore_lint_interpolation(
@@ -79,11 +70,6 @@ fn restore_lint_interpolation(
         Err(LintTextError::Restoration(message)) => Ok((false, message)),
         Err(error) => Err(value_error(error)),
     }
-}
-
-#[pyfunction]
-fn lint_interpolation_text_at(body: &str, start: usize, dialect: &str) -> PyResult<Option<String>> {
-    compiler_guard(|| Ok(interpolation_text_at(body, start, dialect)))
 }
 
 #[pyfunction]
@@ -249,9 +235,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         neutralize_lint_context_interpolation,
         module
     )?)?;
-    module.add_function(wrap_pyfunction!(neutralize_lint_audit_parameters, module)?)?;
     module.add_function(wrap_pyfunction!(restore_lint_interpolation, module)?)?;
-    module.add_function(wrap_pyfunction!(lint_interpolation_text_at, module)?)?;
     module.add_function(wrap_pyfunction!(
         scan_fixture_typed_null_candidates,
         module
