@@ -442,7 +442,9 @@ def inventory_project_macros(
                 for parsed_file, row in _sql_macro_rows((sql_file,))
             )
         except CompileInputError as error:
-            faults.append(StaticMacroFault(relative_path=sql_file.relative_path, message=str(error)))
+            faults.append(
+                StaticMacroFault(relative_path=sql_file.relative_path, message=str(error))
+            )
     return replace(
         inventory,
         exports=(*inventory.exports, *exports),

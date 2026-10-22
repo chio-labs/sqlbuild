@@ -251,8 +251,7 @@ pub(crate) fn expanded_authored_sql<'py>(
             sql_macros: Some(SqlMacroSource {
                 loaded_macros: Some(context.classes.macros.loaded_macros.bind(py).as_any()),
                 origin: None,
-                resolver: Some(&context.classes.visibility.resolver)
-                    .filter(|resolver| !resolver.is_none()),
+                scopes: Some(&context.classes.visibility),
             }),
         })?;
         expanded_sql = expanded.spliced.sql;

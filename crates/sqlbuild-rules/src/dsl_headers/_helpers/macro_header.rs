@@ -4,7 +4,9 @@ use sqlbuild_core::text::main::python_isspace::python_isspace;
 
 use crate::dsl_headers::_helpers::quoted::quoted_value_end;
 use crate::dsl_headers::_helpers::text::{slice, string, tail};
-use crate::dsl_headers::constants::{HEADER_INDENT, QUOTES, SQL_MACRO_HEADER_KIND};
+use crate::dsl_headers::constants::{
+    HEADER_INDENT, HEADER_TERMINATOR, QUOTES, SQL_MACRO_HEADER_KIND,
+};
 use crate::dsl_headers::models::HeaderSpan;
 
 /// `text` with every `MACRO` header laid out canonically within `line_width`.
@@ -32,8 +34,7 @@ pub(crate) fn layout_macro_headers(
     updated
 }
 
-/// One header laid out: one line when authored on one line and it fits, otherwise one item per
-/// line with any list that does not fit one entry per line; `None` leaves it as authored.
+/// One header on one line if authored so and it fits, else one item per line; `None` if unreadable.
 fn macro_header(header: &[char], width: usize) -> Option<String> {
     let open: usize = header.iter().position(|character| *character == '(')?;
     let close: usize = header.iter().rposition(|character| *character == ')')?;
@@ -42,7 +43,7 @@ fn macro_header(header: &[char], width: usize) -> Option<String> {
     }
     let keyword: String = string(&header[..open]).trim_end().to_owned();
     let closing: String = string(&header[close + 1..]).trim().to_owned();
-    if !closing.is_empty() && closing != ";" {
+    if !closing.is_empty() && closing != HEADER_TERMINATOR {
         return None;
     }
     let items: Vec<String> = split_items(&header[open + 1..close])?;
@@ -106,8 +107,7 @@ fn outer_list(item: &[char]) -> Option<(usize, usize)> {
     None
 }
 
-/// The comma-separated items of `inner`, each with its whitespace normalised, or `None` if its
-/// brackets do not balance.
+/// The comma-separated items of `inner` with normalised whitespace, or `None` if unbalanced.
 fn split_items(inner: &[char]) -> Option<Vec<String>> {
     let mut items: Vec<String> = Vec::new();
     let mut current: String = String::new();

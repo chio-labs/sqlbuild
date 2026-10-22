@@ -640,8 +640,7 @@ impl NativeModelLoop {
                         contents,
                         query: authored_query,
                     }),
-                    resolver: Some(&context.classes.visibility.resolver)
-                        .filter(|resolver| !resolver.is_none()),
+                    scopes: Some(&context.classes.visibility),
                 }),
             })?;
         let macros: Option<ExpandedMacros> = if calls_macros(&declarations.spliced.sql) {

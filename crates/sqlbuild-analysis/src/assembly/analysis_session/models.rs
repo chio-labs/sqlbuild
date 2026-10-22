@@ -1,6 +1,5 @@
 //! Plain-data request, deferrals and outcomes of the native model analysis session.
 
-use crate::sql_macros::models::{SqlMacroCheck, SqlMacroFinding};
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
@@ -13,6 +12,7 @@ use crate::assembly::analysis_session::_helpers::catalog_state::SessionCatalog;
 use crate::assembly::analysis_session::_helpers::mappings::ShapeTable;
 use crate::assembly::analysis_session::types::{NullabilityRuleFn, OutputSources, Pairs, Shapes};
 use crate::semantic_validation::models::DiagnosticRow;
+use crate::sql_macros::models::{SqlMacroCheck, SqlMacroFinding};
 
 /// One `ref`, `source`, `seed`, `table_fn` or `udf` call a model's SQL makes.
 #[derive(Debug, Clone, PartialEq, Eq)]

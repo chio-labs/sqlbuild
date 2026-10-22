@@ -1,4 +1,4 @@
-use crate::sql_macros::_helpers::calls::{AtConstruct, at_constructs};
+use crate::sql_macros::_helpers::lexing::{AtConstruct, at_constructs};
 use crate::sql_macros::constants::NON_ASCII_BYTE;
 
 /// The name and byte offset of each `@name(...)` call in `text` that names no macro kind.

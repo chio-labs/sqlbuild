@@ -1,6 +1,5 @@
 //! A model's compile input, read from the native compiled project that owns it.
 
-use sqlbuild_analysis::sql_macros::models::SqlMacroCheck;
 use sqlbuild_project::models as project_models;
 use sqlbuild_project::models::ExpansionRecord;
 use std::sync::Arc;
@@ -10,6 +9,7 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{FromPyObject, IntoPyObject, pyclass, pymethods};
 use sqlbuild_analysis::compiled_project::models::SchemaColumnFact;
+use sqlbuild_analysis::sql_macros::models::SqlMacroCheck;
 
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::compiled_project::rows::{ReferenceTuple, reference_row_tuple};

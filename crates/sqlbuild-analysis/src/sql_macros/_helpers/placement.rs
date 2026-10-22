@@ -1,9 +1,12 @@
-//! Where a call stands in its caller, the separators its expansion needs and the caller's names.
+//! Where a call stands in its caller: its query part, separators and the caller's names.
 
+use crate::sql_macros::_helpers::header::unquoted;
 use crate::sql_macros::_helpers::lexing::{Token, TokenKind, closing_token};
 use crate::sql_macros::constants::{AT_SIGN, COMMA, SELECT_KEYWORD, WITH_KEYWORD};
-use crate::sql_macros::models::CallPosition;
+use crate::sql_macros::models::{CallPosition, CallScope};
 
+/// Tokens from `@` to a macro call's name: `@`, the kind, `.` and the name.
+const CALL_PREFIX_TOKENS: usize = 4;
 /// Keywords that open the clause a call stands in, read backwards from the call.
 const CLAUSE_KEYWORDS: [&str; 22] = [
     "WITH",
@@ -69,8 +72,7 @@ pub(crate) struct CallSite<'a> {
     pub(crate) previous: Option<usize>,
     /// Index of the first token after the call, if any.
     pub(crate) next: Option<usize>,
-    /// Index of the first token after the text the expansion replaces: the call and the comma
-    /// right after it in a `WITH` or select list, which the expansion writes itself.
+    /// Index of the first token after the call and any list comma right after it, if any.
     pub(crate) after_replaced: Option<usize>,
 }
 
@@ -125,10 +127,10 @@ impl<'a> CallSite<'a> {
                 "(" | "[" | "{" => {
                     depth = depth.saturating_sub(1);
                     if depth == 0 {
-                        return open >= 4
+                        return open >= CALL_PREFIX_TOKENS
                             && self.tokens[open - 1].kind == TokenKind::Word
                             && self.tokens[open - 2].is(self.sql, ".")
-                            && self.tokens[open - 4].is(self.sql, AT_SIGN);
+                            && self.tokens[open - CALL_PREFIX_TOKENS].is(self.sql, AT_SIGN);
                     }
                 }
                 _ => {}
@@ -155,8 +157,7 @@ impl<'a> CallSite<'a> {
         }
     }
 
-    /// Whether the column-list call is followed by an alias, `@sql.m(o) AS x`; an identifier
-    /// without `AS` is the next column.
+    /// Whether the column-list call is followed by an `AS` alias, as in `@sql.m(o) AS x`.
     pub(crate) fn has_alias(&self) -> bool {
         !self.absorbs_comma()
             && self
@@ -237,10 +238,7 @@ impl<'a> CallSite<'a> {
         }
     }
 
-    /// The separators a CTE list needs around the inserted CTEs.
-    ///
-    /// A call replaces the comma right after it, so it writes the comma before the next CTE or
-    /// call itself; a call after a CTE with no comma between writes the comma before it.
+    /// The separators around inserted CTEs, which replace the comma right after the call.
     pub(crate) fn cte_separators(&self) -> (&'static str, &'static str) {
         let before: &'static str = match self.previous {
             Some(index)
@@ -465,5 +463,115 @@ fn item_name(sql: &str, item: &[Token]) -> Option<(String, usize)> {
             crate::sql_macros::_helpers::header::unquoted(last.text(sql)),
             last.start,
         )
+    })
+}
+
+/// One top-level CTE: its name, the byte span of its whole definition and of its body.
+pub(crate) struct CtePart {
+    pub(crate) name: String,
+    pub(crate) definition: (usize, usize),
+    pub(crate) body: (usize, usize),
+}
+
+/// The top-level CTEs of a query, where its `WITH` list ends and its final query starts.
+pub(crate) struct QueryParts {
+    pub(crate) ctes: Vec<CtePart>,
+    /// Byte span of the `WITH` list, from `WITH` to the end of its last item.
+    pub(crate) with_list: Option<(usize, usize)>,
+    /// Byte offset of the query after the `WITH` list.
+    pub(crate) main: usize,
+}
+
+impl QueryParts {
+    /// The part holding byte `offset`.
+    pub(crate) fn scope_of(&self, offset: usize) -> CallScope {
+        if let Some(cte) = self
+            .ctes
+            .iter()
+            .find(|cte| cte.body.0 <= offset && offset < cte.body.1)
+        {
+            return CallScope::Cte(cte.name.clone());
+        }
+        match self.with_list {
+            Some((start, _)) if start <= offset && offset < self.main => CallScope::WithList,
+            _ => CallScope::Main,
+        }
+    }
+}
+
+/// The top-level parts of `text`, or `None` if its `WITH` list cannot be read.
+pub(crate) fn top_level_parts(text: &str, scanned: &[Token]) -> Option<QueryParts> {
+    let Some(first) = scanned.first() else {
+        return Some(QueryParts {
+            ctes: Vec::new(),
+            with_list: None,
+            main: 0,
+        });
+    };
+    if !first.is_word(text, "WITH") {
+        return Some(QueryParts {
+            ctes: Vec::new(),
+            with_list: None,
+            main: first.start,
+        });
+    }
+    let mut ctes: Vec<CtePart> = Vec::new();
+    let mut index: usize = 1;
+    if scanned
+        .get(index)
+        .is_some_and(|token| token.is_word(text, "RECURSIVE"))
+    {
+        index += 1;
+    }
+    loop {
+        let token: &Token = scanned.get(index)?;
+        if token.is(text, ",") {
+            index += 1;
+            continue;
+        }
+        if token.is(text, "@") {
+            let open: usize = index
+                + scanned[index..]
+                    .iter()
+                    .position(|candidate| candidate.is(text, "("))?;
+            index = closing_token(text, scanned, open)? + 1;
+            continue;
+        }
+        if !matches!(token.kind, TokenKind::Word | TokenKind::Quoted) {
+            return None;
+        }
+        let mut cursor: usize = index + 1;
+        if scanned.get(cursor).is_some_and(|open| open.is(text, "(")) {
+            cursor = closing_token(text, scanned, cursor)? + 1;
+        }
+        if !scanned
+            .get(cursor)
+            .is_some_and(|keyword| keyword.is_word(text, "AS"))
+        {
+            break;
+        }
+        cursor += 1;
+        while scanned
+            .get(cursor)
+            .is_some_and(|word| word.is_word(text, "NOT") || word.is_word(text, "MATERIALIZED"))
+        {
+            cursor += 1;
+        }
+        if !scanned.get(cursor).is_some_and(|open| open.is(text, "(")) {
+            return None;
+        }
+        let close: usize = closing_token(text, scanned, cursor)?;
+        ctes.push(CtePart {
+            name: unquoted(token.text(text)),
+            definition: (token.start, scanned[close].end),
+            body: (scanned[cursor].end, scanned[close].start),
+        });
+        index = close + 1;
+    }
+    let main: usize = scanned[index].start;
+    Some(QueryParts {
+        ctes,
+        with_list: Some((first.start, main)),
+        main,
     })
 }

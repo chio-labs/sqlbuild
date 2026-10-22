@@ -88,8 +88,9 @@ SELECT
 FROM analytics.stg_orders AS o
 ```
 
-An argument is parenthesised where the body needs it. Arguments resolve in the caller's scope, so a
-model can pass its own private constant; the macro receives only the value.
+An argument is parenthesised where the body needs it, and so is an expression macro's result where
+the call stands, such as before `AT TIME ZONE` or `FILTER`. Arguments resolve in the caller's
+scope, so a model can pass its own private constant; the macro receives only the value.
 
 ### CTE lists
 
@@ -139,7 +140,7 @@ SELECT @src.created_at, @src.updated_at, @src.updated_at > @src.created_at AS wa
 `SELECT o.order_id, o.created_at, o.updated_at, o.updated_at > o.created_at AS was_updated FROM orders AS o`.
 
 Use a column list when the same ordered set of columns repeats, for example in every branch of a
-`UNION ALL`.
+`UNION ALL`. The call takes no alias (`P021`): each inserted column is named in the macro.
 
 A CTE or column name a macro inserts that the caller already defines fails with `P018`, which names
 both. Nothing is renamed, so a model cannot call the same CTE-list macro twice.
@@ -234,18 +235,39 @@ a visible name.
 A body may not call `__ref()`, `__source()` or `__seed()` (`P016`): pass relations in as `RELATION`
 arguments. `@const(...)` and `@enum(...)` in a body resolve from the macro file's own folder, like
 audits and unlike Python macros; one that is not visible from there fails with `S026`. Make it a
-parameter and pass the value from the caller instead.
+parameter and pass the value from the caller instead. SQL macros a body calls resolve the same way,
+so a macro can call a folder-local macro beside it that its callers cannot see.
 
 ## Checks and tools
 
-Each macro is checked on its own when the project compiles, and again in every model after
-expansion, so a missing relation column or misspelled `COLUMN OF` argument fails like any other
-unknown column in the model. Errors point at the call and at the macro file.
+Each macro is checked on its own when the project compiles, and each call is checked against the
+caller's column types, inferred like the rest of the model:
 
-- `sqb format` formats SQL macro files and normalises the commas around CTE-list and column-list
-  calls. Expression bodies are left as written.
+- a `RELATION` argument must have every declared column, each of a compatible type;
+- a `COLUMN OF` argument must name a column of that relation;
+- a typed argument must have a compatible type, so `@sql.cents_to_dollars(o.status)` with a
+  `VARCHAR` status fails.
+
+These fail with `P017`, naming the argument, the expected type or column and what the caller has:
+
+```
+error[P017]: argument src of macro clean_orders() needs column is_deleted BOOLEAN; orders_raw has no column is_deleted
+  --> models/marts/orders_clean.sql:2:1
+  parameter declared here:
+  --> macros/sql/clean_orders.sql:3:14
+  = help: pass a relation with these columns: order_id BIGINT, updated_at TIMESTAMP, is_deleted BOOLEAN
+```
+
+An argument whose type the compiler cannot infer passes. Arguments built from `__ref()`, macro
+calls or parameters of a calling macro, and models with runtime placeholders, are checked only by
+the model's own column checks after expansion. All other errors also point at the call and at the
+macro file.
+
+- `sqb format` formats SQL macro files, bodies of every form and the `MACRO` header, and
+  normalises the commas around CTE-list and column-list calls.
 - [Rules](../rules.md) and [column lineage](../column-lineage.md) read the expanded
-  SQL, so they see through every call.
+  SQL, so they see through every call. A rule finding inside an expansion is reported at its
+  position in the expanded query, not in the macro file.
 - Editing a macro recompiles its callers.
 
 Test SQL macros with [macro-mode unit tests](../testing.md#macro-tests), and replace one

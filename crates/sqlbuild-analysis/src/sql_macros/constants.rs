@@ -94,3 +94,8 @@ pub(crate) const PROBE_TAIL_ENDS: [&str; 11] = [
 /// The string type name inference reports, and the name messages show for it.
 pub(crate) const INFERRED_TEXT_TYPE: &str = "TEXT";
 pub(crate) const VARCHAR_TYPE: &str = "VARCHAR";
+pub(crate) const FROM_KEYWORD: &str = "FROM";
+/// The projection name of an unexpanded star in a probe's analysis.
+pub(crate) const STAR_PROJECTION: &str = "*";
+/// The type hint analysis reports for a column whose type it does not know.
+pub(crate) const UNKNOWN_TYPE_HINT: &str = "UNKNOWN";

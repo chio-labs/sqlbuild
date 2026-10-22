@@ -7,14 +7,14 @@ use crate::sql_macros::_helpers::arguments::{
     ShapeContext, argument_shape, bind_arguments, check_shape, is_atomic, split_arguments,
 };
 use crate::sql_macros::_helpers::body::expand_body;
-use crate::sql_macros::_helpers::calls::{AtConstruct, at_constructs, outer_sql_calls};
+use crate::sql_macros::_helpers::lexing::{AtConstruct, at_constructs, outer_sql_calls};
 use crate::sql_macros::_helpers::lexing::{Token, line_column, tokens};
 use crate::sql_macros::_helpers::literal_positions::{
     LiteralRules, literal_error, non_literal_use,
 };
 use crate::sql_macros::_helpers::parameters::{ParameterReference, parameter_references};
+use crate::sql_macros::_helpers::placement::top_level_parts;
 use crate::sql_macros::_helpers::placement::{CallSite, cte_names, select_names};
-use crate::sql_macros::_helpers::query_parts::top_level_parts;
 use crate::sql_macros::constants::{
     ARGUMENT_CODE, CTE_NOUN, CYCLE_CODE, INVALID_DEFINITION_CODE, MISPLACED_CALL_CODE,
     NAME_CLASH_CODE,

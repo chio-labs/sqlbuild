@@ -1,15 +1,20 @@
 //! Probe queries that read the caller's column types at each SQL macro call, and their verdicts.
 
+use serde_json::{Value, json};
+
+use crate::query_analysis::main::analyze::analyze_json;
 use crate::sql_macros::_helpers::arguments::{fits, type_family};
 use crate::sql_macros::_helpers::header::unquoted;
 use crate::sql_macros::_helpers::lexing::{Token, TokenKind, tokens};
-use crate::sql_macros::_helpers::query_parts::{QueryParts, top_level_parts};
+use crate::sql_macros::_helpers::placement::{QueryParts, top_level_parts};
 use crate::sql_macros::constants::{
-    INFERRED_TEXT_TYPE, PROBE_COLUMN_PREFIX, PROBE_TAIL_ENDS, VARCHAR_TYPE,
+    FROM_KEYWORD, INFERRED_TEXT_TYPE, PROBE_COLUMN_PREFIX, PROBE_TAIL_ENDS, STAR_PROJECTION,
+    UNKNOWN_TYPE_HINT, VARCHAR_TYPE,
 };
 use crate::sql_macros::models::{
     ArgumentCheck, ArgumentExpectation, CallScope, SqlMacroCheck, SqlMacroFinding,
 };
+use crate::sql_macros::types::{ProbeColumns, RelationShapes};
 
 /// Where one argument's evidence is: a probe's whole column list, or one probe column.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -20,8 +25,8 @@ pub(crate) enum Evidence {
 
 /// The probes of one model and, per check and argument, where its evidence is.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct ProbePlan {
-    pub probes: Vec<String>,
+pub(crate) struct ProbePlan {
+    pub(crate) probes: Vec<String>,
     pub(crate) evidence: Vec<Vec<Option<Evidence>>>,
 }
 
@@ -40,7 +45,9 @@ fn with_prefix(sql: &str, parts: &QueryParts, end: usize) -> String {
 
 /// The `FROM ... WHERE ...` text of the first select of `body`, with no later clauses.
 fn from_tail(body: &str) -> Option<String> {
-    let scanned: Vec<Token> = tokens(body).ok()?;
+    let Ok(scanned) = tokens(body) else {
+        return None;
+    };
     let first: &Token = scanned.first()?;
     if !first.is_word(body, "SELECT") {
         return None;
@@ -62,7 +69,7 @@ fn from_tail(body: &str) -> Option<String> {
         }
         let upper: String = token.text(body).to_ascii_uppercase();
         match from {
-            None if upper == "FROM" => from = Some(token.start),
+            None if upper == FROM_KEYWORD => from = Some(token.start),
             Some(start) if PROBE_TAIL_ENDS.contains(&upper.as_str()) => {
                 return Some(body[start..token.start].to_owned());
             }
@@ -114,10 +121,11 @@ fn relation_probe(sql: &str, parts: &QueryParts, scope: &CallScope, name: &str) 
 /// The probes reading every check's evidence from the analysed query `sql`.
 pub(crate) fn probe_plan(sql: &str, checks: &[SqlMacroCheck]) -> ProbePlan {
     let mut plan: ProbePlan = ProbePlan::default();
-    let Some(parts) = tokens(sql)
-        .ok()
-        .and_then(|scanned| top_level_parts(sql, &scanned))
-    else {
+    let parts: Option<QueryParts> = match tokens(sql) {
+        Ok(scanned) => top_level_parts(sql, &scanned),
+        Err(_) => None,
+    };
+    let Some(parts) = parts else {
         plan.evidence = checks
             .iter()
             .map(|check| vec![None; check.arguments.len()])
@@ -188,7 +196,7 @@ fn compatible(actual: Option<&str>, expected: &str, dialect: &str) -> bool {
 /// The findings of one check, given each probe's columns where its analysis knew them.
 pub(crate) fn check_findings(
     (check, evidence): (&SqlMacroCheck, &[Option<Evidence>]),
-    results: &[Option<Vec<(String, Option<String>)>>],
+    results: &[ProbeColumns],
     dialect: &str,
 ) -> Vec<SqlMacroFinding> {
     let Some((call, call_end)) = &check.call else {
@@ -302,4 +310,65 @@ fn shown_type(inferred: &str) -> &str {
     } else {
         inferred
     }
+}
+
+/// Each probe's output columns, analysed against `schema`; `None` where analysis knew none.
+pub(crate) fn analysed_probes(
+    dialect: &str,
+    probes: &[String],
+    schema: &RelationShapes,
+) -> Option<Vec<ProbeColumns>> {
+    let tables: Vec<Value> = schema
+        .iter()
+        .map(|(name, columns)| table(name, columns))
+        .collect();
+    let requests: Vec<Value> = probes
+        .iter()
+        .map(|sql| json!({"sql": sql, "dialect": dialect, "schema": {"tables": tables}}))
+        .collect();
+    let Ok(response) = analyze_json(&json!({ "requests": requests }).to_string()) else {
+        return None;
+    };
+    let Ok(Value::Array(analyses)) = serde_json::from_str::<Value>(&response) else {
+        return None;
+    };
+    Some(analyses.iter().map(probe_columns).collect())
+}
+
+/// One bound relation as a validation schema table, its qualified name split into parts.
+fn table(name: &str, columns: &[(String, String)]) -> Value {
+    let mut parts: Vec<&str> = name.split('.').collect();
+    let table_name: &str = parts.pop().unwrap_or(name);
+    let columns: Vec<Value> = columns
+        .iter()
+        .map(|(column, data_type)| json!({"name": column, "type": data_type}))
+        .collect();
+    let mut entry: Value = json!({"name": table_name, "columns": columns});
+    if let Some(schema) = parts.pop() {
+        entry["schema"] = json!(schema);
+    }
+    if let Some(catalog) = parts.pop() {
+        entry["catalog"] = json!(catalog);
+    }
+    entry
+}
+
+/// A probe analysis's output columns, unless it failed or left a star unresolved.
+fn probe_columns(analysis: &Value) -> ProbeColumns {
+    let projections: &Vec<Value> = analysis.pointer("/analysis/projections")?.as_array()?;
+    let mut columns: Vec<(String, Option<String>)> = Vec::with_capacity(projections.len());
+    for projection in projections {
+        let name: &str = projection.get("name")?.as_str()?;
+        let star: bool = projection.get("isStar").and_then(Value::as_bool) == Some(true);
+        if star || name == STAR_PROJECTION {
+            return None;
+        }
+        let hint: Option<&str> = projection.get("typeHint").and_then(Value::as_str);
+        let data_type: Option<String> = match hint {
+            Some(hint) if !hint.eq_ignore_ascii_case(UNKNOWN_TYPE_HINT) => Some(hint.to_owned()),
+            _ => None,
+        };
+        columns.push((name.to_owned(), data_type));
+    }
+    Some(columns)
 }

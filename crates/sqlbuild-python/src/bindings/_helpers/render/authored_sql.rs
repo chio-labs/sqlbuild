@@ -154,7 +154,7 @@ fn declarations_expanded<'py>(
         sql_macros: Some(SqlMacroSource {
             loaded_macros: Some(loaded_macros),
             origin: None,
-            resolver: None,
+            scopes: None,
         }),
     })?;
     let spans: Vec<SpanRow> = span_rows(&expanded.spliced);
