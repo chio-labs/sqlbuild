@@ -69,12 +69,34 @@ fn given_dbt_events_when_consuming_then_reports_starts_and_first_results() {
                 finished(
                     "model.a.payments",
                     ("ERROR", 1),
-                    vec![DbtNodeMessage {
-                        level: "error".to_owned(),
-                        message: "relation missing".to_owned(),
-                    }],
+                    vec![
+                        DbtNodeMessage {
+                            level: "error".to_owned(),
+                            message: "relation missing".to_owned(),
+                        },
+                        DbtNodeMessage {
+                            level: "error".to_owned(),
+                            message: "1 of 2 ERROR creating table model payments".to_owned(),
+                        },
+                    ],
                 ),
             ],
+        },
+        StreamTestCase {
+            description: "a warn-level test result keeps its own message",
+            events: vec![DbtEvent {
+                level: Some("warn".to_owned()),
+                info_msg: Some("FAIL 3 not_null_orders_id".to_owned()),
+                ..result_event("LogTestResult", "test.a.not_null_orders_id", "fail")
+            }],
+            expected_updates: vec![finished(
+                "test.a.not_null_orders_id",
+                ("fail", 1),
+                vec![DbtNodeMessage {
+                    level: "warn".to_owned(),
+                    message: "FAIL 3 not_null_orders_id".to_owned(),
+                }],
+            )],
         },
     ];
 
