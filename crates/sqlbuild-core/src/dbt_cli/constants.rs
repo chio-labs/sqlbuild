@@ -2,13 +2,6 @@
 
 /// The dbt executable when no override is set.
 pub const DEFAULT_DBT_EXECUTABLE: &str = "dbt";
-/// SQLBuild cursor flags `sqb dbt` forwards to SQLBuild.
-pub const CURSOR_FLAGS: [&str; 4] = [
-    "--start-cursor-ts",
-    "--end-cursor-ts",
-    "--start-cursor-int",
-    "--end-cursor-int",
-];
 /// SQLBuild-only flags `sqb dbt run` and `sqb dbt build` accept.
 pub const EXECUTION_SQLBUILD_FLAGS: [&str; 7] = [
     "--start-cursor-ts",

@@ -2,9 +2,7 @@ use crate::text::main::decimal_digit_value::decimal_digit_value;
 use crate::text::main::decode_text::decode_text;
 use crate::text::main::is_decimal_digit::is_decimal_digit;
 use crate::text::models::LineIndex;
-use crate::text::tests::test_types::{
-    DecimalDigitTestCase, DecodeTestCase, PositionTestCase, SpanTestCase,
-};
+use crate::text::tests::test_types::{DecimalDigitTestCase, DecodeTestCase, PositionTestCase};
 
 #[test]
 fn given_offsets_when_indexing_text_then_lines_and_columns_match_python() {
@@ -61,42 +59,9 @@ fn given_offsets_when_indexing_text_then_lines_and_columns_match_python() {
     for test_case in test_cases {
         let index = LineIndex::new(test_case.text);
         let position = index.position_at_byte(test_case.byte_offset);
-        let round_trip = position.and_then(|found| index.position_at_char(found.char_offset));
         assert_eq!(
             position.map(|found| (found.char_offset, found.line, found.column)),
             test_case.expected_position,
-            "{}",
-            test_case.description
-        );
-        assert_eq!(round_trip, position, "{} round trip", test_case.description);
-    }
-}
-
-#[test]
-fn given_byte_ranges_when_building_spans_then_both_ends_are_positions() {
-    let test_cases = [
-        SpanTestCase {
-            description: "range on the second line",
-            text: "one\ntwo é three",
-            byte_range: (8, 10),
-            expected_ends: Some(((2, 5), (2, 6))),
-        },
-        SpanTestCase {
-            description: "reversed range is rejected",
-            text: "one",
-            byte_range: (2, 1),
-            expected_ends: None,
-        },
-    ];
-    for test_case in test_cases {
-        let span = LineIndex::new(test_case.text)
-            .span_at_bytes(test_case.byte_range.0, test_case.byte_range.1);
-        assert_eq!(
-            span.map(|found| (
-                (found.start.line, found.start.column),
-                (found.end.line, found.end.column)
-            )),
-            test_case.expected_ends,
             "{}",
             test_case.description
         );

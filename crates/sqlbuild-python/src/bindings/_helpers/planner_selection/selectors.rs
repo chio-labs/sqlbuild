@@ -12,7 +12,6 @@ use sqlbuild_analysis::graph::main::parse_selector::parse_selector;
 use sqlbuild_analysis::graph::main::resolve_selector_tokens::resolve_selector_tokens;
 use sqlbuild_analysis::graph::main::resolve_selectors::resolve_selectors;
 use sqlbuild_analysis::graph::models::{ParsedSelector, ProjectGraph};
-use sqlbuild_analysis::planner_selection::main::unit_test_selector_rejection::unit_test_selector_rejection;
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::graph::algorithms::closure;
@@ -247,14 +246,6 @@ pub(crate) fn expand_project_upstream_keys<'py>(
     PyFrozenSet::new(upstream_deps.py(), visited.iter())
 }
 
-/// The error for a unit-test selector given where unit tests never run.
-#[pyfunction]
-#[pyo3(signature = (*, selector))]
-fn unit_test_selector_error<'py>(selector: &Bound<'py, PyString>) -> PyResult<Bound<'py, PyAny>> {
-    let carrier: Carrier<'py> = Carrier::single(selector)?;
-    carrier.exception(unit_test_selector_rejection(&carrier.send(selector)?))
-}
-
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(parse_project_selector, module)?)?;
     module.add_function(wrap_pyfunction!(resolve_graph_selection, module)?)?;
@@ -263,5 +254,5 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(resolve_project_selector_tokens, module)?)?;
     module.add_function(wrap_pyfunction!(match_project_selector, module)?)?;
     module.add_function(wrap_pyfunction!(expand_project_upstream_keys, module)?)?;
-    module.add_function(wrap_pyfunction!(unit_test_selector_error, module)?)
+    Ok(())
 }

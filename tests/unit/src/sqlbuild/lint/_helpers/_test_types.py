@@ -63,40 +63,6 @@ class FormatDescriptionTestCase:
 
 
 @dataclass(frozen=True)
-class InvalidNativeSqlResponseTestCase:
-    """Test case for rejecting malformed native SQL lint responses."""
-
-    description: str
-    response: str
-    expected_message: str
-
-
-@dataclass(frozen=True)
-class NativeSqlReuseTestCase:
-    """Identity for native SQL reuse behavior."""
-
-    description: str
-    expected_call_count: int
-
-
-@dataclass(frozen=True)
-class NativeSqlDependencyCacheTestCase:
-    """Dependency identities that must remain part of native lint cache identity."""
-
-    description: str
-    expected_call_count: int
-
-
-@dataclass(frozen=True)
-class NativeParseIsolationTestCase:
-    """Native parser fault that must not stop later bodies."""
-
-    description: str
-    error_message: str
-    expected_position: tuple[int, int]
-
-
-@dataclass(frozen=True)
 class ReservedCteLintTestCase:
     """Test case for SQLBuild harness CTE filtering."""
 
@@ -122,18 +88,6 @@ class NativeSqlFindingTestCase:
     sql: str
     selected_rule: str
     expected_violation_count: int
-
-
-@dataclass(frozen=True)
-class GeneratedRangeFallbackTestCase:
-    """Test case for a diagnostic that crosses generated SQL."""
-
-    description: str
-    authored: str
-    expanded: str
-    diagnostic_start: int
-    diagnostic_end: int
-    expected_position: tuple[int, int]
 
 
 @dataclass(frozen=True)

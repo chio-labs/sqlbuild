@@ -1,12 +1,10 @@
 //! The built-in rule catalogue returned as the Python `Rule` models.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString, PyTuple};
-use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_rules::models::RuleMetadata;
 use sqlbuild_rules::rules::main::builtin_options::builtin_options;
 use sqlbuild_rules::rules::main::catalogue::catalogue;
-use sqlbuild_rules::rules::main::selected_sql_codes::selected_sql_codes;
 use sqlbuild_rules::rules::models::{BuiltinOption, BuiltinOptionKind};
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
@@ -143,16 +141,4 @@ pub(crate) fn builtin_rules<'py>(
         .into_iter()
         .map(|metadata| rule(py, &subjects, &check, metadata))
         .collect()
-}
-
-/// The built-in SQL rule codes `select` enables and `ignore` does not, in catalogue order.
-#[pyfunction]
-#[pyo3(signature = (*, select, ignore))]
-fn selected_sql_rule_codes(select: Vec<String>, ignore: Vec<String>) -> PyResult<Vec<String>> {
-    compiler_guard(|| Ok(selected_sql_codes(&select, &ignore)))
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(selected_sql_rule_codes, module)?)?;
-    Ok(())
 }

@@ -4258,7 +4258,6 @@ dependencies = [
     { name = "polyglot-sql-chio" },
     { name = "pydantic-settings" },
     { name = "pyyaml" },
-    { name = "rich" },
     { name = "sqlbuild-cli" },
 ]
 
@@ -4343,7 +4342,6 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2,<3" },
     { name = "pymssql", marker = "extra == 'sqlserver'", specifier = ">=2.3.0" },
     { name = "pyyaml", specifier = ">=6.0.2" },
-    { name = "rich", specifier = ">=15.0.0" },
     { name = "rivers", marker = "extra == 'rivers'", specifier = ">=0.1.4" },
     { name = "snowflake-connector-python", marker = "extra == 'snowflake'", specifier = ">=4.7.1,<5" },
     { name = "sqlbuild-cli", directory = "crates/sqlbuild-cli" },

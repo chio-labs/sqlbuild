@@ -1,8 +1,8 @@
 use crate::lint_text::_helpers::sites::site_pattern;
+use crate::lint_text::_helpers::sql_diagnostics::interpolation_text_at;
 use crate::lint_text::constants::SITE_START_BYTES;
 use crate::lint_text::errors::LintTextError;
 use crate::lint_text::main::format_sql_bodies::format_sql_bodies;
-use crate::lint_text::main::interpolation_text_at::interpolation_text_at;
 use crate::lint_text::main::lint_sql_bodies::lint_sql_bodies;
 use crate::lint_text::main::neutralize_audit_parameters::neutralize_audit_parameters;
 use crate::lint_text::main::neutralize_context_interpolation::neutralize_context_interpolation;

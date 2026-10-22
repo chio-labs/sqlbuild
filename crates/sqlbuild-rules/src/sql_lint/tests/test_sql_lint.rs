@@ -1,8 +1,8 @@
 use serde_json::{Value, json};
 
-use crate::sql_lint::main::batch_formatter::format_batch_json;
 use crate::sql_lint::main::engine::lint_json;
 use crate::sql_lint::main::formatter::format_json;
+use crate::sql_lint::tests::helpers::format_batch_json;
 use crate::sql_lint::tests::{helpers, test_types};
 
 #[test]

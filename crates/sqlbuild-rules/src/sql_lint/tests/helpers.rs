@@ -3,9 +3,10 @@ use std::str::FromStr;
 use polyglot_sql::{Dialect, DialectType};
 use serde_json::{Map, Value, json};
 
-use crate::sql_lint::main::batch_formatter::format_batch_json;
+use crate::sql_lint::_helpers::formatter::format_requests;
 use crate::sql_lint::main::engine::lint_json;
 use crate::sql_lint::main::formatter::format_json;
+use crate::sql_lint::models::FormatRequest;
 use crate::sql_lint::tests::test_types::CrossJoinTestCase;
 use sqlbuild_analysis::sql_tokens::constants::CALL_SYNTAX_FUNCTIONS;
 use sqlbuild_analysis::sql_tokens::main::builtin_function_names::builtin_function_names;
@@ -14,6 +15,13 @@ use sqlbuild_analysis::sql_tokens::main::query_fingerprint::query_fingerprint;
 
 /// The dependency sentinel the cross join cases name `order_policy`.
 pub(crate) const POLICY_SENTINEL: &str = "__sqb_lint_7__";
+
+/// Format a JSON array of format requests in parallel, as a JSON array of responses.
+pub(crate) fn format_batch_json(request_json: &str) -> Result<String, String> {
+    let requests: Vec<FormatRequest> =
+        serde_json::from_str(request_json).map_err(|error| error.to_string())?;
+    serde_json::to_string(&format_requests(requests)).map_err(|error| error.to_string())
+}
 
 pub(crate) fn nested_function_sql(depth: usize) -> String {
     format!("SELECT {}1{}", "F(".repeat(depth), ")".repeat(depth))

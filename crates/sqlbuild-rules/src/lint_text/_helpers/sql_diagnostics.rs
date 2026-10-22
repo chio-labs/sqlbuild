@@ -5,7 +5,7 @@ use std::sync::LazyLock;
 use regex::Regex;
 use serde_json::{Map, Value};
 
-use crate::lint_text::_helpers::sites::compiled;
+use crate::lint_text::_helpers::sites::{byte_offset, compiled, lint_policy, site_end};
 use crate::lint_text::constants::{
     GENERATED_FIX, GENERATED_SQL_SUFFIX, HARNESS_CTE_PREFIXES, INVALID_DIAGNOSTIC,
     INVALID_FIX_EDIT, INVALID_FIX_OBJECT, INVALID_FIX_REASON, LINT_API_VERSION, LONG_LITERAL_CODE,
@@ -13,8 +13,8 @@ use crate::lint_text::constants::{
     NOT_AN_OBJECT, PARSE_ERROR_POSITION_PATTERN, PARSE_FAILURE_PREFIX, PARSE_FAILURE_REMEDIATION,
     UNSUPPORTED_VERSION, UNUSED_CTE_CODE,
 };
-use crate::lint_text::main::interpolation_text_at::interpolation_text_at;
 use crate::lint_text::models::{AuthoredDiagnostic, AuthoredEdit, ExpansionSpan, LintSqlBody};
+use crate::sql_lint::main::backtick_identifiers::backtick_identifiers;
 
 static PARSE_ERROR_POSITION: LazyLock<Result<Regex, regex::Error>> =
     LazyLock::new(|| Regex::new(PARSE_ERROR_POSITION_PATTERN));
@@ -393,4 +393,11 @@ fn overlaps(span: &ExpansionSpan, start: i64, end: i64) -> bool {
         || span.output_start == span.output_end
             && start <= span.output_start
             && span.output_start < end
+}
+
+/// Return the interpolation token starting at character position `start`, if there is one.
+pub(crate) fn interpolation_text_at(body: &str, start: usize, dialect: &str) -> Option<String> {
+    let byte_start: usize = byte_offset(body, start)?;
+    let end: usize = site_end(body, byte_start, lint_policy(backtick_identifiers(dialect)))?;
+    Some(body[byte_start..end].to_string())
 }

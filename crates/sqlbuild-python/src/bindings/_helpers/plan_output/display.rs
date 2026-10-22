@@ -184,14 +184,6 @@ fn model_execution_annotation(entry: &Bound<'_, PyAny>) -> PyResult<String> {
     Ok(execution_annotation(optional_facts(entry)?.as_ref()))
 }
 
-/// The left-column resource type for active progress rows.
-#[pyfunction]
-fn materialization_type_display<'py>(
-    resource_kind: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    native_field(resource_kind, "value")
-}
-
 fn names(input_names: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     input_names
         .try_iter()?
@@ -276,7 +268,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(model_materialization_label, module)?)?;
     module.add_function(wrap_pyfunction!(model_resource_type, module)?)?;
     module.add_function(wrap_pyfunction!(model_execution_annotation, module)?)?;
-    module.add_function(wrap_pyfunction!(materialization_type_display, module)?)?;
     module.add_function(wrap_pyfunction!(format_no_input_rows, module)?)?;
     module.add_function(wrap_pyfunction!(format_waiting_on_empty_inputs, module)?)?;
     module.add_function(wrap_pyfunction!(

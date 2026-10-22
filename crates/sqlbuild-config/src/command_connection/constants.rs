@@ -4,7 +4,6 @@ pub const CLI_WAREHOUSE_SOURCE: &str = "--warehouse";
 pub const CONNECTION_WAREHOUSE_SOURCE: &str = "connection warehouse";
 pub const CONNECTION_DEFAULT_WAREHOUSE_SOURCE: &str = "connection default";
 pub const CONNECTION_WAREHOUSE_KEY: &str = "warehouse";
-pub const CONNECTION_DATABASE_KEY: &str = "database";
 pub const CONNECTION_SOURCE_KEY: &str = "source";
 pub const DBT_PROFILE_CONNECTION_SOURCE: &str = "dbt_profile";
 pub const DUCKDB_ADAPTER: &str = "duckdb";

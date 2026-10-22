@@ -18,7 +18,6 @@ dependencies = [
   "polyglot-sql-chio==0.13.9",
   "pydantic-settings>=2,<3",
   "PyYAML>=6.0.2",
-  "rich>=15.0.0",
   "sqlbuild-cli==0.167.2",  # x-release-please-version
 ]
 

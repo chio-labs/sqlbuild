@@ -9,13 +9,6 @@ pub struct TextPosition {
     pub column: usize,
 }
 
-/// A half-open range of text.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct TextSpan {
-    pub start: TextPosition,
-    pub end: TextPosition,
-}
-
 /// Line starts of one text, converting offsets into Python-compatible lines and columns.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LineIndex<'text> {
@@ -62,40 +55,6 @@ impl<'text> LineIndex<'text> {
             char_offset: self.line_char_starts[line_index] + column - 1,
             line: line_index + 1,
             column,
-        })
-    }
-
-    /// The position at a code-point offset (a Python string index), or `None` past the end.
-    pub fn position_at_char(&self, char_offset: usize) -> Option<TextPosition> {
-        if char_offset > self.char_len {
-            return None;
-        }
-        let line_index = self
-            .line_char_starts
-            .partition_point(|start| *start <= char_offset)
-            - 1;
-        let line_start = self.line_byte_starts[line_index];
-        let column = char_offset - self.line_char_starts[line_index] + 1;
-        let byte_offset = self.text[line_start..]
-            .char_indices()
-            .nth(column - 1)
-            .map_or(self.text.len(), |(offset, _)| line_start + offset);
-        Some(TextPosition {
-            byte_offset,
-            char_offset,
-            line: line_index + 1,
-            column,
-        })
-    }
-
-    /// The span between two UTF-8 byte offsets, or `None` when either end is not a position.
-    pub fn span_at_bytes(&self, start: usize, end: usize) -> Option<TextSpan> {
-        if start > end {
-            return None;
-        }
-        Some(TextSpan {
-            start: self.position_at_byte(start)?,
-            end: self.position_at_byte(end)?,
         })
     }
 }

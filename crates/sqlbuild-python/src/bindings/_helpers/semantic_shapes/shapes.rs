@@ -434,18 +434,8 @@ fn published_model_shape<'py>(
     )
 }
 
-/// `{name: shapes.get(name, {})}` for each relation the model's reference rows bind.
-#[pyfunction]
-fn model_binding_inputs<'py>(
-    model: &Bound<'py, PyAny>,
-    shapes: &Bound<'py, PyDict>,
-) -> PyResult<Bound<'py, PyDict>> {
-    model_inputs(model, shapes)
-}
-
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(semantic_shapes, module)?)?;
     module.add_function(wrap_pyfunction!(published_model_shape, module)?)?;
-    module.add_function(wrap_pyfunction!(model_binding_inputs, module)?)?;
     module.add_function(wrap_pyfunction!(binding_relation_names, module)?)
 }

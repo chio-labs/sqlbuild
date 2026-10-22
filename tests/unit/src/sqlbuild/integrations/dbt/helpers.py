@@ -9,11 +9,6 @@ from types import MappingProxyType
 from typing import cast
 
 from sqlbuild._native import (
-    BackfillAction,
-    BackfillResult,
-    CompiledObjectKey,
-    CompiledRelationLocation,
-    CompiledResourceType,
     CompileModelConfig,
     CompileModelInput,
     CompileProjectInputs,
@@ -28,10 +23,6 @@ from sqlbuild._native import (
     DiscoveredProjectInputs,
     DiscoveredSqlModelFile,
     LocalConfig,
-    MaterializationType,
-    ModelPlanEntry,
-    PlanAction,
-    PlanReason,
     ProjectConfig,
     SqlLexicalSyntax,
     assemble_project,
@@ -142,30 +133,6 @@ def build_dbt_ls_command_result(
 
     stdout: str = "\n".join(json.dumps({"unique_id": unique_id}) for unique_id in unique_ids)
     return DbtCommandResult(argv=argv, returncode=0, stdout=stdout)
-
-
-def _build_sqlbuild_model_plan_entry(model_name: str) -> ModelPlanEntry:
-    return ModelPlanEntry(
-        key=CompiledObjectKey(
-            resource_type=CompiledResourceType.MODEL,
-            name=model_name,
-        ),
-        name=model_name,
-        relative_path=Path(f"models/{model_name}.sql"),
-        materialization_type=MaterializationType.TABLE,
-        action=PlanAction.CREATE_TABLE,
-        reason=PlanReason.NO_CHANGE,
-        destination=CompiledRelationLocation(
-            database=None,
-            schema=None,
-            name=model_name,
-            qualified_name=None,
-        ),
-        fingerprint_query_sql="select 1",
-        resolved_sql="select 1",
-        logical_ddl="",
-        backfill=BackfillResult(action=BackfillAction.FORWARD_ONLY),
-    )
 
 
 def build_dbt_plan_mapping_invoker(
@@ -342,46 +309,6 @@ def build_manifest_source_node(
         ("loaded_at_query", loaded_at_query, loaded_at_query is not None),
         ("freshness", freshness, freshness is not None),
         ("filter", freshness_filter, freshness_filter is not None),
-    )
-    field_name: str
-    field_value: object
-    is_present: bool
-    for field_name, field_value, is_present in optional_fields:
-        node.update(_OPTIONAL_FIELD_BUILDERS[is_present](field_name, field_value))
-    return node
-
-
-def build_manifest_seed_node(
-    *,
-    unique_id: str,
-    package_name: str = "analytics",
-    name: str = "countries",
-    relation_name: str | None = None,
-    database: str | None = None,
-    schema: str | None = None,
-    alias: str | None = None,
-    checksum: str | None = None,
-    config_overrides: dict[str, object] | None = None,
-    root_path: str | None = None,
-    original_file_path: str | None = None,
-) -> dict[str, object]:
-    """Build a minimal dbt manifest seed node."""
-
-    node: dict[str, object] = {
-        "unique_id": unique_id,
-        "resource_type": "seed",
-        "package_name": package_name,
-        "name": name,
-    }
-    optional_fields: tuple[tuple[str, object, bool], ...] = (
-        ("relation_name", relation_name, relation_name is not None),
-        ("database", database, database is not None),
-        ("schema", schema, schema is not None),
-        ("alias", alias, alias is not None),
-        ("checksum", {"checksum": checksum}, checksum is not None),
-        ("config", config_overrides, config_overrides is not None),
-        ("root_path", root_path, root_path is not None),
-        ("original_file_path", original_file_path, original_file_path is not None),
     )
     field_name: str
     field_value: object

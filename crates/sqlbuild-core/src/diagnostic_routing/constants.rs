@@ -57,7 +57,6 @@ pub const SAFE_FIELDS: [&str; 7] = [
 /// The safe fields a retained SQL diagnostic keeps.
 pub const SQL_SAFE_FIELDS: [&str; 4] = ["sql_action", "sql_digest", "sql_intent", "sql_query_id"];
 /// Python logging level numbers.
-pub const LEVEL_DEBUG: i64 = 10;
 pub const LEVEL_INFO: i64 = 20;
 pub const LEVEL_WARNING: i64 = 30;
 pub const LEVEL_ERROR: i64 = 40;

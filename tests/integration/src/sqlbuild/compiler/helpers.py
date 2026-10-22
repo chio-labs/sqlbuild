@@ -434,15 +434,6 @@ def read_golden(name: str) -> list[GoldenEntry]:
     return json.loads((GOLDEN_DIR / f"{name}.json").read_text(encoding="utf-8"))
 
 
-def write_golden(name: str, entries: list[GoldenEntry]) -> None:
-    """Record one golden file; used only by the one-off oracle recording."""
-
-    GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
-    _ = (GOLDEN_DIR / f"{name}.json").write_text(
-        json.dumps(entries, indent=0, sort_keys=True) + "\n", encoding="utf-8"
-    )
-
-
 def golden_differences(
     expected: list[GoldenEntry], actual: list[GoldenEntry]
 ) -> list[GoldenDifference]:

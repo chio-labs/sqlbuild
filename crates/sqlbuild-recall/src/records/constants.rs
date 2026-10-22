@@ -2,8 +2,6 @@
 
 /// The largest output chunk, in bytes.
 pub const MAX_OUTPUT_CHUNK_BYTES: usize = 64 * 1024;
-/// The largest external context, in bytes of JSON.
-pub const MAX_EXTERNAL_CONTEXT_BYTES: usize = 16 * 1024;
 /// The output record ID infix, shared with command-output sink records.
 pub const OUTPUT_RECORD_ID_INFIX: &str = "command-output";
 pub const DIAGNOSTIC_RECORD_ID_INFIX: &str = "diagnostic";
@@ -12,9 +10,6 @@ pub const ARTIFACT_DIGEST_PREFIX: &str = "sha256:";
 pub const SQL_ARTIFACT_KIND: &str = "sql";
 pub const SQL_MEDIA_TYPE: &str = "text/x-sql";
 pub const EXECUTED_SQL_ROLE: &str = "executed_sql";
-/// Delivery stream names, one `recall_delivery` row each.
-pub const DELIVERY_STREAMS: [&str; 5] =
-    ["invocation", "output", "events", "diagnostics", "artifacts"];
 /// Diagnostic severities, least severe first.
 pub const SEVERITY_ORDER: [&str; 6] = ["trace", "debug", "info", "warning", "error", "critical"];
 /// Event payload fields promoted to their own `recall_events` columns.
