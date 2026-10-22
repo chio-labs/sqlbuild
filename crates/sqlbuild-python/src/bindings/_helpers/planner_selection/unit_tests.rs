@@ -2,9 +2,9 @@
 
 use std::collections::BTreeSet;
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::IntoPyObject;
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyFrozenSet, PyString, PyTuple};
-use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::planner_selection::main::split_unit_test_selectors::split_unit_test_selectors as split;
 use sqlbuild_analysis::planner_selection::models::{
     SelectorGroups, UnitTestSelectorNames, UnitTestSelectorSplit,
@@ -146,8 +146,6 @@ fn split_python<'py>(
 }
 
 /// Move unit-test selectors out of resource selectors, or reject them for this command.
-#[pyfunction]
-#[pyo3(signature = (*, select, exclude, discovered_inputs, accepts_unit_tests))]
 pub(crate) fn split_project_unit_test_selectors<'py>(
     select: &Bound<'py, PyAny>,
     exclude: &Bound<'py, PyAny>,
@@ -158,8 +156,6 @@ pub(crate) fn split_project_unit_test_selectors<'py>(
 }
 
 /// Split unit-test selectors from resource selectors for a command that runs unit tests.
-#[pyfunction]
-#[pyo3(signature = (*, select, exclude, discovered_inputs))]
 pub(crate) fn split_unit_test_selectors<'py>(
     select: &Bound<'py, PyAny>,
     exclude: &Bound<'py, PyAny>,
@@ -169,18 +165,10 @@ pub(crate) fn split_unit_test_selectors<'py>(
 }
 
 /// Raise when a selector names a unit test; return the unchanged resource selectors.
-#[pyfunction]
-#[pyo3(signature = (*, select, exclude, discovered_inputs))]
 pub(crate) fn reject_unit_test_selectors<'py>(
     select: &Bound<'py, PyAny>,
     exclude: &Bound<'py, PyAny>,
     discovered_inputs: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     split_python((select, exclude), discovered_inputs, false)
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(split_project_unit_test_selectors, module)?)?;
-    module.add_function(wrap_pyfunction!(split_unit_test_selectors, module)?)?;
-    module.add_function(wrap_pyfunction!(reject_unit_test_selectors, module)?)
 }

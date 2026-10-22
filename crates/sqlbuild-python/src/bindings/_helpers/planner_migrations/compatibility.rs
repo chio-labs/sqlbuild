@@ -1,6 +1,5 @@
 //! Convert existing planner contracts for origin compatibility checks.
 
-use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::compiled_views::model_reads::inferred_rows;
@@ -12,10 +11,10 @@ use crate::bindings::_helpers::planner_migrations::models::{
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
+use pyo3::IntoPyObject;
 use pyo3::exceptions::PyValueError;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
-use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::planner_migrations::main::compatibility_findings::compatibility_findings;
 use sqlbuild_analysis::planner_migrations::models::CompatibilityFinding;
 
@@ -71,45 +70,6 @@ fn blocking<'py>(
         .map_err(PyValueError::new_err)?,
     )
 }
-
-#[pyfunction]
-#[pyo3(signature = (**options))]
-fn migration_incremental_blocking_findings<'py>(
-    py: Python<'py>,
-    options: Option<Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyTuple>> {
-    let arguments = KeywordArguments::read(
-        py,
-        "migration_incremental_blocking_findings",
-        options,
-        (&["model", "findings", "dialect"], &[]),
-    )?;
-    blocking(
-        (&arguments.value("model")?, &arguments.value("findings")?),
-        &arguments.value("dialect")?,
-        None,
-    )
-}
-
-#[pyfunction]
-#[pyo3(signature = (**options))]
-fn migration_snapshot_blocking_findings<'py>(
-    py: Python<'py>,
-    options: Option<Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyTuple>> {
-    let arguments = KeywordArguments::read(
-        py,
-        "migration_snapshot_blocking_findings",
-        options,
-        (&["model", "findings", "dialect", "snapshots_config"], &[]),
-    )?;
-    blocking(
-        (&arguments.value("model")?, &arguments.value("findings")?),
-        &arguments.value("dialect")?,
-        Some(&arguments.value("snapshots_config")?),
-    )
-}
-
 /// Whether an origin relation's columns can carry the destination model's history.
 pub(super) fn check_migration_compatibility<'py>(
     check: &CompatibilityCheck<'py>,
@@ -200,15 +160,4 @@ fn result<'py>(
         status: enum_from_value(py, RecordId::MigrationCompatibility, status)?,
         findings: findings.into_any(),
     })
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(
-        migration_incremental_blocking_findings,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
-        migration_snapshot_blocking_findings,
-        module
-    )?)
 }

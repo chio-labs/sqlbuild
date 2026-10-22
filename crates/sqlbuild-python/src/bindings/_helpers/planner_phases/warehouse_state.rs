@@ -19,7 +19,6 @@ use crate::bindings::_helpers::planner_warehouse::snapshot::{SnapshotRequest, wa
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult};
-use pyo3::pyfunction;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use std::time::Instant;
 
@@ -31,8 +30,6 @@ fn progress(runtime: &Bound<'_, PyAny>, message: &str) -> PyResult<()> {
     Ok(())
 }
 
-#[pyfunction]
-#[pyo3(signature = (*, runtime, scopes, overrides, deferral))]
 pub(crate) fn gather_planner_warehouse_state<'py>(
     runtime: &Bound<'py, PyAny>,
     scopes: &Bound<'py, PyAny>,

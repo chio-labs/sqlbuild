@@ -772,8 +772,6 @@ pub(crate) fn gather_warehouse_snapshot<'py>(
 }
 
 /// Cursor snapshots of models whose history lives in another relation or column.
-#[pyfunction]
-#[pyo3(signature = (**options))]
 pub(crate) fn gather_redirected_cursor_snapshots<'py>(
     py: pyo3::Python<'py>,
     options: Option<Bound<'py, KeywordDict>>,

@@ -645,32 +645,6 @@ fn compute_microbatch_range<'py>(
     microbatch_range(&args.value("model")?, &window_inputs(&args)?)
 }
 
-/// Return empty inputs that leave a planner-owned window empty, and whether others have rows.
-#[pyfunction]
-#[pyo3(signature = (**kwargs))]
-fn resolve_empty_cursor_inputs<'py>(
-    py: Python<'py>,
-    kwargs: Option<Bound<'py, PyDict>>,
-) -> PyResult<(Bound<'py, PyAny>, bool)> {
-    let args = KeywordArguments::read(
-        py,
-        "resolve_empty_cursor_inputs",
-        kwargs,
-        (
-            &[
-                "model",
-                "snapshot",
-                "full_refresh",
-                "runtime_owned_cursor_bounds",
-                "start_cursor_override",
-                "end_cursor_override",
-            ],
-            &[],
-        ),
-    )?;
-    empty_cursor_inputs(&args.value("model")?, &window_inputs(&args)?)
-}
-
 /// Resolve typed cursor overrides to generic start/end for one model.
 #[pyfunction]
 #[pyo3(signature = (*, model, cursor_overrides, start_cursor_override, end_cursor_override))]
@@ -690,6 +664,5 @@ fn resolve_cursor_overrides<'py>(
 pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(compute_plan_cursor_bounds, module)?)?;
     module.add_function(wrap_pyfunction!(compute_microbatch_range, module)?)?;
-    module.add_function(wrap_pyfunction!(resolve_empty_cursor_inputs, module)?)?;
     module.add_function(wrap_pyfunction!(resolve_cursor_overrides, module)?)
 }

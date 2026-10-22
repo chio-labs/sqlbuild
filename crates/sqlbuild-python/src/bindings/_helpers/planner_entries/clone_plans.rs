@@ -512,16 +512,6 @@ fn origin_source_entries<'py>(
     )
 }
 
-/// Prepare planner outputs needed for clone execution.
-#[pyfunction]
-#[pyo3(signature = (**kwargs))]
-pub(crate) fn run_clone_planning<'py>(
-    py: Python<'py>,
-    kwargs: Option<Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyTuple>> {
-    Ok(timed_clone_planning(py, kwargs)?.0)
-}
-
 /// `run_clone_planning`, with the seconds spent inspecting sources and planning.
 pub(crate) fn timed_clone_planning<'py>(
     py: Python<'py>,
@@ -728,7 +718,6 @@ pub(crate) fn resolve_skipped_view_chain<'py>(
 }
 
 pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(run_clone_planning, module)?)?;
     module.add_function(wrap_pyfunction!(resolve_clone_boundary, module)?)?;
     module.add_function(wrap_pyfunction!(resolve_skipped_view_chain, module)?)
 }

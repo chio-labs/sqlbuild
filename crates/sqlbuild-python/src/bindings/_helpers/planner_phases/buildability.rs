@@ -16,10 +16,7 @@ use crate::bindings::_helpers::planner_phases::runtime::warehouse_field;
 use crate::bindings::_helpers::planner_warehouse::source_tables::check_selected_source_tables_exist;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
-use pyo3::pyfunction;
 
-#[pyfunction]
-#[pyo3(signature = (*, runtime, scopes, warehouse, deferral))]
 pub(crate) fn check_selected_scope_buildability<'py>(
     runtime: &Bound<'py, PyAny>,
     scopes: &Bound<'py, PyAny>,

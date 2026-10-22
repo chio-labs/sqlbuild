@@ -55,3 +55,26 @@ pub(super) fn models() -> Vec<SelectableModel> {
         model("report", &["daily"], "models/marts"),
     ]
 }
+
+/// Unit tests `order_status`, `order_totals_check` and `customer_status` beside four resources.
+pub(super) fn order_selector_names() -> UnitTestSelectorNames {
+    UnitTestSelectorNames {
+        tests: name_set(&["customer_status", "order_status", "order_totals_check"]),
+        resources: name_set(&["customers", "order_totals", "orders", "raw_orders"]),
+    }
+}
+
+/// A split with resource selectors, selected and excluded unit tests, and whether models run.
+pub(super) fn full_split(
+    (select, exclude): (&[&str], &[&str]),
+    (tests, excluded_tests): (&[&str], &[&str]),
+    models_selected: bool,
+) -> UnitTestSelectorSplit {
+    UnitTestSelectorSplit {
+        select: texts(select),
+        exclude: texts(exclude),
+        test_names: name_set(tests),
+        excluded_test_names: name_set(excluded_tests),
+        models_selected,
+    }
+}

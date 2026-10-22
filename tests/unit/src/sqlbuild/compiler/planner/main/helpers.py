@@ -40,51 +40,6 @@ def model_definition_hash(project: CompiledProjectView, name: str) -> str:
     return compute_query_hash(query_sql=model.query_sql, dialect=project.sql_analysis_dialect)
 
 
-def build_sqlbuild_model_selector_project() -> CompiledProjectView:
-    return CompiledProject(
-        run_id="selector-test-run",
-        effective_target_name=None,
-        effective_connection={},
-        effective_vars={},
-        models=(
-            build_sqlbuild_model_selector_model(
-                name="fact_orders",
-                relative_path=Path("models/marts/fact_orders.sql"),
-                tags=("nightly",),
-            ),
-            build_sqlbuild_model_selector_model(
-                name="dim_customers",
-                relative_path=Path("models/marts/dim_customers.sql"),
-                tags=("nightly", "customer"),
-            ),
-            build_sqlbuild_model_selector_model(
-                name="stg_orders",
-                relative_path=Path("models/staging/stg_orders.sql"),
-                tags=("staging",),
-            ),
-        ),
-    )
-
-
-def build_sqlbuild_model_selector_model(
-    *, name: str, relative_path: Path, tags: tuple[str, ...]
-) -> CompiledModelView:
-    return CompiledModel(
-        key=CompiledObjectKey(resource_type=CompiledResourceType.MODEL, name=name),
-        deps=(),
-        name=name,
-        relative_path=relative_path,
-        query_sql=f"SELECT 1 AS {name}",
-        config=CompileModelConfig(values={"tags": tags}),
-        destination=CompiledRelationLocation(
-            database=None,
-            schema=None,
-            name=name,
-            qualified_name=None,
-        ),
-    )
-
-
 def build_execution_plan_from_kwargs(**kwargs: Any) -> PlanOutput:
     """Adapt flat planner kwargs to the grouped build_execution_plan inputs."""
 

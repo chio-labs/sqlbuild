@@ -19,7 +19,7 @@ use crate::bindings::_helpers::records::construct::{new_record, new_record_with}
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyDictMethods;
 use pyo3::types::{PyDict, PyFrozenSet, PyTuple};
 use sqlbuild_analysis::planner_scope::constants::SOURCE;
@@ -28,8 +28,6 @@ use sqlbuild_analysis::planner_scope::main::{
 };
 use std::collections::HashSet;
 
-#[pyfunction]
-#[pyo3(signature = (*, selected_keys, upstream_deps, project))]
 pub(crate) fn managed_source_upstream_keys<'py>(
     selected_keys: &Bound<'py, PyAny>,
     upstream_deps: &Bound<'py, PyAny>,
@@ -49,8 +47,6 @@ pub(crate) fn managed_source_upstream_keys<'py>(
     )
 }
 
-#[pyfunction]
-#[pyo3(signature = (**options))]
 pub(crate) fn build_planner_scope<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,

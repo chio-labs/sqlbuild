@@ -22,7 +22,6 @@ use crate::bindings::_helpers::planner_warehouse::constants::{
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
-use pyo3::pyfunction;
 use pyo3::types::PyDict as KeywordDict;
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyTuple};
 use sqlbuild_analysis::planner_warehouse::main::source_call_names::source_call_names;
@@ -244,8 +243,6 @@ fn entry_for_environment<'py>(
 }
 
 /// Resolve source reads for selected SQL, or for `read_source_names` when given.
-#[pyfunction]
-#[pyo3(signature = (**options))]
 pub(crate) fn build_source_read_map<'py>(
     py: pyo3::Python<'py>,
     options: Option<Bound<'py, KeywordDict>>,
@@ -325,8 +322,6 @@ pub(crate) fn build_source_read_map<'py>(
 }
 
 /// Add declared project sources that no selected SQL resource reads to a source map.
-#[pyfunction]
-#[pyo3(signature = (*, project, source_map, source_names))]
 pub(crate) fn with_declared_source_reads<'py>(
     project: &Bound<'py, PyAny>,
     source_map: &Bound<'py, PyDict>,
