@@ -32,6 +32,11 @@ pub trait RecallStoreOpener: Send + Sync + std::fmt::Debug {
         give_up: Instant,
     ) -> Result<Box<dyn RecallStore>, StoreError>;
 
+    /// What opening did that the user should know although nothing is wrong, such as a database it created, gathered since the last call. Kept across failed and retried opens, so each is reported exactly once.
+    fn take_information(&self) -> Vec<String> {
+        Vec::new()
+    }
+
     /// Most rows one insert batch takes.
     fn batch_rows(&self) -> usize;
 

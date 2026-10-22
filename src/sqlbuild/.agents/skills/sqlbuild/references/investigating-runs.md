@@ -63,6 +63,9 @@ what they printed. `sqb recall query` runs one read-only `SELECT` over a set of 
   `statements.status`.
 - On a shared ClickHouse store write ClickHouse SQL (`now() - INTERVAL 1 DAY`, `countIf`), not
   SQLite SQL (`strftime`, `datetime('now', '-1 day')`).
+- Check values before filtering on a kind or status column: `SELECT DISTINCT resource_kind, purpose
+  FROM statements`. A model's `resource_kind` is its materialization (`table`, `view` or a custom
+  one), never `model`; its build statements have `purpose = 'model_build'`.
 - Keep queries few and targeted: select the columns you need, filter on `invocation_id` or
   `invocation_started_at`, and add `LIMIT`. `SELECT *` over a view on a large store is slow.
 - Filter on a literal `invocation_id`. On ClickHouse, `invocation_id = (SELECT ...)` does not reach
@@ -75,13 +78,13 @@ what they printed. `sqb recall query` runs one read-only `SELECT` over a set of 
 
 ## Output format
 
-- Read results in the default `long` format: every value in full, one record at a time.
-- When there are too many rows to read, narrow the query (fewer columns, `LIMIT`, aggregation);
-  don't switch format.
-- Use `--json` only when a program consumes the output, for example to chain an `invocation_id`
-  into the next query, or when you need `statistics` (`rows_read`, `bytes_read`, elapsed time).
-  Don't use `--json` by default "to be safe".
-- Use `--format csv` for export. `--format table` is deprecated.
+- The default `long` format is fine in most cases: read it as it is, every value in full, one
+  record at a time.
+- If it is too verbose, select fewer columns or add a `LIMIT` (or aggregate) rather than changing
+  the format or reshaping the output.
+- Use `--json` only when a program does something meaningful with the result, for example to chain
+  an `invocation_id` into the next query, or when you need `statistics` (`rows_read`,
+  `bytes_read`, elapsed time). Not just to print rows more compactly.
 
 ## Worked investigations
 

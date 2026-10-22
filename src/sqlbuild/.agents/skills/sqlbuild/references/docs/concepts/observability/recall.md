@@ -233,8 +233,9 @@ see what last night's production build ran and printed without access to the mac
 first run where an audit started failing across everyone's runs, or compare a production run with
 your own by `target`, `git_revision` or `sqlbuild_version`.
 
-The connection needs `adapter = "clickhouse"` when the project uses another adapter, and its
-`database` must already exist; Recall never creates databases.
+The connection needs `adapter = "clickhouse"` when the project uses another adapter. Recall creates
+and upgrades its own store on the first write: the `database` when it does not exist yet, then its
+tables, views and schema version. A writer that may run that DDL needs no other setup.
 
 ```toml
 [connections.history_writer]
@@ -252,7 +253,7 @@ password = "${env:RECALL_READER_PASSWORD}"
 database = "observability"
 
 [recall]
-write_connection = "history_writer"  # every command writes history (INSERT, SELECT)
+write_connection = "history_writer"  # every command writes history; creates the store on first use
 read_connection = "history_reader"   # sqb recall query, schema and output (SELECT only)
 retention = "30d"
 ```
@@ -267,15 +268,21 @@ writer's password on a reader's laptop, need not be set.
 
 ### Users and grants
 
-SQLBuild does not enforce grants; it only lets the roles be separated. A least-privilege setup:
+SQLBuild does not enforce grants; it only lets the roles be separated. Give the writer the rights to
+create and upgrade the store in its database, so the first command sets it up and later SQLBuild
+versions upgrade it without anyone running DDL by hand:
 
 ```sql
 -- once, as an administrator: the users
 CREATE USER recall_writer IDENTIFIED BY '...';
 CREATE USER recall_reader IDENTIFIED BY '...';
-GRANT SELECT, INSERT ON observability.* TO recall_writer;
+GRANT CREATE DATABASE, CREATE TABLE, CREATE VIEW, DROP TABLE, ALTER ADD COLUMN, SELECT, INSERT
+  ON observability.* TO recall_writer;
 GRANT SELECT ON observability.* TO recall_reader;
 ```
+
+`DROP TABLE` is there because ClickHouse replaces a view through a temporary table; Recall itself
+never drops a table.
 
 The reader may be a standard read-only user (`SETTINGS readonly = 1`, or a settings profile with
 it), which may not change any setting. Such a user's queries run with the server's own settings;
@@ -287,23 +294,21 @@ read-only; a user that may not set the row limit gets the same truncated result,
 reading. A setting that Recall needs and the user may not change fails with an error naming it; set
 it in the user's profile, or give the user `readonly = 2`, which keeps it read-only.
 
-Then, as the administrator, create the store with the DDL that `sqb recall schema --ddl` prints
-(any connection that can read the database works, so the reader's is enough):
+A writer limited to `SELECT` and `INSERT` also works, once the store exists: it writes history but
+cannot create or upgrade the store. When such a writer finds the store missing or behind, Recall
+prints the exact statements an administrator should run, and `sqb recall schema --ddl` prints them
+again.
 
-```bash
-sqb recall schema --ddl --target prod > recall.sql   # review, then run it with an admin user
-```
-
-Repeat the same step after upgrading SQLBuild: `sqb recall schema --ddl` reads the store and prints
-only what this version adds (`ALTER TABLE … ADD COLUMN`, replaced views and the schema version row),
-or says that the store is up to date. Changes are always additive, and older SQLBuild versions keep
-writing to an upgraded store. `--ddl` prints SQL, so it cannot be combined with `--json` or
-`--format`.
-
-- **Setup.** A writer allowed to run DDL creates the `recall_*` MergeTree tables and the views above
-  in that database on first use, and adds the columns and views a newer SQLBuild introduces. If the
-  user may not create the store, the command still succeeds and prints the complete DDL for an
-  administrator to run; a store created from it accepts writers limited to `SELECT` and `INSERT`.
+- **Setup.** On first use the writer creates the database if it is missing, printing
+  ``Recall: created ClickHouse database `observability` for the store.`` once, then the `recall_*`
+  MergeTree tables and the views above. An existing database is used as it is, whatever its engine.
+  The database is created on the server the writer connects to, never `ON CLUSTER`: on a
+  self-managed cluster whose default database engine is not `Replicated`, create the database
+  yourself first with `ENGINE = Replicated(...)`, and Recall leaves it alone.
+  ClickHouse Cloud needs nothing.
+  If the user may not create the store, the command still succeeds and prints the statements,
+  starting with `CREATE DATABASE IF NOT EXISTS` when the database is missing; a store created from
+  them accepts writers limited to `SELECT` and `INSERT`.
 - **Upgrades.** When a store is behind this SQLBuild version and the writer may not upgrade it, the
   command still runs and exits as it otherwise would. History is still written, to the columns
   that exist, and Recall prints one warning (at most once a day) with the exact statements an
@@ -312,7 +317,9 @@ writing to an upgraded store. `--ddl` prints SQL, so it cannot be combined with 
   other. Writers append it again once it is older than half the retention, with the highest version
   recorded. When it has expired anyway, a writer compares the stored tables' and views' columns
   with its own: it upgrades an older store, records its version on a current one, and never
-  replaces the views of a store a newer SQLBuild version created.
+  replaces the views of a store a newer SQLBuild version created. Views whose definitions show an
+  older version created them, such as views that set `join_use_nulls`, count as older whatever the
+  version row says.
 - **Writes.** History is sent in batches of up to 5,000 rows about every five seconds, one insert
   per table, so a long command adds few parts; everything still queued is sent when it ends, with
   the same queue, shutdown budget and exit-code guarantees as the local store. Many concurrent
@@ -368,7 +375,10 @@ def recall_output(record: CommandOutputRecord, writer: RecallWriter) -> None:
 
 ## Querying history
 
-Use [`sqb recall`](../../cli/recall.md) to read the store. Queries are read-only `SELECT` statements,
+Use [`sqb recall`](../../cli/recall.md) to read the store: `sqb recall query` for questions and
+`sqb recall output` for what a command printed. The views fold the raw `recall_*` tables for you
+(duplicate deliveries, terminal facts, retention), so start there; query the store's database
+directly only for something the views do not expose. Queries are read-only `SELECT` statements,
 in the store's SQL dialect, against these views:
 
 | View | One row per |
@@ -384,11 +394,61 @@ in the store's SQL dialect, against these views:
 | `output_tail` | Recent output chunk |
 | `conflicts` | Record written twice with different content |
 
-Run `sqb recall schema` for every column.
+Run `sqb recall schema` for every column, and check the values a column holds before filtering on
+it, for example `SELECT DISTINCT resource_kind, purpose FROM statements`: a model's
+`resource_kind` is its materialization, such as `table` or `view`, and its build statements have
+`purpose = 'model_build'`.
 
 Every view has `invocation_id` and `invocation_started_at`. Filter on them to keep a query cheap:
 on a ClickHouse store, a filter on either reaches the table reads, so a query about one invocation or
 the last day reads that part of the store instead of folding the whole retention window.
+
+### Common questions
+
+These run as written on the local SQLite store; on ClickHouse, read JSON with
+`JSONExtractString(external_context, 'integration', 'job_name')`.
+
+The latest runs of an orchestrated job, by the context its integration records (the Dagster
+integration records `run_id`, `job_name`, `step_key`, `retry_number` and `partition_key`). Runs
+recorded before this context was stored as JSON hold it in a form the JSON functions cannot read,
+so this query skips them without an error:
+
+```bash
+sqb recall query "SELECT invocation_id, invocation_started_at, status, duration_ms
+  FROM invocations
+  WHERE json_extract(external_context, '$.integration.job_name') = 'daily_models'
+  ORDER BY invocation_started_at DESC LIMIT 5"
+```
+
+The slowest models in a run:
+
+```bash
+sqb recall query "SELECT resource_name, resource_kind, sum(duration_ms) AS total_ms
+  FROM statements WHERE invocation_id = '<invocation_id>' AND purpose = 'model_build'
+  GROUP BY resource_name, resource_kind ORDER BY total_ms DESC LIMIT 10"
+```
+
+Audits that did not pass:
+
+```bash
+sqb recall query "SELECT invocation_started_at, audit_name, outcome, violation_count, execution_error
+  FROM audit_results WHERE outcome <> 'pass'
+  ORDER BY invocation_started_at DESC LIMIT 20"
+```
+
+What a run printed at the end:
+
+```bash
+sqb recall output <invocation_id> --tail 50
+```
+
+### From a statement to the warehouse
+
+`statements.query_id` is the warehouse's own ID for the statement on Snowflake (the query ID) and
+ClickHouse (the `query_id` in `system.query_log`). Look it up in the warehouse's query history to
+see what Recall does not record, such as the warehouse size, queueing and spilling behind a slow
+statement. It is `NULL` on DuckDB and BigQuery; a BigQuery statement's job ID is in its
+`statement_submitted` event instead, as `payload` field `job_id` in `events`.
 
 ## Relationship to compute logs
 

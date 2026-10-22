@@ -127,8 +127,8 @@ fn clickhouse_location(
         }
         Some(_) => {
             return Err(SettingsError::invalid_configuration(format!(
-                "connections.{name}.database must name the existing ClickHouse database Recall \
-                 writes to"
+                "connections.{name}.database must name the ClickHouse database Recall writes \
+                 to"
             )));
         }
     };

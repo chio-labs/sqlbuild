@@ -310,3 +310,11 @@ class RecallDiagnosticsTestCase:
 class UnsetWriterVariableTestCase:
     description: str
     expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class DocumentedQueryTestCase:
+    description: str
+    question: int
+    columns: tuple[str, ...]
+    expected_rows: list[list[object]]

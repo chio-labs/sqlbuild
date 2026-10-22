@@ -1027,3 +1027,19 @@ def representative_store(project_dir: Path) -> subprocess.Popen[bytes]:
         timeout=120,
     )
     return running
+
+
+def drop_database(*, config: dict[str, object], database: str) -> None:
+    """Drop `database`, so a writer finds it missing."""
+
+    execute_clickhouse_sql(config=config, statements=(f"DROP DATABASE {database} SYNC",))
+
+
+def stale_views(*, config: dict[str, object], database: str) -> tuple[tuple[object, ...], ...]:
+    """How many views in `database` still depend on `join_use_nulls`, as the previous version's."""
+
+    return fetch_clickhouse_rows(
+        config=config,
+        sql="SELECT countIf(position(create_table_query, 'join_use_nulls') > 0) "
+        f"FROM system.tables WHERE database = '{database}' AND engine = 'View'",
+    )

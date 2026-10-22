@@ -2,12 +2,13 @@ use std::time::Duration;
 
 use crate::records::models::{OutputStream, RecallValue};
 use crate::schema::models::Table;
+use crate::store::errors::StoreErrorKind;
 use crate::writer::models::{Priority, SetupOutcome};
 
 #[cfg(unix)]
 use crate::writer::tests::helpers::unwritable_session;
 use crate::writer::tests::helpers::{
-    artifact_counts, close_under_held_lock, event_counts, insert_heartbeat,
+    artifact_counts, close_under_held_lock, creation_notices, event_counts, insert_heartbeat,
     invocation_during_discovery, output_stored_while_running, partially_inserted,
     pending_event_counts, record_run, recorded_session, replaced_session, replacement_order,
     sent_before_the_window, session_on_corrupt_store, written_to_core_release_store,
@@ -15,10 +16,10 @@ use crate::writer::tests::helpers::{
 #[cfg(unix)]
 use crate::writer::tests::test_types::UnwritableTestCase;
 use crate::writer::tests::test_types::{
-    ArtifactSizeTestCase, CoreReleaseStoreTestCase, CorruptStoreTestCase, DiscoveryTestCase,
-    EarlyBatchTestCase, EventBuildTestCase, HeldLockTestCase, PartialInsertTestCase,
-    PendingEventTestCase, RecordedSession, ReplacementOrderTestCase, ReplacementTestCase,
-    SessionTestCase, StoredWhileRunningTestCase,
+    ArtifactSizeTestCase, CoreReleaseStoreTestCase, CorruptStoreTestCase, CreationNoticeTestCase,
+    DiscoveryTestCase, EarlyBatchTestCase, EventBuildTestCase, HeldLockTestCase,
+    PartialInsertTestCase, PendingEventTestCase, RecordedSession, ReplacementOrderTestCase,
+    ReplacementTestCase, SessionTestCase, StoredWhileRunningTestCase,
 };
 
 const CLOSE_SLACK_SECONDS: f64 = 0.3;
@@ -395,6 +396,42 @@ fn given_a_byte_heavy_burst_when_the_window_is_long_then_it_is_sent_early_and_no
             (sent >= test_case.expected_minimum_sent_bytes, dropped),
             (true, test_case.expected_dropped),
             "{}: {sent} bytes sent",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_a_created_database_when_later_setup_fails_or_retries_then_its_notice_is_kept_once() {
+    let test_cases = [
+        CreationNoticeTestCase {
+            description: "creation followed by refused DDL keeps the notice",
+            failures: vec![Some(StoreErrorKind::Permission)],
+            expected_information: vec!["created database `history`".to_owned()],
+            expected_permission_denied: true,
+        },
+        CreationNoticeTestCase {
+            description: "a busy retry after creation reports it once",
+            failures: vec![Some(StoreErrorKind::Busy), None],
+            expected_information: vec!["created database `history`".to_owned()],
+            expected_permission_denied: false,
+        },
+        CreationNoticeTestCase {
+            description: "a store opened at once reports the creation",
+            failures: vec![None],
+            expected_information: vec!["created database `history`".to_owned()],
+            expected_permission_denied: false,
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            creation_notices(test_case.failures),
+            (
+                test_case.expected_information,
+                test_case.expected_permission_denied
+            ),
+            "{}",
             test_case.description
         );
     }

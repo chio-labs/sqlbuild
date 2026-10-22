@@ -1,9 +1,11 @@
+import json
 import subprocess
 from pathlib import Path
 
 import pytest
 
 from tests.integration.src.sqlbuild.cli.recall._test_types import (
+    DocumentedQueryTestCase,
     FailureCauseTestCase,
     GitRevisionTestCase,
 )
@@ -11,8 +13,10 @@ from tests.integration.src.sqlbuild.cli.recall.helpers import (
     DEPLOYED_REVISION,
     checkout_project,
     deployed_project,
+    documented_commands,
     recall_rows,
     run,
+    selected_columns,
     worktree_project,
     write_project,
 )
@@ -24,6 +28,70 @@ BROKEN_TARGET: str = (
     'connection = "broken"\n'
     'schema = "dev"\n'
 )
+
+ORCHESTRATED_CONTEXT: str = (
+    '{"integration": {"name": "dagster", "job_name": "daily_models", "run_id": "run-7"}}'
+)
+WARNING_AUDITS: str = '\n[settings]\ndefault_audit_severity = "warn"\n'
+CUSTOMERS_MODEL: str = (
+    'MODEL (\n  description "One row per customer",\n  materialized table,\n'
+    "  columns (email (audits [not_null])),\n);\n\n"
+    "SELECT 1 AS customer_id, CAST(NULL AS VARCHAR) AS email\n"
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DocumentedQueryTestCase(
+            description="an orchestrated job's runs are found by their external context",
+            question=0,
+            columns=("status",),
+            expected_rows=[["completed"]],
+        ),
+        DocumentedQueryTestCase(
+            description="the slowest models of a run are its model builds by resource",
+            question=1,
+            columns=("resource_name", "resource_kind"),
+            expected_rows=[["customers", "table"], ["orders", "table"]],
+        ),
+        DocumentedQueryTestCase(
+            description="audits that did not pass are listed",
+            question=2,
+            columns=("audit_name", "outcome", "violation_count"),
+            expected_rows=[["not_null", "warn", 1]],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_an_orchestrated_build_when_running_the_documented_queries_then_they_answer(
+    test_case: DocumentedQueryTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_project(tmp_path / "orders_shop", extra_toml=WARNING_AUDITS)
+    _ = (project_dir / "models" / "customers.sql").write_text(CUSTOMERS_MODEL, encoding="utf-8")
+    built: subprocess.CompletedProcess[bytes] = run(
+        project_dir, "build", SQLBUILD_INVOCATION_CONTEXT_JSON=ORCHESTRATED_CONTEXT
+    )
+    invocation_id: str = str(
+        recall_rows(project_dir, "SELECT invocation_id FROM invocations")[0][0]
+    )
+    commands: list[list[str]] = documented_commands(invocation_id=invocation_id)
+
+    answered: subprocess.CompletedProcess[bytes] = run(
+        project_dir, *commands[test_case.question], "--json"
+    )
+    printed: subprocess.CompletedProcess[bytes] = run(project_dir, *commands[-1])
+
+    assert built.returncode == 0, built.stderr
+    assert len(commands) == 4
+    assert answered.returncode == 0, answered.stderr
+    assert (
+        selected_columns(result=json.loads(answered.stdout), columns=test_case.columns)
+        == test_case.expected_rows
+    )
+    assert printed.returncode == 0, printed.stderr
+    assert len(printed.stdout.splitlines()) == 50
+    assert printed.stdout.endswith(built.stdout.splitlines(keepends=True)[-1])
 
 
 @pytest.mark.parametrize(

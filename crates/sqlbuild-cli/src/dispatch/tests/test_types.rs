@@ -23,5 +23,6 @@ pub(super) struct EventExportWarningTestCase {
 pub(super) struct ClosingStatusTestCase {
     pub(super) description: &'static str,
     pub(super) exit_code: Option<i64>,
+    pub(super) affected: Option<&'static str>,
     pub(super) expected_status: &'static str,
 }

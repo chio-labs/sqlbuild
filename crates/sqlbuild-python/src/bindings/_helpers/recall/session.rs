@@ -2,17 +2,21 @@
 
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use sqlbuild_cli::dispatch::main::closing_status::closing_status;
 use sqlbuild_cli::dispatch::models::CommandFacts;
+use sqlbuild_core::command_output::constants::INVOCATION_CONTEXT_ENV;
 use sqlbuild_host::entries::models::ExecutorHost;
 use sqlbuild_recall::records::main::format_timestamp::format_timestamp;
 use sqlbuild_recall::records::main::sha256_hex::sha256_hex;
 use sqlbuild_recall::records::models::{InvocationContext, OutputStream, RowEnvelope};
+use sqlbuild_recall::schema::main::create_database_statement::create_database_statement;
 use sqlbuild_recall::schema::main::ddl_script::ddl_script;
+use sqlbuild_recall::schema::main::render_script::render_script;
 use sqlbuild_recall::schema::models::{DdlOptions, Dialect};
 use sqlbuild_recall::settings::main::resolve_recall_settings::resolve_recall_settings;
 use sqlbuild_recall::settings::models::{
@@ -31,7 +35,7 @@ use sqlbuild_recall::writer::models::{
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::output_capture::records::invocation_context;
 use crate::bindings::_helpers::recall::clickhouse_store::{
-    ClickHouseLocation, ClickHouseStoreOpener,
+    ClickHouseLocation, ClickHouseStoreOpener, missing_database_reason,
 };
 use crate::bindings::_helpers::recall::console::write_stderr;
 use crate::bindings::_helpers::recall::constants::{
@@ -42,7 +46,6 @@ use crate::bindings::_helpers::recall::constants::{
 use crate::bindings::_helpers::recall::events::escaped_text;
 use crate::bindings::_helpers::recall::replacements::{RecallReplacements, in_replacement_sink};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::rules::config_json::dumped_json;
 
 /// What the invocation records: its session, when enabled, and the resolved target and adapter.
 #[derive(Clone, Debug, Default)]
@@ -178,7 +181,7 @@ fn host_token() -> Option<String> {
     Some(sha256_hex(name.trim().as_bytes())[..HOST_TOKEN_LENGTH].to_owned())
 }
 
-/// The orchestrator context as JSON; an invalid environment context records none.
+/// The orchestrator context as JSON, read from the environment once it is validated; an invalid one records none.
 fn external_context(py: Python<'_>) -> PyResult<Option<String>> {
     let context: Bound<'_, PyAny> = match invocation_context(py, None) {
         Ok(context) => context,
@@ -192,7 +195,16 @@ fn external_context(py: Python<'_>) -> PyResult<Option<String>> {
     if !context.is_truthy()? {
         return Ok(None);
     }
-    Ok(dumped_json(&context)?.map(|encoded| encoded.to_string()))
+    let Some(text) = environment(INVOCATION_CONTEXT_ENV) else {
+        return Ok(None);
+    };
+    serde_json::from_str::<serde_json::Value>(&text)
+        .map(|value| Some(value.to_string()))
+        .map_err(|error| {
+            PyValueError::new_err(format!(
+                "{INVOCATION_CONTEXT_ENV} must contain valid JSON: {error}"
+            ))
+        })
 }
 
 fn heartbeat_interval() -> Duration {
@@ -289,14 +301,20 @@ fn permission_notice(
     if !notice_due(project_dir, &place) {
         return None;
     }
-    let script = ddl_script(
-        dialect,
-        &DdlOptions {
-            database,
-            retention_days: settings.retention_days,
-            cluster: None,
-        },
-    );
+    let options = DdlOptions {
+        database,
+        retention_days: settings.retention_days,
+        cluster: None,
+    };
+    let database_missing: bool = options
+        .database
+        .as_deref()
+        .is_some_and(|database| reason.starts_with(&missing_database_reason(database)));
+    let script: String = ddl_script(dialect, &options);
+    let script: String = match create_database_statement(&options).filter(|_| database_missing) {
+        Some(statement) => format!("{}\n{script}", render_script(&[statement])),
+        None => script,
+    };
     Some(format!(
         "Recall history is not being written{}: {reason}. An administrator can create the \
          store {place} with:\n\n{script}\n",
@@ -365,6 +383,7 @@ fn started_session(
             location: ClickHouseLocation::new(config, database, settings.retention_days),
             retention_notice: notice_due,
             project_dir: project_dir.to_path_buf(),
+            information: Mutex::default(),
         })),
         StoreLocation::Unsupported {
             connection,
@@ -446,18 +465,21 @@ pub(crate) fn start_invocation_recall(
     })
 }
 
+/// `notice` as one Recall line, or block when it already ends with a newline.
+fn prefixed(notice: &str) -> String {
+    if notice.ends_with('\n') {
+        format!("Recall: {notice}")
+    } else {
+        format!("Recall: {notice}.\n")
+    }
+}
+
 /// What Recall must tell the user about this run once delivery has finished.
 fn closing_notices(recall: &InvocationRecall, session: &RecallSession) -> Vec<String> {
     let mut notices: Vec<String> = session
         .notices()
-        .into_iter()
-        .map(|notice| {
-            if notice.ends_with('\n') {
-                format!("Recall: {notice}")
-            } else {
-                format!("Recall: {notice}.\n")
-            }
-        })
+        .iter()
+        .map(|notice| prefixed(notice))
         .collect();
     if let (Some(SetupOutcome::PermissionDenied { reason }), Some((settings, project_dir))) =
         (session.wait_for_setup(Duration::ZERO), &recall.settings)
@@ -496,11 +518,21 @@ pub(crate) fn finish_invocation_recall(
             return Err(interrupt);
         }
     }
+    let information: Vec<String> = session
+        .information()
+        .iter()
+        .map(|text| prefixed(text))
+        .collect();
     let notices: Vec<String> = closing_notices(recall, session);
-    if !notices.is_empty() {
+    if !information.is_empty() || !notices.is_empty() {
+        let affected: Option<&str> = (!notices.is_empty()).then_some(RECALL_HISTORY);
         notify(
             py,
-            Some(notices.concat() + &closing_status(&recall.command, exit_code, RECALL_HISTORY)),
+            Some(
+                information.concat()
+                    + &notices.concat()
+                    + &closing_status(&recall.command, exit_code, affected),
+            ),
         );
     }
     Ok(())

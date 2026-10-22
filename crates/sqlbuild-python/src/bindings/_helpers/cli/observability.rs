@@ -211,7 +211,7 @@ fn warn_incomplete_export(
         return Ok(());
     };
     let closing: String = if command_succeeded {
-        closing_status(command, Some(0), LIFECYCLE_EVENT_EXPORT)
+        closing_status(command, Some(0), Some(LIFECYCLE_EVENT_EXPORT))
     } else {
         String::new()
     };

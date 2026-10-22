@@ -2,19 +2,26 @@ use std::collections::BTreeMap;
 
 use crate::schema::_helpers::clickhouse_views::clickhouse_view_bodies;
 use crate::schema::constants::{RECALL_SCHEMA_VERSION, VIEW_NAMES};
+use crate::schema::main::create_database_statement::create_database_statement;
 use crate::schema::main::schema_age::schema_age;
+use crate::schema::main::store_version_with_views::store_version_with_views;
 use crate::schema::main::version_plan::version_plan;
 use crate::schema::main::view_columns::view_columns;
-use crate::schema::models::{SchemaAge, StoreVersion, VersionPlan};
+use crate::schema::main::view_statements::view_statements;
+use crate::schema::models::{DdlOptions, Dialect, SchemaAge, StoreVersion, VersionPlan};
 use crate::schema::tests::helpers::{
     changed_statements_view, clickhouse_view_columns, current_views, options,
 };
 use crate::schema::tests::test_types::{
-    SchemaAgeTestCase, VersionPlanTestCase, ViewColumnsTestCase,
+    CreateDatabaseTestCase, SchemaAgeTestCase, VersionPlanTestCase, ViewColumnsTestCase,
+    ViewDefinitionsTestCase,
 };
 
 const RETENTION_DAYS: u32 = 30;
 const DAY: i64 = 86_400;
+const PREVIOUS_VIEW: &str =
+    "CREATE VIEW observability.statements AS SELECT 1 AS x SETTINGS join_use_nulls = 1";
+const CURRENT_VIEW: &str = "CREATE VIEW observability.statements AS SELECT 1 AS x";
 
 #[test]
 fn given_stored_view_columns_when_compared_then_the_store_is_older_current_or_newer() {
@@ -243,6 +250,113 @@ fn given_each_view_when_both_dialects_are_built_then_they_expose_the_same_column
             clickhouse == expected && !expected.is_empty(),
             test_case.expected_same,
             "{}: ClickHouse {clickhouse:?}, SQLite {expected:?}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_view_definitions_when_versioned_then_views_an_older_version_wrote_make_the_store_older() {
+    let recorded = |version: i64| StoreVersion::Recorded {
+        version,
+        age_seconds: DAY,
+        views_visible: true,
+    };
+    let test_cases = [
+        ViewDefinitionsTestCase {
+            description: "previous views with no version row are older, though columns match",
+            store: StoreVersion::Unrecorded(SchemaAge::Current),
+            definitions: vec![CURRENT_VIEW.to_owned(), PREVIOUS_VIEW.to_owned()],
+            expected_store: StoreVersion::Unrecorded(SchemaAge::Older),
+        },
+        ViewDefinitionsTestCase {
+            description: "previous views recorded as current count as the previous version",
+            store: recorded(RECALL_SCHEMA_VERSION),
+            definitions: vec![PREVIOUS_VIEW.to_owned()],
+            expected_store: recorded(RECALL_SCHEMA_VERSION - 1),
+        },
+        ViewDefinitionsTestCase {
+            description: "current views keep the recorded version",
+            store: recorded(RECALL_SCHEMA_VERSION),
+            definitions: vec![CURRENT_VIEW.to_owned()],
+            expected_store: recorded(RECALL_SCHEMA_VERSION),
+        },
+        ViewDefinitionsTestCase {
+            description: "current views with no version row stay current",
+            store: StoreVersion::Unrecorded(SchemaAge::Current),
+            definitions: vec![CURRENT_VIEW.to_owned()],
+            expected_store: StoreVersion::Unrecorded(SchemaAge::Current),
+        },
+        ViewDefinitionsTestCase {
+            description: "this build's own ClickHouse views keep the current version",
+            store: recorded(RECALL_SCHEMA_VERSION),
+            definitions: view_statements(Dialect::ClickHouse, &options(None))
+                .into_iter()
+                .map(|(_, statement)| statement)
+                .collect(),
+            expected_store: recorded(RECALL_SCHEMA_VERSION),
+        },
+        ViewDefinitionsTestCase {
+            description: "a store recorded by a newer build is never made older",
+            store: recorded(RECALL_SCHEMA_VERSION + 1),
+            definitions: vec![PREVIOUS_VIEW.to_owned()],
+            expected_store: recorded(RECALL_SCHEMA_VERSION + 1),
+        },
+        ViewDefinitionsTestCase {
+            description: "views with columns of a newer build are never made older",
+            store: StoreVersion::Unrecorded(SchemaAge::Newer),
+            definitions: vec![PREVIOUS_VIEW.to_owned()],
+            expected_store: StoreVersion::Unrecorded(SchemaAge::Newer),
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            store_version_with_views(
+                test_case.store,
+                &test_case
+                    .definitions
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<&str>>()
+            ),
+            test_case.expected_store,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_a_configured_database_when_rendered_then_it_is_created_only_if_missing() {
+    let test_cases = [
+        CreateDatabaseTestCase {
+            description: "a single server creates the database if it is missing",
+            options: options(None),
+            expected_statement: Some("CREATE DATABASE IF NOT EXISTS `observability`"),
+        },
+        CreateDatabaseTestCase {
+            description: "a cluster creates it on every node",
+            options: options(Some("main")),
+            expected_statement: Some(
+                "CREATE DATABASE IF NOT EXISTS `observability` ON CLUSTER `main`",
+            ),
+        },
+        CreateDatabaseTestCase {
+            description: "no configured database needs no statement",
+            options: DdlOptions {
+                database: None,
+                ..options(None)
+            },
+            expected_statement: None,
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            create_database_statement(&test_case.options).as_deref(),
+            test_case.expected_statement,
+            "{}",
             test_case.description
         );
     }
