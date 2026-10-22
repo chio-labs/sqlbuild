@@ -284,3 +284,13 @@ class SnowflakeStateTableSchemaFallbackTestCase:
     rejecting_schema: str
     accepting_schema: str
     expected_executed: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class SnowflakeViewDefinitionsTestCase:
+    description: str
+    stored_rows: tuple[tuple[str, str], ...]
+    prefetched_names: tuple[str, ...]
+    read_names: tuple[str, ...]
+    expected_definitions: tuple[str | None, ...]
+    expected_query_count: int
