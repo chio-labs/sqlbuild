@@ -29,6 +29,7 @@ use crate::bindings::_helpers::records::fields::{field, replaced};
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::render::authored_sql::SqlExpansionInputs;
 use crate::bindings::_helpers::rules::constants::SAFE_RULE_FIX_CODES;
+use crate::bindings::_helpers::rules::constants::SQL_RULE_PREFIX;
 use crate::bindings::_helpers::rules::fix_facts::compile_facts;
 use crate::bindings::_helpers::rules::fix_verdict::fix_verdict;
 use crate::bindings::_helpers::rules::lint_expansion::{
@@ -43,7 +44,6 @@ const VERIFICATION_FAILURE: &str =
     "Compilation could not prove unchanged output columns, types, dependencies and lineage";
 const APPLIED_REASON: &str = "Meaning-preserving rewrite; compiler invariants verified";
 const MAX_PASSES: usize = 128;
-const SQL_RULE_PREFIX: &str = "SQBRSQL";
 
 struct FixSession<'py> {
     project_dir: Bound<'py, PyAny>,

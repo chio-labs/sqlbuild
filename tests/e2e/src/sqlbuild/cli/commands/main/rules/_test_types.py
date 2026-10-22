@@ -303,3 +303,15 @@ class SelectedRuleCacheCase:
     edited_path: str
     expected_entries: tuple[str, ...]
     expected_recompile_cache_hits: int
+
+
+@dataclass(frozen=True)
+class SelectedGraphRuleCase:
+    """One selected plan whose graph-reading model Rule must agree with a whole-project compile."""
+
+    description: str
+    view_sql: str
+    selection: tuple[str, ...]
+    expected_compile_findings: tuple[tuple[str, str], ...]
+    expected_plan_findings: tuple[tuple[str, str], ...]
+    expected_plan_exit: int

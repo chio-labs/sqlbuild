@@ -1,4 +1,4 @@
-"""E2E coverage of project-wide Rules on a selected plan, which must agree with compile."""
+"""E2E coverage of Rules on a selected plan, which must agree with a whole-project compile."""
 
 from __future__ import annotations
 
@@ -11,11 +11,13 @@ import pytest
 
 from sqlbuild._native import rules_bulk_cache_path
 from tests.e2e.src.sqlbuild.cli.commands.main.rules._test_types import (
+    SelectedGraphRuleCase,
     SelectedProjectWideRuleCase,
     SelectedRuleCacheCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.rules.helpers import (
     compile_diagnostics,
+    custom_rule_source,
     duckdb_rules_project_toml,
     rule_cache_hits,
     run_compile_cli,
@@ -23,7 +25,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.rules.helpers import (
     write_model_files,
 )
 
-_FINDING_LINE: re.Pattern[str] = re.compile(r"^(\S+):\d+:\d+ \[(SQBR\w+)\] ", re.MULTILINE)
+_FINDING_LINE: re.Pattern[str] = re.compile(r"^(\S+):\d+:\d+ \[(X?SQBR\w+)\] ", re.MULTILINE)
 _RETURNS_PATH: str = "models/sales/mart/sales__mart__returns__finance.sql"
 _REFUNDS_PATH: str = "models/sales/mart/sales__mart__refunds__audit.sql"
 _ORDERS_PATH: str = "models/sales/mart/sales__mart__orders.sql"
@@ -69,6 +71,17 @@ _QUALIFIED_IGNORES: str = (
     'rules = ["SQBRPROJECT107"]\n'
     f'paths = ["{_RETURNS_PATH}", "{_REFUNDS_PATH}"]\n'
     'reason = "Reviewed qualified variants."\n'
+)
+
+_ORDERS_BASE_PATH: str = "models/orders_base.sql"
+_PUBLISHED_VIEW_RULE: str = custom_rule_source(
+    code="XSQBRPUB001",
+    body=(
+        '    if model.name != "orders_base":\n'
+        "        return []\n"
+        '    published: bool = any(item.name == "orders_published" for item in ctx.graph.dependents(model))\n'
+        "    return [] if published else [ctx.finding(subject=model)]\n"
+    ),
 )
 
 
@@ -176,6 +189,84 @@ def test_given_compile_cache_when_planning_selection_then_compile_and_plan_share
     assert tuple(sorted(after_compile["entries"])) == test_case.expected_entries  # type: ignore[arg-type]
     assert after_plan == after_compile
     assert rule_cache_hits(recompiled) == test_case.expected_recompile_cache_hits, recompiled.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SelectedGraphRuleCase(
+            description="an unselected dependent still exempts its upstream model",
+            view_sql='SELECT order_id FROM __ref("orders_base")\n',
+            selection=("+orders_report",),
+            expected_compile_findings=(),
+            expected_plan_findings=(),
+            expected_plan_exit=0,
+        ),
+        SelectedGraphRuleCase(
+            description="a finding compile reports on a selected model is still reported",
+            view_sql="SELECT 1 AS order_id\n",
+            selection=("+orders_report",),
+            expected_compile_findings=(("XSQBRPUB001", _ORDERS_BASE_PATH),),
+            expected_plan_findings=(("XSQBRPUB001", _ORDERS_BASE_PATH),),
+            expected_plan_exit=1,
+        ),
+        SelectedGraphRuleCase(
+            description="a finding on an unselected model is left out",
+            view_sql="SELECT 1 AS order_id\n",
+            selection=("orders_published",),
+            expected_compile_findings=(("XSQBRPUB001", _ORDERS_BASE_PATH),),
+            expected_plan_findings=(),
+            expected_plan_exit=0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_selection_when_planning_then_graph_reading_model_rules_see_whole_project(
+    test_case: SelectedGraphRuleCase,
+    tmp_path: Path,
+) -> None:
+    write_model_files(
+        project_dir=tmp_path,
+        toml=duckdb_rules_project_toml(
+            project_dir=tmp_path,
+            rules_toml=(
+                'select = ["XSQBRPUB001"]\n\n[rules.thresholds]\nmin_custom_rule_test_cases = 0\n'
+            ),
+        ),
+        files=(
+            ("rules/published.py", _PUBLISHED_VIEW_RULE),
+            (_ORDERS_BASE_PATH, "MODEL (description 'Orders.');\nSELECT 1 AS order_id\n"),
+            (
+                "models/orders_report.sql",
+                "MODEL (description 'Order report.');\n"
+                'SELECT order_id FROM __ref("orders_base")\n',
+            ),
+            (
+                "models/orders_published.sql",
+                "MODEL (description 'Published orders.', materialized view);\n"
+                + test_case.view_sql,
+            ),
+        ),
+    )
+
+    compiled: subprocess.CompletedProcess[str] = run_compile_cli(tmp_path)
+    plans: tuple[subprocess.CompletedProcess[str], ...] = tuple(
+        run_unevaluated_rules_cli(tmp_path, "plan", "--select", *test_case.selection)
+        for _ in ("cold", "warm")
+    )
+
+    compile_findings: tuple[tuple[str, str], ...] = tuple(
+        sorted({(str(item["code"]), str(item["path"])) for item in compile_diagnostics(compiled)})
+    )
+    assert compile_findings == test_case.expected_compile_findings, compiled.stdout
+    for planned in plans:
+        plan_output: str = planned.stdout + planned.stderr
+        plan_findings: tuple[tuple[str, str], ...] = tuple(
+            sorted({(code, path) for path, code in _FINDING_LINE.findall(plan_output)})
+        )
+        assert plan_findings == test_case.expected_plan_findings, plan_output
+        assert planned.returncode == test_case.expected_plan_exit, plan_output
+        assert "Traceback" not in plan_output, plan_output
 
 
 if __name__ == "__main__":
