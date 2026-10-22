@@ -14,6 +14,8 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
 )
 from sqlbuild.adapter.type_system.main.normalize_relation_type import normalize_relation_type
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.janitor.classes.janitor_workers import JanitorWorkers
+from sqlbuild.executor.janitor.constants import ARCHIVE_NAME_SEPARATOR
 from sqlbuild.executor.janitor.main._run_janitor_phase import run_janitor_phase
 from sqlbuild.executor.janitor.models import (
     JanitorArchiveCandidate,
@@ -23,9 +25,12 @@ from sqlbuild.executor.janitor.models import (
     JanitorRelationKey,
 )
 from sqlbuild.executor.janitor.types import JanitorAction, JanitorPhase, JanitorProgress
-from sqlbuild.executor.janitor_events.constants import JANITOR_EVENT_SCHEMA_VERSION
+from sqlbuild.executor.janitor_events.classes.janitor_event_writer import JanitorEventWriter
+from sqlbuild.executor.janitor_events.constants import (
+    JANITOR_EVENT_CHUNK_SIZE,
+    JANITOR_EVENT_SCHEMA_VERSION,
+)
 from sqlbuild.executor.janitor_events.main.janitor_event_id import build_janitor_event_id
-from sqlbuild.executor.janitor_events.main.write_janitor_event import write_janitor_event_record
 from sqlbuild.executor.janitor_events.models import JanitorEventRecord
 from sqlbuild.executor.janitor_events.types import JanitorEventType
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
@@ -46,17 +51,33 @@ def apply_direct_archives(
     *,
     plan: JanitorPlan,
     adapter: BaseAdapter,
-    connection: Any,
+    workers: JanitorWorkers,
     recorder: StatementRecorder,
     run_id: str,
     progress: JanitorProgress | None = None,
 ) -> tuple[tuple[JanitorArchiveCandidate, ...], tuple[JanitorArchivedRelation, ...]]:
-    """Rename stale relations to archives, then drop expired archives by name."""
+    """Rename stale relations to archives, then drop expired archives by name.
 
-    _create_event_tables(adapter=adapter, connection=connection, plan=plan)
-    archived: list[JanitorArchiveCandidate] = []
+    Audit events are written after each chunk of actions in a schema, and after a failure for
+    every action that succeeded. An archive whose name was shortened gets its event right after
+    its rename, because the event is the only record of its original name.
+    """
 
-    def archive_relation(candidate: JanitorArchiveCandidate) -> None:
+    schemas: tuple[tuple[str | None, str], ...] = _create_event_tables(
+        adapter=adapter, connection=workers.connection, plan=plan
+    )
+    events: JanitorEventWriter = JanitorEventWriter(
+        execute=adapter.execute,
+        render_qualified_name=adapter.render_qualified_name,
+        run_id=run_id,
+    )
+    if schemas:
+        events.read_existing(connection=workers.connection, schemas=schemas)
+
+    def flush_events() -> None:
+        events.flush(connection=workers.connection)
+
+    def archive_relation(candidate: JanitorArchiveCandidate, connection: Any) -> None:
         with OperationLifecycle(operation_kind="janitor", operation_name="janitor_cleanup_action"):
             _rename_relation(
                 adapter=adapter,
@@ -64,25 +85,24 @@ def apply_direct_archives(
                 candidate=candidate,
                 recorder=recorder,
             )
-        archived.append(candidate)
-        _write_event(
+        record: JanitorEventRecord = _event_record(
             adapter=adapter,
-            connection=connection,
-            record=_event_record(
-                adapter=adapter,
-                event_type=JanitorEventType.ARCHIVE,
-                run_id=run_id,
-                archive=JanitorArchivedRelation(
-                    key=candidate.archive_key,
-                    relation_type=candidate.relation.relation_type,
-                    archived_at=candidate.archived_at,
-                    expires_at=candidate.expires_at,
-                    original_key=candidate.key,
-                ),
+            event_type=JanitorEventType.ARCHIVE,
+            run_id=run_id,
+            archive=JanitorArchivedRelation(
+                key=candidate.archive_key,
+                relation_type=candidate.relation.relation_type,
+                archived_at=candidate.archived_at,
+                expires_at=candidate.expires_at,
+                original_key=candidate.key,
             ),
         )
+        if _shortened(candidate):
+            events.write_now(connection=connection, record=record)
+        else:
+            events.add(record)
 
-    run_janitor_phase(
+    archived: tuple[JanitorArchiveCandidate, ...] = run_janitor_phase(
         progress=progress,
         phase=JanitorPhase.ARCHIVE,
         items=plan.archive_candidates,
@@ -92,27 +112,26 @@ def apply_direct_archives(
             destination=candidate.archive_key.display_name(),
         ),
         apply=archive_relation,
+        workers=workers,
+        chunks=_event_chunks(tuple(candidate.archive_key for candidate in plan.archive_candidates)),
+        after_chunk=flush_events,
     )
-    deleted: list[JanitorArchivedRelation] = []
 
-    def delete_archive(archive: JanitorArchivedRelation) -> None:
+    def delete_archive(archive: JanitorArchivedRelation, connection: Any) -> None:
         with OperationLifecycle(operation_kind="janitor", operation_name="janitor_cleanup_action"):
             _drop_archive(
                 adapter=adapter, connection=connection, archive=archive, recorder=recorder
             )
-        deleted.append(archive)
-        _write_event(
-            adapter=adapter,
-            connection=connection,
-            record=_event_record(
+        events.add(
+            _event_record(
                 adapter=adapter,
                 event_type=JanitorEventType.DELETE,
                 run_id=run_id,
                 archive=archive,
-            ),
+            )
         )
 
-    run_janitor_phase(
+    deleted: tuple[JanitorArchivedRelation, ...] = run_janitor_phase(
         progress=progress,
         phase=JanitorPhase.DELETE_ARCHIVES,
         items=plan.archive_deletion_candidates,
@@ -120,8 +139,34 @@ def apply_direct_archives(
             action=JanitorAction.DELETED, name=archive.key.display_name()
         ),
         apply=delete_archive,
+        workers=workers,
+        chunks=_event_chunks(tuple(archive.key for archive in plan.archive_deletion_candidates)),
+        after_chunk=flush_events,
     )
-    return tuple(archived), tuple(deleted)
+    return archived, deleted
+
+
+def _shortened(candidate: JanitorArchiveCandidate) -> bool:
+    """Whether the archive name no longer ends with the relation's full original name."""
+
+    return not candidate.archive_key.name.lower().endswith(
+        ARCHIVE_NAME_SEPARATOR + candidate.key.name.lower()
+    )
+
+
+def _event_chunks(keys: tuple[JanitorRelationKey, ...]) -> tuple[tuple[int, ...], ...]:
+    """Item positions grouped by schema, in order, and split into event-sized chunks."""
+
+    by_schema: dict[tuple[str | None, str | None], list[int]] = {}
+    index: int
+    key: JanitorRelationKey
+    for index, key in enumerate(keys):
+        by_schema.setdefault((key.database, key.schema), []).append(index)
+    return tuple(
+        tuple(positions[start : start + JANITOR_EVENT_CHUNK_SIZE])
+        for positions in by_schema.values()
+        for start in range(0, len(positions), JANITOR_EVENT_CHUNK_SIZE)
+    )
 
 
 def _required_schema(key: JanitorRelationKey) -> str:
@@ -188,7 +233,9 @@ def _drop_archive(
     )
 
 
-def _create_event_tables(*, adapter: BaseAdapter, connection: Any, plan: JanitorPlan) -> None:
+def _create_event_tables(
+    *, adapter: BaseAdapter, connection: Any, plan: JanitorPlan
+) -> tuple[tuple[str | None, str], ...]:
     keys: tuple[JanitorRelationKey, ...] = (
         *(candidate.key for candidate in plan.archive_candidates),
         *(archive.key for archive in plan.archive_deletion_candidates),
@@ -203,6 +250,7 @@ def _create_event_tables(*, adapter: BaseAdapter, connection: Any, plan: Janitor
             connection=connection,
             sql=adapter.render_create_janitor_event_table_sql(database=database, schema=schema),
         )
+    return tuple(schemas)
 
 
 def _event_record(
@@ -236,13 +284,4 @@ def _event_record(
         archive_name=archive.key.name,
         archive_qualified_name=_qualified(adapter=adapter, key=archive.key),
         archived_at=archive.archived_at,
-    )
-
-
-def _write_event(*, adapter: BaseAdapter, connection: Any, record: JanitorEventRecord) -> None:
-    _ = write_janitor_event_record(
-        connection=connection,
-        execute=adapter.execute,
-        record=record,
-        render_qualified_name=adapter.render_qualified_name,
     )

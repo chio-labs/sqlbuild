@@ -20,6 +20,7 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
 from sqlbuild.adapter.type_system.main.normalize_relation_type import normalize_relation_type
+from sqlbuild.executor.janitor.classes.janitor_workers import JanitorWorkers
 from sqlbuild.executor.janitor.main._run_janitor_phase import run_janitor_phase
 from sqlbuild.executor.janitor.models import (
     JanitorOldNameView,
@@ -35,19 +36,20 @@ def apply_old_name_view_drops(
     *,
     plan: JanitorOldNameViewPlanning,
     adapter: BaseAdapter,
-    connection: Any,
+    workers: JanitorWorkers,
     recorder: StatementRecorder,
     run_id: str,
     progress: JanitorProgress | None = None,
 ) -> tuple[JanitorOldNameView, ...]:
     """Drop expired or requested views, then record every drop and every vanished view."""
 
-    dropped: list[JanitorOldNameView] = []
+    dropped: set[int] = set()
 
-    def apply(entry: tuple[JanitorOldNameView, bool]) -> JanitorAction | None:
+    def apply(entry: tuple[int, JanitorOldNameView, bool], connection: Any) -> JanitorAction | None:
+        position: int
         view: JanitorOldNameView
         planned_missing: bool
-        view, planned_missing = entry
+        position, view, planned_missing = entry
         if planned_missing:
             _record_drop(adapter=adapter, connection=connection, view=view, run_id=run_id)
             return None
@@ -71,20 +73,24 @@ def apply_old_name_view_drops(
             statement_recorder=recorder,
         )
         _record_drop(adapter=adapter, connection=connection, view=view, run_id=run_id)
-        dropped.append(view)
+        dropped.add(position)
         return None
 
     run_janitor_phase(
         progress=progress,
         phase=JanitorPhase.DROP_OLD_NAME_VIEWS,
-        items=(*((view, False) for view in plan.drops), *((view, True) for view in plan.missing)),
+        items=(
+            *((index, view, False) for index, view in enumerate(plan.drops)),
+            *((len(plan.drops), view, True) for view in plan.missing),
+        ),
         describe=lambda entry: JanitorProgressItem(
-            action=JanitorAction.RECORDED if entry[1] else JanitorAction.DROPPED,
-            name=entry[0].key.display_name(),
+            action=JanitorAction.RECORDED if entry[2] else JanitorAction.DROPPED,
+            name=entry[1].key.display_name(),
         ),
         apply=apply,
+        workers=workers,
     )
-    return tuple(dropped)
+    return tuple(view for index, view in enumerate(plan.drops) if index in dropped)
 
 
 def _record_drop(

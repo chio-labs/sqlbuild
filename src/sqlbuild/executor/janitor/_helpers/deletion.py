@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
+from sqlbuild.executor.janitor.classes.janitor_workers import JanitorWorkers
 from sqlbuild.executor.janitor.main._run_janitor_phase import run_janitor_phase
 from sqlbuild.executor.janitor.models import JanitorDirectStatePruneCandidate, JanitorProgressItem
 from sqlbuild.executor.janitor.types import JanitorAction, JanitorPhase, JanitorProgress
@@ -13,17 +15,18 @@ from sqlbuild.runtime.observability.classes.operation_lifecycle import Operation
 def apply_janitor_deletions(
     *,
     candidates: tuple[JanitorDirectStatePruneCandidate, ...],
-    delete: Callable[[JanitorDirectStatePruneCandidate], object] | None,
+    delete: Callable[[JanitorDirectStatePruneCandidate, Any], object] | None,
+    workers: JanitorWorkers,
     progress: JanitorProgress | None = None,
 ) -> tuple[JanitorDirectStatePruneCandidate, ...]:
-    """Run the delete callback for each candidate, returning the deleted ones."""
+    """Run `delete(candidate, connection)` for each candidate, returning the deleted ones."""
 
     if delete is None:
         return ()
 
-    def prune(candidate: JanitorDirectStatePruneCandidate) -> None:
+    def prune(candidate: JanitorDirectStatePruneCandidate, connection: Any) -> None:
         with OperationLifecycle(operation_kind="janitor", operation_name="janitor_cleanup_action"):
-            _ = delete(candidate)
+            _ = delete(candidate, connection)
 
     run_janitor_phase(
         progress=progress,
@@ -33,5 +36,6 @@ def apply_janitor_deletions(
             action=JanitorAction.PRUNED, name=candidate.display_name()
         ),
         apply=prune,
+        workers=workers,
     )
     return candidates

@@ -214,7 +214,8 @@ fn confirmed(stream: &Bound<'_, PyAny>, plan: &JanitorPlanText) -> PyResult<bool
 
 /// Run the confirmed plan, streaming each action, then print the final line and `--json`.
 fn apply(
-    (request, stream, style): (&Bound<'_, PyAny>, &Bound<'_, PyAny>, CliStyle),
+    (request, invocation): (&Bound<'_, PyAny>, &Bound<'_, PyAny>),
+    (stream, style): (&Bound<'_, PyAny>, CliStyle),
     (compiled, connection): (&JanitorCompiled<'_>, &Bound<'_, PyAny>),
     (planning, plan): (&Bound<'_, PyAny>, &JanitorPlanText),
 ) -> PyResult<i32> {
@@ -224,8 +225,11 @@ fn apply(
         JanitorProgressPrinter::new(stream, style, plan.clone())?,
     )?;
     let started: Instant = Instant::now();
-    let executed: PyResult<Bound<'_, PyAny>> =
-        execute_janitor_cleanup(compiled, connection, (planning, progress.as_any()));
+    let executed: PyResult<Bound<'_, PyAny>> = execute_janitor_cleanup(
+        invocation,
+        (compiled, connection),
+        (planning, progress.as_any()),
+    );
     let elapsed_seconds: f64 = started.elapsed().as_secs_f64();
     let items = progress.get().items();
     match executed {
@@ -311,7 +315,8 @@ fn clean(
         return Ok(1);
     }
     apply(
-        (request, &stream, style),
+        (request, invocation),
+        (&stream, style),
         (compiled, connection),
         (&planning, &plan),
     )

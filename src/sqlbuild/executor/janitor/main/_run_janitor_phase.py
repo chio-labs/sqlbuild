@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import replace
-from time import perf_counter
+from typing import Any
 
-from sqlbuild.executor.janitor.models import JanitorProgressItem
+from sqlbuild.executor.janitor.classes.janitor_workers import JanitorWorkers
+from sqlbuild.executor.janitor.models import JanitorActionOutcome, JanitorProgressItem
 from sqlbuild.executor.janitor.types import JanitorAction, JanitorPhase, JanitorProgress
 
 
@@ -16,50 +17,82 @@ def run_janitor_phase[T](
     phase: JanitorPhase,
     items: Sequence[T],
     describe: Callable[[T], JanitorProgressItem],
-    apply: Callable[[T], JanitorAction | None],
-) -> None:
-    """Apply `apply` to each item in order; a failing item is reported, then re-raised.
+    apply: Callable[[T, Any], JanitorAction | None],
+    workers: JanitorWorkers,
+    chunks: Sequence[Sequence[int]] | None = None,
+    after_chunk: Callable[[], None] | None = None,
+) -> tuple[T, ...]:
+    """Apply `apply(item, connection)` to every item and return the items that succeeded.
 
-    `apply` may return the action actually taken when it differs from the described one.
+    Items run concurrently on `workers`, a chunk of item positions at a time (all items when
+    `chunks` is none); `after_chunk` runs after every chunk
+    and once more after a failure or interruption, before the error is raised. A failing item is
+    reported and no later action starts. `apply` may return the action actually taken when it
+    differs from the described one.
     """
 
     if not items:
-        return
+        return ()
     if progress is not None:
         progress.phase_started(phase=phase.value, total=len(items))
-    item: T
-    for item in items:
-        started: float = perf_counter()
-        try:
-            taken: JanitorAction | None = apply(item)
-        except BaseException as error:
-            message: str = str(error) or type(error).__name__
-            _report(progress, phase, (describe(item), None), (message, started))
-            if progress is not None:
-                progress.phase_finished(phase=phase.value, failed=True)
-            raise
-        _report(progress, phase, (describe(item), taken), (None, started))
+    succeeded: set[int] = set()
+
+    def report(
+        chunk: Sequence[int],
+    ) -> Callable[[int, JanitorActionOutcome[JanitorAction | None]], None]:
+        def on_done(index: int, outcome: JanitorActionOutcome[JanitorAction | None]) -> None:
+            item: T = items[chunk[index]]
+            if outcome.error is None:
+                succeeded.add(chunk[index])
+            if progress is None:
+                return
+            label: JanitorProgressItem = describe(item)
+            progress.item_finished(
+                phase=phase.value,
+                item=label if outcome.result is None else replace(label, action=outcome.result),
+                error=None if outcome.error is None else _message(outcome.error),
+                duration_seconds=outcome.duration_seconds,
+            )
+
+        return on_done
+
+    failure: BaseException | None = None
+    try:
+        chunk: Sequence[int]
+        for chunk in (range(len(items)),) if chunks is None else chunks:
+            failure = workers.run(
+                items=tuple(items[index] for index in chunk),
+                action=apply,
+                on_done=report(chunk),
+            )
+            if failure is not None:
+                break
+            if after_chunk is not None:
+                after_chunk()
+    except BaseException:
+        _finish_failed(progress=progress, phase=phase, after_chunk=after_chunk)
+        raise
+    if failure is not None:
+        _finish_failed(progress=progress, phase=phase, after_chunk=after_chunk)
+        raise failure
     if progress is not None:
         progress.phase_finished(phase=phase.value, failed=False)
+    return tuple(item for index, item in enumerate(items) if index in succeeded)
 
 
-def _report(
+def _finish_failed(
+    *,
     progress: JanitorProgress | None,
     phase: JanitorPhase,
-    described: tuple[JanitorProgressItem, JanitorAction | None],
-    outcome: tuple[str | None, float],
+    after_chunk: Callable[[], None] | None,
 ) -> None:
-    if progress is None:
-        return
-    label: JanitorProgressItem
-    taken: JanitorAction | None
-    label, taken = described
-    error: str | None
-    started: float
-    error, started = outcome
-    progress.item_finished(
-        phase=phase.value,
-        item=label if taken is None else replace(label, action=taken),
-        error=error,
-        duration_seconds=perf_counter() - started,
-    )
+    try:
+        if after_chunk is not None:
+            after_chunk()
+    finally:
+        if progress is not None:
+            progress.phase_finished(phase=phase.value, failed=True)
+
+
+def _message(error: BaseException) -> str:
+    return str(error) or type(error).__name__

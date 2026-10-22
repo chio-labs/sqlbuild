@@ -236,3 +236,12 @@ class JanitorProgressItem:
     action: JanitorAction
     name: str
     destination: str | None = None
+
+
+@dataclass(frozen=True)
+class JanitorActionOutcome[ResultT]:
+    """What one janitor action returned or raised, and how long it ran."""
+
+    result: ResultT | None = None
+    error: BaseException | None = None
+    duration_seconds: float = 0.0

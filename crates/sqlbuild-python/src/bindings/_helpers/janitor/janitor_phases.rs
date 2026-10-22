@@ -7,6 +7,7 @@ use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::native_host::connections::connection_failure;
 use std::time::Instant;
 
+use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
 
@@ -15,6 +16,7 @@ use crate::bindings::_helpers::build_progress::progress_reporters::{
     ConnectionProgressReporter, PlanningProgressReporter,
 };
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
+use crate::bindings::_helpers::command_runtime::concurrency::resolve_concurrency;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_connection_context;
 use crate::bindings::_helpers::janitor::janitor_facts::Warehouse;
 use crate::bindings::_helpers::janitor::janitor_planning::{
@@ -298,18 +300,50 @@ pub(crate) fn build_janitor_execution_plan<'py>(
 }
 
 /// Execute the warehouse cleanup plan, reporting each phase and action to `progress`.
+///
+/// Independent actions of a phase run on up to the command's concurrency of connections.
 pub(crate) fn execute_janitor_cleanup<'py>(
-    compiled: &JanitorCompiled<'py>,
-    connection: &Bound<'py, PyAny>,
+    invocation: &Bound<'py, PyAny>,
+    (compiled, connection): (&JanitorCompiled<'py>, &Bound<'py, PyAny>),
     (plan, progress): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = invocation.py();
+    let concurrency: i64 = resolve_concurrency(
+        &py.None().into_bound(py),
+        &native_field(invocation, "discovered_inputs")?,
+        &native_field(invocation, "selected_target")?,
+    )?
+    .limit;
+    let connection_progress: Bound<'py, PyAny> = Bound::new(
+        py,
+        ConnectionProgressReporter::new(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("adapter_name", compiled.adapter_name.clone()),
+                    ("stream", output_stream(invocation)?),
+                    (
+                        "use_color",
+                        PyBool::new(py, use_color(invocation)?)
+                            .to_owned()
+                            .into_any(),
+                    ),
+                ],
+            )?),
+        )?,
+    )?
+    .into_any();
     call_with(
-        &host::entry(compiled.adapter.py(), ExecutorHost::ExecuteJanitorPlan)?,
+        &host::entry(py, ExecutorHost::ExecuteJanitorPlan)?,
         &[
             ("plan", plan.clone()),
             ("adapter", compiled.adapter.clone()),
             ("connection", connection.clone()),
             ("progress", progress.clone()),
+            ("connection_config", compiled.connection_config.clone()),
+            ("concurrency", concurrency.into_pyobject(py)?.into_any()),
+            ("connection_progress", connection_progress),
         ],
     )
 }

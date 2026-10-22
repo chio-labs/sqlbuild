@@ -170,6 +170,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     )
     views_read_with_reader_access: ClassVar[bool] = True
     max_identifier_length: ClassVar[int] = 1024
+    concurrent_ddl_limit: ClassVar[int] = 16
     _snapshot_sql_dialect: ClassVar[SnapshotSqlDialect] = SnapshotSqlDialect(
         timestamp_type="TIMESTAMP",
         distinct_condition=render_is_distinct_from,
