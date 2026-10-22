@@ -8,6 +8,7 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse._test_types import (
     ClickHouseRecallDatabaseCreationTestCase,
     ClickHouseRecallExistingDatabaseTestCase,
+    ClickHouseRecallExternalContextTestCase,
     ClickHouseRecallMissingDatabaseTestCase,
     ClickHouseRecallStaleViewsTestCase,
 )
@@ -284,6 +285,37 @@ def test_given_views_of_the_previous_version_when_building_then_they_count_as_ol
         )
         == test_case.expected_version
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseRecallExternalContextTestCase(
+            description="an orchestrated job's runs are found with the documented JSON spelling",
+            external_context='{"integration": {"name": "dagster", "job_name": "daily_models"}}',
+            sql="SELECT status FROM invocations "
+            "WHERE JSONExtractString(external_context, 'integration', 'job_name') = 'daily_models'",
+            expected_rows=[["completed"]],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_an_orchestrated_build_when_queried_on_clickhouse_then_its_context_is_json(
+    test_case: ClickHouseRecallExternalContextTestCase,
+    tmp_path: Path,
+    clickhouse_e2e_config: dict[str, object],
+    recall_database: str,
+) -> None:
+    project_dir: Path = write_recall_project(
+        parent=tmp_path, config=clickhouse_e2e_config, database=recall_database
+    )
+
+    built: subprocess.CompletedProcess[bytes] = run(
+        project_dir, "build", SQLBUILD_INVOCATION_CONTEXT_JSON=test_case.external_context
+    )
+
+    assert built.returncode == 0, built.stderr
+    assert recall_rows(project_dir, test_case.sql) == test_case.expected_rows
 
 
 if __name__ == "__main__":

@@ -99,7 +99,7 @@ explain it.
 ## Looking at data: sqb query
 
 ```bash
-sqb query "SELECT status, COUNT(*) FROM analytics.orders GROUP BY 1" --format table
+sqb query "SELECT status, COUNT(*) FROM analytics.orders GROUP BY 1"
 sqb query --file /tmp/check.sql --limit 100
 ```
 

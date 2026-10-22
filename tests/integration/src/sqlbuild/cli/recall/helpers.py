@@ -6,6 +6,7 @@ import json
 import operator
 import os
 import re
+import shlex
 import signal
 import sqlite3
 import stat
@@ -570,3 +571,22 @@ def worktree_project(parent: Path) -> tuple[Path, str]:
     repository, revision = committed_repository(parent)
     _ = git(repository, "worktree", "add", "-q", "-b", "orders", str(parent / "linked"))
     return parent / "linked" / "orders_shop", revision
+
+
+RECALL_CONCEPT_PAGE: Path = (
+    Path(__file__).resolve().parents[6]
+    / "website/src/content/docs/docs/concepts/observability/recall.mdx"
+)
+_COMMON_QUESTIONS: str = "### Common questions"
+_BASH_BLOCK: re.Pattern[str] = re.compile(r"```bash\n(.*?)```", re.DOTALL)
+
+
+def documented_commands(*, invocation_id: str) -> list[list[str]]:
+    """The arguments of each command under the Recall page's common questions, for one invocation."""
+
+    page: str = RECALL_CONCEPT_PAGE.read_text(encoding="utf-8")
+    section: str = page.split(_COMMON_QUESTIONS, 1)[1].split("\n### ", 1)[0]
+    return [
+        shlex.split(block.replace("<invocation_id>", invocation_id))[1:]
+        for block in _BASH_BLOCK.findall(section)
+    ]

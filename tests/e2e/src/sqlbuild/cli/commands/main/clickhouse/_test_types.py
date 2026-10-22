@@ -332,3 +332,11 @@ class ClickHouseRecallStaleViewsTestCase:
     expected_notices: int
     expected_stale_views: tuple[tuple[object, ...], ...]
     expected_version: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallExternalContextTestCase:
+    description: str
+    external_context: str
+    sql: str
+    expected_rows: list[list[object]]

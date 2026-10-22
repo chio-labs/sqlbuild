@@ -100,10 +100,11 @@ Timestamps are ISO-8601 UTC text, so they compare correctly as strings. Filter o
 List every Recall view with its columns, types, and join keys. Accepts `--format`, `--json`, and
 `--target`.
 
-With `--ddl`, print instead the SQL that creates the store, or brings an existing store up to this
-SQLBuild version (missing columns, replaced views, and the schema version row), for an
-administrator to run. It reads the store through `read_connection` and changes nothing; when the
-store is up to date it prints nothing and says so on stderr. Run it again after every upgrade. With `--backend warehouse`, it lists SQLBuild's state tables in the target's warehouse
+Recall creates and upgrades its store itself on the first write when the writer may run DDL, so
+there is usually nothing to run. With `--ddl`, print instead the SQL an administrator runs when the
+writer may not: what creates the store, or brings it up to this SQLBuild version (missing columns,
+replaced views, and the schema version row). It reads the store through `read_connection` and
+changes nothing; when the store is up to date it prints nothing and says so on stderr. With `--backend warehouse`, it lists SQLBuild's state tables in the target's warehouse
 instead, or describes one with `--relation <name>`.
 
 ## sqb recall output

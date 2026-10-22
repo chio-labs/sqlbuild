@@ -236,7 +236,7 @@ password = "${env:RECALL_READER_PASSWORD}"
 database = "observability"
 
 [recall]
-write_connection = "history_writer"  # every command writes history (INSERT, SELECT)
+write_connection = "history_writer"  # every command writes history; creates the store on first use
 read_connection = "history_reader"   # sqb recall query, schema and output (SELECT only)
 retention = "30d"
 ```
@@ -259,10 +259,13 @@ versions upgrade it without anyone running DDL by hand:
 -- once, as an administrator: the users
 CREATE USER recall_writer IDENTIFIED BY '...';
 CREATE USER recall_reader IDENTIFIED BY '...';
-GRANT CREATE DATABASE, CREATE TABLE, CREATE VIEW, DROP VIEW, ALTER ADD COLUMN, SELECT, INSERT
+GRANT CREATE DATABASE, CREATE TABLE, CREATE VIEW, DROP TABLE, ALTER ADD COLUMN, SELECT, INSERT
   ON observability.* TO recall_writer;
 GRANT SELECT ON observability.* TO recall_reader;
 ```
+
+`DROP TABLE` is there because ClickHouse replaces a view through a temporary table; Recall itself
+never drops a table.
 
 The reader may be a standard read-only user (`SETTINGS readonly = 1`, or a settings profile with
 it), which may not change any setting. Such a user's queries run with the server's own settings;
@@ -352,7 +355,10 @@ def recall_output(record: CommandOutputRecord, writer: RecallWriter) -> None:
 
 ## Querying history
 
-Use [`sqb recall`](/docs/cli/recall) to read the store. Queries are read-only `SELECT` statements,
+Use [`sqb recall`](/docs/cli/recall) to read the store: `sqb recall query` for questions and
+`sqb recall output` for what a command printed. The views fold the raw `recall_*` tables for you
+(duplicate deliveries, terminal facts, retention), so start there; query the store's database
+directly only for something the views do not expose. Queries are read-only `SELECT` statements,
 in the store's SQL dialect, against these views:
 
 | View | One row per |
@@ -368,11 +374,58 @@ in the store's SQL dialect, against these views:
 | `output_tail` | Recent output chunk |
 | `conflicts` | Record written twice with different content |
 
-Run `sqb recall schema` for every column.
+Run `sqb recall schema` for every column, and check the values a column holds before filtering on
+it, for example `SELECT DISTINCT resource_kind, purpose FROM statements`: a model's
+`resource_kind` is its materialization, such as `table` or `view`, and its build statements have
+`purpose = 'model_build'`.
 
 Every view has `invocation_id` and `invocation_started_at`. Filter on them to keep a query cheap:
 on a ClickHouse store, a filter on either reaches the table reads, so a query about one invocation or
 the last day reads that part of the store instead of folding the whole retention window.
+
+### Common questions
+
+These run as written on the local SQLite store; on ClickHouse, read JSON with
+`JSONExtractString(external_context, 'integration', 'job_name')`.
+
+The latest runs of an orchestrated job, by the context its integration records (the Dagster
+integration records `run_id`, `job_name`, `step_key`, `retry_number` and `partition_key`):
+
+```bash
+sqb recall query "SELECT invocation_id, invocation_started_at, status, duration_ms
+  FROM invocations
+  WHERE json_extract(external_context, '$.integration.job_name') = 'daily_models'
+  ORDER BY invocation_started_at DESC LIMIT 5"
+```
+
+The slowest models in a run:
+
+```bash
+sqb recall query "SELECT resource_name, resource_kind, sum(duration_ms) AS total_ms
+  FROM statements WHERE invocation_id = '<invocation_id>' AND purpose = 'model_build'
+  GROUP BY resource_name, resource_kind ORDER BY total_ms DESC LIMIT 10"
+```
+
+Audits that did not pass:
+
+```bash
+sqb recall query "SELECT invocation_started_at, audit_name, outcome, violation_count, execution_error
+  FROM audit_results WHERE outcome <> 'pass'
+  ORDER BY invocation_started_at DESC LIMIT 20"
+```
+
+What a run printed at the end:
+
+```bash
+sqb recall output <invocation_id> --tail 50
+```
+
+### From a statement to the warehouse
+
+`statements.query_id` is the warehouse's own ID for the statement, where the adapter reports one:
+the Snowflake query ID, or the `query_id` ClickHouse logs in `system.query_log`. It is `NULL` on
+adapters without one, such as DuckDB. Look it up in the warehouse's query history to see what
+Recall does not record, such as the warehouse size, queueing and spilling behind a slow statement.
 
 ## Relationship to compute logs
 

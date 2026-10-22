@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::types::{PyDict, PyDictMethods};
 use sqlbuild_cli::dispatch::main::closing_status::closing_status;
 use sqlbuild_cli::dispatch::models::CommandFacts;
 use sqlbuild_host::entries::models::ExecutorHost;
@@ -30,6 +31,7 @@ use sqlbuild_recall::writer::models::{
     DeliverySummary, RecallSession, SessionConfig, SessionStore, SetupOutcome,
 };
 
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::output_capture::records::invocation_context;
 use crate::bindings::_helpers::recall::clickhouse_store::{
@@ -194,7 +196,11 @@ fn external_context(py: Python<'_>) -> PyResult<Option<String>> {
     if !context.is_truthy()? {
         return Ok(None);
     }
-    Ok(dumped_json(&context)?.map(|encoded| encoded.to_string()))
+    let options = PyDict::new(py);
+    options.set_item("default", py.import("builtins")?.getattr("dict")?)?;
+    let encoded = imported(py, "json", "dumps")?.call((&context,), Some(&options))?;
+    let plain = imported(py, "json", "loads")?.call1((encoded,))?;
+    Ok(dumped_json(&plain)?.map(|encoded| encoded.to_string()))
 }
 
 fn heartbeat_interval() -> Duration {

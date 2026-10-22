@@ -344,7 +344,7 @@ impl ClickHouseStore {
         observed
     }
 
-    /// Create a store whose tables are missing. On existing tables add missing columns, create missing views, and replace views on a version upgrade; when retention removed the version row, the views' columns tell whether the store is older, current or newer, and a newer store's views are never replaced. A user who may not run that DDL writes the columns that exist and gets the statements an administrator must run. A version is recorded only once the views are settled, never lower than the store holds, and again before retention removes the newest row.
+    /// Create a store whose tables are missing. On existing tables add missing columns, create missing views, and replace views on a version upgrade; when retention removed the version row, the views' columns tell whether the store is older, current or newer, and a newer store's views are never replaced; views whose definitions show an older version wrote them make the store older either way. A user who may not run that DDL writes the columns that exist and gets the statements an administrator must run. A version is recorded only once the views are settled, never lower than the store holds, and again before retention removes the newest row.
     fn ensure_schema(
         &mut self,
         py: Python<'_>,

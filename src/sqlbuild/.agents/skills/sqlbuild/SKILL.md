@@ -79,11 +79,13 @@ printed. Add `--backend warehouse` to check live warehouse state with the same c
 Read [references/investigating-runs.md](references/investigating-runs.md) before writing recall
 queries; `statements` and `audit_results` use `outcome`, not `status`.
 
-Check `read_connection` in `[recall]` or `[targets.<name>.recall]` to see which store you are
-reading:
+Recall reads the store of the selected target: the default target unless you pass `--target`.
+Check that target's `read_connection` in `[recall]` or `[targets.<name>.recall]`:
 
 - **Local (the default).** A SQLite file, `logs/recall.sqlite3`, holding this checkout's own runs.
-  Use it for "what did my last build do?" and to compare runs during your session.
+  Use it for "what did my last build do?" and to compare runs during your session. Development
+  targets usually record here, so pass `--target <deployment>` to see what a shared deployment
+  target ran.
 - **Shared ClickHouse store.** One history for every machine that writes to it: teammates, CI, and
   scheduled or orchestrated production runs. This is far more powerful: you can see what prod
   actually ran and printed last night without access to the machine, find the first run where an
@@ -91,6 +93,20 @@ reading:
   with yours by `target`, `git_revision`, `sqlbuild_version` or `host_token`. Queries use
   ClickHouse SQL, and `--json` reports `rows_read` and `bytes_read`; filter on `invocation_id` or
   `invocation_started_at` and keep a `LIMIT` on large stores.
+
+The default `long` format is fine in most cases: read it as it is. If it is too verbose, select
+fewer columns or add a `LIMIT` rather than changing the format or reshaping the output. Use
+`--json` only when a program does something meaningful with the result, such as feeding it into
+further processing, not just to print rows more compactly.
+
+Every command except `sqb recall` is recorded in the store of the target it runs against,
+including `sqb debug` and failed commands. To check a shared target, prefer `sqb recall` reads:
+anything else you run from your machine with `--target <shared>` appears in that target's history.
+
+Recall creates and upgrades its own store (database, tables, views and schema version) on the first
+write, so there is usually nothing to set up, even for a new shared store. Run the statements from
+`sqb recall schema --ddl` yourself only when the writer is not allowed to run DDL and Recall printed
+them for an administrator, or when an administrator asks you to.
 
 Read [references/docs/concepts/observability/recall.md](references/docs/concepts/observability/recall.md).
 
