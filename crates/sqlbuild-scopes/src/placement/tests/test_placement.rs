@@ -158,25 +158,33 @@ fn given_destination_role_layout_when_carrying_declaration_then_its_shape_is_mat
             description: "an empty destination role keeps the source group",
             index: grouped_cents_empty_role,
             moves: &[("orders", "models/sales/eu/orders.sql")],
-            expected_relocations: &[(0, "models/sales/_sqlbuild/macros/money/cents.py", false)],
+            expected_relocations: &[(
+                0,
+                "models/sales/_sqlbuild/macros/python/money/cents.py",
+                false,
+            )],
         },
         CarriedLayoutTestCase {
             description: "a grouped destination role keeps the source group",
             index: grouped_cents_grouped_role,
             moves: &[("orders", "models/sales/eu/orders.sql")],
-            expected_relocations: &[(0, "models/sales/_sqlbuild/macros/money/cents.py", false)],
+            expected_relocations: &[(
+                0,
+                "models/sales/_sqlbuild/macros/python/money/cents.py",
+                false,
+            )],
         },
         CarriedLayoutTestCase {
             description: "a direct source in a grouped destination role needs a group",
             index: direct_cents_grouped_role,
             moves: &[("orders", "models/sales/eu/orders.sql")],
-            expected_relocations: &[(0, "models/sales/_sqlbuild/macros/cents.py", true)],
+            expected_relocations: &[(0, "models/sales/_sqlbuild/macros/python/cents.py", true)],
         },
         CarriedLayoutTestCase {
             description: "a direct destination role drops the source group",
             index: grouped_cents_direct_role,
             moves: &[("orders", "models/sales/eu/orders.sql")],
-            expected_relocations: &[(0, "models/sales/_sqlbuild/macros/cents.py", false)],
+            expected_relocations: &[(0, "models/sales/_sqlbuild/macros/python/cents.py", false)],
         },
         CarriedLayoutTestCase {
             description: "moving every user together places the macro once at their new folder",
@@ -185,7 +193,11 @@ fn given_destination_role_layout_when_carrying_declaration_then_its_shape_is_mat
                 ("orders", "models/sales/eu/orders.sql"),
                 ("refunds", "models/sales/eu/refunds.sql"),
             ],
-            expected_relocations: &[(0, "models/sales/eu/_sqlbuild/_macros/money/cents.py", false)],
+            expected_relocations: &[(
+                0,
+                "models/sales/eu/_sqlbuild/_macros/python/money/cents.py",
+                false,
+            )],
         },
     ];
     for test_case in test_cases {

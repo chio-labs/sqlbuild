@@ -1,6 +1,6 @@
 //! Where a carried declaration file lands inside its destination role folder.
 
-use crate::placement::_helpers::declaration_directory::declaration_directory;
+use crate::placement::_helpers::declaration_directory::declaration_file_directory;
 use crate::placement::models::PlacementIndex;
 use crate::scope_index::models::{DeclarationRecord, ScopeKind};
 use sqlbuild_core::posix_path::main::posix_name::posix_name;
@@ -21,10 +21,11 @@ pub(crate) fn carried_path(
     directory: &str,
 ) -> (String, bool) {
     let name: &str = posix_name(&record.path);
-    let source: String = declaration_directory(
+    let source: String = declaration_file_directory(
         record.identity.kind,
         record.scope,
         record.owning_path.as_deref(),
+        &record.path,
     );
     let relative: &str = record
         .path

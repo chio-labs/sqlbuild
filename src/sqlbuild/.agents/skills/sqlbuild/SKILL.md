@@ -14,8 +14,8 @@ plan, and ships tools for proving a change is correct. Use those tools; do not s
 - Models are SQL files with a `MODEL (...)` header, then one query. No Jinja.
 - References are `__ref("model")`, `__source("source_name")`, `__seed("seed")`. Never hardcode a
   relation SQLBuild manages.
-- Macros are plain Python functions called as `@macro_name("arg")`. Constants and enums are
-  `@const("name")` and `@enum("name").MEMBER`.
+- Macros are typed SQL fragments called as `@sql.name(arg)` or Python functions called as
+  `@py.name("arg")`. Constants and enums are `@const("name")` and `@enum("name").MEMBER`.
 - Config, column schemas, contracts and audits live in the `MODEL()` header, not YAML.
 - Every model, scenario, seed, source, function, named hook, Python node and provider needs a
   non-empty description (`MODEL (description "...")`, `description:` in YAML, a docstring or
@@ -181,7 +181,9 @@ parameterised cases, scenarios, audits and Rules.
 swap for tables, and on each delta before DML for incremental models. Attach built-ins such as
 `not_null` and `unique` in the column schema.
 
-**Macros, enums and constants.** Macros are Python functions returning SQL strings; arguments are
+**Macros, enums and constants.** SQL macros (`macros/sql/`, one per file, called `@sql.name(...)`)
+are typed, logic-free SQL fragments; prefer them when no logic is needed. Python macros
+(`macros/python/`, called `@py.name(...)`) are functions returning SQL strings; arguments are
 Python literals, and SQL expressions are passed as quoted strings. Public functions become macros;
 prefix helpers with `_`. Macros work in model SQL, SQL hooks, tests, scenarios, audits and SQL
 functions, but not in ordinary `MODEL()` config fields. Placement decides visibility. Read
