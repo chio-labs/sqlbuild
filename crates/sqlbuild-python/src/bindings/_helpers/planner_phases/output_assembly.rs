@@ -21,7 +21,7 @@ use crate::bindings::_helpers::planner_phases::retention::{plan_retention, plan_
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::planner_phases::runtime::warehouse_field;
 use crate::bindings::_helpers::planner_warehouse::source_freshness::source_freshness_unknown_warnings;
-use crate::bindings::_helpers::records::construct::new_record_with;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
@@ -301,6 +301,91 @@ pub(crate) fn add_plan_warnings<'py>(
     )?;
     if stale.is_truthy()? {
         let warnings = concat(py, &[output.field("warnings")?, stale])?;
+        output.set("warnings", warnings);
+    }
+    Ok(output)
+}
+
+/// The unselected models the selected scope reads, sorted.
+pub(crate) fn unselected_upstream_models(scopes: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+    let py = scopes.py();
+    let selected = class_field(scopes, |s: &PlannerScopeResolution| &s.selected_scope)?;
+    let selected_keys = native_field(&selected, "selected_keys")?;
+    let upstream_deps = native_field(&selected, "upstream_deps")?;
+    let model_type = enum_member(py, RecordId::CompiledResourceType, "MODEL")?;
+    let mut names: Vec<String> = Vec::new();
+    for key in selected_keys.try_iter()? {
+        let Some(deps) = upstream_deps.downcast::<PyDict>()?.get_item(key?)? else {
+            continue;
+        };
+        for dep in deps.try_iter()? {
+            let dep = dep?;
+            if native_field(&dep, "resource_type")?.eq(&model_type)?
+                && !selected_keys.contains(&dep)?
+            {
+                names.push(native_field(&dep, "name")?.extract()?);
+            }
+        }
+    }
+    names.sort();
+    names.dedup();
+    Ok(names)
+}
+
+/// Note unselected upstreams deferred to pre-migration names, and each lookup in `failures`.
+pub(crate) fn add_deferred_origin_notes<'py>(
+    mut output: PlanOutputFields<'py>,
+    (project, scopes): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    (deferral, failures): (&Bound<'py, PyAny>, &[(String, String)]),
+) -> PyResult<PlanOutputFields<'py>> {
+    let py = project.py();
+    let locations = native_field(deferral, "deferred_locations")?;
+    if locations.is_none() {
+        return Ok(output);
+    }
+    let names: Vec<String> = unselected_upstream_models(scopes)?;
+    let warning = |name: &str, message: &str| -> PyResult<Bound<'py, PyAny>> {
+        native(
+            py,
+            RecordId::PlanWarning,
+            &[
+                ("model_name", text(py, name)),
+                (
+                    "severity",
+                    enum_member(py, RecordId::WarningSeverity, "WARNING")?,
+                ),
+                ("message", text(py, message)),
+            ],
+        )
+    };
+    let mut notes: Vec<Bound<'py, PyAny>> = Vec::new();
+    for model in native_field(project, "models")?.try_iter()? {
+        let model = model?;
+        let name: String = native_field(&model, "name")?.extract()?;
+        if names.binary_search(&name).is_err() {
+            continue;
+        }
+        let Some(location) = locations.downcast::<PyDict>()?.get_item(&name)? else {
+            continue;
+        };
+        if native_field(&location, "name")?
+            .eq(native_field(&native_field(&model, "destination")?, "name")?)?
+        {
+            continue;
+        }
+        notes.push(warning(
+            &name,
+            &format!(
+                "deferred to pre-migration name {}: the deferred target has not built model '{name}' under its current name yet",
+                native_field(&location, "qualified_name")?
+            ),
+        )?);
+    }
+    for (name, message) in failures {
+        notes.push(warning(name, message)?);
+    }
+    if !notes.is_empty() {
+        let warnings = concat(py, &[output.field("warnings")?, tuple(py, notes)?])?;
         output.set("warnings", warnings);
     }
     Ok(output)

@@ -142,6 +142,11 @@ For a model without a stable row key, opt in to exact full-row multiset comparis
 sqb diff prod:dev --full --select daily_order_totals --unkeyed
 ```
 
+Unkeyed diffs show sample complete rows that one side holds more often than the other, up to
+`--max-row-only-examples` per side; a row duplicated three more times on one side appears three
+times. In `--json`, they are `examples.from_only_rows` and `examples.to_only_rows`, and
+`from_only_keys` and `to_only_keys` stay empty because there is no key.
+
 The diff output categorises rows as:
 - **Equal** - same key, same values on both sides
 - **Unequal** - same key, different values (with per-column breakdown)

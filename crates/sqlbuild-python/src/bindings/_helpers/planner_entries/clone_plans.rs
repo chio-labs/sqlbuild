@@ -37,6 +37,13 @@ const ENABLED_KEY: &str = "enabled";
 
 const VIEW_MATERIALIZATION: &str = "view";
 const GRAPH_ARGUMENTS: [&str; 4] = ["selected", "upstream", "is_clonable", "is_view"];
+/// The clone phase that reads source columns from the warehouse.
+const SOURCE_INSPECTION_PHASE: &str = "source_inspection";
+/// The clone phase that plans entries from the compiled projects.
+const PLANNING_PHASE: &str = "planning";
+
+/// Each clone phase name with its seconds, in the order the phases ran.
+pub(crate) type PhaseTimings = Vec<(String, f64)>;
 
 /// Whether a model is explicitly disabled with a boolean `enabled = false`.
 fn disabled_model(model: &Bound<'_, PyAny>) -> PyResult<bool> {
@@ -511,6 +518,15 @@ pub(crate) fn run_clone_planning<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
+    Ok(timed_clone_planning(py, kwargs)?.0)
+}
+
+/// `run_clone_planning`, with the seconds spent inspecting sources and planning.
+pub(crate) fn timed_clone_planning<'py>(
+    py: Python<'py>,
+    kwargs: Option<Bound<'py, PyDict>>,
+) -> PyResult<(Bound<'py, PyTuple>, PhaseTimings)> {
+    let started = std::time::Instant::now();
     let args = KeywordArguments::read(
         py,
         "run_clone_planning",
@@ -534,11 +550,13 @@ pub(crate) fn run_clone_planning<'py>(
     let connection = args.value("connection")?;
     let destination_sources = args.value("destination_source_project")?;
     let plan = clone_plan_output(&project, &args.value("select")?, &args.value("exclude")?)?;
+    let inspection_started = std::time::Instant::now();
     let resolution = clone_resolution(
         (&project, &plan),
         &destination_sources,
         (&adapter, &connection),
     )?;
+    let inspection_seconds = inspection_started.elapsed().as_secs_f64();
     let models = clone_model_entries((&project, &plan), &adapter, &resolution)?;
     let seeds = seed_entries(&project, "key", &native_field(&plan, "selected_keys")?)?;
     let functions = clone_function_entries((&project, &plan), &adapter, &resolution)?;
@@ -580,7 +598,14 @@ pub(crate) fn run_clone_planning<'py>(
             kept_sources.push(entry);
         }
     }
-    PyTuple::new(
+    let timings: PhaseTimings = vec![
+        (SOURCE_INSPECTION_PHASE.to_owned(), inspection_seconds),
+        (
+            PLANNING_PHASE.to_owned(),
+            started.elapsed().as_secs_f64() - inspection_seconds,
+        ),
+    ];
+    let planned = PyTuple::new(
         py,
         [
             plan,
@@ -592,7 +617,8 @@ pub(crate) fn run_clone_planning<'py>(
             origin_seeds,
             tuple_of(py, kept_origins)?,
         ],
-    )
+    )?;
+    Ok((planned, timings))
 }
 
 /// The traversal callbacks and graph of one deferred-clone query.

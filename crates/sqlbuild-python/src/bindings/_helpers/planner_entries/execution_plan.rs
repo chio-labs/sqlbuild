@@ -13,6 +13,7 @@ use crate::bindings::_helpers::planner_entries::test_planning::{
 use crate::bindings::_helpers::planner_entries::values::{native, replaced};
 use crate::bindings::_helpers::planner_phases::buildability::check_selected_scope_buildability;
 use crate::bindings::_helpers::planner_phases::contexts::class_field;
+use crate::bindings::_helpers::planner_phases::deferred_origins::defer_to_migration_origins;
 use crate::bindings::_helpers::planner_phases::execution_changes::{
     build_planner_entry_results, reconcile_execution_changes,
 };
@@ -25,8 +26,10 @@ use crate::bindings::_helpers::planner_phases::models::PlannerScopeResolution;
 use crate::bindings::_helpers::planner_phases::models::{
     PlanOutputContext, PlanWarningContext, PlannedModelEntries, StoragePolicyContext,
 };
+use crate::bindings::_helpers::planner_phases::output_assembly::unselected_upstream_models;
 use crate::bindings::_helpers::planner_phases::output_assembly::{
-    add_plan_metadata, add_plan_warnings, add_storage_policies, base_plan_output,
+    add_deferred_origin_notes, add_plan_metadata, add_plan_warnings, add_storage_policies,
+    base_plan_output,
 };
 use crate::bindings::_helpers::planner_phases::runtime::warehouse_field;
 use crate::bindings::_helpers::planner_phases::scopes::resolve_planner_scopes;
@@ -112,6 +115,31 @@ fn change_results<'py>(
     Ok((changes, stale))
 }
 
+/// Redirect unselected upstreams to their `migrate_from` relation in the deferred target.
+fn deferred_migration_origins<'py>(
+    args: &KeywordArguments<'py>,
+    scopes: &Bound<'py, PyAny>,
+    deferral: &Bound<'py, PyAny>,
+) -> PyResult<Vec<(String, String)>> {
+    let locations = native_field(deferral, "deferred_locations")?;
+    let relations = native_field(deferral, "deferred_relations")?;
+    if locations.is_none() || relations.is_none() {
+        return Ok(Vec::new());
+    }
+    defer_to_migration_origins(
+        (
+            &args.value("project")?,
+            &args.value("adapter")?,
+            &args.value("connection")?,
+        ),
+        (
+            locations.downcast::<PyDict>()?,
+            relations.downcast::<PyDict>()?,
+        ),
+        &unselected_upstream_models(scopes)?,
+    )
+}
+
 /// The plan phases after warehouse inspection, run inside the inspection catalog.
 fn planned_output<'py>(
     args: &KeywordArguments<'py>,
@@ -123,6 +151,7 @@ fn planned_output<'py>(
     let py = project.py();
     let deferral = args.value("deferral")?;
     let policies = args.value("policies")?;
+    let origin_failures = deferred_migration_origins(args, scopes, &deferral)?;
     let warehouse = gather_planner_warehouse_state(runtime, scopes, overrides, &deferral)?;
     let started = Instant::now();
     let identities = build_planner_identity_context(
@@ -193,6 +222,8 @@ fn planned_output<'py>(
         },
         (&source_freshness, &policies),
     )?;
+    let output =
+        add_deferred_origin_notes(output, (&project, scopes), (&deferral, &origin_failures))?;
     let plan_output = add_plan_metadata(output, &source_freshness, &policies)?.build(py)?;
     let on_progress = args.value("on_progress")?;
     if !on_progress.is_none() {

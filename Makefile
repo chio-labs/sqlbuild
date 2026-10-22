@@ -93,6 +93,7 @@ E2E_DUCKDB_BUILD_CORE_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_python_hooks.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_python_node_selection.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_python_source_deferral.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_defer_migration_origin.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_sql_hook_reads.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_python_node_identity.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_sql_hook_identity.py \
@@ -123,6 +124,7 @@ E2E_DUCKDB_BUILD_INCREMENTAL_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_microbatch_aware_cursor_date_input.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_microbatch_direct_lifecycle.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_microbatch_failure_windows.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_microbatch_batch_progress.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_microbatch_replay_backfill_lifecycle.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_mixed_timestamp_grain_replay.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_model_backed_cursor_build.py \
@@ -144,7 +146,8 @@ E2E_DUCKDB_CLI_DATA_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_interrupts.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_empty_fixture.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_expected_columns.py \
-	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_helper_ctes.py
+	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_helper_ctes.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_unmocked_inputs.py
 
 E2E_DUCKDB_CLI_PATHS := \
 	tests/e2e/scripts/cli_preview \

@@ -1,3 +1,4 @@
+use crate::build_progress::main::batch_progress_message::batch_progress_message;
 use crate::build_progress::main::format_build_footer::format_build_footer;
 use crate::build_progress::main::progress_name_width::progress_name_width;
 use crate::build_progress::main::render_build_spinner_line::render_build_spinner_line;
@@ -5,13 +6,13 @@ use crate::build_progress::main::render_failed_test_result::render_failed_test_r
 use crate::build_progress::main::render_model_result::render_model_result;
 use crate::build_progress::main::scheduler_diagnostic_message::scheduler_diagnostic_message;
 use crate::build_progress::models::{
-    BuildResultText, ErrorText, LifecycleEventText, ModelResultText, ModelRowFacts,
-    NameWidthInputs, ProgressLayout, PythonNodeText, SchedulerStateText, SpinnerRow,
+    BatchProgressText, BuildResultText, ErrorText, LifecycleEventText, ModelResultText,
+    ModelRowFacts, NameWidthInputs, ProgressLayout, PythonNodeText, SchedulerStateText, SpinnerRow,
 };
 use crate::build_progress::tests::helpers::{audit, failed_model, layout, model, test};
 use crate::build_progress::tests::test_types::{
-    FailedTestTestCase, FooterTestCase, InlineErrorTestCase, ModelRowTestCase, NameWidthTestCase,
-    SchedulerTestCase, SpinnerTestCase,
+    BatchProgressTestCase, FailedTestTestCase, FooterTestCase, InlineErrorTestCase,
+    ModelRowTestCase, NameWidthTestCase, SchedulerTestCase, SpinnerTestCase,
 };
 use crate::cli_text::main::format_inline_error_lines::format_inline_error_lines;
 use crate::cli_text::models::CliStyle;
@@ -288,6 +289,39 @@ fn given_long_error_when_wrapping_inline_then_truncates_to_two_lines() {
         assert_eq!(
             format_inline_error_lines(test_case.error, test_case.width, PLAIN),
             test_case.expected_lines,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_completed_batch_when_describing_then_names_model_window_rows_and_time() {
+    let batch = |rows_affected: Option<i64>| BatchProgressText {
+        model_name: "daily_orders".to_owned(),
+        batch_number: 2,
+        batch_count: 12,
+        window: "2024-02-01..2024-03-01".to_owned(),
+        rows_affected,
+        elapsed_seconds: 1.26,
+    };
+    let test_cases = [
+        BatchProgressTestCase {
+            description: "known row count",
+            batch: batch(Some(40)),
+            expected_text: "Batch  daily_orders  2/12  2024-02-01..2024-03-01  40 rows  1.3s",
+        },
+        BatchProgressTestCase {
+            description: "unknown row count",
+            batch: batch(None),
+            expected_text: "Batch  daily_orders  2/12  2024-02-01..2024-03-01  1.3s",
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            batch_progress_message(&test_case.batch),
+            test_case.expected_text,
             "{}",
             test_case.description
         );

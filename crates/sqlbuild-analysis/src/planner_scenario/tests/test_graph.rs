@@ -76,6 +76,56 @@ fn given_scenario_dependencies_when_planning_then_preserves_closure_and_warning_
                 ),
             ],
         },
+        GraphTestCase {
+            description: "unmocked inputs beside mocked ones are named before the sources",
+            input: ScenarioGraphInput {
+                name: "orders".into(),
+                targets: vec!["summary".into()],
+                refs: vec!["staging".into()],
+                models: [
+                    (
+                        "summary".into(),
+                        vec![
+                            ("model".into(), "staging".into()),
+                            ("model".into(), "sales_rep".into()),
+                            ("model".into(), "manager".into()),
+                        ],
+                    ),
+                    ("staging".into(), vec![("source".into(), "hidden".into())]),
+                    (
+                        "sales_rep".into(),
+                        vec![
+                            ("source".into(), "raw.reps".into()),
+                            ("source".into(), "raw.a".into()),
+                            ("source".into(), "raw.b".into()),
+                        ],
+                    ),
+                    (
+                        "manager".into(),
+                        vec![
+                            ("source".into(), "raw.c".into()),
+                            ("source".into(), "raw.d".into()),
+                            ("source".into(), "raw.e".into()),
+                        ],
+                    ),
+                ]
+                .into(),
+                ..ScenarioGraphInput::default()
+            },
+            expected_models: vec!["manager", "sales_rep", "summary"],
+            expected_refs: vec!["staging"],
+            expected_functions: vec![],
+            expected_warnings: vec![
+                (
+                    "Scenario 'orders': model 'summary' reads 'sales_rep' and 'manager', which are not mocked, while its other model inputs are. Add CTEs named __ref__sales_rep AS (...) and __ref__manager AS (...).",
+                    false,
+                ),
+                (
+                    "Scenario 'orders' requires 6 sources without fixtures: raw.a, raw.b, raw.c, raw.d, raw.e and 1 more.",
+                    false,
+                ),
+            ],
+        },
     ];
     for test_case in test_cases {
         let result = graph(&test_case.input);

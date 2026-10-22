@@ -937,3 +937,56 @@ def build_helper_scenario_project_files(*, helper_ctes: str, check_ctes: str) ->
             f"{_EXPECTED_COLUMNS_FIXTURE}{helper_ctes},\n\n{check_ctes}\n\nSELECT 1\n"
         ),
     }
+
+
+_UNMOCKED_REP_SOURCES: tuple[str, ...] = tuple(f"raw_reps_{index}" for index in range(8))
+
+
+def build_unmocked_input_scenario_project_files() -> dict[str, str]:
+    """Build scenarios that mock one input of order_reps and leave a source-backed one real."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": (
+            'name = "unmocked_inputs"\nadapter = "duckdb"\n\n'
+            '[connection]\ndatabase = "unmocked_inputs.duckdb"\n'
+        ),
+        "sources/raw.yml": "sources:\n"
+        + "".join(
+            f"  - name: {name}\n    description: Test source {name}.\n"
+            f"    schema: main\n    table: {name}\n"
+            for name in ("raw_orders", *_UNMOCKED_REP_SOURCES)
+        ),
+        "models/stg_orders.sql": (
+            'MODEL (description "Test model stg_orders.");\n\n'
+            'SELECT order_id, rep_id FROM __source("raw_orders")\n'
+        ),
+        "models/stg_sales_reps.sql": (
+            'MODEL (description "Test model stg_sales_reps.");\n\n'
+            + "\nUNION ALL\n".join(
+                f'SELECT rep_id, rep_name FROM __source("{name}")' for name in _UNMOCKED_REP_SOURCES
+            )
+            + "\n"
+        ),
+        "models/order_reps.sql": (
+            'MODEL (description "Test model order_reps.");\n\n'
+            "SELECT o.order_id, r.rep_name\n"
+            'FROM __ref("stg_orders") AS o\n'
+            'JOIN __ref("stg_sales_reps") AS r ON o.rep_id = r.rep_id\n'
+        ),
+        "tests/scenarios/order_reps_ok.sql": (
+            "SCENARIO (description 'Test scenario order_reps_ok.');\n\n"
+            "WITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 7 AS rep_id),\n"
+            "__ref__stg_sales_reps AS (SELECT 7 AS rep_id, 'Ana' AS rep_name),\n"
+            "__expected__order_reps AS (SELECT 1 AS order_id, 'Ana' AS rep_name)\n"
+            "SELECT 1\n"
+        ),
+        "tests/scenarios/order_reps_unmocked.sql": (
+            "SCENARIO (description 'Test scenario order_reps_unmocked.');\n\n"
+            "WITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 7 AS rep_id),\n"
+            "__expected__order_reps AS (SELECT 1 AS order_id, 'Ana' AS rep_name)\n"
+            "SELECT 1\n"
+        ),
+    }
+    return files

@@ -11,6 +11,8 @@ from sqlbuild._native import (
     resolve_row_diff_sampling,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.classes.unkeyed_diff import UnkeyedDiffMixin
+from sqlbuild.adapter.contract.constants import DIFF_LEFT_SIDE, DIFF_RIGHT_SIDE
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     RowDiffCoverage,
@@ -207,6 +209,14 @@ def execute_query_diff(
             right=right_relation,
             excluded_columns=excluded_columns,
         )
+        left_only_rows, right_only_rows = _unkeyed_side_only_samples(
+            adapter=adapter,
+            connection=connection,
+            relations=(left_relation, right_relation),
+            row_result=row_result,
+            options=options,
+            excluded_columns=excluded_columns,
+        )
         return replace(
             result,
             row_result=replace(
@@ -214,6 +224,8 @@ def execute_query_diff(
                 left_coverage=left_coverage,
                 right_coverage=right_coverage,
             ),
+            left_only_key_samples=left_only_rows,
+            right_only_key_samples=right_only_rows,
         )
     sampling: RowDiffSampling | None = resolve_row_diff_sampling(
         raw_row_limit=None,
@@ -424,6 +436,15 @@ def _execute_model_row_diff(
             start_cursor=start_cursor,
             end_cursor=end_cursor,
         )
+        unkeyed_left_rows, unkeyed_right_rows = _unkeyed_side_only_samples(
+            adapter=adapter,
+            connection=connection,
+            relations=(left_relation, right_relation),
+            row_result=row_result,
+            options=options,
+            excluded_columns=excluded_columns,
+            cursor=(cursor_column, start_cursor, end_cursor),
+        )
         return (
             replace(
                 row_result,
@@ -434,8 +455,8 @@ def _execute_model_row_diff(
                 cursor_end=end_cursor.value if end_cursor is not None else None,
             ),
             (),
-            (),
-            (),
+            unkeyed_left_rows,
+            unkeyed_right_rows,
             bounded_fallback,
             excluded_columns,
         )
@@ -523,6 +544,44 @@ def _execute_model_row_diff(
         bounded_fallback,
         excluded_columns,
     )
+
+
+def _unkeyed_side_only_samples(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    relations: tuple[str, str],
+    row_result: RowDiffResult,
+    options: DiffExecutionOptions,
+    excluded_columns: tuple[str, ...],
+    cursor: tuple[str | None, Any | None, Any | None] = (None, None, None),
+) -> tuple[tuple[tuple[tuple[str, object], ...], ...], tuple[tuple[tuple[str, object], ...], ...]]:
+    """Return bounded samples of the complete rows each side holds more often than the other."""
+
+    samples: list[tuple[tuple[tuple[str, object], ...], ...]] = []
+    side: str
+    count: int
+    for side, count in (
+        (DIFF_LEFT_SIDE, row_result.left_only_count),
+        (DIFF_RIGHT_SIDE, row_result.right_only_count),
+    ):
+        if not options.collect_samples or count <= 0 or not isinstance(adapter, UnkeyedDiffMixin):
+            samples.append(())
+            continue
+        samples.append(
+            adapter.sample_unkeyed_side_only_rows(
+                connection=connection,
+                left=relations[0],
+                right=relations[1],
+                side=side,
+                excluded_columns=excluded_columns,
+                cursor_column=cursor[0],
+                start_cursor=cursor[1],
+                end_cursor=cursor[2],
+                limit=options.max_row_only_examples,
+            )
+        )
+    return samples[0], samples[1]
 
 
 def _model_has_unique_key(model: Any) -> bool:

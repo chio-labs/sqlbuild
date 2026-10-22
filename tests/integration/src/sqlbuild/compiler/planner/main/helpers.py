@@ -590,6 +590,63 @@ class CountingSourceDuckDbAdapter(DuckDbAdapter):
         return super().probe_relation_read(connection=connection, relation=relation)
 
 
+class UnlistedDatabaseDuckDbAdapter(CountingSourceDuckDbAdapter):
+    """Plan against one shared DuckDB connection whose listings of one database fail."""
+
+    def __init__(self, *, connection: Any, unlisted_database: str) -> None:
+        super().__init__(connection=connection)
+        self._unlisted_database: str = unlisted_database
+        self.listed_databases: list[str | None] = []
+
+    def list_relations(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> tuple[RelationInfo, ...]:
+        self.listed_databases.append(database)
+        _LISTING_GUARDS[database == self._unlisted_database](database)
+        return super().list_relations(
+            connection=connection, database=database, schemas=schemas, names=names
+        )
+
+
+def _allow_listing(database: str | None) -> None:
+    del database
+
+
+def _refuse_listing(database: str | None) -> None:
+    raise RuntimeError(f"cannot list database {database}")
+
+
+_LISTING_GUARDS: MappingProxyType[bool, Callable[[str | None], None]] = MappingProxyType(
+    {False: _allow_listing, True: _refuse_listing}
+)
+
+
+def plan_deferred_project(
+    *,
+    project_dir: Path,
+    adapter: DuckDbAdapter,
+    project_files: dict[str, str],
+    select: tuple[str, ...],
+) -> CompilePipelineResult:
+    """Write a project with `dev` and `prod` targets and plan `select` deferring to prod."""
+
+    relative_path: str
+    contents: str
+    for relative_path, contents in project_files.items():
+        (project_dir / relative_path).parent.mkdir(parents=True, exist_ok=True)
+        (project_dir / relative_path).write_text(contents, encoding="utf-8")
+    return run_compile_pipeline(
+        discovered_inputs=discover_project_inputs(project_dir=project_dir),
+        adapter=adapter,
+        options=CompilePipelineOptions(no_sql_validation=True, defer_to="prod", select=select),
+    )
+
+
 def plan_source_reading_project(
     *, project_dir: Path, adapter: DuckDbAdapter, source_schema: str, source_table: str
 ) -> CompilePipelineResult:

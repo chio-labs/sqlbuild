@@ -1,6 +1,6 @@
 use crate::build_progress::models::{
-    BuildResultText, ModelResultText, NameWidthInputs, PythonNodeText, SchedulerStateText,
-    SpinnerRow, TestResultText,
+    BatchProgressText, BuildResultText, ModelResultText, NameWidthInputs, PythonNodeText,
+    SchedulerStateText, SpinnerRow, TestResultText,
 };
 
 pub(super) struct FooterTestCase {
@@ -49,4 +49,10 @@ pub(super) struct InlineErrorTestCase {
     pub(super) error: (Option<&'static str>, &'static str, Option<&'static str>),
     pub(super) width: usize,
     pub(super) expected_lines: &'static [&'static str],
+}
+
+pub(super) struct BatchProgressTestCase {
+    pub(super) description: &'static str,
+    pub(super) batch: BatchProgressText,
+    pub(super) expected_text: &'static str,
 }

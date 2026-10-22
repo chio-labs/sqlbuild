@@ -8,9 +8,10 @@ use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple, PyTupleMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::cli_text::main::format_summary_footer::format_summary_footer;
 use sqlbuild_core::cli_text::models::{CliStyle, SummaryCount};
+use sqlbuild_core::scenario_command::main::render_scenario_failures::render_scenario_failures;
 use sqlbuild_core::scenario_command::main::validate_scenario_test_flags::validate_scenario_test_flags;
 use sqlbuild_core::scenario_command::models::{
-    ScenarioNamespace, ScenarioTestFlags, SqlAnalysisCommand,
+    ScenarioNamespace, ScenarioResultRow, ScenarioTestFlags, SqlAnalysisCommand,
 };
 use sqlbuild_host::entries::models::ExecutorHost;
 
@@ -21,7 +22,7 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::result_output::documents::format_scenario_execution_json;
 use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
-use crate::bindings::_helpers::scenario_command::conversions::succeeded;
+use crate::bindings::_helpers::scenario_command::conversions::{scenario_result_row, succeeded};
 use crate::bindings::_helpers::scenario_command::presentation::{
     CompletionKind, RelayContext, SectionStatus, activity, begin_section, connection_hooks,
     progress_relay, write_completion,
@@ -142,6 +143,14 @@ fn finish(
             format_summary_footer(run.style, &counts, Some(&format!("{elapsed_seconds:.2}s")))
         ),
     )?;
+    let rows: Vec<ScenarioResultRow> = results
+        .iter()
+        .map(|result| scenario_result_row(&result))
+        .collect::<PyResult<_>>()?;
+    let failures: String = render_scenario_failures(&rows, run.style);
+    if !failures.is_empty() {
+        write(&run.stream, &format!("{failures}\n"))?;
+    }
     flush(&run.stream)?;
     write_completion(&run.stream, (&run.project.namespace, succeeded))?;
     let namespace: &ScenarioNamespace = &run.project.namespace;

@@ -113,7 +113,7 @@ def test_given_verbose_runtime_diagnostics_when_reporting_then_writes_concise_ra
             expected_fragments=(
                 "Scheduler diagnostics  2 transitions omitted after 50",
                 "51 waiting on dependencies",
-                "Query diagnostics  2 statements omitted after 25",
+                "Query diagnostics  2 statements omitted after 25 per resource",
                 "query-26",
             ),
             expected_absent_fragments=("query-25  success",),
@@ -142,6 +142,16 @@ def test_given_high_volume_runtime_diagnostics_when_closing_then_output_is_bound
                 phase="microbatch",
             )
         )
+    callbacks.on_statement_complete(
+        StatementExecutionTelemetry(
+            query_id="customers-query",
+            status="success",
+            elapsed_seconds=0.1,
+            resource_type="model",
+            resource_name="customers",
+            phase="materialize",
+        )
+    )
     callbacks.close()
 
     output: str = capsys.readouterr().out
@@ -152,7 +162,8 @@ def test_given_high_volume_runtime_diagnostics_when_closing_then_output_is_bound
     for absent_fragment in test_case.expected_absent_fragments:
         assert absent_fragment not in output
     assert output.count("Scheduler  ") == 51
-    assert output.count("Query  model") == 26
+    assert output.count("Query  model orders") == 26
+    assert "Query  model customers  phase=materialize  customers-query" in output
 
 
 @pytest.mark.parametrize(

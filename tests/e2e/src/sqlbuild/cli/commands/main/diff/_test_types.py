@@ -96,3 +96,15 @@ class DefaultFullDiffE2ETestCase:
     unexpected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
     expected_json_status: str | None = None
     expected_json_blocked_models: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class UnkeyedExamplesE2ETestCase:
+    """An unkeyed diff and the order IDs of the side-only example rows it reports."""
+
+    description: str
+    mutation_sql: tuple[str, ...]
+    command: tuple[str, ...]
+    expected_from_order_ids: tuple[int, ...]
+    expected_to_order_ids: tuple[int, ...]
+    expected_truncated: bool

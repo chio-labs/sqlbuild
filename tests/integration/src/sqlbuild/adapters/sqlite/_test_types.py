@@ -210,3 +210,12 @@ class SqliteRetypeIndexTestCase:
     description: str
     expected_indexes: tuple[tuple[object, ...], ...]
     expected_columns: tuple[ColumnInfo, ...]
+
+
+@dataclass(frozen=True)
+class SqliteUnkeyedSampleTestCase:
+    description: str
+    left_sql: str
+    limit: int
+    expected_row_count: int
+    expected_order_ids: frozenset[object]
