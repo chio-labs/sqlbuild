@@ -55,6 +55,7 @@ pub fn consume_dbt_event(
         .pending_messages
         .remove(&result.unique_id)
         .unwrap_or_default();
+    result.messages.extend(node_message(event));
     if !state.recorded_unique_ids.insert(result.unique_id.clone()) {
         return (state, None);
     }
