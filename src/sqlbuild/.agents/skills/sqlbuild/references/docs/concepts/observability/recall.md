@@ -409,9 +409,9 @@ These run as written on the local SQLite store; on ClickHouse, read JSON with
 `JSONExtractString(external_context, 'integration', 'job_name')`.
 
 The latest runs of an orchestrated job, by the context its integration records (the Dagster
-integration records `run_id`, `job_name`, `step_key`, `retry_number` and `partition_key`). This
-finds runs recorded by SQLBuild 0.168.0 or later; earlier versions stored the context in a form
-the JSON functions cannot read, so those runs are skipped without an error:
+integration records `run_id`, `job_name`, `step_key`, `retry_number` and `partition_key`). Runs
+recorded before this context was stored as JSON hold it in a form the JSON functions cannot read,
+so this query skips them without an error:
 
 ```bash
 sqb recall query "SELECT invocation_id, invocation_started_at, status, duration_ms
