@@ -1,4 +1,6 @@
-use crate::janitor_text::models::{ArchiveCandidateText, ArchivedRelationText, JanitorPlanText};
+use crate::janitor_text::models::{
+    ArchiveCandidateText, ArchivedRelationText, JanitorItemText, JanitorPhase, JanitorPlanText,
+};
 
 /// A direct-mode plan for `dev` that archives one relation and deletes one archive.
 pub(super) fn direct_archive_plan() -> JanitorPlanText {
@@ -15,6 +17,50 @@ pub(super) fn direct_archive_plan() -> JanitorPlanText {
             name: "dev.old_products".to_owned(),
             ..ArchivedRelationText::default()
         }],
+        ..JanitorPlanText::default()
+    }
+}
+
+/// A finished action of `phase`, failed when `error` is given.
+pub(super) fn item(
+    phase: JanitorPhase,
+    (action, name, destination): (&str, &str, Option<&str>),
+    error: Option<&str>,
+) -> JanitorItemText {
+    JanitorItemText {
+        phase,
+        action: action.to_owned(),
+        name: name.to_owned(),
+        destination: destination.map(str::to_owned),
+        error: error.map(str::to_owned),
+        duration_seconds: Some(0.5),
+    }
+}
+
+/// A direct-mode plan archiving `count` relations, with `skipped` objects for two reasons.
+pub(super) fn large_plan(count: usize, skipped: usize) -> JanitorPlanText {
+    JanitorPlanText {
+        target_name: Some("dev".to_owned()),
+        retention_days: 14,
+        direct_mode: true,
+        archive_retention_days: 14,
+        archive_candidates: (0..count)
+            .map(|index| ArchiveCandidateText {
+                name: format!("dev.old_orders_{index:03}"),
+                archive_name: format!("dev._sqb_archive__20260924t101500z__old_orders_{index:03}"),
+                ..ArchiveCandidateText::default()
+            })
+            .collect(),
+        skipped_relations: (0..skipped)
+            .map(|index| {
+                let reason: &str = if index % 3 == 0 {
+                    "relation is newer than 14 days"
+                } else {
+                    "not tracked by SQLBuild"
+                };
+                (format!("dev.recent_{index:03}"), reason.to_owned())
+            })
+            .collect(),
         ..JanitorPlanText::default()
     }
 }

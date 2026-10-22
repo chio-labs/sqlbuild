@@ -87,6 +87,7 @@ class JanitorArchiveExecutionTestCase:
     expected_dropped_targets: tuple[str, ...]
     expected_dropped_view_targets: tuple[str, ...]
     expected_event_insert_count: int
+    expected_event_row_count: int
     expected_event_table_create_count: int
 
 
