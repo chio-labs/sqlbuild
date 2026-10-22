@@ -313,9 +313,10 @@ writing to an upgraded store. `--ddl` prints SQL, so it cannot be combined with 
   recorded. When it has expired anyway, a writer compares the stored tables' and views' columns
   with its own: it upgrades an older store, records its version on a current one, and never
   replaces the views of a store a newer SQLBuild version created.
-- **Writes.** History is sent in batches of up to 5,000 rows about once a second, one insert per
-  table, with the same queue, shutdown budget and exit-code guarantees as the local store. Many
-  concurrent commands can write one store.
+- **Writes.** History is sent in batches of up to 5,000 rows about every five seconds, one insert
+  per table, so a long command adds few parts; everything still queued is sent when it ends, with
+  the same queue, shutdown budget and exit-code guarantees as the local store. Many concurrent
+  commands can write one store.
 - **Duplicates.** Every row has a deterministic key. A retried batch is deduplicated by ClickHouse,
   and the views read each key once, so a repeated delivery is counted once: views that list or count
   rows read the `ReplacingMergeTree` tables with `FINAL`, and `invocations` and `statements`, which

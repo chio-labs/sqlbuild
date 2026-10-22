@@ -2,6 +2,8 @@
 
 pub const QUEUE_RECORD_CAPACITY: usize = 10_000;
 pub const QUEUE_BYTE_CAPACITY: usize = 32 * 1024 * 1024;
+/// A batch is sent before its window once this many bytes are ready, so a long window never fills the queue.
+pub const EARLY_BATCH_BYTES: usize = QUEUE_BYTE_CAPACITY / 4;
 pub const BATCH_ROWS: usize = 500;
 pub const BATCH_WINDOW_MS: u64 = 250;
 /// Contiguous writes to one stream coalesce into one chunk for at most this long.

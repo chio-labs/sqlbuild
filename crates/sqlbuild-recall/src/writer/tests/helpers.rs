@@ -17,7 +17,8 @@ use crate::writer::models::{
     DeliveryStream, DeliverySummary, Priority, SessionConfig, SessionStore, SetupOutcome,
 };
 use crate::writer::tests::test_types::{
-    CopyingReplacement, PartialStore, PrefixReplacement, RecordedSession, RecordingReplacement,
+    CopyingReplacement, OutputBytesStore, PartialStore, PrefixReplacement, RecordedSession,
+    RecordingReplacement,
 };
 
 /// The envelope of invocation `invocation_id`.
@@ -376,6 +377,29 @@ pub(crate) fn replaced_session(
     )
     .expect("the query is valid");
     (transcript.data, facts.rows)
+}
+
+/// Output bytes a store with a ten-minute batch window received `wait` after `written_bytes` were printed, and the output records dropped by close.
+pub(crate) fn sent_before_the_window(written_bytes: usize, wait: Duration) -> (usize, u64) {
+    let store = OutputBytesStore::default();
+    let session = start_recall_session(SessionConfig {
+        store: SessionStore::Hosted(Arc::new(store.clone())),
+        ..config(PathBuf::from("unused"), "burst")
+    });
+    let line: Vec<u8> = vec![b'x'; 4096];
+    for _ in 0..written_bytes / line.len() {
+        session.append_output(OutputStream::Stdout, &line);
+    }
+    std::thread::sleep(wait);
+    let sent: usize = *store
+        .received
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let summary = session.close();
+    (
+        sent,
+        stream_counts(&summary, DeliveryStream::Output).dropped,
+    )
 }
 
 /// `(accepted, delivered, failed)` of events and output after one batch whose insert into `failing` fails.
