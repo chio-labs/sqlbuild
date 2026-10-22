@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.167.1](https://github.com/chio-labs/sqlbuild/compare/v0.167.0...v0.167.1) (2026-10-22)
+
+
+### Bug Fixes
+
+* deferral, refactor, microbatch progress, scenario, diff and clone fixes ([#1212](https://github.com/chio-labs/sqlbuild/issues/1212)) ([78b3adc](https://github.com/chio-labs/sqlbuild/commit/78b3adc62b8375ea082bf2ed0d97c5a5fdd7e67f))
+* evaluate every rule over the whole project on selected runs ([#1216](https://github.com/chio-labs/sqlbuild/issues/1216)) ([5f46d68](https://github.com/chio-labs/sqlbuild/commit/5f46d68fb9442b3a9c0c007d2ee4aa297f74c792))
+* match interrupted connections by the connection, not a reusable id ([#1214](https://github.com/chio-labs/sqlbuild/issues/1214)) ([e1a2850](https://github.com/chio-labs/sqlbuild/commit/e1a285091c1338719dc4da0732a0d98a8dc5cc14))
+
 ## [0.167.0](https://github.com/chio-labs/sqlbuild/compare/v0.166.0...v0.167.0) (2026-10-22)
 
 
