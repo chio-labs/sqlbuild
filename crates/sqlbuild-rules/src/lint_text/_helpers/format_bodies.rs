@@ -17,8 +17,9 @@ use crate::dsl_headers::models::HeaderSpan;
 use crate::lint_text::_helpers::sites::compiled;
 use crate::lint_text::constants::{
     DECLARATION_GROUP_DIRECTORY, DECLINED_WITHOUT_REASON, FIXTURE_HEADER_KINDS, FORMAT_API_VERSION,
-    GLOBAL_NAMED_ROOTS, GROUPED_NAMED_ROLES, LINE_COMMENT_PREFIX, MAX_FUNCTION_CALL_DEPTH,
-    MOVED_OMITTED_SELECT, OMITTED_CEREMONIAL_SELECT_SQL, OMITTED_SELECT_SUFFIX_PATTERN,
+    GLOBAL_NAMED_ROOTS, GROUPED_NAMED_ROLES, LINE_COMMENT_PREFIX, MACRO_HEADER_KIND,
+    MAX_FUNCTION_CALL_DEPTH, MOVED_OMITTED_SELECT, OMITTED_CEREMONIAL_SELECT_SQL,
+    OMITTED_SELECT_SUFFIX_PATTERN,
 };
 use crate::lint_text::errors::LintTextError;
 use crate::lint_text::main::neutralize_interpolation::neutralize_interpolation;
@@ -115,6 +116,9 @@ pub(crate) fn prepare_file(
     let omits: bool = headers
         .iter()
         .any(|header| FIXTURE_HEADER_KINDS.contains(&header.kind.as_str()));
+    let sql_macro: bool = headers
+        .iter()
+        .any(|header| header.kind == MACRO_HEADER_KIND);
     let syntax: LexicalSyntax = LexicalSyntax {
         line_comment_prefixes: vec![LINE_COMMENT_PREFIX.to_string()],
         ..LexicalSyntax::default()
@@ -128,7 +132,13 @@ pub(crate) fn prepare_file(
             .map_or(0, |index| index + 1);
         let mut core: String = body[..core_end].iter().collect();
         let mut trailing: String = body[core_end..].iter().collect();
-        let omitted: Option<usize> = if omits {
+        let omitted: Option<usize> = if sql_macro {
+            match macro_body_form(&core) {
+                MacroBodyForm::CteList => Some(core.chars().count()),
+                MacroBodyForm::ColumnList => None,
+                MacroBodyForm::Expression => continue,
+            }
+        } else if omits {
             match omitted_select_offset(&core, &syntax) {
                 OmittedSelect::At(offset) => Some(offset),
                 OmittedSelect::Absent => None,
@@ -158,6 +168,41 @@ pub(crate) fn prepare_file(
         prepared.push((body, sql, widths));
     }
     Ok(prepared)
+}
+
+/// How a SQL macro body starts, which decides how it is formatted.
+enum MacroBodyForm {
+    /// A `WITH` list, formatted with a final query added and removed again.
+    CteList,
+    /// A `SELECT` list, formatted as it stands.
+    ColumnList,
+    /// An expression, left as authored.
+    Expression,
+}
+
+/// The form of a SQL macro body, read from its first word after comments.
+fn macro_body_form(body: &str) -> MacroBodyForm {
+    let mut rest: &str = body;
+    loop {
+        rest = rest.trim_start();
+        if let Some(comment) = rest.strip_prefix(LINE_COMMENT_PREFIX) {
+            rest = comment.split_once('\n').map_or("", |(_, after)| after);
+        } else if let Some(comment) = rest.strip_prefix("/*") {
+            rest = comment.split_once("*/").map_or("", |(_, after)| after);
+        } else {
+            break;
+        }
+    }
+    let word: String = rest
+        .chars()
+        .take_while(|character| character.is_ascii_alphabetic())
+        .collect::<String>()
+        .to_ascii_uppercase();
+    match word.as_str() {
+        "WITH" => MacroBodyForm::CteList,
+        "SELECT" => MacroBodyForm::ColumnList,
+        _ => MacroBodyForm::Expression,
+    }
 }
 
 /// The printed width of the SQLBuild syntax each sentinel stands in for, where it differs.

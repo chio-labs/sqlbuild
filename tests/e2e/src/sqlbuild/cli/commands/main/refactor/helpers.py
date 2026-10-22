@@ -91,24 +91,24 @@ UDF_FILE: tuple[str, str] = (
     "\n  arguments (amount INTEGER),\n  returns BOOLEAN,\n);\n\namount >= 100\n",
 )
 CENTS_MACRO: dict[str, str] = {
-    "models/staging/_sqlbuild/_macros/cents.py": (
+    "models/staging/_sqlbuild/_macros/python/cents.py": (
         'def to_cents(expression: str) -> str:\n    return f"({expression}) * 100"\n'
     ),
     "models/staging/stg_order_cents.sql": (
         "MODEL (description 'Test model stg_order_cents.',\n  materialized view,\n);\n\n"
-        'SELECT\n  order_id,\n  @to_cents("amount") AS amount_cents\nFROM __ref("stg_orders")\n'
+        'SELECT\n  order_id,\n  @py.to_cents("amount") AS amount_cents\nFROM __ref("stg_orders")\n'
     ),
 }
 ORDER_REFUNDS: dict[str, str] = {
     "models/staging/stg_order_refunds.sql": (
         "MODEL (description 'Test model stg_order_refunds.',\n  materialized view,\n);\n\n"
-        'SELECT\n  order_id,\n  @to_cents("amount") AS refund_cents\nFROM __ref("stg_orders")\n'
+        'SELECT\n  order_id,\n  @py.to_cents("amount") AS refund_cents\nFROM __ref("stg_orders")\n'
     ),
 }
 SPLIT_CENTS_MACROS: dict[str, str] = {
     **CENTS_MACRO,
-    "models/staging/_sqlbuild/_macros/cents.py": (
-        CENTS_MACRO["models/staging/_sqlbuild/_macros/cents.py"]
+    "models/staging/_sqlbuild/_macros/python/cents.py": (
+        CENTS_MACRO["models/staging/_sqlbuild/_macros/python/cents.py"]
         + '\n\ndef to_dollars(expression: str) -> str:\n    return f"({expression}) / 100"\n'
     ),
     "models/staging/stg_order_refunds.sql": ORDER_REFUNDS[
@@ -351,12 +351,12 @@ FLAGGED_LITERAL_AUDIT: dict[str, str] = {
 }
 ORDERS_MACRO: dict[str, str] = {
     "sqlbuild_project.toml": _PROJECT_TOML + "\n[references]\nenforce_explicit = false\n",
-    "models/staging/_sqlbuild/_macros/orders.py": (
+    "models/staging/_sqlbuild/_macros/python/orders.py": (
         "def staged_orders() -> str:\n    return '__ref(\"stg_orders\")'\n"
     ),
     "models/staging/stg_order_count.sql": (
         "MODEL (description 'Test model stg_order_count.',\n  materialized view,\n);\n\n"
-        "SELECT COUNT(*) AS order_count\nFROM @staged_orders()\n"
+        "SELECT COUNT(*) AS order_count\nFROM @py.staged_orders()\n"
     ),
 }
 _INCREMENTAL_HEADER: str = (

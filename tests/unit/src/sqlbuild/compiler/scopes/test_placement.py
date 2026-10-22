@@ -68,7 +68,7 @@ def test_given_test_usage_through_macro_when_validating_placement_then_test_path
     ownership_root: OwnershipRoot = OwnershipRoot("models", resource_kind=ResourceKind.MODEL)
     declaration: DeclarationRecord = DeclarationRecord(
         identity=macro_identity,
-        path="models/orders/_sqlbuild/_macros/policy.py",
+        path="models/orders/_sqlbuild/_macros/python/policy.py",
         line=1,
         column=1,
         scope=ScopeKind.LOCAL,
@@ -318,9 +318,14 @@ def test_given_complete_usage_when_validating_then_exact_placement_is_enforced(
         DeclarationChainPlacementCase(
             description="diamond chain shares an intermediate consumer",
             declarations=(
-                ("base", ScopeKind.LOCAL, "models/domain", "models/domain/_macros/base.py"),
-                ("left", ScopeKind.LOCAL, "models/domain", "models/domain/_macros/left.py"),
-                ("right", ScopeKind.LOCAL, "models/domain", "models/domain/_macros/right.py"),
+                ("base", ScopeKind.LOCAL, "models/domain", "models/domain/_macros/python/base.py"),
+                ("left", ScopeKind.LOCAL, "models/domain", "models/domain/_macros/python/left.py"),
+                (
+                    "right",
+                    ScopeKind.LOCAL,
+                    "models/domain",
+                    "models/domain/_macros/python/right.py",
+                ),
             ),
             declaration_usages=(("base", "left"), ("base", "right")),
             model_consumers=(("models/domain/orders.sql", ("left", "right")),),
@@ -329,8 +334,13 @@ def test_given_complete_usage_when_validating_then_exact_placement_is_enforced(
         DeclarationChainPlacementCase(
             description="cyclic chain still anchors to model consumers",
             declarations=(
-                ("alpha", ScopeKind.LOCAL, "models/domain", "models/domain/_macros/alpha.py"),
-                ("beta", ScopeKind.LOCAL, "models/domain", "models/domain/_macros/beta.py"),
+                (
+                    "alpha",
+                    ScopeKind.LOCAL,
+                    "models/domain",
+                    "models/domain/_macros/python/alpha.py",
+                ),
+                ("beta", ScopeKind.LOCAL, "models/domain", "models/domain/_macros/python/beta.py"),
             ),
             declaration_usages=(("alpha", "beta"), ("beta", "alpha")),
             model_consumers=(("models/domain/orders.sql", ("beta",)),),
@@ -339,8 +349,13 @@ def test_given_complete_usage_when_validating_then_exact_placement_is_enforced(
         DeclarationChainPlacementCase(
             description="over broad inherited is detected through the chain",
             declarations=(
-                ("base", ScopeKind.INHERITED, "models/domain", "models/domain/macros/base.py"),
-                ("mid", ScopeKind.LOCAL, "models/domain", "models/domain/_macros/mid.py"),
+                (
+                    "base",
+                    ScopeKind.INHERITED,
+                    "models/domain",
+                    "models/domain/macros/python/base.py",
+                ),
+                ("mid", ScopeKind.LOCAL, "models/domain", "models/domain/_macros/python/mid.py"),
             ),
             declaration_usages=(("base", "mid"),),
             model_consumers=(("models/domain/orders.sql", ("mid",)),),
@@ -353,15 +368,15 @@ def test_given_complete_usage_when_validating_then_exact_placement_is_enforced(
                     "base_one",
                     ScopeKind.LOCAL,
                     "models/domain",
-                    "models/domain/_macros/base_one.py",
+                    "models/domain/_macros/python/base_one.py",
                 ),
                 (
                     "base_two",
                     ScopeKind.LOCAL,
                     "models/domain",
-                    "models/domain/_macros/base_two.py",
+                    "models/domain/_macros/python/base_two.py",
                 ),
-                ("mid", ScopeKind.LOCAL, "models/domain", "models/domain/_macros/mid.py"),
+                ("mid", ScopeKind.LOCAL, "models/domain", "models/domain/_macros/python/mid.py"),
             ),
             declaration_usages=(("base_one", "mid"), ("base_two", "mid")),
             model_consumers=(("models/domain/orders.sql", ("mid",)),),

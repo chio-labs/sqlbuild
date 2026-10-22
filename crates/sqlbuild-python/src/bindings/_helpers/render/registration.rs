@@ -4,7 +4,7 @@ use pyo3::prelude::{Bound, PyModule, PyResult};
 
 use crate::bindings::_helpers::render::{
     authored_sql, declaration_indexes, declaration_values, macro_arguments, macro_calls,
-    macro_expansion, macro_expansion_result, macro_modules,
+    macro_expansion, macro_expansion_result, macro_modules, sql_macro_inventory,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -16,5 +16,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     macro_expansion::register(module)?;
     macro_expansion_result::register(module)?;
     macro_modules::register(module)?;
+    sql_macro_inventory::register(module)?;
     Ok(())
 }

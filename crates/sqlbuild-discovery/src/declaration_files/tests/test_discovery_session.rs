@@ -11,7 +11,10 @@ const FILES: &[(&str, &str)] = &[
         "constants/limits.sql",
         "CONSTANT (name max_orders, value 10);\n",
     ),
-    ("macros/cents.py", "def cents(value):\n    return value\n"),
+    (
+        "macros/python/cents.py",
+        "def cents(value):\n    return value\n",
+    ),
     ("schemas/orders.sql", "SCHEMA (name orders_shape);\n"),
     (
         "audits/generic/positive.sql",

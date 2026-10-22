@@ -1,0 +1,295 @@
+use crate::sql_macros::main::parse_sql_macro::parse_sql_macro;
+use crate::sql_macros::main::sql_macro_cycle::sql_macro_cycle;
+use crate::sql_macros::tests::helpers::owned;
+use crate::sql_macros::tests::test_types::{
+    CycleTestCase, DefinitionErrorTestCase, DefinitionTestCase,
+};
+
+#[test]
+fn given_valid_macro_files_when_parsing_then_each_parameter_and_the_body_are_read() {
+    let test_cases = [
+        DefinitionTestCase {
+            description: "every parameter type",
+            source: "MACRO (\n  description \"Every type\",\n  arguments (\n    amount BIGINT,\n    places INT CONST DEFAULT 2,\n    codes LIST VARCHAR,\n    unique_codes SET VARCHAR,\n    status ENUM order_status,\n    src RELATION (id BIGINT, created_at TIMESTAMP),\n    key COLUMN OF src,\n    price DECIMAL(18, 2),\n  ),\n);\n\nWITH picked AS (SELECT @key FROM @src)\n",
+            expected_labels: &[
+                "BIGINT",
+                "INT CONST",
+                "LIST VARCHAR",
+                "SET VARCHAR",
+                "ENUM order_status",
+                "RELATION (id BIGINT, created_at TIMESTAMP)",
+                "COLUMN OF src",
+                "DECIMAL(18, 2)",
+            ],
+            expected_form: "CTE-list",
+            expected_body_position: (15, 1),
+        },
+        DefinitionTestCase {
+            description: "list parameter in PIVOT and runtime parameter in a WHERE list",
+            source: "MACRO (description \"x\", arguments (src RELATION (status VARCHAR, amount BIGINT), statuses LIST VARCHAR, kept VARCHAR));\nWITH pivoted AS (SELECT * FROM @src PIVOT (SUM(amount) FOR status IN @statuses) WHERE status IN (@kept, 'x'))",
+            expected_labels: &[
+                "RELATION (status VARCHAR, amount BIGINT)",
+                "LIST VARCHAR",
+                "VARCHAR",
+            ],
+            expected_form: "CTE-list",
+            expected_body_position: (2, 1),
+        },
+        DefinitionTestCase {
+            description: "CONST parameter as LIMIT",
+            source: "MACRO (description \"x\", arguments (src RELATION (id BIGINT), n BIGINT CONST));\nWITH firsts AS (SELECT id FROM @src LIMIT @n)",
+            expected_labels: &["RELATION (id BIGINT)", "BIGINT CONST"],
+            expected_form: "CTE-list",
+            expected_body_position: (2, 1),
+        },
+        DefinitionTestCase {
+            description: "CONST parameter as INTERVAL unit",
+            source: "MACRO (description \"x\", arguments (at TIMESTAMP, unit VARCHAR CONST), returns TIMESTAMP);\n@at + INTERVAL 1 @unit",
+            expected_labels: &["TIMESTAMP", "VARCHAR CONST"],
+            expected_form: "expression",
+            expected_body_position: (2, 1),
+        },
+        DefinitionTestCase {
+            description: "CONST parameter as ROUND precision",
+            source: "MACRO (description \"x\", arguments (n BIGINT, places INT CONST), returns DECIMAL(18, 2));\nROUND(@n * 1.5, @places) + @n",
+            expected_labels: &["BIGINT", "INT CONST"],
+            expected_form: "expression",
+            expected_body_position: (2, 1),
+        },
+    ];
+
+    for test_case in test_cases {
+        let definition = parse_sql_macro("m", "macros/sql/m.sql", test_case.source)
+            .expect(test_case.description);
+
+        let labels: Vec<String> = definition
+            .parameters
+            .iter()
+            .map(|parameter| parameter.kind.label())
+            .collect();
+        assert_eq!(
+            labels, test_case.expected_labels,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            definition.form.label(),
+            test_case.expected_form,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            (definition.body_line, definition.body_column),
+            test_case.expected_body_position,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_invalid_macro_files_when_parsing_then_each_is_rejected() {
+    let test_cases = [
+        DefinitionErrorTestCase {
+            description: "untyped argument",
+            source: "MACRO (description \"x\", arguments (amount), returns BIGINT);\namount",
+            expected_code: "P015",
+            expected_message: "argument amount of macro m() has no type",
+        },
+        DefinitionErrorTestCase {
+            description: "raw text argument",
+            source: "MACRO (description \"x\", arguments (amount SQL), returns BIGINT);\namount",
+            expected_code: "P015",
+            expected_message: "argument amount of macro m() is raw text",
+        },
+        DefinitionErrorTestCase {
+            description: "reference in a body",
+            source: "MACRO (description \"x\");\nWITH c AS (SELECT * FROM __ref(\"stg_orders\"))",
+            expected_code: "P016",
+            expected_message: "macro m() reads model:stg_orders through __ref() in its body",
+        },
+        DefinitionErrorTestCase {
+            description: "Python macro in a body",
+            source: "MACRO (description \"x\", returns BIGINT);\n@py.other()",
+            expected_code: "P020",
+            expected_message: "SQL macro m() calls Python macro other()",
+        },
+        DefinitionErrorTestCase {
+            description: "bare macro call in a body",
+            source: "MACRO (description \"x\", returns BIGINT);\n@other()",
+            expected_code: "P014",
+            expected_message: "macro call @other() in SQL macro m() does not say which kind of macro it calls",
+        },
+        DefinitionErrorTestCase {
+            description: "expression without returns",
+            source: "MACRO (description \"x\", arguments (a BIGINT));\na + 1",
+            expected_code: "P015",
+            expected_message: "expression macro m() needs returns <type>",
+        },
+        DefinitionErrorTestCase {
+            description: "CTE list with returns",
+            source: "MACRO (description \"x\", returns BIGINT);\nWITH a AS (SELECT 1)",
+            expected_code: "P015",
+            expected_message: "CTE-list macro m() cannot declare returns",
+        },
+        DefinitionErrorTestCase {
+            description: "relation default",
+            source: "MACRO (description \"x\", arguments (src RELATION (id BIGINT) DEFAULT orders));\nWITH a AS (SELECT * FROM src)",
+            expected_code: "P015",
+            expected_message: "argument src is a RELATION and cannot have a DEFAULT",
+        },
+        DefinitionErrorTestCase {
+            description: "column of a non-relation",
+            source: "MACRO (description \"x\", arguments (src BIGINT, key COLUMN OF src));\nSELECT key",
+            expected_code: "P015",
+            expected_message: "argument key of macro m() is COLUMN OF src, but src is not a RELATION argument",
+        },
+        DefinitionErrorTestCase {
+            description: "constant default that is not a literal",
+            source: "MACRO (description \"x\", arguments (a INT CONST DEFAULT b + 1), returns BIGINT);\na",
+            expected_code: "P015",
+            expected_message: "DEFAULT of argument a of macro m() expects INT CONST",
+        },
+        DefinitionErrorTestCase {
+            description: "undeclared parameter reference",
+            source: "MACRO (description \"x\", arguments (a BIGINT), returns BIGINT);\n@a + @b",
+            expected_code: "P022",
+            expected_message: "@b in the body of macro m() names no parameter of the macro",
+        },
+        DefinitionErrorTestCase {
+            description: "relation parameter written as a bare table name",
+            source: "MACRO (description \"x\", arguments (src RELATION (id BIGINT)));\nWITH a AS (SELECT id FROM src)",
+            expected_code: "P022",
+            expected_message: "src is a parameter of macro m(); write @src",
+        },
+        DefinitionErrorTestCase {
+            description: "relation parameter written as a bare qualifier",
+            source: "MACRO (description \"x\", arguments (src RELATION (id BIGINT)));\nSELECT src.id",
+            expected_code: "P022",
+            expected_message: "src is a parameter of macro m(); write @src",
+        },
+        DefinitionErrorTestCase {
+            description: "built-in parameter name",
+            source: "MACRO (description \"x\", arguments (const BIGINT), returns BIGINT);\n1",
+            expected_code: "P015",
+            expected_message: "argument const of macro m() uses a built-in name",
+        },
+        DefinitionErrorTestCase {
+            description: "LIST with CONST",
+            source: "MACRO (description \"x\", arguments (codes LIST VARCHAR CONST), returns BOOLEAN);\n'a' IN @codes",
+            expected_code: "P015",
+            expected_message: "argument codes LIST VARCHAR CONST: a LIST argument is always known at compile time, so it takes no CONST",
+        },
+        DefinitionErrorTestCase {
+            description: "array type with CONST",
+            source: "MACRO (description \"x\", arguments (codes VARCHAR[] CONST), returns BOOLEAN);\nlen(@codes) > 0",
+            expected_code: "P015",
+            expected_message: "argument codes VARCHAR[] CONST: CONST is for scalar types only",
+        },
+        DefinitionErrorTestCase {
+            description: "runtime parameter as LIMIT",
+            source: "MACRO (description \"x\", arguments (src RELATION (id BIGINT), n BIGINT));\nWITH firsts AS (SELECT id FROM @src LIMIT @n)",
+            expected_code: "P023",
+            expected_message: "n is used where a literal is required; declare it n BIGINT CONST",
+        },
+        DefinitionErrorTestCase {
+            description: "runtime parameter as OFFSET",
+            source: "MACRO (description \"x\", arguments (src RELATION (id BIGINT), n BIGINT));\nWITH rest AS (SELECT id FROM @src LIMIT 10 OFFSET @n)",
+            expected_code: "P023",
+            expected_message: "n is used where a literal is required",
+        },
+        DefinitionErrorTestCase {
+            description: "runtime parameter as FETCH FIRST",
+            source: "MACRO (description \"x\", arguments (src RELATION (id BIGINT), n BIGINT));\nWITH firsts AS (SELECT id FROM @src FETCH FIRST @n ROWS ONLY)",
+            expected_code: "P023",
+            expected_message: "n is used where a literal is required",
+        },
+        DefinitionErrorTestCase {
+            description: "runtime parameter as INTERVAL unit",
+            source: "MACRO (description \"x\", arguments (at TIMESTAMP, unit VARCHAR), returns TIMESTAMP);\n@at + INTERVAL 1 @unit",
+            expected_code: "P023",
+            expected_message: "unit is used where a literal is required; declare it unit VARCHAR CONST",
+        },
+        DefinitionErrorTestCase {
+            description: "runtime parameter as EXTRACT unit",
+            source: "MACRO (description \"x\", arguments (at TIMESTAMP, part VARCHAR), returns BIGINT);\nEXTRACT(@part FROM @at)",
+            expected_code: "P023",
+            expected_message: "part is used where a literal is required",
+        },
+        DefinitionErrorTestCase {
+            description: "runtime parameter as PIVOT value",
+            source: "MACRO (description \"x\", arguments (src RELATION (status VARCHAR, amount BIGINT), first_status VARCHAR));\nWITH pivoted AS (SELECT * FROM @src PIVOT (SUM(amount) FOR status IN (@first_status, 'closed')))",
+            expected_code: "P023",
+            expected_message: "first_status is used where a literal is required",
+        },
+        DefinitionErrorTestCase {
+            description: "missing header",
+            source: "SELECT 1",
+            expected_code: "P015",
+            expected_message: "SQL macro file macros/sql/m.sql must start with a MACRO (...) header",
+        },
+        DefinitionErrorTestCase {
+            description: "unknown header key",
+            source: "MACRO (description \"x\", owner \"me\", returns BIGINT);\n1",
+            expected_code: "P015",
+            expected_message: "unknown MACRO header key owner",
+        },
+    ];
+
+    for test_case in test_cases {
+        let error = parse_sql_macro("m", "macros/sql/m.sql", test_case.source)
+            .expect_err(test_case.description);
+
+        assert_eq!(
+            error.code, test_case.expected_code,
+            "{}: {}",
+            test_case.description, error.message
+        );
+        assert!(
+            error.message.starts_with(test_case.expected_message),
+            "{}: {}",
+            test_case.description,
+            error.message
+        );
+    }
+}
+
+#[test]
+fn given_macros_calling_each_other_when_checking_then_the_cycle_is_named() {
+    let test_cases = [
+        CycleTestCase {
+            description: "two macros calling each other",
+            calls: &[
+                ("net_amount", &["cents_to_dollars"]),
+                ("cents_to_dollars", &["net_amount"]),
+                ("other", &[]),
+            ],
+            expected_cycle: Some(&["net_amount", "cents_to_dollars", "net_amount"]),
+        },
+        CycleTestCase {
+            description: "a chain without a cycle",
+            calls: &[
+                ("net_amount", &["cents_to_dollars"]),
+                ("cents_to_dollars", &[]),
+            ],
+            expected_cycle: None,
+        },
+    ];
+
+    for test_case in test_cases {
+        let calls: Vec<(String, Vec<String>)> = test_case
+            .calls
+            .iter()
+            .map(|(name, called)| ((*name).to_owned(), owned(called)))
+            .collect();
+
+        let cycle: Option<Vec<String>> = sql_macro_cycle(&calls);
+
+        assert_eq!(
+            cycle,
+            test_case.expected_cycle.map(owned),
+            "{}",
+            test_case.description
+        );
+    }
+}

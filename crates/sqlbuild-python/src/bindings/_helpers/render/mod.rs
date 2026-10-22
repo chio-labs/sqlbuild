@@ -14,3 +14,7 @@ pub(crate) mod macro_expansion_result;
 pub(crate) mod macro_generated_references;
 pub(crate) mod macro_modules;
 pub(crate) mod registration;
+pub(crate) mod sql_macro_host;
+pub(crate) mod sql_macro_inventory;
+pub(crate) mod sql_macro_mocks;
+pub(crate) mod sql_macro_tests;

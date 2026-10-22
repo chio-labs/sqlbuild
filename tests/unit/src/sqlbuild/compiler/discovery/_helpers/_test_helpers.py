@@ -86,7 +86,7 @@ _SCOPED_PROJECT_FILES: dict[str, str] = {
     "models/sales/_sqlbuild/audits/generic/positive.sql": (
         "AUDIT (name positive);\nSELECT 1 WHERE FALSE\n"
     ),
-    "macros/money.py": "def money(value):\n    return value\n",
+    "macros/python/money.py": "def money(value):\n    return value\n",
     "enums/status.sql": "ENUM (name status, members [OPEN, CLOSED]);\n",
     "functions/sql/tax.sql": (
         "FUNCTION (arguments (amount DOUBLE), returns DOUBLE);\namount * 0.2\n"

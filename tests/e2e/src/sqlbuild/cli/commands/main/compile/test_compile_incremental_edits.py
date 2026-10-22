@@ -137,7 +137,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
                     "macro_edit",
                     lambda root: replace_project_text(
                         root,
-                        "macros/currency.py",
+                        "macros/python/currency.py",
                         "{price_cents} * {quantity}",
                         "{quantity} * {price_cents}",
                     ),
@@ -146,14 +146,14 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
                 edit_step(
                     "module_imported_by_macro_edit",
                     lambda root: replace_project_text(
-                        root, "macros/_rounding.py", "_SCALE: int = 2", "_SCALE: int = 3"
+                        root, "macros/python/_rounding.py", "_SCALE: int = 2", "_SCALE: int = 3"
                     ),
                 ),
                 edit_step(
                     "scoped_macro_edit",
                     lambda root: replace_project_text(
                         root,
-                        "models/marts/_sqlbuild/_macros/currency.py",
+                        "models/marts/_sqlbuild/_macros/python/currency.py",
                         "/ 100.0, 2)",
                         "/ 100.0, 3)",
                     ),
@@ -189,7 +189,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
                     "new_scope_folder",
                     lambda root: write_project_file(
                         root,
-                        "models/staging/_sqlbuild/_macros/staging_totals.py",
+                        "models/staging/_sqlbuild/_macros/python/staging_totals.py",
                         "def staging_total_cents(price_cents: str, quantity: str) -> str:\n"
                         '    """Calculate a staging line total."""\n'
                         '    return f"({price_cents}) * ({quantity})"\n',

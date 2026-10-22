@@ -85,7 +85,7 @@ fn given_dependency_tokens_when_classifying_imports_then_preserves_dialect_and_o
         request["models"][0]["query_sql"] = json!(test_case.query_sql);
         // Authored SQL can differ after expansion: dependency classification has
         // always used query_sql, while literal decisions use authored_sql.
-        request["models"][0]["authored_sql"] = json!("SELECT @orders()");
+        request["models"][0]["authored_sql"] = json!("SELECT @py.orders()");
         let result: Value = serde_json::from_str(&evaluate_json(&request.to_string())?)
             .map_err(|error| error.to_string())?;
         let faults = result["faults"].as_array().ok_or("missing faults")?;

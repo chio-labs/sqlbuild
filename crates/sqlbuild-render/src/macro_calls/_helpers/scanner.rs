@@ -4,6 +4,13 @@ use sqlbuild_core::text::main::is_letter::is_letter;
 
 use crate::macro_calls::errors::ScanError;
 
+/// The prefix of a Python macro call after its `@`.
+const PYTHON_PREFIX: &str = "py.";
+/// The prefix of a SQL macro call after its `@`.
+const SQL_PREFIX: &str = "sql.";
+/// Declaration and SQL test parameter references, which scans read as calls that need no kind.
+const DECLARATION_NAMES: [&str; 3] = ["const", "enum", "param"];
+
 const TYPED_REFERENCE_NAMES: [&str; 3] = ["__ref", "__source", "__seed"];
 
 /// One call found by the scanner, in byte offsets of the scanned text.
@@ -20,8 +27,17 @@ pub(crate) struct ScannedFailure {
     pub(crate) error: ScanError,
 }
 
-/// Every top-level call of `text` in order, up to the first error Python's scan raises.
+/// Every top-level Python macro call of `text` in order, up to the first error the scan raises.
 pub(crate) fn top_level_calls(text: &str) -> (Vec<ScannedCall>, Option<ScannedFailure>) {
+    top_level_calls_of(text, false)
+}
+
+/// Every top-level Python or SQL macro call of `text`, as static name scans read them.
+pub(crate) fn top_level_named_calls(text: &str) -> (Vec<ScannedCall>, Option<ScannedFailure>) {
+    top_level_calls_of(text, true)
+}
+
+fn top_level_calls_of(text: &str, with_sql: bool) -> (Vec<ScannedCall>, Option<ScannedFailure>) {
     let mut calls: Vec<ScannedCall> = Vec::new();
     let mut cursor = 0;
     while cursor < text.len() {
@@ -36,7 +52,7 @@ pub(crate) fn top_level_calls(text: &str) -> (Vec<ScannedCall>, Option<ScannedFa
                 return (calls, Some(failure));
             }
         };
-        match call_at(text, start) {
+        match call_at(text, start, with_sql) {
             Ok(call) => {
                 cursor = call.close + 1;
                 calls.push(call);
@@ -53,12 +69,60 @@ pub(crate) fn top_level_calls(text: &str) -> (Vec<ScannedCall>, Option<ScannedFa
     (calls, None)
 }
 
-/// Python's `_parse_macro_name`: the identifier after the `@` at byte `start`.
-pub(crate) fn call_name(text: &str, start: usize) -> String {
-    text[start + 1..identifier_end(text, start + 1)].to_owned()
+/// What starts at an `@`: a macro call of either kind, a declaration, a bare call, or none.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CallStart {
+    Python,
+    Sql,
+    Declaration,
+    Bare,
+    None,
 }
 
-/// Python's `_scan_sqlbuild_call_names(include_nested=True)`: every call start's name in order.
+/// What the `@` at byte `at` starts.
+pub(crate) fn call_start_at(text: &str, at: usize) -> CallStart {
+    let rest: &str = &text[at + 1..];
+    if rest.starts_with(PYTHON_PREFIX) && name_call_at(text, at + 1 + PYTHON_PREFIX.len()) {
+        return CallStart::Python;
+    }
+    if rest.starts_with(SQL_PREFIX) && name_call_at(text, at + 1 + SQL_PREFIX.len()) {
+        return CallStart::Sql;
+    }
+    if name_call_at(text, at + 1) {
+        let name: &str = &text[at + 1..identifier_end(text, at + 1)];
+        if DECLARATION_NAMES.contains(&name) {
+            return CallStart::Declaration;
+        }
+        return CallStart::Bare;
+    }
+    CallStart::None
+}
+
+/// The byte offset where the called name starts, after the `@` and any kind prefix.
+fn name_start(text: &str, at: usize) -> usize {
+    match call_start_at(text, at) {
+        CallStart::Python => at + 1 + PYTHON_PREFIX.len(),
+        CallStart::Sql => at + 1 + SQL_PREFIX.len(),
+        CallStart::Declaration | CallStart::Bare | CallStart::None => at + 1,
+    }
+}
+
+/// The error a call start raises: a bare call always, a SQL macro call unless `with_sql`.
+fn kind_error(start: CallStart, with_sql: bool) -> Option<ScanError> {
+    match start {
+        CallStart::Bare => Some(ScanError::BareCall),
+        CallStart::Sql if !with_sql => Some(ScanError::SqlCall),
+        CallStart::Sql | CallStart::Python | CallStart::Declaration | CallStart::None => None,
+    }
+}
+
+/// Python's `_parse_macro_name`: the identifier after the `@` at byte `start`.
+pub(crate) fn call_name(text: &str, start: usize) -> String {
+    let from: usize = name_start(text, start);
+    text[from..identifier_end(text, from)].to_owned()
+}
+
+/// Every Python or SQL macro call start's name in order, nested calls included.
 pub(crate) fn every_call_name(text: &str) -> Result<Vec<String>, ScanError> {
     let mut names: Vec<String> = Vec::new();
     let mut cursor = 0;
@@ -66,8 +130,12 @@ pub(crate) fn every_call_name(text: &str) -> Result<Vec<String>, ScanError> {
         let Some(start) = next_macro_start(text, cursor)? else {
             break;
         };
-        let name_end = identifier_end(text, start + 1);
-        names.push(text[start + 1..name_end].to_owned());
+        if let Some(error) = kind_error(call_start_at(text, start), true) {
+            return Err(error);
+        }
+        let from: usize = name_start(text, start);
+        let name_end = identifier_end(text, from);
+        names.push(text[from..name_end].to_owned());
         let open = skip_whitespace(text, name_end);
         cursor = open + char_at(text, open).map_or(1, char::len_utf8);
     }
@@ -88,6 +156,9 @@ pub(crate) fn nested_names(args: &str) -> Result<Vec<String>, ScanError> {
             b'-' if bytes.get(index + 1) == Some(&b'-') => index = line_comment_end(bytes, index),
             b'/' if bytes.get(index + 1) == Some(&b'*') => index = block_comment_end(bytes, index)?,
             b'@' if macro_call_starts_at(args, index) => {
+                if let Some(error) = kind_error(call_start_at(args, index), false) {
+                    return Err(error);
+                }
                 let (name, open) = call_header(args, index)?;
                 names.push(name);
                 depth += 1;
@@ -120,7 +191,10 @@ pub(crate) fn mentions_typed_reference(args: &str) -> bool {
     TYPED_REFERENCE_NAMES.iter().any(|name| args.contains(name))
 }
 
-fn call_at(text: &str, start: usize) -> Result<ScannedCall, ScanError> {
+fn call_at(text: &str, start: usize, with_sql: bool) -> Result<ScannedCall, ScanError> {
+    if let Some(error) = kind_error(call_start_at(text, start), with_sql) {
+        return Err(error);
+    }
     let (name, open) = call_header(text, start)?;
     let close = matching_paren(text.as_bytes(), open)?;
     Ok(ScannedCall {
@@ -132,12 +206,13 @@ fn call_at(text: &str, start: usize) -> Result<ScannedCall, ScanError> {
 }
 
 fn call_header(text: &str, start: usize) -> Result<(String, usize), ScanError> {
-    let name_end = identifier_end(text, start + 1);
+    let from: usize = name_start(text, start);
+    let name_end = identifier_end(text, from);
     let open = skip_whitespace(text, name_end);
     if text.as_bytes().get(open) != Some(&b'(') {
         return Err(ScanError::MissingParenthesis);
     }
-    Ok((text[start + 1..name_end].to_owned(), open))
+    Ok((text[from..name_end].to_owned(), open))
 }
 
 fn next_macro_start(text: &str, from: usize) -> Result<Option<usize>, ScanError> {
@@ -162,6 +237,12 @@ fn next_macro_start(text: &str, from: usize) -> Result<Option<usize>, ScanError>
 }
 
 fn macro_call_starts_at(text: &str, at: usize) -> bool {
+    call_start_at(text, at) != CallStart::None
+}
+
+/// Whether an identifier starting at byte `from` runs, as a call name, to an opening parenthesis.
+fn name_call_at(text: &str, from: usize) -> bool {
+    let at: usize = from - 1;
     let Some(first) = char_at(text, at + 1) else {
         return false;
     };

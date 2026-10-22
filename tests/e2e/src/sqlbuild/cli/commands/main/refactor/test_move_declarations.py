@@ -23,8 +23,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
     write_orders_project,
 )
 
-_CENTS: str = "models/staging/_sqlbuild/_macros/cents.py"
-_GROUPED_CENTS: str = "models/staging/_sqlbuild/_macros/money/cents.py"
+_CENTS: str = "models/staging/_sqlbuild/_macros/python/cents.py"
+_GROUPED_CENTS: str = "models/staging/_sqlbuild/_macros/python/money/cents.py"
 _PRIORITY_ENUM: dict[str, str] = {
     "models/marts/_sqlbuild/_enums/priority.sql": (
         "ENUM (\n  name priority,\n  members (LOW 1, HIGH 3),\n);\n"
@@ -57,14 +57,14 @@ _PRIORITY_ENUM: dict[str, str] = {
             model="stg_order_cents",
             extra_files={**CENTS_MACRO, **ORDER_REFUNDS},
             destination="models/staging/eu/",
-            expected_moved={_CENTS: "models/staging/_sqlbuild/macros/cents.py"},
+            expected_moved={_CENTS: "models/staging/_sqlbuild/macros/python/cents.py"},
         ),
         DeclarationMoveE2ETestCase(
             description="a macro shared across the models root moves to the top-level role",
             model="stg_order_cents",
             extra_files={**CENTS_MACRO, **ORDER_REFUNDS},
             destination="models/marts/",
-            expected_moved={_CENTS: "macros/cents.py"},
+            expected_moved={_CENTS: "macros/python/cents.py"},
         ),
         DeclarationMoveE2ETestCase(
             description="a grouped macro keeps its group in a grouped destination role",

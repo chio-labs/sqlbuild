@@ -26,7 +26,7 @@ _COUNTED_MACRO: str = (
     "from pathlib import Path\n\n\n"
     "def counted(expression: str) -> str:\n"
     '    """Return the expression, logging each execution."""\n\n'
-    f"    with (Path(__file__).resolve().parents[1] / {_CALL_LOG!r}).open(\n"
+    f"    with (Path(__file__).resolve().parents[2] / {_CALL_LOG!r}).open(\n"
     '        "a", encoding="utf-8"\n'
     "    ) as log:\n"
     '        _ = log.write("call\\n")\n'
@@ -103,8 +103,8 @@ def test_given_attachment_error_when_compiling_then_the_error_and_type_are_repor
     project_dir: Path = tmp_path / "orders"
     files: dict[str, str] = {
         **case.files,
-        "macros/counted.py": _COUNTED_MACRO,
-        FAILURE_MART_PATH: FAILURE_BASE_MART.replace("SUM(amount)", "SUM(@counted('amount'))"),
+        "macros/python/counted.py": _COUNTED_MACRO,
+        FAILURE_MART_PATH: FAILURE_BASE_MART.replace("SUM(amount)", "SUM(@py.counted('amount'))"),
         _CALL_LOG: "",
     }
     for relative_path, contents in files.items():

@@ -25,13 +25,13 @@ _COUNTED_MACRO: str = (
     "from pathlib import Path\n\n\n"
     "def counted(expression: str) -> str:\n"
     '    """Return the expression, logging each execution."""\n\n'
-    f"    with (Path(__file__).resolve().parents[1] / {_CALL_LOG!r}).open(\n"
+    f"    with (Path(__file__).resolve().parents[2] / {_CALL_LOG!r}).open(\n"
     '        "a", encoding="utf-8"\n'
     "    ) as log:\n"
     '        _ = log.write("call\\n")\n'
     "    return expression\n"
 )
-_COUNTED_MART: str = FAILURE_BASE_MART.replace("SUM(amount)", "SUM(@counted('amount'))")
+_COUNTED_MART: str = FAILURE_BASE_MART.replace("SUM(amount)", "SUM(@py.counted('amount'))")
 _UPSTREAM_MACRO: str = _COUNTED_MACRO.replace(
     "def counted(expression: str) -> str:", "def upstream() -> str:"
 ).replace("    return expression\n", "    return '__ref(\"ghost\")'\n")
@@ -45,7 +45,7 @@ _INCREMENTAL: str = (
 )
 _FALLBACKS: tuple[tuple[ModuleType, str], ...] = ((_native, "expand_template_data"),)
 _PROJECT_FILES: dict[str, str] = {
-    "macros/counted.py": _COUNTED_MACRO,
+    "macros/python/counted.py": _COUNTED_MACRO,
     "models/marts/customer_totals.sql": _COUNTED_MART,
     _CALL_LOG: "",
 }
@@ -160,10 +160,10 @@ def test_given_config_error_when_compiling_then_the_error_is_reported_without_fa
         MacroExpandedValidatorErrorTestCase(
             description="unknown_model_reference_from_a_macro",
             project_files={
-                "macros/upstream.py": _UPSTREAM_MACRO,
+                "macros/python/upstream.py": _UPSTREAM_MACRO,
                 "models/marts/customer_totals.sql": (
                     'MODEL (\n  description "Order totals per customer",\n);\n\n'
-                    "SELECT * FROM @upstream()\n"
+                    "SELECT * FROM @py.upstream()\n"
                 ),
                 _CALL_LOG: "",
             },

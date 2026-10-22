@@ -22,7 +22,7 @@ _CALL_LOG: str = "macro_calls.log"
 _MACROS: str = (
     "from pathlib import Path\n\n\n"
     "def _log(name: str) -> None:\n"
-    f"    with (Path(__file__).resolve().parents[1] / {_CALL_LOG!r}).open(\n"
+    f"    with (Path(__file__).resolve().parents[2] / {_CALL_LOG!r}).open(\n"
     '        "a", encoding="utf-8"\n'
     "    ) as log:\n"
     '        _ = log.write(f"{name}\\n")\n\n\n'
@@ -52,7 +52,7 @@ _CYCLIC_MACROS: str = (
     'def ping(expression: str) -> str:\n    """Call pong."""\n    return pong(expression)\n\n\n'
     'def pong(expression: str) -> str:\n    """Call ping."""\n    return ping(expression)\n'
 )
-_COUNTED_MART: str = FAILURE_BASE_MART.replace("SUM(amount)", "SUM(@counted('amount'))")
+_COUNTED_MART: str = FAILURE_BASE_MART.replace("SUM(amount)", "SUM(@py.counted('amount'))")
 _STAGING_PATH: str = "models/staging/stg_orders.sql"
 _MART_PATH: str = "models/marts/customer_totals.sql"
 _STAGING_PREFIX: str = (
@@ -66,56 +66,60 @@ _STAGING_SUFFIX: str = ' AS amount, status\nFROM __source("raw_orders")\n'
     [
         NativeMacroErrorTestCase(
             description="macro_raises_after_a_side_effect",
-            project_files={_STAGING_PATH: _STAGING_PREFIX + "@explode('amount')" + _STAGING_SUFFIX},
+            project_files={
+                _STAGING_PATH: _STAGING_PREFIX + "@py.explode('amount')" + _STAGING_SUFFIX
+            },
             expected_report_text="stg_orders.sql' failed: cannot render amount",
             expected_macro_runs=["counted amount", "explode amount"],
         ),
         NativeMacroErrorTestCase(
             description="macro_returns_a_value_that_is_not_sql",
-            project_files={_STAGING_PATH: _STAGING_PREFIX + "@answer()" + _STAGING_SUFFIX},
+            project_files={_STAGING_PATH: _STAGING_PREFIX + "@py.answer()" + _STAGING_SUFFIX},
             expected_report_text="must return a SQL string when used directly in SQL",
             expected_macro_runs=["counted amount", "answer"],
         ),
         NativeMacroErrorTestCase(
             description="macro_arguments_do_not_parse",
             project_files={
-                _STAGING_PATH: _STAGING_PREFIX + "@counted('amount',,)" + _STAGING_SUFFIX
+                _STAGING_PATH: _STAGING_PREFIX + "@py.counted('amount',,)" + _STAGING_SUFFIX
             },
             expected_report_text="could not be parsed",
             expected_macro_runs=["counted amount"],
         ),
         NativeMacroErrorTestCase(
             description="unknown_macro",
-            project_files={_STAGING_PATH: _STAGING_PREFIX + "@missing('amount')" + _STAGING_SUFFIX},
-            expected_report_text="Unknown macro '@missing'",
+            project_files={
+                _STAGING_PATH: _STAGING_PREFIX + "@py.missing('amount')" + _STAGING_SUFFIX
+            },
+            expected_report_text="Unknown macro '@py.missing'",
             expected_macro_runs=["counted amount"],
         ),
         NativeMacroErrorTestCase(
             description="private_macro_helper",
-            project_files={_STAGING_PATH: _STAGING_PREFIX + "@_log('amount')" + _STAGING_SUFFIX},
-            expected_report_text="Unknown macro '@_log'",
+            project_files={_STAGING_PATH: _STAGING_PREFIX + "@py._log('amount')" + _STAGING_SUFFIX},
+            expected_report_text="Unknown macro '@py._log'",
             expected_macro_runs=["counted amount"],
         ),
         NativeMacroErrorTestCase(
             description="macro_in_a_sibling_scope",
             project_files={
-                _STAGING_PATH: _STAGING_PREFIX + "@mart_only('amount')" + _STAGING_SUFFIX,
-                "models/marts/_sqlbuild/macros/local.py": _MART_MACROS,
+                _STAGING_PATH: _STAGING_PREFIX + "@py.mart_only('amount')" + _STAGING_SUFFIX,
+                "models/marts/_sqlbuild/macros/python/local.py": _MART_MACROS,
             },
             expected_report_text="stg_orders.sql' is inaccessible",
             expected_macro_runs=["counted amount"],
         ),
         NativeMacroErrorTestCase(
             description="macro_call_cycle",
-            project_files={"macros/cyclic.py": _CYCLIC_MACROS},
-            expected_report_text="Macro call cycle in 'macros/cyclic.py': ping -> pong -> ping",
+            project_files={"macros/python/cyclic.py": _CYCLIC_MACROS},
+            expected_report_text="Macro call cycle in 'macros/python/cyclic.py': ping -> pong -> ping",
             expected_macro_runs=[],
         ),
         NativeMacroErrorTestCase(
             description="first_of_two_failing_models",
             project_files={
-                _STAGING_PATH: _STAGING_PREFIX + "@explode('amount')" + _STAGING_SUFFIX,
-                _MART_PATH: FAILURE_BASE_MART.replace("SUM(amount)", "SUM(@explode('total'))"),
+                _STAGING_PATH: _STAGING_PREFIX + "@py.explode('amount')" + _STAGING_SUFFIX,
+                _MART_PATH: FAILURE_BASE_MART.replace("SUM(amount)", "SUM(@py.explode('total'))"),
             },
             expected_report_text="customer_totals.sql' failed: cannot render total",
             expected_macro_runs=["explode total"],
@@ -124,7 +128,7 @@ _STAGING_SUFFIX: str = ' AS amount, status\nFROM __source("raw_orders")\n'
             description="reference_error_in_macro_sql",
             project_files={
                 _STAGING_PATH: _STAGING_PREFIX
-                + "amount FROM @upstream() UNION ALL SELECT 1, 2, amount"
+                + "amount FROM @py.upstream() UNION ALL SELECT 1, 2, amount"
                 + _STAGING_SUFFIX
             },
             expected_report_text="references unknown model 'ghost'",
@@ -139,7 +143,7 @@ def test_given_macro_error_when_compiling_then_error_matches_python_once(
     project_dir: Path = tmp_path / "orders"
     for relative_path, contents in {
         **FAILURE_BASE_FILES,
-        "macros/orders.py": _MACROS,
+        "macros/python/orders.py": _MACROS,
         _MART_PATH: _COUNTED_MART,
         _CALL_LOG: "",
         **test_case.project_files,
@@ -161,12 +165,16 @@ def test_given_macro_error_when_compiling_then_error_matches_python_once(
     [
         MacroErrorLifecycleTestCase(
             description="macro_raises_after_a_side_effect",
-            project_files={_STAGING_PATH: _STAGING_PREFIX + "@explode('amount')" + _STAGING_SUFFIX},
+            project_files={
+                _STAGING_PATH: _STAGING_PREFIX + "@py.explode('amount')" + _STAGING_SUFFIX
+            },
             expected_error_type="CompileInputError",
         ),
         MacroErrorLifecycleTestCase(
             description="unknown_macro",
-            project_files={_STAGING_PATH: _STAGING_PREFIX + "@missing('amount')" + _STAGING_SUFFIX},
+            project_files={
+                _STAGING_PATH: _STAGING_PREFIX + "@py.missing('amount')" + _STAGING_SUFFIX
+            },
             expected_error_type="CompileInputError",
         ),
     ],
@@ -178,7 +186,7 @@ def test_given_macro_error_when_compiling_then_lifecycle_error_type_matches(
     project_dir: Path = tmp_path / "orders"
     for relative_path, contents in {
         **FAILURE_BASE_FILES,
-        "macros/orders.py": _MACROS,
+        "macros/python/orders.py": _MACROS,
         _MART_PATH: _COUNTED_MART,
         _CALL_LOG: "",
         **test_case.project_files,

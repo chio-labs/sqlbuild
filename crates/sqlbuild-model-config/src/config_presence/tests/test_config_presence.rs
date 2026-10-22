@@ -30,7 +30,7 @@ fn given_config_values_when_scanning_then_presence_matches_python() {
                 (Value::Str("${key}"), Value::Str("plain")),
                 (
                     Value::Str("columns"),
-                    Value::Tuple(vec![Value::Str("@cents (amount)")]),
+                    Value::Tuple(vec![Value::Str("@py.cents (amount)")]),
                 ),
             ]),
             expected_template: false,
@@ -68,7 +68,7 @@ fn given_config_values_when_scanning_then_presence_matches_python() {
         },
         PresenceTestCase {
             description: "a later call is found after Unicode whitespace that is no call",
-            value: Value::List(vec![Value::Str("@m\u{2003}("), Value::Str("@n(")]),
+            value: Value::List(vec![Value::Str("@m\u{2003}("), Value::Str("@py.n(")]),
             expected_template: false,
             expected_macro_call: true,
         },
@@ -115,7 +115,7 @@ fn given_config_values_when_checking_reuse_then_python_answers_are_returned() {
         },
         ReuseTestCase {
             description: "a macro call blocks reuse",
-            value: Value::Str("@label ()"),
+            value: Value::Str("@py.label ()"),
             expected_blocks_reuse: true,
             expected_mutable: false,
         },
@@ -168,7 +168,7 @@ fn given_config_entries_when_walking_for_macros_then_the_first_path_matches_pyth
                 Value::Str("id"),
                 Value::Map(vec![
                     (Value::Str("type"), Value::Str("INTEGER")),
-                    (Value::Str("description"), Value::Str("@cents(id)")),
+                    (Value::Str("description"), Value::Str("@py.cents(id)")),
                 ]),
             )]),
             expected_path: MacroPath::Found(vec![
@@ -180,13 +180,13 @@ fn given_config_entries_when_walking_for_macros_then_the_first_path_matches_pyth
         EntryMacroPathTestCase {
             description: "list items report the path of the list",
             key: Value::Str("tags"),
-            value: Value::List(vec![Value::Str("daily"), Value::Str("@later()")]),
+            value: Value::List(vec![Value::Str("daily"), Value::Str("@py.later()")]),
             expected_path: MacroPath::Found(vec!["tags".to_owned()]),
         },
         EntryMacroPathTestCase {
             description: "a mapping key that is not a string is skipped",
             key: Value::Str("config"),
-            value: Value::Map(vec![(Value::Int(1), Value::Str("@skipped()"))]),
+            value: Value::Map(vec![(Value::Int(1), Value::Str("@py.skipped()"))]),
             expected_path: MacroPath::Absent,
         },
     ];

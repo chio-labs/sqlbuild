@@ -15,6 +15,7 @@ type Scan<T> = Result<T, Stop>;
 
 const EXPECTED_PREFIX: &str = "__expected__";
 const QUOTE_TOKENS: &[u8] = b"'\"`$";
+const SQL_MACRO_CALL_PREFIX: &str = "@sql.";
 
 /// The authored text the scan reads, with the labels Python's messages name it by.
 pub(crate) struct ScanText<'sql> {
@@ -70,6 +71,18 @@ pub(crate) fn top_level_ctes(
     let mut ctes: Vec<(String, String)> = Vec::new();
     let mut seen: HashSet<&str> = HashSet::new();
     loop {
+        if let Some(call_end) = sql_macro_call_end(text, index, syntax)? {
+            index = skip_ignorable(sql, call_end, text, syntax)?;
+            if sql.get(index) == Some(&b',') {
+                index = skip_ignorable(sql, index + 1, text, syntax)?;
+            }
+            if trailing_statement_end(sql, index, text, syntax)?
+                || trailing_ceremonial_select(sql, index, text, syntax)?
+            {
+                return Ok(ctes);
+            }
+            continue;
+        }
         let (name, name_end) = read_identifier(text, index)?;
         if !seen.insert(name) {
             return Err(failed(text, format!("defines duplicate CTE '{name}'")));
@@ -239,6 +252,26 @@ fn try_consume_keyword(sql: &str, start: usize, keyword: &str) -> Option<usize> 
         return None;
     }
     Some(window_end)
+}
+
+/// The end of a `@sql.name(...)` CTE-list macro call at `start`, whose CTEs stay unnamed here.
+fn sql_macro_call_end(
+    text: &ScanText<'_>,
+    start: usize,
+    syntax: &LexicalSyntax,
+) -> Scan<Option<usize>> {
+    let Some(rest) = text.sql[start..].strip_prefix(SQL_MACRO_CALL_PREFIX) else {
+        return Ok(None);
+    };
+    let name_end: usize = rest
+        .char_indices()
+        .find(|(_, character)| !is_identifier_character(*character))
+        .map_or(rest.len(), |(offset, _)| offset);
+    let open: usize = start + SQL_MACRO_CALL_PREFIX.len() + name_end;
+    if name_end == 0 || text.sql.as_bytes().get(open) != Some(&b'(') {
+        return Ok(None);
+    }
+    Ok(Some(matching_paren(text, open, syntax)? + 1))
 }
 
 fn read_identifier<'sql>(text: &ScanText<'sql>, start: usize) -> Scan<(&'sql str, usize)> {

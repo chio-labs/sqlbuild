@@ -77,7 +77,7 @@ def _layering_cases() -> tuple[FailureCase, ...]:
             name="config-macro-outside-hooks",
             expected_code="P001",
             expected_message="does not allow macros",
-            files=_staging_header('  alias "@cents(amount)",'),
+            files=_staging_header('  alias "@py.cents(amount)",'),
         ),
         failure_case(
             name="config-unknown-table-type",

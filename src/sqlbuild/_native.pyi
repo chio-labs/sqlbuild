@@ -4300,6 +4300,9 @@ def load_sqlbuild_dag(
     dag: Mapping[str, Any] | str | Path, *, error_class: type[Exception]
 ) -> Mapping[str, Any]: ...
 def build_python_node_graph(*, discovered_inputs: DiscoveredProjectInputs) -> PythonNodeGraph: ...
+def inventory_sql_macros(
+    sources: list[tuple[str, str, str]], /
+) -> list[tuple[str, list[str], list[str]]]: ...
 def macro_module_load_plan(
     modules: Sequence[tuple[str, str, str, Sequence[str]]],
 ) -> tuple[str, list[str], list[str]]: ...
@@ -14981,6 +14984,7 @@ class LoadedMacro(NativeRecord):
     raw_source: str
     function: Callable[..., object]
     dependencies: tuple[DeclarationIdentity, ...]
+    language: str
     def __init__(
         self,
         name: str,
@@ -14989,6 +14993,7 @@ class LoadedMacro(NativeRecord):
         raw_source: str,
         function: Callable[..., object],
         dependencies: tuple[DeclarationIdentity, ...] = ...,
+        language: str = ...,
     ) -> None: ...
     @property
     def injects_context(self) -> bool: ...

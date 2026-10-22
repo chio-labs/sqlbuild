@@ -26,7 +26,7 @@ _ORDERS_TEST: str = (
     "__expected__orders AS (SELECT 1 AS customer_id)\nSELECT 1\n"
 )
 _NOT_NULL_AUDIT: str = "AUDIT ();\nSELECT 1 FROM @relation WHERE @column IS NULL\n"
-_BROKEN_MODEL: str = 'MODEL (description "Broken");\nSELECT @unknown()\n'
+_BROKEN_MODEL: str = 'MODEL (description "Broken");\nSELECT @py.unknown()\n'
 _UNEXPANDABLE_FILES: dict[str, str] = {
     "models/customers.sql": _CUSTOMERS_MODEL,
     "models/orders.sql": _ORDERS_MODEL,

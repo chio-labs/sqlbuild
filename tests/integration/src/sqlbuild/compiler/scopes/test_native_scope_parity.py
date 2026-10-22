@@ -81,7 +81,7 @@ _MACRO_TEST_HEADER: str = 'TEST (mode macro, name "eu_label");\n\n'
             files={
                 **SCOPED_PROJECT,
                 "tests/unit/test_eu_label.sql": _MACRO_TEST_HEADER
-                + "WITH\n__macro_actual__ AS SELECT @eu_label('1') AS label\n",
+                + "WITH\n__macro_actual__ AS SELECT @py.eu_label('1') AS label\n",
             },
             expected_error="SQL test 'tests/unit/test_eu_label.sql' CTE '__macro_actual__' must",
         ),
@@ -90,7 +90,7 @@ _MACRO_TEST_HEADER: str = 'TEST (mode macro, name "eu_label");\n\n'
             files={
                 **SCOPED_PROJECT,
                 "tests/unit/test_eu_label.sql": _MACRO_TEST_HEADER
-                + "WITH\n__macro_actual__ AS MATERIALIZED (\n  SELECT @cents('1') AS label\n),\n"
+                + "WITH\n__macro_actual__ AS MATERIALIZED (\n  SELECT @py.cents('1') AS label\n),\n"
                 "__macro_expected__ AS (\n  SELECT 100 AS label\n)\nSELECT 1\n",
             },
             expected_error=(
@@ -113,13 +113,13 @@ _MACRO_TEST_HEADER: str = 'TEST (mode macro, name "eu_label");\n\n'
             description="a test granted a deeper macro's folder through a macro test",
             files={
                 **SCOPED_PROJECT,
-                "models/sales/eu/_macros/rates.py": (
+                "models/sales/eu/_macros/python/rates.py": (
                     'def eu_rate(value: str) -> str:\n    return f"{value} * 2"\n\n\n'
                     "def eu_label(value: str) -> str:\n    return eu_rate(value)\n"
                 ),
                 "tests/unit/test_eu_label.sql": (
                     'TEST (mode macro, name "eu_label");\n\nWITH\n'
-                    "__macro_actual__ AS (\n  SELECT @eu_label('1') AS label\n),\n"
+                    "__macro_actual__ AS (\n  SELECT @py.eu_label('1') AS label\n),\n"
                     "__macro_expected__ AS (\n  SELECT 1 * 2 AS label\n)\nSELECT 1\n"
                 ),
             },

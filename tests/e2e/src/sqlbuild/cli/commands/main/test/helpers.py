@@ -20,7 +20,7 @@ _OPTIONAL_CEREMONY_PROJECT_FILES: dict[str, str] = {
         '[connection]\ndatabase = "optional_ceremony.duckdb"\n\n'
         '[defaults]\nmaterialized = "table"\n'
     ),
-    "macros/status.py": (
+    "macros/python/status.py": (
         'def normalize_status(value: str) -> str:\n    return f"LOWER(TRIM({value}))"\n'
     ),
     "sources/raw_orders.yml": (
@@ -34,7 +34,7 @@ _OPTIONAL_CEREMONY_PROJECT_FILES: dict[str, str] = {
     ),
     "models/orders.sql": (
         "MODEL (description 'Test model orders.');\n\n"
-        'SELECT order_id, @normalize_status("status") AS status FROM __source("raw_orders")\n'
+        'SELECT order_id, @py.normalize_status("status") AS status FROM __source("raw_orders")\n'
     ),
 }
 
@@ -125,10 +125,10 @@ def build_chain_test_project_files(*, sql_analysis_enabled: bool) -> dict[str, s
             "MODEL (description 'Test model stg_orders.', materialized table);\n\n"
             "SELECT\n"
             "  id,\n"
-            "  @mocked_amount() AS amount,\n"
-            "  @mocked_country() AS country,\n"
-            "  @mocked_literal_text() AS literal_text,\n"
-            "  @real_status() AS status\n"
+            "  @py.mocked_amount() AS amount,\n"
+            "  @py.mocked_country() AS country,\n"
+            "  @py.mocked_literal_text() AS literal_text,\n"
+            "  @py.real_status() AS status\n"
             'FROM __source("raw")'
         ),
         "models/fact_orders.sql": (
@@ -141,7 +141,7 @@ def build_chain_test_project_files(*, sql_analysis_enabled: bool) -> dict[str, s
             "  status\n"
             'FROM __ref("stg_orders")'
         ),
-        "models/_macros/test_macros.py": (
+        "models/_macros/python/test_macros.py": (
             "def mocked_amount() -> str:\n"
             '    return "0"\n\n'
             "def mocked_country() -> str:\n"
@@ -1178,19 +1178,19 @@ def build_macro_test_project_files() -> dict[str, str]:
             "[defaults]\n"
             'materialized = "table"\n'
         ),
-        "macros/status.py": (
+        "macros/python/status.py": (
             'def normalize_status(value: str) -> str:\n    return f"LOWER(TRIM({value}))"\n'
         ),
         "models/orders.sql": (
             "MODEL (description 'Test model orders.', "
-            "materialized table);\n\nSELECT @normalize_status(\"'  PAID  '\") AS status\n"
+            "materialized table);\n\nSELECT @py.normalize_status(\"'  PAID  '\") AS status\n"
         ),
         "tests/unit/test_normalize_status.sql": (
             'TEST (mode macro, name "normalizes_status");\n\n'
             "WITH\n"
             "input_values AS (SELECT '  PAID  ' AS raw_status),\n"
             "__macro_actual__ AS (\n"
-            '  SELECT @normalize_status("raw_status") AS status FROM input_values\n'
+            '  SELECT @py.normalize_status("raw_status") AS status FROM input_values\n'
             "),\n"
             "__macro_expected__ AS (SELECT 'paid' AS status)\n"
             "SELECT 1\n"

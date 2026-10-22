@@ -40,6 +40,7 @@ use crate::bindings::_helpers::render::declaration_expansion::{
     DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer,
     expand_declarations,
 };
+use crate::bindings::_helpers::render::sql_macro_host::SqlMacroSource;
 use crate::bindings::_helpers::sqltext::declaration_references::declaration_scan;
 use crate::bindings::_helpers::sqltext::static_sql::{InterpolationSources, interpolated};
 use sqlbuild_project::models::ReferenceRow;
@@ -489,6 +490,17 @@ impl<'py> HookRun<'_, '_, 'py> {
             },
             rendering: self.context.host.get(),
             classes: &classes,
+            sql_macros: Some(SqlMacroSource {
+                loaded_macros: Some(
+                    self.context
+                        .classes
+                        .macros
+                        .loaded_macros
+                        .bind(declarations.py())
+                        .as_any(),
+                ),
+                origin: None,
+            }),
         })
     }
 

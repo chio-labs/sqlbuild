@@ -11,7 +11,7 @@ use crate::macro_calls::errors::ScanError;
 
 use crate::macro_calls::_helpers::entry_codec::{decode_entry, encode_entry};
 
-/// One top-level `@macro(...)` call in an authored SQL string; offsets count code points.
+/// One top-level `@py.macro(...)` call in an authored SQL string; offsets count code points.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MacroCallSite {
     /// Offset of the `@` that starts the call.

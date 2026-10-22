@@ -426,18 +426,18 @@ def test_given_scoped_declaration_when_compiling_sql_surface_then_uses_authored_
         ExpectedModelDeclarationGrantTestCase(
             description="only macros called by the test are granted",
             files={
-                "models/domain/_sqlbuild/_macros/discount.py": (
+                "models/domain/_sqlbuild/_macros/python/discount.py": (
                     'def discount(expression: str) -> str:\n    return f"({expression} - 1)"\n'
                 ),
-                "models/domain/_sqlbuild/_macros/surcharge.py": (
+                "models/domain/_sqlbuild/_macros/python/surcharge.py": (
                     'def surcharge(expression: str) -> str:\n    return f"({expression} + 1)"\n'
                 ),
                 "models/domain/orders.sql": (
-                    "MODEL (description 'Test model orders.');\nSELECT @discount('10') AS value, @surcharge('10') AS fee"
+                    "MODEL (description 'Test model orders.');\nSELECT @py.discount('10') AS value, @py.surcharge('10') AS fee"
                 ),
                 "tests/unit/check.sql": (
                     "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
-                    "__expected__orders AS (SELECT @discount('10') AS value) SELECT 1"
+                    "__expected__orders AS (SELECT @py.discount('10') AS value) SELECT 1"
                 ),
             },
             expected_sql_fragments=("SELECT (10 - 1) AS value",),
@@ -446,18 +446,18 @@ def test_given_scoped_declaration_when_compiling_sql_surface_then_uses_authored_
         ExpectedModelDeclarationGrantTestCase(
             description="macros called inside macro arguments are granted",
             files={
-                "models/domain/_sqlbuild/_macros/discount.py": (
+                "models/domain/_sqlbuild/_macros/python/discount.py": (
                     'def discount(expression: str) -> str:\n    return f"({expression} - 1)"\n'
                 ),
-                "models/domain/_sqlbuild/_macros/surcharge.py": (
+                "models/domain/_sqlbuild/_macros/python/surcharge.py": (
                     'def surcharge(expression: str) -> str:\n    return f"({expression} + 1)"\n'
                 ),
                 "models/domain/orders.sql": (
-                    "MODEL (description 'Test model orders.');\nSELECT @discount('10') AS value, @surcharge('10') AS fee"
+                    "MODEL (description 'Test model orders.');\nSELECT @py.discount('10') AS value, @py.surcharge('10') AS fee"
                 ),
                 "tests/unit/check.sql": (
                     "TEST ();\nWITH __ref__orders AS (SELECT 1 AS value), "
-                    "__expected__orders AS (SELECT @discount(@surcharge('10')) AS value) SELECT 1"
+                    "__expected__orders AS (SELECT @py.discount(@py.surcharge('10')) AS value) SELECT 1"
                 ),
             },
             expected_sql_fragments=("SELECT ((10 + 1) - 1) AS value",),

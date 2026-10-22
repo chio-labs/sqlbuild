@@ -1226,6 +1226,15 @@ fn macro_calls(sql: &str, syntax: &LexicalSyntax) -> Result<Vec<String>, String>
         if byte_at(sql, index) == Some(b'@')
             && let Some((name, end)) = read_identifier(sql, index + 1, syntax)
         {
+            let (name, end) =
+                if matches!(name.as_str(), "py" | "sql") && byte_at(sql, end) == Some(b'.') {
+                    match read_identifier(sql, end + 1, syntax) {
+                        Some(called) => called,
+                        None => (name, end),
+                    }
+                } else {
+                    (name, end)
+                };
             let open = space_end(sql, end);
             if byte_at(sql, open) == Some(b'(') && !DECLARATION_CALLS.contains(&name.as_str()) {
                 if !calls.contains(&name) {

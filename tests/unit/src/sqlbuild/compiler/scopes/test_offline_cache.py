@@ -86,16 +86,16 @@ def test_given_scoped_macro_test_when_loading_warm_cache_then_grant_provenance_i
             "sqlbuild_project.toml": (
                 'name = "orders"\nadapter = "duckdb"\n[scopes]\nenforce_placement = false\n'
             ),
-            "models/orders/_sqlbuild/_macros/policy.py": (
+            "models/orders/_sqlbuild/_macros/python/policy.py": (
                 "def order_policy() -> str:\n    return '2'\n"
             ),
             "models/orders/summary.sql": (
-                'MODEL (description "Order summary.");\nSELECT @order_policy() AS quantity'
+                'MODEL (description "Order summary.");\nSELECT @py.order_policy() AS quantity'
             ),
             "tests/unit/macros/models/orders/test_order_policy__returns_quantity.sql": (
                 'TEST (mode macro, name "order_policy__returns_quantity");\n\n'
                 "WITH\n"
-                "__macro_actual__ AS (SELECT @order_policy() AS quantity),\n"
+                "__macro_actual__ AS (SELECT @py.order_policy() AS quantity),\n"
                 "__macro_expected__ AS (SELECT 2 AS quantity)\n"
                 "SELECT 1\n"
             ),
@@ -125,14 +125,14 @@ def test_given_macro_side_effect_when_loading_warm_cache_then_module_is_not_exec
         {
             "sqlbuild_project.toml": _PROJECT,
             "models/orders.sql": _MODEL,
-            "macros/side_effect.py": (
+            "macros/python/side_effect.py": (
                 "from pathlib import Path\n"
                 "Path(__file__).with_name('executed').write_text('yes')\n"
                 "def identity(value):\n    return str(value)\n"
             ),
         },
     )
-    marker: Path = tmp_path / "macros" / "executed"
+    marker: Path = tmp_path / "macros" / "python" / "executed"
 
     load_or_build_scope_index(project_dir=tmp_path)
     marker.unlink()
@@ -327,15 +327,15 @@ def test_given_target_aware_python_composition_when_switching_target_then_depend
                 _PROJECT + '\ndefault_target = "dev"\n[targets.dev]\n[targets.prod]\n'
             ),
             "sqlbuild_local.toml": 'target = "dev"\n',
-            "models/orders.sql": "MODEL(description 'Test model orders.');\nSELECT @choose() AS value\n",
-            "macros/choose.py": (
-                "from macros.dev import dev_macro\n"
-                "from macros.prod import prod_macro\n\n"
+            "models/orders.sql": "MODEL(description 'Test model orders.');\nSELECT @py.choose() AS value\n",
+            "macros/python/choose.py": (
+                "from macros.python.dev import dev_macro\n"
+                "from macros.python.prod import prod_macro\n\n"
                 "def choose(ctx):\n    return dev_macro() "
                 'if ctx.target_name == "dev" else prod_macro()\n'
             ),
-            "macros/dev.py": 'def dev_macro():\n    return "1"\n',
-            "macros/prod.py": 'def prod_macro():\n    return "2"\n',
+            "macros/python/dev.py": 'def dev_macro():\n    return "1"\n',
+            "macros/python/prod.py": 'def prod_macro():\n    return "2"\n',
         },
     )
 
@@ -368,7 +368,7 @@ def test_given_broken_declaration_category_when_loading_then_other_categories_re
             "models/orders.sql": _MODEL,
             "models/domain/enums/_enums/broken.sql": ("ENUM (name broken, members [BROKEN]);"),
             "constants/limit.sql": "CONSTANT (name limit, value 1);",
-            "macros/identity.py": 'def identity():\n    return "1"\n',
+            "macros/python/identity.py": 'def identity():\n    return "1"\n',
         },
     )
 
@@ -386,11 +386,11 @@ def test_given_broken_declaration_category_when_loading_then_other_categories_re
         TolerantMacroInventoryCase(
             description="syntax error retains valid composed macro and dependency",
             files={
-                "macros/shared.py": "def shared():\n    return 'shared'\n",
-                "macros/consumer.py": (
-                    "from macros.shared import shared\n\ndef consumer():\n    return shared()\n"
+                "macros/python/shared.py": "def shared():\n    return 'shared'\n",
+                "macros/python/consumer.py": (
+                    "from macros.python.shared import shared\n\ndef consumer():\n    return shared()\n"
                 ),
-                "macros/broken.py": "def broken(:\n    return 'broken'\n",
+                "macros/python/broken.py": "def broken(:\n    return 'broken'\n",
             },
             expected_names=frozenset({"shared", "consumer"}),
             unexpected_names=frozenset({"broken"}),
@@ -400,12 +400,12 @@ def test_given_broken_declaration_category_when_loading_then_other_categories_re
         TolerantMacroInventoryCase(
             description="scope-invalid macro import is omitted with diagnostic",
             files={
-                "models/sales/_macros/shared.py": ("def shared():\n    return 'shared'\n"),
-                "models/finance/macros/consumer.py": (
-                    "from models.sales._macros.shared import shared\n\n"
+                "models/sales/_macros/python/shared.py": ("def shared():\n    return 'shared'\n"),
+                "models/finance/macros/python/consumer.py": (
+                    "from models.sales._macros.python.shared import shared\n\n"
                     "def consumer():\n    return shared()\n"
                 ),
-                "macros/broken.py": "def broken(:\n    return 'broken'\n",
+                "macros/python/broken.py": "def broken(:\n    return 'broken'\n",
             },
             expected_names=frozenset({"shared"}),
             unexpected_names=frozenset({"consumer", "broken"}),
@@ -414,9 +414,9 @@ def test_given_broken_declaration_category_when_loading_then_other_categories_re
         TolerantMacroInventoryCase(
             description="name collision retains unrelated valid macro",
             files={
-                "macros/valid.py": "def valid():\n    return 'valid'\n",
-                "macros/first.py": "def duplicate():\n    return 'first'\n",
-                "macros/second.py": "def duplicate():\n    return 'second'\n",
+                "macros/python/valid.py": "def valid():\n    return 'valid'\n",
+                "macros/python/first.py": "def duplicate():\n    return 'first'\n",
+                "macros/python/second.py": "def duplicate():\n    return 'second'\n",
             },
             expected_names=frozenset({"valid"}),
             unexpected_names=frozenset({"duplicate"}),
@@ -425,12 +425,12 @@ def test_given_broken_declaration_category_when_loading_then_other_categories_re
         TolerantMacroInventoryCase(
             description="import cycle retains unrelated valid macro",
             files={
-                "macros/valid.py": "def valid():\n    return 'valid'\n",
-                "macros/first.py": (
-                    "from macros.second import second\n\ndef first():\n    return second()\n"
+                "macros/python/valid.py": "def valid():\n    return 'valid'\n",
+                "macros/python/first.py": (
+                    "from macros.python.second import second\n\ndef first():\n    return second()\n"
                 ),
-                "macros/second.py": (
-                    "from macros.first import first\n\ndef second():\n    return first()\n"
+                "macros/python/second.py": (
+                    "from macros.python.first import first\n\ndef second():\n    return first()\n"
                 ),
             },
             expected_names=frozenset({"valid"}),
@@ -440,13 +440,13 @@ def test_given_broken_declaration_category_when_loading_then_other_categories_re
         TolerantMacroInventoryCase(
             description="module path collision omits both ambiguous modules",
             files={
-                "macros/valid.py": "def valid():\n    return 'valid'\n",
-                "macros/a.b.py": "def dotted():\n    return 'dotted'\n",
-                "macros/a/b.py": "def nested():\n    return 'nested'\n",
+                "macros/python/valid.py": "def valid():\n    return 'valid'\n",
+                "macros/python/a.b.py": "def dotted():\n    return 'dotted'\n",
+                "macros/python/a/b.py": "def nested():\n    return 'nested'\n",
             },
             expected_names=frozenset({"valid"}),
             unexpected_names=frozenset({"dotted", "nested"}),
-            expected_diagnostic_fragments=("Macro module path collision for 'macros.a.b'",),
+            expected_diagnostic_fragments=("Macro module path collision for 'macros.python.a.b'",),
         ),
     ),
     ids=lambda case: case.description,

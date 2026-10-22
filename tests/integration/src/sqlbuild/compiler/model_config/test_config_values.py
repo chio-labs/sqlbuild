@@ -159,7 +159,7 @@ def test_given_python_given_header_when_building_config_then_values_keep_types_a
         ),
         ConfigValueRejectionTestCase(
             description="a nested macro call",
-            header={"table_settings": {"a": ["@x ("]}},
+            header={"table_settings": {"a": ["@py.x ("]}},
             expected_error=(
                 "CompileInputError",
                 "model config field 'table_settings.a' does not allow macros",

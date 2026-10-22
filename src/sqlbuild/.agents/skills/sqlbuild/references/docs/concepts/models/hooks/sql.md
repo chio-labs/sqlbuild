@@ -131,7 +131,7 @@ Both named and inline SQL hooks receive the invoking model's runtime context. Th
 - Environment variables such as `@@ENV:DEPLOY_ROLE`
 - Hook context variables such as `@@CTX:destination.qualified`
 - Enums and constants such as `@enum("role").ANALYST` and `@const("retention_days")`
-- Python macros such as `@grant_target("@@CTX:destination.qualified")`
+- Python macros such as `@py.grant_target("@@CTX:destination.qualified")`
 
 For named hooks, SQLBuild first substitutes `@name` and `@'name'` arguments into the hook body. A supplied argument such as `relation: "@@CTX:destination.qualified"` therefore resolves to the invoking model's final target-overridden destination.
 
@@ -190,7 +190,7 @@ SELECT order_id FROM __ref("stg_orders")
 ```sql
 HOOK (description "Record counts");
 
-@count_rows(__ref("stg_orders"))
+@py.count_rows(__ref("stg_orders"))
 ```
 
 At plan time each reference resolves exactly like one in model SQL: adapter quoting, source

@@ -698,10 +698,10 @@ def test_given_relative_project_directory_when_diffing_contract_then_private_mac
     model_path: Path = project_dir / "models" / "orders" / "orders.sql"
     model_path.parent.mkdir()
     _ = model_path.write_text(
-        "MODEL (description 'Test model orders.', materialized table);\nSELECT @order_id() AS id, CAST('a' AS VARCHAR) AS name\n",
+        "MODEL (description 'Test model orders.', materialized table);\nSELECT @py.order_id() AS id, CAST('a' AS VARCHAR) AS name\n",
         encoding="utf-8",
     )
-    macro_path: Path = model_path.parent / "_sqlbuild" / "_macros" / "order_id.py"
+    macro_path: Path = model_path.parent / "_sqlbuild" / "_macros" / "python" / "order_id.py"
     macro_path.parent.mkdir(parents=True)
     _ = macro_path.write_text(
         'def order_id() -> str:\n    return "CAST(1 AS INTEGER)"\n', encoding="utf-8"

@@ -20,7 +20,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_dependency_calls: &["__ref(\"o\")"],
             expected_compact: "a=aandb",
             expected_snowflake_compact: "a=aandb",
-            expected_lint_site: Some("@m(a x)"),
+            expected_lint_site: Some("@py.m(a x)"),
         },
         SqlScannerTestCase {
             description: "single quote containing open paren",
@@ -29,7 +29,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_dependency_calls: &["__ref(\"o\")"],
             expected_compact: "a='a(b'andb",
             expected_snowflake_compact: "a='a(b'andb",
-            expected_lint_site: Some("@m('a(b' x)"),
+            expected_lint_site: Some("@py.m('a(b' x)"),
         },
         SqlScannerTestCase {
             description: "single quote containing close paren",
@@ -38,7 +38,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_dependency_calls: &["__ref(\"o\")"],
             expected_compact: "a='a)b'andb",
             expected_snowflake_compact: "a='a)b'andb",
-            expected_lint_site: Some("@m('a)b' x)"),
+            expected_lint_site: Some("@py.m('a)b' x)"),
         },
         SqlScannerTestCase {
             description: "doubled single quote",
@@ -47,7 +47,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_dependency_calls: &["__ref(\"o\")"],
             expected_compact: "a='it''s )'andb",
             expected_snowflake_compact: "a='it''s )'andb",
-            expected_lint_site: Some("@m('it''s )' x)"),
+            expected_lint_site: Some("@py.m('it''s )' x)"),
         },
         SqlScannerTestCase {
             description: "backslash escaped quote before close paren",
@@ -56,7 +56,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_dependency_calls: &[],
             expected_compact: "a='a\\')' and  b",
             expected_snowflake_compact: "a='a\\')'andb",
-            expected_lint_site: Some("@m('a\\')' x)"),
+            expected_lint_site: Some("@py.m('a\\')' x)"),
         },
         SqlScannerTestCase {
             description: "backslash escaped quote before open paren",
@@ -65,7 +65,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_dependency_calls: &[],
             expected_compact: "a='a\\'(' and  b",
             expected_snowflake_compact: "a='a\\'('andb",
-            expected_lint_site: Some("@m('a\\'(' x)"),
+            expected_lint_site: Some("@py.m('a\\'(' x)"),
         },
         SqlScannerTestCase {
             description: "double quote containing close paren",
@@ -74,7 +74,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_dependency_calls: &["__ref(\"o\")"],
             expected_compact: "a=\"a)b\"andb",
             expected_snowflake_compact: "a=\"a)b\"andb",
-            expected_lint_site: Some("@m(\"a)b\" x)"),
+            expected_lint_site: Some("@py.m(\"a)b\" x)"),
         },
         SqlScannerTestCase {
             description: "backtick containing close paren",
@@ -83,7 +83,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_dependency_calls: &["__ref(\"o\")"],
             expected_compact: "a=`a)b`andb",
             expected_snowflake_compact: "a=`a)b`andb",
-            expected_lint_site: Some("@m(`a)"),
+            expected_lint_site: Some("@py.m(`a)"),
         },
         SqlScannerTestCase {
             description: "doubled backtick",
@@ -92,7 +92,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_dependency_calls: &["__ref(\"o\")"],
             expected_compact: "a=`a``)b`andb",
             expected_snowflake_compact: "a=`a``)b`andb",
-            expected_lint_site: Some("@m(`a``)"),
+            expected_lint_site: Some("@py.m(`a``)"),
         },
         SqlScannerTestCase {
             description: "line comment",
@@ -101,7 +101,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_dependency_calls: &["__ref(\"o\")"],
             expected_compact: "a=andb",
             expected_snowflake_compact: "a=andb",
-            expected_lint_site: Some("@m(-- )\n x)"),
+            expected_lint_site: Some("@py.m(-- )\n x)"),
         },
         SqlScannerTestCase {
             description: "block comment",
@@ -110,7 +110,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_dependency_calls: &["__ref(\"o\")"],
             expected_compact: "a=andb",
             expected_snowflake_compact: "a=andb",
-            expected_lint_site: Some("@m(/* ) */ x)"),
+            expected_lint_site: Some("@py.m(/* ) */ x)"),
         },
         SqlScannerTestCase {
             description: "nested block comment",
@@ -119,7 +119,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_dependency_calls: &["__ref(\"o\")"],
             expected_compact: "a=)*/andb",
             expected_snowflake_compact: "a=)*/andb",
-            expected_lint_site: Some("@m(/* /* ) */ )"),
+            expected_lint_site: Some("@py.m(/* /* ) */ )"),
         },
         SqlScannerTestCase {
             description: "dollar quote",
@@ -128,7 +128,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_dependency_calls: &["__ref(\"o\")"],
             expected_compact: "a=$$)$$andb",
             expected_snowflake_compact: "a=$$)$$andb",
-            expected_lint_site: Some("@m($$ ) $$ x)"),
+            expected_lint_site: Some("@py.m($$ ) $$ x)"),
         },
         SqlScannerTestCase {
             description: "unterminated quote",
@@ -155,7 +155,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             expected_dependency_calls: &["__ref(\"o\")"],
             expected_compact: "a='é)ü'ñandb",
             expected_snowflake_compact: "a='é)ü'ñandb",
-            expected_lint_site: Some("@m('é)ü' ñ x)"),
+            expected_lint_site: Some("@py.m('é)ü' ñ x)"),
         },
     ];
 
@@ -203,7 +203,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             "rules Snowflake numeric decision compaction: {}",
             test_case.description
         );
-        let lint_sql = format!("SELECT @m({fragment} x) AS y");
+        let lint_sql = format!("SELECT @py.m({fragment} x) AS y");
         let lint_site = prepare(&lint_sql, &lint_sql, &[], "postgres")?.map(|prepared| {
             prepared
                 .1
@@ -229,53 +229,53 @@ fn given_lint_dialect_when_preparing_macro_sites_then_backticks_follow_rules_quo
             description: "databricks backtick containing close paren",
             dialect: "databricks",
             fragment: "`a)b`",
-            expected_lint_site: "@m(`a)b` x)",
+            expected_lint_site: "@py.m(`a)b` x)",
         },
         LintDialectSiteTestCase {
             description: "bigquery doubled backtick",
             dialect: "bigquery",
             fragment: "`a``)b`",
-            expected_lint_site: "@m(`a``)b` x)",
+            expected_lint_site: "@py.m(`a``)b` x)",
         },
         LintDialectSiteTestCase {
             description: "databricks single quote inside backticks",
             dialect: "databricks",
             fragment: "`it's)`",
-            expected_lint_site: "@m(`it's)` x)",
+            expected_lint_site: "@py.m(`it's)` x)",
         },
         LintDialectSiteTestCase {
             description: "databricks backslash in single quote still escapes",
             dialect: "databricks",
             fragment: "'a\\')'",
-            expected_lint_site: "@m('a\\')' x)",
+            expected_lint_site: "@py.m('a\\')' x)",
         },
         LintDialectSiteTestCase {
             description: "postgres backtick remains code",
             dialect: "postgres",
             fragment: "`a)b`",
-            expected_lint_site: "@m(`a)",
+            expected_lint_site: "@py.m(`a)",
         },
         LintDialectSiteTestCase {
             description: "duckdb dollar quote hides an apostrophe and close paren",
             dialect: "duckdb",
             fragment: "$$Customer's order)$$",
-            expected_lint_site: "@m($$Customer's order)$$ x)",
+            expected_lint_site: "@py.m($$Customer's order)$$ x)",
         },
         LintDialectSiteTestCase {
             description: "snowflake tagged dollar quote hides a nested dollar quote",
             dialect: "snowflake",
             fragment: "$note$ $$ ) $note$",
-            expected_lint_site: "@m($note$ $$ ) $note$ x)",
+            expected_lint_site: "@py.m($note$ $$ ) $note$ x)",
         },
         LintDialectSiteTestCase {
             description: "sqlserver backtick remains code",
             dialect: "tsql",
             fragment: "`a)b`",
-            expected_lint_site: "@m(`a)",
+            expected_lint_site: "@py.m(`a)",
         },
     ];
     for test_case in test_cases {
-        let lint_sql = format!("SELECT @m({} x) AS y", test_case.fragment);
+        let lint_sql = format!("SELECT @py.m({} x) AS y", test_case.fragment);
         let lint_site = prepare(&lint_sql, &lint_sql, &[], test_case.dialect)?
             .and_then(|prepared| prepared.1.first().map(|site| site.original_text.clone()))
             .unwrap_or_default();

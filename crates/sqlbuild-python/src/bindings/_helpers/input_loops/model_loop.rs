@@ -95,6 +95,7 @@ use crate::bindings::_helpers::render::declaration_expansion::{
 use crate::bindings::_helpers::render::declaration_values::ConstantRendering;
 use crate::bindings::_helpers::render::macro_call_rows::SpanRow;
 use crate::bindings::_helpers::render::macro_call_rows::span_row;
+use crate::bindings::_helpers::render::sql_macro_host::{SqlCallOrigin, SqlMacroSource};
 use crate::bindings::_helpers::sqltext::declaration_references::declaration_scan;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 use crate::bindings::_helpers::sqltext::static_sql::{
@@ -631,6 +632,14 @@ impl NativeModelLoop {
             },
             rendering: context.host.get(),
             classes: &expansion_classes,
+            sql_macros: Some(SqlMacroSource {
+                loaded_macros: Some(context.classes.macros.loaded_macros.bind(py).as_any()),
+                origin: Some(SqlCallOrigin {
+                    relative_path,
+                    contents,
+                    query: authored_query,
+                }),
+            }),
         })?;
         let macros: Option<ExpandedMacros> = if calls_macros(&declarations.spliced.sql) {
             let model: MacroModel<'_> = MacroModel {

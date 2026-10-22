@@ -28,7 +28,7 @@ HOOKED_MODEL: str = (
     "columns (id (type INTEGER)));\nSELECT CAST(1 AS INTEGER) AS id\n"
 )
 MACRO_COLUMN_MODEL: str = (
-    "MODEL (description 'Orders.', columns (id (type INTEGER, description '@cents(id)')));\n"
+    "MODEL (description 'Orders.', columns (id (type INTEGER, description '@py.cents(id)')));\n"
     "SELECT CAST(1 AS INTEGER) AS id\n"
 )
 DUPLICATE_COLUMN_MODEL: str = (

@@ -1,7 +1,7 @@
 //! SQL test macro-mock model queries and compiled SQL scenarios of an assembled project.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
+use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString, PyTuple};
 
 use crate::bindings::_helpers::attachments::cursor_intrinsics::validated_model_cursor_sql;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
@@ -16,6 +16,7 @@ use crate::bindings::_helpers::render::declaration_values::declaration_scope_res
 use crate::bindings::_helpers::render::macro_expansion_result::{
     ExpansionRequest, expansion_result,
 };
+use crate::bindings::_helpers::render::sql_macro_mocks::with_sql_macro_mocks;
 use pyo3::IntoPyObjectExt;
 
 /// The `CompiledSqlScenario` fields copied from its input, in Python's keyword order.
@@ -82,8 +83,13 @@ pub(crate) fn test_model_query_overrides<'py>(
         } else {
             native_field(&model_input, "query_sql")?
         };
+        let macro_source_sql: String = with_sql_macro_mocks(
+            &model_input,
+            macro_source_sql.extract()?,
+            (macro_mocks.downcast()?, &loaded_macros),
+        )?;
         let expanded: Bound<'py, PyAny> = expansion_result(ExpansionRequest {
-            sql: macro_source_sql.downcast_into()?,
+            sql: PyString::new(py, &macro_source_sql),
             file_path,
             loaded_macros: loaded_macros.downcast()?.clone(),
             macro_overrides: Some(macro_mocks.downcast()?.clone()),

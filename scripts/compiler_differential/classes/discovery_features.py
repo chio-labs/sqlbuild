@@ -365,13 +365,13 @@ class DiscoveryFeatureWriter:
     def _cross_file_macro_import(self) -> None:
         self._features.add("cross_file_macro_import")
         base: ModelPlan = self._base()
-        self._files["macros/rounding.py"] = (
+        self._files["macros/python/rounding.py"] = (
             "def round_amount(expression: str, places: int = 2) -> str:\n"
             '    """Round an amount."""\n'
             '    return f"ROUND({expression}, {places})"\n'
         )
-        self._files["macros/tax.py"] = (
-            "from macros.rounding import round_amount\n\n\n"
+        self._files["macros/python/tax.py"] = (
+            "from macros.python.rounding import round_amount\n\n\n"
             "def taxed(expression: str) -> str:\n"
             '    """Add tax to an amount, rounded."""\n'
             '    return round_amount(f"{expression} * 1.2")\n'
@@ -381,20 +381,22 @@ class DiscoveryFeatureWriter:
             description=f"Taxed copy of {base.name}",
             header="",
             body=(
-                'SELECT id, @taxed("amount") AS taxed, @round_amount("amount", 1) AS rounded\n'
+                'SELECT id, @py.taxed("amount") AS taxed, @py.round_amount("amount", 1) AS '
+                "rounded\n"
                 f'FROM __ref("{base.name}")\n'
             ),
         )
         self._files["tests/unit/test_taxed_macro.sql"] = (
             'TEST (mode macro, name "taxes_amounts");\n\n'
             "WITH\ninput_values AS (\n  SELECT 10 AS amount\n),\n"
-            '__macro_actual__ AS (\n  SELECT @taxed("amount") AS taxed\n  FROM input_values\n),\n'
+            '__macro_actual__ AS (\n  SELECT @py.taxed("amount") AS taxed\n  FROM '
+            "input_values\n),\n"
             "__macro_expected__ AS (\n  SELECT 12.0 AS taxed\n)\nSELECT 1\n"
         )
 
     def _macro_test_mode(self) -> None:
         self._features.add("macro_test_mode")
-        self._files["tests/unit/_macros/scaling.py"] = (
+        self._files["tests/unit/_macros/python/scaling.py"] = (
             "def doubled(expression: str) -> str:\n"
             '    """Double an amount."""\n'
             '    return f"({expression} * 2)"\n'
@@ -402,7 +404,7 @@ class DiscoveryFeatureWriter:
         self._files["tests/unit/test_doubled_macro.sql"] = (
             'TEST (mode macro, name "doubles_amounts");\n\n'
             "WITH\ninput_values AS (\n  SELECT 4 AS amount\n),\n"
-            '__macro_actual__ AS (\n  SELECT @doubled("amount") AS doubled\n'
+            '__macro_actual__ AS (\n  SELECT @py.doubled("amount") AS doubled\n'
             "  FROM input_values\n),\n"
             "__macro_expected__ AS (\n  SELECT 8 AS doubled\n)\nSELECT 1\n"
         )

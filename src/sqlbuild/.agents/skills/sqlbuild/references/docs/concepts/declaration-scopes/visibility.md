@@ -116,7 +116,7 @@ WITH
 __expected__orders AS (
   SELECT
     1 AS order_id,
-    @normalize_order_status("'completed'") AS normalized_status,
+    @py.normalize_order_status("'completed'") AS normalized_status,
     @enum("order_status").COMPLETED AS status
 )
 ```
@@ -140,7 +140,7 @@ macro's production owner. SQLBuild infers tested macros from calls in `__macro_a
 filename or directory does not grant production visibility.
 
 ```text
-models/orders/_sqlbuild/_macros/order_policy.py
+models/orders/_sqlbuild/_macros/python/order_policy.py
 tests/unit/macros/models/orders/test_order_policy__returns_quantity.sql
 ```
 
@@ -164,8 +164,8 @@ A macro file may import another project macro file when the imported macro is av
 importing file's location. The same directory rules apply as they do to SQL.
 
 ```python
-# models/commerce/macros/orders.py
-from macros.currency import round_money
+# models/commerce/macros/python/orders.py
+from macros.python.currency import round_money
 
 def formatted_total(expression: str) -> str:
     return round_money(expression)
@@ -188,7 +188,7 @@ second version that overrides another declaration.
 Macros, enums, and constants use separate namespaces, so these three references may coexist:
 
 ```sql
-@format_currency()
+@py.format_currency()
 @const("format_currency")
 @enum("format_currency").USD
 ```

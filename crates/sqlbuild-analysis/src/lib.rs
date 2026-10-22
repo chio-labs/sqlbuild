@@ -42,6 +42,7 @@ pub mod semantic_checks;
 pub mod semantic_usage;
 pub mod semantic_validation;
 pub mod snowflake_cost;
+pub mod sql_macros;
 pub mod sql_test_attachment;
 pub mod sql_tokens;
 pub mod target_paths;

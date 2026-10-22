@@ -57,9 +57,9 @@ _FUNCTION: bytes = (
 )
 _EVERY_KIND: tuple[tuple[str, bytes], ...] = (
     ("models/marts/orders.sql", _MODEL),
-    ("macros/money.py", _MACRO),
-    ("macros/__init__.py", b""),
-    ("models/marts/_macros/local.py", _MACRO),
+    ("macros/python/money.py", _MACRO),
+    ("macros/python/__init__.py", b""),
+    ("models/marts/_macros/python/local.py", _MACRO),
     ("enums/status.sql", _ENUMS),
     ("models/marts/_enums/tier.sql", b"ENUM (name tier, members [GOLD]);\n"),
     ("models/marts/_sqlbuild/constants/limits.sql", _CONSTANTS),
@@ -76,7 +76,7 @@ _EVERY_KIND: tuple[tuple[str, bytes], ...] = (
     ("hooks/sql/_private.sql", b"not a hook"),
     ("functions/sql/double_amount.sql", _FUNCTION),
     ("functions/sql/finance/net_amount.sql", _FUNCTION),
-    ("functions/sql/_macros/helpers.py", _MACRO),
+    ("functions/sql/_macros/python/helpers.py", _MACRO),
     ("seeds/channels.csv", b"id\n1\n"),
     (
         "seeds/seeds.yml",
@@ -212,7 +212,7 @@ def test_given_generated_declaration_files_when_discovering_then_native_parses_o
         DeclarationFilesParityTestCase(
             description="a nested declaration root fails before any file is parsed",
             files=(
-                ("models/marts/_enums/macros/money.py", _MACRO),
+                ("models/marts/_enums/macros/python/money.py", _MACRO),
                 ("enums/status.sql", b"broken"),
             ),
             expected_failure_type="DeclarationParseError",
@@ -226,7 +226,7 @@ def test_given_generated_declaration_files_when_discovering_then_native_parses_o
         ),
         DeclarationFilesParityTestCase(
             description="an unreadable macro file fails with Python's decode error",
-            files=(("macros/money.py", b"# \xc3"),),
+            files=(("macros/python/money.py", b"# \xc3"),),
             expected_failure_type="UnicodeDecodeError",
             expected_message_fragment="unexpected end of data",
         ),

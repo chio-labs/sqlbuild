@@ -38,7 +38,7 @@ _EXPRESSION_SOURCE_YML: str = (
     "sources:\n"
     "  - name: open_orders\n"
     "    contract: none\n"
-    '    expression: "SELECT @cents(1) AS cents, @enum(\\"order_status\\").PLACED AS status,'
+    '    expression: "SELECT @py.cents(1) AS cents, @enum(\\"order_status\\").PLACED AS status,'
     ' @const(\\"order_cap\\") AS cap, \'@@region\' AS region"\n'
 )
 

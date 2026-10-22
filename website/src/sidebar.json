@@ -89,11 +89,12 @@
 				]
 			},
 			{
-				"label": "Python Macros",
+				"label": "Macros",
 				"collapsed": true,
 				"items": [
 					"docs/concepts/macros",
-					"docs/concepts/macros/composition-and-context"
+					"docs/concepts/macros/composition-and-context",
+					"docs/concepts/macros/sql-macros"
 				]
 			},
 			"docs/concepts/interpolation",

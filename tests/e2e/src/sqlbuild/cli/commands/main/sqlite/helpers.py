@@ -764,7 +764,7 @@ _WAFFLE_SQLITE_REWRITES: tuple[tuple[str, str, str], ...] = (
         "o.status = 'completed' AS is_completed_order_py,",
     ),
     (
-        "models/marts/_macros/time.py",
+        "models/marts/_macros/python/time.py",
         "    return f\"DATE_TRUNC('{grain}', {expression})\"",
         '    if ctx.adapter_name == "sqlite" and grain == "day":\n'
         "        return f\"datetime({expression}, 'start of day')\"\n"

@@ -2,8 +2,8 @@
 
 use crate::constants::{
     CANONICAL_AUTHORED_ROOTS, DECLARATION_GROUP_DIRECTORY, GLOBAL_DECLARATION_DIRECTORIES,
-    LOCAL_DECLARATION_DIRECTORIES, PYTHON_FILE_SUFFIX, SCOPED_DECLARATION_DIRECTORIES,
-    SQL_FILE_SUFFIX,
+    LOCAL_DECLARATION_DIRECTORIES, PYTHON_FILE_SUFFIX, PYTHON_MACROS_DIRECTORY,
+    SCOPED_DECLARATION_DIRECTORIES, SQL_FILE_SUFFIX, SQL_MACROS_DIRECTORY,
 };
 use crate::declarations::_helpers::declaration_groups::validate_declaration_groups;
 use crate::declarations::_helpers::paths::{directory_facts, name, parent, stem};
@@ -15,6 +15,9 @@ use crate::tree::main::path_order::compare_posix_text;
 use crate::tree::main::rglob::rglob;
 use crate::tree::models::ProjectTree;
 use sqlbuild_core::constants::PYTHON_INIT_MODULE_STEM;
+
+/// The SQL test folder of macro tests, which keeps Python macro files without a kind folder.
+const MACRO_TESTS_ROOT: &str = "tests/unit/macros";
 
 /// Where a declaration root sits and who owns it.
 struct DeclarationRoot<'a> {
@@ -134,6 +137,9 @@ fn files_under_root(
     let Some((kind, _)) = directory_facts(name(root.directory)) else {
         return Ok(Vec::new());
     };
+    if kind == DeclarationKind::Macro && root.directory != MACRO_TESTS_ROOT {
+        return macro_files(tree, root);
+    }
     let suffix: &str = if kind == DeclarationKind::Macro {
         PYTHON_FILE_SUFFIX
     } else {
@@ -155,4 +161,60 @@ fn files_under_root(
             })
             .collect(),
     )
+}
+
+/// Python macros below `python/` and SQL macros below `sql/`; any other macro file is misplaced.
+fn macro_files(
+    tree: &ProjectTree,
+    root: &DeclarationRoot<'_>,
+) -> Result<Vec<DeclarationFileFact>, ScanError> {
+    let paths: Vec<String> = rglob(tree, root.directory, |entry| {
+        entry.name.ends_with(PYTHON_FILE_SUFFIX) || entry.name.ends_with(SQL_FILE_SUFFIX)
+    })?;
+    let mut facts: Vec<DeclarationFileFact> = Vec::new();
+    for relative_path in paths {
+        let inside: &str = &relative_path[root.directory.len() + 1..];
+        let python: bool = relative_path.ends_with(PYTHON_FILE_SUFFIX);
+        if python && stem(name(&relative_path)) == PYTHON_INIT_MODULE_STEM {
+            continue;
+        }
+        let (folder, rest) = inside.split_once('/').unwrap_or(("", inside));
+        let expected: &str = if python {
+            PYTHON_MACROS_DIRECTORY
+        } else {
+            SQL_MACROS_DIRECTORY
+        };
+        if folder != expected {
+            let destination: &str =
+                if folder == PYTHON_MACROS_DIRECTORY || folder == SQL_MACROS_DIRECTORY {
+                    rest
+                } else {
+                    inside
+                };
+            return Err(ScanError::Failure(crate::models::DiscoveryFailure {
+                kind: crate::models::FailureKind::Declaration,
+                message: format!(
+                    "macro file {} must live in {}/{PYTHON_MACROS_DIRECTORY}/ or {}/{SQL_MACROS_DIRECTORY}/\n  --> {}",
+                    shown(&relative_path),
+                    shown(root.directory),
+                    shown(root.directory),
+                    shown(&relative_path),
+                ),
+                help: Some(format!(
+                    "move it to {}/{expected}/{}",
+                    shown(root.directory),
+                    shown(destination)
+                )),
+            }));
+        }
+        facts.push(DeclarationFileFact {
+            relative_path,
+            kind: DeclarationKind::Macro,
+            scope_kind: root.scope_kind,
+            ownership_root: root.ownership_root.to_owned(),
+            owning_path: root.owning_path.map(str::to_owned),
+            declaration_root: root.directory.to_owned(),
+        });
+    }
+    Ok(facts)
 }

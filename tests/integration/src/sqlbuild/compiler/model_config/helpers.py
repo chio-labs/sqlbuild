@@ -504,7 +504,9 @@ def column_metadata_outcome(*, project_dir: Path, header_column: str) -> tuple[o
         "sqlbuild_project.toml": (
             'name = "orders"\nadapter = "duckdb"\n\n[vars]\ncolumn_type = "BIGINT"\n'
         ),
-        "macros/amounts.py": 'def cents(column: str) -> str:\n    return f"{column} * 100"\n',
+        "macros/python/amounts.py": (
+            'def cents(column: str) -> str:\n    return f"{column} * 100"\n'
+        ),
         "models/orders.sql": (
             f"MODEL (description 'Orders.', columns ({header_column}));\nSELECT 1 AS amount\n"
         ),

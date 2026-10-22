@@ -17,6 +17,20 @@ pub(crate) fn macro_call(text: &str) -> bool {
         {
             index += 1;
         }
+        if matches!(&text[at + 1..index], "py" | "sql")
+            && bytes.get(index) == Some(&b'.')
+            && bytes
+                .get(index + 1)
+                .is_some_and(|byte| byte.is_ascii_alphabetic() || *byte == b'_')
+        {
+            index += 1;
+            while bytes
+                .get(index)
+                .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
+            {
+                index += 1;
+            }
+        }
         opens_call(&text[index..])
     })
 }

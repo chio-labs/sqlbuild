@@ -26,7 +26,7 @@ _EMIT_MACRO: str = (
     "from pathlib import Path\n\n\n"
     "def emit(expression: str) -> str:\n"
     '    """Return the expression, logging each execution."""\n\n'
-    f"    with (Path(__file__).resolve().parents[1] / {_CALL_LOG!r}).open(\n"
+    f"    with (Path(__file__).resolve().parents[2] / {_CALL_LOG!r}).open(\n"
     '        "a", encoding="utf-8"\n'
     "    ) as log:\n"
     '        _ = log.write("call\\n")\n'
@@ -92,9 +92,9 @@ _NO_SQL_ANALYSIS_CONFIG: str = FAILURE_BASE_CONFIG + "\n[settings]\nsql_analysis
         ReferenceScanErrorTestCase(
             description="macro_output_fault_before_an_authored_fault_is_unlocated",
             project_files={
-                "macros/emit.py": _EMIT_MACRO,
+                "macros/python/emit.py": _EMIT_MACRO,
                 FAILURE_MART_PATH: _MART_HEADER
-                + "SELECT customer_id, @emit('__ref(1') AS total_amount\n"
+                + "SELECT customer_id, @py.emit('__ref(1') AS total_amount\n"
                 'FROM __ref("stg_orders"\n',
             },
             expected_message=(
@@ -106,8 +106,9 @@ _NO_SQL_ANALYSIS_CONFIG: str = FAILURE_BASE_CONFIG + "\n[settings]\nsql_analysis
         ReferenceScanErrorTestCase(
             description="authored_fault_after_a_macro_is_located_natively",
             project_files={
-                "macros/emit.py": _EMIT_MACRO,
-                FAILURE_MART_PATH: _MART_HEADER + "SELECT customer_id, @emit('1') AS total_amount\n"
+                "macros/python/emit.py": _EMIT_MACRO,
+                FAILURE_MART_PATH: _MART_HEADER
+                + "SELECT customer_id, @py.emit('1') AS total_amount\n"
                 'FROM __ref("stg_orders"\n',
             },
             expected_message=(

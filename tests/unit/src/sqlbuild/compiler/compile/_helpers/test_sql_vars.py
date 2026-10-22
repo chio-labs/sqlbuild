@@ -51,9 +51,9 @@ _FILE_PATH: Path = Path("models/test_model.sql")
         ),
         SubstituteSqlVarsTestCase(
             description="does not replace macro call with parens",
-            sql="SELECT @my_macro('arg') FROM orders",
+            sql="SELECT @py.my_macro('arg') FROM orders",
             effective_vars={"my_macro": "should_not_appear"},
-            expected_sql="SELECT @my_macro('arg') FROM orders",
+            expected_sql="SELECT @py.my_macro('arg') FROM orders",
         ),
         SubstituteSqlVarsTestCase(
             description="does not replace single at placeholder syntax",

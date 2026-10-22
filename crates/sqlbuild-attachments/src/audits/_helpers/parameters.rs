@@ -47,7 +47,7 @@ pub(crate) fn parameter_matches(sql: &str) -> Vec<ParameterMatch<'_>> {
         let Some(end) = identifier_end(bytes, index + 1) else {
             continue;
         };
-        if !opens_call(sql, end) {
+        if !opens_call(sql, end) && !opens_kind_call(sql, index + 1, end) {
             matches.push(ParameterMatch {
                 name: &sql[index + 1..end],
                 start: index,
@@ -92,6 +92,15 @@ fn identifier_end(bytes: &[u8], start: usize) -> Option<usize> {
         end += 1;
     }
     Some(end)
+}
+
+/// Whether `@py.name(` or `@sql.name(` starts at the kind name ending at `end`.
+fn opens_kind_call(sql: &str, start: usize, end: usize) -> bool {
+    let bytes: &[u8] = sql.as_bytes();
+    if !matches!(&sql[start..end], "py" | "sql") || bytes.get(end) != Some(&b'.') {
+        return false;
+    }
+    identifier_end(bytes, end + 1).is_some_and(|name_end| opens_call(sql, name_end))
 }
 
 /// Python's `(?=\s*\()` after a name, with `\s` matching what `str.isspace` accepts.

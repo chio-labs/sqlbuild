@@ -465,6 +465,13 @@ impl ConstantRendering {
         }
     }
 
+    /// The adapter name the value renderer renders for, empty when it names none.
+    pub(crate) fn adapter_name(&self, py: Python<'_>) -> String {
+        native_field(self.value_renderer.bind(py), "adapter_name")
+            .and_then(|name| name.extract::<String>())
+            .unwrap_or_default()
+    }
+
     /// One visible constant as SQL, its failures located at `file_path`.
     pub(crate) fn render(
         &self,

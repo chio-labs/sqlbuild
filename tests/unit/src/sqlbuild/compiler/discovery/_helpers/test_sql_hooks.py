@@ -24,10 +24,10 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import discover
     [
         ParseSqlHookTestCase(
             description="parses hook description and SQL body",
-            contents=('HOOK (description "Grant: access");\n\n@grant(role: "analyst:read")\n'),
+            contents=('HOOK (description "Grant: access");\n\n@py.grant(role: "analyst:read")\n'),
             expected_name="grant_access",
             expected_description="Grant: access",
-            expected_sql_body='@grant(role: "analyst:read")',
+            expected_sql_body='@py.grant(role: "analyst:read")',
         ),
         ParseSqlHookTestCase(
             description="allows header-like text inside strings and comments",

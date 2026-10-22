@@ -2437,6 +2437,7 @@ pending_budgets = [
     "crates/sqlbuild-python/src/bindings/_helpers/render/macro_expansion_facts.rs=2",
     "crates/sqlbuild-python/src/bindings/_helpers/render/macro_expansion_result.rs=8",
     "crates/sqlbuild-python/src/bindings/_helpers/render/macro_generated_references.rs=6",
+    "crates/sqlbuild-python/src/bindings/_helpers/render/sql_macro_host.rs=2",
     "crates/sqlbuild-python/src/bindings/_helpers/result_output/documents.rs=8",
     "crates/sqlbuild-python/src/bindings/_helpers/result_output/event_writer.rs=2",
     "crates/sqlbuild-python/src/bindings/_helpers/result_output/integration_envelope.rs=4",

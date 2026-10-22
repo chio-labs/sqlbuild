@@ -1,13 +1,15 @@
 //! DSL header kinds, rule codes and the text the header rules read and write.
 
-pub const HEADER_KINDS: [&str; 9] = [
-    "AUDIT", "CONSTANT", "ENUM", "FUNCTION", "HOOK", "MODEL", "SCENARIO", "SCHEMA", "TEST",
+pub const HEADER_KINDS: [&str; 10] = [
+    "AUDIT", "CONSTANT", "ENUM", "FUNCTION", "HOOK", "MACRO", "MODEL", "SCENARIO", "SCHEMA", "TEST",
 ];
 pub const MEASUREMENT_KINDS: [&str; 2] = ["EVIDENCE", "MEASURE"];
 pub(crate) const DESCRIPTION_HEADER_KINDS: [&str; 2] = ["MODEL", "SCENARIO"];
 pub(crate) const DESCRIPTION_REQUIRED_HEADER_KINDS: [&str; 4] =
     ["MODEL", "SCENARIO", "FUNCTION", "HOOK"];
 pub(crate) const MODEL_KIND: &str = "MODEL";
+/// The SQL macro header, whose typed arguments the compiler parses and checks, not these rules.
+pub(crate) const SQL_MACRO_HEADER_KIND: &str = "MACRO";
 pub const RULE_DESCRIPTION_PRESENT: &str = "description-present";
 pub const RULE_DESCRIPTION_LENGTH: &str = "description-length";
 pub const RULE_LEADING_COMMENT_DESCRIPTION: &str = "leading-comment-description";

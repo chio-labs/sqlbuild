@@ -53,7 +53,7 @@ def write_scope_performance_project(
         models_in_domain: int = next_model_index - first_model_index
         root_model_count: int = min(10, models_in_domain)
         domain_dir: Path = project_dir / "models" / f"domain_{domain:03d}"
-        macros_dir: Path = domain_dir / "macros"
+        macros_dir: Path = domain_dir / "macros" / "python"
         macros_dir.mkdir(parents=True)
         macro_source: str = "\n\n".join(
             f"def domain_{domain:03d}_identity_{offset:02d}(expression: str) -> str:\n"
@@ -83,7 +83,7 @@ def write_unicode_macro_project(*, project_dir: Path, macro_names: tuple[str, ..
     """Write one model and a global macro file defining each named macro."""
 
     (project_dir / "models").mkdir(parents=True)
-    (project_dir / "macros").mkdir()
+    (project_dir / "macros" / "python").mkdir(parents=True)
     (project_dir / "sqlbuild_project.toml").write_text(
         'name = "scope_unicode"\nadapter = "duckdb"\n', encoding="utf-8"
     )
@@ -93,12 +93,13 @@ def write_unicode_macro_project(*, project_dir: Path, macro_names: tuple[str, ..
     macro_source: str = "\n\n".join(
         f"def {name}(expression: str) -> str:\n    return expression\n" for name in macro_names
     )
-    (project_dir / "macros" / "names.py").write_text(macro_source, encoding="utf-8")
+    (project_dir / "macros" / "python" / "names.py").write_text(macro_source, encoding="utf-8")
 
 
 def _write_scope_model(*, model_dir: Path, model_index: int, macro_name: str) -> None:
     (model_dir / f"model_{model_index:05d}.sql").write_text(
-        f'MODEL(description "Test model.");\nSELECT @{macro_name}("id") AS id\n', encoding="utf-8"
+        f'MODEL(description "Test model.");\nSELECT @py.{macro_name}("id") AS id\n',
+        encoding="utf-8",
     )
 
 

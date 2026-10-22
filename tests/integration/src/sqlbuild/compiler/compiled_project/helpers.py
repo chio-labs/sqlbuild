@@ -152,15 +152,15 @@ PARITY_FILES: dict[str, str] = {
         'SELECT @enum("order_status").PLACED AS status, @const("order_cap") AS cap\n'
         'WHERE 30 NOT IN @const("held_codes")\n'
     ),
-    "macros/money.py": 'def cents(value: str) -> str:\n    return f"{value} * 100"\n',
+    "macros/python/money.py": 'def cents(value: str) -> str:\n    return f"{value} * 100"\n',
     "models/marts/priced.sql": (
         "MODEL (description 'Priced orders.');\n"
-        "SELECT @cents('3') AS cents, order_id FROM __ref(\"stg_orders\")\n"
+        "SELECT @py.cents('3') AS cents, order_id FROM __ref(\"stg_orders\")\n"
     ),
     "models/marts/hooked.sql": (
         "MODEL (\n  description 'Hooked orders.',\n"
         "  pre_hooks [inline_sql('SELECT @@region AS region')],\n"
-        "  post_hooks [inline_sql('SELECT @cents(2) AS cents')],\n);\n"
+        "  post_hooks [inline_sql('SELECT @py.cents(2) AS cents')],\n);\n"
         "SELECT 1 AS order_id\n"
     ),
     "models/marts/migrated.sql": (
@@ -280,7 +280,7 @@ SQL_HOOK_FILES: dict[str, str] = {
     "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n\n[vars]\nregion = "eu"\n',
     "enums/status.sql": "ENUM (name order_status, members [PLACED, SHIPPED]);\n",
     "constants/limits.sql": "CONSTANT (name order_cap, value 3);\n",
-    "macros/money.py": 'def cents(value: str) -> str:\n    return f"{value} * 100"\n',
+    "macros/python/money.py": 'def cents(value: str) -> str:\n    return f"{value} * 100"\n',
     "hooks/sql/grant_read.sql": (
         "HOOK (description 'Grant read access.');\n\n"
         "GRANT SELECT ON @@CTX:destination.qualified TO @'role'\n"
@@ -288,7 +288,7 @@ SQL_HOOK_FILES: dict[str, str] = {
     "hooks/sql/log_load.sql": (
         "HOOK (description 'Log a load.');\n\n"
         'INSERT INTO @target SELECT @enum("order_status").PLACED, @const("order_cap"),'
-        " @cents(@amount), '@@region' FROM __ref(\"stg_orders\")\n"
+        " @py.cents(@amount), '@@region' FROM __ref(\"stg_orders\")\n"
     ),
     "models/staging/stg_orders.sql": "MODEL ();\nSELECT 1 AS order_id\n",
     "models/marts/loaded.sql": (
@@ -302,7 +302,7 @@ SQL_HOOK_FILES: dict[str, str] = {
 
 MACRO_FILES: dict[str, str] = {
     "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n\n[vars]\nregion = "eu"\n',
-    "macros/amounts.py": (
+    "macros/python/amounts.py": (
         '"""Amount macros."""\n\n\n'
         'def cents(value):\n    """Cents."""\n    return f"{value} * 100"\n\n\n'
         'def word():\n    """A word."""\n    return "x"\n'
@@ -403,7 +403,7 @@ SOURCE_PROJECT_FILES: dict[str, str] = {
     ),
     "enums/status.sql": "ENUM (name order_status, members [PLACED, SHIPPED]);\n",
     "constants/limits.sql": "CONSTANT (name order_cap, value 3);\n",
-    "macros/money.py": 'def cents(value: str) -> str:\n    return f"{value} * 100"\n',
+    "macros/python/money.py": 'def cents(value: str) -> str:\n    return f"{value} * 100"\n',
 }
 _SOURCE_CONNECTION: dict[str, object] = {"database": "warehouse", "schema": "main"}
 

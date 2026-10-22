@@ -197,8 +197,8 @@ SQLBuild processes authored SQL in this order:
 1. **Config templates** (`${CTX:...}`, `${ENV:...}`) in TOML/YAML config values are resolved during config compilation
 2. **Named SQL hook arguments** (`@name` and `@'name'`) are substituted into reusable hook bodies
 3. **Project variables** (`@@name`), **environment variables** (`@@ENV:NAME`), and **context variables** (`@@CTX:name` in SQL hooks) are substituted
-4. **Enum and constant references** are validated, normalized, and expanded through the active adapter
-5. **Macro calls** (`@name(args)`) are expanded
+4. **Enum and constant references** are validated, normalized, and expanded through the active adapter, and **SQL macro calls** (`@sql.name(args)`) are expanded
+5. **Python macro calls** (`@py.name(args)`) are expanded
 6. **SQL analysis validation** runs against the fully expanded SQL
 
 This means:

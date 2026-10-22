@@ -7,7 +7,7 @@ from scripts.compiler_differential.constants import (
 )
 from scripts.compiler_differential.models import FailureCase
 
-_STAGING_MACRO_PATH: str = "models/staging/_macros/amounts.py"
+_STAGING_MACRO_PATH: str = "models/staging/_macros/python/amounts.py"
 _STAGING_MACRO: str = "def staged_amount(value):\n    return f'{value} * 1'\n"
 _STAGING_ENUM_PATH: str = "models/staging/_enums/status.sql"
 _STAGING_ENUM: str = "ENUM (name staged_status, members [PLACED]);\n"
@@ -18,10 +18,10 @@ _SCOPE_SCENARIO_PATH: str = "tests/scenarios/orders.sql"
 _SCENARIO_HEADER: str = 'SCENARIO (\n  description "Order flow"\n);\n\n'
 
 
-_GLOBAL_MACRO_PATH: str = "macros/amounts.py"
+_GLOBAL_MACRO_PATH: str = "macros/python/amounts.py"
 _GLOBAL_MACRO: str = "def doubled(value):\n    return f'{value} * 2'\n"
 _MART_WITH_MACRO: str = (
-    _MART_HEADER + "SELECT customer_id, SUM(@doubled('amount')) AS total_amount\n"
+    _MART_HEADER + "SELECT customer_id, SUM(@py.doubled('amount')) AS total_amount\n"
     'FROM __ref("stg_orders")\nGROUP BY customer_id\n'
 )
 
@@ -67,7 +67,7 @@ def scope_failure_cases() -> tuple[FailureCase, ...]:
             files={
                 _STAGING_MACRO_PATH: _STAGING_MACRO,
                 FAILURE_MART_PATH: _MART_HEADER
-                + "SELECT customer_id, SUM(@staged_amount('amount')) AS total_amount\n"
+                + "SELECT customer_id, SUM(@py.staged_amount('amount')) AS total_amount\n"
                 'FROM __ref("stg_orders")\nGROUP BY customer_id\n',
             },
         ),
@@ -76,9 +76,11 @@ def scope_failure_cases() -> tuple[FailureCase, ...]:
             expected_code="P001",
             files={
                 _STAGING_ENUM_PATH: _STAGING_ENUM,
-                "models/marts/_macros/totals.py": "def mart_total(value):\n    return value\n",
+                "models/marts/_macros/python/totals.py": (
+                    "def mart_total(value):\n    return value\n"
+                ),
                 FAILURE_STAGING_PATH: _STAGING_HEADER
-                + "SELECT order_id, customer_id, @mart_total('amount') AS amount, status\n"
+                + "SELECT order_id, customer_id, @py.mart_total('amount') AS amount, status\n"
                 'FROM __source("raw_orders")\n',
                 FAILURE_MART_PATH: _MART_HEADER
                 + "SELECT customer_id, SUM(amount) AS total_amount\n"
@@ -128,9 +130,9 @@ def scope_failure_cases() -> tuple[FailureCase, ...]:
             expected_message=f"SQL test '{_TEST_PATH}' CTE '__macro_actual__' must use AS (...)",
             files={
                 _STAGING_ENUM_PATH: _STAGING_ENUM,
-                "macros/amounts.py": "def doubled(value):\n    return f'{value} * 2'\n",
+                "macros/python/amounts.py": "def doubled(value):\n    return f'{value} * 2'\n",
                 _TEST_PATH: 'TEST (mode macro, name "doubled");\n\nWITH\n'
-                "__macro_actual__ AS SELECT @doubled('1') AS amount\n",
+                "__macro_actual__ AS SELECT @py.doubled('1') AS amount\n",
             },
         ),
     )

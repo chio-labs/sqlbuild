@@ -29,7 +29,7 @@ MODEL (
 WITH hourly_activity AS (
   SELECT
     activity_hour,
-    @timestamp_trunc('day', 'activity_hour') AS activity_day,
+    @py.timestamp_trunc('day', 'activity_hour') AS activity_day,
     orders_placed,
     waffles_ordered,
     revenue_cents

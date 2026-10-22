@@ -29,8 +29,8 @@ fn given_sql_when_scanning_interpolation_then_sites_outside_comments_and_strings
         InterpolationSitesTestCase {
             description: "macros, variables and templates",
             dialect: "duckdb",
-            sql: "SELECT @cents(amount), @@limit_rows, ${var} FROM t",
-            expected_sites: &["@cents(amount)", "@@limit_rows", "${var}"],
+            sql: "SELECT @py.cents(amount), @@limit_rows, ${var} FROM t",
+            expected_sites: &["@py.cents(amount)", "@@limit_rows", "${var}"],
         },
         InterpolationSitesTestCase {
             description: "a backslash before a line break backtracks to the last doubled quote",
@@ -106,8 +106,8 @@ fn given_sql_when_building_analysis_sql_then_sites_become_same_length_placeholde
     let test_cases = [
         AnalysisSqlTestCase {
             description: "resource and macro sites",
-            sql: "SELECT a FROM __ref('orders') o JOIN @m(x) m",
-            expected_sql: "SELECT a FROM _qr0___________ o JOIN _qx1_ m",
+            sql: "SELECT a FROM __ref('orders') o JOIN @py.m(x) m",
+            expected_sql: "SELECT a FROM _qr0___________ o JOIN _qx1____ m",
             expected_tables: &["ref orders _qr0___________"],
         },
         AnalysisSqlTestCase {

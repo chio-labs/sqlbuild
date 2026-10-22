@@ -828,7 +828,7 @@ EARLY_LINT_PROJECT_FILES: dict[str, str] = {
         'name = "orders"\nadapter = "duckdb"\n\n[vars]\nfloor = "2"\n\n'
         '[rules]\nselect = ["SQBRSQL005"]\n'
     ),
-    "models/_macros/cents.py": (
+    "models/_macros/python/cents.py": (
         'def cents(expression: str) -> str:\n    """Convert to cents."""\n'
         '    return f"({expression} * 100)"\n'
     ),
@@ -837,7 +837,7 @@ EARLY_LINT_PROJECT_FILES: dict[str, str] = {
     ),
     "models/order_cents.sql": (
         'MODEL (description "Order amounts in cents");\n'
-        'WITH floored AS (SELECT order_id, @cents("amount") AS amount_cents, '
+        'WITH floored AS (SELECT order_id, @py.cents("amount") AS amount_cents, '
         '@@floor AS floor_amount FROM __ref("orders")), spare AS (SELECT 1 AS one)\n'
         "SELECT order_id, amount_cents FROM floored WHERE amount_cents > floor_amount\n"
     ),

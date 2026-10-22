@@ -22,7 +22,7 @@ _PROJECT_FILES: dict[str, str] = {
         '[connection]\ndatabase = "commented_fixtures.duckdb"\n\n'
         '[defaults]\nmaterialized = "table"\n'
     ),
-    "macros/status.py": (
+    "macros/python/status.py": (
         'def normalize_status(value: str) -> str:\n    return f"LOWER(TRIM({value}))"\n'
     ),
     "sources/raw_orders.yml": (
@@ -36,7 +36,7 @@ _PROJECT_FILES: dict[str, str] = {
     ),
     "models/orders.sql": (
         "MODEL (description 'Test model orders.');\n\n"
-        'SELECT order_id, @normalize_status("status") AS status FROM __source("raw_orders")\n'
+        'SELECT order_id, @py.normalize_status("status") AS status FROM __source("raw_orders")\n'
     ),
     "models/order_counts.sql": (
         "MODEL (description 'Test model order_counts.');\n\n"
@@ -89,7 +89,7 @@ _MISMATCH_FRAGMENT: str = (
         CommentedFixtureE2ETestCase(
             description="bounded CTE casts joins and unions execute with mocked sources",
             test_files={
-                "macros/status.py": "",
+                "macros/python/status.py": "",
                 "models/orders.sql": (
                     "MODEL (description 'Orders through projected CTEs.');\n"
                     'WITH imported AS (SELECT * FROM __source("raw_orders")),\n'
@@ -114,8 +114,8 @@ _MISMATCH_FRAGMENT: str = (
         CommentedFixtureE2ETestCase(
             description="nested model CTEs and marker lookalikes preserve mocked source results",
             test_files={
-                "macros/status.py": "",
-                "models/_macros/status.py": _PROJECT_FILES["macros/status.py"],
+                "macros/python/status.py": "",
+                "models/_macros/python/status.py": _PROJECT_FILES["macros/python/status.py"],
                 "models/orders.sql": (
                     "MODEL (description 'Orders through nested CTEs.');\n"
                     'WITH "recent" AS (\n'
@@ -123,7 +123,7 @@ _MISMATCH_FRAGMENT: str = (
                     '    FROM __source("raw_orders"))\n'
                     "  SELECT order_id, status FROM nested\n"
                     ")\n"
-                    'SELECT order_id, @normalize_status("status") AS status\n'
+                    'SELECT order_id, @py.normalize_status("status") AS status\n'
                     'FROM "recent" /* __seed("ignored") */\n'
                 ),
                 "tests/unit/test_orders.sql": (
@@ -171,7 +171,7 @@ _MISMATCH_FRAGMENT: str = (
                     'TEST (mode macro, name "normalizes_status_commented");\n\nWITH\n'
                     "input_values AS (SELECT '  PAID  ' AS raw_status),\n"
                     "__macro_actual__ AS (\n"
-                    '  SELECT @normalize_status("raw_status") AS status FROM input_values\n'
+                    '  SELECT @py.normalize_status("raw_status") AS status FROM input_values\n'
                     "),\n"
                     "__macro_expected__ AS (\n"
                     "  SELECT 'paid' AS status -- normalized\n"
