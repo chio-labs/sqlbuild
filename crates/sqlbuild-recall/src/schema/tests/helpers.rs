@@ -119,3 +119,58 @@ pub(crate) fn changed_statements_view(
     statements.retain(|column| !removed.contains(&column.as_str()));
     views
 }
+
+/// Views that pass a table through with `SELECT *`, and that table.
+const PASSTHROUGH_VIEWS: [(&str, Table); 3] = [
+    ("events", Table::Events),
+    ("diagnostics", Table::Diagnostics),
+    ("conflicts", Table::Conflicts),
+];
+
+/// The columns a ClickHouse view body exposes: its passed-through table's, or the aliases of its final top-level `SELECT` list.
+pub(crate) fn clickhouse_view_columns(view: &str, body: &str) -> BTreeSet<String> {
+    PASSTHROUGH_VIEWS
+        .iter()
+        .find(|(name, _)| *name == view)
+        .map(|(_, table)| {
+            table_columns(*table)
+                .into_iter()
+                .map(|column| column.name.to_owned())
+                .collect()
+        })
+        .unwrap_or_else(|| select_list_names(body))
+}
+
+fn select_list_names(body: &str) -> BTreeSet<String> {
+    let start: usize = body.rfind("\nSELECT").map_or(0, |index| index + 1);
+    let list: &str = body[start + "SELECT".len()..]
+        .split("\nFROM ")
+        .next()
+        .unwrap_or_default();
+    top_level_items(list)
+        .iter()
+        .map(|item| item_name(item))
+        .collect()
+}
+
+fn top_level_items(list: &str) -> Vec<String> {
+    let marked: String = list
+        .chars()
+        .scan((0_i32, false), |(depth, quoted), character| {
+            let separator: bool = *depth == 0 && !*quoted && character == ',';
+            *quoted ^= character == '\'';
+            *depth += i32::from(!*quoted && character == '(');
+            *depth -= i32::from(!*quoted && character == ')');
+            Some([character, '\u{0}'][usize::from(separator)])
+        })
+        .collect();
+    marked.split('\u{0}').map(str::to_owned).collect()
+}
+
+fn item_name(item: &str) -> String {
+    let normalized: String = item.split_whitespace().collect::<Vec<&str>>().join(" ");
+    normalized.rsplit_once(" AS ").map_or_else(
+        || normalized.rsplit('.').next().unwrap_or_default().to_owned(),
+        |(_, alias)| alias.to_owned(),
+    )
+}

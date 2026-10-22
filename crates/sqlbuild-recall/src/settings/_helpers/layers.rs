@@ -126,7 +126,7 @@ fn clickhouse_location(
             database.trim().to_owned()
         }
         Some(_) => {
-            return Err(SettingsError::new(format!(
+            return Err(SettingsError::invalid_configuration(format!(
                 "connections.{name}.database must name the existing ClickHouse database Recall \
                  writes to"
             )));
@@ -152,7 +152,7 @@ pub(crate) fn store_location(
         });
     };
     let entries = connection_entries(documents, name).ok_or_else(|| {
-        SettingsError::new(format!(
+        SettingsError::invalid_configuration(format!(
             "recall.{key} names unknown connection '{name}'; define [connections.{name}]"
         ))
     })?;
@@ -165,7 +165,7 @@ pub(crate) fn store_location(
     let adapter: String = match value(CONNECTION_ADAPTER_KEY) {
         Some(ConfigValue::String(adapter)) => adapter.trim().to_owned(),
         Some(_) => {
-            return Err(SettingsError::new(format!(
+            return Err(SettingsError::invalid_configuration(format!(
                 "connections.{name}.adapter must be a string"
             )));
         }
@@ -181,7 +181,7 @@ pub(crate) fn store_location(
         });
     }
     let Some(ConfigValue::String(path)) = value(SQLITE_PATH_KEY) else {
-        return Err(SettingsError::new(format!(
+        return Err(SettingsError::invalid_configuration(format!(
             "connections.{name}.path must name the SQLite file Recall writes"
         )));
     };

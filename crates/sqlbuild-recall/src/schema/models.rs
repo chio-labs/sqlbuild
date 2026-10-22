@@ -128,13 +128,19 @@ pub enum SchemaAge {
     Current,
     /// A relation has a column this build does not know: a newer build created it.
     Newer,
+    /// No view is visible, as to a user granted only the tables, so the store's age is unknown.
+    Unseen,
 }
 
 /// What a writer knows about the store's schema version.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StoreVersion {
-    /// The highest recorded version, and the age in seconds of the newest version row.
-    Recorded { version: i64, age_seconds: i64 },
+    /// The highest recorded version, the age in seconds of the newest version row, and whether any view is visible to this user.
+    Recorded {
+        version: i64,
+        age_seconds: i64,
+        views_visible: bool,
+    },
     /// No version row is left, as after retention expired it; the columns tell the store's age.
     Unrecorded(SchemaAge),
 }
@@ -144,6 +150,8 @@ pub enum StoreVersion {
 pub struct VersionPlan {
     /// Replace every view with this build's definition.
     pub replace_views: bool,
+    /// Run view statements at all: replacements, or creating missing views. A user who sees no view issues none, since they would fail on every start.
+    pub view_ddl: bool,
     /// The version to append once the views are settled, if any.
     pub record: Option<i64>,
 }

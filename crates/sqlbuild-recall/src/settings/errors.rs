@@ -4,7 +4,7 @@
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SettingsError {
     pub message: String,
-    /// A configuration mistake every command reports, not only a store this invocation cannot reach.
+    /// A configuration mistake every command reports, such as an unknown or incomplete connection; an unset environment variable or unreachable store is not one.
     pub invalid_configuration: bool,
 }
 

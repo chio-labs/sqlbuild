@@ -195,6 +195,7 @@ impl ClickHouseStore {
             return Ok(StoreVersion::Recorded {
                 version: state.version,
                 age_seconds: state.version_age_seconds,
+                views_visible: !state.views.is_empty(),
             });
         }
         let mut expected = view_columns().map_err(|message| StoreError {
@@ -225,7 +226,11 @@ impl ClickHouseStore {
                 .or_default()
                 .insert(text(row.get(1)));
         }
-        Ok(StoreVersion::Unrecorded(schema_age(&expected, &observed)))
+        Ok(StoreVersion::Unrecorded(schema_age(
+            &expected,
+            &observed,
+            &VIEW_NAMES,
+        )))
     }
 
     fn require_database(&self, py: Python<'_>) -> Result<(), StoreError> {
@@ -325,7 +330,12 @@ impl ClickHouseStore {
                 tables,
             });
         }
-        for (name, statement) in view_statements(Dialect::ClickHouse, &self.location.options) {
+        let view_ddl: Vec<(&str, String)> = if plan.view_ddl {
+            view_statements(Dialect::ClickHouse, &self.location.options)
+        } else {
+            Vec::new()
+        };
+        for (name, statement) in view_ddl {
             let statement: String = if plan.replace_views {
                 statement
             } else if !views.contains(name) {
@@ -920,6 +930,8 @@ fn observed_version(store: StoreVersion) -> i64 {
     match store {
         StoreVersion::Recorded { version, .. } => version,
         StoreVersion::Unrecorded(SchemaAge::Older) => 0,
-        StoreVersion::Unrecorded(SchemaAge::Current | SchemaAge::Newer) => RECALL_SCHEMA_VERSION,
+        StoreVersion::Unrecorded(SchemaAge::Current | SchemaAge::Newer | SchemaAge::Unseen) => {
+            RECALL_SCHEMA_VERSION
+        }
     }
 }

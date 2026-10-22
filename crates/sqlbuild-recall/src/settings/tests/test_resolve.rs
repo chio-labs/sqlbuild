@@ -1,6 +1,10 @@
 use crate::settings::models::{RecallSettings, StoreLocation, StorePurpose};
-use crate::settings::tests::helpers::{central_store, defaults, local_store, resolved};
-use crate::settings::tests::test_types::{ResolveErrorTestCase, ResolveTestCase};
+use crate::settings::tests::helpers::{
+    central_store, defaults, local_store, resolution_error, resolved,
+};
+use crate::settings::tests::test_types::{
+    ErrorKindTestCase, ResolveErrorTestCase, ResolveTestCase,
+};
 
 const DEFAULT_PROJECT: &[(&str, &str)] = &[(
     "sqlbuild_project.toml",
@@ -377,6 +381,49 @@ fn given_invalid_settings_when_resolved_then_the_error_names_the_setting() {
             .expect_err("the settings are invalid");
         assert!(
             message.contains(test_case.expected_message_fragment),
+            "{}: {message}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_a_write_connection_problem_when_recording_then_only_mistakes_fail_the_command() {
+    let test_cases = [
+        ErrorKindTestCase {
+            description: "a misspelled write connection is a configuration mistake",
+            files: &[(
+                "sqlbuild_project.toml",
+                "name = \"x\"\nadapter = \"duckdb\"\n[recall]\nwrite_connection = \"histroy_writer\"\n\
+                 read_connection = \"history\"\n[connections.history]\nadapter = \"sqlite\"\npath = \"h.sqlite3\"\n",
+            )],
+            expected_fragment: "recall.write_connection names unknown connection 'histroy_writer'",
+            expected_invalid_configuration: true,
+        },
+        ErrorKindTestCase {
+            description: "a SQLite write connection without a path is a configuration mistake",
+            files: &[(
+                "sqlbuild_project.toml",
+                "name = \"x\"\nadapter = \"duckdb\"\n[recall]\nwrite_connection = \"history\"\n\
+                 read_connection = \"history\"\n[connections.history]\nadapter = \"sqlite\"\n",
+            )],
+            expected_fragment: "connections.history.path must name the SQLite file",
+            expected_invalid_configuration: true,
+        },
+        ErrorKindTestCase {
+            description: "an unset writer variable only skips recording",
+            files: READER_CREDENTIALS_PROJECT,
+            expected_fragment: "connections.writer.password references unset",
+            expected_invalid_configuration: false,
+        },
+    ];
+
+    for test_case in test_cases {
+        let (message, invalid) = resolution_error(test_case.files, None, StorePurpose::Record)
+            .expect("the settings do not resolve");
+        assert_eq!(
+            (message.contains(test_case.expected_fragment), invalid),
+            (true, test_case.expected_invalid_configuration),
             "{}: {message}",
             test_case.description
         );

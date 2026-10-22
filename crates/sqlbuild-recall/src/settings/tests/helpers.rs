@@ -76,3 +76,23 @@ pub(crate) fn defaults() -> RecallSettings {
         destination_schema: None,
     }
 }
+
+/// Why settings for a project holding `files` do not resolve: the message and whether it is a configuration mistake.
+pub(crate) fn resolution_error(
+    files: &[(&str, &str)],
+    target: Option<&str>,
+    purpose: StorePurpose,
+) -> Option<(String, bool)> {
+    let directory = tempfile::tempdir().expect("a temporary directory can be created");
+    for (name, text) in files {
+        std::fs::write(directory.path().join(name), text).expect("test files can be written");
+    }
+    let request = SettingsRequest {
+        project_dir: directory.path().to_path_buf(),
+        selected_target: target.map(str::to_owned),
+        purpose,
+    };
+    resolve_recall_settings(&request)
+        .err()
+        .map(|error| (error.message, error.invalid_configuration))
+}

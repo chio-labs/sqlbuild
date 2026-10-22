@@ -55,7 +55,7 @@ pub(crate) fn expand_environment(text: &str, label: &str) -> Result<String, Sett
         expanded.push_str(&rest[..start]);
         let after = &rest[start + "${env:".len()..];
         let Some(end) = after.find('}') else {
-            return Err(SettingsError::new(format!(
+            return Err(SettingsError::invalid_configuration(format!(
                 "{label} has an unterminated ${{env:...}} reference"
             )));
         };

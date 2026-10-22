@@ -43,3 +43,9 @@ pub(crate) struct VersionPlanTestCase {
     pub(crate) store: crate::schema::models::StoreVersion,
     pub(crate) expected_plan: crate::schema::models::VersionPlan,
 }
+
+pub(crate) struct ViewColumnsTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) view: &'static str,
+    pub(crate) expected_same: bool,
+}

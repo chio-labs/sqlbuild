@@ -11,6 +11,7 @@ from tests.integration.src.sqlbuild.cli.recall._test_types import (
     ReadOnlyReaderTestCase,
     RecallConnectionErrorTestCase,
     SplitCredentialsTestCase,
+    UnsetWriterVariableTestCase,
 )
 from tests.integration.src.sqlbuild.cli.recall.helpers import (
     SPLIT_CREDENTIALS_TOML,
@@ -46,6 +47,14 @@ from tests.integration.src.sqlbuild.cli.recall.helpers import (
             recall_toml='[recall]\nwrite_connection = "history"\n',
             args=("build",),
             expected_message="recall.write_connection requires recall.read_connection",
+        ),
+        RecallConnectionErrorTestCase(
+            description="a misspelled write connection fails the build",
+            recall_toml=(
+                '[recall]\nwrite_connection = "histroy_writer"\nread_connection = "history"\n'
+            ),
+            args=("build",),
+            expected_message="error[C975]: recall.write_connection names unknown connection",
         ),
     ],
     ids=lambda case: case.description,
@@ -235,3 +244,24 @@ def test_given_connections_split_across_layers_when_building_then_history_is_rec
         == test_case.expected_invocations
     )
     assert (project_dir / "history.sqlite3").exists()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        UnsetWriterVariableTestCase(
+            description="an unset writer variable skips recording without failing the build",
+            expected_exit_code=0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_an_unset_writer_variable_when_building_then_the_command_still_succeeds(
+    test_case: UnsetWriterVariableTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_project(tmp_path / "orders_shop", extra_toml=SPLIT_CREDENTIALS_TOML)
+
+    built: subprocess.CompletedProcess[bytes] = run(project_dir, "build")
+
+    assert built.returncode == test_case.expected_exit_code, built.stderr.decode(errors="replace")
+    assert not (project_dir / "history.sqlite3").exists()

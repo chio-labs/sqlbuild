@@ -304,3 +304,9 @@ class RecallDiagnosticsTestCase:
     description: str
     global_args: tuple[str, ...]
     expected_debug_log: bool
+
+
+@dataclass(frozen=True)
+class UnsetWriterVariableTestCase:
+    description: str
+    expected_exit_code: int
