@@ -324,8 +324,9 @@ lifetime_orders
 								<h3>Rename models without rebuilding history</h3>
 								<p>
 									
-									<code>sqb rename</code> and <code>sqb mv</code> update every reference and keep the existing table, so an incremental model doesn't start again. The old name keeps working as a view. Renamed columns keep their history too.
+									<code>sqb rename</code> and <code>sqb mv</code> update every reference and keep the existing table, so an incremental model doesn't start again. The old name keeps working as a view. Renamed columns keep their history too. The old table is never modified during the migration.
 								</p>
+								<p class="more"><a href="/docs/concepts/models/migrations/">How migrations work →</a></p>
 							</div>
 <pre class="terminal"><span class="cmd">sqb rename daily_activity_rollup daily_order_rollup</span>
 <span class="info strong">Rename model  daily_activity_rollup -&gt; daily_order_rollup</span>
@@ -350,8 +351,9 @@ lifetime_orders
 								<span class="num">08 · Tidy up safely</span>
 								<h3>Archive old tables before deleting them</h3>
 								<p>
-									The janitor renames tables your project no longer builds, and only drops them once the archive expires, 14 days later by default.
+									The janitor renames tables your project no longer builds, and only drops them once the archive expires, 14 days later by default. Until then an archive can be renamed back, and every move is recorded.
 								</p>
+								<p class="more"><a href="/docs/cli/janitor/">How the janitor works →</a></p>
 							</div>
 <pre class="terminal"><span class="cmd">sqb janitor</span>
 <span class="info strong">Janitor preview</span>  prod
@@ -368,8 +370,13 @@ lifetime_orders
 								<span class="num">09 · Investigate</span>
 								<h3>Find out what happened, then check what's true now</h3>
 								<p>
-									Every run is recorded: what ran, the SQL it executed, audit results and everything it printed. Agents and people ask in SQL, then check live state with the same command.
+									SQLBuild records every run: what ran, the SQL it executed, audit results and everything it printed. You or an agent can query that history in SQL, and the same command queries the warehouse to check what's true now.
 								</p>
+								<p>
+									Here an audit started warning on the latest run, but the build still exited 0. The first two commands show when it started and what the run printed. The third finds the cause, still in prod: a refund stored as a negative payment.
+								</p>
+								<p>History lives in a SQLite file in your project, or in ClickHouse for a team. No service to run, no account, no paid tier.</p>
+								<p class="more"><a href="/docs/concepts/observability/recall/">How Recall works →</a></p>
 							</div>
 <pre class="terminal"><span class="cmd">sqb recall query &quot;SELECT substr(a.invocation_started_at, 1, 16) AS run,
   a.outcome, a.violation_count, i.status, i.exit_code FROM audit_results a
@@ -391,17 +398,7 @@ payment_id <span class="dim">|</span> order_id <span class="dim">|</span> amount
 9          <span class="dim">|</span> 8        <span class="dim">|</span> <span class="warn">-2200</span>        <span class="dim">|</span> 2026-04-03 15:42:00</pre>
 						</div>
 					</div>
-					<p class="caption">
-						Real output from SQLBuild's example project, trimmed to the relevant lines. During a migration the old
-						table is never modified, archives can be renamed back until they expire, and every move is recorded.
-						In step 09 the audit started warning on the latest run, the build still exited 0, and the cause
-						is still in prod: a refund recorded as a negative payment. Three commands, no log digging.
-						History stays in a SQLite file in your project, or in ClickHouse for a team. No service, no
-						account, no paid tier.
-						<a href="/docs/concepts/models/migrations/">How migrations work</a> ·
-						<a href="/docs/cli/janitor/">How the janitor works</a> ·
-						<a href="/docs/concepts/observability/recall/">How Recall works</a>
-					</p>
+					<p class="caption">Real output from SQLBuild's example project, trimmed to the relevant lines.</p>
 				</div>
 			</section>
 
