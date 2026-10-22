@@ -3769,7 +3769,10 @@ def dlt_destination_arguments(
     dataset_name: str | None,
 ) -> tuple[str, dict[str, Any], dict[str, Any], str | None]: ...
 def format_clone_execution_json(
-    *, result: CloneExecutionResult, resource_types_by_name: Mapping[str, str]
+    *,
+    result: CloneExecutionResult,
+    resource_types_by_name: Mapping[str, str],
+    phase_timings: dict[str, float] | None = None,
 ) -> str: ...
 def format_test_execution_json(*, results: tuple[SqlTestExecutionResult, ...]) -> str: ...
 def format_audit_execution_json(

@@ -20,12 +20,12 @@ use sqlbuild_core::clone_text::models::CloneItemText;
 use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::boundary::python_calls::keywords;
-use crate::bindings::_helpers::boundary::python_calls::{call_with, within};
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, within};
 use crate::bindings::_helpers::build_progress::progress_reporters::PlanningProgressReporter;
 use crate::bindings::_helpers::clone::clone_execution::{
     destination_entry_count, execute_clone_plan, resource_types_by_name,
 };
-use crate::bindings::_helpers::clone::clone_pipeline::{ClonePipeline, prepared_clone_pipeline};
+use crate::bindings::_helpers::clone::clone_pipeline::{ClonePipeline, timed_clone_pipeline};
 use crate::bindings::_helpers::clone::clone_progress::{clone_item_text, write_line};
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::command_runtime::connection::resolve_target_connection_config;
@@ -36,6 +36,7 @@ use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
 use crate::bindings::_helpers::native_host::connections::connection_failure;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::planner_entries::clone_plans::PhaseTimings;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::construct::error_class;
@@ -45,6 +46,9 @@ use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::result_output::documents::format_clone_execution_json;
 use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
 
+const CLONE_LOGGER: &str = "sqlbuild.clone";
+/// The clone phase that copies relations into the destination.
+const EXECUTION_PHASE: &str = "execution";
 const NO_DESTINATION: (&str, &str) = (
     "C406",
     "clone requires --to when the project has no active target",
@@ -233,12 +237,12 @@ fn prepare<'py>(
     request: &Bound<'py, PyAny>,
     invocation: &Invocation<'py>,
     (config, connection): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
-) -> PyResult<Bound<'py, PyAny>> {
+) -> PyResult<(Bound<'py, PyAny>, PhaseTimings)> {
     let py: Python<'py> = request.py();
     let progress: Bound<'py, PlanningProgressReporter> =
         progress_reporter(&invocation.stream, invocation.style)?;
     let started: Instant = Instant::now();
-    let prepared: PyResult<Bound<'py, PyAny>> =
+    let prepared: PyResult<(Bound<'py, PyAny>, PhaseTimings)> =
         within(&lifecycle(py, ("project", "project_compile"))?, |_| {
             progress.get().on_progress(py, "Preparing clone plan...")?;
             let resolver: Bound<'py, PyAny> = resolve_external_sql_reference_resolver(
@@ -263,7 +267,7 @@ fn prepare<'py>(
                     ("cli_vars", native_field(request, "cli_vars")?),
                 ],
             )?;
-            let pipeline: Bound<'py, PyAny> = prepared_clone_pipeline(
+            let prepared: (Bound<'py, PyAny>, PhaseTimings) = timed_clone_pipeline(
                 &ClonePipeline {
                     discovered: invocation.discovered.clone(),
                     adapter: invocation.adapter.clone(),
@@ -283,14 +287,14 @@ fn prepare<'py>(
                     started.elapsed().as_secs_f64()
                 ),
             )?;
-            Ok(pipeline)
+            Ok(prepared)
         });
-    let pipeline: Bound<'py, PyAny> =
+    let (pipeline, timings) =
         prepared.or_else(|error| progress.get().finish(py, false).and(Err(error)))?;
     if destination_entry_count(&pipeline)? == 0 {
         return Err(user_error(py, NOTHING_TO_CLONE));
     }
-    Ok(pipeline)
+    Ok((pipeline, timings))
 }
 
 /// Prepare, announce and execute the clone with an open destination connection.
@@ -298,8 +302,8 @@ fn clone<'py>(
     request: &Bound<'py, PyAny>,
     invocation: &Invocation<'py>,
     (config, connection): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
-) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>, f64)> {
-    let pipeline: Bound<'py, PyAny> = prepare(request, invocation, (config, connection))?;
+) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>, PhaseTimings)> {
+    let (pipeline, mut timings) = prepare(request, invocation, (config, connection))?;
     let origin: String = native_field(request, "origin_target_name")?.extract()?;
     write_line(
         &invocation.stream,
@@ -310,7 +314,17 @@ fn clone<'py>(
         ),
     )?;
     let (result, elapsed) = execute_clone_plan(request, invocation, (&pipeline, connection))?;
-    Ok((pipeline, result, elapsed))
+    timings.push((EXECUTION_PHASE.to_owned(), elapsed));
+    Ok((pipeline, result, timings))
+}
+
+/// Log each clone phase's duration for `--debug`, the way compile phases are reported.
+fn log_phase_timings(py: Python<'_>, timings: &[(String, f64)]) -> PyResult<()> {
+    let logger: Bound<'_, PyAny> = imported(py, "logging", "getLogger")?.call1((CLONE_LOGGER,))?;
+    for (phase, seconds) in timings {
+        logger.call_method1("debug", (format!("Clone timing  {phase}  {seconds:.3}s"),))?;
+    }
+    Ok(())
 }
 
 /// Run one `sqb clone` request.
@@ -322,26 +336,35 @@ pub(crate) fn run_clone_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> P
     let outcome = clone(request, &invocation, (&config, &connection));
     let closed: PyResult<Bound<'_, PyAny>> =
         invocation.adapter.call_method1("close", (&connection,));
-    let (pipeline, result, elapsed) = outcome?;
+    let (pipeline, result, timings) = outcome?;
     closed?;
+    log_phase_timings(py, &timings)?;
+    let elapsed: f64 = timings
+        .iter()
+        .find(|(phase, _)| phase == EXECUTION_PHASE)
+        .map_or(0.0, |(_, seconds)| *seconds);
     let items: Vec<CloneItemText> = native_field(&result, "item_results")?
         .try_iter()?
         .map(|item| clone_item_text(&item?))
         .collect::<PyResult<_>>()?;
-    let stdout: Bound<'_, PyAny> = py.import("sys")?.getattr("stdout")?;
     for line in render_clone_completion(&items, Some(elapsed), invocation.style).lines() {
-        if !line.is_empty() {
-            stdout.call_method1("write", (line,))?;
-        }
-        stdout.call_method1("write", ("\n",))?;
+        write_line(&invocation.stream, line)?;
+    }
+    let phase_timings: Bound<'_, PyDict> = PyDict::new(py);
+    for (phase, seconds) in &timings {
+        phase_timings.set_item(phase, seconds)?;
     }
     let resource_types: Bound<'_, PyDict> = PyDict::new(py);
     for (name, resource_type) in resource_types_by_name(&pipeline)? {
         resource_types.set_item(name, resource_type)?;
     }
-    let payload: Bound<'_, PyAny> =
-        format_clone_execution_json(py, result.clone(), resource_types.into_any())
-            .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
+    let payload: Bound<'_, PyAny> = format_clone_execution_json(
+        py,
+        result.clone(),
+        resource_types.into_any(),
+        Some(phase_timings),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     write_execution_json_output(
         py,
         payload,

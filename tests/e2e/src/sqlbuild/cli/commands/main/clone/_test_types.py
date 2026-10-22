@@ -66,3 +66,11 @@ class ClonePreparationFailureE2ETestCase:
     broken_model_path: str
     broken_model_sql: str
     expected_screen_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CloneTimingsE2ETestCase:
+    """The clone phases a debug run reports, in order."""
+
+    description: str
+    expected_phases: tuple[str, ...]
