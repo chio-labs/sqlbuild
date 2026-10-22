@@ -42,3 +42,21 @@ def project_run(*, message: str, compiled_sql: str) -> ProjectRun:
             }
         ),
     )
+
+
+def machine_error_run() -> ProjectRun:
+    """A `plan --json` run that failed with the machine error document and a coded stderr."""
+
+    error: dict[str, object] = {"error": {"code": "C214", "message": "no manifest", "help": None}}
+    return ProjectRun(
+        outcomes=(
+            CommandOutcome(
+                label="plan",
+                exit_code=1,
+                stdout=json.dumps(error),
+                stderr="error[C214]: no manifest\n",
+            ),
+        ),
+        compiled={},
+        manifest=None,
+    )

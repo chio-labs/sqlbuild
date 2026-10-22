@@ -23,6 +23,7 @@ GOLDEN_SUFFIX: str = ".json"
 GOLDEN_LABEL: str = "golden"
 GOLDEN_FULL_REPORT_LABEL_PREFIX: str = "refactor-"
 GOLDEN_REPORT_KEY: str = "report"
+MACHINE_ERROR_KEY: str = "error"
 GOLDEN_MANIFEST_DROPPED_KEYS: frozenset[str] = frozenset({"metadata", "child_map"})
 GOLDEN_MANIFEST_RESOURCE_SECTIONS: tuple[str, ...] = ("nodes", "sources", "macros")
 GOLDEN_RESOURCE_DROPPED_FIELDS: frozenset[str] = frozenset(

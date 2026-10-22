@@ -20,6 +20,7 @@ from tests.unit.scripts.compiler_differential._helpers.goldens._test_types impor
 )
 from tests.unit.scripts.compiler_differential._helpers.goldens.helpers import (
     PROJECT_PATH,
+    machine_error_run,
     project_run,
 )
 
@@ -98,7 +99,23 @@ def test_given_corpus_project_when_locating_its_golden_then_only_golden_corpora_
                     "parent_map": {"model.orders.customer_totals": []},
                 },
             },
-        )
+        ),
+        GoldenPayloadTestCase(
+            description="machine_error_document_keeps_the_coded_stderr",
+            run=machine_error_run(),
+            masked_paths=(),
+            expected_payload={
+                "commands": [
+                    {
+                        "label": "plan",
+                        "exit_code": 1,
+                        "diagnostics": ["error[C214]: no manifest", ""],
+                    }
+                ],
+                "compiled": {},
+                "manifest": None,
+            },
+        ),
     ],
     ids=lambda case: case.description,
 )
