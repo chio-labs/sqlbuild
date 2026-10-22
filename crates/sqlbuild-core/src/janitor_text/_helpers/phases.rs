@@ -1,7 +1,7 @@
 //! Wording and durations of janitor apply phases.
 
 use crate::cli_text::main::format_count_noun::format_count_noun;
-use crate::janitor_text::constants::{SECONDS_PER_HOUR, SECONDS_PER_MINUTE};
+use crate::janitor_text::constants::{MINUTE_SECONDS, SECONDS_PER_HOUR, SECONDS_PER_MINUTE};
 use crate::janitor_text::models::JanitorPhase;
 
 /// The phase's present participle, past tense and singular noun.
@@ -23,7 +23,7 @@ pub(crate) fn noun(count: usize, singular: &str) -> String {
 
 /// Seconds with two decimals under a minute, then whole minutes and seconds.
 pub(crate) fn duration(seconds: f64) -> String {
-    if seconds < 60.0 {
+    if seconds < MINUTE_SECONDS {
         return format!("{:.2}s", seconds.max(0.0));
     }
     let whole: u64 = seconds.round() as u64;

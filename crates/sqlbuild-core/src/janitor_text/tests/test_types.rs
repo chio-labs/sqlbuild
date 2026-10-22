@@ -49,6 +49,14 @@ pub(super) struct CompletionTestCase {
     pub(super) expected_text: &'static str,
 }
 
+pub(super) struct ItemCountsTestCase {
+    pub(super) description: &'static str,
+    pub(super) items: Vec<JanitorItemText>,
+    pub(super) plan: JanitorPlanText,
+    pub(super) expected_counts: JanitorResultCounts,
+    pub(super) expected_archive_flow_width: usize,
+}
+
 pub(super) struct PreviewTestCase {
     pub(super) description: &'static str,
     pub(super) plan: JanitorPlanText,
@@ -59,6 +67,7 @@ pub(super) struct PreviewTestCase {
 
 pub(super) struct JsonTestCase {
     pub(super) description: &'static str,
+    pub(super) plan: Option<JanitorPlanText>,
     pub(super) outcome: JanitorOutcome,
     pub(super) run: Option<JanitorRunText>,
     pub(super) error: Option<&'static str>,

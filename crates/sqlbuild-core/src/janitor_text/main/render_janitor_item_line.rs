@@ -5,8 +5,7 @@ use crate::janitor_text::_helpers::phases::{duration, flow};
 use crate::janitor_text::constants::ACTION_WIDTH;
 use crate::janitor_text::models::JanitorItemText;
 
-/// Position, action, name or `name -> destination` padded to `flow_width`, status and duration,
-/// then the error of a failed action.
+/// Position, action, padded `name -> destination`, status, duration and any error of one action.
 #[must_use]
 pub fn render_janitor_item_line(
     (index, total): (usize, usize),

@@ -5,7 +5,6 @@ use std::time::Instant;
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyclass, pymethods};
 use sqlbuild_core::cli_text::models::CliStyle;
 use sqlbuild_core::janitor_text::main::janitor_phase_complete_text::janitor_phase_complete_text;
@@ -15,9 +14,9 @@ use sqlbuild_core::janitor_text::main::janitor_phase_start_text::janitor_phase_s
 use sqlbuild_core::janitor_text::main::render_janitor_item_line::render_janitor_item_line;
 use sqlbuild_core::janitor_text::models::{JanitorItemText, JanitorPhase, JanitorPlanText};
 
-use crate::bindings::_helpers::build_progress::terminal::{shared_lines, tty_flag};
+use crate::bindings::_helpers::build_progress::terminal::tty_flag;
 use crate::bindings::_helpers::build_progress::transient_status::{
-    progress_spinners_disabled, status_reporter,
+    TransientStatusReporter, progress_spinners_disabled,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
 
@@ -37,10 +36,9 @@ struct ProgressState {
 }
 
 /// Print each janitor phase and action as it finishes, and keep the finished actions.
-#[pyclass(module = "sqlbuild._native", frozen)]
+#[pyclass(frozen)]
 pub(crate) struct JanitorProgressPrinter {
-    stream: Py<PyAny>,
-    status: Py<PyAny>,
+    status: Py<TransientStatusReporter>,
     style: CliStyle,
     live: bool,
     plan: JanitorPlanText,
@@ -53,9 +51,12 @@ impl JanitorProgressPrinter {
         style: CliStyle,
         plan: JanitorPlanText,
     ) -> PyResult<Self> {
+        let py: Python<'_> = stream.py();
         Ok(Self {
-            stream: stream.clone().unbind(),
-            status: status_reporter(stream, style.use_color)?.unbind(),
+            status: Py::new(
+                py,
+                TransientStatusReporter::new(py, stream, style.use_color, true)?,
+            )?,
             style,
             live: tty_flag(stream)? && !progress_spinners_disabled(),
             plan,
@@ -70,14 +71,6 @@ impl JanitorProgressPrinter {
     /// Every action finished so far, in order.
     pub(crate) fn items(&self) -> Vec<JanitorItemText> {
         self.state().items.clone()
-    }
-
-    fn write_persistent(&self, py: Python<'_>, text: &str) -> PyResult<()> {
-        let options: Bound<'_, PyDict> = PyDict::new(py);
-        options.set_item("stream", self.stream.bind(py))?;
-        options.set_item("text", text)?;
-        shared_lines(py)?.call_method("write_persistent", (), Some(&options))?;
-        Ok(())
     }
 }
 
@@ -99,27 +92,19 @@ impl JanitorProgressPrinter {
             flow_width: janitor_phase_flow_width(&self.plan, phase),
             started: Instant::now(),
         });
-        self.status.bind(py).call_method1("start", (message,))?;
-        Ok(())
+        TransientStatusReporter::start(self.status.bind(py), message)
     }
 
-    /// Record and print one finished action; `item` is its `JanitorProgressItem`.
-    #[pyo3(signature = (*, phase, item, error, duration_seconds))]
-    fn item_finished(
-        &self,
-        py: Python<'_>,
-        phase: &str,
-        item: &Bound<'_, PyAny>,
-        error: Option<String>,
-        duration_seconds: f64,
-    ) -> PyResult<()> {
+    /// Record and print one finished action; `item` is its finished `JanitorProgressItem`.
+    #[pyo3(signature = (*, phase, item))]
+    fn item_finished(&self, py: Python<'_>, phase: &str, item: &Bound<'_, PyAny>) -> PyResult<()> {
         let item: JanitorItemText = JanitorItemText {
             phase: self::phase(phase)?,
             action: native_field(item, "action")?.str()?.extract()?,
             name: native_field(item, "name")?.extract()?,
             destination: native_field(item, "destination")?.extract()?,
-            error,
-            duration_seconds: Some(duration_seconds),
+            error: native_field(item, "error")?.extract()?,
+            duration_seconds: Some(native_field(item, "duration_seconds")?.extract()?),
         };
         let (line, progress) = {
             let mut state = self.state();
@@ -139,9 +124,10 @@ impl JanitorProgressPrinter {
             state.items.push(item);
             (line, format!("{message} {index}/{total}"))
         };
-        self.write_persistent(py, &format!("{line}\n"))?;
+        let status: &TransientStatusReporter = self.status.get();
+        status.write_persistent(py, &format!("{line}\n"))?;
         if self.live {
-            self.status.bind(py).call_method1("update", (progress,))?;
+            status.update(py, progress)?;
         }
         Ok(())
     }
@@ -156,28 +142,20 @@ impl JanitorProgressPrinter {
         let (total, elapsed) = active.as_ref().map_or((0, 0.0), |active| {
             (active.total, active.started.elapsed().as_secs_f64())
         });
-        let options: Bound<'_, PyDict> = PyDict::new(py);
+        let status: &Bound<'_, TransientStatusReporter> = self.status.bind(py);
         if failed {
             let completed: usize = items
                 .iter()
                 .filter(|item| item.phase == phase && item.error.is_none())
                 .count();
-            options.set_item(
-                "message",
-                janitor_phase_failed_text(phase, (completed, total), elapsed, self.style),
-            )?;
-            self.status
-                .bind(py)
-                .call_method("complete_styled", (), Some(&options))?;
-            return Ok(());
+            let message: String =
+                janitor_phase_failed_text(phase, (completed, total), elapsed, self.style);
+            return TransientStatusReporter::complete_styled(status, &message, false);
         }
-        options.set_item(
-            "message",
-            janitor_phase_complete_text(phase, &items, elapsed),
-        )?;
-        self.status
-            .bind(py)
-            .call_method("complete", (), Some(&options))?;
-        Ok(())
+        TransientStatusReporter::complete(
+            status,
+            &janitor_phase_complete_text(phase, &items, elapsed),
+            false,
+        )
     }
 }

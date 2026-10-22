@@ -5,9 +5,7 @@ use crate::janitor_text::models::{JanitorOutcome, JanitorPlanText, JanitorRunTex
 use crate::json::main::dumps::dumps;
 use crate::json::models::{JsonDialect, JsonValue, StdlibJsonOptions};
 
-/// `json.dumps(payload, indent=2)` of the outcome, the plan, what the run did and its error.
-///
-/// The plan is none when janitor is disabled for the project.
+/// `json.dumps(payload, indent=2)` of the outcome, the plan (none when disabled), run and error.
 #[must_use]
 pub fn format_janitor_json(
     plan: Option<&JanitorPlanText>,

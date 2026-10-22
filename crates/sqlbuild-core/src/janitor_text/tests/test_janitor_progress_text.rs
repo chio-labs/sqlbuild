@@ -14,7 +14,8 @@ use crate::janitor_text::models::{
 };
 use crate::janitor_text::tests::helpers::{direct_archive_plan, item, large_plan};
 use crate::janitor_text::tests::test_types::{
-    CompletionTestCase, ItemLineTestCase, JsonTestCase, PhaseTextTestCase, PreviewTestCase,
+    CompletionTestCase, ItemCountsTestCase, ItemLineTestCase, JsonTestCase, PhaseTextTestCase,
+    PreviewTestCase,
 };
 
 const PLAIN: CliStyle = CliStyle { use_color: false };
@@ -200,43 +201,55 @@ fn given_run_counts_when_rendering_completion_then_final_line_is_unambiguous() {
 
 #[test]
 fn given_finished_actions_when_counting_then_only_successes_count_by_kind() {
-    let items = vec![
-        item(JanitorPhase::Archive, ("archived", "a", Some("b")), None),
-        item(
-            JanitorPhase::Archive,
-            ("archived", "c", Some("d")),
-            Some("denied"),
-        ),
-        item(JanitorPhase::DeleteArchives, ("deleted", "e", None), None),
-        item(JanitorPhase::DropOldNameViews, ("dropped", "f", None), None),
-        item(
-            JanitorPhase::DropOldNameViews,
-            ("recorded", "g", None),
-            None,
-        ),
-        item(
-            JanitorPhase::DropQueryArtifacts,
-            ("dropped", "h", None),
-            None,
-        ),
-        item(JanitorPhase::PruneDirectState, ("pruned", "i", None), None),
-    ];
-
-    assert_eq!(
-        janitor_item_counts(&items),
-        JanitorResultCounts {
+    let test_cases = [ItemCountsTestCase {
+        description: "failed actions and views already gone are not counted",
+        items: vec![
+            item(JanitorPhase::Archive, ("archived", "a", Some("b")), None),
+            item(
+                JanitorPhase::Archive,
+                ("archived", "c", Some("d")),
+                Some("denied"),
+            ),
+            item(JanitorPhase::DeleteArchives, ("deleted", "e", None), None),
+            item(JanitorPhase::DropOldNameViews, ("dropped", "f", None), None),
+            item(
+                JanitorPhase::DropOldNameViews,
+                ("recorded", "g", None),
+                None,
+            ),
+            item(
+                JanitorPhase::DropQueryArtifacts,
+                ("dropped", "h", None),
+                None,
+            ),
+            item(JanitorPhase::PruneDirectState, ("pruned", "i", None), None),
+        ],
+        plan: large_plan(3, 0),
+        expected_counts: JanitorResultCounts {
             archived: 1,
             deleted: 0,
             deleted_archives: 1,
             deleted_query_artifacts: 1,
             dropped_old_name_views: 1,
             pruned_direct_state: 1,
-        }
-    );
-    assert_eq!(
-        janitor_phase_flow_width(&large_plan(3, 0), JanitorPhase::Archive),
-        72
-    );
+        },
+        expected_archive_flow_width: 72,
+    }];
+
+    for test_case in test_cases {
+        assert_eq!(
+            janitor_item_counts(&test_case.items),
+            test_case.expected_counts,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            janitor_phase_flow_width(&test_case.plan, JanitorPhase::Archive),
+            test_case.expected_archive_flow_width,
+            "{}",
+            test_case.description
+        );
+    }
 }
 
 #[test]
@@ -268,20 +281,22 @@ fn given_long_plan_when_previewing_then_lists_are_capped_unless_verbose() {
 
     for test_case in test_cases {
         let text: String = render_janitor_plan(&test_case.plan, test_case.verbose, PLAIN);
-        for fragment in test_case.expected_fragments {
-            assert!(
-                text.contains(fragment),
-                "{}: missing {fragment:?} in {text}",
-                test_case.description
-            );
-        }
-        for fragment in test_case.unexpected_fragments {
-            assert!(
-                !text.contains(fragment),
-                "{}: unexpected {fragment:?}",
-                test_case.description
-            );
-        }
+        assert!(
+            test_case
+                .expected_fragments
+                .iter()
+                .all(|fragment| text.contains(fragment)),
+            "{}: missing fragments in {text}",
+            test_case.description
+        );
+        assert!(
+            !test_case
+                .unexpected_fragments
+                .iter()
+                .any(|fragment| text.contains(fragment)),
+            "{}: unexpected fragments in {text}",
+            test_case.description
+        );
     }
 }
 
@@ -302,6 +317,7 @@ fn given_outcome_when_formatting_json_then_document_carries_plan_result_and_erro
     let test_cases = [
         JsonTestCase {
             description: "a completed run lists its actions",
+            plan: Some(direct_archive_plan()),
             outcome: JanitorOutcome::Completed,
             run: Some(run.clone()),
             error: None,
@@ -318,6 +334,7 @@ fn given_outcome_when_formatting_json_then_document_carries_plan_result_and_erro
         },
         JsonTestCase {
             description: "a failed run carries its error",
+            plan: Some(direct_archive_plan()),
             outcome: JanitorOutcome::Failed,
             run: Some(run),
             error: Some("rename denied"),
@@ -325,29 +342,36 @@ fn given_outcome_when_formatting_json_then_document_carries_plan_result_and_erro
         },
         JsonTestCase {
             description: "a preview has no result",
+            plan: Some(direct_archive_plan()),
             outcome: JanitorOutcome::Previewed,
             run: None,
             error: None,
             expected_fragments: &["\"status\": \"previewed\"", "\"result\": null"],
         },
+        JsonTestCase {
+            description: "a disabled janitor has no plan",
+            plan: None,
+            outcome: JanitorOutcome::Disabled,
+            run: None,
+            error: None,
+            expected_fragments: &["\"status\": \"disabled\"", "\"plan\": null"],
+        },
     ];
 
     for test_case in test_cases {
         let text: String = format_janitor_json(
-            Some(&direct_archive_plan()),
+            test_case.plan.as_ref(),
             test_case.outcome,
             test_case.run.as_ref(),
             test_case.error,
         );
-        for fragment in test_case.expected_fragments {
-            assert!(
-                text.contains(fragment),
-                "{}: missing {fragment:?} in {text}",
-                test_case.description
-            );
-        }
+        assert!(
+            test_case
+                .expected_fragments
+                .iter()
+                .all(|fragment| text.contains(fragment)),
+            "{}: missing fragments in {text}",
+            test_case.description
+        );
     }
-    assert!(
-        format_janitor_json(None, JanitorOutcome::Disabled, None, None).contains("\"plan\": null")
-    );
 }

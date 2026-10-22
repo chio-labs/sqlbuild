@@ -34,11 +34,15 @@ class JanitorItemReporter:
         done: JanitorActionDone | None = outcome.result
         taken: JanitorAction | None = None if done is None else done.taken
         label: JanitorProgressItem = self._labels[index]
+        error: str | None = (
+            None if outcome.error is None else str(outcome.error) or type(outcome.error).__name__
+        )
         self._progress.item_finished(
             phase=self._phase.value,
-            item=label if taken is None else replace(label, action=taken),
-            error=None
-            if outcome.error is None
-            else str(outcome.error) or type(outcome.error).__name__,
-            duration_seconds=outcome.duration_seconds,
+            item=replace(
+                label,
+                action=label.action if taken is None else taken,
+                error=error,
+                duration_seconds=outcome.duration_seconds,
+            ),
         )

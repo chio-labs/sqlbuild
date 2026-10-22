@@ -302,9 +302,7 @@ pub(crate) fn build_janitor_execution_plan<'py>(
     Ok(plan)
 }
 
-/// Execute the warehouse cleanup plan, reporting each phase and action to `progress`.
-///
-/// Independent actions of a phase run on up to the command's concurrency of connections.
+/// Execute the cleanup plan on up to the command's concurrency, reporting to `progress`.
 pub(crate) fn execute_janitor_cleanup<'py>(
     invocation: &Bound<'py, PyAny>,
     (compiled, connection): (&JanitorCompiled<'py>, &Bound<'py, PyAny>),

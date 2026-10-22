@@ -5,8 +5,7 @@ use crate::cli_text::models::{CliStyle, CompletionState};
 use crate::janitor_text::_helpers::phases::duration;
 use crate::janitor_text::models::JanitorResultCounts;
 
-/// `✓ Janitor completed  archived N, deleted M, pruned K  (5m 02s)`, or `✗ Janitor failed  ...`
-/// with what was done before the failure.
+/// `✓ Janitor completed  archived N, deleted M, pruned K  (5m 02s)`, or `✗ Janitor failed  ...`.
 #[must_use]
 pub fn render_janitor_completion(
     counts: &JanitorResultCounts,

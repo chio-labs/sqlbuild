@@ -19,4 +19,6 @@ pub(crate) const ACTION_WIDTH: usize = "archived".len();
 pub(crate) const RECORDED_ACTION: &str = "recorded";
 pub(crate) const DROPPED_ACTION: &str = "dropped";
 pub(crate) const SECONDS_PER_MINUTE: u64 = 60;
+/// Durations below this many seconds show seconds with two decimals.
+pub(crate) const MINUTE_SECONDS: f64 = 60.0;
 pub(crate) const SECONDS_PER_HOUR: u64 = 3600;

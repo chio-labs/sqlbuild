@@ -8,9 +8,7 @@ use crate::janitor_text::_helpers::plan_sections::{
 use crate::janitor_text::constants::PREVIEW_LIMIT;
 use crate::janitor_text::models::JanitorPlanText;
 
-/// Every section of the preview, ending with a blank line.
-///
-/// Without `verbose`, each list shows its first entries and skipped objects are counted by reason.
+/// Every preview section, capped and grouped unless `verbose`, ending with a blank line.
 #[must_use]
 pub fn render_janitor_plan(plan: &JanitorPlanText, verbose: bool, style: CliStyle) -> String {
     let limit: Option<usize> = (!verbose).then_some(PREVIEW_LIMIT);

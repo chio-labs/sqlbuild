@@ -81,7 +81,7 @@ fn source_schema(schema: &SourceSchemaText, blocked: bool) -> JsonValue {
 
 /// Every planned action, retained archive and skipped object of the plan.
 pub(crate) fn plan_payload(plan: &JanitorPlanText) -> JsonValue {
-    let views = plan
+    let views: Vec<JsonValue> = plan
         .old_name_drops
         .iter()
         .map(|view| old_name_view(view, "drop"))

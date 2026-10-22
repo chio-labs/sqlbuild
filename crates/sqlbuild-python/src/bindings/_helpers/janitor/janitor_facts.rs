@@ -244,9 +244,7 @@ fn source_schemas(
     Ok(schemas)
 }
 
-/// Relations matched case-insensitively and respelled as their target schema.
-///
-/// Each schema is listed on its own, so every other planning read of it hits the catalog.
+/// Each target schema's relations, listed once through the catalog and respelled as targeted.
 fn list_target_schema_relations<'py>(
     warehouse: &Warehouse<'py>,
     target_schemas: &[SchemaKey],
@@ -308,9 +306,7 @@ fn list_target_schema_relations<'py>(
     Ok(result)
 }
 
-/// Relations present at the given locations, keyed as `RelationLookup.key` folds them.
-///
-/// Like `build_relation_lookup`, but each schema is listed through the inspection catalog.
+/// Folded keys of relations in the locations' schemas, listed through the inspection catalog.
 fn relation_lookup(
     warehouse: &Warehouse<'_>,
     locations: &[(Option<String>, String, &str)],

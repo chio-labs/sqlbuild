@@ -232,11 +232,13 @@ class JanitorExecutionResult:
 
 @dataclass(frozen=True)
 class JanitorProgressItem:
-    """How the progress output names one janitor action before it runs."""
+    """How the progress output names one janitor action, and once finished its error and time."""
 
     action: JanitorAction
     name: str
     destination: str | None = None
+    error: str | None = None
+    duration_seconds: float = 0.0
 
 
 @dataclass(frozen=True)

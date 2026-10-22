@@ -53,11 +53,9 @@ pub(super) fn large_plan(count: usize, skipped: usize) -> JanitorPlanText {
             .collect(),
         skipped_relations: (0..skipped)
             .map(|index| {
-                let reason: &str = if index % 3 == 0 {
-                    "relation is newer than 14 days"
-                } else {
-                    "not tracked by SQLBuild"
-                };
+                let reasons: [&str; 2] =
+                    ["relation is newer than 14 days", "not tracked by SQLBuild"];
+                let reason: &str = reasons[usize::from(index % 3 != 0)];
                 (format!("dev.recent_{index:03}"), reason.to_owned())
             })
             .collect(),

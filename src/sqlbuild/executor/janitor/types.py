@@ -29,14 +29,7 @@ class JanitorAction(StrEnum):
 class JanitorProgress(Protocol):
     def phase_started(self, *, phase: str, total: int) -> None: ...
 
-    def item_finished(
-        self,
-        *,
-        phase: str,
-        item: JanitorProgressItem,
-        error: str | None,
-        duration_seconds: float,
-    ) -> None: ...
+    def item_finished(self, *, phase: str, item: JanitorProgressItem) -> None: ...
 
     def phase_finished(self, *, phase: str, failed: bool) -> None: ...
 
