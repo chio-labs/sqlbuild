@@ -175,7 +175,7 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     _relation_locks: ClassVar[RelationWriteLocks] = RelationWriteLocks()
 
     def connect(self, config: dict[str, Any]) -> _ClickHouseConnection:
-        return connect_clickhouse(config)
+        return connect_clickhouse(config=config)
 
     def _execute(self, *, connection: _ClickHouseConnection, sql: str) -> Any:
         log_sql(logger=logging.getLogger("sqlbuild.adapter.clickhouse"), sql=sql)

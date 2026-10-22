@@ -951,6 +951,19 @@ def create_previous_views(
     )
 
 
+def snapshot_views(*, config: dict[str, object], database: str, names: tuple[str, ...]) -> None:
+    """Copy each view's current rows into a `snapshot_` memory table."""
+
+    execute_clickhouse_sql(
+        config=config,
+        statements=tuple(
+            f"CREATE TABLE `{database}`.`snapshot_{name}` ENGINE = Memory AS "
+            f"SELECT * FROM `{database}`.`{name}`"
+            for name in names
+        ),
+    )
+
+
 def table_reads(*, config: dict[str, object], sql: str) -> tuple[str, ...]:
     """The tables `sql` reads, once per read, from its plan."""
 
@@ -967,6 +980,27 @@ def primary_key_reads(*, config: dict[str, object], sql: str) -> int:
         config=config, sql=f"EXPLAIN indexes = 1 {sql}"
     )
     return len(_PRIMARY_KEY_INDEX.findall("\n".join(str(row[0]) for row in plan)))
+
+
+@contextmanager
+def readonly_user(
+    *, config: dict[str, object], database: str, settings: str = "readonly = 1"
+) -> Iterator[dict[str, object]]:
+    """A user with `settings`, by default the standard `readonly = 1`, and `SELECT` on it."""
+
+    name: str = build_unique_schema_name(prefix="recall_reader")
+    password: str = uuid.uuid4().hex
+    execute_clickhouse_sql(
+        config=config,
+        statements=(
+            f"CREATE USER {name} IDENTIFIED BY '{password}' SETTINGS {settings}",
+            f"GRANT SELECT ON {database}.* TO {name}",
+        ),
+    )
+    try:
+        yield {**config, "user": name, "password": password}
+    finally:
+        execute_clickhouse_sql(config=config, statements=(f"DROP USER IF EXISTS {name}",))
 
 
 _FAILING_MODEL: str = (

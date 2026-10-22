@@ -62,6 +62,24 @@ const STATEMENT_FACT_COLUMNS: [&str; 17] = [
     "affected_rows",
 ];
 
+/// The columns the `output_invocations` pass reads: the chunk's own values default to what adds nothing to a sum, and the delivery and context values to NULL.
+const OUTPUT_SOURCE_COLUMNS: [(&str, &str, &str); 14] = [
+    ("chunk_stream", "String", "''"),
+    ("chunk_bytes", "Int64", "0"),
+    ("chunk_sequence", "Nullable(Int64)", "NULL"),
+    ("chunk_dropped_before", "Int64", "0"),
+    ("chunk_spans", "Int64", "0"),
+    ("chunk_omitted_bytes", "Int64", "0"),
+    ("delivery_accepted", "Nullable(Int64)", "NULL"),
+    ("delivery_delivered", "Nullable(Int64)", "NULL"),
+    ("delivery_filtered", "Nullable(Int64)", "NULL"),
+    ("delivery_dropped", "Nullable(Int64)", "NULL"),
+    ("delivery_failed", "Nullable(Int64)", "NULL"),
+    ("delivery_flush_complete", "Nullable(UInt8)", "NULL"),
+    ("context_filter_active", "Nullable(UInt8)", "NULL"),
+    ("is_listed", "UInt8", "0"),
+];
+
 /// `table`'s rows within its TTL, one copy per key: `FINAL` for replacing tables, so filters on the sorting key reach the read, else the first ingested copy. SQL text outlives retention like its TTL, so every reference still within retention finds it.
 fn deduplicated(table: Table, options: &DdlOptions) -> String {
     let spec = table_spec(table);
@@ -398,59 +416,99 @@ WHERE event_type = 'audit_completed'"
     )
 }
 
+/// One pass over the output chunks, the output delivery row and the context row, folded by invocation without joins. Chunks are counted and summed, so they keep `FINAL`; the delivery and context rows are only picked with `any`.
 fn output_invocations(options: &DdlOptions) -> String {
     let output = deduplicated(Table::Output, options);
-    let delivery = deduplicated(Table::Delivery, options);
-    let context = deduplicated(Table::Invocations, options);
+    let delivery = retained(Table::Delivery, options, "stream = 'output'");
+    let context = retained(Table::Invocations, options, "");
+    let columns = &OUTPUT_SOURCE_COLUMNS;
+    let chunk_rows = union_branch(
+        "output",
+        columns,
+        &[
+            ("chunk_stream", "stream"),
+            ("chunk_bytes", "byte_count"),
+            ("chunk_sequence", "sequence"),
+            ("chunk_dropped_before", "dropped_before"),
+            ("chunk_spans", "coalesce(omitted_sequences, 1)"),
+            ("chunk_omitted_bytes", "coalesce(omitted_bytes, 0)"),
+            ("is_listed", "1"),
+        ],
+        &output,
+    );
+    let delivery_rows = union_branch(
+        "delivery",
+        columns,
+        &[
+            ("delivery_accepted", "accepted"),
+            ("delivery_delivered", "delivered"),
+            ("delivery_filtered", "filtered"),
+            ("delivery_dropped", "dropped"),
+            ("delivery_failed", "failed"),
+            ("delivery_flush_complete", "flush_complete"),
+            ("is_listed", "1"),
+        ],
+        &delivery,
+    );
+    let context_rows = union_branch(
+        "context",
+        columns,
+        &[("context_filter_active", "recall_filter_active")],
+        &context,
+    );
     format!(
         "WITH
-received AS (
-    SELECT invocation_id,
-        min(invocation_started_at) AS invocation_started_at,
-        count() AS chunks,
-        sum(byte_count) AS bytes,
-        sumIf(byte_count, stream = 'stdout') AS stdout_bytes,
-        sumIf(byte_count, stream = 'stderr') AS stderr_bytes,
-        max(sequence) AS max_sequence,
-        sum(dropped_before) AS queue_drops,
-        sum(coalesce(omitted_sequences, 1)) AS spans,
-        sum(coalesce(omitted_bytes, 0)) AS truncated_bytes
-    FROM {output} GROUP BY invocation_id
+source_rows AS (
+{chunk_rows}
+    UNION ALL
+{delivery_rows}
+    UNION ALL
+{context_rows}
 ),
-delivery AS (SELECT * FROM {delivery} WHERE stream = 'output'),
-ids AS (
-    SELECT DISTINCT invocation_id, invocation_started_at
-    FROM (
-        SELECT invocation_id, invocation_started_at FROM received
-        UNION ALL SELECT invocation_id, invocation_started_at FROM delivery
-    )
+folded AS (
+    SELECT invocation_id, invocation_started_at,
+        countIf(source = 'output') AS chunks,
+        sumIf(chunk_bytes, source = 'output') AS bytes,
+        sumIf(chunk_bytes, source = 'output' AND chunk_stream = 'stdout') AS stdout_bytes,
+        sumIf(chunk_bytes, source = 'output' AND chunk_stream = 'stderr') AS stderr_bytes,
+        maxIf(chunk_sequence, source = 'output') AS max_sequence,
+        sumIf(chunk_dropped_before, source = 'output') AS queue_drops,
+        sumIf(chunk_spans, source = 'output') AS spans,
+        sumIf(chunk_omitted_bytes, source = 'output') AS truncated_bytes,
+        anyIf(delivery_accepted, source = 'delivery') AS accepted,
+        anyIf(delivery_delivered, source = 'delivery') AS delivered,
+        anyIf(delivery_filtered, source = 'delivery') AS filtered_count,
+        anyIf(delivery_dropped, source = 'delivery') AS dropped,
+        anyIf(delivery_failed, source = 'delivery') AS failed_count,
+        anyIf(delivery_flush_complete, source = 'delivery') AS flush_flag,
+        countIf(source = 'delivery') > 0 AS delivery_reported,
+        anyIf(context_filter_active, source = 'context') AS filter_flag
+    FROM source_rows
+    GROUP BY invocation_id, invocation_started_at
+    HAVING max(is_listed) = 1
 ),
 counted AS (
     SELECT
-        ids.invocation_id AS invocation_id,
-        ids.invocation_started_at AS invocation_started_at,
-        coalesce(received.chunks, 0) AS chunks,
-        coalesce(received.bytes, 0) AS bytes,
-        coalesce(received.stdout_bytes, 0) AS stdout_bytes,
-        coalesce(received.stderr_bytes, 0) AS stderr_bytes,
-        coalesce(received.truncated_bytes, 0) AS truncated_bytes,
-        received.max_sequence AS max_sequence,
+        invocation_id,
+        invocation_started_at,
+        chunks,
+        bytes,
+        stdout_bytes,
+        stderr_bytes,
+        truncated_bytes,
+        max_sequence,
         greatest(
-            coalesce(toInt64(received.max_sequence) + 1 - toInt64(received.spans), 0),
-            coalesce(toInt64(delivery.accepted), 0) - coalesce(toInt64(received.chunks), 0)
+            coalesce(toInt64(max_sequence) + 1 - toInt64(spans), 0),
+            coalesce(toInt64(accepted), 0) - coalesce(toInt64(chunks), 0)
         ) AS missing_sequences,
-        greatest(coalesce(received.queue_drops, 0), coalesce(delivery.dropped, 0)) AS reported_drops,
-        coalesce(delivery.filtered, 0) AS filtered,
-        coalesce(delivery.failed, 0) AS failed,
-        coalesce(context.recall_filter_active, 0) AS filter_active,
-        coalesce(delivery.flush_complete, 0) AS flush_complete,
-        delivery.invocation_id IS NOT NULL AS delivery_reported,
-        coalesce(delivery.delivered, 0) AS delivered
-    FROM ids
-    LEFT JOIN received ON received.invocation_id = ids.invocation_id
-    LEFT JOIN delivery ON delivery.invocation_id = ids.invocation_id
-    LEFT JOIN {context} AS context ON context.invocation_id = ids.invocation_id
-    SETTINGS join_use_nulls = 1
+        greatest(coalesce(queue_drops, 0), coalesce(dropped, 0)) AS reported_drops,
+        coalesce(filtered_count, 0) AS filtered,
+        coalesce(failed_count, 0) AS failed,
+        coalesce(filter_flag, 0) AS filter_active,
+        coalesce(flush_flag, 0) AS flush_complete,
+        delivery_reported,
+        coalesce(delivered, 0) AS delivered
+    FROM folded
 )
 SELECT
     invocation_id, invocation_started_at, chunks, bytes, stdout_bytes, stderr_bytes,
@@ -503,6 +561,7 @@ fn passthrough(table: Table, options: &DdlOptions) -> String {
     format!("SELECT * FROM {}", deduplicated(table, options))
 }
 
+/// Every reference with what is stored for its digest. The stored side is nullable before the join, so a reference without stored SQL reads NULL whether or not the session sets `join_use_nulls`.
 fn artifacts(options: &DdlOptions) -> String {
     let refs = deduplicated(Table::ArtifactRefs, options);
     let stored = deduplicated(Table::Artifacts, options);
@@ -515,16 +574,24 @@ fn artifacts(options: &DdlOptions) -> String {
     refs.role AS role,
     refs.statement_id AS statement_id,
     refs.resource_id AS resource_id,
-    artifact.kind AS kind,
-    artifact.media_type AS media_type,
-    artifact.size AS size,
-    artifact.digest IS NOT NULL AS available,
-    if(artifact.digest IS NULL, 'expired_or_not_captured', NULL) AS unavailable_reason,
-    if(startsWith(artifact.media_type, 'text/'), toValidUTF8(artifact.content), NULL) AS text,
-    artifact.content AS content
+    artifact.stored_kind AS kind,
+    artifact.stored_media_type AS media_type,
+    artifact.stored_size AS size,
+    artifact.stored_digest IS NOT NULL AS available,
+    if(artifact.stored_digest IS NULL, 'expired_or_not_captured', NULL) AS unavailable_reason,
+    if(startsWith(artifact.stored_media_type, 'text/'), toValidUTF8(artifact.stored_content), NULL)
+        AS text,
+    artifact.stored_content AS content
 FROM {refs} AS refs
-LEFT JOIN {stored} AS artifact ON artifact.digest = refs.digest
-SETTINGS join_use_nulls = 1"
+LEFT JOIN (
+    SELECT digest,
+        CAST(digest AS Nullable(String)) AS stored_digest,
+        CAST(kind AS Nullable(String)) AS stored_kind,
+        CAST(media_type AS Nullable(String)) AS stored_media_type,
+        CAST(size AS Nullable(Int64)) AS stored_size,
+        CAST(content AS Nullable(String)) AS stored_content
+    FROM {stored}
+) AS artifact ON artifact.digest = refs.digest"
     )
 }
 

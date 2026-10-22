@@ -13,15 +13,19 @@ from sqlbuild.adapters.clickhouse.constants import (
     DEFAULT_HTTPS_PORT,
     DSN_OPTION,
     MINIMUM_SERVER_VERSION,
+    READONLY_SETTING,
     SESSION_SETTINGS,
     SETTING_CONFLICT_CODE,
+    SETTINGS_LOCKED_READONLY,
     TIMEOUT_OPTIONS,
     VERIFY_OPTION,
 )
 
 
-def connect_clickhouse(config: dict[str, Any]) -> _ClickHouseConnection:
-    """A connection for `config`: validated options, required session settings, supported server."""
+def connect_clickhouse(
+    *, config: dict[str, Any], settings_if_allowed: bool = False
+) -> _ClickHouseConnection:
+    """A connection for `config` with SQLBuild's session settings, or only where allowed."""
 
     try:
         import clickhouse_connect
@@ -39,7 +43,9 @@ def connect_clickhouse(config: dict[str, Any]) -> _ClickHouseConnection:
             help="Supported options: " + ", ".join(sorted(CONNECTION_OPTION_KEYS)),
         )
     secure: bool = bool(config.get("secure", False))
-    settings: dict[str, object] = _session_settings(dict(config.get("settings") or {}))
+    user_settings: dict[str, object] = dict(config.get("settings") or {})
+    pinned: dict[str, object] = _session_settings(user_settings)
+    settings: dict[str, object] = user_settings if settings_if_allowed else pinned
     client_options: dict[str, Any] = {
         "host": str(config.get("host", "localhost")),
         "port": int(config.get("port", DEFAULT_HTTPS_PORT if secure else DEFAULT_HTTP_PORT)),
@@ -71,7 +77,17 @@ def connect_clickhouse(config: dict[str, Any]) -> _ClickHouseConnection:
             code="A703",
             help=f"Upgrade the server to ClickHouse {minimum} or newer.",
         )
+    if settings_if_allowed and _may_change_settings(client):
+        for name, value in pinned.items():
+            client.set_client_setting(name, value)
     return _ClickHouseConnection(client=client, interrupt_client_factory=create_client)
+
+
+def _may_change_settings(client: Any) -> bool:
+    """Whether the session may change settings: not `readonly = 1`."""
+
+    readonly: Any = client.server_settings.get(READONLY_SETTING)
+    return readonly is None or str(readonly.value) != SETTINGS_LOCKED_READONLY
 
 
 def _version_tuple(version: str) -> tuple[int, ...]:

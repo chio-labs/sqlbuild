@@ -154,6 +154,15 @@ fn given_clickhouse_statement_sets_when_rendered_then_every_statement_has_the_sh
             required_fragments: &["now64(6) - INTERVAL 14 DAY", " FINAL WHERE "],
             expected_count: VIEW_NAMES.len(),
         },
+        StatementSetTestCase {
+            description: "no view sets query settings or depends on join_use_nulls",
+            statements: views(None)
+                .into_iter()
+                .filter(|statement| !statement.contains("SETTINGS"))
+                .collect(),
+            required_fragments: &["CREATE OR REPLACE VIEW"],
+            expected_count: VIEW_NAMES.len(),
+        },
     ];
 
     for test_case in test_cases {

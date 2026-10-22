@@ -256,6 +256,13 @@ class ClickHouseRecallUnrecordedBehindTestCase:
 
 
 @dataclass(frozen=True)
+class ClickHouseRecallReadOnlyUserTestCase:
+    description: str
+    view_names: tuple[str, ...]
+    expected_status: list[list[object]]
+
+
+@dataclass(frozen=True)
 class ClickHouseRecallViewEquivalenceTestCase:
     description: str
     replaced_views: tuple[str, ...]
@@ -278,3 +285,17 @@ class ClickHouseRecallPreviousVersionTestCase:
     expected_notice: str
     expected_ddl_fragments: tuple[str, ...]
     expected_version: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallRefusedSettingTestCase:
+    description: str
+    user_settings: str
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallReaderSettingsTestCase:
+    description: str
+    user_settings: str
+    expected_rows: list[list[object]]

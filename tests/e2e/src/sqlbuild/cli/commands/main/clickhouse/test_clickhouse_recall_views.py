@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import signal
 import subprocess
@@ -9,10 +10,14 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse._test_types import (
     ClickHouseRecallPreviousVersionTestCase,
+    ClickHouseRecallReaderSettingsTestCase,
+    ClickHouseRecallReadOnlyUserTestCase,
+    ClickHouseRecallRefusedSettingTestCase,
     ClickHouseRecallTableReadsTestCase,
     ClickHouseRecallViewEquivalenceTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse.helpers import (
+    RECALL_VIEWS,
     create_previous_views,
     described,
     differing_rows,
@@ -20,7 +25,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse.helpers import (
     fetch_clickhouse_rows,
     limited_user,
     primary_key_reads,
+    readonly_user,
     representative_store,
+    snapshot_views,
     table_reads,
     write_recall_project,
 )
@@ -30,10 +37,167 @@ from tests.integration.src.sqlbuild.cli.recall.helpers import recall_rows, run
 @pytest.mark.parametrize(
     "test_case",
     [
+        ClickHouseRecallReadOnlyUserTestCase(
+            description="a readonly = 1 user queries every view, the schema and the output",
+            view_names=RECALL_VIEWS,
+            expected_status=[["completed"]],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_readonly_1_reader_when_recalling_then_no_setting_is_needed(
+    test_case: ClickHouseRecallReadOnlyUserTestCase,
+    tmp_path: Path,
+    clickhouse_e2e_config: dict[str, object],
+    recall_database: str,
+) -> None:
+    writer: Path = write_recall_project(
+        parent=tmp_path / "writer", config=clickhouse_e2e_config, database=recall_database
+    )
+    built: subprocess.CompletedProcess[bytes] = run(writer, "build")
+
+    with readonly_user(config=clickhouse_e2e_config, database=recall_database) as reader:
+        project_dir: Path = write_recall_project(
+            parent=tmp_path / "reader", config=reader, database=recall_database
+        )
+        counted: list[subprocess.CompletedProcess[bytes]] = [
+            run(project_dir, "recall", "query", "--json", f"SELECT count() FROM {view}")
+            for view in test_case.view_names
+        ]
+        limited: subprocess.CompletedProcess[bytes] = run(
+            project_dir, "recall", "query", "--json", "--limit", "1", "SELECT * FROM events"
+        )
+        schema: subprocess.CompletedProcess[bytes] = run(project_dir, "recall", "schema")
+        ddl: subprocess.CompletedProcess[bytes] = run(project_dir, "recall", "schema", "--ddl")
+        output: subprocess.CompletedProcess[bytes] = run(
+            project_dir, "recall", "output", "last", "--stream", "stdout"
+        )
+        status: list[list[object]] = recall_rows(project_dir, "SELECT status FROM invocations")
+        refused: subprocess.CompletedProcess[bytes] = run(
+            project_dir, "recall", "query", f"DROP TABLE {recall_database}.recall_meta"
+        )
+
+    assert built.returncode == 0, built.stderr
+    assert [completed.returncode for completed in counted] == [0 for _ in counted], [
+        completed.stderr for completed in counted
+    ]
+    assert [len(json.loads(completed.stdout)["rows"]) for completed in counted] == [
+        1 for _ in counted
+    ]
+    document: dict[str, object] = json.loads(limited.stdout)
+    assert (limited.returncode, len(document["rows"]), document["truncated"]) == (0, 1, True)  # type: ignore[arg-type]
+    assert schema.returncode == 0, schema.stderr
+    assert b"invocations" in schema.stdout
+    assert (ddl.returncode, ddl.stdout) == (0, b""), ddl.stderr
+    assert (output.returncode, output.stdout) == (0, built.stdout), output.stderr
+    assert status == test_case.expected_status
+    assert refused.returncode == 1
+    assert fetch_clickhouse_rows(
+        config=clickhouse_e2e_config,
+        sql=f"SELECT count() FROM system.tables WHERE database = '{recall_database}' "
+        "AND name = 'recall_meta'",
+    ) == ((1,),)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseRecallRefusedSettingTestCase(
+            description="a user that may not change readonly is told to set readonly = 2",
+            user_settings="readonly = 0 CONST",
+            expected_fragments=(
+                "error[C974]",
+                "may not change the setting `readonly`",
+                "`readonly = 2`",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_reader_that_may_not_set_readonly_when_querying_then_the_error_names_the_setting(
+    test_case: ClickHouseRecallRefusedSettingTestCase,
+    tmp_path: Path,
+    clickhouse_e2e_config: dict[str, object],
+    recall_database: str,
+) -> None:
+    writer: Path = write_recall_project(
+        parent=tmp_path / "writer", config=clickhouse_e2e_config, database=recall_database
+    )
+    assert run(writer, "build").returncode == 0
+
+    with readonly_user(
+        config=clickhouse_e2e_config, database=recall_database, settings=test_case.user_settings
+    ) as reader:
+        project_dir: Path = write_recall_project(
+            parent=tmp_path / "reader", config=reader, database=recall_database
+        )
+        queried: subprocess.CompletedProcess[bytes] = run(
+            project_dir, "recall", "query", "SELECT count() FROM invocations"
+        )
+        output: subprocess.CompletedProcess[bytes] = run(project_dir, "recall", "output", "last")
+
+    stderr: str = queried.stderr.decode(errors="replace")
+    assert queried.returncode == 1
+    assert [fragment in stderr for fragment in test_case.expected_fragments] == [
+        True for _ in test_case.expected_fragments
+    ]
+    assert output.returncode == 0, output.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseRecallReaderSettingsTestCase(
+            description="a readonly = 1 reader runs with the server's own settings",
+            user_settings="readonly = 1",
+            expected_rows=[[0, "", 1]],
+        ),
+        ClickHouseRecallReaderSettingsTestCase(
+            description="a readonly = 2 reader gets the pinned settings",
+            user_settings="readonly = 2",
+            expected_rows=[[1, "DISTINCT", 1]],
+        ),
+        ClickHouseRecallReaderSettingsTestCase(
+            description="a reader allowed to change settings gets the pinned settings",
+            user_settings="readonly = 0",
+            expected_rows=[[1, "DISTINCT", 1]],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_reader_when_querying_then_pinned_settings_apply_unless_it_may_not_set_them(
+    test_case: ClickHouseRecallReaderSettingsTestCase,
+    tmp_path: Path,
+    clickhouse_e2e_config: dict[str, object],
+    recall_database: str,
+) -> None:
+    writer: Path = write_recall_project(
+        parent=tmp_path / "writer", config=clickhouse_e2e_config, database=recall_database
+    )
+    assert run(writer, "build").returncode == 0
+
+    with readonly_user(
+        config=clickhouse_e2e_config, database=recall_database, settings=test_case.user_settings
+    ) as reader:
+        project_dir: Path = write_recall_project(
+            parent=tmp_path / "reader", config=reader, database=recall_database
+        )
+        rows: list[list[object]] = recall_rows(
+            project_dir,
+            "SELECT toUInt8(getSetting('join_use_nulls')), "
+            "toString(getSetting('union_default_mode')), count() FROM invocations",
+        )
+
+    assert rows == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         ClickHouseRecallViewEquivalenceTestCase(
             description="rewritten views match the previous ones",
-            replaced_views=("invocations", "statements"),
-            all_views=(),
+            replaced_views=("invocations", "statements", "output_invocations", "artifacts"),
+            all_views=RECALL_VIEWS,
             expected_statuses=[
                 ["abandoned"],
                 ["abandoned"],
@@ -84,10 +248,22 @@ def test_given_representative_invocations_when_views_are_rewritten_then_rows_and
     finally:
         os.killpg(running.pid, signal.SIGKILL)
         _ = running.wait(timeout=30)
-
+    snapshot_views(
+        config=clickhouse_e2e_config, database=recall_database, names=test_case.all_views
+    )
+    without_join_nulls: list[int] = [
+        differing_rows(
+            config=clickhouse_e2e_config,
+            left=f"{recall_database}.{view}",
+            right=f"{recall_database}.snapshot_{view}",
+            settings={"join_use_nulls": 0},
+        )
+        for view in test_case.all_views
+    ]
     assert statuses == test_case.expected_statuses
     assert against_previous == [0 for _ in test_case.replaced_views]
     assert types == [True for _ in test_case.replaced_views]
+    assert without_join_nulls == [0 for _ in test_case.all_views]
 
 
 @pytest.mark.parametrize(
@@ -104,6 +280,12 @@ def test_given_representative_invocations_when_views_are_rewritten_then_rows_and
             view="statements",
             expected_tables=("recall_artifacts", "recall_events"),
             expected_primary_key_reads=1,
+        ),
+        ClickHouseRecallTableReadsTestCase(
+            description="output_invocations reads its three tables once each",
+            view="output_invocations",
+            expected_tables=("recall_delivery", "recall_invocations", "recall_output"),
+            expected_primary_key_reads=3,
         ),
     ],
     ids=lambda case: case.description,
@@ -134,7 +316,7 @@ def test_given_one_invocation_lookup_when_planned_then_each_table_is_read_once_b
     [
         ClickHouseRecallPreviousVersionTestCase(
             description="a store of the previous version is upgraded by whoever may",
-            replaced_views=("invocations", "statements"),
+            replaced_views=("invocations", "statements", "output_invocations", "artifacts"),
             expected_notice="is behind this SQLBuild version, and this user may not upgrade it",
             expected_ddl_fragments=(
                 "CREATE OR REPLACE VIEW `{database}`.`invocations`",
@@ -197,6 +379,11 @@ def test_given_a_previous_version_store_when_built_then_limited_writers_warn_and
         )
         == test_case.expected_version
     )
+    assert fetch_clickhouse_rows(
+        config=clickhouse_e2e_config,
+        sql=f"SELECT countIf(position(create_table_query, 'join_use_nulls') > 0) "
+        f"FROM system.tables WHERE database = '{recall_database}' AND engine = 'View'",
+    ) == ((0,),)
     assert recall_rows(admin, "SELECT count() FROM invocations") == [[3]]
 
 

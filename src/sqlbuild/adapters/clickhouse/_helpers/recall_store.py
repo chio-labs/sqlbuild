@@ -22,6 +22,9 @@ _BYTES_FORMATS: dict[str, str] = {"String": "bytes", "FixedString": "bytes"}
 _ROW_BINARY: str = "RowBinary"
 _INT64_MIN: int = -(2**63)
 _INT64_MAX: int = 2**63 - 1
+_READONLY_SETTING: str = "readonly"
+_WRITABLE_READONLY_VALUE: str = "0"
+_LIMIT_SETTING: str = "limit"
 
 
 def _failure(error: Exception) -> tuple[bool, str]:
@@ -62,39 +65,84 @@ def _number(*, summary: dict[str, Any], key: str) -> int | None:
 
 
 def connect_recall_store(
-    *, config: dict[str, object], quiet_thread_attribute: str | None
+    *, config: dict[str, object], quiet_thread_attribute: str | None, read_only: bool
 ) -> tuple[RecallFailure, int]:
-    """Connect for Recall and return the handle; only the delivery thread asks to stay quiet."""
+    """Connect for Recall; a `read_only` connection skips session settings under `readonly = 1`."""
 
     if quiet_thread_attribute is not None:
         setattr(threading.current_thread(), quiet_thread_attribute, True)
     options: dict[str, object] = {_CONNECT_TIMEOUT_KEY: _DEFAULT_CONNECT_TIMEOUT_SECONDS, **config}
     try:
-        connection: _ClickHouseConnection = connect_clickhouse(options)
+        connection: _ClickHouseConnection = connect_clickhouse(
+            config=options, settings_if_allowed=read_only
+        )
     except Exception as error:
         return _failure(error), 0
     return None, SharedRecallConnections.connections.add(connection=connection)
 
 
+def _server_value(*, client: Any, name: str) -> tuple[str | None, bool]:
+    """The session's value of setting `name`, and whether this user may change it."""
+
+    setting: Any = client.server_settings.get(name)
+    if setting is None:
+        return None, True
+    return str(setting.value), not setting.readonly
+
+
+def _query_settings(
+    *, client: Any, settings: dict[str, int], row_cap: int | None
+) -> tuple[dict[str, int], str | None]:
+    """The settings the session does not already hold, or why the user may not set one."""
+
+    sent: dict[str, int] = {}
+    for name, value in settings.items():
+        current, writable = _server_value(client=client, name=name)
+        if current == str(value) or (
+            name == _READONLY_SETTING and current not in (None, _WRITABLE_READONLY_VALUE)
+        ):
+            continue
+        if not writable:
+            return {}, (
+                f"this ClickHouse user may not change the setting `{name}`, which Recall "
+                f"queries set to {value}; set it in the user's settings profile, or give the "
+                "user `readonly = 2`, which keeps it read-only and lets it set query settings"
+            )
+        sent[name] = value
+    if row_cap is not None and _server_value(client=client, name=_LIMIT_SETTING)[1]:
+        sent[_LIMIT_SETTING] = row_cap
+    return sent, None
+
+
 def run_recall_query(
-    *, handle: int, sql: str, settings: dict[str, int]
+    *, handle: int, sql: str, settings: dict[str, int], row_cap: int | None
 ) -> tuple[RecallFailure, tuple[list[str], list[list[RecallCell]], RecallStatistics] | None]:
-    """Columns, rows of plain values and server statistics; strings not in UTF-8 stay bytes."""
+    """Columns, at most `row_cap` rows of plain values, and server statistics."""
 
     try:
-        result: Any = SharedRecallConnections.connections.get(handle=handle).client.query(
-            sql, settings=settings, query_formats=_BYTES_FORMATS
-        )
+        client: Any = SharedRecallConnections.connections.get(handle=handle).client
+        sent, refused = _query_settings(client=client, settings=settings, row_cap=row_cap)
+        if refused is not None:
+            return (False, refused), None
+        rows: list[list[RecallCell]] = []
+        with client.query_row_block_stream(
+            sql, settings=sent, query_formats=_BYTES_FORMATS
+        ) as stream:
+            result: Any = stream.source
+            for block in stream:
+                rows.extend(_row(row) for row in block)
+                if row_cap is not None and len(rows) >= row_cap:
+                    break
+            columns: list[str] = list(result.column_names)
+            summary: dict[str, Any] = dict(result.summary or {})
     except Exception as error:
         return _failure(error), None
-    summary: dict[str, Any] = dict(result.summary or {})
     statistics: RecallStatistics = (
         _number(summary=summary, key="read_rows"),
         _number(summary=summary, key="read_bytes"),
         summary.get("query_id"),
     )
-    rows: list[list[RecallCell]] = [_row(row) for row in result.result_rows]
-    return None, (list(result.column_names), rows, statistics)
+    return None, (columns, rows[:row_cap] if row_cap is not None else rows, statistics)
 
 
 def run_recall_command(*, handle: int, sql: str) -> tuple[RecallFailure, None]:

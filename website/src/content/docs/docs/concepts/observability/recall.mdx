@@ -260,6 +260,16 @@ GRANT SELECT, INSERT ON observability.* TO recall_writer;
 GRANT SELECT ON observability.* TO recall_reader;
 ```
 
+The reader may be a standard read-only user (`SETTINGS readonly = 1`, or a settings profile with
+it), which may not change any setting. Such a user's queries run with the server's own settings;
+every other reader gets the
+[settings SQLBuild pins](/docs/concepts/adapters/clickhouse#settings-sqlbuild-pins). The views
+return the same rows either way. `sqb recall query` runs with
+`readonly = 2`, which refuses writes but still allows query settings, unless the user is already
+read-only; a user that may not set the row limit gets the same truncated result, cut off while
+reading. A setting that Recall needs and the user may not change fails with an error naming it; set
+it in the user's profile, or give the user `readonly = 2`, which keeps it read-only.
+
 Then, as the administrator, create the store with the DDL that `sqb recall schema --ddl` prints
 (any connection that can read the database works, so the reader's is enough):
 

@@ -46,9 +46,11 @@ use sqlbuild_recall::store::models::{
 use sqlbuild_recall::store::types::{RecallStore, RecallStoreOpener};
 
 use crate::bindings::_helpers::recall::clickhouse_calls::{
-    self as calls, QueryStatistics, StoreHandle,
+    self as calls, ConnectionRole, QueryStatistics, StoreHandle,
 };
-use crate::bindings::_helpers::recall::constants::{SECONDS_PER_DAY, UNKNOWN_TABLE_ERROR};
+use crate::bindings::_helpers::recall::constants::{
+    READ_ONLY_QUERIES, READONLY_SETTING, SECONDS_PER_DAY, UNKNOWN_TABLE_ERROR,
+};
 
 /// Where a ClickHouse store lives and how long it keeps history.
 #[derive(Clone, Debug)]
@@ -143,7 +145,7 @@ impl ClickHouseStore {
     }
 
     fn query(&self, py: Python<'_>, sql: &str, action: &str) -> Result<QueryResult, StoreError> {
-        calls::query(py, self.connection()?, (sql, &[]), action).map(|(result, _)| result)
+        calls::query(py, self.connection()?, (sql, &[], None), action).map(|(result, _)| result)
     }
 
     fn command(&self, py: Python<'_>, sql: &str, action: &str) -> Result<(), StoreError> {
@@ -591,7 +593,7 @@ impl RecallStoreOpener for ClickHouseStoreOpener {
                 location: self.location.clone(),
                 connection: Some(calls::connect(
                     py,
-                    (&self.location.config, true),
+                    (&self.location.config, ConnectionRole::Writer),
                     &self.location.connect_action(),
                 )?),
                 columns: HashMap::new(),
@@ -645,7 +647,7 @@ impl ClickHouseReader {
             location: location.clone(),
             connection: Some(calls::connect(
                 py,
-                (&location.config, false),
+                (&location.config, ConnectionRole::Reader),
                 &location.connect_action(),
             )?),
             columns: HashMap::new(),
@@ -683,7 +685,7 @@ impl ClickHouseReader {
             location: location.clone(),
             connection: Some(calls::connect(
                 py,
-                (&location.config, false),
+                (&location.config, ConnectionRole::Reader),
                 &location.connect_action(),
             )?),
             columns: HashMap::new(),
@@ -719,15 +721,13 @@ impl ClickHouseReader {
         sql: &str,
         limit: Option<usize>,
     ) -> Result<(QueryResult, QueryStatistics), StoreError> {
-        let mut settings: Vec<(&str, i64)> = vec![("readonly", 2)];
-        if let Some(limit) = limit {
-            settings.push(("limit", i64::try_from(limit).unwrap_or(i64::MAX - 1) + 1));
-        }
+        let settings: [(&str, i64); 1] = [(READONLY_SETTING, READ_ONLY_QUERIES)];
+        let row_cap: Option<usize> = limit.map(|limit| limit.saturating_add(1));
         let run = || {
             calls::query(
                 py,
                 self.store.connection()?,
-                (sql, &settings),
+                (sql, &settings, row_cap),
                 "run the Recall query",
             )
         };

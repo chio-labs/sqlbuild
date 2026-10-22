@@ -100,6 +100,9 @@ pub(crate) const CLOSE_POLL_MS: u64 = 50;
 pub(crate) const QUARANTINE_START_WAIT_MS: u64 = 200;
 /// The ClickHouse error name of a query naming a relation that does not exist yet.
 pub(crate) const UNKNOWN_TABLE_ERROR: &str = "UNKNOWN_TABLE";
+/// `sqb recall query` runs read-only: the setting, and the value that still allows query settings. Not sent when the session is already read-only.
+pub(crate) const READONLY_SETTING: &str = "readonly";
+pub(crate) const READ_ONLY_QUERIES: i64 = 2;
 /// Seconds in a day, for the artifact refresh cutoff.
 pub(crate) const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
 /// The parameter a lifecycle-event sink takes its event in.

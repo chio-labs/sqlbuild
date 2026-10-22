@@ -7,7 +7,9 @@ from pathlib import Path
 
 _AUDITED_ROOTS: tuple[str, ...] = ("adapter", "adapters")
 _RAW_RECEIVERS: frozenset[str] = frozenset({"client", "raw_connection", "raw_cursor"})
-_STATEMENT_METHODS: frozenset[str] = frozenset({"execute", "executemany", "query"})
+_STATEMENT_METHODS: frozenset[str] = frozenset(
+    {"execute", "executemany", "query", "query_row_block_stream"}
+)
 _APPROVED_BOUNDARIES: dict[str, frozenset[tuple[str, str]]] = {
     "adapter/contract/classes/observed_connection.py": frozenset(
         {
@@ -24,7 +26,9 @@ _APPROVED_BOUNDARIES: dict[str, frozenset[tuple[str, str]]] = {
     "adapters/bigquery/classes/bigquery_connection.py": frozenset(
         {("_BigQueryConnection.query_job", "query")}
     ),
-    "adapters/clickhouse/_helpers/recall_store.py": frozenset({("run_recall_query", "query")}),
+    "adapters/clickhouse/_helpers/recall_store.py": frozenset(
+        {("run_recall_query", "query_row_block_stream")}
+    ),
     "adapters/clickhouse/classes/clickhouse_connection.py": frozenset(
         {("_ClickHouseConnection._run", "query")}
     ),
