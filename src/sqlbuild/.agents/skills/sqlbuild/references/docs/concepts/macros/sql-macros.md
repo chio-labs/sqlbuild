@@ -258,9 +258,10 @@ error[P017]: argument src of macro clean_orders() needs column is_deleted BOOLEA
   = help: pass a relation with these columns: order_id BIGINT, updated_at TIMESTAMP, is_deleted BOOLEAN
 ```
 
-An argument whose type the compiler cannot infer passes. Arguments built from `__ref()`, macro
-calls or parameters of a calling macro, and models with runtime placeholders, are checked only by
-the model's own column checks after expansion. All other errors also point at the call and at the
+An argument whose type the compiler cannot infer passes. So do calls inside a subquery or in a
+query part with `UNION`, `INTERSECT` or `EXCEPT`, arguments built from `__ref()`, macro calls or
+parameters of a calling macro, and calls in models with runtime placeholders; the model's own
+column checks still run on the expanded SQL. All other errors also point at the call and at the
 macro file.
 
 - `sqb format` formats SQL macro files, bodies of every form and the `MACRO` header, and
