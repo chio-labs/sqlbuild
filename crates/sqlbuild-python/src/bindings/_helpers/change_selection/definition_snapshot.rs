@@ -124,7 +124,7 @@ fn declaration_file_digest(fingerprints: &Fingerprinting, path: &str) -> String 
     }
 }
 
-/// Scope declarations: a macro by its facts and Python imports, any other by its declaration file.
+/// Scope declarations by their file; a Python macro also by its facts and macro dependencies.
 fn declaration_nodes(
     project: &Bound<'_, PyAny>,
     fingerprints: &Fingerprinting,
@@ -141,10 +141,8 @@ fn declaration_nodes(
         let name: String = native_field(&identity, "name")?.extract()?;
         let path: String = native_field(&declaration, "path")?.extract()?;
         let macro_facts: Bound<'_, PyAny> = native_field(&declaration, "macro")?;
-        let (digest, uses): (String, Vec<String>) = if kind == MACRO_KIND {
-            if macro_facts.is_none() {
-                continue;
-            }
+        let (digest, uses): (String, Vec<String>) = if kind == MACRO_KIND && !macro_facts.is_none()
+        {
             let dependencies: Vec<String> =
                 native_field(&macro_facts, "dependencies")?.extract()?;
             (
@@ -193,8 +191,7 @@ fn config_digest(fingerprints: &Fingerprinting, config: &Bound<'_, PyAny>) -> Py
     Ok(definition_digest(&[&encoded.to_string()]))
 }
 
-/// A model by its SQL before macro expansion, resolved configuration, columns, contract, audits
-/// and the variables its file reads.
+/// A model by its authored SQL, resolved configuration, columns, audits and variables it reads.
 fn model_node(
     model: &Bound<'_, PyAny>,
     fingerprints: &Fingerprinting,
@@ -274,39 +271,37 @@ fn source_node(
 fn python_nodes(
     discovered: &Bound<'_, PyAny>,
     fingerprints: &Fingerprinting,
-    nodes: &mut BTreeMap<String, NodeDefinition>,
-) -> PyResult<()> {
+) -> PyResult<Vec<(String, NodeDefinition)>> {
+    let mut nodes: Vec<(String, NodeDefinition)> = Vec::new();
     let collections = PYTHON_NODE_COLLECTIONS
         .iter()
         .zip(PYTHON_NODE_KINDS)
-        .chain([(&"materialization_files", MATERIALIZATION_KIND)]);
+        .map(|(collection, kind)| (*collection, kind))
+        .chain([("materialization_files", MATERIALIZATION_KIND)]);
     for (collection, kind) in collections {
-        let Ok(items) = discovered.getattr(*collection) else {
-            continue;
-        };
-        for item in items.try_iter()? {
+        for item in native_field(discovered, collection)?.try_iter()? {
             let item: Bound<'_, PyAny> = item?;
-            let name: String = item.getattr("name")?.extract()?;
-            let path: PathBuf = item.getattr("file_path")?.extract()?;
-            nodes.insert(
+            let name: String = native_field(&item, "name")?.extract()?;
+            let path: PathBuf = native_field(&item, "file_path")?.extract()?;
+            nodes.push((
                 node_key(kind, &name),
                 node(
                     kind,
                     &name,
                     vec![(DEFINITION_ASPECT, fingerprints.python_module_digest(&path))],
                 ),
-            );
+            ));
         }
     }
-    Ok(())
+    Ok(nodes)
 }
 
 /// User-defined and table functions by their definitions, Python ones with their imports.
 fn function_nodes(
     project: &Bound<'_, PyAny>,
     fingerprints: &Fingerprinting,
-    nodes: &mut BTreeMap<String, NodeDefinition>,
-) -> PyResult<()> {
+) -> PyResult<Vec<(String, NodeDefinition)>> {
+    let mut nodes: Vec<(String, NodeDefinition)> = Vec::new();
     let functions: Bound<'_, PyAny> = project_reads::functions(project)?;
     let hashes: Bound<'_, PyDict> = function_local_hashes(&functions, None)?;
     for function in functions.try_iter()? {
@@ -343,17 +338,17 @@ fn function_nodes(
             ));
         }
         definition.uses.push(node_key(SETTINGS_KIND, SETTINGS_NAME));
-        nodes.insert(node_key(&kind, &name), definition);
+        nodes.push((node_key(&kind, &name), definition));
     }
-    Ok(())
+    Ok(nodes)
 }
 
 /// Each unit test file by its text and the variables it reads.
 fn test_file_nodes(
     project: &Bound<'_, PyAny>,
     fingerprints: &Fingerprinting,
-    nodes: &mut BTreeMap<String, NodeDefinition>,
-) -> PyResult<()> {
+) -> PyResult<BTreeMap<String, NodeDefinition>> {
+    let mut nodes: BTreeMap<String, NodeDefinition> = BTreeMap::new();
     for test in project_reads::sql_tests(project)?.try_iter()? {
         let file: Bound<'_, PyAny> = native_field(&test?, "test_file")?;
         let path: String = text_of(&native_field(&file, "relative_path")?)?;
@@ -371,7 +366,7 @@ fn test_file_nodes(
         }
         nodes.insert(key, node(TEST_FILE_KIND, &path, aspects));
     }
-    Ok(())
+    Ok(nodes)
 }
 
 /// Each scenario by its file, captured snapshots and the variables it reads.
@@ -379,8 +374,8 @@ fn scenario_nodes(
     project: &Bound<'_, PyAny>,
     fingerprints: &Fingerprinting,
     uses: &BTreeMap<String, BTreeSet<String>>,
-    nodes: &mut BTreeMap<String, NodeDefinition>,
-) -> PyResult<()> {
+) -> PyResult<Vec<(String, NodeDefinition)>> {
+    let mut nodes: Vec<(String, NodeDefinition)> = Vec::new();
     let snapshot_root: PathBuf = SCENARIO_SNAPSHOT_ROOT
         .iter()
         .fold(fingerprints.project_dir.clone(), |path, part| {
@@ -398,16 +393,20 @@ fn scenario_nodes(
         if let Some(digest) = directory_digest(&snapshot_root.join(&name)) {
             aspects.push((SNAPSHOTS_ASPECT, digest));
         }
-        let contents: String = std::fs::read_to_string(&file).unwrap_or_default();
+        let contents: String = match std::fs::read_to_string(&file) {
+            Ok(contents) => contents,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+            Err(error) => return Err(error.into()),
+        };
         if let Some(digest) = fingerprints.referenced_vars_digest(&contents) {
             aspects.push((VARS_ASPECT, digest));
         }
         let key: String = node_key(SCENARIO_KIND, &name);
         let mut definition: NodeDefinition = node(SCENARIO_KIND, &name, aspects);
         definition.uses = uses.get(&key).into_iter().flatten().cloned().collect();
-        nodes.insert(key, definition);
+        nodes.push((key, definition));
     }
-    Ok(())
+    Ok(nodes)
 }
 
 /// The definition snapshot of `project`, discovered as `discovered` under `project_dir`.
@@ -454,10 +453,10 @@ pub(crate) fn definition_snapshot(
             node(SEED_KIND, &name, vec![(DEFINITION_ASPECT, version_hash)]),
         );
     }
-    function_nodes(project, &fingerprints, &mut nodes)?;
-    python_nodes(discovered, &fingerprints, &mut nodes)?;
-    test_file_nodes(project, &fingerprints, &mut nodes)?;
-    scenario_nodes(project, &fingerprints, &uses, &mut nodes)?;
+    nodes.extend(function_nodes(project, &fingerprints)?);
+    nodes.extend(python_nodes(discovered, &fingerprints)?);
+    nodes.extend(test_file_nodes(project, &fingerprints)?);
+    nodes.extend(scenario_nodes(project, &fingerprints, &uses)?);
     Ok(DefinitionSnapshot {
         format: DEFINITION_SNAPSHOT_FORMAT,
         nodes,

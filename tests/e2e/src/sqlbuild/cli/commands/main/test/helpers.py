@@ -2224,11 +2224,11 @@ def build_since_project_files() -> dict[str, str]:
 
 
 def build_since_indirect_files() -> dict[str, str]:
-    """Build files that reach tests indirectly: variables, defaults, helpers, seeds and functions."""
+    """Build files that reach tests indirectly: variables, defaults, helpers, seeds, functions."""
 
     base: dict[str, str] = build_since_project_files()
     return {
-        "sqlbuild_project.toml": base["sqlbuild_project.toml"] + "\n[vars]\nmin_amount = \"100\"\n",
+        "sqlbuild_project.toml": base["sqlbuild_project.toml"] + '\n[vars]\nmin_amount = "100"\n',
         "python/_rates.py": 'DIVISOR = "100"\n',
         "models/_macros/money.py": (
             "from python._rates import DIVISOR\n\n\n"
@@ -2259,7 +2259,8 @@ def build_since_indirect_files() -> dict[str, str]:
             "      - name: region_name\n        type: VARCHAR\n"
         ),
         "functions/sql/is_open.sql": (
-            "FUNCTION (\n  description 'Whether an order is open.',\n  arguments (order_status VARCHAR),\n  returns BOOLEAN,\n);\n\n"
+            "FUNCTION (\n  description 'Whether an order is open.',\n"
+            "  arguments (order_status VARCHAR),\n  returns BOOLEAN,\n);\n\n"
             "order_status = 'open'\n"
         ),
         "models/regional_orders.sql": (

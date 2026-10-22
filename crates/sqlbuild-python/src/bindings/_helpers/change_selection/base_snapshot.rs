@@ -195,8 +195,11 @@ pub(crate) fn base_comparison<'py>(
     )?;
     let vars: &str = &variant.vars_json;
     let target: Option<&str> = variant.selected_target.as_deref();
-    let local_config: String =
-        std::fs::read_to_string(directory.join(LOCAL_CONFIG_FILE)).unwrap_or_default();
+    let local_config: String = match std::fs::read_to_string(directory.join(LOCAL_CONFIG_FILE)) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(io_failed(py, &base, &error)),
+    };
     let key: String = definition_digest(&[
         NATIVE_BUILD_IDENTITY,
         target.unwrap_or_default(),

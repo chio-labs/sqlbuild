@@ -65,10 +65,7 @@ pub(crate) fn package_inits(path: &Path, rules_root: &Path) -> Vec<PathBuf> {
     inits
 }
 
-/// Every module under `rules_root` one import statement can execute.
-///
-/// Absolute imports resolve from `project`; with `package` set, only imports of that top-level
-/// package count.
+/// Modules under `rules_root` one import executes, from `project` and only `package` when set.
 pub(crate) fn local_import_paths(
     node: &CpythonNode<'_>,
     source_path: &Path,

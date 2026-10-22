@@ -61,13 +61,8 @@ const PASS_OUTCOME: &str = "pass";
 
 /// Why `--since` selected each test, by inspection label.
 type SelectionReasons = HashMap<String, Vec<String>>;
-
 /// What a `--since` selection kept: the narrowed pipeline, reasons by label, and its JSON section.
-struct ChangedSelection<'py> {
-    pipeline: Bound<'py, PyAny>,
-    reasons: SelectionReasons,
-    json: String,
-}
+type ChangedSelection<'py> = (Bound<'py, PyAny>, SelectionReasons, String);
 const EXPECT_LABEL: &str = "expect";
 const UNKNOWN_GROUP: &str = "(unknown)";
 const EXECUTION_COMMAND: &str = "sqb test";
@@ -475,11 +470,11 @@ fn select_changed<'py>(
         &plan_output,
         &[("test_entries", PyTuple::new(py, kept)?.into_any())],
     )?;
-    Ok(ChangedSelection {
-        pipeline: replaced(pipeline, &[("plan_output", plan_output)])?,
+    Ok((
+        replaced(pipeline, &[("plan_output", plan_output)])?,
         reasons,
-        json: changed.json((total, &selected)),
-    })
+        changed.json((total, &selected)),
+    ))
 }
 
 /// Write the ready header and run the tests with nested progress; returns the results.
@@ -657,7 +652,7 @@ fn complete(
     let tuple: Bound<'_, PyAny> = PyTuple::new(py, results)?.into_any();
     let payload: Bound<'_, PyAny> = PyString::new(
         py,
-        &with_since_section(py, format_test_execution_json(py, tuple)?, since_json)?,
+        &with_since_section(format_test_execution_json(py, tuple)?, since_json)?,
     )
     .into_any();
     write_execution_json_output(
@@ -697,7 +692,8 @@ pub(crate) fn run_test_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> Py
     let mut reasons: HashMap<String, Vec<String>> = HashMap::new();
     let mut since_json: Option<String> = None;
     if let Some(base) = base {
-        let selection: ChangedSelection<'_> = select_changed(
+        let json: String;
+        (pipeline, reasons, json) = select_changed(
             (
                 &pipeline,
                 &stream,
@@ -707,8 +703,7 @@ pub(crate) fn run_test_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> Py
             base,
             native_field(request, "explain")?.is_truthy()?,
         )?;
-        (pipeline, reasons) = (selection.pipeline, selection.reasons);
-        since_json = Some(selection.json);
+        since_json = Some(json);
     }
     if inspect_only {
         return inspect(&stream, &pipeline.getattr("plan_output")?, &reasons);

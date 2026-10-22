@@ -167,7 +167,6 @@ fn finish(
     let payload: Bound<'_, PyAny> = PyString::new(
         py,
         &with_since_section(
-            py,
             format_scenario_execution_json(
                 py,
                 Some(keywords(

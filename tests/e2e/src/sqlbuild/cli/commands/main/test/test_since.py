@@ -41,6 +41,11 @@ _ARCHIVE_SQL: str = (
 )
 _TEST_COMMAND: tuple[str, ...] = ("--no-color", "test", "--since", "main")
 _BASE_REF_CONFIG: str = _FILES["sqlbuild_project.toml"] + '\n[git]\nbase_ref = "main"\n'
+_INDIRECT: dict[str, str] = build_since_indirect_files()
+_PROJECT_CONFIG: str = "sqlbuild_project.toml"
+_SCENARIO_COMMAND: tuple[str, ...] = ("--no-color", "scenario", "test", "--since", "main")
+_EXPLAINED_TESTS: tuple[str, ...] = (*_TEST_COMMAND, "--explain")
+_EXPLAINED_SCENARIOS: tuple[str, ...] = (*_SCENARIO_COMMAND, "--explain")
 
 
 @pytest.mark.parametrize(
@@ -191,13 +196,6 @@ def test_given_changes_since_ref_when_testing_then_runs_only_affected_tests(
         assert fragment in output, output
     for fragment in test_case.unexpected_fragments:
         assert fragment not in output, output
-
-
-_INDIRECT: dict[str, str] = build_since_indirect_files()
-_PROJECT_CONFIG: str = "sqlbuild_project.toml"
-_SCENARIO_COMMAND: tuple[str, ...] = ("--no-color", "scenario", "test", "--since", "main")
-_EXPLAINED_TESTS: tuple[str, ...] = (*_TEST_COMMAND, "--explain")
-_EXPLAINED_SCENARIOS: tuple[str, ...] = (*_SCENARIO_COMMAND, "--explain")
 
 
 @pytest.mark.parametrize(

@@ -3,8 +3,10 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyResult, Python};
+use pyo3::exceptions::PyValueError;
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods};
+use serde_json::Value;
 use sqlbuild_analysis::definition_changes::constants::{
     MACRO_KIND, MODEL_KIND, SCENARIO_KIND, SEED_KIND, SOURCE_KIND, TABLE_FUNCTION_KIND,
     TEST_FILE_KIND,
@@ -31,7 +33,6 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::scenario_command::setup::{flush, write};
 
 const MACRO_TEST_MODE: &str = "macro";
-const JSON_MODULE: &str = "json";
 /// The JSON document key of the changes and selection of a `--since` run.
 const SINCE_SECTION: &str = "since";
 /// The relation call a test or scenario file reads a source with.
@@ -269,23 +270,22 @@ impl ChangedProject {
 }
 
 /// `payload`, a JSON document, with the `since` section added when the run used `--since`.
-pub(crate) fn with_since_section(
-    py: Python<'_>,
-    payload: String,
-    since: Option<&str>,
-) -> PyResult<String> {
+pub(crate) fn with_since_section(payload: String, since: Option<&str>) -> PyResult<String> {
     let Some(since) = since else {
         return Ok(payload);
     };
-    let json: Bound<'_, PyModule> = py.import(JSON_MODULE)?;
-    let document: Bound<'_, PyAny> = json.call_method1("loads", (payload,))?;
-    document.set_item(SINCE_SECTION, json.call_method1("loads", (since,))?)?;
-    let options: Bound<'_, PyDict> = PyDict::new(py);
-    options.set_item("indent", 2)?;
-    let text: String = json
-        .call_method("dumps", (document,), Some(&options))?
-        .extract()?;
-    Ok(format!("{text}\n"))
+    let invalid = |error: serde_json::Error| PyValueError::new_err(error.to_string());
+    let mut document: Value = serde_json::from_str(&payload).map_err(invalid)?;
+    if let Value::Object(fields) = &mut document {
+        fields.insert(
+            SINCE_SECTION.to_owned(),
+            serde_json::from_str(since).map_err(invalid)?,
+        );
+    }
+    Ok(format!(
+        "{}\n",
+        serde_json::to_string_pretty(&document).map_err(invalid)?
+    ))
 }
 
 /// The project's compiled tests and models by name.

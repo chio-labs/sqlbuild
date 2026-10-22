@@ -17,7 +17,6 @@ use crate::bindings::_helpers::records::models::NativeRecord;
 
 /// Fields that document a definition without changing what it does.
 const DOCUMENTATION_FIELDS: [&str; 2] = ["description", "location"];
-const DATACLASS_FIELDS: &str = "__dataclass_fields__";
 /// Python source that mentions this can read project variables through `ctx.vars`.
 const VARS_ATTRIBUTE: &str = "vars";
 const VARIABLE_SIGIL: &str = "@@";
@@ -43,12 +42,14 @@ impl Fingerprinting {
     ) -> PyResult<Self> {
         let py: Python<'_> = project.py();
         let mut roots: Vec<String> = Vec::new();
-        for root in [
-            std::fs::canonicalize(project_dir).ok(),
-            Some(project_dir.to_path_buf()),
-        ]
-        .into_iter()
-        .flatten()
+        let canonical: Option<PathBuf> = match std::fs::canonicalize(project_dir) {
+            Ok(resolved) => Some(resolved),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(error.into()),
+        };
+        for root in canonical
+            .into_iter()
+            .chain(std::iter::once(project_dir.to_path_buf()))
         {
             let text: String = format!("{}/", root.to_string_lossy().replace('\\', "/"));
             if !roots.contains(&text) {
@@ -131,25 +132,6 @@ impl Fingerprinting {
             }
             return Ok(Value::Object(entries.into_iter().collect()));
         }
-        if let Ok(declared) = value.getattr(DATACLASS_FIELDS)
-            && let Ok(declared) = declared.cast::<PyDict>()
-        {
-            let mut fields: Map<String, Value> = Map::new();
-            fields.insert(
-                "record".to_owned(),
-                Value::from(value.get_type().name()?.to_string()),
-            );
-            for name in declared.keys() {
-                let name: String = name.extract()?;
-                if DOCUMENTATION_FIELDS.contains(&name.as_str()) || skipped.contains(&name.as_str())
-                {
-                    continue;
-                }
-                let item: Value = self.canonical(&value.getattr(name.as_str())?, skipped)?;
-                fields.insert(name, item);
-            }
-            return Ok(Value::Object(fields));
-        }
         let text: String = value.repr()?.to_string();
         if text.contains(" at 0x") {
             return Ok(Value::from(value.get_type().name()?.to_string()));
@@ -188,9 +170,7 @@ impl Fingerprinting {
         (!names.is_empty()).then(|| self.vars_digest(names.iter()))
     }
 
-    /// The digest of a Python file and every project module it imports, by relative path.
-    ///
-    /// Code that mentions `vars` may read any project variable, so its digest covers them all.
+    /// A Python file and its imported project modules; code mentioning `vars` covers every variable.
     pub(crate) fn python_module_digest(&self, path: &Path) -> String {
         let source: PathBuf = if path.is_absolute() {
             path.to_path_buf()

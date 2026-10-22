@@ -5,10 +5,7 @@ use std::path::{Path, PathBuf};
 use crate::rule_evidence::_helpers::closure::module_closure;
 use crate::rule_evidence::_helpers::paths::resolve;
 
-/// Every module and package initializer under `project_dir` that `source_path` executes, sorted.
-///
-/// Imports resolve from the project directory, the way project Python imports `macros.currency`
-/// or `python._helpers`; standard-library and installed modules are not part of the closure.
+/// Project modules and package initializers `source_path` imports, resolved from `project_dir`.
 pub fn project_import_closure(
     source_path: &Path,
     project_dir: &Path,
