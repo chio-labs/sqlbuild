@@ -85,7 +85,7 @@ fn reply<'py>(
     }
 }
 
-/// How a store connection is used: the delivery thread writes and is never captured; a reader sends no session settings, so a `readonly = 1` user can read.
+/// How a store connection is used: the delivery thread writes and is never captured; a reader skips the session settings under `readonly = 1`, so that user can read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ConnectionRole {
     Writer,
