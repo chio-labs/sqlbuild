@@ -127,6 +127,7 @@ def test_given_native_source_when_checking_module_paths_then_reports_errors(
                 "sqlbuild.cli.commands.classes.prepared_compile_artifacts",
                 "sqlbuild.cli.compute_logs",
                 "sqlbuild.cli.observability",
+                "sqlbuild.clone",
                 "sqlbuild.compile",
                 "sqlbuild.compile.reuse",
                 "sqlbuild.cost",
