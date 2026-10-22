@@ -300,8 +300,9 @@ writing to an upgraded store. `--ddl` prints SQL, so it cannot be combined with 
   table, with the same queue, shutdown budget and exit-code guarantees as the local store. Many
   concurrent commands can write one store.
 - **Duplicates.** Every row has a deterministic key. A retried batch is deduplicated by ClickHouse,
-  and the views read each key once (`FINAL` on `ReplacingMergeTree` tables), so a repeated delivery
-  is counted once. Before writing, Recall looks up the batch's keys: a key already stored with
+  and the views read each key once, so a repeated delivery is counted once: views that list or count
+  rows read the `ReplacingMergeTree` tables with `FINAL`, and `invocations` and `statements`, which
+  only take the first, last, smallest or largest value of a key's copies, read them without it. Before writing, Recall looks up the batch's keys: a key already stored with
   different content keeps the stored row, and the rejected copy is listed in `conflicts`.
 - **Retention.** Every table carries a TTL of `retention` (SQL text a week longer, and refreshed
   while it is still referenced), and the views hide rows past their TTL at once. ClickHouse drops

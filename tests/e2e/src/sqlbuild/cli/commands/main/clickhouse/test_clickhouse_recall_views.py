@@ -21,6 +21,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse.helpers import (
     create_previous_views,
     described,
     differing_rows,
+    duplicate_recall_rows,
     execute_clickhouse_sql,
     fetch_clickhouse_rows,
     limited_user,
@@ -195,7 +196,7 @@ def test_given_a_reader_when_querying_then_pinned_settings_apply_unless_it_may_n
     "test_case",
     [
         ClickHouseRecallViewEquivalenceTestCase(
-            description="rewritten views match the previous ones",
+            description="rewritten views match the previous ones with and without duplicates",
             replaced_views=("invocations", "statements", "output_invocations", "artifacts"),
             all_views=RECALL_VIEWS,
             expected_statuses=[
@@ -260,10 +261,42 @@ def test_given_representative_invocations_when_views_are_rewritten_then_rows_and
         )
         for view in test_case.all_views
     ]
+    duplicate_recall_rows(config=clickhouse_e2e_config, database=recall_database)
+    with_duplicates: list[int] = [
+        differing_rows(
+            config=clickhouse_e2e_config,
+            left=f"{recall_database}.{view}",
+            right=f"{recall_database}.snapshot_{view}",
+            settings={},
+        )
+        for view in test_case.all_views
+    ]
+    previous_with_duplicates: list[int] = [
+        differing_rows(
+            config=clickhouse_e2e_config,
+            left=f"{recall_database}.{view}",
+            right=f"{recall_database}.previous_{view}",
+            settings={"join_use_nulls": 1},
+        )
+        for view in test_case.replaced_views
+    ]
+    counts_with_duplicates: list[bool] = [
+        fetch_clickhouse_rows(
+            config=clickhouse_e2e_config,
+            sql=f"SELECT (SELECT count() FROM {recall_database}.{view}) "
+            f"= (SELECT count() FROM {recall_database}.snapshot_{view})",
+        )
+        == ((1,),)
+        for view in test_case.all_views
+    ]
+
     assert statuses == test_case.expected_statuses
     assert against_previous == [0 for _ in test_case.replaced_views]
     assert types == [True for _ in test_case.replaced_views]
     assert without_join_nulls == [0 for _ in test_case.all_views]
+    assert with_duplicates == [0 for _ in test_case.all_views]
+    assert previous_with_duplicates == [0 for _ in test_case.replaced_views]
+    assert counts_with_duplicates == [True for _ in test_case.all_views]
 
 
 @pytest.mark.parametrize(

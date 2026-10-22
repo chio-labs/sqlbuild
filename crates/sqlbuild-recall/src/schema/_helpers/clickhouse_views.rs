@@ -100,7 +100,7 @@ fn deduplicated(table: Table, options: &DdlOptions) -> String {
     )
 }
 
-/// `table`'s rows within its TTL that match `filter`, one copy per key (`FINAL`).
+/// `table`'s rows within its TTL that match `filter`, every stored copy included. Only for folds whose result is the same however often a row repeats (`any`, `min`, `max`, `argMin`, `argMax`, a count compared with zero): copies of one key hold the same content, since a write with other content is refused as a conflict.
 fn retained(table: Table, options: &DdlOptions, filter: &str) -> String {
     let spec = table_spec(table);
     let days: u32 = options.retention_days.saturating_add(spec.ttl_extra_days);
@@ -110,7 +110,7 @@ fn retained(table: Table, options: &DdlOptions, filter: &str) -> String {
         format!(" AND {filter}")
     };
     format!(
-        "(SELECT * FROM {name} FINAL WHERE {expiry} >= now64(6) - INTERVAL {days} DAY{filter})",
+        "(SELECT * FROM {name} WHERE {expiry} >= now64(6) - INTERVAL {days} DAY{filter})",
         name = clickhouse_table(spec.name, options),
         expiry = spec.expiry_column,
     )
