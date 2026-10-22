@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.167.0](https://github.com/chio-labs/sqlbuild/compare/v0.166.0...v0.167.0) (2026-10-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* the Recall `connection` key is removed. A configuration that still sets it fails with an error naming `write_connection` and `read_connection`; set both to the old connection to keep the previous behaviour.
+
+### Features
+
+* split Recall read and write connections, faster recall queries, richer failure records ([#1210](https://github.com/chio-labs/sqlbuild/issues/1210)) ([5c70edd](https://github.com/chio-labs/sqlbuild/commit/5c70edd90d6496f3ea8c8a9f96625ba353330578))
+
+
+### Bug Fixes
+
+* error a unit test when its tested output query fails ([#1208](https://github.com/chio-labs/sqlbuild/issues/1208)) ([e250b75](https://github.com/chio-labs/sqlbuild/commit/e250b755de97d7828ff770bd2304cce6343ffbd7))
+
 ## [0.166.0](https://github.com/chio-labs/sqlbuild/compare/v0.165.0...v0.166.0) (2026-10-21)
 
 
