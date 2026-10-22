@@ -304,7 +304,7 @@ again.
   MergeTree tables and the views above. An existing database is used as it is, whatever its engine.
   The database is created on the server the writer connects to, never `ON CLUSTER`: on a
   self-managed cluster whose default database engine is not `Replicated`, create the database
-  yourself first (`ENGINE = Replicated(...)` or `ON CLUSTER`), and Recall leaves it alone.
+  yourself first with `ENGINE = Replicated(...)`, and Recall leaves it alone.
   ClickHouse Cloud needs nothing.
   If the user may not create the store, the command still succeeds and prints the statements,
   starting with `CREATE DATABASE IF NOT EXISTS` when the database is missing; a store created from
