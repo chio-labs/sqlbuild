@@ -58,3 +58,7 @@ def run_finished_statement() -> None:
     assert deadline is not None
     deadline.statement_started()
     deadline.statement_finished(query_id=None)
+
+
+class PlaceholderConnection:
+    """A connection stand-in that, like real adapter connections, supports weak references."""

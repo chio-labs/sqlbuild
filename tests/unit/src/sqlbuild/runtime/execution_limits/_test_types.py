@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from sqlbuild.runtime.execution_limits.models import ItemTimeoutPolicy
@@ -79,3 +80,16 @@ class SharedQueuedClockTestCase:
     waited_seconds: float
     expected_minimum_running_seconds: float
     expected_maximum_running_seconds: float
+
+
+@dataclass(frozen=True)
+class InterruptedConnectionReportsTestCase:
+    description: str
+    new_connection: Callable[[], object]
+    expected_reports: tuple[bool, bool]
+
+
+@dataclass(frozen=True)
+class InterruptedIdentityReuseTestCase:
+    description: str
+    expected_reuse_and_report: tuple[bool, bool]
