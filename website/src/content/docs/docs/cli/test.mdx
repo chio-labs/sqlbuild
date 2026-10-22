@@ -61,9 +61,15 @@ uncommitted edits included. A test is selected when:
 
 - its own file changed or is new, or
 - any node it actually executes changed: the models in its chain, the seeds, sources and
-  functions they read, and the macros, enums, constants and audits they use. The resolution is the
-  one `--inspect` shows, so a test that mocks a changed model, source, seed or macro is not
-  selected, while a downstream test that really runs it is.
+  functions they read, and the macros, enums, constants and audits they and the test file use
+  (every case of a parameterized test counts), or
+- a model, source or seed it mocks changed its declared columns: names, types, nullability or
+  contract, which shape the mock's columns, or
+- a project-wide input changed: see [Project-wide inputs](#project-wide-inputs).
+
+The resolution is the one `--inspect` shows, so a test that mocks a model, source, seed or macro
+is not selected when only that relation's SQL, data or upstream changes, while a downstream test
+that really runs it is.
 
 A node changed when its definition fingerprint differs. The fingerprint covers the model SQL with
 formatting and comments ignored, the resolved configuration (including what `[defaults]` and
@@ -80,6 +86,26 @@ changes other than in formatting and comments. A seed counts as changed with its
 types, a source with its declaration or inline expression, and a function with its definition.
 Loaders, tasks, assets and checks are compared by their Python modules and the project modules
 they import; they appear in the change summary but no unit test runs them.
+
+### Project-wide inputs
+
+Some inputs reach every test, so a change to any of them selects every test:
+
+- the `[settings]` that shape compiled models;
+- the adapter, `[connection]` and `[connections]` (including connection settings and adapter
+  extensions), `[targets]` and the target in use, and project-local adapter modules under
+  `adapters/`. Their values are compared by digest and never printed;
+- the Python environment as the project records it: `pyproject.toml`, `uv.lock`, `poetry.lock`,
+  `pdm.lock`, `Pipfile.lock` and `requirements*.txt` in the project directory or at the repository
+  root.
+
+Environment variables a project reads with `${ENV:NAME}` in configuration or `@@ENV:NAME` in SQL
+are part of the cache key of the base compile and of the fingerprints of the SQL that reads them;
+their values are never printed.
+
+`--since` cannot see code outside the project: modules imported from outside the project
+directory, installed package versions that the files above do not record, and environment
+variables read directly from Python with `os.environ`. Run the full suite when those change.
 
 Added nodes count as changed. A model renamed with `migrate_from` is compared with its old
 definition, so a pure rename selects nothing, while a rename that also edits the model counts as a
@@ -112,9 +138,12 @@ Selected 2 of 9 tests
     executes macro to_utc (changed)
 ```
 
-The base compile is cached per merge-base commit under `target/since/`, so `sqb test --since` and
-`sqb scenario test --since` in the same CI job compile the base once and compare against the same
-changed set. When no test is affected, the command says so and exits successfully.
+The base compile is cached under `target/since/` per merge-base commit, target, `--vars`, local
+configuration and referenced environment variables, and the newest few are kept. `sqb test --since`
+and `sqb scenario test --since` in the same CI job compile the base once when they use the same
+target and `--vars`; `sqb scenario test` uses the default target, so a `sqb test --target` run
+compiles the base separately. When no test is affected, the command says so and exits
+successfully.
 
 With `--json`, the progress and selection lines go to stderr, and the JSON document on stdout gains a
 `since` section: the ref and merge base, the `changed`, `renamed` and `deleted` nodes, the number
@@ -137,7 +166,17 @@ of candidate tests, and each selected test with its reasons:
 ```
 
 The base revision must compile. When it does not, `--since` fails with the compile error instead
-of guessing; compare with a later ref whose project compiles, or run without `--since`.
+of guessing; compare with a later ref whose project compiles, or run without `--since`. A
+`--target` that the base revision does not define, such as one the branch adds, compiles the base
+with its default target instead; the run says so, and because the target changed, every test is
+selected.
+
+SQL comparisons ignore layout and comments using a generic SQL tokenizer. In dialects where `--`
+starts a comment only when followed by whitespace, such as MySQL, `1--1` is read as `1` followed by
+a comment, so an edit inside such an expression can go unnoticed. The base tree is read from git
+objects without LFS smudging, including when a `.gitattributes` at the repository root marks files
+in a project subdirectory. A file stored with Git LFS, such as a seed, is a pointer file at the
+base and real content in the checkout, so it always counts as changed and selects what reads it.
 
 `<ref>` is any git ref or commit, such as the merge request's target branch from a CI variable.
 `--since` always takes a value. A ref that does not exist, or a shallow clone that does not reach

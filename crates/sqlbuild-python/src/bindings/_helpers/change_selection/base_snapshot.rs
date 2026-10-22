@@ -6,7 +6,6 @@ use std::time::Instant;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use sqlbuild_analysis::definition_changes::constants::DEFINITION_SNAPSHOT_FORMAT;
-use sqlbuild_analysis::definition_changes::main::definition_digest::definition_digest;
 use sqlbuild_analysis::definition_changes::main::definition_snapshot_json::definition_snapshot_json;
 use sqlbuild_analysis::definition_changes::main::parse_definition_snapshot::parse_definition_snapshot;
 use sqlbuild_analysis::definition_changes::models::DefinitionSnapshot;
@@ -18,8 +17,12 @@ use sqlbuild_core::git_revisions::main::resolve_since_reference::resolve_since_r
 use sqlbuild_core::git_revisions::main::short_commit::short_commit;
 use sqlbuild_core::git_revisions::models::GitBase;
 use sqlbuild_core::scenario_command::errors::ScenarioCommandError;
-use sqlbuild_rules::constants::NATIVE_BUILD_IDENTITY;
 
+use crate::bindings::_helpers::change_selection::base_cache::{
+    cache_key, prune_snapshots, work_directory_name,
+};
+use crate::bindings::_helpers::change_selection::base_compile::NOTES_EXTENSION;
+use crate::bindings::_helpers::change_selection::environment_nodes::with_base_dependencies;
 use crate::bindings::_helpers::compile_command::runtime_identity::interpreter_values;
 use crate::bindings::_helpers::discovery::project_config::configured_git_base_ref;
 use crate::bindings::_helpers::planner_identity::json_values::{COMPACT, sorted_dumps};
@@ -30,11 +33,19 @@ const LOCAL_CONFIG_FILE: &str = "sqlbuild_local.toml";
 const PROJECT_CONFIG_FILE: &str = "sqlbuild_project.toml";
 const BASE_COMPILE_FAILED_CODE: &str = "C484";
 const FAILURE_TAIL_LINES: usize = 20;
-/// Compiles the exported base tree in a fresh interpreter, apart from the working tree's modules.
-const BASE_COMPILE_PROGRAM: &str = "import json, sys\n\
-from sqlbuild._native import write_base_definition_snapshot\n\
-write_base_definition_snapshot(project_dir=sys.argv[1], output_path=sys.argv[2], \
-selected_target=sys.argv[3] or None, cli_vars=json.loads(sys.argv[4]))\n";
+/// Compiles the exported base tree in a separate interpreter; a failure prints only its error.
+const BASE_COMPILE_PROGRAM: &str = concat!(
+    "import json, sys\n",
+    "from sqlbuild._native import write_base_definition_snapshot\n",
+    "try:\n",
+    "    write_base_definition_snapshot(project_dir=sys.argv[1], output_path=sys.argv[2],\n",
+    "        selected_target=sys.argv[3] or None, cli_vars=json.loads(sys.argv[4]))\n",
+    "except Exception as error:\n",
+    "    code = getattr(error, 'code', None)\n",
+    "    message = f'error[{code}]: {error}' if code else f'{type(error).__name__}: {error}'\n",
+    "    print(message, file=sys.stderr)\n",
+    "    sys.exit(1)\n",
+);
 
 /// The base revision and its definition snapshot.
 pub(crate) struct BaseComparison {
@@ -60,7 +71,7 @@ pub(crate) fn base_variant(
     })
 }
 
-fn git_error(py: Python<'_>, error: GitRevisionError) -> PyErr {
+pub(crate) fn git_error(py: Python<'_>, error: GitRevisionError) -> PyErr {
     cli_user_error(
         py,
         ScenarioCommandError {
@@ -118,11 +129,11 @@ fn vars_json(cli_vars: &Bound<'_, PyAny>) -> PyResult<String> {
 
 /// Run the base compile of `tree` into `output` in a separate interpreter.
 fn compile_base_tree(
-    py: Python<'_>,
-    base: &GitBase,
+    (stream, base): (&Bound<'_, PyAny>, &GitBase),
     (tree, output): (&Path, &Path),
     (selected_target, vars): (Option<&str>, &str),
 ) -> PyResult<()> {
+    let py: Python<'_> = stream.py();
     let [_, executable, _, _] = interpreter_values(py)?;
     let finished: std::io::Result<Output> = py.detach(|| {
         Command::new(&executable)
@@ -138,6 +149,11 @@ fn compile_base_tree(
     });
     let finished: Output = finished.map_err(|error| io_failed(py, base, &error))?;
     if finished.status.success() && output.is_file() {
+        match std::fs::read_to_string(output.with_extension(NOTES_EXTENSION)) {
+            Ok(notes) => write(stream, &notes)?,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(io_failed(py, base, &error)),
+        }
         return Ok(());
     }
     Err(compile_failed(py, base, &failure_tail(&finished)))
@@ -145,10 +161,11 @@ fn compile_base_tree(
 
 /// Export the base tree, carry over the untracked local config, and compile it.
 fn compiled_base_snapshot(
-    py: Python<'_>,
+    stream: &Bound<'_, PyAny>,
     (base, project_dir, work): (&GitBase, &Path, &Path),
     (selected_target, vars): (Option<&str>, &str),
 ) -> PyResult<DefinitionSnapshot> {
+    let py: Python<'_> = stream.py();
     let tree: PathBuf = work.join("project");
     let exported: bool = export_git_tree(base, &tree).map_err(|error| git_error(py, error))?;
     if !exported || !tree.join(PROJECT_CONFIG_FILE).is_file() {
@@ -163,7 +180,7 @@ fn compiled_base_snapshot(
             .map_err(|error| io_failed(py, base, &error))?;
     }
     let output: PathBuf = work.join("definitions.json");
-    compile_base_tree(py, base, (&tree, &output), (selected_target, vars))?;
+    compile_base_tree((stream, base), (&tree, &output), (selected_target, vars))?;
     let text: String =
         std::fs::read_to_string(&output).map_err(|error| io_failed(py, base, &error))?;
     parse_definition_snapshot(&text)
@@ -200,12 +217,8 @@ pub(crate) fn base_comparison<'py>(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(error) => return Err(io_failed(py, &base, &error)),
     };
-    let key: String = definition_digest(&[
-        NATIVE_BUILD_IDENTITY,
-        target.unwrap_or_default(),
-        vars,
-        &local_config,
-    ]);
+    let key: String = cache_key(&directory, (target, vars, &local_config))
+        .map_err(|error| io_failed(py, &base, &error))?;
     let cache_dir: PathBuf = CACHE_DIRECTORY
         .iter()
         .fold(directory.clone(), |path, part| path.join(part));
@@ -217,22 +230,23 @@ pub(crate) fn base_comparison<'py>(
     if let Some(snapshot) = stored {
         write(stream, &format!("Using cached base revision {short}\n"))?;
         flush(stream)?;
+        let snapshot: DefinitionSnapshot = with_base_dependencies(py, &base, &snapshot)?;
         return Ok(BaseComparison { base, snapshot });
     }
     write(stream, &format!("Compiling base revision {short}...\n"))?;
     flush(stream)?;
     let started: Instant = Instant::now();
-    let work: PathBuf = cache_dir.join(format!("work-{}-{}", short, std::process::id()));
-    let _ = std::fs::remove_dir_all(&work);
+    let work: PathBuf = cache_dir.join(work_directory_name(short));
     std::fs::create_dir_all(&work).map_err(|error| io_failed(py, &base, &error))?;
     let compiled: PyResult<DefinitionSnapshot> =
-        compiled_base_snapshot(py, (&base, &directory, &work), (target, vars));
+        compiled_base_snapshot(stream, (&base, &directory, &work), (target, vars));
     let _ = std::fs::remove_dir_all(&work);
     let snapshot: DefinitionSnapshot = compiled?;
     let staged: PathBuf = cached.with_extension(format!("{}.tmp", std::process::id()));
     if let Ok(()) = std::fs::write(&staged, definition_snapshot_json(&snapshot)) {
         let _ = std::fs::rename(&staged, &cached);
     }
+    prune_snapshots(&cache_dir).map_err(|error| io_failed(py, &base, &error))?;
     write(
         stream,
         &format!(
@@ -241,5 +255,6 @@ pub(crate) fn base_comparison<'py>(
         ),
     )?;
     flush(stream)?;
+    let snapshot: DefinitionSnapshot = with_base_dependencies(py, &base, &snapshot)?;
     Ok(BaseComparison { base, snapshot })
 }

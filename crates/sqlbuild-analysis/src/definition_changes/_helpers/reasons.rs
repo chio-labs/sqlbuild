@@ -4,8 +4,12 @@ use std::collections::BTreeSet;
 
 use crate::definition_changes::_helpers::aspects::{aspect_label, joined, kind_words};
 use crate::definition_changes::constants::{
-    CONSTANT_KIND, ENUM_KIND, MODEL_KIND, SEED_KIND, SETTINGS_KIND, SOURCE_KIND, TEST_FILE_KIND,
+    COLUMNS_ASPECT, CONNECTION_KIND, CONSTANT_KIND, DEPENDENCIES_KIND, ENUM_KIND, MODEL_KIND,
+    SEED_KIND, SETTINGS_KIND, SOURCE_KIND, TEST_FILE_KIND,
 };
+
+/// Project-wide kinds whose reasons name the kind, not the single node.
+const PROJECT_WIDE_KINDS: [&str; 3] = [SETTINGS_KIND, CONNECTION_KIND, DEPENDENCIES_KIND];
 use crate::definition_changes::models::{DefinitionSnapshot, ExecutedItem, NodeChange};
 
 fn aspect_phrase(change: &NodeChange) -> String {
@@ -62,8 +66,12 @@ pub(crate) fn executed_reason(change: &NodeChange) -> String {
 
 /// `executes macro to_utc (changed)`, `uses enum status (changed)`, `uses project settings (changed)`.
 pub(crate) fn declaration_reason(change: &NodeChange) -> String {
-    if change.kind == SETTINGS_KIND {
-        return format!("uses project settings ({})", change_detail(change));
+    if PROJECT_WIDE_KINDS.contains(&change.kind.as_str()) {
+        return format!(
+            "uses {} ({})",
+            kind_words(&change.kind).0,
+            change_detail(change)
+        );
     }
     if change.kind == SOURCE_KIND {
         return executed_reason(change);
@@ -102,4 +110,22 @@ pub(crate) fn reached_declarations(
         }
     }
     reached
+}
+
+/// `mocks stg_orders (model columns changed)` when a mocked relation's declared shape changed.
+pub(crate) fn mocked_reason(change: &NodeChange) -> Option<String> {
+    if !change.added && !change.aspects.iter().any(|aspect| aspect == COLUMNS_ASPECT) {
+        return None;
+    }
+    let subject: String = if change.kind == MODEL_KIND {
+        change.name.clone()
+    } else {
+        format!("{} {}", kind_words(&change.kind).0, change.name)
+    };
+    let detail: String = if change.added {
+        "added".to_owned()
+    } else {
+        format!("{} columns changed", kind_words(&change.kind).0)
+    };
+    Some(format!("mocks {subject} ({detail})"))
 }

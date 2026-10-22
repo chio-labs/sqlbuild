@@ -21,6 +21,8 @@ const DOCUMENTATION_FIELDS: [&str; 2] = ["description", "location"];
 const VARS_ATTRIBUTE: &str = "vars";
 const VARIABLE_SIGIL: &str = "@@";
 const ENVIRONMENT_VARIABLE: &str = "ENV";
+/// How SQL and configuration read an environment variable.
+const ENVIRONMENT_MARKERS: [&str; 2] = ["@@ENV:", "${ENV:"];
 
 /// What fingerprints of one project revision need: where it lives and its variables.
 pub(crate) struct Fingerprinting {
@@ -164,10 +166,17 @@ impl Fingerprinting {
         definition_digest(&parts)
     }
 
-    /// The digest of the variables `text` reads with `@@name`, or `None` when it reads none.
+    /// The digest of the project and environment variables `text` reads, or `None` without any.
     pub(crate) fn referenced_vars_digest(&self, text: &str) -> Option<String> {
         let names: BTreeSet<String> = referenced_vars(text);
-        (!names.is_empty()).then(|| self.vars_digest(names.iter()))
+        let environment: BTreeSet<String> = referenced_environment(text);
+        if names.is_empty() && environment.is_empty() {
+            return None;
+        }
+        Some(definition_digest(&[
+            &self.vars_digest(names.iter()),
+            &environment_digest(&environment),
+        ]))
     }
 
     /// A Python file and its imported project modules; code mentioning `vars` covers every variable.
@@ -230,6 +239,37 @@ fn referenced_vars(text: &str) -> BTreeSet<String> {
         names.insert(name);
     }
     names
+}
+
+/// Names of the environment variables `text` reads with `@@ENV:NAME` or `${ENV:NAME}`.
+pub(crate) fn referenced_environment(text: &str) -> BTreeSet<String> {
+    let mut names: BTreeSet<String> = BTreeSet::new();
+    for marker in ENVIRONMENT_MARKERS {
+        for (index, _) in text.match_indices(marker) {
+            let name: String = text[index + marker.len()..]
+                .chars()
+                .take_while(|character| character.is_ascii_alphanumeric() || *character == '_')
+                .collect();
+            if !name.is_empty() {
+                names.insert(name);
+            }
+        }
+    }
+    names
+}
+
+/// The digest of the environment variables `names` by their current values, which it never shows.
+pub(crate) fn environment_digest(names: &BTreeSet<String>) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    for name in names {
+        parts.push(name.clone());
+        parts.push(match std::env::var_os(name) {
+            Some(value) => definition_digest(&[&value.to_string_lossy()]),
+            None => "unset".to_owned(),
+        });
+    }
+    let borrowed: Vec<&str> = parts.iter().map(String::as_str).collect();
+    definition_digest(&borrowed)
 }
 
 pub(crate) fn text_of(value: &Bound<'_, PyAny>) -> PyResult<String> {

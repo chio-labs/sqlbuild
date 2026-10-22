@@ -559,3 +559,4 @@ class SinceBrokenBaseE2ETestCase:
     command: tuple[str, ...]
     expected_exit_code: int
     expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)

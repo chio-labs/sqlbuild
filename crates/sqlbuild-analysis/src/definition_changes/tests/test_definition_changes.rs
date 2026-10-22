@@ -11,7 +11,7 @@ use crate::definition_changes::main::selection_report::selection_report;
 use crate::definition_changes::main::sql_definition_digest::sql_definition_digest;
 use crate::definition_changes::models::{DefinitionChanges, SelectedItem};
 use crate::definition_changes::tests::helpers::{
-    base_orders, current_orders, item, keys, node, renamed, snapshot, with_node,
+    base_orders, current_orders, item, keys, mocking, node, renamed, snapshot, with_node,
 };
 use crate::definition_changes::tests::test_types::{
     CompareTestCase, SelectionJsonTestCase, SelectionReasonTestCase, SelectionReportTestCase,
@@ -155,6 +155,32 @@ fn given_executed_item_when_explaining_selection_then_lists_each_changed_depende
             current: current_orders(),
             item: item(&["test_file:tests/orders.sql"], &["model:orders"], &[], &[]),
             expected_reasons: &[],
+        },
+        SelectionReasonTestCase {
+            description: "a mocked model's SQL change does not select the test",
+            current: current_orders(),
+            item: mocking(
+                item(&["test_file:tests/orders.sql"], &["model:orders"], &[], &[]),
+                &["model:stg_orders"],
+            ),
+            expected_reasons: &[],
+        },
+        SelectionReasonTestCase {
+            description: "a mocked model's declared columns shape the mock",
+            current: with_node(
+                base_orders(),
+                node(
+                    "model",
+                    "stg_orders",
+                    &[("sql", "s1"), ("config", "c1"), ("columns", "k2")],
+                    &["macro:to_utc"],
+                ),
+            ),
+            item: mocking(
+                item(&["test_file:tests/orders.sql"], &["model:orders"], &[], &[]),
+                &["model:stg_orders"],
+            ),
+            expected_reasons: &["mocks stg_orders (model columns changed)"],
         },
         SelectionReasonTestCase {
             description: "a macro changed through another macro the model calls",

@@ -1,5 +1,8 @@
 use std::path::PathBuf;
 
+use crate::git_revisions::main::dependency_files::{
+    base_dependency_files, current_dependency_files,
+};
 use crate::git_revisions::main::export_git_tree::export_git_tree;
 use crate::git_revisions::main::resolve_git_base::resolve_git_base;
 use crate::git_revisions::main::resolve_since_reference::resolve_since_reference;
@@ -8,8 +11,8 @@ use crate::git_revisions::tests::helpers::{
     git, project_repository, read, scratch_directory, write,
 };
 use crate::git_revisions::tests::test_types::{
-    AbsentProjectTestCase, ExportTreeTestCase, GitBaseFailureTestCase, GitBaseTestCase,
-    SinceReferenceTestCase,
+    AbsentProjectTestCase, DependencyFilesTestCase, ExportTreeTestCase, GitBaseFailureTestCase,
+    GitBaseTestCase, SinceReferenceTestCase,
 };
 
 #[test]
@@ -294,6 +297,62 @@ fn given_project_absent_at_merge_base_when_exporting_tree_then_reports_no_projec
 
         assert_eq!(
             exported, test_case.expected_exported,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_dependency_files_when_reading_both_sides_then_lists_root_and_project_files() {
+    let (root, _) = project_repository();
+    write(&root, "uv.lock", "version = 1\n");
+    write(&root, "warehouse/requirements-dev.txt", "pytest\n");
+    write(&root, "warehouse/notes.txt", "not a dependency file\n");
+    git(&root, &["add", "uv.lock"]);
+    git(&root, &["commit", "--quiet", "-m", "lock"]);
+    let current: Vec<(&str, &str)> = vec![
+        ("uv.lock", "version = 1"),
+        ("warehouse/requirements-dev.txt", "pytest"),
+    ];
+    let test_cases = [
+        DependencyFilesTestCase {
+            description: "files added after the base are only in the checkout",
+            reference: "main",
+            expected_base: vec![],
+            expected_current: current.clone(),
+        },
+        DependencyFilesTestCase {
+            description: "committed files are read from the merge base",
+            reference: "feature",
+            expected_base: vec![("uv.lock", "version = 1")],
+            expected_current: current.clone(),
+        },
+    ];
+    for test_case in test_cases {
+        let base: GitBase =
+            resolve_git_base(&root.join("warehouse"), test_case.reference).expect("ref resolves");
+
+        let base_files: Vec<(String, String)> =
+            base_dependency_files(&base).expect("the base reads");
+        let current_files: Vec<(String, String)> =
+            current_dependency_files(&base).expect("the checkout reads");
+
+        let owned = |files: &[(&str, &str)]| -> Vec<(String, String)> {
+            files
+                .iter()
+                .map(|(path, text)| ((*path).to_owned(), (*text).to_owned()))
+                .collect()
+        };
+        assert_eq!(
+            base_files,
+            owned(&test_case.expected_base),
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            current_files,
+            owned(&test_case.expected_current),
             "{}",
             test_case.description
         );

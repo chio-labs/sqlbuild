@@ -5,12 +5,12 @@ use std::path::{Path, PathBuf};
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use sqlbuild_analysis::definition_changes::constants::{
-    AUDITS_ASPECT, COLUMNS_ASPECT, CONFIG_ASPECT, DEFINITION_ASPECT, DEFINITION_SNAPSHOT_FORMAT,
-    FILE_ASPECT, MACRO_KIND, MATERIALIZATION_KIND, MODEL_KIND, PYTHON_NODE_KINDS, SCENARIO_KIND,
-    SEED_KIND, SETTINGS_KIND, SNAPSHOTS_ASPECT, SOURCE_KIND, SQL_ASPECT, TEST_FILE_KIND,
-    VARS_ASPECT,
+    AUDITS_ASPECT, COLUMNS_ASPECT, CONFIG_ASPECT, CONNECTION_KIND, DEFINITION_ASPECT,
+    DEFINITION_SNAPSHOT_FORMAT, DEPENDENCIES_KIND, FILE_ASPECT, MACRO_KIND, MATERIALIZATION_KIND,
+    MODEL_KIND, PROJECT_NODE_NAME, PYTHON_NODE_KINDS, SCENARIO_KIND, SEED_KIND, SETTINGS_KIND,
+    SNAPSHOTS_ASPECT, SOURCE_KIND, SQL_ASPECT, TEST_FILE_KIND, VARS_ASPECT,
 };
 use sqlbuild_analysis::definition_changes::main::definition_digest::definition_digest;
 use sqlbuild_analysis::definition_changes::main::node_key::node_key;
@@ -36,7 +36,26 @@ const MATERIALIZED_KEY: &str = "materialized";
 const AUTHORED_KEYS_FIELD: &str = "model_header_keys";
 const SOURCE_EXPRESSION_FIELD: &str = "expression";
 const SCENARIO_SNAPSHOT_ROOT: [&str; 2] = ["tests", "_scenario_snapshots"];
-const SETTINGS_NAME: &str = "project";
+const CONTRACT_KEY: &str = "contract";
+/// Source declaration fields that shape a source mock's columns.
+const SOURCE_SHAPE_FIELDS: [&str; 3] = ["columns", "contract", "type_enforcement"];
+/// Project-local adapter modules.
+const ADAPTERS_DIRECTORY: &str = "adapters";
+/// Project configuration fields that other nodes fingerprint, or that do not shape compiled SQL.
+const PROJECT_CONFIG_ELSEWHERE: [&str; 11] = [
+    "name",
+    "settings",
+    "vars",
+    "defaults",
+    "path_defaults",
+    "cost",
+    "diff",
+    "janitor",
+    "migrations",
+    "sinks",
+    "scenario",
+];
+const LOCAL_CONFIG_ELSEWHERE: [&str; 4] = ["settings", "setting_overrides", "vars", "scenario"];
 /// Settings that tune how a run executes or validates, not what a node computes.
 const RUNTIME_SETTINGS: [&str; 9] = [
     "sql_analysis",
@@ -75,11 +94,16 @@ fn node(kind: &str, name: &str, aspects: Vec<(&str, String)>) -> NodeDefinition 
 pub(crate) fn declaration_key(identity: &Bound<'_, PyAny>) -> PyResult<String> {
     let kind: String = text_of(&native_field(&native_field(identity, "kind")?, "value")?)?;
     let name: String = native_field(identity, "name")?.extract()?;
-    let owner: Option<String> = native_field(identity, "owner")?.extract()?;
-    Ok(match owner {
-        Some(owner) => node_key(&kind, &format!("{name}@{owner}")),
-        None => node_key(&kind, &name),
-    })
+    let owner: Bound<'_, PyAny> = native_field(identity, "owner")?;
+    if owner.is_none() {
+        return Ok(node_key(&kind, &name));
+    }
+    let owner_kind: String = text_of(&native_field(&native_field(&owner, "kind")?, "value")?)?;
+    let owner_name: String = native_field(&owner, "name")?.extract()?;
+    Ok(node_key(
+        &kind,
+        &format!("{name}@{}", node_key(&owner_kind, &owner_name)),
+    ))
 }
 
 /// `kind:name` of a usage consumer.
@@ -143,17 +167,16 @@ fn declaration_nodes(
         let macro_facts: Bound<'_, PyAny> = native_field(&declaration, "macro")?;
         let (digest, uses): (String, Vec<String>) = if kind == MACRO_KIND && !macro_facts.is_none()
         {
-            let dependencies: Vec<String> =
-                native_field(&macro_facts, "dependencies")?.extract()?;
+            let dependencies: Vec<String> = native_field(&macro_facts, "dependencies")?
+                .try_iter()?
+                .map(|dependency| declaration_key(&dependency?))
+                .collect::<PyResult<_>>()?;
             (
                 definition_digest(&[
                     &fingerprints.canonical_digest(&macro_facts, (&[], &[]))?,
                     &declaration_file_digest(fingerprints, &path),
                 ]),
-                dependencies
-                    .iter()
-                    .map(|dependency| node_key(MACRO_KIND, dependency))
-                    .collect(),
+                dependencies,
             )
         } else {
             (declaration_file_digest(fingerprints, &path), Vec::new())
@@ -201,8 +224,15 @@ fn model_node(
     let config: Bound<'_, PyAny> = model_reads::config(model)?;
     let config_values: Bound<'_, PyAny> = native_field(&config, "values")?;
     let schema: Bound<'_, PyAny> = model_reads::schema_entry(model)?;
+    let contract: String = match config_values.cast::<PyDict>() {
+        Ok(values) => match values.get_item(CONTRACT_KEY)? {
+            Some(value) => fingerprints.canonical(&value, &[])?.to_string(),
+            None => String::new(),
+        },
+        Err(_) => String::new(),
+    };
     let (columns, audits): (String, String) = if schema.is_none() {
-        (definition_digest(&[]), definition_digest(&[]))
+        (definition_digest(&[&contract]), definition_digest(&[]))
     } else {
         let mut column_audits: Vec<Value> =
             vec![fingerprints.canonical(&native_field(&schema, "audits")?, &[])?];
@@ -210,7 +240,10 @@ fn model_node(
             column_audits.push(fingerprints.canonical(&native_field(&column?, "audits")?, &[])?);
         }
         (
-            fingerprints.canonical_digest(&schema, (&["name", "tags"], &["audits"]))?,
+            definition_digest(&[
+                &fingerprints.canonical_digest(&schema, (&["name", "tags"], &["audits"]))?,
+                &contract,
+            ]),
             definition_digest(&[&Value::Array(column_audits).to_string()]),
         )
     };
@@ -228,7 +261,7 @@ fn model_node(
     let mut definition: NodeDefinition = node(MODEL_KIND, &name, aspects);
     let key: String = node_key(MODEL_KIND, &name);
     definition.uses = uses.get(&key).into_iter().flatten().cloned().collect();
-    definition.uses.push(node_key(SETTINGS_KIND, SETTINGS_NAME));
+    definition.uses.extend(project_wide_keys());
     if let Ok(values) = config_values.cast::<PyDict>()
         && let Some(materialized) = values.get_item(MATERIALIZED_KEY)?
         && let Ok(materialized) = materialized.cast::<PyString>()
@@ -241,30 +274,128 @@ fn model_node(
     Ok((key, definition))
 }
 
-/// A source by its declaration, with an inline expression's formatting ignored.
+/// A source by its declared columns, which shape mocks, and the rest of its declaration.
 fn source_node(
     source: &Bound<'_, PyAny>,
     fingerprints: &Fingerprinting,
 ) -> PyResult<(String, NodeDefinition)> {
     let name: String = source_reads::name(source)?.extract()?;
     let mut encoded: Value = fingerprints.canonical(&source_reads::source_entry(source)?, &[])?;
-    if let Value::Object(fields) = &mut encoded
-        && let Some(Value::String(expression)) = fields.get(SOURCE_EXPRESSION_FIELD)
-    {
-        let normalised: String = sql_definition_digest(expression);
-        fields.insert(SOURCE_EXPRESSION_FIELD.to_owned(), Value::from(normalised));
+    let mut shape: Map<String, Value> = Map::new();
+    let mut reads: Option<String> = None;
+    if let Value::Object(fields) = &mut encoded {
+        for field in SOURCE_SHAPE_FIELDS {
+            if let Some(value) = fields.remove(field) {
+                shape.insert(field.to_owned(), value);
+            }
+        }
+        if let Some(Value::String(expression)) = fields.get(SOURCE_EXPRESSION_FIELD) {
+            reads = fingerprints.referenced_vars_digest(expression);
+            let normalised: String = sql_definition_digest(expression);
+            fields.insert(SOURCE_EXPRESSION_FIELD.to_owned(), Value::from(normalised));
+        }
     }
+    let mut aspects: Vec<(&str, String)> = vec![
+        (
+            DEFINITION_ASPECT,
+            definition_digest(&[&encoded.to_string()]),
+        ),
+        (
+            COLUMNS_ASPECT,
+            definition_digest(&[&Value::Object(shape).to_string()]),
+        ),
+    ];
+    aspects.extend(reads.map(|digest| (VARS_ASPECT, digest)));
+    let mut definition: NodeDefinition = node(SOURCE_KIND, &name, aspects);
+    definition.uses = project_wide_keys();
+    Ok((node_key(SOURCE_KIND, &name), definition))
+}
+
+/// A seed by its data and settings, and by the declared columns that shape its mocks.
+fn seed_node(
+    seed: &Bound<'_, PyAny>,
+    fingerprints: &Fingerprinting,
+) -> PyResult<(String, NodeDefinition)> {
+    let name: String = seed_reads::name(seed)?.extract()?;
+    let (version_hash, _) = seed_identity(seed)?;
+    let schema: Bound<'_, PyAny> = seed_reads::schema_entry(seed)?;
+    let columns: String = if schema.is_none() {
+        definition_digest(&[])
+    } else {
+        definition_digest(&[&fingerprints
+            .canonical(&native_field(&schema, "columns")?, &[])?
+            .to_string()])
+    };
     Ok((
-        node_key(SOURCE_KIND, &name),
+        node_key(SEED_KIND, &name),
         node(
-            SOURCE_KIND,
+            SEED_KIND,
             &name,
-            vec![(
-                DEFINITION_ASPECT,
-                definition_digest(&[&encoded.to_string()]),
-            )],
+            vec![(DEFINITION_ASPECT, version_hash), (COLUMNS_ASPECT, columns)],
         ),
     ))
+}
+
+/// Keys of the project-wide nodes that every compiled definition depends on.
+pub(crate) fn project_wide_keys() -> Vec<String> {
+    [SETTINGS_KIND, CONNECTION_KIND, DEPENDENCIES_KIND]
+        .iter()
+        .map(|kind| node_key(kind, PROJECT_NODE_NAME))
+        .collect()
+}
+
+/// The adapter, connections and targets as configured, the selected target, and adapter modules.
+fn connection_node(
+    project: &Bound<'_, PyAny>,
+    discovered: &Bound<'_, PyAny>,
+    fingerprints: &Fingerprinting,
+) -> PyResult<(String, NodeDefinition)> {
+    let mut parts: Vec<String> = vec![
+        fingerprints.canonical_digest(
+            &native_field(discovered, "project_config")?,
+            (&PROJECT_CONFIG_ELSEWHERE, &[]),
+        )?,
+        fingerprints.canonical_digest(
+            &native_field(discovered, "local_config")?,
+            (&LOCAL_CONFIG_ELSEWHERE, &[]),
+        )?,
+        text_of(&native_field(project, "effective_target_name")?)?,
+    ];
+    let adapter_file: Bound<'_, PyAny> = native_field(discovered, "adapter_file")?;
+    if !adapter_file.is_none() {
+        let path: PathBuf = native_field(&adapter_file, "file_path")?.extract()?;
+        parts.push(fingerprints.python_module_digest(&path));
+    }
+    for module in python_files(&fingerprints.project_dir.join(ADAPTERS_DIRECTORY))? {
+        parts.push(fingerprints.python_module_digest(&module));
+    }
+    let borrowed: Vec<&str> = parts.iter().map(String::as_str).collect();
+    Ok((
+        node_key(CONNECTION_KIND, PROJECT_NODE_NAME),
+        node(
+            CONNECTION_KIND,
+            PROJECT_NODE_NAME,
+            vec![(DEFINITION_ASPECT, definition_digest(&borrowed))],
+        ),
+    ))
+}
+
+/// The `.py` files directly in `directory`, sorted; none when it does not exist.
+fn python_files(directory: &Path) -> PyResult<Vec<PathBuf>> {
+    let entries: std::fs::ReadDir = match std::fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error.into()),
+    };
+    let mut files: Vec<PathBuf> = Vec::new();
+    for entry in entries {
+        let path: PathBuf = entry?.path();
+        if path.is_file() && path.to_string_lossy().ends_with(PYTHON_SUFFIX) {
+            files.push(path);
+        }
+    }
+    files.sort();
+    Ok(files)
 }
 
 /// Loaders, tasks, assets, checks and materializations by their Python modules and imports.
@@ -337,7 +468,7 @@ fn function_nodes(
                 &native_field(&dependency, "name")?.extract::<String>()?,
             ));
         }
-        definition.uses.push(node_key(SETTINGS_KIND, SETTINGS_NAME));
+        definition.uses.extend(project_wide_keys());
         nodes.push((node_key(&kind, &name), definition));
     }
     Ok(nodes)
@@ -423,10 +554,10 @@ pub(crate) fn definition_snapshot(
     let uses: BTreeMap<String, BTreeSet<String>> = declaration_uses(project)?;
     let mut nodes: BTreeMap<String, NodeDefinition> = declaration_nodes(project, &fingerprints)?;
     nodes.insert(
-        node_key(SETTINGS_KIND, SETTINGS_NAME),
+        node_key(SETTINGS_KIND, PROJECT_NODE_NAME),
         node(
             SETTINGS_KIND,
-            SETTINGS_NAME,
+            PROJECT_NODE_NAME,
             vec![(
                 DEFINITION_ASPECT,
                 fingerprints.canonical_digest(
@@ -436,6 +567,8 @@ pub(crate) fn definition_snapshot(
             )],
         ),
     );
+    let (connection_key, connection) = connection_node(project, discovered, &fingerprints)?;
+    nodes.insert(connection_key, connection);
     for model in project_reads::models(project)?.try_iter()? {
         let (key, definition) = model_node(&model?, &fingerprints, &uses)?;
         nodes.insert(key, definition);
@@ -445,13 +578,8 @@ pub(crate) fn definition_snapshot(
         nodes.insert(key, definition);
     }
     for seed in project_reads::seeds(project)?.try_iter()? {
-        let seed: Bound<'_, PyAny> = seed?;
-        let name: String = seed_reads::name(&seed)?.extract()?;
-        let (version_hash, _) = seed_identity(&seed)?;
-        nodes.insert(
-            node_key(SEED_KIND, &name),
-            node(SEED_KIND, &name, vec![(DEFINITION_ASPECT, version_hash)]),
-        );
+        let (key, definition) = seed_node(&seed?, &fingerprints)?;
+        nodes.insert(key, definition);
     }
     nodes.extend(function_nodes(project, &fingerprints)?);
     nodes.extend(python_nodes(discovered, &fingerprints)?);

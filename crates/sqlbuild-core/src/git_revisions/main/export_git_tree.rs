@@ -2,8 +2,9 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::git_revisions::_helpers::failures::export_failed;
 use crate::git_revisions::_helpers::git_command::git_output;
-use crate::git_revisions::constants::{EXPORT_FAILED_CODE, INDEX_FILE_ENV};
+use crate::git_revisions::constants::INDEX_FILE_ENV;
 use crate::git_revisions::errors::GitRevisionError;
 use crate::git_revisions::models::GitBase;
 
@@ -13,18 +14,6 @@ fn tree_of(base: &GitBase) -> String {
         format!("{}^{{tree}}", base.merge_base)
     } else {
         format!("{}:{prefix}", base.merge_base)
-    }
-}
-
-fn export_failed(base: &GitBase, detail: &str) -> GitRevisionError {
-    GitRevisionError {
-        message: format!(
-            "Cannot read the project at merge base {}: {detail}",
-            base.merge_base
-        ),
-        code: EXPORT_FAILED_CODE,
-        help: "Check that the repository is readable and complete, for example with `git fsck`"
-            .to_owned(),
     }
 }
 

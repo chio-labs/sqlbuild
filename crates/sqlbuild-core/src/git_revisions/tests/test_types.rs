@@ -33,3 +33,10 @@ pub(crate) struct AbsentProjectTestCase {
     pub(crate) project_prefix: &'static str,
     pub(crate) expected_exported: bool,
 }
+
+pub(crate) struct DependencyFilesTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) reference: &'static str,
+    pub(crate) expected_base: Vec<(&'static str, &'static str)>,
+    pub(crate) expected_current: Vec<(&'static str, &'static str)>,
+}

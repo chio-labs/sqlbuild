@@ -5,6 +5,17 @@ pub const BASE_REF_ALIAS: &str = "@base";
 /// Hex digits of a commit hash shown in progress and summaries.
 pub const SHORT_COMMIT_LENGTH: usize = 10;
 
+/// Python dependency manifests and lock files, by exact name.
+pub(crate) const DEPENDENCY_FILE_NAMES: [&str; 5] = [
+    "pyproject.toml",
+    "uv.lock",
+    "poetry.lock",
+    "pdm.lock",
+    "Pipfile.lock",
+];
+/// `requirements*.txt`: the prefix and suffix of pip requirement files.
+pub(crate) const REQUIREMENTS_FILE_AFFIXES: (&str, &str) = ("requirements", ".txt");
+
 pub(crate) const GIT_PROGRAM: &str = "git";
 pub(crate) const INDEX_FILE_ENV: &str = "GIT_INDEX_FILE";
 pub(crate) const SHALLOW_TRUE: &str = "true";

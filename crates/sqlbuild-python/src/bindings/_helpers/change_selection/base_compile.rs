@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use pyo3::prelude::{
     Bound, IntoPyObject, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyBool, PyDict};
+use pyo3::types::{PyBool, PyDict, PyDictMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::definition_changes::main::definition_snapshot_json::definition_snapshot_json;
 use sqlbuild_analysis::definition_changes::models::DefinitionSnapshot;
@@ -20,8 +20,28 @@ use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 
+/// The extension of the file beside the snapshot that holds notes for the run's output.
+pub(crate) const NOTES_EXTENSION: &str = "notes";
+
 fn flag(py: Python<'_>, value: bool) -> Bound<'_, PyAny> {
     PyBool::new(py, value).to_owned().into_any()
+}
+
+/// Whether `target` is unset or defined by the project or its local configuration.
+fn target_defined(discovered: &Bound<'_, PyAny>, target: &Bound<'_, PyAny>) -> PyResult<bool> {
+    if target.is_none() {
+        return Ok(true);
+    }
+    for config in ["project_config", "local_config"] {
+        let targets: Bound<'_, PyAny> =
+            native_field(&native_field(discovered, config)?, "targets")?;
+        if let Ok(targets) = targets.cast::<PyDict>()
+            && targets.contains(target)?
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Compile an exported base tree without SQL analysis and write its definition snapshot.
@@ -50,6 +70,19 @@ fn write_base_definition_snapshot(
         py,
         Some(keywords(py, &[("project_dir", directory.clone())])?),
     )?;
+    let target: Bound<'_, PyAny> = if target_defined(&discovered, &target)? {
+        target
+    } else {
+        std::fs::write(
+            output_path.with_extension(NOTES_EXTENSION),
+            format!(
+                "Target '{}' is not defined at the merge base, so the base compiles with its \
+                 default target and everything that depends on the target is selected\n",
+                target.str()?
+            ),
+        )?;
+        none()
+    };
     let context: Bound<'_, PyAny> = resolve_adapter_connection_context(
         &discovered,
         &directory,

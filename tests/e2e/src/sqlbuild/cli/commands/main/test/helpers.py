@@ -2228,12 +2228,61 @@ def build_since_indirect_files() -> dict[str, str]:
 
     base: dict[str, str] = build_since_project_files()
     return {
-        "sqlbuild_project.toml": base["sqlbuild_project.toml"] + '\n[vars]\nmin_amount = "100"\n',
+        "sqlbuild_project.toml": (
+            base["sqlbuild_project.toml"]
+            + '\n[vars]\nmin_amount = "100"\n\n[scopes]\nenforce_placement = false\n'
+        ),
         "python/_rates.py": 'DIVISOR = "100"\n',
+        "models/_macros/currency.py": (
+            'def whole_cents(expression: str) -> str:\n    return f"({expression} * 1)"\n'
+        ),
         "models/_macros/money.py": (
+            "from models._macros.currency import whole_cents\n"
             "from python._rates import DIVISOR\n\n\n"
             "def cents_to_dollars(expression: str) -> str:\n"
-            '    return f"CAST({expression} AS DOUBLE) / {DIVISOR}"\n'
+            '    return f"CAST({whole_cents(expression)} AS DOUBLE) / {DIVISOR}"\n'
+        ),
+        "macros/taxes.py": (
+            'def with_tax(expression: str) -> str:\n    return f"({expression} + 0)"\n'
+        ),
+        "macros/pricing.py": (
+            "from macros.taxes import with_tax\n\n\n"
+            "def gross(expression: str) -> str:\n    return with_tax(expression)\n"
+        ),
+        "macros/fixture_values.py": "def suffix() -> str:\n    return \"''\"\n",
+        "models/stg_orders.sql": (
+            "MODEL (\n  description 'Cleaned orders.',\n"
+            "  columns (order_id (type INTEGER), status (type VARCHAR), "
+            "amount_cents (type INTEGER)),\n);\n\n"
+            'SELECT order_id, status, amount_cents FROM __source("raw_orders")\n'
+        ),
+        "models/order_gross.sql": (
+            "MODEL (description 'Gross order amounts.');\n\n"
+            'SELECT order_id, @gross("amount_cents") AS gross_cents FROM __ref("stg_orders")\n'
+        ),
+        "models/order_day.sql": (
+            "MODEL (description 'The UTC day of a fixed timestamp.');\n\n"
+            "SELECT order_id, CAST(TIMESTAMPTZ '2024-01-01 23:30:00+00' AS DATE) AS day\n"
+            'FROM __ref("stg_orders")\n'
+        ),
+        "tests/unit/test_order_gross.sql": (
+            "TEST ();\n\nWITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents),\n"
+            "__expected__order_gross AS (SELECT 1 AS order_id, 250 AS gross_cents)\nSELECT 1\n"
+        ),
+        "tests/unit/test_order_day.sql": (
+            "TEST ();\n\nWITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents),\n"
+            "__expected__order_day AS (SELECT 1 AS order_id, DATE '2024-01-01' AS day)\nSELECT 1\n"
+        ),
+        "tests/unit/test_status_cases.sql": (
+            'TEST (name "status_cases", parameters (status string), '
+            'cases (open_case (status "open"), closed_case (status "closed")));\n\n'
+            "WITH\n__source__raw_orders AS (\n"
+            '  SELECT 1 AS order_id, @param("status") || @suffix() AS status, '
+            "250 AS amount_cents\n),\n"
+            "__expected__stg_orders AS (\n"
+            '  SELECT 1 AS order_id, @param("status") || @suffix() AS status\n)\nSELECT 1\n'
         ),
         "audits/generic/at_least.sql": (
             'AUDIT ();\n\nSELECT *\nFROM __ref("@model")\nWHERE @column < @minimum\n'

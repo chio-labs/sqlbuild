@@ -1,7 +1,7 @@
 //! Node kinds, definition aspects and the snapshot format version.
 
 /// The version of the stored snapshot layout and fingerprint scheme; older snapshots are recomputed.
-pub const DEFINITION_SNAPSHOT_FORMAT: u32 = 2;
+pub const DEFINITION_SNAPSHOT_FORMAT: u32 = 3;
 
 pub const MODEL_KIND: &str = "model";
 pub const SEED_KIND: &str = "seed";
@@ -15,6 +15,12 @@ pub const SCENARIO_KIND: &str = "scenario";
 pub const SOURCE_KIND: &str = "source";
 pub const MATERIALIZATION_KIND: &str = "materialization";
 pub const SETTINGS_KIND: &str = "settings";
+/// Adapter, connection and target configuration, adapter modules and referenced environment.
+pub const CONNECTION_KIND: &str = "connection";
+/// Python dependency manifests and lock files of the project and its repository.
+pub const DEPENDENCIES_KIND: &str = "dependencies";
+/// The one node of each project-wide kind.
+pub const PROJECT_NODE_NAME: &str = "project";
 /// Python nodes by decorator.
 pub const PYTHON_NODE_KINDS: [&str; 4] = ["loader", "task", "asset", "check"];
 
@@ -32,7 +38,7 @@ pub const DEFINITION_ASPECT: &str = "definition";
 pub const FILE_ASPECT: &str = "file";
 /// Captured local snapshots of a scenario.
 pub const SNAPSHOTS_ASPECT: &str = "snapshots";
-/// Values of the project variables a definition reads with `@@name`.
+/// Values of the project variables and environment variables a definition reads.
 pub const VARS_ASPECT: &str = "vars";
 
 /// How each aspect reads in a reason, in the order reasons list them.
@@ -48,8 +54,14 @@ pub(crate) const ASPECT_LABELS: [(&str, &str); 8] = [
 ];
 
 /// How each node kind reads in summaries: singular, plural.
-pub(crate) const KIND_LABELS: [(&str, &str, &str); 21] = [
+pub(crate) const KIND_LABELS: [(&str, &str, &str); 23] = [
     (SETTINGS_KIND, "project settings", "project settings"),
+    (
+        CONNECTION_KIND,
+        "connection and target configuration",
+        "connection and target configurations",
+    ),
+    (DEPENDENCIES_KIND, "Python environment", "Python environments"),
     (MODEL_KIND, "model", "models"),
     (SOURCE_KIND, "source", "sources"),
     (SEED_KIND, "seed", "seeds"),

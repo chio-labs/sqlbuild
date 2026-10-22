@@ -23,8 +23,9 @@ use sqlbuild_analysis::definition_changes::models::{
 
 use crate::bindings::_helpers::change_selection::base_snapshot::BaseComparison;
 use crate::bindings::_helpers::change_selection::definition_snapshot::{
-    declaration_uses, definition_snapshot,
+    declaration_uses, definition_snapshot, project_wide_keys,
 };
+use crate::bindings::_helpers::change_selection::environment_nodes::with_current_dependencies;
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::graph::keys::native_key;
@@ -57,7 +58,10 @@ pub(crate) fn changed_project(
     project_dir: &Path,
     base: BaseComparison,
 ) -> PyResult<ChangedProject> {
-    let current: DefinitionSnapshot = definition_snapshot(project, discovered, project_dir)?;
+    let current: DefinitionSnapshot = with_current_dependencies(
+        &base.base,
+        &definition_snapshot(project, discovered, project_dir)?,
+    )?;
     let changes: DefinitionChanges = compare_definitions(&base.snapshot, &current);
     Ok(ChangedProject {
         reference: base.base.reference,
@@ -89,6 +93,14 @@ fn source_calls(sql: &str) -> Vec<String> {
         }
     }
     names
+}
+
+/// Node keys of mocked models, sources and seeds.
+fn relation_keys((refs, sources, seeds): (&[String], &[String], &[String])) -> Vec<String> {
+    let models = refs.iter().map(|name| node_key(MODEL_KIND, name));
+    let sources = sources.iter().map(|name| node_key(SOURCE_KIND, name));
+    let seeds = seeds.iter().map(|name| node_key(SEED_KIND, name));
+    models.chain(sources).chain(seeds).collect()
 }
 
 /// The sources `model` reads, other than `mocked` ones, as node keys.
@@ -164,25 +176,36 @@ impl ChangedProject {
         (tests, models): (&ByName<'_>, &ByName<'_>),
     ) -> PyResult<ExecutedItem> {
         let name: String = native_field(entry, "name")?.extract()?;
+        let parent: Option<String> = native_field(entry, "parent_name")?.extract()?;
         let mut item: ExecutedItem = ExecutedItem {
-            declarations: self.declarations_of(&node_key(TEST_CONSUMER_KIND, &name)),
+            declarations: project_wide_keys(),
             ..ExecutedItem::default()
         };
         let mocked_seeds: Vec<String> = strings(&native_field(entry, "mock_seed_names")?)?;
         let mocked_sources: Vec<String> = strings(&native_field(entry, "mock_source_names")?)?;
+        let mocked_refs: Vec<String> = strings(&native_field(entry, "mock_ref_names")?)?;
         let mocked_functions: Vec<String> =
             strings(&native_field(entry, "mock_table_function_names")?)?;
         item.mocked
             .extend(self.keys_named(TABLE_FUNCTION_KIND, &mocked_functions));
-        if let Some(test) = tests.get(&name) {
+        item.mocked_relations = relation_keys((&mocked_refs, &mocked_sources, &mocked_seeds));
+        let mut consumers: Vec<String> = vec![name.clone()];
+        consumers.extend(parent.clone());
+        let compiled: Option<&Bound<'_, PyAny>> = tests
+            .get(&name)
+            .or_else(|| parent.as_ref().and_then(|parent| tests.get(parent)));
+        if let Some(test) = compiled {
             let file: Bound<'_, PyAny> = native_field(test, "test_file")?;
+            let path: Bound<'_, PyAny> = native_field(&file, "relative_path")?;
             item.own_keys.push(node_key(
                 TEST_FILE_KIND,
-                &native_field(&file, "relative_path")?
-                    .str()?
-                    .to_string()
-                    .replace('\\', "/"),
+                &path.str()?.to_string().replace('\\', "/"),
             ));
+            consumers.push(native_field(&path, "stem")?.extract()?);
+            for block in native_field(&file, "blocks")?.try_iter()? {
+                let block_name: Option<String> = native_field(&block?, "name")?.extract()?;
+                consumers.extend(block_name);
+            }
             let contents: String = native_field(&file, "contents")?.extract()?;
             for name in source_calls(&contents) {
                 if !mocked_sources.contains(&name) {
@@ -226,6 +249,10 @@ impl ChangedProject {
             let (kind, function_name) = native_key(&key?)?;
             item.executed.push(node_key(&kind, &function_name));
         }
+        for consumer in consumers {
+            item.declarations
+                .extend(self.declarations_of(&node_key(TEST_CONSUMER_KIND, &consumer)));
+        }
         Ok(item)
     }
 
@@ -238,12 +265,19 @@ impl ChangedProject {
         let name: String = native_field(scenario, "name")?.extract()?;
         let key: String = node_key(SCENARIO_KIND, &name);
         let (graph, _) = plan_scenario_graph(scenario, project, true, None)?;
+        let mut declarations: Vec<String> = project_wide_keys();
+        declarations.extend(self.declarations_of(&key));
         let mut item: ExecutedItem = ExecutedItem {
             own_keys: vec![key.clone()],
-            declarations: self.declarations_of(&key),
+            declarations,
             ..ExecutedItem::default()
         };
         let source_fixtures: Vec<String> = strings(&native_field(&graph, "source_fixture_names")?)?;
+        item.mocked_relations = relation_keys((
+            &strings(&native_field(&graph, "ref_fixture_names")?)?,
+            &source_fixtures,
+            &strings(&native_field(&graph, "seed_fixture_names")?)?,
+        ));
         for name in source_calls(&native_field(scenario, "sql_body")?.extract::<String>()?) {
             if !source_fixtures.contains(&name) {
                 item.executed.push(node_key(SOURCE_KIND, &name));

@@ -212,7 +212,7 @@ def test_given_changes_since_ref_when_testing_then_runs_only_affected_tests(
             expected_exit_code=0,
             expected_fragments=(
                 "Changed since main: 1 model changed\n",
-                "Selected 1 of 9 tests",
+                "Selected 1 of 13 tests",
                 "test_big_orders\n    executes big_orders (model vars changed)",
                 "PASS=1  FAIL=0  TOTAL=1",
             ),
@@ -226,7 +226,7 @@ def test_given_changes_since_ref_when_testing_then_runs_only_affected_tests(
             command=_EXPLAINED_TESTS,
             expected_exit_code=0,
             expected_fragments=(
-                "Selected 1 of 9 tests",
+                "Selected 1 of 13 tests",
                 "test_order_counts\n    executes order_counts (model config changed)",
                 "PASS=1  FAIL=0  TOTAL=1",
             ),
@@ -238,7 +238,7 @@ def test_given_changes_since_ref_when_testing_then_runs_only_affected_tests(
             expected_exit_code=0,
             expected_fragments=(
                 "Changed since main: 1 macro changed\n",
-                "Selected 2 of 9 tests",
+                "Selected 2 of 13 tests",
                 "test_order_totals\n    executes macro cents_to_dollars (changed)",
                 "test_order_totals_from_source\n    executes macro cents_to_dollars (changed)",
                 "PASS=2  FAIL=0  TOTAL=2",
@@ -255,7 +255,7 @@ def test_given_changes_since_ref_when_testing_then_runs_only_affected_tests(
             expected_exit_code=0,
             expected_fragments=(
                 "Changed since main: 1 function changed\n",
-                "Selected 1 of 9 tests",
+                "Selected 1 of 13 tests",
                 "test_order_flags\n    executes function is_open (changed)",
             ),
         ),
@@ -270,13 +270,17 @@ def test_given_changes_since_ref_when_testing_then_runs_only_affected_tests(
             expected_exit_code=0,
             expected_fragments=(
                 "Changed since main: 1 audit changed\n",
-                "Selected 2 of 9 tests",
+                "Selected 2 of 13 tests",
                 "test_order_totals\n    executes audit at_least (changed)",
             ),
         ),
         SinceSelectionE2ETestCase(
             description="an upstream change selects a test that runs it but not one that mocks it",
-            edits={_STAGING: _EDITED_STAGING},
+            edits={
+                _STAGING: _INDIRECT[_STAGING].replace(
+                    "SELECT order_id, status", "SELECT order_id, LOWER(status) AS status"
+                )
+            },
             command=_EXPLAINED_TESTS,
             expected_exit_code=0,
             expected_fragments=(
@@ -365,17 +369,134 @@ def test_given_changes_since_ref_when_testing_then_runs_only_affected_tests(
             unexpected_fragments=("order_totals_end_to_end",),
         ),
         SinceSelectionE2ETestCase(
-            description="a source definition that every test mocks selects nothing",
+            description="a mocked source's declared column type selects the tests that mock it",
             edits={
                 "sources/raw.yml": _FILES["sources/raw.yml"].replace(
                     "amount_cents\n        type: INTEGER", "amount_cents\n        type: BIGINT"
                 )
             },
-            command=_TEST_COMMAND,
+            command=_EXPLAINED_TESTS,
             expected_exit_code=0,
             expected_fragments=(
                 "Changed since main: 1 source changed\n",
-                "No tests are affected by the changes since main",
+                "Selected 5 of 13 tests",
+                "test_stg_orders\n    mocks source raw_orders (source columns changed)",
+            ),
+            unexpected_fragments=("test_order_flags",),
+        ),
+        SinceSelectionE2ETestCase(
+            description="a mocked model's declared column type selects the tests that mock it",
+            edits={
+                _STAGING: _INDIRECT[_STAGING].replace(
+                    "amount_cents (type INTEGER)", "amount_cents (type BIGINT)"
+                )
+            },
+            command=_EXPLAINED_TESTS,
+            expected_exit_code=0,
+            expected_fragments=(
+                "Selected 13 of 13 tests",
+                "test_big_orders\n    mocks stg_orders (model columns changed)",
+                "test_archive_counts\n    executes stg_orders (model columns changed)",
+            ),
+        ),
+        SinceSelectionE2ETestCase(
+            description="a fixture's declared column type selects the scenario that replaces it",
+            edits={
+                _STAGING: _INDIRECT[_STAGING].replace(
+                    "amount_cents (type INTEGER)", "amount_cents (type BIGINT)"
+                )
+            },
+            command=_EXPLAINED_SCENARIOS,
+            expected_exit_code=0,
+            expected_fragments=(
+                "open_orders_from_fixture\n    mocks stg_orders (model columns changed)",
+            ),
+        ),
+        SinceSelectionE2ETestCase(
+            description="a macro another project-wide macro imports changes both",
+            edits={"macros/taxes.py": _INDIRECT["macros/taxes.py"].replace("+ 0", "+ 1 - 1")},
+            command=_EXPLAINED_TESTS,
+            expected_exit_code=0,
+            expected_fragments=(
+                "Changed since main: 2 macros changed\n",
+                "Selected 1 of 13 tests",
+                "test_order_gross\n    executes macro gross (changed)\n"
+                "    executes macro with_tax (changed)",
+                "PASS=1  FAIL=0  TOTAL=1",
+            ),
+        ),
+        SinceSelectionE2ETestCase(
+            description="a scoped macro another scoped macro imports changes both",
+            edits={
+                "models/_macros/currency.py": _INDIRECT["models/_macros/currency.py"].replace(
+                    "* 1)", "* 1.0)"
+                )
+            },
+            command=_EXPLAINED_TESTS,
+            expected_exit_code=0,
+            expected_fragments=(
+                "Selected 2 of 13 tests",
+                "test_order_totals\n    executes macro cents_to_dollars (changed)\n"
+                "    executes macro whole_cents (changed)",
+                "PASS=2  FAIL=0  TOTAL=2",
+            ),
+        ),
+        SinceSelectionE2ETestCase(
+            description="a macro a parameterized test's own fixture calls selects every case",
+            edits={
+                "macros/fixture_values.py": _INDIRECT["macros/fixture_values.py"].replace(
+                    "\"''\"", "\"'x'\""
+                )
+            },
+            command=_EXPLAINED_TESTS,
+            expected_exit_code=0,
+            expected_fragments=(
+                "Selected 2 of 13 tests",
+                "status_cases [open_case]\n    executes macro suffix (changed)",
+                "status_cases [closed_case]\n    executes macro suffix (changed)",
+                "PASS=2  FAIL=0  TOTAL=2",
+            ),
+        ),
+        SinceSelectionE2ETestCase(
+            description="a connection setting selects every test, including the one it breaks",
+            edits={
+                _PROJECT_CONFIG: _INDIRECT[_PROJECT_CONFIG].replace(
+                    '[connection]\ndatabase = "since_orders.duckdb"\n',
+                    '[connection]\ndatabase = "since_orders.duckdb"\n\n'
+                    '[connection.settings]\nTimeZone = "Asia/Tokyo"\n',
+                )
+            },
+            command=_EXPLAINED_TESTS,
+            expected_exit_code=1,
+            expected_fragments=(
+                "Changed since main: 1 connection and target configuration changed\n",
+                "Selected 13 of 13 tests",
+                "test_order_day\n    uses connection and target configuration (changed)",
+            ),
+        ),
+        SinceSelectionE2ETestCase(
+            description="a Python dependency lock file selects every test",
+            edits={"uv.lock": "version = 1\n"},
+            command=_EXPLAINED_TESTS,
+            expected_exit_code=0,
+            expected_fragments=(
+                "Changed since main: 1 Python environment changed\n",
+                "Selected 13 of 13 tests",
+                "test_order_day\n    uses Python environment (changed)",
+            ),
+        ),
+        SinceSelectionE2ETestCase(
+            description="a target the base does not define compiles the base with its default",
+            edits={
+                _PROJECT_CONFIG: _INDIRECT[_PROJECT_CONFIG] + '\n[targets.ci]\nschema = "main"\n'
+            },
+            command=("--no-color", "test", "--target", "ci", "--since", "main"),
+            expected_exit_code=0,
+            expected_fragments=(
+                "Target 'ci' is not defined at the merge base, so the base compiles with its "
+                "default target",
+                "Selected 13 of 13 tests",
+                "PASS=13  FAIL=0  TOTAL=13",
             ),
         ),
         SinceSelectionE2ETestCase(
@@ -429,6 +550,7 @@ def test_given_indirect_changes_since_ref_when_testing_then_selects_what_execute
                 "missing_orders",
                 "Compare with a later ref whose project compiles, or run without --since",
             ),
+            unexpected_fragments=("Traceback", 'File "'),
         ),
     ),
     ids=lambda case: case.description,
@@ -445,6 +567,8 @@ def test_given_base_that_does_not_compile_when_testing_since_then_fails_with_gui
     assert result.returncode == test_case.expected_exit_code, output
     for fragment in test_case.expected_fragments:
         assert fragment in output, output
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in output, output
 
 
 @pytest.mark.parametrize(

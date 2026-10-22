@@ -46,12 +46,15 @@ captured local snapshots changed, or when any node it actually executes changed:
 builds, the seeds and sources it reads, the functions they call, the audits attached to its models,
 and the macros, enums and constants they and the scenario use. A model the scenario replaces with a
 `__ref__` fixture, a source it replaces with a `__source__` fixture, or a seed it replaces with a
-`__seed__` fixture, is not executed, so its changes do not select the scenario.
+`__seed__` fixture, is not executed, so only changes to its declared columns, which shape the
+fixture, select the scenario. [Project-wide inputs](/docs/cli/test#project-wide-inputs) such as
+the connection, targets and Python dependency files select every scenario.
 
 `--select` and `--exclude` narrow the affected scenarios further. With `--json`, the document gains
 the same `since` section as `sqb test`, listing each selected scenario with its reasons. Both
-commands share the cached base compile, so `sqb test --since origin/main` and
-`sqb scenario test --since origin/main` in one CI job resolve the same changed set:
+commands share the cached base compile when `sqb test` uses the default target and no `--vars`, so
+`sqb test --since origin/main` and `sqb scenario test --since origin/main` in one CI job compile
+the base once and resolve the same changed set:
 
 ```bash
 sqb test --since "origin/$TARGET_BRANCH"

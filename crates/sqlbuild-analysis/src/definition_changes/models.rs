@@ -68,6 +68,8 @@ pub struct ExecutedItem {
     pub declarations: Vec<String>,
     /// Keys of declarations the item mocks, whose changes never select it.
     pub mocked: BTreeSet<String>,
+    /// Keys of relations the item mocks, whose declared columns still shape the mock.
+    pub mocked_relations: Vec<String>,
 }
 
 /// One selected test or scenario and why it was selected.

@@ -121,6 +121,7 @@ pub(super) fn item(
             .iter()
             .map(|key| (*key).to_owned())
             .collect::<BTreeSet<_>>(),
+        mocked_relations: Vec::new(),
     }
 }
 
@@ -131,4 +132,10 @@ pub(super) fn with_node(
 ) -> DefinitionSnapshot {
     current.nodes.insert(entry.0, entry.1);
     current
+}
+
+/// `item` mocking the relations `keys`.
+pub(super) fn mocking(mut item: ExecutedItem, keys: &[&str]) -> ExecutedItem {
+    item.mocked_relations = keys.iter().map(|key| (*key).to_owned()).collect();
+    item
 }
