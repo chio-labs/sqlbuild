@@ -11,18 +11,27 @@ pub fn output_types(
     dialect: &str,
     schema: &ValidationSchema,
 ) -> Option<Vec<(String, Option<String>)>> {
-    let dialect: DialectType = dialect.parse().ok()?;
+    let dialect: DialectType = match dialect.parse() {
+        Ok(dialect) => dialect,
+        Err(_) => return None,
+    };
     let mut statements: Vec<Expression> =
-        polyglot_sql::parse_with_options(sql, dialect, &ParseOptions::default()).ok()?;
+        match polyglot_sql::parse_with_options(sql, dialect, &ParseOptions::default()) {
+            Ok(statements) => statements,
+            Err(_) => return None,
+        };
     if statements.len() != 1 {
         return None;
     }
     let expression: Expression = statements.pop()?;
-    let outputs = infer_outputs(&expression, Some(schema), &HashMap::new(), dialect);
-    Some(
-        outputs
-            .into_iter()
-            .map(|(name, data_type)| (name, data_type.filter(|value| value != NULL_TYPE)))
-            .collect(),
-    )
+    let mut outputs: Vec<(String, Option<String>)> = Vec::new();
+    for (name, data_type) in infer_outputs(&expression, Some(schema), &HashMap::new(), dialect) {
+        outputs.push((name, data_type.filter(|value| !is_null_type(value))));
+    }
+    Some(outputs)
+}
+
+/// Whether `value` is the placeholder inference uses for a `NULL` literal's type.
+fn is_null_type(value: &str) -> bool {
+    value == NULL_TYPE
 }

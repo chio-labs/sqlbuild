@@ -137,25 +137,31 @@ fn defines_alias(tail: &str, name: &str) -> bool {
     let Ok(scanned) = tokens(tail) else {
         return true;
     };
-    scanned.iter().enumerate().any(|(index, token)| {
+    for (index, token) in scanned.iter().enumerate() {
         let named: bool = matches!(token.kind, TokenKind::Word | TokenKind::Quoted)
             && unquoted(token.text(tail)).eq_ignore_ascii_case(name);
         let qualifies: bool = scanned
             .get(index + 1)
             .is_some_and(|next| next.is(tail, "."));
-        let after_relation: bool = index
-            .checked_sub(1)
-            .and_then(|previous| scanned.get(previous))
-            .is_some_and(|previous| {
-                previous.is_word(tail, "AS")
-                    || previous.is(tail, ")")
-                    || matches!(previous.kind, TokenKind::Word | TokenKind::Quoted)
-                        && !ALIAS_PRECEDING_KEYWORDS
-                            .iter()
-                            .any(|keyword| previous.is_word(tail, keyword))
-            });
-        named && !qualifies && after_relation
-    })
+        let previous: Option<&Token> = index.checked_sub(1).and_then(|before| scanned.get(before));
+        if named && !qualifies && previous.is_some_and(|before| ends_relation(tail, before)) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Whether `token` can end the relation an alias follows: `AS`, `)` or a relation name.
+fn ends_relation(tail: &str, token: &Token) -> bool {
+    if token.is_word(tail, "AS") || token.is(tail, ")") {
+        return true;
+    }
+    if !matches!(token.kind, TokenKind::Word | TokenKind::Quoted) {
+        return false;
+    }
+    !ALIAS_PRECEDING_KEYWORDS
+        .iter()
+        .any(|keyword| token.is_word(tail, keyword))
 }
 
 /// The probes reading every check's evidence from the analysed query `sql`.
@@ -188,7 +194,18 @@ pub(crate) fn probe_plan(sql: &str, checks: &[SqlMacroCheck]) -> ProbePlan {
                     }
                 }
                 ArgumentExpectation::Typed { .. } => {
-                    let probe: &mut TypedProbe<'_> = typed_probe(&mut scopes, &check.scope);
+                    let group: usize = match typed_probe_index(&scopes, &check.scope) {
+                        Some(group) => group,
+                        None => {
+                            scopes.push(TypedProbe {
+                                scope: &check.scope,
+                                columns: Vec::new(),
+                                arguments: Vec::new(),
+                            });
+                            scopes.len() - 1
+                        }
+                    };
+                    let probe: &mut TypedProbe<'_> = &mut scopes[group];
                     probe.columns.push(format!(
                         "({}) AS {PROBE_COLUMN_PREFIX}{}",
                         argument.text,
@@ -220,21 +237,9 @@ pub(crate) fn probe_plan(sql: &str, checks: &[SqlMacroCheck]) -> ProbePlan {
     plan
 }
 
-/// The typed probe of `scope` among `scopes`, added empty when it is the first.
-fn typed_probe<'s, 'c>(
-    scopes: &'s mut Vec<TypedProbe<'c>>,
-    scope: &'c CallScope,
-) -> &'s mut TypedProbe<'c> {
-    let found: Option<usize> = scopes.iter().position(|probe| probe.scope == scope);
-    let index: usize = found.unwrap_or_else(|| {
-        scopes.push(TypedProbe {
-            scope,
-            columns: Vec::new(),
-            arguments: Vec::new(),
-        });
-        scopes.len() - 1
-    });
-    &mut scopes[index]
+/// The index of `scope`'s typed probe in `scopes`, if one was started.
+fn typed_probe_index(scopes: &[TypedProbe<'_>], scope: &CallScope) -> Option<usize> {
+    scopes.iter().position(|probe| probe.scope == scope)
 }
 
 /// The column type of `name` in `columns`, matching names without case or quotes.
@@ -381,27 +386,30 @@ pub(crate) fn analysed_probes(
     dialect: &str,
     models: &[(&[String], &RelationShapes)],
 ) -> Vec<Vec<ProbeColumns>> {
-    models
-        .iter()
-        .map(|(probes, schema)| {
-            if probes.is_empty() {
-                return Vec::new();
-            }
-            let tables: Vec<Value> = schema
-                .iter()
-                .map(|(name, columns)| table(name, columns))
-                .collect();
-            let Ok(schema) =
-                serde_json::from_value::<ValidationSchema>(json!({ "tables": tables }))
-            else {
-                return vec![None; probes.len()];
-            };
-            probes
-                .iter()
-                .map(|sql| output_types(sql, dialect, &schema).and_then(probe_columns))
-                .collect()
-        })
-        .collect()
+    let mut analysed: Vec<Vec<ProbeColumns>> = Vec::with_capacity(models.len());
+    for (probes, schema) in models {
+        analysed.push(model_probes(dialect, probes, schema));
+    }
+    analysed
+}
+
+/// One model's probes' output columns, inferred against its bound relations.
+fn model_probes(dialect: &str, probes: &[String], schema: &RelationShapes) -> Vec<ProbeColumns> {
+    if probes.is_empty() {
+        return Vec::new();
+    }
+    let mut tables: Vec<Value> = Vec::with_capacity(schema.len());
+    for (name, columns) in schema {
+        tables.push(table(name, columns));
+    }
+    let Ok(schema) = serde_json::from_value::<ValidationSchema>(json!({ "tables": tables })) else {
+        return vec![None; probes.len()];
+    };
+    let mut columns: Vec<ProbeColumns> = Vec::with_capacity(probes.len());
+    for sql in probes {
+        columns.push(output_types(sql, dialect, &schema).and_then(probe_columns));
+    }
+    columns
 }
 
 /// One bound relation as a validation schema table, its qualified name split into parts.
@@ -427,14 +435,14 @@ fn probe_columns(outputs: Vec<(String, Option<String>)>) -> ProbeColumns {
     if outputs.is_empty() || outputs.iter().any(|(name, _)| name == STAR_PROJECTION) {
         return None;
     }
-    Some(
-        outputs
-            .into_iter()
-            .map(|(name, data_type)| {
-                let known: Option<String> =
-                    data_type.filter(|hint| !hint.eq_ignore_ascii_case(UNKNOWN_TYPE_HINT));
-                (name, known)
-            })
-            .collect(),
-    )
+    let mut columns: Vec<(String, Option<String>)> = Vec::with_capacity(outputs.len());
+    for (name, data_type) in outputs {
+        columns.push((name, data_type.filter(|hint| known_type(hint))));
+    }
+    Some(columns)
+}
+
+/// Whether inference reported a type rather than its unknown placeholder.
+fn known_type(hint: &str) -> bool {
+    !hint.eq_ignore_ascii_case(UNKNOWN_TYPE_HINT)
 }
