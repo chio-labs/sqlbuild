@@ -279,4 +279,10 @@ impl RecallSession {
     pub fn notices(&self) -> Vec<String> {
         locked(&self.shared.state).notices.clone()
     }
+
+    /// Informational store notices, such as a database Recall created; they report no problem.
+    #[must_use]
+    pub fn information(&self) -> Vec<String> {
+        locked(&self.shared.state).information.clone()
+    }
 }

@@ -340,3 +340,21 @@ class ClickHouseRecallExternalContextTestCase:
     external_context: str
     sql: str
     expected_rows: list[list[object]]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallRefusedTablesTestCase:
+    description: str
+    writer_privileges: str
+    expected_fragments: tuple[str, ...]
+    expected_databases: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallDocumentedGrantsTestCase:
+    description: str
+    writer_privileges: str
+    dropped_column: tuple[str, str]
+    expected_columns: tuple[tuple[object, ...], ...]
+    expected_stale_views: tuple[tuple[object, ...], ...]
+    expected_version: tuple[tuple[object, ...], ...]

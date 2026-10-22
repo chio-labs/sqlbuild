@@ -302,6 +302,10 @@ again.
 - **Setup.** On first use the writer creates the database if it is missing, printing
   ``Recall: created ClickHouse database `observability` for the store.`` once, then the `recall_*`
   MergeTree tables and the views above. An existing database is used as it is, whatever its engine.
+  The database is created on the server the writer connects to, never `ON CLUSTER`: on a
+  self-managed cluster whose default database engine is not `Replicated`, create the database
+  yourself first (`ENGINE = Replicated(...)` or `ON CLUSTER`), and Recall leaves it alone.
+  ClickHouse Cloud needs nothing.
   If the user may not create the store, the command still succeeds and prints the statements,
   starting with `CREATE DATABASE IF NOT EXISTS` when the database is missing; a store created from
   them accepts writers limited to `SELECT` and `INSERT`.
@@ -405,7 +409,9 @@ These run as written on the local SQLite store; on ClickHouse, read JSON with
 `JSONExtractString(external_context, 'integration', 'job_name')`.
 
 The latest runs of an orchestrated job, by the context its integration records (the Dagster
-integration records `run_id`, `job_name`, `step_key`, `retry_number` and `partition_key`):
+integration records `run_id`, `job_name`, `step_key`, `retry_number` and `partition_key`). This
+finds runs recorded by SQLBuild 0.168.0 or later; earlier versions stored the context in a form
+the JSON functions cannot read, so those runs are skipped without an error:
 
 ```bash
 sqb recall query "SELECT invocation_id, invocation_started_at, status, duration_ms
@@ -438,10 +444,11 @@ sqb recall output <invocation_id> --tail 50
 
 ### From a statement to the warehouse
 
-`statements.query_id` is the warehouse's own ID for the statement, where the adapter reports one:
-the Snowflake query ID, or the `query_id` ClickHouse logs in `system.query_log`. It is `NULL` on
-adapters without one, such as DuckDB. Look it up in the warehouse's query history to see what
-Recall does not record, such as the warehouse size, queueing and spilling behind a slow statement.
+`statements.query_id` is the warehouse's own ID for the statement on Snowflake (the query ID) and
+ClickHouse (the `query_id` in `system.query_log`). Look it up in the warehouse's query history to
+see what Recall does not record, such as the warehouse size, queueing and spilling behind a slow
+statement. It is `NULL` on DuckDB and BigQuery; a BigQuery statement's job ID is in its
+`statement_submitted` event instead, as `payload` field `job_id` in `events`.
 
 ## Relationship to compute logs
 

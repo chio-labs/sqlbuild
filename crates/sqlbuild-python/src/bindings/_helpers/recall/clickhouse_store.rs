@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant, SystemTime};
 
 use pyo3::prelude::Python;
@@ -95,6 +96,8 @@ pub(crate) struct ClickHouseStoreOpener {
     pub(crate) location: ClickHouseLocation,
     pub(crate) retention_notice: fn(&Path, &str) -> bool,
     pub(crate) project_dir: PathBuf,
+    /// What opening did that nothing is wrong with, such as creating the database, kept until the session takes it even when a later step fails.
+    pub(crate) information: Mutex<Vec<String>>,
 }
 
 /// The Recall relations present: tables with their `CREATE` queries, views, and the stored schema version.
@@ -120,6 +123,7 @@ struct ClickHouseStore {
     connection: Option<StoreHandle>,
     columns: HashMap<Table, Vec<StoredColumn>>,
     notices: Vec<String>,
+    information: Vec<String>,
 }
 
 fn text(value: Option<&RecallValue>) -> String {
@@ -279,7 +283,7 @@ impl ClickHouseStore {
         };
         match self.command(py, &statement, "create the Recall database") {
             Ok(()) => {
-                self.notices.push(format!(
+                self.information.push(format!(
                     "created ClickHouse database `{}` for the store",
                     self.location.database()
                 ));
@@ -634,8 +638,14 @@ impl RecallStoreOpener for ClickHouseStoreOpener {
                 connection: Some(connect_store(py, &self.location, ConnectionRole::Writer)?),
                 columns: HashMap::new(),
                 notices: Vec::new(),
+                information: Vec::new(),
             };
-            match store.ensure_schema(py, envelope) {
+            let ensured = store.ensure_schema(py, envelope);
+            self.information
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .append(&mut store.information);
+            match ensured {
                 Ok(ReadyStore { tables, behind }) => {
                     if !behind.is_empty()
                         && (self.retention_notice)(
@@ -663,6 +673,15 @@ impl RecallStoreOpener for ClickHouseStoreOpener {
         })
     }
 
+    fn take_information(&self) -> Vec<String> {
+        std::mem::take(
+            &mut *self
+                .information
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner),
+        )
+    }
+
     fn batch_rows(&self) -> usize {
         BATCH_ROWS
     }
@@ -688,6 +707,7 @@ impl ClickHouseReader {
             )?),
             columns: HashMap::new(),
             notices: Vec::new(),
+            information: Vec::new(),
         };
         Ok(Self { store })
     }
@@ -722,6 +742,7 @@ impl ClickHouseReader {
             connection: Some(connect_store(py, location, ConnectionRole::Reader)?),
             columns: HashMap::new(),
             notices: Vec::new(),
+            information: Vec::new(),
         };
         match store.database_exists(py) {
             Ok(true) => {}

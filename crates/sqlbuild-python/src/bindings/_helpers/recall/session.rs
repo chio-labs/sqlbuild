@@ -2,7 +2,7 @@
 
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
 use pyo3::exceptions::PyValueError;
@@ -383,6 +383,7 @@ fn started_session(
             location: ClickHouseLocation::new(config, database, settings.retention_days),
             retention_notice: notice_due,
             project_dir: project_dir.to_path_buf(),
+            information: Mutex::default(),
         })),
         StoreLocation::Unsupported {
             connection,
@@ -464,18 +465,21 @@ pub(crate) fn start_invocation_recall(
     })
 }
 
+/// `notice` as one Recall line, or block when it already ends with a newline.
+fn prefixed(notice: &str) -> String {
+    if notice.ends_with('\n') {
+        format!("Recall: {notice}")
+    } else {
+        format!("Recall: {notice}.\n")
+    }
+}
+
 /// What Recall must tell the user about this run once delivery has finished.
 fn closing_notices(recall: &InvocationRecall, session: &RecallSession) -> Vec<String> {
     let mut notices: Vec<String> = session
         .notices()
-        .into_iter()
-        .map(|notice| {
-            if notice.ends_with('\n') {
-                format!("Recall: {notice}")
-            } else {
-                format!("Recall: {notice}.\n")
-            }
-        })
+        .iter()
+        .map(|notice| prefixed(notice))
         .collect();
     if let (Some(SetupOutcome::PermissionDenied { reason }), Some((settings, project_dir))) =
         (session.wait_for_setup(Duration::ZERO), &recall.settings)
@@ -514,11 +518,21 @@ pub(crate) fn finish_invocation_recall(
             return Err(interrupt);
         }
     }
+    let information: Vec<String> = session
+        .information()
+        .iter()
+        .map(|text| prefixed(text))
+        .collect();
     let notices: Vec<String> = closing_notices(recall, session);
-    if !notices.is_empty() {
+    if !information.is_empty() || !notices.is_empty() {
+        let affected: Option<&str> = (!notices.is_empty()).then_some(RECALL_HISTORY);
         notify(
             py,
-            Some(notices.concat() + &closing_status(&recall.command, exit_code, RECALL_HISTORY)),
+            Some(
+                information.concat()
+                    + &notices.concat()
+                    + &closing_status(&recall.command, exit_code, affected),
+            ),
         );
     }
     Ok(())

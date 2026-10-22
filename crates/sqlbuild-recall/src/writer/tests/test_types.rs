@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use crate::records::models::{OutputChunk, OutputStream, RecallRow, RecallValue, RowEnvelope};
 use crate::schema::models::Table;
-use crate::store::errors::StoreError;
+use crate::store::errors::{StoreError, StoreErrorKind};
 use crate::store::models::InsertOutcome;
 use crate::store::types::{RecallStore, RecallStoreOpener};
 use crate::writer::models::{
@@ -286,5 +286,66 @@ impl PendingLifecycleEvent for RecordingReplacement {
             .expect("the record is not poisoned")
             .push(self.index);
         ReplacedEvents::Published(Vec::new())
+    }
+}
+
+pub(crate) struct CreationNoticeTestCase {
+    pub(crate) description: &'static str,
+    /// The failure of each open after the first creates the database; `None` opens the store.
+    pub(crate) failures: Vec<Option<StoreErrorKind>>,
+    pub(crate) expected_information: Vec<String>,
+    pub(crate) expected_permission_denied: bool,
+}
+
+/// A hosted store whose first open creates its database, then fails or opens as `failures` say.
+#[derive(Debug, Default)]
+pub(crate) struct CreatingStore {
+    pub(crate) failures: Vec<Option<StoreErrorKind>>,
+    pub(crate) attempts: Mutex<usize>,
+    pub(crate) information: Mutex<Vec<String>>,
+}
+
+impl RecallStoreOpener for CreatingStore {
+    fn open(
+        &self,
+        _envelope: &RowEnvelope,
+        _give_up: Instant,
+    ) -> Result<Box<dyn RecallStore>, StoreError> {
+        let mut attempts = self
+            .attempts
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let attempt: usize = *attempts;
+        *attempts += 1;
+        if attempt == 0 {
+            self.information
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push("created database `history`".to_owned());
+        }
+        match self.failures.get(attempt).copied().flatten() {
+            Some(kind) => Err(StoreError {
+                kind,
+                message: "the store could not be set up".to_owned(),
+            }),
+            None => Ok(Box::new(OutputBytesStore::default())),
+        }
+    }
+
+    fn take_information(&self) -> Vec<String> {
+        std::mem::take(
+            &mut *self
+                .information
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        )
+    }
+
+    fn batch_rows(&self) -> usize {
+        1_000
+    }
+
+    fn batch_window(&self) -> Duration {
+        Duration::from_millis(10)
     }
 }

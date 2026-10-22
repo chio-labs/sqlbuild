@@ -7,9 +7,11 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse._test_types import (
     ClickHouseRecallDatabaseCreationTestCase,
+    ClickHouseRecallDocumentedGrantsTestCase,
     ClickHouseRecallExistingDatabaseTestCase,
     ClickHouseRecallExternalContextTestCase,
     ClickHouseRecallMissingDatabaseTestCase,
+    ClickHouseRecallRefusedTablesTestCase,
     ClickHouseRecallStaleViewsTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse.helpers import (
@@ -28,6 +30,7 @@ _STORE_MANAGER_PRIVILEGES: str = (
     "CREATE DATABASE, CREATE TABLE, CREATE VIEW, DROP TABLE, ALTER ADD COLUMN, SELECT, INSERT"
 )
 _CLOSING_STATUS: str = "sqb build completed successfully; only its Recall history is affected.\n"
+_SUCCESS_STATUS: str = "sqb build completed successfully.\n"
 
 
 @pytest.mark.parametrize(
@@ -71,7 +74,7 @@ def test_given_a_missing_database_when_a_writer_may_create_it_then_recall_create
     stderr: str = first.stderr.decode(errors="replace")
     assert (first.returncode, second.returncode) == (0, 0), stderr
     assert stderr.count(notice) == 1
-    assert stderr.endswith(notice + _CLOSING_STATUS)
+    assert stderr.endswith(notice + _SUCCESS_STATUS)
     assert b"Recall" not in second.stderr
     assert (
         recall_rows(
@@ -299,6 +302,132 @@ def test_given_an_orchestrated_build_when_queried_on_clickhouse_then_its_context
 
     assert built.returncode == 0, built.stderr
     assert recall_rows(project_dir, test_case.sql) == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseRecallRefusedTablesTestCase(
+            description="a writer that may create the database but not tables still hears of it",
+            writer_privileges="CREATE DATABASE, SELECT, INSERT",
+            expected_fragments=(
+                "Recall: created ClickHouse database `{database}` for the store.\n",
+                "Recall history is not being written for target `dev`: cannot create the Recall "
+                "tables",
+                "CREATE TABLE IF NOT EXISTS `{database}`.`recall_meta`",
+                _CLOSING_STATUS,
+            ),
+            expected_databases=((1,),),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_writer_that_may_create_only_the_database_when_building_then_both_are_reported(
+    test_case: ClickHouseRecallRefusedTablesTestCase,
+    tmp_path: Path,
+    clickhouse_e2e_config: dict[str, object],
+    recall_database: str,
+) -> None:
+    drop_database(config=clickhouse_e2e_config, database=recall_database)
+
+    with limited_user(
+        config=clickhouse_e2e_config,
+        database=recall_database,
+        privileges=test_case.writer_privileges,
+    ) as writer:
+        built: subprocess.CompletedProcess[bytes] = run(
+            write_recall_project(parent=tmp_path, config=writer, database=recall_database), "build"
+        )
+
+    stderr: str = built.stderr.decode(errors="replace")
+    assert built.returncode == 0, stderr
+    assert [
+        stderr.count(fragment.format(database=recall_database))
+        for fragment in test_case.expected_fragments
+    ] == [1 for _ in test_case.expected_fragments]
+    assert stderr.endswith(_CLOSING_STATUS)
+    assert (
+        fetch_clickhouse_rows(
+            config=clickhouse_e2e_config,
+            sql=f"SELECT count() FROM system.databases WHERE name = '{recall_database}'",
+        )
+        == test_case.expected_databases
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseRecallDocumentedGrantsTestCase(
+            description="the documented writer grants replace older views and add a column",
+            writer_privileges=_STORE_MANAGER_PRIVILEGES,
+            dropped_column=("recall_invocations", "argv_digest"),
+            expected_columns=((1,),),
+            expected_stale_views=((0,),),
+            expected_version=((3,),),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_the_documented_writer_grants_when_the_store_is_behind_then_the_writer_upgrades_it(
+    test_case: ClickHouseRecallDocumentedGrantsTestCase,
+    tmp_path: Path,
+    clickhouse_e2e_config: dict[str, object],
+    recall_database: str,
+) -> None:
+    table, column = test_case.dropped_column
+    admin: Path = write_recall_project(
+        parent=tmp_path / "admin", config=clickhouse_e2e_config, database=recall_database
+    )
+    assert run(admin, "build").returncode == 0
+    create_previous_views(
+        config=clickhouse_e2e_config,
+        database=recall_database,
+        names=("invocations", "statements", "output_invocations", "artifacts"),
+        prefix="",
+    )
+    execute_clickhouse_sql(
+        config=clickhouse_e2e_config,
+        statements=(
+            f"ALTER TABLE {recall_database}.{table} DROP COLUMN {column}",
+            f"ALTER TABLE {recall_database}.recall_meta UPDATE value = '2' "
+            "WHERE component = 'schema' SETTINGS mutations_sync = 2",
+        ),
+    )
+
+    with limited_user(
+        config=clickhouse_e2e_config,
+        database=recall_database,
+        privileges=test_case.writer_privileges,
+    ) as writer:
+        built: subprocess.CompletedProcess[bytes] = run(
+            write_recall_project(
+                parent=tmp_path / "writer", config=writer, database=recall_database
+            ),
+            "build",
+        )
+
+    assert built.returncode == 0, built.stderr
+    assert b"Recall" not in built.stderr
+    assert (
+        fetch_clickhouse_rows(
+            config=clickhouse_e2e_config,
+            sql=f"SELECT count() FROM system.columns WHERE database = '{recall_database}' "
+            f"AND table = '{table}' AND name = '{column}'",
+        )
+        == test_case.expected_columns
+    )
+    assert stale_views(config=clickhouse_e2e_config, database=recall_database) == (
+        test_case.expected_stale_views
+    )
+    assert (
+        fetch_clickhouse_rows(
+            config=clickhouse_e2e_config,
+            sql=f"SELECT toInt64(max(toInt64OrZero(value))) FROM {recall_database}.recall_meta "
+            "WHERE component = 'schema'",
+        )
+        == test_case.expected_version
+    )
 
 
 if __name__ == "__main__":

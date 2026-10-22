@@ -17,8 +17,8 @@ use crate::writer::models::{
     DeliveryStream, DeliverySummary, Priority, SessionConfig, SessionStore, SetupOutcome,
 };
 use crate::writer::tests::test_types::{
-    CopyingReplacement, OutputBytesStore, PartialStore, PrefixReplacement, RecordedSession,
-    RecordingReplacement,
+    CopyingReplacement, CreatingStore, OutputBytesStore, PartialStore, PrefixReplacement,
+    RecordedSession, RecordingReplacement,
 };
 
 /// The envelope of invocation `invocation_id`.
@@ -585,4 +585,23 @@ pub(crate) fn replacement_order(priorities: &[Priority]) -> Vec<usize> {
     let batch = state.take_batch(usize::MAX);
     drop(Materializer::new(envelope("ordered")).build(batch, None));
     std::mem::take(&mut *seen.lock().expect("the record is not poisoned"))
+}
+
+/// The informational notices of a session whose store opens as `failures` say after creating its database, and whether setup was refused for permission.
+pub(crate) fn creation_notices(
+    failures: Vec<Option<crate::store::errors::StoreErrorKind>>,
+) -> (Vec<String>, bool) {
+    let session = start_recall_session(SessionConfig {
+        store: SessionStore::Hosted(Arc::new(CreatingStore {
+            failures,
+            ..CreatingStore::default()
+        })),
+        ..config(PathBuf::from("unused"), "creating")
+    });
+    let setup = session.wait_for_setup(Duration::from_secs(10));
+    drop(session.close());
+    (
+        session.information(),
+        matches!(setup, Some(SetupOutcome::PermissionDenied { .. })),
+    )
 }

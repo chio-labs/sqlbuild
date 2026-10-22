@@ -113,7 +113,12 @@ fn open_store(shared: &Shared, config: &SessionConfig) -> Result<Box<dyn RecallS
             drop(checkpoint_sqlite_store(&store));
             Box::new(NativeSqlite(store)) as Box<dyn RecallStore>
         }),
-        SessionStore::Hosted(opener) => open_hosted(shared, config, opener.as_ref()),
+        SessionStore::Hosted(opener) => {
+            let opened = open_hosted(shared, config, opener.as_ref());
+            let information: Vec<String> = opener.take_information();
+            locked(&shared.state).information.extend(information);
+            opened
+        }
     }
 }
 
