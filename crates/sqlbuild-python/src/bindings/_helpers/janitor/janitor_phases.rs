@@ -43,8 +43,13 @@ pub(crate) struct JanitorCompiled<'py> {
     pub(crate) connection_config: Bound<'py, PyAny>,
 }
 
-fn stdout(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    py.import("sys")?.getattr("stdout")
+/// Where human output goes: stderr when stdout carries `--json`, otherwise stdout.
+pub(crate) fn output_stream<'py>(invocation: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let machine_output: bool = native_field(invocation, "machine_output")?.is_truthy()?;
+    invocation
+        .py()
+        .import("sys")?
+        .getattr(if machine_output { "stderr" } else { "stdout" })
 }
 
 fn use_color(invocation: &Bound<'_, PyAny>) -> PyResult<bool> {
@@ -76,7 +81,7 @@ pub(crate) fn compile_janitor_project<'py>(
     let started: Instant = Instant::now();
     let status: Bound<'py, PyAny> = Bound::new(
         py,
-        PlanningProgressReporter::new(py, &stdout(py)?, use_color(invocation)?)?,
+        PlanningProgressReporter::new(py, &output_stream(invocation)?, use_color(invocation)?)?,
     )?
     .into_any();
     let as_target: Bound<'py, PyAny> = native_field(invocation, "as_target")?;
@@ -145,7 +150,7 @@ pub(crate) fn connect_janitor_warehouse<'py>(
                 py,
                 &[
                     ("adapter_name", compiled.adapter_name.clone()),
-                    ("stream", stdout(py)?),
+                    ("stream", output_stream(invocation)?),
                     (
                         "use_color",
                         PyBool::new(py, use_color(invocation)?)
@@ -221,7 +226,7 @@ pub(crate) fn build_janitor_execution_plan<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = invocation.py();
     let started: Instant = Instant::now();
-    let status: Bound<'py, PyAny> = status_reporter(&stdout(py)?, use_color(invocation)?)?;
+    let status: Bound<'py, PyAny> = status_reporter(&output_stream(invocation)?, use_color(invocation)?)?;
     status.call_method1("start", ("Inspecting warehouse state...",))?;
     let janitor: Bound<'py, PyAny> = native_field(invocation, "discovered_inputs")?
         .getattr("project_config")?
@@ -285,11 +290,11 @@ pub(crate) fn build_janitor_execution_plan<'py>(
     Ok(plan)
 }
 
-/// Execute the warehouse cleanup plan.
+/// Execute the warehouse cleanup plan, reporting each phase and action to `progress`.
 pub(crate) fn execute_janitor_cleanup<'py>(
     compiled: &JanitorCompiled<'py>,
     connection: &Bound<'py, PyAny>,
-    plan: &Bound<'py, PyAny>,
+    (plan, progress): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
         &host::entry(compiled.adapter.py(), ExecutorHost::ExecuteJanitorPlan)?,
@@ -297,6 +302,7 @@ pub(crate) fn execute_janitor_cleanup<'py>(
             ("plan", plan.clone()),
             ("adapter", compiled.adapter.clone()),
             ("connection", connection.clone()),
+            ("progress", progress.clone()),
         ],
     )
 }

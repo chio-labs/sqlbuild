@@ -14,12 +14,15 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
 )
 from sqlbuild.adapter.type_system.main.normalize_relation_type import normalize_relation_type
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.janitor.main._run_janitor_phase import run_janitor_phase
 from sqlbuild.executor.janitor.models import (
     JanitorArchiveCandidate,
     JanitorArchivedRelation,
     JanitorPlan,
+    JanitorProgressItem,
     JanitorRelationKey,
 )
+from sqlbuild.executor.janitor.types import JanitorAction, JanitorPhase, JanitorProgress
 from sqlbuild.executor.janitor_events.constants import JANITOR_EVENT_SCHEMA_VERSION
 from sqlbuild.executor.janitor_events.main.janitor_event_id import build_janitor_event_id
 from sqlbuild.executor.janitor_events.main.write_janitor_event import write_janitor_event_record
@@ -46,13 +49,14 @@ def apply_direct_archives(
     connection: Any,
     recorder: StatementRecorder,
     run_id: str,
+    progress: JanitorProgress | None = None,
 ) -> tuple[tuple[JanitorArchiveCandidate, ...], tuple[JanitorArchivedRelation, ...]]:
     """Rename stale relations to archives, then drop expired archives by name."""
 
     _create_event_tables(adapter=adapter, connection=connection, plan=plan)
     archived: list[JanitorArchiveCandidate] = []
-    candidate: JanitorArchiveCandidate
-    for candidate in plan.archive_candidates:
+
+    def archive_relation(candidate: JanitorArchiveCandidate) -> None:
         with OperationLifecycle(operation_kind="janitor", operation_name="janitor_cleanup_action"):
             _rename_relation(
                 adapter=adapter,
@@ -77,9 +81,21 @@ def apply_direct_archives(
                 ),
             ),
         )
+
+    run_janitor_phase(
+        progress=progress,
+        phase=JanitorPhase.ARCHIVE,
+        items=plan.archive_candidates,
+        describe=lambda candidate: JanitorProgressItem(
+            action=JanitorAction.ARCHIVED,
+            name=candidate.key.display_name(),
+            destination=candidate.archive_key.display_name(),
+        ),
+        apply=archive_relation,
+    )
     deleted: list[JanitorArchivedRelation] = []
-    archive: JanitorArchivedRelation
-    for archive in plan.archive_deletion_candidates:
+
+    def delete_archive(archive: JanitorArchivedRelation) -> None:
         with OperationLifecycle(operation_kind="janitor", operation_name="janitor_cleanup_action"):
             _drop_archive(
                 adapter=adapter, connection=connection, archive=archive, recorder=recorder
@@ -95,6 +111,16 @@ def apply_direct_archives(
                 archive=archive,
             ),
         )
+
+    run_janitor_phase(
+        progress=progress,
+        phase=JanitorPhase.DELETE_ARCHIVES,
+        items=plan.archive_deletion_candidates,
+        describe=lambda archive: JanitorProgressItem(
+            action=JanitorAction.DELETED, name=archive.key.display_name()
+        ),
+        apply=delete_archive,
+    )
     return tuple(archived), tuple(deleted)
 
 

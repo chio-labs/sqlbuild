@@ -7,6 +7,7 @@ from datetime import datetime
 
 from sqlbuild._native import OldNameViewDropReason, OldNameViewHistory
 from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
+from sqlbuild.executor.janitor.types import JanitorAction
 
 
 @dataclass(frozen=True, eq=False)
@@ -226,3 +227,12 @@ class JanitorExecutionResult:
     )
     pruned_direct_state: tuple[JanitorDirectStatePruneCandidate, ...] = field(default_factory=tuple)
     dropped_old_name_views: tuple[JanitorOldNameView, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class JanitorProgressItem:
+    """How the progress output names one janitor action before it runs."""
+
+    action: JanitorAction
+    name: str
+    destination: str | None = None

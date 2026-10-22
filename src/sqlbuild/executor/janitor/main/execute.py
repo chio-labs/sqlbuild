@@ -11,6 +11,7 @@ from sqlbuild.executor.janitor._helpers.archive_execution import (
     janitor_run_id,
 )
 from sqlbuild.executor.janitor._helpers.deletion import apply_janitor_deletions
+from sqlbuild.executor.janitor.main._run_janitor_phase import run_janitor_phase
 from sqlbuild.executor.janitor.models import (
     JanitorArchiveCandidate,
     JanitorArchivedRelation,
@@ -19,8 +20,10 @@ from sqlbuild.executor.janitor.models import (
     JanitorExecutionResult,
     JanitorOldNameView,
     JanitorPlan,
+    JanitorProgressItem,
     JanitorQueryDiffArtifactCandidate,
 )
+from sqlbuild.executor.janitor.types import JanitorAction, JanitorPhase, JanitorProgress
 from sqlbuild.executor.old_name_views.main._drop_old_name_views import drop_old_name_views
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
@@ -30,8 +33,9 @@ def execute_janitor_plan(
     plan: JanitorPlan,
     adapter: BaseAdapter,
     connection: Any,
+    progress: JanitorProgress | None = None,
 ) -> JanitorExecutionResult:
-    """Delete all candidates in a janitor plan."""
+    """Delete all candidates in a janitor plan, reporting each phase and action to `progress`."""
 
     with OperationLifecycle(
         operation_kind="janitor",
@@ -42,6 +46,7 @@ def execute_janitor_plan(
             plan=plan,
             adapter=adapter,
             connection=connection,
+            progress=progress,
         )
 
 
@@ -50,10 +55,11 @@ def _execute_janitor_plan(
     plan: JanitorPlan,
     adapter: BaseAdapter,
     connection: Any,
+    progress: JanitorProgress | None,
 ) -> JanitorExecutionResult:
     recorder: StatementRecorder = StatementRecorder()
-    candidate: JanitorDeleteCandidate
-    for candidate in () if plan.direct_mode else plan.candidates:
+
+    def drop_candidate(candidate: JanitorDeleteCandidate) -> None:
         with OperationLifecycle(operation_kind="janitor", operation_name="janitor_cleanup_action"):
             adapter.drop(
                 connection=connection,
@@ -61,6 +67,16 @@ def _execute_janitor_plan(
                 if_exists=True,
                 statement_recorder=recorder,
             )
+
+    run_janitor_phase(
+        progress=progress,
+        phase=JanitorPhase.DELETE_RELATIONS,
+        items=() if plan.direct_mode else plan.candidates,
+        describe=lambda candidate: JanitorProgressItem(
+            action=JanitorAction.DELETED, name=candidate.key.display_name()
+        ),
+        apply=drop_candidate,
+    )
     archived: tuple[JanitorArchiveCandidate, ...]
     deleted_archives: tuple[JanitorArchivedRelation, ...]
     archived, deleted_archives = (
@@ -70,6 +86,7 @@ def _execute_janitor_plan(
             connection=connection,
             recorder=recorder,
             run_id=janitor_run_id(),
+            progress=progress,
         )
         if plan.direct_mode
         else ((), ())
@@ -80,30 +97,42 @@ def _execute_janitor_plan(
         connection=connection,
         recorder=recorder,
         run_id=janitor_run_id(),
+        progress=progress,
     )
-    query_artifact_candidate: JanitorQueryDiffArtifactCandidate
-    for query_artifact_candidate in plan.query_diff_artifact_candidates:
+
+    def drop_query_artifact(candidate: JanitorQueryDiffArtifactCandidate) -> None:
         with OperationLifecycle(operation_kind="janitor", operation_name="janitor_cleanup_action"):
             query_artifact_destination: str | None = adapter.render_qualified_name(
-                database=query_artifact_candidate.key.database,
-                schema=query_artifact_candidate.key.schema,
-                name=query_artifact_candidate.key.name,
+                database=candidate.key.database,
+                schema=candidate.key.schema,
+                name=candidate.key.name,
             )
             adapter.drop(
                 connection=connection,
                 destination=(
                     query_artifact_destination
                     if query_artifact_destination is not None
-                    else query_artifact_candidate.key.display_name()
+                    else candidate.key.display_name()
                 ),
                 if_exists=True,
                 statement_recorder=recorder,
             )
+
+    run_janitor_phase(
+        progress=progress,
+        phase=JanitorPhase.DROP_QUERY_ARTIFACTS,
+        items=plan.query_diff_artifact_candidates,
+        describe=lambda candidate: JanitorProgressItem(
+            action=JanitorAction.DROPPED, name=candidate.key.display_name()
+        ),
+        apply=drop_query_artifact,
+    )
     pruned_direct_state: tuple[JanitorDirectStatePruneCandidate, ...] = apply_janitor_deletions(
         candidates=plan.direct_state_prune_candidates,
         delete=lambda direct_state_candidate: adapter.execute(
             connection=connection, sql=direct_state_candidate.prune_sql
         ),
+        progress=progress,
     )
     return JanitorExecutionResult(
         deleted=() if plan.direct_mode else plan.candidates,

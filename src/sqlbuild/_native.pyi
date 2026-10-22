@@ -5050,7 +5050,9 @@ def observe_source_freshness_json(
     previous_records: Mapping[SourceFreshnessIdentity, SourceFreshnessRecord] | None = None,
     previous_records_by_source_name: Mapping[str, SourceFreshnessRecord] | None = None,
 ) -> str: ...
-def render_janitor_plan(*, plan: JanitorPlan, use_color: bool = False) -> str: ...
+def render_janitor_plan(
+    *, plan: JanitorPlan, use_color: bool = False, verbose: bool = False
+) -> str: ...
 def discover_python_node_functions(
     *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] | None = None
 ) -> DiscoveredPythonNodeFunctions: ...
@@ -5147,7 +5149,10 @@ def build_janitor_archive_name(
 def build_query_diff_artifact_name(*, run_id: str, side: str) -> str: ...
 def parse_query_diff_artifact_name(name: str, /) -> tuple[str, str] | None: ...
 def render_janitor_completion(
-    *, result: JanitorExecutionResult, use_color: bool = False
+    *,
+    result: JanitorExecutionResult,
+    elapsed_seconds: float | None = None,
+    use_color: bool = False,
 ) -> str: ...
 
 # Native analysis: SQL test planning glue.
@@ -6663,6 +6668,8 @@ class JanitorCommandRequest(NativeRecord):
     drop_old_name_views: tuple[str, ...]
     selected_target: str | None
     as_target: str | None
+    verbose: bool
+    json_output: bool
     def __init__(
         self,
         project_dir: Path | None,
@@ -6673,6 +6680,8 @@ class JanitorCommandRequest(NativeRecord):
         drop_old_name_views: tuple[str, ...] = (),
         selected_target: str | None = None,
         as_target: str | None = None,
+        verbose: bool = False,
+        json_output: bool = False,
     ) -> None: ...
 
 class LoadCommandRequest(NativeRecord):
