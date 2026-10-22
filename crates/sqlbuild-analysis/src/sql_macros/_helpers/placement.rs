@@ -5,6 +5,12 @@ use crate::sql_macros::_helpers::lexing::{Token, TokenKind, closing_token};
 use crate::sql_macros::constants::{AT_SIGN, COMMA, SELECT_KEYWORD, WITH_KEYWORD};
 use crate::sql_macros::models::{CallPosition, CallScope};
 
+/// Tokens before the `(` of `DISTINCT ON (...)`.
+const DISTINCT_ON_TOKENS: usize = 2;
+/// Keywords that open a query inside a parenthesis.
+const QUERY_OPENERS: [&str; 4] = ["SELECT", "WITH", "VALUES", "FROM"];
+/// Keywords that combine the selects of a query.
+const SET_OPERATIONS: [&str; 3] = ["UNION", "INTERSECT", "EXCEPT"];
 /// Tokens from `@` to a macro call's name: `@`, the kind, `.` and the name.
 const CALL_PREFIX_TOKENS: usize = 4;
 /// Keywords that open the clause a call stands in, read backwards from the call.
@@ -116,6 +122,25 @@ impl<'a> CallSite<'a> {
 
     /// Whether token `index` is the `)` closing a `@sql.name(...)` or `@py.name(...)` call.
     fn closes_macro_call(&self, index: usize) -> bool {
+        self.opening(index).is_some_and(|open| {
+            open >= CALL_PREFIX_TOKENS
+                && self.tokens[open - 1].kind == TokenKind::Word
+                && self.tokens[open - 2].is(self.sql, ".")
+                && self.tokens[open - CALL_PREFIX_TOKENS].is(self.sql, AT_SIGN)
+        })
+    }
+
+    /// Whether token `index` is the `)` closing `DISTINCT ON (...)`.
+    fn closes_distinct_on(&self, index: usize) -> bool {
+        self.opening(index).is_some_and(|open| {
+            open >= DISTINCT_ON_TOKENS
+                && self.tokens[open - 1].is_word(self.sql, "ON")
+                && self.tokens[open - DISTINCT_ON_TOKENS].is_word(self.sql, "DISTINCT")
+        })
+    }
+
+    /// The index of the bracket token `index` closes, if it closes one.
+    fn opening(&self, index: usize) -> Option<usize> {
         let mut depth: usize = 0;
         for open in (0..=index).rev() {
             let token: &Token = &self.tokens[open];
@@ -127,16 +152,13 @@ impl<'a> CallSite<'a> {
                 "(" | "[" | "{" => {
                     depth = depth.saturating_sub(1);
                     if depth == 0 {
-                        return open >= CALL_PREFIX_TOKENS
-                            && self.tokens[open - 1].kind == TokenKind::Word
-                            && self.tokens[open - 2].is(self.sql, ".")
-                            && self.tokens[open - CALL_PREFIX_TOKENS].is(self.sql, AT_SIGN);
+                        return Some(open);
                     }
                 }
                 _ => {}
             }
         }
-        false
+        None
     }
 
     /// Whether the token before the call ends a select-list item, such as `o.id` or `SUM(x)`.
@@ -146,7 +168,13 @@ impl<'a> CallSite<'a> {
         };
         match token.kind {
             TokenKind::Quoted | TokenKind::Number | TokenKind::Text => true,
-            TokenKind::Punct => token.is(self.sql, ")") || token.is(self.sql, "]"),
+            TokenKind::Punct => {
+                let closing: bool = token.is(self.sql, ")") || token.is(self.sql, "]");
+                closing
+                    && self
+                        .previous
+                        .is_some_and(|index| !self.closes_distinct_on(index))
+            }
             TokenKind::Word => {
                 let upper: String = token.text(self.sql).to_ascii_uppercase();
                 !ITEM_CONTINUING_WORDS.contains(&upper.as_str())
@@ -497,6 +525,62 @@ impl QueryParts {
             _ => CallScope::Main,
         }
     }
+
+    /// Whether byte `offset` stands outside subqueries in a scope without set operations.
+    pub(crate) fn plain_select(&self, text: &str, scanned: &[Token], offset: usize) -> bool {
+        let range: (usize, usize) = match self.scope_of(offset) {
+            CallScope::WithList => return true,
+            CallScope::Cte(name) => match self.ctes.iter().find(|cte| cte.name == name) {
+                Some(cte) => cte.body,
+                None => return false,
+            },
+            CallScope::Main => (self.main, text.len()),
+        };
+        let mut queries: Vec<bool> = Vec::new();
+        let mut nested_at_call: Option<bool> = None;
+        let inside = scanned
+            .iter()
+            .enumerate()
+            .filter(|(_, token)| range.0 <= token.start && token.end <= range.1);
+        for (index, token) in inside {
+            if nested_at_call.is_none() && token.start >= offset {
+                nested_at_call = Some(queries.iter().any(|query| *query));
+            }
+            if token.kind == TokenKind::Punct {
+                match token.text(text) {
+                    "(" | "[" | "{" => queries.push(
+                        scanned
+                            .get(index + 1)
+                            .is_some_and(|next| opens_query(text, next)),
+                    ),
+                    ")" | "]" | "}" => {
+                        let _ = queries.pop();
+                    }
+                    _ => {}
+                }
+                continue;
+            }
+            let at_top: bool = queries.is_empty();
+            if at_top && token.kind == TokenKind::Word && is_set_operation(token.text(text)) {
+                return false;
+            }
+        }
+        nested_at_call == Some(false)
+    }
+}
+
+/// Whether `token` opens a query, as the first token inside a parenthesis.
+fn opens_query(text: &str, token: &Token) -> bool {
+    QUERY_OPENERS
+        .iter()
+        .any(|keyword| token.is_word(text, keyword))
+}
+
+/// Whether `word` is `UNION`, `INTERSECT` or `EXCEPT`.
+fn is_set_operation(word: &str) -> bool {
+    SET_OPERATIONS
+        .iter()
+        .any(|keyword| word.eq_ignore_ascii_case(keyword))
 }
 
 /// The top-level parts of `text`, or `None` if its `WITH` list cannot be read.

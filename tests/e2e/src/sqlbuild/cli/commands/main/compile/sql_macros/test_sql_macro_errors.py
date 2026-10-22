@@ -718,6 +718,39 @@ _CALL_X: dict[str, str] = orders_model("SELECT @sql.x(1) AS a\n")
             ),
         ),
         SqlMacroErrorTestCase(
+            description="column_list_call_after_distinct_on",
+            files={
+                **AUDIT_COLUMNS,
+                **orders_model(
+                    "SELECT DISTINCT ON (o.order_id) @sql.audit_columns(o), o.order_id "
+                    'FROM __ref("stg_orders") AS o\n'
+                ),
+            },
+            expected_code="P021",
+            expected_fragments=(
+                "column-list macro audit_columns() must be called as an item of a select list",
+            ),
+        ),
+        SqlMacroErrorTestCase(
+            description="same_named_folder_local_macros_in_two_folders",
+            files={
+                "models/a/_sqlbuild/_macros/sql/helper.sql": _X_HEADER.format(
+                    args="v BIGINT", returns=", returns BIGINT"
+                )
+                + "@v * 2\n",
+                "models/b/_sqlbuild/_macros/sql/helper.sql": _X_HEADER.format(
+                    args="v BIGINT", returns=", returns BIGINT"
+                )
+                + "@v * 3\n",
+                "models/a/model_a.sql": (
+                    'MODEL (description "A");\n\nSELECT @sql.helper(order_id) AS x '
+                    'FROM __ref("stg_orders")\n'
+                ),
+            },
+            expected_code="P001",
+            expected_fragments=("Macro name collision for 'helper'",),
+        ),
+        SqlMacroErrorTestCase(
             description="alias_after_a_column_list_call",
             files={
                 **AUDIT_COLUMNS,

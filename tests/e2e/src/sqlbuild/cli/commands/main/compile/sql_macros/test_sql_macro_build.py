@@ -84,6 +84,17 @@ _CTE_LIST_SPELLINGS: tuple[tuple[str, str], ...] = (
         f"{_RAW},\n{_CLEAN}\n{_FIRST}\nSELECT order_id FROM firsts\n",
     ),
 )
+_REFUNDS: dict[str, str] = {
+    "seeds/raw_refunds.csv": "refund_id,status\n1,250\n",
+    "seeds/raw_refunds.yml": (
+        "seeds:\n  - name: raw_refunds\n    description: Raw refunds.\n    columns:\n"
+        "      - name: refund_id\n        type: BIGINT\n"
+        "      - name: status\n        type: BIGINT\n"
+    ),
+    "models/staging/stg_refunds.sql": (
+        'MODEL (description "Staged refunds");\n\nSELECT * FROM __seed("raw_refunds")\n'
+    ),
+}
 _PLUS_ONE_HOUR: dict[str, str] = {
     "macros/sql/plus_one_hour.sql": (
         'MACRO (description "One hour later", arguments (ts TIMESTAMP), returns TIMESTAMP);'
@@ -340,6 +351,49 @@ def test_given_any_spelling_of_list_calls_when_building_then_the_model_holds_the
             expected_returncode=0,
             expected_fragments=("'[' || CAST(order_id AS VARCHAR) || ']' AS label",),
             inspected_paths=("target/compiled/models/marts/orders.sql",),
+        ),
+        SqlMacroCommandTestCase(
+            description="typed_argument_in_a_later_union_branch_reads_that_branch",
+            files={
+                **CENTS_TO_DOLLARS,
+                **_REFUNDS,
+                **orders_model(
+                    'SELECT @sql.cents_to_dollars(amount_cents) AS d FROM __ref("stg_orders")\n'
+                    "UNION ALL\n"
+                    'SELECT @sql.cents_to_dollars(status) AS d FROM __ref("stg_refunds")\n'
+                ),
+            },
+            command=("compile",),
+            expected_returncode=0,
+            expected_fragments=("0 errors",),
+        ),
+        SqlMacroCommandTestCase(
+            description="typed_argument_in_a_scalar_subquery_reads_the_subquery",
+            files={
+                **CENTS_TO_DOLLARS,
+                **_REFUNDS,
+                **orders_model(
+                    "SELECT o.order_id,\n"
+                    '  (SELECT MAX(@sql.cents_to_dollars(status)) FROM __ref("stg_refunds")) AS m\n'
+                    'FROM __ref("stg_orders") AS o\n'
+                ),
+            },
+            command=("compile",),
+            expected_returncode=0,
+            expected_fragments=("0 errors",),
+        ),
+        SqlMacroCommandTestCase(
+            description="relation_argument_alias_shadowing_a_cte_reads_the_alias",
+            files={
+                **AUDIT_COLUMNS,
+                **orders_model(
+                    'WITH o AS (SELECT order_id FROM __ref("stg_orders"))\n'
+                    'SELECT o.order_id, @sql.audit_columns(o) FROM __ref("stg_orders") AS o\n'
+                ),
+            },
+            command=("compile",),
+            expected_returncode=0,
+            expected_fragments=("0 errors",),
         ),
         SqlMacroCommandTestCase(
             description="lineage_reads_the_arguments_of_a_sql_macro",

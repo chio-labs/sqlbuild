@@ -19,7 +19,7 @@ use crate::lint_text::constants::{
     DECLARATION_GROUP_DIRECTORY, DECLINED_WITHOUT_REASON, EXPRESSION_SELECT_PREFIX,
     FIXTURE_HEADER_KINDS, FORMAT_API_VERSION, GLOBAL_NAMED_ROOTS, GROUPED_NAMED_ROLES,
     LINE_COMMENT_PREFIX, MACRO_HEADER_KIND, MAX_FUNCTION_CALL_DEPTH, MOVED_OMITTED_SELECT,
-    OMITTED_CEREMONIAL_SELECT_SQL, OMITTED_SELECT_SUFFIX_PATTERN,
+    OMITTED_CEREMONIAL_SELECT_SQL, OMITTED_SELECT_SUFFIX_PATTERN, STRING_QUOTES,
 };
 use crate::lint_text::errors::LintTextError;
 use crate::lint_text::main::neutralize_interpolation::neutralize_interpolation;
@@ -306,7 +306,7 @@ pub(crate) fn splice_file(
 }
 
 /// The expression of a formatted one-item `SELECT`, dedented, or `None` if it is not one.
-fn unwrapped_expression(formatted: &str) -> Option<String> {
+pub(crate) fn unwrapped_expression(formatted: &str) -> Option<String> {
     let trimmed: &str = formatted.trim_start();
     let keyword: &str = trimmed.get(..EXPRESSION_SELECT_PREFIX.trim_end().len())?;
     if !keyword.eq_ignore_ascii_case(EXPRESSION_SELECT_PREFIX.trim_end()) {
@@ -325,9 +325,36 @@ fn unwrapped_expression(formatted: &str) -> Option<String> {
     };
     let indent: usize = first.len() - first.trim_start().len();
     let mut dedented: Vec<&str> = vec![first.trim_start()];
+    let mut quote: Option<char> = open_quote(None, first);
     for line in rest_lines {
-        let leading: usize = line.len() - line.trim_start().len();
-        dedented.push(&line[leading.min(indent)..]);
+        if quote.is_some() {
+            dedented.push(line);
+        } else {
+            let leading: usize = line.len() - line.trim_start().len();
+            dedented.push(&line[leading.min(indent)..]);
+        }
+        quote = open_quote(quote, line);
     }
     Some(dedented.join("\n").trim_end().to_owned())
+}
+
+/// The quote still open after `line`, given the one open before it; a doubled quote escapes.
+fn open_quote(mut quote: Option<char>, line: &str) -> Option<char> {
+    let mut characters = line.chars().peekable();
+    while let Some(character) = characters.next() {
+        match quote {
+            Some(open) if character == open => {
+                if characters.peek() == Some(&open) {
+                    let _ = characters.next();
+                } else {
+                    quote = None;
+                }
+            }
+            Some(_) => {}
+            None if STRING_QUOTES.contains(&character) => quote = Some(character),
+            None if character == '-' && characters.peek() == Some(&'-') => return None,
+            None => {}
+        }
+    }
+    quote
 }
