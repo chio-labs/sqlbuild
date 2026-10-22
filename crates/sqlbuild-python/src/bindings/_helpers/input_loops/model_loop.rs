@@ -620,27 +620,30 @@ impl NativeModelLoop {
             usage_record: context.classes.usage_record.clone(),
             compile_error: context.classes.compile_error.clone(),
         };
-        let declarations: ExpandedDeclarations<'py> = expand_declarations(&DeclarationExpansion {
-            sql: &interpolated,
-            references: &references,
-            stop,
-            context: &visible.declarations,
-            consumer: ExpansionConsumer {
-                identity: Some(visible.consumer.clone()),
-                relationship_visibility: false,
-                path: file_path,
-            },
-            rendering: context.host.get(),
-            classes: &expansion_classes,
-            sql_macros: Some(SqlMacroSource {
-                loaded_macros: Some(context.classes.macros.loaded_macros.bind(py).as_any()),
-                origin: Some(SqlCallOrigin {
-                    relative_path,
-                    contents,
-                    query: authored_query,
+        let mut declarations: ExpandedDeclarations<'py> =
+            expand_declarations(&DeclarationExpansion {
+                sql: &interpolated,
+                references: &references,
+                stop,
+                context: &visible.declarations,
+                consumer: ExpansionConsumer {
+                    identity: Some(visible.consumer.clone()),
+                    relationship_visibility: false,
+                    path: file_path,
+                },
+                rendering: context.host.get(),
+                classes: &expansion_classes,
+                sql_macros: Some(SqlMacroSource {
+                    loaded_macros: Some(context.classes.macros.loaded_macros.bind(py).as_any()),
+                    origin: Some(SqlCallOrigin {
+                        relative_path,
+                        contents,
+                        query: authored_query,
+                    }),
+                    resolver: Some(&context.classes.visibility.resolver)
+                        .filter(|resolver| !resolver.is_none()),
                 }),
-            }),
-        })?;
+            })?;
         let macros: Option<ExpandedMacros> = if calls_macros(&declarations.spliced.sql) {
             let model: MacroModel<'_> = MacroModel {
                 file_path,
@@ -749,6 +752,11 @@ impl NativeModelLoop {
                 visibility,
             };
             let hooks: ExpandedHooks<'py> = expanded_hooks(self, context, &values, &hook_model)?;
+            for name in hooks.sql_macros {
+                if !declarations.sql_macros.contains(&name) {
+                    declarations.sql_macros.push(name);
+                }
+            }
             (hooks.values, hooks.usages)
         } else {
             (values, Vec::new())

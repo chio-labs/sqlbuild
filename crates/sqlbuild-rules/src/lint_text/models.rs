@@ -90,6 +90,8 @@ pub(crate) struct PreparedBody {
     pub(crate) request: usize,
     pub(crate) sites: Vec<InterpolationSite>,
     pub(crate) omits_select: bool,
+    /// The body is a SQL macro expression, formatted as the one item of a `SELECT`.
+    pub(crate) wraps_expression: bool,
 }
 
 /// One substitution of an expansion pass: authored source range and generated output range.

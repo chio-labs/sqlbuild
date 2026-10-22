@@ -5,4 +5,6 @@ pub mod parse_sql_macro;
 pub mod render_inline_collection;
 pub mod sql_macro_calls;
 pub mod sql_macro_cycle;
+pub mod sql_macro_findings;
+pub mod sql_macro_probes;
 pub mod with_list_sql_macro_calls;

@@ -51,6 +51,10 @@ const ALIASED_COLUMNS: (&str, &str) = (
     "MACRO (\n  description \"Ids of an aliased relation\",\n  arguments (src RELATION (id BIGINT)),\n);\n\nWITH picked_ids AS (SELECT s.id FROM @src AS s)\n",
 );
 
+const PLUS_ONE: (&str, &str) = (
+    "plus_one",
+    "MACRO (description \"Plus one\", arguments (v BIGINT), returns BIGINT);\n\n@v + 1\n",
+);
 const ROUND_TO: (&str, &str) = (
     "round_to",
     "MACRO (description \"Rounded\", arguments (v DECIMAL(18, 4), places INT), returns DECIMAL(18, 2));\n\nROUND(@v, @places)\n",
@@ -104,6 +108,48 @@ fn given_calls_of_each_form_when_expanding_then_the_ticket_examples_compile() {
             macros: &[CENTS_TO_DOLLARS, NET_AMOUNT],
             sql: "SELECT @sql.net_amount(o.gross_cents, o.refund_cents) AS net FROM orders AS o",
             expected_sql: "SELECT ROUND(CAST((o.gross_cents - COALESCE(o.refund_cents, 0)) AS DECIMAL(18, 4)) / 100, 2) AS net FROM orders AS o",
+        },
+        ExpansionTestCase {
+            description: "a backslash-escaped quote in a BigQuery string is not a call",
+            adapter: "bigquery",
+            macros: &[NET_AMOUNT, CENTS_TO_DOLLARS],
+            sql: "SELECT 'it\\'s @sql.x(' AS note, @sql.net_amount(o.a, o.b) AS net FROM orders AS o",
+            expected_sql: "SELECT 'it\\'s @sql.x(' AS note, ROUND(CAST((o.a - COALESCE(o.b, 0)) AS DECIMAL(18, 4)) / 100, 2) AS net FROM orders AS o",
+        },
+        ExpansionTestCase {
+            description: "an expression call before AT TIME ZONE is parenthesised",
+            adapter: "",
+            macros: &[PLUS_ONE],
+            sql: "SELECT @sql.plus_one(o.v) AT TIME ZONE 'UTC' AS t FROM orders AS o",
+            expected_sql: "SELECT (o.v + 1) AT TIME ZONE 'UTC' AS t FROM orders AS o",
+        },
+        ExpansionTestCase {
+            description: "an expression call before FILTER is parenthesised",
+            adapter: "",
+            macros: &[PLUS_ONE],
+            sql: "SELECT @sql.plus_one(o.v) FILTER (WHERE o.v > 0) AS t FROM orders AS o",
+            expected_sql: "SELECT (o.v + 1) FILTER (WHERE o.v > 0) AS t FROM orders AS o",
+        },
+        ExpansionTestCase {
+            description: "two different CTE-list calls without commas",
+            adapter: "",
+            macros: &[CLEAN_ORDERS, ALIASED_COLUMNS],
+            sql: "WITH r AS (SELECT 1 AS id) @sql.clean_orders(r) @sql.aliased_ids(latest) final AS (SELECT 1) SELECT * FROM final",
+            expected_sql: "WITH r AS (SELECT 1 AS id) , live AS (SELECT * FROM r WHERE NOT is_deleted),\nranked AS (\n  SELECT *, ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY updated_at DESC) AS row_num\n  FROM live\n),\nlatest AS (SELECT * EXCLUDE (row_num) FROM ranked WHERE row_num = 1), picked_ids AS (SELECT s.id FROM latest AS s), final AS (SELECT 1) SELECT * FROM final",
+        },
+        ExpansionTestCase {
+            description: "a comma after the last CTE-list call before the final query",
+            adapter: "",
+            macros: &[ALIASED_COLUMNS],
+            sql: "WITH r AS (SELECT 1 AS id), @sql.aliased_ids(r), SELECT * FROM picked_ids",
+            expected_sql: "WITH r AS (SELECT 1 AS id), picked_ids AS (SELECT s.id FROM r AS s) SELECT * FROM picked_ids",
+        },
+        ExpansionTestCase {
+            description: "a column-list call without a comma before it",
+            adapter: "",
+            macros: &[AUDIT_COLUMNS],
+            sql: "SELECT o.order_id @sql.audit_columns(o) FROM orders AS o",
+            expected_sql: "SELECT o.order_id , o.created_at, o.updated_at, o.updated_at > o.created_at AS was_updated FROM orders AS o",
         },
         ExpansionTestCase {
             description: "CTE list inserted flat with its own names",

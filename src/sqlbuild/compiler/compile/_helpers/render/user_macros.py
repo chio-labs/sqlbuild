@@ -431,29 +431,22 @@ def inventory_project_macros(
         macro_files=python_files,
         trees=tuple(_parse_macro_module(macro_file=macro_file) for macro_file in python_files),
     )
-    try:
-        sql_rows: tuple[tuple[DiscoveredMacroFile, tuple[str, list[str], list[str]]], ...] = (
-            _sql_macro_rows(macro_files)
-        )
-    except CompileInputError as error:
-        failed: DiscoveredMacroFile = next(
-            macro_file
-            for macro_file in macro_files
-            if macro_file.relative_path.suffix == _SQL_SUFFIX
-        )
-        return replace(
-            inventory,
-            faults=(
-                *inventory.faults,
-                StaticMacroFault(relative_path=failed.relative_path, message=str(error)),
-            ),
-        )
+    exports: list[StaticMacroExport] = []
+    faults: list[StaticMacroFault] = []
+    for sql_file in macro_files:
+        if sql_file.relative_path.suffix != _SQL_SUFFIX:
+            continue
+        try:
+            exports.extend(
+                _sql_macro_export(sql_file=parsed_file, row=row)
+                for parsed_file, row in _sql_macro_rows((sql_file,))
+            )
+        except CompileInputError as error:
+            faults.append(StaticMacroFault(relative_path=sql_file.relative_path, message=str(error)))
     return replace(
         inventory,
-        exports=(
-            *inventory.exports,
-            *(_sql_macro_export(sql_file=sql_file, row=row) for sql_file, row in sql_rows),
-        ),
+        exports=(*inventory.exports, *exports),
+        faults=(*inventory.faults, *faults),
     )
 
 

@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.sql_macros._test_types import (
     SqlMacroErrorTestCase,
+    SqlMacroRecompileTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.sql_macros.helpers import (
     AUDIT_COLUMNS,
+    BASE_FILES,
     BRACKET,
     CENTS_TO_DOLLARS,
     CLEAN_ORDERS,
@@ -21,6 +24,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.sql_macros.helpers import 
     output,
     run_project,
 )
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
 _X_HEADER: str = 'MACRO (description "X", arguments ({args}){returns});\n\n'
 _CALL_X: dict[str, str] = orders_model("SELECT @sql.x(1) AS a\n")
@@ -593,6 +597,23 @@ _CALL_X: dict[str, str] = orders_model("SELECT @sql.x(1) AS a\n")
             ),
         ),
         SqlMacroErrorTestCase(
+            description="folder_local_macro_called_from_a_subfolder_model",
+            files={
+                "models/marts/_sqlbuild/_macros/sql/doubled_inner.sql": _X_HEADER.format(
+                    args="v BIGINT", returns=", returns BIGINT"
+                )
+                + "@v * 2\n",
+                "models/marts/daily/orders.sql": (
+                    'MODEL (description "Orders");\n\nSELECT @sql.doubled_inner(order_id) AS d '
+                    'FROM __ref("stg_orders")\n'
+                ),
+            },
+            expected_code="S006",
+            expected_fragments=(
+                "SQL macro doubled_inner() defined at models/marts/_sqlbuild/_macros/sql/doubled_inner.sql is not visible from",
+            ),
+        ),
+        SqlMacroErrorTestCase(
             description="sql_and_python_macro_sharing_a_name",
             files={
                 "macros/sql/same.sql": _X_HEADER.format(args="v BIGINT", returns=", returns BIGINT")
@@ -608,6 +629,22 @@ _CALL_X: dict[str, str] = orders_model("SELECT @sql.x(1) AS a\n")
             ),
         ),
         SqlMacroErrorTestCase(
+            description="call_after_interpolation_is_located_at_its_own_span",
+            files={
+                **CENTS_TO_DOLLARS,
+                "sqlbuild_project.toml": BASE_FILES["sqlbuild_project.toml"]
+                + '\n[vars]\nfactor = "10"\n',
+                **orders_model(
+                    "SELECT @@factor AS factor,\n"
+                    "  @sql.cents_to_dollars(COALESCE(fee_cents, 0)) AS a,\n"
+                    "  @sql.cents_to_dollars(COALESCE(fee_cents, 0), places := fee_cents) AS b\n"
+                    'FROM __ref("stg_orders")\n'
+                ),
+            },
+            expected_code="P017",
+            expected_fragments=("expects INT CONST", "models/marts/orders.sql:5:3"),
+        ),
+        SqlMacroErrorTestCase(
             description="relation_missing_a_declared_column",
             files={
                 **CLEAN_ORDERS,
@@ -615,9 +652,25 @@ _CALL_X: dict[str, str] = orders_model("SELECT @sql.x(1) AS a\n")
                     'WITH orders_raw AS (SELECT order_id, updated_at FROM __ref("stg_orders")),\n@sql.clean_orders(orders_raw)\nSELECT * FROM latest\n'
                 ),
             },
-            expected_code="B002",
+            expected_code="P017",
             expected_fragments=(
-                "Unknown column 'is_deleted' in orders_raw",
+                "argument src of macro clean_orders() needs column is_deleted BOOLEAN; orders_raw has no column is_deleted",
+                "models/marts/orders.sql:4:1",
+                "macros/sql/clean_orders.sql:3:",
+                "pass a relation with these columns: order_id BIGINT, updated_at TIMESTAMP, is_deleted BOOLEAN",
+            ),
+        ),
+        SqlMacroErrorTestCase(
+            description="relation_column_of_an_incompatible_type",
+            files={
+                **CLEAN_ORDERS,
+                **orders_model(
+                    'WITH orders_raw AS (SELECT order_id, updated_at, status AS is_deleted FROM __ref("stg_orders")),\n@sql.clean_orders(orders_raw)\nSELECT * FROM latest\n'
+                ),
+            },
+            expected_code="P017",
+            expected_fragments=(
+                "argument src of macro clean_orders() needs column is_deleted BOOLEAN; orders_raw.is_deleted is VARCHAR",
                 "models/marts/orders.sql:4:1",
             ),
         ),
@@ -629,8 +682,54 @@ _CALL_X: dict[str, str] = orders_model("SELECT @sql.x(1) AS a\n")
                     'WITH orders_raw AS (SELECT * FROM __ref("stg_orders")),\n@sql.latest_per_key(orders_raw, key := email_typo)\nSELECT * FROM latest_rows\n'
                 ),
             },
-            expected_code="B002",
-            expected_fragments=("Unknown column 'email_typo' in orders_raw",),
+            expected_code="P017",
+            expected_fragments=(
+                "argument key of macro latest_per_key() expects COLUMN OF src; orders_raw has no column email_typo",
+                "models/marts/orders.sql:4:1",
+                "macros/sql/latest_per_key.sql:",
+            ),
+        ),
+        SqlMacroErrorTestCase(
+            description="argument_of_the_wrong_type",
+            files={
+                **CENTS_TO_DOLLARS,
+                **orders_model(
+                    'SELECT o.order_id,\n  @sql.cents_to_dollars(o.status) AS d\nFROM __ref("stg_orders") AS o\n'
+                ),
+            },
+            expected_code="P017",
+            expected_fragments=(
+                "argument amount_cents of macro cents_to_dollars() expects BIGINT; o.status is VARCHAR",
+                "models/marts/orders.sql:4:3",
+                "macros/sql/cents_to_dollars.sql:3:",
+            ),
+        ),
+        SqlMacroErrorTestCase(
+            description="argument_of_the_wrong_type_inside_a_cte",
+            files={
+                **CENTS_TO_DOLLARS,
+                **orders_model(
+                    'WITH o AS (SELECT * FROM __ref("stg_orders")),\nfinal AS (SELECT @sql.cents_to_dollars(o.created_at) AS d FROM o)\nSELECT * FROM final\n'
+                ),
+            },
+            expected_code="P017",
+            expected_fragments=(
+                "argument amount_cents of macro cents_to_dollars() expects BIGINT; o.created_at is TIMESTAMP",
+            ),
+        ),
+        SqlMacroErrorTestCase(
+            description="alias_after_a_column_list_call",
+            files={
+                **AUDIT_COLUMNS,
+                **orders_model(
+                    'SELECT o.order_id, @sql.audit_columns(o) AS audit FROM __ref("stg_orders") AS o\n'
+                ),
+            },
+            expected_code="P021",
+            expected_fragments=(
+                "column-list macro audit_columns() cannot take an alias",
+                "models/marts/orders.sql:3:20",
+            ),
         ),
     ],
     ids=lambda case: case.description,
@@ -645,3 +744,43 @@ def test_given_an_invalid_sql_macro_project_when_compiling_then_the_error_names_
     assert f"error[{test_case.expected_code}]" in printed, printed
     for fragment in test_case.expected_fragments:
         assert fragment in printed, printed
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlMacroRecompileTestCase(
+            description="parameter_type_changed_without_changing_the_expansion",
+            files={
+                **CENTS_TO_DOLLARS,
+                **orders_model(
+                    'SELECT o.order_id, @sql.cents_to_dollars(o.amount_cents) AS d FROM __ref("stg_orders") AS o\n'
+                ),
+            },
+            edited_path="macros/sql/cents_to_dollars.sql",
+            replaced_text=("amount_cents BIGINT", "amount_cents BOOLEAN"),
+            expected_code="P017",
+            expected_fragment=(
+                "argument amount_cents of macro cents_to_dollars() expects BOOLEAN; "
+                "o.amount_cents is BIGINT"
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_compiled_project_when_a_macro_signature_changes_then_the_next_compile_checks_it(
+    test_case: SqlMacroRecompileTestCase, tmp_path: Path
+) -> None:
+    project_dir, first = run_project(tmp_path=tmp_path, files=test_case.files, command=("compile",))
+    assert first.returncode == 0, output(first)
+    macro: Path = project_dir / test_case.edited_path
+    macro.write_text(macro.read_text().replace(*test_case.replaced_text), encoding="utf-8")
+
+    second: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "compile"), project_dir=project_dir
+    )
+    printed: str = output(second)
+
+    assert second.returncode == 1, printed
+    assert f"error[{test_case.expected_code}]" in printed, printed
+    assert test_case.expected_fragment in printed, printed

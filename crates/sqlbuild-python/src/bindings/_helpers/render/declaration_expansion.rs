@@ -11,6 +11,7 @@ use sqlbuild_analysis::compiled_project::main::splice_declarations::splice_decla
 use sqlbuild_analysis::compiled_project::models::{
     DeclarationSplice, InaccessibleDeclaration, SplicedSql,
 };
+use sqlbuild_analysis::sql_macros::models::SqlMacroCheck;
 
 use crate::bindings::_helpers::render::declaration_values::ConstantRendering;
 use crate::bindings::_helpers::render::sql_macro_host::{
@@ -79,6 +80,8 @@ pub(crate) struct ExpandedDeclarations<'py> {
     pub(crate) usages: Vec<Bound<'py, PyAny>>,
     /// The SQL macros the SQL called, top-level and nested, once each.
     pub(crate) sql_macros: Vec<String>,
+    /// What the analysed SQL must show for each top-level call's arguments to fit.
+    pub(crate) sql_macro_checks: Vec<SqlMacroCheck>,
 }
 
 /// Splice each reference in order, raising the attachment's error for the first bad one.
@@ -94,12 +97,12 @@ pub(crate) fn expand_declarations<'py>(
         .filter(|reference| is_sql_macro_reference(reference.kind))
         .map(|reference| reference.start)
         .collect();
-    let (mut call_texts, sql_macros) = if call_starts.is_empty() {
-        (Vec::new().into_iter(), Vec::new())
+    let (mut call_texts, sql_macros, sql_macro_checks) = if call_starts.is_empty() {
+        (Vec::new().into_iter(), Vec::new(), Vec::new())
     } else {
         let (texts, facts) = expanded_sql_macro_calls(request, &call_starts)?;
         usages.extend(facts.usages);
-        (texts.into_iter(), facts.names)
+        (texts.into_iter(), facts.names, facts.checks)
     };
     for ScannedReference {
         kind,
@@ -145,6 +148,7 @@ pub(crate) fn expand_declarations<'py>(
         spliced: splice_declarations(request.sql, &splices),
         usages,
         sql_macros,
+        sql_macro_checks,
     })
 }
 

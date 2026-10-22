@@ -234,6 +234,7 @@ pub(crate) fn finished_record<'py>(
         schema,
         sql_validation_enabled: finished.analysis.0,
         macro_deps,
+        sql_macro_checks: finished.declarations.sql_macro_checks.clone(),
         expansion: ExpansionRecord {
             authored: *interpolated_sql == *authored_query_sql,
             authored_sql: authored,

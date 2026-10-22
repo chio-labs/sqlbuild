@@ -8,3 +8,4 @@ pub(crate) mod enrichment;
 pub(crate) mod mappings;
 pub(crate) mod query_columns;
 pub(crate) mod session;
+pub(crate) mod sql_macro_checks;

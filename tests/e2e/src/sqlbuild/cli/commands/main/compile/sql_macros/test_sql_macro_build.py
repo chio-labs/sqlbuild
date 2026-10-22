@@ -15,6 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.sql_macros._test_types imp
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.sql_macros.helpers import (
     ALL_MACROS,
+    AUDIT_COLUMNS,
     BRACKET,
     CENTS_TO_DOLLARS,
     CLEAN_ORDERS,
@@ -63,6 +64,49 @@ _SCOPED_DOUBLED: dict[str, str] = {
     "models/marts/_sqlbuild/_macros/sql/doubled.sql": (
         'MACRO (description "Doubled", arguments (v BIGINT), returns BIGINT);\n\n@v * 2\n'
     )
+}
+
+_RAW: str = 'WITH orders_raw AS (SELECT * FROM __ref("stg_orders"))'
+_CLEAN: str = "@sql.clean_orders(orders_raw)"
+_FIRST: str = "@sql.first_orders(latest, 2)"
+_FINAL: str = "final AS (SELECT order_id FROM firsts)"
+_CTE_LIST_SPELLINGS: tuple[tuple[str, str], ...] = (
+    ("no_commas", f"{_RAW}\n{_CLEAN}\n{_FIRST}\n{_FINAL}\nSELECT * FROM final\n"),
+    ("commas_after", f"{_RAW},\n{_CLEAN},\n{_FIRST},\n{_FINAL}\nSELECT * FROM final\n"),
+    ("commas_before", f"{_RAW}\n, {_CLEAN}\n, {_FIRST}\n, {_FINAL}\nSELECT * FROM final\n"),
+    ("commas_on_both_sides", f"{_RAW},\n{_CLEAN}, {_FIRST},\n{_FINAL}\nSELECT * FROM final\n"),
+    ("last_call_before_the_query_with_a_comma", f"{_RAW},\n{_CLEAN},\n{_FIRST},\nSELECT order_id FROM firsts\n"),
+    ("last_call_before_the_query_without_a_comma", f"{_RAW},\n{_CLEAN}\n{_FIRST}\nSELECT order_id FROM firsts\n"),
+)
+_PLUS_ONE_HOUR: dict[str, str] = {
+    "macros/sql/plus_one_hour.sql": (
+        'MACRO (description "One hour later", arguments (ts TIMESTAMP), returns TIMESTAMP);'
+        "\n\n@ts + INTERVAL 1 HOUR\n"
+    )
+}
+_BODY_SCOPED: dict[str, str] = {
+    "models/marts/_sqlbuild/_constants/fee_divisor.sql": "CONSTANT (name fee_divisor, value 100);\n",
+    "models/marts/_sqlbuild/macros/sql/fee_dollars.sql": (
+        'MACRO (description "Fee in dollars", arguments (cents BIGINT), returns DOUBLE);'
+        '\n\n@cents / @const("fee_divisor")\n'
+    ),
+    "models/marts/daily/orders.sql": (
+        'MODEL (description "Orders");\n\nSELECT DISTINCT order_id, @sql.fee_dollars(fee_cents) '
+        'AS fee FROM __ref("stg_orders") WHERE order_id = 2\n'
+    ),
+}
+_NESTED_LOCAL: dict[str, str] = {
+    "models/marts/_sqlbuild/macros/sql/doubled_fee.sql": (
+        'MACRO (description "Fee doubled", arguments (cents BIGINT), returns BIGINT);'
+        "\n\n@sql.doubled_inner(@cents)\n"
+    ),
+    "models/marts/_sqlbuild/_macros/sql/doubled_inner.sql": (
+        'MACRO (description "Doubled", arguments (v BIGINT), returns BIGINT);\n\n@v * 2\n'
+    ),
+    "models/marts/daily/orders.sql": (
+        'MODEL (description "Orders");\n\nSELECT DISTINCT order_id, @sql.doubled_fee(fee_cents) '
+        'AS fee FROM __ref("stg_orders") WHERE order_id = 2\n'
+    ),
 }
 
 
@@ -206,6 +250,79 @@ def test_given_a_model_calling_sql_macros_when_building_then_the_expanded_model_
 @pytest.mark.parametrize(
     "test_case",
     [
+        SqlMacroBuildTestCase(
+            description=f"cte_list_calls_{spelling}",
+            files={**CLEAN_ORDERS, **_FIRST_ORDERS, **orders_model(sql)},
+            query="SELECT order_id FROM orders ORDER BY order_id",
+            expected_rows=[(1,), (2,)],
+        )
+        for spelling, sql in _CTE_LIST_SPELLINGS
+    ]
+    + [
+        SqlMacroBuildTestCase(
+            description="column_list_call_without_a_comma_before_it",
+            files={
+                **AUDIT_COLUMNS,
+                **orders_model(
+                    'SELECT DISTINCT o.order_id @sql.audit_columns(o) FROM __ref("stg_orders") AS o '
+                    "WHERE o.order_id = 2\n"
+                ),
+            },
+            query="SELECT order_id, was_updated FROM orders",
+            expected_rows=[(2, False)],
+        ),
+        SqlMacroBuildTestCase(
+            description="column_list_call_without_a_comma_after_it",
+            files={
+                **AUDIT_COLUMNS,
+                **orders_model(
+                    'SELECT DISTINCT @sql.audit_columns(o) o.order_id FROM __ref("stg_orders") AS o '
+                    "WHERE o.order_id = 2\n"
+                ),
+            },
+            query="SELECT order_id, was_updated FROM orders",
+            expected_rows=[(2, False)],
+        ),
+        SqlMacroBuildTestCase(
+            description="expression_call_before_at_time_zone_is_parenthesised",
+            files={
+                **_PLUS_ONE_HOUR,
+                **orders_model(
+                    "SELECT DISTINCT order_id, CAST(@sql.plus_one_hour(created_at) AT TIME ZONE 'UTC' "
+                    'AS VARCHAR) AS later FROM __ref("stg_orders") WHERE order_id = 2\n'
+                ),
+            },
+            query="SELECT order_id, later LIKE '2026-01-01 01:00:00%' FROM orders",
+            expected_rows=[(2, True)],
+        ),
+        SqlMacroBuildTestCase(
+            description="macro_body_constant_resolves_in_the_macro_folder_for_a_subfolder_caller",
+            files=_BODY_SCOPED,
+            query="SELECT fee FROM orders",
+            expected_rows=[(0.5,)],
+        ),
+        SqlMacroBuildTestCase(
+            description="nested_local_macro_visible_to_the_outer_macro_only",
+            files=_NESTED_LOCAL,
+            query="SELECT fee FROM orders",
+            expected_rows=[(100,)],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_any_spelling_of_list_calls_when_building_then_the_model_holds_the_rows(
+    test_case: SqlMacroBuildTestCase, tmp_path: Path
+) -> None:
+    project_dir, result = run_project(tmp_path=tmp_path, files=test_case.files, command=("build",))
+
+    assert result.returncode == 0, output(result)
+    assert (
+        query_duckdb(db_path=project_dir / DATABASE, sql=test_case.query) == test_case.expected_rows
+    )
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         SqlMacroCommandTestCase(
             description="python_macros_in_their_folder_render_as_before",
             files={
@@ -249,6 +366,24 @@ def test_given_a_model_calling_sql_macros_when_building_then_the_expanded_model_
             expected_returncode=1,
             expected_fragments=("models/marts/orders.sql", "[SQBRMODEL102]"),
         ),
+        SqlMacroCommandTestCase(
+            description="scope_names_the_invalid_sql_macro_file_and_keeps_the_valid_ones",
+            files={
+                **CENTS_TO_DOLLARS,
+                "macros/sql/zz_invalid.sql": (
+                    'MACRO (description "Invalid", arguments (v BIGINT));\n\n@v + 1\n'
+                ),
+                **orders_model(
+                    'SELECT @sql.cents_to_dollars(amount_cents) AS d FROM __ref("stg_orders")\n'
+                ),
+            },
+            command=("scope", "macro:cents_to_dollars", "--no-cache"),
+            expected_returncode=1,
+            expected_fragments=(
+                "Resource: macro:cents_to_dollars",
+                "ERROR S021 macros/sql/zz_invalid.sql: expression macro zz_invalid() needs returns",
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -283,7 +418,22 @@ def test_given_a_project_with_macros_when_running_a_command_then_its_output_refl
             replaced_text=("/ 100", "/ 10"),
             query="SELECT fee FROM orders",
             expected_rows=[(5.0,)],
-        )
+        ),
+        SqlMacroEditTestCase(
+            description="sql_macro_called_only_from_a_hook",
+            files={
+                **CENTS_TO_DOLLARS,
+                "models/marts/orders.sql": (
+                    'MODEL (description "Orders", post_hooks [inline_sql("CREATE OR REPLACE TABLE '
+                    "hook_fee AS SELECT @sql.cents_to_dollars(50) AS fee\")]);\n\n"
+                    'SELECT DISTINCT order_id FROM __ref("stg_orders")\n'
+                ),
+            },
+            edited_path="macros/sql/cents_to_dollars.sql",
+            replaced_text=("/ 100", "/ 10"),
+            query="SELECT fee FROM hook_fee",
+            expected_rows=[(5.0,)],
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -325,7 +475,44 @@ def test_given_an_edited_sql_macro_when_rebuilding_then_its_callers_use_the_new_
                 "WITH a AS (\n  SELECT *\n  FROM @src\n),\n\nb AS (\n  SELECT order_id\n"
                 "  FROM a\n)\n"
             ),
-        )
+        ),
+        SqlMacroFormatTestCase(
+            description="expression_macro_body_and_one_line_header",
+            files={
+                "macros/sql/net.sql": (
+                    'MACRO (description "Net",   arguments (gross BIGINT,refund BIGINT), '
+                    "returns DOUBLE);\n\nround(cast((@gross - coalesce(@refund, 0)) as double) "
+                    "/ 100, 2)\n"
+                ),
+                **orders_model(
+                    'SELECT DISTINCT order_id, @sql.net(amount_cents, fee_cents) AS net FROM __ref("stg_orders")\n'
+                ),
+            },
+            formatted_path="macros/sql/net.sql",
+            expected_start=(
+                'MACRO (description "Net", arguments (gross BIGINT, refund BIGINT), '
+                "returns DOUBLE);\n\n"
+            ),
+            expected_ending=(
+                "ROUND(\n  CAST((\n    @gross - COALESCE(@refund, 0)\n  ) AS double)\n  / 100,\n  2\n)\n"
+            ),
+        ),
+        SqlMacroFormatTestCase(
+            description="column_list_macro_body_and_multi_line_header",
+            files={
+                "macros/sql/stamps.sql": (
+                    'MACRO (description "Stamps",\n   arguments (src RELATION (created_at TIMESTAMP, '
+                    "updated_at TIMESTAMP)));\n\nselect @src.created_at,@src.updated_at\n"
+                ),
+                **orders_model('SELECT o.order_id, @sql.stamps(o) FROM __ref("stg_orders") AS o\n'),
+            },
+            formatted_path="macros/sql/stamps.sql",
+            expected_start=(
+                'MACRO (\n  description "Stamps",\n  arguments (src RELATION (created_at TIMESTAMP, '
+                "updated_at TIMESTAMP)),\n);\n\n"
+            ),
+            expected_ending="SELECT\n  @src.created_at,\n  @src.updated_at\n",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -336,6 +523,7 @@ def test_given_sql_macro_files_when_formatting_then_bodies_and_calls_are_normali
 
     assert result.returncode == 0, output(result)
     formatted: str = (project_dir / test_case.formatted_path).read_text(encoding="utf-8")
+    assert formatted.startswith(test_case.expected_start), formatted
     assert formatted.endswith(test_case.expected_ending), formatted
     check: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "format", "--check"), project_dir=project_dir

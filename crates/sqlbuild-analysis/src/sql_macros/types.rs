@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use crate::sql_macros::errors::ExpansionFailure;
-use crate::sql_macros::models::SqlMacroDefinition;
+use crate::sql_macros::models::{SqlMacroCheck, SqlMacroDefinition};
 
 /// Whose scope a piece of SQL resolves its declarations and macros in.
 #[derive(Clone, Debug)]
@@ -54,6 +54,9 @@ pub trait SqlMacroHost {
     fn adapter(&self) -> &str {
         ""
     }
+
+    /// Keep what the caller's analysed SQL must show for a call the caller wrote to fit.
+    fn record_check(&self, _check: SqlMacroCheck, _call: (usize, usize)) {}
 }
 
 /// The macros on the current call path, and the macros already known to be cycle-free.

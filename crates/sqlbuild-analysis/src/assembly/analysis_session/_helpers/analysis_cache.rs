@@ -551,6 +551,7 @@ pub(crate) fn decode_outcome(
     let binding_validated: bool = decoder.flag()?;
     decoder.finish()?;
     let outcome = ModelOutcome {
+        sql_macro_findings: Vec::new(),
         analysis: ModelAnalysis {
             analysis_succeeded,
             columns,

@@ -108,6 +108,7 @@ pub(crate) fn model(name: &str, sql: &str, sources: &[&str], refs: &[&str]) -> M
         snapshot_columns: None,
         pivot_sql: sql.to_owned(),
         dynamic_families: Vec::new(),
+        sql_macro_checks: Vec::new(),
     }
 }
 

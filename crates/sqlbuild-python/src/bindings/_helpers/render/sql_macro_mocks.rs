@@ -7,6 +7,7 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 
 const SQL_LANGUAGE: &str = "sql";
 const SQL_CALL_PREFIX: &str = "@sql.";
+const LIST_SEPARATOR: char = ',';
 
 /// `macro_source_sql` with each call of a mocked SQL macro the model makes replaced by its mock.
 pub(crate) fn with_sql_macro_mocks(
@@ -60,7 +61,8 @@ pub(crate) fn with_sql_macro_mocks(
     replacements.sort_by_key(|(start, _, _)| std::cmp::Reverse(*start));
     for (start, end, value) in replacements {
         if start <= end && end <= text.len() {
-            let _ = text.splice(start..end, value.chars());
+            let mocked: String = with_separators(&text[start..end], value);
+            let _ = text.splice(start..end, mocked.chars());
         }
     }
     Ok(text.into_iter().collect())
@@ -72,4 +74,15 @@ fn called_sql_macro(text: &[char]) -> Option<String> {
     let rest: &str = text.strip_prefix(SQL_CALL_PREFIX)?;
     let name: &str = &rest[..rest.find('(')?];
     Some(name.trim().to_owned())
+}
+
+/// The mock value with the list separators the replaced expansion wrote around itself.
+fn with_separators(expanded: &[char], value: &str) -> String {
+    let leading: bool = expanded.starts_with(&[LIST_SEPARATOR, ' ']);
+    let trailing: bool = expanded.last() == Some(&LIST_SEPARATOR);
+    format!(
+        "{}{value}{}",
+        if leading { ", " } else { "" },
+        if trailing { "," } else { "" }
+    )
 }

@@ -51,9 +51,14 @@ const EXPRESSION_SAFE_BEFORE: [&str; 13] = [
     "RETURN", "AS",
 ];
 /// Words after a call that bind tighter than a select-list item boundary.
-const EXPRESSION_OPERATOR_WORDS: [&str; 12] = [
+const EXPRESSION_OPERATOR_WORDS: [&str; 16] = [
     "AND", "OR", "IS", "IN", "NOT", "LIKE", "ILIKE", "BETWEEN", "COLLATE", "SIMILAR", "GLOB",
-    "REGEXP",
+    "REGEXP", "AT", "OVER", "FILTER", "WITHIN",
+];
+/// Words before a call that leave it inside an expression rather than after a select-list item.
+const ITEM_CONTINUING_WORDS: [&str; 14] = [
+    "AS", "CASE", "WHEN", "THEN", "ELSE", "AND", "OR", "NOT", "IS", "IN", "LIKE", "BETWEEN",
+    "INTERVAL", "ON",
 ];
 
 /// A caller's tokens and where one call stands among them.
@@ -64,19 +69,99 @@ pub(crate) struct CallSite<'a> {
     pub(crate) previous: Option<usize>,
     /// Index of the first token after the call, if any.
     pub(crate) next: Option<usize>,
+    /// Index of the first token after the text the expansion replaces: the call and the comma
+    /// right after it in a `WITH` or select list, which the expansion writes itself.
+    pub(crate) after_replaced: Option<usize>,
 }
 
 impl<'a> CallSite<'a> {
-    /// The call spanning bytes `start..end` of `sql`.
-    pub(crate) fn new(sql: &'a str, tokens: &'a [Token], start: usize, end: usize) -> Self {
+    /// The call spanning bytes `start..end` of `sql`, replacing it up to `replaced_end`.
+    pub(crate) fn new(
+        sql: &'a str,
+        tokens: &'a [Token],
+        (start, end): (usize, usize),
+        replaced_end: usize,
+    ) -> Self {
         let previous: Option<usize> = tokens.iter().rposition(|token| token.end <= start);
         let next: Option<usize> = tokens.iter().position(|token| token.start >= end);
+        let after_replaced: Option<usize> =
+            tokens.iter().position(|token| token.start >= replaced_end);
         Self {
             sql,
             tokens,
             previous,
             next,
+            after_replaced,
         }
+    }
+
+    /// Whether the expansion replaces the comma right after the call.
+    fn absorbs_comma(&self) -> bool {
+        self.next != self.after_replaced
+    }
+
+    /// Where a list call's replaced text ends: after a comma right after it, else at its end.
+    pub(crate) fn list_replaced_end(&self, end: usize) -> usize {
+        let in_list: bool = matches!(
+            self.position(),
+            CallPosition::CteList | CallPosition::SelectList
+        );
+        match self.next_token() {
+            Some(comma) if in_list && comma.is(self.sql, COMMA) => comma.end,
+            _ => end,
+        }
+    }
+
+    /// Whether token `index` is the `)` closing a `@sql.name(...)` or `@py.name(...)` call.
+    fn closes_macro_call(&self, index: usize) -> bool {
+        let mut depth: usize = 0;
+        for open in (0..=index).rev() {
+            let token: &Token = &self.tokens[open];
+            if token.kind != TokenKind::Punct {
+                continue;
+            }
+            match token.text(self.sql) {
+                ")" | "]" | "}" => depth += 1,
+                "(" | "[" | "{" => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        return open >= 4
+                            && self.tokens[open - 1].kind == TokenKind::Word
+                            && self.tokens[open - 2].is(self.sql, ".")
+                            && self.tokens[open - 4].is(self.sql, AT_SIGN);
+                    }
+                }
+                _ => {}
+            }
+        }
+        false
+    }
+
+    /// Whether the token before the call ends a select-list item, such as `o.id` or `SUM(x)`.
+    fn follows_item(&self) -> bool {
+        let Some(token) = self.previous_token() else {
+            return false;
+        };
+        match token.kind {
+            TokenKind::Quoted | TokenKind::Number | TokenKind::Text => true,
+            TokenKind::Punct => token.is(self.sql, ")") || token.is(self.sql, "]"),
+            TokenKind::Word => {
+                let upper: String = token.text(self.sql).to_ascii_uppercase();
+                !ITEM_CONTINUING_WORDS.contains(&upper.as_str())
+                    && !CLAUSE_KEYWORDS.contains(&upper.as_str())
+                    && !matches!(upper.as_str(), "DISTINCT" | "ALL")
+            }
+            TokenKind::Operator => false,
+        }
+    }
+
+    /// Whether the column-list call is followed by an alias, `@sql.m(o) AS x`; an identifier
+    /// without `AS` is the next column.
+    pub(crate) fn has_alias(&self) -> bool {
+        !self.absorbs_comma()
+            && self
+                .next_token()
+                .is_some_and(|next| next.is_word(self.sql, "AS"))
     }
 
     fn previous_token(&self) -> Option<&Token> {
@@ -129,6 +214,11 @@ impl<'a> CallSite<'a> {
             {
                 CallPosition::SelectList
             }
+            (Some((_, clause)), Some(_))
+                if clause == SELECT_KEYWORD && self.follows_item() && self.ends_select_item() =>
+            {
+                CallPosition::SelectList
+            }
             _ => CallPosition::Expression,
         }
     }
@@ -148,12 +238,19 @@ impl<'a> CallSite<'a> {
     }
 
     /// The separators a CTE list needs around the inserted CTEs.
+    ///
+    /// A call replaces the comma right after it, so it writes the comma before the next CTE or
+    /// call itself; a call after a CTE with no comma between writes the comma before it.
     pub(crate) fn cte_separators(&self) -> (&'static str, &'static str) {
-        let before: &'static str = match self.previous_token() {
-            Some(token) if token.is(self.sql, ")") => ", ",
+        let before: &'static str = match self.previous {
+            Some(index)
+                if self.tokens[index].is(self.sql, ")") && !self.closes_macro_call(index) =>
+            {
+                ", "
+            }
             _ => "",
         };
-        let after: &'static str = match self.next {
+        let after: &'static str = match self.after_replaced {
             Some(index) if self.starts_cte(index) => ",",
             _ => "",
         };
@@ -182,7 +279,11 @@ impl<'a> CallSite<'a> {
 
     /// The separators a select list needs around the inserted columns.
     pub(crate) fn column_separators(&self) -> (&'static str, &'static str) {
-        let after: &'static str = match self.next_token() {
+        let before: &'static str = match self.previous {
+            Some(index) if self.follows_item() && !self.closes_macro_call(index) => ", ",
+            _ => "",
+        };
+        let after: &'static str = match self.after_replaced.map(|index| &self.tokens[index]) {
             None => "",
             Some(next) => {
                 let text: String = next.text(self.sql).to_ascii_uppercase();
@@ -195,7 +296,12 @@ impl<'a> CallSite<'a> {
                 }
             }
         };
-        ("", after)
+        (before, after)
+    }
+
+    /// The comma an expression expansion writes back for the one it replaces, if any.
+    pub(crate) fn expression_separator(&self) -> &'static str {
+        if self.absorbs_comma() { "," } else { "" }
     }
 
     /// Whether an expression expansion needs parentheses where the call stands.

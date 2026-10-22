@@ -1,5 +1,7 @@
 //! The session's phases: Python's uncached model analysis, wave by wave.
 
+use crate::assembly::analysis_session::_helpers::sql_macro_checks::checked_sql_macros;
+use crate::assembly::analysis_session::main::resolved_cleaned_sql::resolved_cleaned_sql;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -279,12 +281,47 @@ impl AnalysisSession {
                 }
             };
             self.outcomes[*model] = Some(ModelOutcome {
+                sql_macro_findings: Vec::new(),
                 analysis,
                 cleaned_sql: result.cleaned_sql,
                 deferred_cleaning: None,
                 validated_schema: schema,
                 fused_binding_validated: true,
             });
+        }
+        self.check_sql_macros(models)
+    }
+
+    /// Each model's SQL macro call arguments checked against its analysed column types.
+    ///
+    /// Findings are never cached, so cache hits are cleaned and checked like fresh analyses.
+    fn check_sql_macros(&mut self, models: &[usize]) -> Result<(), String> {
+        let checked: Vec<usize> = models
+            .iter()
+            .copied()
+            .filter(|model| {
+                let request: &ModelRequest = &self.request.models[*model];
+                !request.sql_macro_checks.is_empty() && request.placeholders.is_empty()
+            })
+            .collect();
+        self.ensure_cleaned(&checked)?;
+        for model in &checked {
+            let request: &ModelRequest = &self.request.models[*model];
+            let schema: Shapes = self.binding_schema(request);
+            let Some(outcome) = self.outcomes[*model].as_ref() else {
+                continue;
+            };
+            let Ok(cleaned) = resolved_cleaned_sql(outcome) else {
+                continue;
+            };
+            let findings = checked_sql_macros(
+                &self.request.dialect,
+                (&cleaned, &schema),
+                &request.sql_macro_checks,
+            );
+            if let Some(outcome) = self.outcomes[*model].as_mut() {
+                outcome.sql_macro_findings = findings;
+            }
         }
         Ok(())
     }
