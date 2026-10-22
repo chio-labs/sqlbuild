@@ -7027,7 +7027,7 @@
              "nargs": 0,
              "const": true,
              "default": false,
-             "help": "print the SQL that creates the Recall store or brings it up to this version",
+             "help": "print the SQL an administrator runs when the writer may not create or upgrade the Recall store",
              "mutex_group": 0,
              "group": 1
             },

@@ -25,9 +25,12 @@ use sqlbuild_recall::schema::constants::{
 };
 use sqlbuild_recall::schema::main::add_column_statement::add_column_statement;
 use sqlbuild_recall::schema::main::clickhouse_relation::clickhouse_relation;
+use sqlbuild_recall::schema::main::create_database_statement::create_database_statement;
+use sqlbuild_recall::schema::main::ddl_statements::ddl_statements;
 use sqlbuild_recall::schema::main::render_script::render_script;
 use sqlbuild_recall::schema::main::retention_fix_statements::retention_fix_statements;
 use sqlbuild_recall::schema::main::schema_age::schema_age;
+use sqlbuild_recall::schema::main::store_version_with_views::store_version_with_views;
 use sqlbuild_recall::schema::main::table_columns::table_columns;
 use sqlbuild_recall::schema::main::table_spec::table_spec;
 use sqlbuild_recall::schema::main::table_statements::table_statements;
@@ -38,6 +41,7 @@ use sqlbuild_recall::schema::main::view_statements::view_statements;
 use sqlbuild_recall::schema::models::{
     ColumnSpec, DdlOptions, Dialect, ObservedSchema, SchemaAge, StoreVersion, Table, VersionPlan,
 };
+use sqlbuild_recall::settings::constants::CLICKHOUSE_DATABASE_KEY;
 use sqlbuild_recall::store::constants::LAST_INVOCATION_SELECTOR;
 use sqlbuild_recall::store::errors::{StoreError, StoreErrorKind};
 use sqlbuild_recall::store::models::{
@@ -49,7 +53,8 @@ use crate::bindings::_helpers::recall::clickhouse_calls::{
     self as calls, ConnectionRole, QueryStatistics, StoreHandle,
 };
 use crate::bindings::_helpers::recall::constants::{
-    READ_ONLY_QUERIES, READONLY_SETTING, SECONDS_PER_DAY, UNKNOWN_TABLE_ERROR,
+    READ_ONLY_QUERIES, READONLY_SETTING, SECONDS_PER_DAY, SERVER_DEFAULT_DATABASE,
+    UNKNOWN_TABLE_ERROR,
 };
 
 /// Where a ClickHouse store lives and how long it keeps history.
@@ -96,6 +101,8 @@ pub(crate) struct ClickHouseStoreOpener {
 struct StoreState {
     tables: Vec<(String, String)>,
     views: HashSet<String>,
+    /// The views' `CREATE` queries, which show what an older version wrote when columns cannot.
+    view_definitions: Vec<String>,
     version: i64,
     /// Seconds since the newest version row was recorded.
     version_age_seconds: i64,
@@ -158,10 +165,12 @@ impl ClickHouseStore {
         let relations: QueryResult = self.query(py, &sql.relations, "inspect the Recall store")?;
         let mut tables: Vec<(String, String)> = Vec::new();
         let mut views: HashSet<String> = HashSet::new();
+        let mut view_definitions: Vec<String> = Vec::new();
         for row in &relations.rows {
             let name = text(row.first());
             if integer(row.get(1)) == 1 {
                 views.insert(name);
+                view_definitions.push(text(row.get(2)));
             } else {
                 tables.push((name, text(row.get(2))));
             }
@@ -182,13 +191,26 @@ impl ClickHouseStore {
         Ok(StoreState {
             tables,
             views,
+            view_definitions,
             version,
             version_age_seconds,
         })
     }
 
-    /// The recorded version, or without one how the tables, read by `read_columns`, and the views compare with this build's.
+    /// The recorded version, or without one how the tables, read by `read_columns`, and the views compare with this build's; either is lowered when a view definition shows an older version wrote it.
     fn store_version(
+        &self,
+        py: Python<'_>,
+        state: &StoreState,
+    ) -> Result<StoreVersion, StoreError> {
+        let definitions: Vec<&str> = state.view_definitions.iter().map(String::as_str).collect();
+        Ok(store_version_with_views(
+            self.columns_version(py, state)?,
+            &definitions,
+        ))
+    }
+
+    fn columns_version(
         &self,
         py: Python<'_>,
         state: &StoreState,
@@ -235,7 +257,7 @@ impl ClickHouseStore {
         )))
     }
 
-    fn require_database(&self, py: Python<'_>) -> Result<(), StoreError> {
+    fn database_exists(&self, py: Python<'_>) -> Result<bool, StoreError> {
         let found = self.query(
             py,
             &format!(
@@ -244,17 +266,35 @@ impl ClickHouseStore {
             ),
             "inspect the Recall store",
         )?;
-        if integer(found.rows.first().and_then(|row| row.first())) == 0 {
-            return Err(StoreError {
-                kind: StoreErrorKind::NotFound,
-                message: format!(
-                    "ClickHouse database `{}` does not exist; Recall creates its tables only in an \
-                     existing database",
-                    self.location.database()
-                ),
-            });
+        Ok(integer(found.rows.first().and_then(|row| row.first())) > 0)
+    }
+
+    /// Create the configured database when it is missing, saying so; an existing one, whatever its engine, is left alone. A user who may not create it gets the statement to hand to an administrator.
+    fn ensure_database(&mut self, py: Python<'_>) -> Result<(), StoreError> {
+        if self.database_exists(py)? {
+            return Ok(());
         }
-        Ok(())
+        let Some(statement) = create_database_statement(&self.location.options) else {
+            return Ok(());
+        };
+        match self.command(py, &statement, "create the Recall database") {
+            Ok(()) => {
+                self.notices.push(format!(
+                    "created ClickHouse database `{}` for the store",
+                    self.location.database()
+                ));
+                Ok(())
+            }
+            Err(error) if error.kind == StoreErrorKind::Permission => Err(StoreError {
+                kind: StoreErrorKind::Permission,
+                message: format!(
+                    "{} ({})",
+                    missing_database_reason(self.location.database()),
+                    error.message
+                ),
+            }),
+            Err(error) => Err(error),
+        }
     }
 
     fn read_columns(&mut self, py: Python<'_>) -> Result<(), StoreError> {
@@ -372,7 +412,7 @@ impl ClickHouseStore {
         envelope: &RowEnvelope,
         views: &HashSet<String>,
     ) -> Result<(), StoreError> {
-        self.require_database(py)?;
+        self.ensure_database(py)?;
         for statement in table_statements(Dialect::ClickHouse, &self.location.options) {
             self.command(py, &statement, "create the Recall tables")?;
         }
@@ -591,11 +631,7 @@ impl RecallStoreOpener for ClickHouseStoreOpener {
         Python::attach(|py| {
             let mut store = ClickHouseStore {
                 location: self.location.clone(),
-                connection: Some(calls::connect(
-                    py,
-                    (&self.location.config, ConnectionRole::Writer),
-                    &self.location.connect_action(),
-                )?),
+                connection: Some(connect_store(py, &self.location, ConnectionRole::Writer)?),
                 columns: HashMap::new(),
                 notices: Vec::new(),
             };
@@ -683,15 +719,25 @@ impl ClickHouseReader {
     ) -> Result<Vec<String>, StoreError> {
         let mut store = ClickHouseStore {
             location: location.clone(),
-            connection: Some(calls::connect(
-                py,
-                (&location.config, ConnectionRole::Reader),
-                &location.connect_action(),
-            )?),
+            connection: Some(connect_store(py, location, ConnectionRole::Reader)?),
             columns: HashMap::new(),
             notices: Vec::new(),
         };
-        let observed = store.require_database(py).and_then(|()| {
+        match store.database_exists(py) {
+            Ok(true) => {}
+            Ok(false) => {
+                store.close();
+                return Ok(create_database_statement(&location.options)
+                    .into_iter()
+                    .chain(ddl_statements(Dialect::ClickHouse, &location.options))
+                    .collect());
+            }
+            Err(error) => {
+                store.close();
+                return Err(error);
+            }
+        }
+        let observed = {
             let state: StoreState = store.state(py)?;
             store.read_columns(py)?;
             let version: i64 = if state.tables.len() < ALL_TABLES.len() {
@@ -700,7 +746,7 @@ impl ClickHouseReader {
                 observed_version(store.store_version(py, &state)?)
             };
             Ok(store.observed(&state.views, version))
-        });
+        };
         store.close();
         Ok(upgrade_statements(
             Dialect::ClickHouse,
@@ -922,6 +968,39 @@ impl ClickHouseReader {
 
     pub(crate) fn close(mut self) {
         self.store.close();
+    }
+}
+
+/// Why a store cannot be created when its database is missing and the writer may not create it.
+pub(crate) fn missing_database_reason(database: &str) -> String {
+    format!("ClickHouse database `{database}` does not exist, and this user may not create it")
+}
+
+/// Connect for `role`. When the configured database does not exist yet, connect without it, so that it can be created or reported; every statement names the database itself.
+fn connect_store(
+    py: Python<'_>,
+    location: &ClickHouseLocation,
+    role: ConnectionRole,
+) -> Result<StoreHandle, StoreError> {
+    match calls::connect(py, (&location.config, role), &location.connect_action()) {
+        Err(error) if error.kind == StoreErrorKind::NotFound => {
+            let config: Vec<(String, ConfigValue)> = location
+                .config
+                .iter()
+                .map(|(key, value)| {
+                    if key == CLICKHOUSE_DATABASE_KEY {
+                        (
+                            key.clone(),
+                            ConfigValue::String(SERVER_DEFAULT_DATABASE.to_owned()),
+                        )
+                    } else {
+                        (key.clone(), value.clone())
+                    }
+                })
+                .collect();
+            calls::connect(py, (&config, role), &location.connect_action())
+        }
+        connected => connected,
     }
 }
 

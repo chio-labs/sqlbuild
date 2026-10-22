@@ -299,3 +299,36 @@ class ClickHouseRecallReaderSettingsTestCase:
     description: str
     user_settings: str
     expected_rows: list[list[object]]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallDatabaseCreationTestCase:
+    description: str
+    writer_privileges: str | None
+    expected_notice: str
+    expected_invocations: list[list[object]]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallExistingDatabaseTestCase:
+    description: str
+    expected_database_creations: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallMissingDatabaseTestCase:
+    description: str
+    writer_privileges: str
+    expected_fragments: tuple[str, ...]
+    expected_databases: tuple[tuple[object, ...], ...]
+    expected_invocations: list[list[object]]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallStaleViewsTestCase:
+    description: str
+    version_row: str
+    limited_writer: bool
+    expected_notices: int
+    expected_stale_views: tuple[tuple[object, ...], ...]
+    expected_version: tuple[tuple[object, ...], ...]

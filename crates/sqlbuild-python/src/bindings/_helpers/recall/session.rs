@@ -12,7 +12,9 @@ use sqlbuild_host::entries::models::ExecutorHost;
 use sqlbuild_recall::records::main::format_timestamp::format_timestamp;
 use sqlbuild_recall::records::main::sha256_hex::sha256_hex;
 use sqlbuild_recall::records::models::{InvocationContext, OutputStream, RowEnvelope};
-use sqlbuild_recall::schema::main::ddl_script::ddl_script;
+use sqlbuild_recall::schema::main::create_database_statement::create_database_statement;
+use sqlbuild_recall::schema::main::ddl_statements::ddl_statements;
+use sqlbuild_recall::schema::main::render_script::render_script;
 use sqlbuild_recall::schema::models::{DdlOptions, Dialect};
 use sqlbuild_recall::settings::main::resolve_recall_settings::resolve_recall_settings;
 use sqlbuild_recall::settings::models::{
@@ -31,7 +33,7 @@ use sqlbuild_recall::writer::models::{
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::output_capture::records::invocation_context;
 use crate::bindings::_helpers::recall::clickhouse_store::{
-    ClickHouseLocation, ClickHouseStoreOpener,
+    ClickHouseLocation, ClickHouseStoreOpener, missing_database_reason,
 };
 use crate::bindings::_helpers::recall::console::write_stderr;
 use crate::bindings::_helpers::recall::constants::{
@@ -289,13 +291,21 @@ fn permission_notice(
     if !notice_due(project_dir, &place) {
         return None;
     }
-    let script = ddl_script(
-        dialect,
-        &DdlOptions {
-            database,
-            retention_days: settings.retention_days,
-            cluster: None,
-        },
+    let options = DdlOptions {
+        database,
+        retention_days: settings.retention_days,
+        cluster: None,
+    };
+    let database_missing: bool = options
+        .database
+        .as_deref()
+        .is_some_and(|database| reason.starts_with(&missing_database_reason(database)));
+    let script = render_script(
+        &create_database_statement(&options)
+            .filter(|_| database_missing)
+            .into_iter()
+            .chain(ddl_statements(dialect, &options))
+            .collect::<Vec<String>>(),
     );
     Some(format!(
         "Recall history is not being written{}: {reason}. An administrator can create the \

@@ -15,6 +15,8 @@ pub(crate) const HOST_TOKEN_LENGTH: usize = 16;
 pub(crate) const MINIMUM_HEARTBEAT_SECONDS: f64 = 0.01;
 /// What a Recall closing notice says is the only thing affected.
 pub(crate) const RECALL_HISTORY: &str = "Recall history";
+/// The database the ClickHouse client takes as none, so the server uses the user's default: a store whose database is missing connects with it to create or report the database.
+pub(crate) const SERVER_DEFAULT_DATABASE: &str = "__default__";
 /// The compute-log stream index of stdout; every other output index is stderr.
 pub(crate) const STDOUT_STREAM_INDEX: usize = 0;
 pub(crate) const RECALL_DISABLED_CODE: &str = "C970";
