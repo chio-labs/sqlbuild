@@ -32,7 +32,7 @@ from tests.integration.src.sqlbuild.cli.recall.helpers import recall_rows, run
     [
         ClickHouseRecallViewEquivalenceTestCase(
             description="rewritten views match the previous ones",
-            replaced_views=("invocations",),
+            replaced_views=("invocations", "statements"),
             all_views=(),
             expected_statuses=[
                 ["abandoned"],
@@ -99,6 +99,12 @@ def test_given_representative_invocations_when_views_are_rewritten_then_rows_and
             expected_tables=("recall_events", "recall_heartbeats", "recall_invocations"),
             expected_primary_key_reads=3,
         ),
+        ClickHouseRecallTableReadsTestCase(
+            description="statements reads the events once and the stored SQL once",
+            view="statements",
+            expected_tables=("recall_artifacts", "recall_events"),
+            expected_primary_key_reads=1,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -128,10 +134,11 @@ def test_given_one_invocation_lookup_when_planned_then_each_table_is_read_once_b
     [
         ClickHouseRecallPreviousVersionTestCase(
             description="a store of the previous version is upgraded by whoever may",
-            replaced_views=("invocations",),
+            replaced_views=("invocations", "statements"),
             expected_notice="is behind this SQLBuild version, and this user may not upgrade it",
             expected_ddl_fragments=(
                 "CREATE OR REPLACE VIEW `{database}`.`invocations`",
+                "CREATE OR REPLACE VIEW `{database}`.`statements`",
                 "SELECT 'schema', 'schema_version', '3'",
             ),
             expected_version=((3,),),

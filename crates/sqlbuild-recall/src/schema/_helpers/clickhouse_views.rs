@@ -41,6 +41,27 @@ const INVOCATION_SOURCE_COLUMNS: [(&str, &str, &str); 28] = [
     ("event_is_terminal", "UInt8", "0"),
 ];
 
+/// The statement columns each statement event carries into the second fold, in tuple order.
+const STATEMENT_FACT_COLUMNS: [&str; 17] = [
+    "statement_id",
+    "event_type",
+    "occurred_at",
+    "invocation_sequence",
+    "run_id",
+    "resource_attempt_id",
+    "operation_id",
+    "intent",
+    "statement_kind",
+    "purpose",
+    "sql_digest",
+    "query_id",
+    "error_type",
+    "error_code",
+    "duration_ms",
+    "row_count",
+    "affected_rows",
+];
+
 /// `table`'s rows within its TTL, one copy per key: `FINAL` for replacing tables, so filters on the sorting key reach the read, else the first ingested copy. SQL text outlives retention like its TTL, so every reference still within retention finds it.
 fn deduplicated(table: Table, options: &DdlOptions) -> String {
     let spec = table_spec(table);
@@ -255,21 +276,42 @@ FROM folded",
     )
 }
 
-/// One fold per statement, grouped by its invocation as well, so a filter on `invocation_id` or `invocation_started_at` reaches the table reads.
+/// Two folds over one read of the events: by resource, which names the resource and gathers its statement events, then by statement. Both group by `invocation_id` and `invocation_started_at`, so a filter on either reaches the read; `sql_available` looks digests up in the stored SQL, which is shared across invocations.
 fn statements(options: &DdlOptions) -> String {
-    let events = deduplicated(Table::Events, options);
+    let events = retained(Table::Events, options, "");
     let artifacts = clickhouse_table(table_spec(Table::Artifacts).name, options);
     let order = "tuple(invocation_sequence, occurred_at)";
     let terminal = "event_type IN ('statement_completed', 'statement_failed')";
+    let statement_event = "statement_id IS NOT NULL AND startsWith(event_type, 'statement_')";
+    let facts: String = STATEMENT_FACT_COLUMNS.join(", ");
+    let unpacked: String = STATEMENT_FACT_COLUMNS
+        .iter()
+        .enumerate()
+        .map(|(index, column)| format!("fact.{} AS {column}", index + 1))
+        .collect::<Vec<_>>()
+        .join(", ");
     format!(
         "WITH
-facts AS (
-    SELECT * FROM {events} WHERE statement_id IS NOT NULL AND startsWith(event_type, 'statement_')
+by_resource AS (
+    SELECT invocation_id, invocation_started_at, resource_id,
+        min(resource_name) AS group_resource_name,
+        minIf(resource_kind, resource_name IS NOT NULL) AS group_resource_kind,
+        groupArrayIf(tuple({facts}), {statement_event}) AS facts
+    FROM {events}
+    WHERE ({statement_event}) OR (resource_id IS NOT NULL AND resource_name IS NOT NULL)
+    GROUP BY invocation_id, invocation_started_at, resource_id
+),
+statement_events AS (
+    SELECT invocation_id, invocation_started_at, resource_id, group_resource_name, group_resource_kind,
+        {unpacked}
+    FROM by_resource ARRAY JOIN facts AS fact
 ),
 folded AS (
     SELECT invocation_id, invocation_started_at, statement_id,
         argMin(run_id, {order}) AS first_run_id,
         argMin(resource_id, {order}) AS first_resource_id,
+        argMinIf(tuple(group_resource_name, group_resource_kind), {order}, resource_id IS NOT NULL)
+            AS first_resource,
         argMin(resource_attempt_id, {order}) AS first_resource_attempt_id,
         argMin(operation_id, {order}) AS first_operation_id,
         argMin(intent, {order}) AS first_intent,
@@ -279,7 +321,7 @@ folded AS (
         minIf(occurred_at, event_type = 'statement_started') AS started_at,
         minIf(occurred_at, event_type = 'statement_submitted') AS submitted_at,
         max(query_id) AS any_query_id,
-        countIf({terminal}) AS terminal_count,
+        countIf({terminal}) > 0 AS has_terminal,
         argMaxIf(event_type, {order}, {terminal}) AS last_event_type,
         argMaxIf(occurred_at, {order}, {terminal}) AS last_ended_at,
         argMaxIf(query_id, {order}, {terminal}) AS last_query_id,
@@ -288,51 +330,38 @@ folded AS (
         argMaxIf(duration_ms, {order}, {terminal}) AS last_duration_ms,
         argMaxIf(row_count, {order}, {terminal}) AS last_row_count,
         argMaxIf(affected_rows, {order}, {terminal}) AS last_affected_rows
-    FROM facts GROUP BY invocation_id, invocation_started_at, statement_id
-),
-resources AS (
-    SELECT invocation_id, invocation_started_at, resource_id,
-        min(resource_name) AS first_resource_name, min(resource_kind) AS first_resource_kind
-    FROM {events}
-    WHERE resource_id IS NOT NULL AND resource_name IS NOT NULL
-    GROUP BY invocation_id, invocation_started_at, resource_id
+    FROM statement_events GROUP BY invocation_id, invocation_started_at, statement_id
 )
 SELECT
-    folded.invocation_id AS invocation_id,
-    folded.invocation_started_at AS invocation_started_at,
-    folded.statement_id AS statement_id,
-    folded.first_run_id AS run_id,
-    folded.first_resource_id AS resource_id,
-    resources.first_resource_name AS resource_name,
-    resources.first_resource_kind AS resource_kind,
-    folded.first_resource_attempt_id AS resource_attempt_id,
-    folded.first_operation_id AS operation_id,
-    folded.first_intent AS intent,
-    folded.first_statement_kind AS statement_kind,
-    folded.first_purpose AS purpose,
-    if(folded.terminal_count > 0, coalesce(folded.last_query_id, folded.any_query_id),
-        folded.any_query_id) AS query_id,
-    folded.started_at AS started_at,
-    folded.submitted_at AS submitted_at,
-    if(folded.terminal_count > 0, folded.last_ended_at, NULL) AS ended_at,
+    invocation_id,
+    invocation_started_at,
+    statement_id,
+    first_run_id AS run_id,
+    first_resource_id AS resource_id,
+    tupleElement(first_resource, 1) AS resource_name,
+    tupleElement(first_resource, 2) AS resource_kind,
+    first_resource_attempt_id AS resource_attempt_id,
+    first_operation_id AS operation_id,
+    first_intent AS intent,
+    first_statement_kind AS statement_kind,
+    first_purpose AS purpose,
+    if(has_terminal, coalesce(last_query_id, any_query_id), any_query_id) AS query_id,
+    started_at,
+    submitted_at,
+    if(has_terminal, last_ended_at, NULL) AS ended_at,
     multiIf(
-        folded.terminal_count = 0, 'no_terminal',
-        folded.last_event_type = 'statement_completed', 'completed',
+        NOT has_terminal, 'no_terminal',
+        last_event_type = 'statement_completed', 'completed',
         'failed'
     ) AS outcome,
-    if(folded.terminal_count > 0, folded.last_error_type, NULL) AS error_type,
-    if(folded.terminal_count > 0, folded.last_error_code, NULL) AS error_code,
-    if(folded.terminal_count > 0, folded.last_duration_ms, NULL) AS duration_ms,
-    if(folded.terminal_count > 0, folded.last_row_count, NULL) AS row_count,
-    if(folded.terminal_count > 0, folded.last_affected_rows, NULL) AS affected_rows,
-    folded.first_sql_digest AS sql_digest,
-    concat('sha256:', folded.first_sql_digest) IN (SELECT digest FROM {artifacts}) AS sql_available
-FROM folded
-LEFT JOIN resources
-    ON resources.invocation_id = folded.invocation_id
-    AND resources.invocation_started_at = folded.invocation_started_at
-    AND resources.resource_id = folded.first_resource_id
-SETTINGS join_use_nulls = 1"
+    if(has_terminal, last_error_type, NULL) AS error_type,
+    if(has_terminal, last_error_code, NULL) AS error_code,
+    if(has_terminal, last_duration_ms, NULL) AS duration_ms,
+    if(has_terminal, last_row_count, NULL) AS row_count,
+    if(has_terminal, last_affected_rows, NULL) AS affected_rows,
+    first_sql_digest AS sql_digest,
+    concat('sha256:', first_sql_digest) IN (SELECT digest FROM {artifacts}) AS sql_available
+FROM folded"
     )
 }
 
