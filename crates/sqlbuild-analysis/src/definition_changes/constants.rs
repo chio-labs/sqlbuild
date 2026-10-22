@@ -61,7 +61,11 @@ pub(crate) const KIND_LABELS: [(&str, &str, &str); 23] = [
         "connection and target configuration",
         "connection and target configurations",
     ),
-    (DEPENDENCIES_KIND, "Python environment", "Python environments"),
+    (
+        DEPENDENCIES_KIND,
+        "Python environment",
+        "Python environments",
+    ),
     (MODEL_KIND, "model", "models"),
     (SOURCE_KIND, "source", "sources"),
     (SEED_KIND, "seed", "seeds"),

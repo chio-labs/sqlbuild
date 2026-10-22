@@ -1,8 +1,7 @@
 use std::path::PathBuf;
 
-use crate::git_revisions::main::dependency_files::{
-    base_dependency_files, current_dependency_files,
-};
+use crate::git_revisions::main::base_dependency_files::base_dependency_files;
+use crate::git_revisions::main::current_dependency_files::current_dependency_files;
 use crate::git_revisions::main::export_git_tree::export_git_tree;
 use crate::git_revisions::main::resolve_git_base::resolve_git_base;
 use crate::git_revisions::main::resolve_since_reference::resolve_since_reference;

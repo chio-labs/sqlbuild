@@ -7,9 +7,8 @@ use sqlbuild_analysis::definition_changes::constants::{
 use sqlbuild_analysis::definition_changes::main::definition_digest::definition_digest;
 use sqlbuild_analysis::definition_changes::main::node_key::node_key;
 use sqlbuild_analysis::definition_changes::models::{DefinitionSnapshot, NodeDefinition};
-use sqlbuild_core::git_revisions::main::dependency_files::{
-    base_dependency_files, current_dependency_files,
-};
+use sqlbuild_core::git_revisions::main::base_dependency_files::base_dependency_files;
+use sqlbuild_core::git_revisions::main::current_dependency_files::current_dependency_files;
 use sqlbuild_core::git_revisions::models::GitBase;
 
 use crate::bindings::_helpers::change_selection::base_snapshot::git_error;
