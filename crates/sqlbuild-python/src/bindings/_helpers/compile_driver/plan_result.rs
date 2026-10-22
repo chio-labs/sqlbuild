@@ -4,7 +4,6 @@ use sqlbuild_host::entries::models::UserCodeHost;
 
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::deferral::build_deferred_locations;
-use crate::bindings::_helpers::compile_driver::deferral::defer_to_migration_origins;
 use crate::bindings::_helpers::compile_driver::deferral::gather_deferred_relations;
 use crate::bindings::_helpers::compile_driver::deferral::resolve_deferred_target_config;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::build_project_graph_from_compiled_project;
@@ -255,11 +254,6 @@ fn deferral<'py>(
                 ],
             )?),
         )?,
-    )?;
-    defer_to_migration_origins(
-        (project, adapter, inputs.connection),
-        locations.downcast::<PyDict>()?,
-        relations.downcast::<PyDict>()?,
     )?;
     Ok((locations, relations))
 }

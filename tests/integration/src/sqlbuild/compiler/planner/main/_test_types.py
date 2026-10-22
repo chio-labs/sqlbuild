@@ -165,3 +165,11 @@ class SourceTableProbeBudgetTestCase:
     source_table: str
     expected_source_listings: int
     expected_probes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class UnlistedMigrationOriginTestCase:
+    description: str
+    select: tuple[str, ...]
+    expected_warnings: tuple[str, ...]
+    expected_unlisted_reads: int
