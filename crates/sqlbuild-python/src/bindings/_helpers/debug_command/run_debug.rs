@@ -12,6 +12,7 @@ use sqlbuild_core::cli_text::models::CliStyle;
 use sqlbuild_core::debug_report::main::debug_config_files::debug_config_files;
 use sqlbuild_core::debug_report::main::debug_configuration_lines::debug_configuration_lines;
 use sqlbuild_core::debug_report::main::debug_connection_lines::debug_connection_lines;
+use sqlbuild_core::debug_report::main::debug_failure::debug_failure;
 use sqlbuild_core::debug_report::main::debug_provider_lines::debug_provider_lines;
 use sqlbuild_core::debug_report::main::debug_runtime_lines::debug_runtime_lines;
 use sqlbuild_core::debug_report::main::format_debug_json::format_debug_json;
@@ -25,6 +26,7 @@ use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::boundary::python_calls::{
     KeywordArguments, call_with, imported, within,
 };
+use crate::bindings::_helpers::cli::failure_cause::{FailureCause, report_failure_cause};
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::command_runtime::connection::project_connection_config;
 use crate::bindings::_helpers::command_runtime::runtime_errors::{
@@ -396,6 +398,13 @@ pub(crate) fn run_debug_command(
     let stdout: Bound<'_, PyAny> = py.import("sys")?.getattr("stdout")?;
     stdout.call_method1("write", (text,))?;
     stdout.call_method0("flush")?;
+    if let Some(failure) = debug_failure(&report) {
+        report_failure_cause(FailureCause {
+            error_type: failure.error_type,
+            error_code: failure.error_code,
+            message: failure.message,
+        });
+    }
     Ok(if report.success() { 0 } else { 1 })
 }
 

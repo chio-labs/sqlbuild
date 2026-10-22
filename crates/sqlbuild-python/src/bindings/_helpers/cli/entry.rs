@@ -7,7 +7,10 @@ use pyo3::exceptions::PySystemExit;
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyBool, PyCFunction, PyDict, PyDictMethods, PyInt, PyList, PyString, PyTuple};
+use pyo3::types::{
+    PyBool, PyCFunction, PyDict, PyDictMethods, PyInt, PyList, PyString, PyStringMethods, PyTuple,
+    PyTypeMethods,
+};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_cli::dispatch::main::failure_report::failure_report;
 use sqlbuild_cli::dispatch::main::invocation_policy::invocation_policy;
@@ -19,6 +22,7 @@ use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, key
 use crate::bindings::_helpers::build_progress::transient_lines::shared_transient_line_coordinator;
 use crate::bindings::_helpers::cli::argv::parse_cli_invocation;
 use crate::bindings::_helpers::cli::dispatch::{command_facts, dispatch_command};
+use crate::bindings::_helpers::cli::failure_cause::take_failure_cause;
 use crate::bindings::_helpers::cli::launch_state::offer_launch_record;
 use crate::bindings::_helpers::cli::observability::{
     CliObservabilityScope, cli_observability_scope,
@@ -28,13 +32,14 @@ use crate::bindings::_helpers::diff_report::output::render_diff_error_json;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::output_capture::records::invocation_context;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::recall::constants::{JSON_FORMAT, RECALL_SETTINGS_CODE};
 use crate::bindings::_helpers::recall::events::escaped_text;
 use crate::bindings::_helpers::recall::session::{
     InvocationRecall, finish_invocation_recall, start_invocation_recall,
 };
 use crate::bindings::_helpers::recall::sinks::RecallLifecycleSink;
-use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::record_class;
+use crate::bindings::_helpers::records::construct::{error_class, new_error};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::workspace_commands::commands::maintain_sqlbuild_skills;
@@ -48,6 +53,9 @@ const UNKNOWN_COMMAND: &str = "unknown";
 const DIFF_PUBLICATION_CODE: &str = "C257";
 const DIFF_EXECUTION_STATUS: &str = "execution_failed";
 const DIFF_OUTCOME_PREFIX: &str = "Query diff outcome  ";
+const ERROR_MESSAGE_CHARACTERS: usize = 500;
+/// The error type recorded when a raised error cannot be read.
+const FALLBACK_ERROR_TYPE: &str = "Exception";
 /// Expected staying-Python command failures, loaded only once a command raised.
 const EXPECTED_COMMAND_FAILURES: [ExecutorHost; 4] = [
     ExecutorHost::AuditExecutionError,
@@ -199,6 +207,45 @@ fn write_compile_machine_error(
     print_object(&document, None, None)
 }
 
+/// With `sqb recall … --json` or `sqb plan --json`, the failure as `{"error": {"code", "message", "help"}}` on stdout, so callers parsing the output read the error instead of failing to parse it.
+fn write_machine_error(
+    invocation: &Invocation<'_>,
+    error: &Bound<'_, PyAny>,
+    fallback_code: &str,
+) -> PyResult<()> {
+    let json_output: bool = if invocation.command_is("recall") {
+        let format: Option<String> = invocation
+            .args
+            .getattr_opt("recall_format")?
+            .map(|format| format.extract())
+            .transpose()?;
+        format.as_deref() == Some(JSON_FORMAT)
+    } else {
+        invocation.command_is("plan") && invocation.flag("json")?
+    };
+    if !json_output {
+        return Ok(());
+    }
+    let (code, message, help) = error_parts(error, fallback_code)?;
+    let help: Option<String> = if help.is_none() {
+        None
+    } else {
+        Some(help.str()?.to_string())
+    };
+    let document = serde_json::json!({
+        "error": {
+            "code": code.str()?.to_string(),
+            "message": message.str()?.to_string(),
+            "help": help,
+        }
+    });
+    print_object(
+        &PyString::new(invocation.py(), &document.to_string()).into_any(),
+        None,
+        None,
+    )
+}
+
 fn render_diff_error<'py>(
     py: Python<'py>,
     fields: &[(&str, Bound<'py, PyAny>)],
@@ -345,6 +392,7 @@ fn report_failure<'py>(
         error
     };
     write_compile_machine_error(invocation, &effective, fallback_code)?;
+    write_machine_error(invocation, &effective, fallback_code)?;
     if effective.is_instance(&error_class(py, ErrorId::QueryDiffOutcome)?)? {
         let line: Bound<'py, PyAny> = PyString::new(py, DIFF_OUTCOME_PREFIX)
             .into_any()
@@ -446,6 +494,34 @@ fn add_invocation_context(
     Ok(())
 }
 
+/// The first line of `message`, at most [`ERROR_MESSAGE_CHARACTERS`] characters.
+fn short_message(message: &str) -> String {
+    let line: &str = message.lines().next().unwrap_or_default().trim();
+    line.chars().take(ERROR_MESSAGE_CHARACTERS).collect()
+}
+
+/// A raised error's type name, code (empty for `SystemExit` or none) and short message; a part that cannot be read is left empty, so the original error and its terminal event survive.
+fn raised_cause(py: Python<'_>, error: &PyErr) -> (String, String, String) {
+    let error_type: String = error.get_type(py).name().map_or_else(
+        |_unreadable| FALLBACK_ERROR_TYPE.to_owned(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    let value: Bound<'_, PyAny> = error.value(py).clone().into_any();
+    let readable = |part: &Bound<'_, PyAny>| -> String {
+        part.str()
+            .map(|text| text.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    };
+    let (code, message): (String, String) = match error_parts(&value, "") {
+        Ok((code, message, _)) => (readable(&code), short_message(&readable(&message))),
+        Err(_unreadable) => (String::new(), String::new()),
+    };
+    if error.is_instance_of::<PySystemExit>(py) {
+        return (error_type, String::new(), message);
+    }
+    (error_type, code, message)
+}
+
 /// Dispatch once while publishing canonical invocation lifecycle facts.
 fn observed_dispatch<'py>(
     invocation: &Invocation<'py>,
@@ -459,6 +535,7 @@ fn observed_dispatch<'py>(
         return dispatch_command(&invocation.args, invocation.handlers.clone());
     }
     let command: String = invocation.command_name();
+    drop(take_failure_cause());
     let started: Instant = Instant::now();
     let elapsed = |started: Instant| -> PyResult<Bound<'py, PyAny>> {
         u64::try_from(started.elapsed().as_millis())
@@ -492,6 +569,11 @@ fn observed_dispatch<'py>(
                 let terminal: &str = if exit_code.eq(0)? {
                     "invocation_completed"
                 } else {
+                    if let Some(cause) = take_failure_cause() {
+                        payload.set_item("error_type", cause.error_type)?;
+                        payload.set_item("error_code", cause.error_code)?;
+                        payload.set_item("error_message", short_message(&cause.message))?;
+                    }
                     "invocation_failed"
                 };
                 publish(lifecycle_event(py, terminal, payload)?)?;
@@ -501,7 +583,13 @@ fn observed_dispatch<'py>(
                 let payload: Bound<'py, PyDict> = PyDict::new(py);
                 payload.set_item("command", &command)?;
                 payload.set_item("duration_ms", elapsed(started)?)?;
-                payload.set_item("error_type", error.get_type(py).getattr("__name__")?)?;
+                let (error_type, code, message): (String, String, String) =
+                    raised_cause(py, &error);
+                payload.set_item("error_type", error_type)?;
+                if !code.is_empty() {
+                    payload.set_item("error_code", code)?;
+                }
+                payload.set_item("error_message", message)?;
                 publish(lifecycle_event(py, "invocation_failed", payload)?)?;
                 Err(error)
             }
@@ -514,7 +602,15 @@ fn handled_dispatch<'py>(invocation: &Invocation<'py>) -> PyResult<Bound<'py, Py
     let py: Python<'py> = invocation.py();
     let policy: InvocationPolicy = invocation_policy(&invocation.facts);
     report_skill_freshness(invocation, policy)?;
-    let dispatched: PyResult<Bound<'py, PyAny>> = observed_dispatch(invocation, policy);
+    let dispatched: PyResult<Bound<'py, PyAny>> = match &invocation.recall.configuration_error {
+        Some(message) => Err(new_error(
+            py,
+            ErrorId::CliUser,
+            message.clone(),
+            RECALL_SETTINGS_CODE,
+        )),
+        None => observed_dispatch(invocation, policy),
+    };
     shared_transient_line_coordinator(py)
         .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
         .call_method0("clear_active")?;
@@ -609,21 +705,23 @@ fn parsed_invocation<'py>(
             Ok(handled_dispatch(&invocation)?.unbind())
         },
     )?;
-    let dispatched: PyResult<Bound<'py, PyAny>> = call_with(
-        &host::entry(py, FacadeHost::DispatchWithComputeLogs)?,
-        &[
-            ("args", args),
-            ("identity", identity.clone()),
-            ("operation", operation.into_any()),
-            (
-                "creates_project",
-                PyBool::new(py, policy.creates_project)
-                    .to_owned()
-                    .into_any(),
-            ),
-            ("recall", recall_sink),
-        ],
-    );
+    let dispatched: PyResult<Bound<'py, PyAny>> = if policy.creates_project {
+        call_with(&operation.into_any(), &[])
+    } else {
+        call_with(
+            &host::entry(py, FacadeHost::DispatchWithComputeLogs)?,
+            &[
+                ("args", args),
+                ("identity", identity.clone()),
+                ("operation", operation.into_any()),
+                ("recall", recall_sink),
+                (
+                    "capture",
+                    PyBool::new(py, policy.captured).to_owned().into_any(),
+                ),
+            ],
+        )
+    };
     let exit_status: Option<i64> = match &dispatched {
         Ok(code) if code.is_instance_of::<PyInt>() => Some(code.extract().unwrap_or(1)),
         Ok(_) | Err(_) => None,

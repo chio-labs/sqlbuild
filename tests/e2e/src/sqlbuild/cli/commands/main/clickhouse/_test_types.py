@@ -198,3 +198,58 @@ class ClickHouseRecallUnlimitedOutputTestCase:
     description: str
     thread_lines: str
     expected_minimum_bytes: int
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallBehindStoreTestCase:
+    description: str
+    expected_notice: str
+    expected_ddl_fragments: tuple[str, ...]
+    expected_recorded: list[list[object]]
+    expected_heartbeat_columns: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallPushdownTestCase:
+    description: str
+    sql: str
+    expected_rows: list[list[object]]
+    max_read_fraction: float
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallExpiredVersionTestCase:
+    description: str
+    stale_view: str
+    expected_statement_columns: tuple[tuple[object, ...], ...]
+    expected_version: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallUnknownRelationTestCase:
+    description: str
+    sql: str
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallNewerStoreTestCase:
+    description: str
+    newer_view: str
+    expected_future_columns: tuple[tuple[object, ...], ...]
+    expected_version_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallVersionRefreshTestCase:
+    description: str
+    row_age_days: int
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallUnrecordedBehindTestCase:
+    description: str
+    stale_view: str
+    expected_notice: str
+    expected_version_rows: tuple[tuple[object, ...], ...]

@@ -11,7 +11,8 @@ fn given_valid_sections_when_validated_then_settings_are_typed() {
             description: "every key is typed and trimmed",
             value: table(&[
                 ("enabled", ConfigValue::Bool(false)),
-                ("connection", text(" history ")),
+                ("write_connection", text(" history_writer ")),
+                ("read_connection", text("history_reader")),
                 ("retention", text("720h")),
                 ("shutdown_timeout", text("1500ms")),
                 ("diagnostics_min_severity", text("debug")),
@@ -19,11 +20,20 @@ fn given_valid_sections_when_validated_then_settings_are_typed() {
             ]),
             expected_section: RecallSection {
                 enabled: Some(false),
-                connection: Some("history".to_owned()),
+                write_connection: Some("history_writer".to_owned()),
+                read_connection: Some("history_reader".to_owned()),
                 retention_days: Some(30),
                 shutdown_timeout_ms: Some(1500),
                 diagnostics_min_severity: Some("debug".to_owned()),
                 max_output_bytes: Some(4_194_304),
+            },
+        },
+        ValidSectionTestCase {
+            description: "a read connection alone reads shared history",
+            value: table(&[("read_connection", text("history_reader"))]),
+            expected_section: RecallSection {
+                read_connection: Some("history_reader".to_owned()),
+                ..RecallSection::default()
             },
         },
         ValidSectionTestCase {
@@ -65,6 +75,14 @@ fn given_invalid_sections_when_validated_then_the_message_names_the_key() {
             value: table(&[("max_output_bytes", text("2MiB"))]),
             label: "recall",
             expected_message_prefix: "recall.max_output_bytes must be",
+        },
+        InvalidSectionTestCase {
+            description: "the removed connection key names its replacements",
+            value: table(&[("connection", text("history"))]),
+            label: "targets.prod.recall",
+            expected_message_prefix: "targets.prod.recall.connection was replaced by write_connection \
+                                      and read_connection: set write_connection = \"history\" and \
+                                      read_connection = \"history\"",
         },
         InvalidSectionTestCase {
             description: "unknown keys are listed",

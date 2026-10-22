@@ -65,3 +65,9 @@ pub(crate) struct DeltaFactTestCase {
     pub(crate) all_sources: bool,
     pub(crate) expected_safe: bool,
 }
+
+pub(crate) struct FailureCauseTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) report: fn(),
+    pub(crate) expected_code: Option<&'static str>,
+}

@@ -20,6 +20,11 @@ pub fn store_state_sql(database: &str) -> StoreStateSql {
     for view in VIEW_NAMES {
         names.push(string_literal(view));
     }
+    let views: String = VIEW_NAMES
+        .iter()
+        .map(|view| string_literal(view))
+        .collect::<Vec<String>>()
+        .join(", ");
     let database_literal: String = string_literal(database);
     let options = DdlOptions {
         database: Some(database.to_owned()),
@@ -37,11 +42,16 @@ pub fn store_state_sql(database: &str) -> StoreStateSql {
              WHERE database = {database_literal} AND table IN ({tables}) ORDER BY table, position"
         ),
         schema_version: format!(
-            "SELECT toInt64(max(toInt64OrZero(value))) AS schema_version FROM {} \
+            "SELECT toInt64(max(toInt64OrZero(value))) AS schema_version, \
+             toInt64(dateDiff('second', max(recorded_at), now64(6))) AS age_seconds FROM {} \
              WHERE component = {} AND key = {}",
             clickhouse_relation(table_spec(Table::Meta).name, &options),
             string_literal(META_SCHEMA_COMPONENT),
             string_literal(META_SCHEMA_VERSION_KEY)
+        ),
+        view_columns: format!(
+            "SELECT table, name FROM system.columns \
+             WHERE database = {database_literal} AND table IN ({views})"
         ),
     }
 }

@@ -361,7 +361,8 @@ def recall_store_toml(
         f'database = "{database}"\n'
         f"{connection_settings}"
         "\n[recall]\n"
-        'connection = "history"\n'
+        'write_connection = "history"\n'
+        'read_connection = "history"\n'
         f"{recall_settings}"
     )
 
@@ -477,6 +478,17 @@ FIRST_RELEASE_EDITS: tuple[tuple[str, str], ...] = (
 )
 
 
+def apply_script(*, config: dict[str, object], script: str) -> None:
+    """Run, as an administrator, a script of `;`-terminated statements."""
+
+    execute_clickhouse_sql(
+        config=config,
+        statements=tuple(
+            statement.strip().removesuffix(";") for statement in script.split(";\n\n")
+        ),
+    )
+
+
 def apply_printed_ddl(
     *, config: dict[str, object], stderr: str, edits: tuple[tuple[str, str], ...] = ()
 ) -> None:
@@ -494,9 +506,13 @@ def apply_printed_ddl(
 
 @contextmanager
 def limited_user(
-    *, config: dict[str, object], database: str, revoked_inserts: tuple[str, ...] = ()
+    *,
+    config: dict[str, object],
+    database: str,
+    revoked_inserts: tuple[str, ...] = (),
+    privileges: str = "SELECT, INSERT",
 ) -> Iterator[dict[str, object]]:
-    """A user with only `SELECT` and `INSERT` on `database`, less `revoked_inserts`."""
+    """A user with only `privileges` on `database`, less `revoked_inserts`."""
 
     name: str = build_unique_schema_name(prefix="recall_writer")
     password: str = uuid.uuid4().hex
@@ -504,7 +520,7 @@ def limited_user(
         config=config,
         statements=(
             f"CREATE USER {name} IDENTIFIED BY '{password}'",
-            f"GRANT SELECT, INSERT ON {database}.* TO {name}",
+            f"GRANT {privileges} ON {database}.* TO {name}",
             *(f"REVOKE INSERT ON {database}.{table} FROM {name}" for table in revoked_inserts),
         ),
     )
@@ -512,6 +528,35 @@ def limited_user(
         yield {**config, "user": name, "password": password}
     finally:
         execute_clickhouse_sql(config=config, statements=(f"DROP USER IF EXISTS {name}",))
+
+
+def replicate_invocations(
+    *, config: dict[str, object], database: str, copies: int, spacing_minutes: int
+) -> None:
+    """Store `copies` more invocations shaped like each recorded one, `spacing_minutes` apart."""
+
+    shift: str = f"toIntervalMinute(n * {spacing_minutes})"
+    shifted: dict[str, str] = {
+        "recall_events": (
+            ", if(statement_id IS NULL, NULL, concat(statement_id, '-', toString(n))) "
+            "AS statement_id, concat(event_id, '-', toString(n)) AS event_id, "
+            f"occurred_at - {shift} AS occurred_at"
+        ),
+        "recall_invocations": "",
+        "recall_heartbeats": f", beat_at - {shift} AS beat_at, stale_at - {shift} AS stale_at",
+    }
+    execute_clickhouse_sql(
+        config=config,
+        statements=tuple(
+            f"INSERT INTO {database}.{table} SELECT * EXCEPT (n) REPLACE ("
+            "concat(invocation_id, '-', toString(n)) AS invocation_id, "
+            f"invocation_started_at - {shift} AS invocation_started_at{extra}) "
+            f"FROM (SELECT * FROM {database}.{table}) AS source "
+            f"CROSS JOIN (SELECT number + 1 AS n FROM numbers({copies})) AS copies "
+            "SETTINGS insert_deduplicate = 0, max_partitions_per_insert_block = 1000"
+            for table, extra in shifted.items()
+        ),
+    )
 
 
 def duplicate_recall_rows(*, config: dict[str, object], database: str) -> None:

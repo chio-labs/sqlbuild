@@ -1,6 +1,6 @@
 //! The ClickHouse Recall store: written and read through the ClickHouse adapter's connection.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
@@ -25,12 +25,19 @@ use sqlbuild_recall::schema::constants::{
 };
 use sqlbuild_recall::schema::main::add_column_statement::add_column_statement;
 use sqlbuild_recall::schema::main::clickhouse_relation::clickhouse_relation;
+use sqlbuild_recall::schema::main::render_script::render_script;
 use sqlbuild_recall::schema::main::retention_fix_statements::retention_fix_statements;
+use sqlbuild_recall::schema::main::schema_age::schema_age;
 use sqlbuild_recall::schema::main::table_columns::table_columns;
 use sqlbuild_recall::schema::main::table_spec::table_spec;
 use sqlbuild_recall::schema::main::table_statements::table_statements;
+use sqlbuild_recall::schema::main::upgrade_statements::upgrade_statements;
+use sqlbuild_recall::schema::main::version_plan::version_plan;
+use sqlbuild_recall::schema::main::view_columns::view_columns;
 use sqlbuild_recall::schema::main::view_statements::view_statements;
-use sqlbuild_recall::schema::models::{ColumnSpec, DdlOptions, Dialect, Table};
+use sqlbuild_recall::schema::models::{
+    ColumnSpec, DdlOptions, Dialect, ObservedSchema, SchemaAge, StoreVersion, Table, VersionPlan,
+};
 use sqlbuild_recall::store::constants::LAST_INVOCATION_SELECTOR;
 use sqlbuild_recall::store::errors::{StoreError, StoreErrorKind};
 use sqlbuild_recall::store::models::{
@@ -41,7 +48,7 @@ use sqlbuild_recall::store::types::{RecallStore, RecallStoreOpener};
 use crate::bindings::_helpers::recall::clickhouse_calls::{
     self as calls, QueryStatistics, StoreHandle,
 };
-use crate::bindings::_helpers::recall::constants::SECONDS_PER_DAY;
+use crate::bindings::_helpers::recall::constants::{SECONDS_PER_DAY, UNKNOWN_TABLE_ERROR};
 
 /// Where a ClickHouse store lives and how long it keeps history.
 #[derive(Clone, Debug)]
@@ -88,12 +95,14 @@ struct StoreState {
     tables: Vec<(String, String)>,
     views: HashSet<String>,
     version: i64,
+    /// Seconds since the newest version row was recorded.
+    version_age_seconds: i64,
 }
 
-/// A store ready to write: its tables with their `CREATE` queries, and the column additions an administrator must run.
+/// A store ready to write: its tables with their `CREATE` queries, and the upgrade an administrator must run when this user could not.
 struct ReadyStore {
     tables: Vec<(String, String)>,
-    refused_columns: Vec<String>,
+    behind: Vec<String>,
 }
 
 /// The store the delivery thread writes.
@@ -155,20 +164,73 @@ impl ClickHouseStore {
                 tables.push((name, text(row.get(2))));
             }
         }
-        let version: i64 = if tables
+        let (version, version_age_seconds): (i64, i64) = if tables
             .iter()
             .any(|(name, _)| name == table_spec(Table::Meta).name)
         {
             let found = self.query(py, &sql.schema_version, "read the Recall schema version")?;
-            integer(found.rows.first().and_then(|row| row.first()))
+            let row = found.rows.first();
+            (
+                integer(row.and_then(|row| row.first())),
+                integer(row.and_then(|row| row.get(1))),
+            )
         } else {
-            0
+            (0, 0)
         };
         Ok(StoreState {
             tables,
             views,
             version,
+            version_age_seconds,
         })
+    }
+
+    /// The recorded version, or without one how the tables, read by `read_columns`, and the views compare with this build's.
+    fn store_version(
+        &self,
+        py: Python<'_>,
+        state: &StoreState,
+    ) -> Result<StoreVersion, StoreError> {
+        if state.version > 0 {
+            return Ok(StoreVersion::Recorded {
+                version: state.version,
+                age_seconds: state.version_age_seconds,
+                views_visible: !state.views.is_empty(),
+            });
+        }
+        let mut expected = view_columns().map_err(|message| StoreError {
+            kind: StoreErrorKind::Other,
+            message: format!("could not list this build's Recall view columns: {message}"),
+        })?;
+        let mut observed: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        for table in ALL_TABLES {
+            let name: &'static str = table_spec(table).name;
+            expected.insert(
+                name,
+                table_columns(table)
+                    .iter()
+                    .map(|column| column.name.to_owned())
+                    .collect(),
+            );
+            let stored = self.columns.get(&table).map_or(&[][..], Vec::as_slice);
+            observed.insert(
+                name.to_owned(),
+                stored.iter().map(|column| column.name.clone()).collect(),
+            );
+        }
+        let sql = store_state_sql(self.location.database());
+        let found = self.query(py, &sql.view_columns, "inspect the Recall views")?;
+        for row in &found.rows {
+            observed
+                .entry(text(row.first()))
+                .or_default()
+                .insert(text(row.get(1)));
+        }
+        Ok(StoreVersion::Unrecorded(schema_age(
+            &expected,
+            &observed,
+            &VIEW_NAMES,
+        )))
     }
 
     fn require_database(&self, py: Python<'_>) -> Result<(), StoreError> {
@@ -224,49 +286,80 @@ impl ClickHouseStore {
         Ok(())
     }
 
-    /// Create a store whose tables are missing; on existing tables add missing columns where allowed, create missing views, and replace views only on a version upgrade.
+    /// What the store holds, from its read columns, `views` and recorded `version`.
+    fn observed(&self, views: &HashSet<String>, version: i64) -> ObservedSchema {
+        let mut observed = ObservedSchema {
+            views: views.iter().cloned().collect(),
+            version: (version > 0).then_some(version),
+            ..ObservedSchema::default()
+        };
+        for (table, columns) in &self.columns {
+            let names = observed.tables.entry(*table).or_default();
+            for column in columns {
+                names.insert(column.name.clone());
+            }
+        }
+        observed
+    }
+
+    /// Create a store whose tables are missing. On existing tables add missing columns, create missing views, and replace views on a version upgrade; when retention removed the version row, the views' columns tell whether the store is older, current or newer, and a newer store's views are never replaced. A user who may not run that DDL writes the columns that exist and gets the statements an administrator must run. A version is recorded only once the views are settled, never lower than the store holds, and again before retention removes the newest row.
     fn ensure_schema(
         &mut self,
         py: Python<'_>,
         envelope: &RowEnvelope,
     ) -> Result<ReadyStore, StoreError> {
-        let StoreState {
-            tables,
-            views,
-            version,
-        } = self.state(py)?;
-        if tables.len() < ALL_TABLES.len() {
-            self.create(py, envelope, &views)?;
+        let state: StoreState = self.state(py)?;
+        if state.tables.len() < ALL_TABLES.len() {
+            self.create(py, envelope, &state.views)?;
             return Ok(ReadyStore {
                 tables: self.state(py)?.tables,
-                refused_columns: Vec::new(),
+                behind: Vec::new(),
             });
         }
         self.read_columns(py)?;
-        let refused: Vec<String> = self.add_columns(py)?;
-        let upgrade: bool = version > 0 && version < RECALL_SCHEMA_VERSION;
-        let views_due: bool = upgrade || views.len() < VIEW_NAMES.len();
-        if views_due && !refused.is_empty() {
-            return Err(StoreError {
-                kind: StoreErrorKind::Permission,
-                message: "the Recall views need columns this user may not add".to_owned(),
+        let store_version: StoreVersion = self.store_version(py, &state)?;
+        let plan: VersionPlan = version_plan(store_version, self.location.options.retention_days);
+        let StoreState { tables, views, .. } = state;
+        let before: ObservedSchema = self.observed(&views, observed_version(store_version));
+        let behind = |store: &Self| {
+            upgrade_statements(Dialect::ClickHouse, &store.location.options, &before)
+        };
+        if self.add_columns(py)? {
+            return Ok(ReadyStore {
+                behind: behind(self),
+                tables,
             });
         }
-        for (name, statement) in view_statements(Dialect::ClickHouse, &self.location.options) {
-            if upgrade {
-                self.command(py, &statement, "create the Recall views")?;
+        let view_ddl: Vec<(&str, String)> = if plan.view_ddl {
+            view_statements(Dialect::ClickHouse, &self.location.options)
+        } else {
+            Vec::new()
+        };
+        for (name, statement) in view_ddl {
+            let statement: String = if plan.replace_views {
+                statement
             } else if !views.contains(name) {
-                let statement =
-                    statement.replacen("CREATE OR REPLACE VIEW", "CREATE VIEW IF NOT EXISTS", 1);
-                self.command(py, &statement, "create the Recall views")?;
+                statement.replacen("CREATE OR REPLACE VIEW", "CREATE VIEW IF NOT EXISTS", 1)
+            } else {
+                continue;
+            };
+            match self.command(py, &statement, "create the Recall views") {
+                Ok(()) => {}
+                Err(error) if error.kind == StoreErrorKind::Permission => {
+                    return Ok(ReadyStore {
+                        behind: behind(self),
+                        tables,
+                    });
+                }
+                Err(error) => return Err(error),
             }
         }
-        if version < RECALL_SCHEMA_VERSION {
-            self.record_version(py, envelope)?;
+        if let Some(version) = plan.record {
+            self.record_version(py, envelope, version)?;
         }
         Ok(ReadyStore {
             tables,
-            refused_columns: refused,
+            behind: Vec::new(),
         })
     }
 
@@ -282,8 +375,7 @@ impl ClickHouseStore {
             self.command(py, &statement, "create the Recall tables")?;
         }
         self.read_columns(py)?;
-        let refused: Vec<String> = self.add_columns(py)?;
-        if !refused.is_empty() {
+        if self.add_columns(py)? {
             return Err(StoreError {
                 kind: StoreErrorKind::Permission,
                 message: "the Recall tables need columns this user may not add".to_owned(),
@@ -294,11 +386,11 @@ impl ClickHouseStore {
                 self.command(py, &statement, "create the Recall views")?;
             }
         }
-        self.record_version(py, envelope)
+        self.record_version(py, envelope, RECALL_SCHEMA_VERSION)
     }
 
-    /// Add the additive columns the stored tables lack; when the user may not, the statements an administrator must run.
-    fn add_columns(&mut self, py: Python<'_>) -> Result<Vec<String>, StoreError> {
+    /// Add the additive columns the stored tables lack; `true` when the user may not.
+    fn add_columns(&mut self, py: Python<'_>) -> Result<bool, StoreError> {
         let missing: Vec<(Table, ColumnSpec)> = self.missing_columns();
         let statements: Vec<String> = missing
             .iter()
@@ -310,11 +402,12 @@ impl ClickHouseStore {
                 )
             })
             .collect();
-        for (index, statement) in statements.iter().enumerate() {
+        for statement in &statements {
             match self.command(py, statement, "add a Recall column") {
                 Ok(()) => {}
                 Err(error) if error.kind == StoreErrorKind::Permission => {
-                    return Ok(statements[index..].to_vec());
+                    self.read_columns(py)?;
+                    return Ok(true);
                 }
                 Err(error) => return Err(error),
             }
@@ -322,7 +415,7 @@ impl ClickHouseStore {
         if !missing.is_empty() {
             self.read_columns(py)?;
         }
-        Ok(Vec::new())
+        Ok(false)
     }
 
     /// Every column this build writes that the stored tables lack.
@@ -340,14 +433,19 @@ impl ClickHouseStore {
     }
 
     /// Record this build's schema version with an insert, which a writer allowed only `SELECT` and `INSERT` may run.
-    fn record_version(&self, py: Python<'_>, envelope: &RowEnvelope) -> Result<(), StoreError> {
+    fn record_version(
+        &self,
+        py: Python<'_>,
+        envelope: &RowEnvelope,
+        version: i64,
+    ) -> Result<(), StoreError> {
         let now = format_timestamp(SystemTime::now());
         let row = meta_row(
             envelope,
             (
                 META_SCHEMA_COMPONENT,
                 META_SCHEMA_VERSION_KEY,
-                &RECALL_SCHEMA_VERSION.to_string(),
+                &version.to_string(),
             ),
             &now,
         );
@@ -401,14 +499,15 @@ impl ClickHouseStore {
             .collect())
     }
 
-    /// The notice for columns this user may not add: history is written without them until an administrator adds them.
-    fn columns_notice(&self, statements: &[String]) -> String {
+    /// The notice for a store behind this build that this user may not upgrade: history is written to the columns that exist until an administrator runs `statements`.
+    fn behind_notice(&self, statements: &[String]) -> String {
         format!(
-            "the ClickHouse store in `{}` lacks columns this version of SQLBuild writes, and this \
-             user may not add them; history is still written without them. An administrator can \
-             add them with:\n\n{};\n",
+            "the Recall store in ClickHouse database `{}` is behind this SQLBuild version, and \
+             this user may not upgrade it; history is still written, without what the newer \
+             version adds. An administrator should run:\n\n{}\n`sqb recall schema --ddl` \
+             prints these statements again.\n",
             self.location.database(),
-            statements.join(";\n\n")
+            render_script(statements)
         )
     }
 
@@ -499,17 +598,14 @@ impl RecallStoreOpener for ClickHouseStoreOpener {
                 notices: Vec::new(),
             };
             match store.ensure_schema(py, envelope) {
-                Ok(ReadyStore {
-                    tables,
-                    refused_columns: refused,
-                }) => {
-                    if !refused.is_empty()
+                Ok(ReadyStore { tables, behind }) => {
+                    if !behind.is_empty()
                         && (self.retention_notice)(
                             &self.project_dir,
-                            &format!("{}:columns", self.location.database()),
+                            &format!("{}:upgrade", self.location.database()),
                         )
                     {
-                        store.notices.push(store.columns_notice(&refused));
+                        store.notices.push(store.behind_notice(&behind));
                     }
                     if let Some(notice) = store.retention_conflict(&tables)
                         && (self.retention_notice)(
@@ -545,6 +641,44 @@ pub(crate) struct ClickHouseReader {
 
 impl ClickHouseReader {
     pub(crate) fn open(py: Python<'_>, location: &ClickHouseLocation) -> Result<Self, StoreError> {
+        let store = ClickHouseStore {
+            location: location.clone(),
+            connection: Some(calls::connect(
+                py,
+                (&location.config, false),
+                &location.connect_action(),
+            )?),
+            columns: HashMap::new(),
+            notices: Vec::new(),
+        };
+        Ok(Self { store })
+    }
+
+    /// Fail with "no history yet" when the store's tables or views are missing; queries check only after they fail, so a successful one costs no extra round trip.
+    pub(crate) fn require_store(&self, py: Python<'_>) -> Result<(), StoreError> {
+        let state: StoreState = self.store.state(py)?;
+        if state.tables.len() < ALL_TABLES.len() || state.views.len() < VIEW_NAMES.len() {
+            return Err(StoreError {
+                kind: StoreErrorKind::NotFound,
+                message: self.not_created_message(),
+            });
+        }
+        Ok(())
+    }
+
+    fn not_created_message(&self) -> String {
+        format!(
+            "no Recall history is recorded yet in ClickHouse database `{}`, or its tables are \
+             still being created; run a command first",
+            self.database()
+        )
+    }
+
+    /// The statements that create the store in `location`, or bring it up to this build's schema, read with `SELECT` only.
+    pub(crate) fn upgrade_statements(
+        py: Python<'_>,
+        location: &ClickHouseLocation,
+    ) -> Result<Vec<String>, StoreError> {
         let mut store = ClickHouseStore {
             location: location.clone(),
             connection: Some(calls::connect(
@@ -555,19 +689,22 @@ impl ClickHouseReader {
             columns: HashMap::new(),
             notices: Vec::new(),
         };
-        let state: StoreState = store.state(py)?;
-        if state.tables.len() < ALL_TABLES.len() || state.views.len() < VIEW_NAMES.len() {
-            store.close();
-            return Err(StoreError {
-                kind: StoreErrorKind::NotFound,
-                message: format!(
-                    "no Recall history is recorded yet in ClickHouse database `{}`, or its tables \
-                     are still being created; run a command first",
-                    location.database()
-                ),
-            });
-        }
-        Ok(Self { store })
+        let observed = store.require_database(py).and_then(|()| {
+            let state: StoreState = store.state(py)?;
+            store.read_columns(py)?;
+            let version: i64 = if state.tables.len() < ALL_TABLES.len() {
+                state.version
+            } else {
+                observed_version(store.store_version(py, &state)?)
+            };
+            Ok(store.observed(&state.views, version))
+        });
+        store.close();
+        Ok(upgrade_statements(
+            Dialect::ClickHouse,
+            &location.options,
+            &observed?,
+        ))
     }
 
     /// The database the store lives in.
@@ -575,7 +712,7 @@ impl ClickHouseReader {
         self.store.location.database()
     }
 
-    /// At most `limit` rows of a read-only query, with the server's statistics.
+    /// At most `limit` rows of a read-only query, with the server's statistics. A failure on a store that is not created yet is a store failure (C971), not an invalid query. An unknown relation on a complete store is retried once, since its views may have been created since the query ran; a relation still unknown is the query's own error (C974).
     pub(crate) fn query(
         &self,
         py: Python<'_>,
@@ -586,20 +723,37 @@ impl ClickHouseReader {
         if let Some(limit) = limit {
             settings.push(("limit", i64::try_from(limit).unwrap_or(i64::MAX - 1) + 1));
         }
-        let (mut result, statistics) = calls::query(
-            py,
-            self.store.connection()?,
-            (sql, &settings),
-            "run the Recall query",
-        )
-        .map_err(|failure| StoreError {
+        let run = || {
+            calls::query(
+                py,
+                self.store.connection()?,
+                (sql, &settings),
+                "run the Recall query",
+            )
+        };
+        let rejected = |failure: StoreError| StoreError {
             kind: if failure.kind == StoreErrorKind::Busy {
                 StoreErrorKind::Other
             } else {
                 StoreErrorKind::Query
             },
             message: failure.message,
-        })?;
+        };
+        let (mut result, statistics) = match run() {
+            Ok(found) => found,
+            Err(failure) => match self.require_store(py) {
+                Err(missing) if missing.kind == StoreErrorKind::NotFound => {
+                    return Err(StoreError {
+                        kind: StoreErrorKind::Other,
+                        message: missing.message,
+                    });
+                }
+                Ok(()) if failure.message.contains(UNKNOWN_TABLE_ERROR) => {
+                    run().map_err(rejected)?
+                }
+                Ok(()) | Err(_) => return Err(rejected(failure)),
+            },
+        };
         if let Some(limit) = limit
             && result.rows.len() > limit
         {
@@ -768,5 +922,16 @@ impl ClickHouseReader {
 
     pub(crate) fn close(mut self) {
         self.store.close();
+    }
+}
+
+/// The version `upgrade_statements` compares with: a store without a version row whose views are current or newer needs no view replacement.
+fn observed_version(store: StoreVersion) -> i64 {
+    match store {
+        StoreVersion::Recorded { version, .. } => version,
+        StoreVersion::Unrecorded(SchemaAge::Older) => 0,
+        StoreVersion::Unrecorded(SchemaAge::Current | SchemaAge::Newer | SchemaAge::Unseen) => {
+            RECALL_SCHEMA_VERSION
+        }
     }
 }

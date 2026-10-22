@@ -46,8 +46,10 @@ from tests.unit.src.sqlbuild.cli.commands.main.entry._test_types import (
     MainErrorRenderingTestCase,
     MainTestCase,
     SkillFreshnessNoticeTestCase,
+    UnreadableErrorTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.entry.helpers import (
+    UnprintableError,
     build_handlers,
     build_json_recording_handler,
     invalid_loader_destination_error,
@@ -2645,6 +2647,41 @@ def test_given_handler_exception_when_dispatching_then_failed_terminal_has_origi
         "invocation_failed",
     )
     assert events[-1].payload["error_type"] == "ValueError"
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        UnreadableErrorTestCase(
+            description="an error whose message cannot be read still reaches its caller",
+            expected_error_type="UnprintableError",
+            expected_message="",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_an_unprintable_handler_error_when_dispatching_then_it_propagates_after_its_terminal(
+    tmp_path: Path, test_case: UnreadableErrorTestCase
+) -> None:
+    def run_compile(_request: CompileCommandRequest) -> int:
+        raise UnprintableError
+
+    with (
+        patch.object(EventDispatcher, "publish_lifecycle") as publish,
+        pytest.raises(UnprintableError),
+    ):
+        _ = _main_with_dependencies(
+            argv=["--project-dir", str(tmp_path), "compile"],
+            handlers=build_handlers(run_compile=run_compile),
+        )
+    events: tuple[LifecycleEvent, ...] = tuple(call.args[0] for call in publish.call_args_list)
+
+    assert tuple(event.event_type for event in events) == (
+        "invocation_started",
+        "invocation_failed",
+    )
+    assert events[-1].payload["error_type"] == test_case.expected_error_type
+    assert events[-1].payload["error_message"] == test_case.expected_message
 
 
 @pytest.mark.parametrize(

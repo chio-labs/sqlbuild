@@ -5,8 +5,9 @@ sidebar:
   label: "recall"
 ---
 
-Read the local [Recall](/docs/concepts/observability/recall) store: past invocations, the
-statements they executed, and what they printed. `sqb recall` never records itself.
+Read the [Recall](/docs/concepts/observability/recall) store that `read_connection` names, or the
+local store: past invocations, the statements they executed, and what they printed. `sqb recall`
+never records itself, and never creates or changes the store.
 
 ## Usage
 
@@ -25,7 +26,7 @@ Statements that write, and multiple statements, are rejected.
 | Flag | Description |
 |------|-------------|
 | `sql` | The query (positional argument) |
-| `--format` | `long` (default), `table`, `json`, or `csv` |
+| `--format` | `long` (default) for reading, `json` for programs, or `csv` for export. `table` still works in this release but prints a deprecation warning and will be removed |
 | `--json` | Shorthand for `--format json` |
 | `--limit` | Maximum rows to return (default: 100) |
 | `--no-limit` | Disable the row limit |
@@ -36,15 +37,17 @@ Statements that write, and multiple statements, are rejected.
 The latest invocation in a project named `orders_shop`:
 
 ```bash
-sqb recall query --format table \
+sqb recall query \
   "SELECT command, status, exit_code, duration_ms FROM invocations
    ORDER BY invocation_started_at DESC LIMIT 1"
 ```
 
 ```
-command | status    | exit_code | duration_ms
-------- | --------- | --------- | -----------
-build   | completed | 0         | 752.0
+-[ RECORD 1 ]---------------------------+
+command     | build
+status      | completed
+exit_code   | 0
+duration_ms | 752.0
 
 1 row
 ```
@@ -52,17 +55,22 @@ build   | completed | 0         | 752.0
 The slowest statements of past builds, with their SQL:
 
 ```bash
-sqb recall query --format table --max-cell-bytes 60 \
+sqb recall query --max-cell-bytes 60 \
   "SELECT s.resource_name, round(s.duration_ms, 1) AS ms, a.text AS sql
    FROM statements s JOIN artifacts a USING (invocation_id, statement_id)
    WHERE s.statement_kind = 'CREATE' ORDER BY s.duration_ms DESC LIMIT 2"
 ```
 
 ```
-resource_name | ms  | sql
-------------- | --- | ------------------------------------------------------------------------
-orders        | 3.6 | CREATE OR REPLACE TABLE dev.orders__staging AS SELECT 1 …[+74 bytes]
-NULL          | 3.2 | CREATE SCHEMA IF NOT EXISTS dev
+-[ RECORD 1 ]---------------------------+
+resource_name | orders
+ms            | 3.6
+sql           | CREATE OR REPLACE TABLE dev.orders__staging AS SELECT 1 …[+74 bytes]
+
+-[ RECORD 2 ]---------------------------+
+resource_name | NULL
+ms            | 3.2
+sql           | CREATE SCHEMA IF NOT EXISTS dev
 
 2 rows
 ```
@@ -81,7 +89,12 @@ Timestamps are ISO-8601 UTC text, so they compare correctly as strings. Filter o
 ## sqb recall schema
 
 List every Recall view with its columns, types, and join keys. Accepts `--format`, `--json`, and
-`--target`. With `--backend warehouse`, it lists SQLBuild's state tables in the target's warehouse
+`--target`.
+
+With `--ddl`, print instead the SQL that creates the store, or brings an existing store up to this
+SQLBuild version (missing columns, replaced views, and the schema version row), for an
+administrator to run. It reads the store through `read_connection` and changes nothing; when the
+store is up to date it prints nothing and says so on stderr. Run it again after every upgrade. With `--backend warehouse`, it lists SQLBuild's state tables in the target's warehouse
 instead, or describes one with `--relation <name>`.
 
 ## sqb recall output
@@ -106,6 +119,14 @@ out, a note line marks the gap in place. Output that Recall could not record com
 other reason is followed by a note on stderr naming the gap.
 
 ## Errors
+
+With `--json` (or `--format json`), a failing `query` or `schema` still exits `1` and prints its
+coded error on stderr, and prints the error as JSON on stdout, so a program parsing the output reads
+the error instead of failing to parse it:
+
+```json
+{"error": {"code": "C974", "message": "invalid Recall query: no such column: status ...", "help": null}}
+```
 
 | Code | Meaning |
 |------|---------|

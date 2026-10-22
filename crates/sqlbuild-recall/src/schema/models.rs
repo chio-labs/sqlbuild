@@ -109,3 +109,49 @@ pub struct SqliteRetentionSql {
     /// `?1` cutoff: maintenance claims older than retention.
     pub delete_old_claims: String,
 }
+
+/// What a Recall store holds: its tables with their column names, its views, and the recorded schema version.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ObservedSchema {
+    pub tables: std::collections::BTreeMap<Table, std::collections::BTreeSet<String>>,
+    pub views: std::collections::BTreeSet<String>,
+    /// The highest recorded schema version; `None` when none is recorded.
+    pub version: Option<i64>,
+}
+
+/// How a store's tables and views compare with this build's, from their columns.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SchemaAge {
+    /// A relation is missing or lacks a column of this build, and none has a column this build does not know.
+    Older,
+    /// Every table and view has exactly this build's columns.
+    Current,
+    /// A relation has a column this build does not know: a newer build created it.
+    Newer,
+    /// No view is visible, as to a user granted only the tables, so the store's age is unknown.
+    Unseen,
+}
+
+/// What a writer knows about the store's schema version.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StoreVersion {
+    /// The highest recorded version, the age in seconds of the newest version row, and whether any view is visible to this user.
+    Recorded {
+        version: i64,
+        age_seconds: i64,
+        views_visible: bool,
+    },
+    /// No version row is left, as after retention expired it; the columns tell the store's age.
+    Unrecorded(SchemaAge),
+}
+
+/// What a writer does to the views and the version row.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VersionPlan {
+    /// Replace every view with this build's definition.
+    pub replace_views: bool,
+    /// Run view statements at all: replacements, or creating missing views. A user who sees no view issues none, since they would fail on every start.
+    pub view_ddl: bool,
+    /// The version to append once the views are settled, if any.
+    pub record: Option<i64>,
+}

@@ -15,3 +15,8 @@ INDEX_FILENAME: str = "CONTENTS.md"
 FRONTMATTER_DELIMITER: str = "---"
 TABLE_OF_CONTENTS_MIN_LINES: int = 100
 UNGROUPED_LABEL: str = "Other pages"
+INVESTIGATION_GUIDE: Path = Path(
+    "src/sqlbuild/.agents/skills/sqlbuild/references/investigating-runs.md"
+)
+SCHEMA_SECTION_START: str = "<!-- recall-schema:start (generated from `sqb recall schema`) -->"
+SCHEMA_SECTION_END: str = "<!-- recall-schema:end -->"

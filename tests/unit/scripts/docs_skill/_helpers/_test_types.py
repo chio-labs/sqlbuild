@@ -18,3 +18,11 @@ class ReferencePagesTestCase:
     stale_page: str
     expected_files: tuple[str, ...]
     expected_fragments: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class RecallViewsSectionTestCase:
+    description: str
+    guide: str
+    views: str
+    expected_guide: str

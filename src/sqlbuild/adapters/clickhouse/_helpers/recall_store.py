@@ -7,8 +7,11 @@ import json
 import threading
 from typing import Any
 
-from sqlbuild.adapters.clickhouse.classes.clickhouse_adapter import ClickHouseAdapter
+from sqlbuild.adapters.clickhouse._helpers.connect_clickhouse import connect_clickhouse
 from sqlbuild.adapters.clickhouse.classes.clickhouse_connection import _ClickHouseConnection
+from sqlbuild.adapters.clickhouse.classes.shared_recall_connections import (
+    SharedRecallConnections,
+)
 from sqlbuild.adapters.clickhouse.types import RecallCell, RecallFailure, RecallStatistics
 
 _CLIENT_MODULE: str = "clickhouse_connect"
@@ -67,11 +70,10 @@ def connect_recall_store(
         setattr(threading.current_thread(), quiet_thread_attribute, True)
     options: dict[str, object] = {_CONNECT_TIMEOUT_KEY: _DEFAULT_CONNECT_TIMEOUT_SECONDS, **config}
     try:
-        adapter: ClickHouseAdapter = ClickHouseAdapter()
-        connection: _ClickHouseConnection = adapter.connect(options)
+        connection: _ClickHouseConnection = connect_clickhouse(options)
     except Exception as error:
         return _failure(error), 0
-    return None, adapter.recall_connections.add(connection=connection)
+    return None, SharedRecallConnections.connections.add(connection=connection)
 
 
 def run_recall_query(
@@ -80,7 +82,7 @@ def run_recall_query(
     """Columns, rows of plain values and server statistics; strings not in UTF-8 stay bytes."""
 
     try:
-        result: Any = ClickHouseAdapter.recall_connections.get(handle=handle).client.query(
+        result: Any = SharedRecallConnections.connections.get(handle=handle).client.query(
             sql, settings=settings, query_formats=_BYTES_FORMATS
         )
     except Exception as error:
@@ -99,7 +101,7 @@ def run_recall_command(*, handle: int, sql: str) -> tuple[RecallFailure, None]:
     """Run one DDL statement."""
 
     try:
-        ClickHouseAdapter.recall_connections.get(handle=handle).client.command(sql)
+        SharedRecallConnections.connections.get(handle=handle).client.command(sql)
     except Exception as error:
         return _failure(error), None
     return None, None
@@ -111,7 +113,7 @@ def insert_recall_rows(
     """Insert one `RowBinary` block; a retried block with the same token is deduplicated."""
 
     try:
-        ClickHouseAdapter.recall_connections.get(handle=handle).client.raw_insert(
+        SharedRecallConnections.connections.get(handle=handle).client.raw_insert(
             table,
             column_names=column_names,
             insert_block=payload,
@@ -126,7 +128,7 @@ def insert_recall_rows(
 def close_recall_store(*, handle: int) -> None:
     """Close and forget the connection; a failure to close is ignored."""
 
-    connection: _ClickHouseConnection | None = ClickHouseAdapter.recall_connections.pop(
+    connection: _ClickHouseConnection | None = SharedRecallConnections.connections.pop(
         handle=handle
     )
     if connection is None:

@@ -10,6 +10,7 @@ Online: https://sqlbuild.com/docs/concepts/observability/recall/
 
 - An investigation, start to finish
 - What is recorded
+- Git revision
 - Settings
 - Output limit
 - Retention
@@ -32,18 +33,33 @@ still pass, because they run on mocked data. The build finishes with a warning t
 The next morning, ask when the audit started failing, and what each of those builds reported:
 
 ```bash
-sqb recall query --format table \
+sqb recall query \
   "SELECT a.invocation_started_at AS run, a.outcome, a.violation_count, i.status, i.exit_code
    FROM audit_results a JOIN invocations i USING (invocation_id)
    WHERE a.audit_name = 'revenue_is_non_negative' ORDER BY run DESC LIMIT 3"
 ```
 
 ```
-run                         | outcome | violation_count | status    | exit_code
---------------------------- | ------- | --------------- | --------- | ---------
-2026-10-20T00:01:44.784683Z | warn    | 1               | completed | 0
-2026-10-20T00:00:34.652468Z | pass    | 0               | completed | 0
-2026-10-19T23:59:23.827831Z | pass    | 0               | completed | 0
+-[ RECORD 1 ]---------------------------+
+run             | 2026-10-20T00:01:44.784683Z
+outcome         | warn
+violation_count | 1
+status          | completed
+exit_code       | 0
+
+-[ RECORD 2 ]---------------------------+
+run             | 2026-10-20T00:00:34.652468Z
+outcome         | pass
+violation_count | 0
+status          | completed
+exit_code       | 0
+
+-[ RECORD 3 ]---------------------------+
+run             | 2026-10-19T23:59:23.827831Z
+outcome         | pass
+violation_count | 0
+status          | completed
+exit_code       | 0
 
 3 rows
 ```
@@ -66,14 +82,16 @@ sqb recall output last --tail 4
 Then check what is true in the warehouse now, with `sqb recall query` again:
 
 ```bash
-sqb recall query --backend warehouse --format table \
+sqb recall query --backend warehouse \
   "SELECT payment_id, order_id, amount_cents, paid_at FROM prod.stg_payments WHERE amount_cents < 0"
 ```
 
 ```
-payment_id | order_id | amount_cents | paid_at
----------- | -------- | ------------ | -------------------
-9          | 8        | -2200        | 2026-04-03 15:42:00
+-[ RECORD 1 ]---------------------------+
+payment_id   | 9
+order_id     | 8
+amount_cents | -2200
+paid_at      | 2026-04-03 15:42:00
 
 1 row
 ```
@@ -86,7 +104,11 @@ return `--json`.
 
 For every recorded invocation, Recall keeps:
 
-- the invocation itself: command, arguments, target, adapter, status, exit code, and timing;
+- the invocation itself: command, arguments, target, adapter, status, exit code, and timing, and
+  for a failed invocation its cause as `error_type`, `error_code` and a one-line
+  `error_message`, also when the command reported the failure only through its exit code (for
+  example `sqb debug` failing to connect records `ConnectionError` and `C980`);
+- the commit it ran from (`git_revision`), see [Git revision](#git-revision);
 - its [lifecycle events](../observability.md): runs, resource attempts, statements,
   retries, and audit results;
 - the SQL text of every executed statement, stored once per distinct statement and shared across
@@ -100,13 +122,29 @@ of its history still succeeds, prints a warning followed by its own final status
 `output_invocations` reports the gap. An invocation whose process died without finishing has
 status `abandoned`.
 
-Every command is recorded except `sqb recall` itself, commands that create a project (such as
+`sqb recall` only reads history: it publishes no lifecycle events, runs no project sinks, and keeps
+no compute logs, so a query starts quickly. Every command is recorded except `sqb recall` itself, commands that create a project (such as
 `sqb init`), and raw-query `sqb diff`. Commands `sqb` answers without starting Python are not
 recorded either: a `sqb compile` answered from the launcher's warm cache, and `sqb clean`, `sqb skills`,
 `sqb rules list` and `sqb rules show` in a project with no custom rules, rule options or sinks.
 
 The store is `logs/recall.sqlite3` in the project directory. Add `logs/` to `.gitignore`; the store
 can contain sensitive SQL and output.
+
+## Git revision
+
+`invocations.git_revision` is the commit `HEAD` names in the repository above the project
+directory, including git worktrees and submodules, whose `.git` is a file pointing at the
+repository. Deployments usually have no `.git` at all, so set the revision when building the image
+or starting the job, or comparing production runs by `git_revision` finds nothing:
+
+```bash
+export SQLBUILD_GIT_REVISION="$(git rev-parse HEAD)"   # recorded as git_revision
+export SQLBUILD_GIT_DIRTY=false                        # optional: recorded as git_dirty (true/false)
+```
+
+`SQLBUILD_GIT_REVISION` takes precedence over the repository. Without `SQLBUILD_GIT_DIRTY`,
+`git_dirty` is `NULL`.
 
 ## Settings
 
@@ -127,7 +165,8 @@ enabled = false               # do not record runs against the ci target
 | Key | Default | Description |
 |-----|---------|-------------|
 | `enabled` | `true` | Set to `false` to stop recording |
-| `connection` | (none) | A `sqlite` connection whose `path` names the store, or a `clickhouse` connection; defaults to `logs/recall.sqlite3` |
+| `write_connection` | (none) | The connection every command writes its history to: a `sqlite` connection whose `path` names the store, or a `clickhouse` connection. Requires `read_connection` in the merged settings: `[recall]`, the target's table or `sqlbuild_local.toml` may set either. Defaults to `logs/recall.sqlite3` |
+| `read_connection` | (none) | The connection `sqb recall query`, `schema` and `output` read; may name the same connection as `write_connection`. Set alone to read shared history while this machine's own commands record to `logs/recall.sqlite3` |
 | `retention` | `"30d"` | How long invocations are kept, in days (`d`) or hours (`h`), up to 3650 days |
 | `shutdown_timeout` | `"3s"` | The cap on time spent flushing history at exit, in `s` or `ms`, up to 10 minutes |
 | `diagnostics_min_severity` | `"info"` | `trace`, `debug`, `info`, `warning`, `error`, or `critical` |
@@ -178,12 +217,17 @@ repeats at most once a day. If the store file is not a SQLite database, Recall m
 `recall.sqlite3.corrupt-<UTC timestamp>`, starts a fresh store, and says so once. Commands that
 find the same corrupt file coordinate through `recall.sqlite3.lock`, so only one of them moves it.
 
-A `connection` on any adapter other than `sqlite` or `clickhouse` is not supported; Recall prints a
-notice and records nothing.
+A `write_connection` on any adapter other than `sqlite` or `clickhouse` is not supported; Recall
+prints a notice and records nothing.
+
+`write_connection` and `read_connection` replaced the single `connection` key. A configuration that
+still sets `connection` fails with an error naming the replacements: set both keys to the old
+connection to keep the previous behaviour.
 
 ## Sharing history in ClickHouse
 
-Point `connection` at a ClickHouse connection to keep one history for a whole team. Every machine
+Point `write_connection` and `read_connection` at ClickHouse connections to keep one history for a
+whole team. Every machine
 that writes to it, including CI and scheduled production runs, becomes queryable from anywhere:
 see what last night's production build ran and printed without access to the machine, find the
 first run where an audit started failing across everyone's runs, or compare a production run with
@@ -193,23 +237,72 @@ The connection needs `adapter = "clickhouse"` when the project uses another adap
 `database` must already exist; Recall never creates databases.
 
 ```toml
-[connections.history]
+[connections.history_writer]
 adapter = "clickhouse"
 host = "${env:CLICKHOUSE_HOST}"
 user = "recall_writer"
-password = "${env:CLICKHOUSE_PASSWORD}"
+password = "${env:RECALL_WRITER_PASSWORD}"
+database = "observability"
+
+[connections.history_reader]
+adapter = "clickhouse"
+host = "${env:CLICKHOUSE_HOST}"
+user = "recall_reader"
+password = "${env:RECALL_READER_PASSWORD}"
 database = "observability"
 
 [recall]
-connection = "history"
+write_connection = "history_writer"  # every command writes history (INSERT, SELECT)
+read_connection = "history_reader"   # sqb recall query, schema and output (SELECT only)
 retention = "30d"
 ```
 
-- **Setup.** On first use Recall creates its `recall_*` MergeTree tables and the views above in that
-  database, and adds columns that a newer SQLBuild introduces. After that, writing needs only
-  `INSERT` and `SELECT` on the tables. If the user may not create them, the command still succeeds
-  and prints the complete DDL for an administrator to run; a store created from it accepts writers
-  limited to `SELECT` and `INSERT`.
+`sqb recall query`, `schema` and `output` use only `read_connection` and never create or change
+anything in the store, so someone investigating production runs needs no credentials that could
+rewrite or delete its history. Both keys may name one connection when separate users are not
+wanted. A machine that only reads shared history, such as a laptop investigating production runs,
+sets only `read_connection`; its own commands keep recording to the local store. Each side
+resolves only its own connection, so environment references in the other connection, such as the
+writer's password on a reader's laptop, need not be set.
+
+### Users and grants
+
+SQLBuild does not enforce grants; it only lets the roles be separated. A least-privilege setup:
+
+```sql
+-- once, as an administrator: the users
+CREATE USER recall_writer IDENTIFIED BY '...';
+CREATE USER recall_reader IDENTIFIED BY '...';
+GRANT SELECT, INSERT ON observability.* TO recall_writer;
+GRANT SELECT ON observability.* TO recall_reader;
+```
+
+Then, as the administrator, create the store with the DDL that `sqb recall schema --ddl` prints
+(any connection that can read the database works, so the reader's is enough):
+
+```bash
+sqb recall schema --ddl --target prod > recall.sql   # review, then run it with an admin user
+```
+
+Repeat the same step after upgrading SQLBuild: `sqb recall schema --ddl` reads the store and prints
+only what this version adds (`ALTER TABLE … ADD COLUMN`, replaced views and the schema version row),
+or says that the store is up to date. Changes are always additive, and older SQLBuild versions keep
+writing to an upgraded store. `--ddl` prints SQL, so it cannot be combined with `--json` or
+`--format`.
+
+- **Setup.** A writer allowed to run DDL creates the `recall_*` MergeTree tables and the views above
+  in that database on first use, and adds the columns and views a newer SQLBuild introduces. If the
+  user may not create the store, the command still succeeds and prints the complete DDL for an
+  administrator to run; a store created from it accepts writers limited to `SELECT` and `INSERT`.
+- **Upgrades.** When a store is behind this SQLBuild version and the writer may not upgrade it, the
+  command still runs and exits as it otherwise would. History is still written, to the columns
+  that exist, and Recall prints one warning (at most once a day) with the exact statements an
+  administrator should run; `sqb recall schema --ddl` prints them again.
+- **Schema version.** The store's version is a `recall_meta` row, which retention expires like any
+  other. Writers append it again once it is older than half the retention, with the highest version
+  recorded. When it has expired anyway, a writer compares the stored tables' and views' columns
+  with its own: it upgrades an older store, records its version on a current one, and never
+  replaces the views of a store a newer SQLBuild version created.
 - **Writes.** History is sent in batches of up to 5,000 rows about once a second, one insert per
   table, with the same queue, shutdown budget and exit-code guarantees as the local store. Many
   concurrent commands can write one store.
@@ -280,6 +373,10 @@ in the store's SQL dialect, against these views:
 | `conflicts` | Record written twice with different content |
 
 Run `sqb recall schema` for every column.
+
+Every view has `invocation_id` and `invocation_started_at`. Filter on them to keep a query cheap:
+on a ClickHouse store, a filter on either reaches the table reads, so a query about one invocation or
+the last day reads that part of the store instead of folding the whole retention window.
 
 ## Relationship to compute logs
 

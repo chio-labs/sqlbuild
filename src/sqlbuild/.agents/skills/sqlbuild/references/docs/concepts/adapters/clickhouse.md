@@ -195,6 +195,7 @@ ClickHouse returns a type's default value (`0`, the epoch, an empty string) from
 
 A ClickHouse connection can also hold [Recall](../observability/recall.md)'s command
 history for a whole team, whichever adapter the project builds with. Set
-`[recall] connection` to it; Recall creates its tables on first use, keeps every output byte by
-default, and needs only `SELECT` and `INSERT` once the tables exist. See
+`[recall] write_connection` and `read_connection` to it, one connection or separate writer and
+reader users. Recall creates its tables on first use, keeps every output byte by default, and needs
+only `SELECT` and `INSERT` once the tables exist; readers need only `SELECT`. See
 [Sharing history in ClickHouse](../observability/recall.md#sharing-history-in-clickhouse).

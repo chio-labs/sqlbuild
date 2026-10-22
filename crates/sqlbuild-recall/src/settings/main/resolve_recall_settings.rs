@@ -4,7 +4,7 @@ use sqlbuild_config::models::ConfigValue;
 use sqlbuild_config::recall::constants::RECALL_SECTION;
 
 use crate::settings::_helpers::documents::{read_document, string_at};
-use crate::settings::_helpers::layers::{overlay, section, store_location};
+use crate::settings::_helpers::layers::{overlay, purpose_connection, section, store_location};
 use crate::settings::constants::{
     DEFAULT_DIAGNOSTICS_MIN_SEVERITY, DEFAULT_RETENTION_DAYS, DEFAULT_SHUTDOWN_TIMEOUT_MS,
     LOCAL_FILE_NAME, PROJECT_FILE_NAME,
@@ -12,7 +12,7 @@ use crate::settings::constants::{
 use crate::settings::errors::SettingsError;
 use crate::settings::models::{RecallSettings, SettingsRequest};
 
-/// The effective settings: `targets.<t>.recall` over `[recall]` over the built-in local store, local configuration over project configuration at each level.
+/// The effective settings: `targets.<t>.recall` over `[recall]` over the built-in local store, local configuration over project configuration at each level. Only the connection of the request's purpose is resolved, so a machine holding only the writer's or only the reader's credentials resolves its own side.
 pub fn resolve_recall_settings(request: &SettingsRequest) -> Result<RecallSettings, SettingsError> {
     let project = read_document(&request.project_dir.join(PROJECT_FILE_NAME))?;
     let local = read_document(&request.project_dir.join(LOCAL_FILE_NAME))?;
@@ -43,10 +43,12 @@ pub fn resolve_recall_settings(request: &SettingsRequest) -> Result<RecallSettin
         string_at(local.as_ref(), &["targets", target, key])
             .or_else(|| string_at(project.as_ref(), &["targets", target, key]))
     };
+    let (key, connection): (&str, Option<&str>) =
+        purpose_connection(&effective, target.as_deref(), request.purpose)?;
     let store = store_location(
         &request.project_dir,
         documents,
-        (effective.connection.as_deref(), project_adapter.as_deref()),
+        (key, connection, project_adapter.as_deref()),
     )?;
     let max_output_bytes: Option<u64> = match effective.max_output_bytes {
         Some(0) => None,
@@ -57,7 +59,8 @@ pub fn resolve_recall_settings(request: &SettingsRequest) -> Result<RecallSettin
         enabled: effective.enabled.unwrap_or(true),
         target: target.clone(),
         store,
-        connection: effective.connection,
+        write_connection: effective.write_connection,
+        read_connection: effective.read_connection,
         retention_days: effective.retention_days.unwrap_or(DEFAULT_RETENTION_DAYS),
         shutdown_timeout_ms: effective
             .shutdown_timeout_ms

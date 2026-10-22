@@ -1,6 +1,7 @@
 pub(crate) mod argv;
 pub(crate) mod dispatch;
 pub(crate) mod entry;
+pub(crate) mod failure_cause;
 pub(crate) mod launch_state;
 pub(crate) mod namespace;
 pub(crate) mod observability;

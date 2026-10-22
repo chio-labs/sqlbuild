@@ -82,3 +82,11 @@ Connection:
 ## Exit codes
 
 Returns `0` when all checks pass, `1` when any check fails (e.g. connection refused, invalid config).
+A failed run is recorded in [Recall](../concepts/observability/recall.md) with the first failed
+check as its cause:
+
+| `error_code` | `error_type` | Meaning |
+|------|------|---------|
+| `C980` | `ConnectionError` | The connection test failed |
+| `C981` | `QueryError` | The connection worked but `SELECT 1` failed |
+| `C982` | `ConfigurationError` | Another check failed, such as an invalid configuration file |

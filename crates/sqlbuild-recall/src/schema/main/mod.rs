@@ -1,9 +1,15 @@
 pub mod add_column_statement;
 pub mod clickhouse_relation;
 pub mod ddl_script;
+pub mod ddl_statements;
+pub mod render_script;
 pub mod retention_fix_statements;
+pub mod schema_age;
 pub mod sqlite_retention_sql;
 pub mod table_columns;
 pub mod table_spec;
 pub mod table_statements;
+pub mod upgrade_statements;
+pub mod version_plan;
+pub mod view_columns;
 pub mod view_statements;

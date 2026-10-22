@@ -61,6 +61,8 @@ pub struct StoreStateSql {
     pub relations: String,
     /// `table`, `name`, `type` of every column of the Recall tables, in table order.
     pub columns: String,
-    /// The highest schema version recorded, 0 when none.
+    /// The highest schema version recorded, 0 when none, and the age in seconds of the newest version row.
     pub schema_version: String,
+    /// `table`, `name` of every column of the Recall views present.
+    pub view_columns: String,
 }

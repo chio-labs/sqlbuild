@@ -2,6 +2,10 @@
 
 /// Seconds between heartbeats; tests shorten it to observe abandoned invocations quickly.
 pub(crate) const HEARTBEAT_ENVIRONMENT: &str = "SQLBUILD_RECALL_HEARTBEAT_SECONDS";
+/// The commit a deployment without `.git` records as `git_revision`.
+pub(crate) const GIT_REVISION_ENVIRONMENT: &str = "SQLBUILD_GIT_REVISION";
+/// Whether that deployment's tree had uncommitted changes, recorded as `git_dirty`.
+pub(crate) const GIT_DIRTY_ENVIRONMENT: &str = "SQLBUILD_GIT_DIRTY";
 /// Marker files under `target/` limiting store notices to one per interval.
 pub(crate) const DDL_NOTICE_PREFIX: &str = ".recall-notice-";
 pub(crate) const NOTICE_INTERVAL_SECONDS: u64 = 24 * 60 * 60;
@@ -24,6 +28,8 @@ pub(crate) const WAREHOUSE_BACKEND: &str = "warehouse";
 pub(crate) const DEFAULT_MAX_CELL_BYTES: usize = 4096;
 pub(crate) const LONG_FORMAT: &str = "long";
 pub(crate) const TABLE_FORMAT: &str = "table";
+/// What `--format table` prints in the release before it is removed.
+pub(crate) const TABLE_FORMAT_DEPRECATION: &str = "warning: --format table is deprecated and will be removed; use the default long format, or --json/--format csv\n";
 pub(crate) const CSV_FORMAT: &str = "csv";
 pub(crate) const JSON_FORMAT: &str = "json";
 /// The standard base64 alphabet binary JSON cells are encoded with.
@@ -42,7 +48,7 @@ pub(crate) const DEFAULT_QUERY_LIMIT: i64 = 100;
 /// The invocation selector naming the most recently started invocation.
 pub(crate) const LAST_INVOCATION: &str = "last";
 /// The keyword arguments the `sqb recall` dispatch route passes.
-pub(crate) const RECALL_OPTIONS: [&str; 13] = [
+pub(crate) const RECALL_OPTIONS: [&str; 14] = [
     "project_dir",
     "selected_target",
     "recall_command",
@@ -56,6 +62,7 @@ pub(crate) const RECALL_OPTIONS: [&str; 13] = [
     "invocation",
     "stream",
     "tail",
+    "ddl",
 ];
 /// Required text envelope fields of a known lifecycle event.
 pub(crate) const EVENT_TEXT_FIELDS: [&str; 5] = [
@@ -91,6 +98,8 @@ pub(crate) const UTC_ZONE_NAME: &str = "UTC";
 pub(crate) const CLOSE_POLL_MS: u64 = 50;
 /// Longest wait at startup for another process moving a corrupt store aside; the writer thread retries within the shutdown budget.
 pub(crate) const QUARANTINE_START_WAIT_MS: u64 = 200;
+/// The ClickHouse error name of a query naming a relation that does not exist yet.
+pub(crate) const UNKNOWN_TABLE_ERROR: &str = "UNKNOWN_TABLE";
 /// Seconds in a day, for the artifact refresh cutoff.
 pub(crate) const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
 /// The parameter a lifecycle-event sink takes its event in.

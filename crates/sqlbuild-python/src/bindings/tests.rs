@@ -2,6 +2,8 @@
 mod coverage;
 #[path = "tests/test_delta_facts.rs"]
 mod delta_facts;
+#[path = "tests/test_failure_cause.rs"]
+mod failure_cause;
 #[path = "tests/helpers.rs"]
 mod helpers;
 #[path = "tests/test_image.rs"]
