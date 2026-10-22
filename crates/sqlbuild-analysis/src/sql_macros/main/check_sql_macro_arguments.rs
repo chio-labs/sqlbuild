@@ -1,25 +1,40 @@
-use crate::sql_macros::_helpers::probes::analysed_probes;
-use crate::sql_macros::_helpers::probes::{check_findings, probe_plan};
-use crate::sql_macros::models::{SqlMacroCheck, SqlMacroFinding};
-use crate::sql_macros::types::RelationShapes;
+use crate::sql_macros::_helpers::probes::{ProbePlan, analysed_probes, check_findings, probe_plan};
+use crate::sql_macros::models::SqlMacroFinding;
+use crate::sql_macros::types::{ArgumentCheckInput, ProbeColumns};
 
-/// Each call argument the analysed model SQL shows does not fit its parameter, in call order.
+/// Each model's call arguments its analysed SQL shows do not fit.
 #[must_use]
 pub fn check_sql_macro_arguments(
     dialect: &str,
-    (sql, schema): (&str, &RelationShapes),
-    checks: &[SqlMacroCheck],
+    models: &[ArgumentCheckInput<'_>],
+) -> Vec<Vec<SqlMacroFinding>> {
+    let plans: Vec<ProbePlan> = models
+        .iter()
+        .map(|(sql, _, checks)| probe_plan(sql, checks))
+        .collect();
+    let batch: Vec<(&[String], _)> = plans
+        .iter()
+        .zip(models)
+        .map(|(plan, (_, schema, _))| (plan.probes.as_slice(), *schema))
+        .collect();
+    let results: Vec<Vec<ProbeColumns>> = analysed_probes(dialect, &batch);
+    plans
+        .iter()
+        .zip(models)
+        .zip(&results)
+        .map(|((plan, (_, _, checks)), columns)| model_findings(plan, checks, columns, dialect))
+        .collect()
+}
+
+fn model_findings(
+    plan: &ProbePlan,
+    checks: &[crate::sql_macros::models::SqlMacroCheck],
+    columns: &[ProbeColumns],
+    dialect: &str,
 ) -> Vec<SqlMacroFinding> {
-    let plan = probe_plan(sql, checks);
-    if plan.probes.is_empty() {
-        return Vec::new();
-    }
-    let Some(results) = analysed_probes(dialect, &plan.probes, schema) else {
-        return Vec::new();
-    };
     checks
         .iter()
         .zip(&plan.evidence)
-        .flat_map(|(check, evidence)| check_findings((check, evidence), &results, dialect))
+        .flat_map(|(check, evidence)| check_findings((check, evidence), columns, dialect))
         .collect()
 }

@@ -40,6 +40,8 @@ use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::models::DiagnosticRow;
 use crate::semantic_validation::models::ProjectCatalog;
 use crate::sql_macros::main::check_sql_macro_arguments::check_sql_macro_arguments;
+use crate::sql_macros::models::SqlMacroFinding;
+use crate::sql_macros::types::ArgumentCheckInput;
 
 /// What an internal native failure of the session names.
 const SESSION_CONTEXT: &str = "native model analysis";
@@ -303,22 +305,32 @@ impl AnalysisSession {
             })
             .collect();
         self.ensure_cleaned(&checked)?;
-        for model in &checked {
-            let request: &ModelRequest = &self.request.models[*model];
-            let schema: Shapes = self.binding_schema(request);
-            let Some(outcome) = self.outcomes[*model].as_ref() else {
+        let mut inputs: Vec<(usize, String, Shapes)> = Vec::with_capacity(checked.len());
+        for model in checked {
+            let Some(outcome) = self.outcomes[model].as_ref() else {
                 continue;
             };
             let Ok(cleaned) = resolved_cleaned_sql(outcome) else {
                 continue;
             };
-            let findings = check_sql_macro_arguments(
-                &self.request.dialect,
-                (&cleaned, &schema),
-                &request.sql_macro_checks,
-            );
+            let schema: Shapes = self.binding_schema(&self.request.models[model]);
+            inputs.push((model, cleaned.into_owned(), schema));
+        }
+        let batch: Vec<ArgumentCheckInput<'_>> = inputs
+            .iter()
+            .map(|(model, cleaned, schema)| {
+                (
+                    cleaned.as_str(),
+                    schema.as_slice(),
+                    self.request.models[*model].sql_macro_checks.as_slice(),
+                )
+            })
+            .collect();
+        let findings: Vec<Vec<SqlMacroFinding>> =
+            check_sql_macro_arguments(&self.request.dialect, &batch);
+        for ((model, _, _), found) in inputs.iter().zip(findings) {
             if let Some(outcome) = self.outcomes[*model].as_mut() {
-                outcome.sql_macro_findings = findings;
+                outcome.sql_macro_findings = found;
             }
         }
         Ok(())
