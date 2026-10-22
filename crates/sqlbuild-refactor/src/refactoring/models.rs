@@ -148,11 +148,6 @@ impl RefactorPlan {
             &self.batch
         }
     }
-
-    /// The number of text edits the plan writes, over every changed file.
-    pub fn edit_count(&self) -> usize {
-        self.changes.iter().map(|change| change.edits.len()).sum()
-    }
 }
 
 /// One rendered region of an expansion pass, pairing its source range with its output range.

@@ -73,8 +73,6 @@ pub const UNIT_TEST_ROOT: &str = "tests/unit";
 pub const MODELS_ROOT: &str = "models";
 pub const MODEL_MANUAL_HELP: &str = "Pass the model into the macro as an argument, or edit the listed locations, then run the command again.";
 pub const COLUMN_MANUAL_HELP: &str = "Edit the listed locations, then run the command again.";
-/// `RefactorInputError`'s default code.
-pub const INPUT_ERROR_CODE: &str = "C950";
 /// `RefactorEditError`'s code: two planned edits overlap.
 pub const EDIT_ERROR_CODE: &str = "C957";
 /// `RefactorWriteError`'s code: project files changed between planning and writing.

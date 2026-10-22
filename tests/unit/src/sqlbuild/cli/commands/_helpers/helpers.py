@@ -4,7 +4,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlbuild._native import (
-    ChainStep,
     CompiledObjectKey,
     CompiledRelationLocation,
     CompiledResourceType,
@@ -15,7 +14,6 @@ from sqlbuild._native import (
     PlanReason,
     SourceFreshnessIdentity,
     SourceFreshnessRecord,
-    SqlTestPlanEntry,
     build_source_freshness_create_table_sql,
 )
 from sqlbuild.adapter.contract.types import FrameworkType
@@ -103,21 +101,6 @@ def model_entry(name: str) -> ModelPlanEntry:
         fingerprint_query_sql="SELECT 1",
         resolved_sql="SELECT 1",
         logical_ddl="",
-    )
-
-
-def chained_sql_test_entry() -> SqlTestPlanEntry:
-    return SqlTestPlanEntry(
-        key=CompiledObjectKey(resource_type=CompiledResourceType.SQL_TEST, name="test_orders"),
-        name="test_orders",
-        chain=(
-            ChainStep(model_name="stg_orders", resolved_sql="select 1"),
-            ChainStep(
-                model_name="fct_orders",
-                resolved_sql="select 1",
-                expected_cte_sql="select 1",
-            ),
-        ),
     )
 
 

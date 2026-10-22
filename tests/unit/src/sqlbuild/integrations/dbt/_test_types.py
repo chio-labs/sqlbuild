@@ -88,15 +88,6 @@ class DbtRunnerCommandTestCase:
 
 
 @dataclass(frozen=True)
-class DbtModeGuardTestCase:
-    description: str
-    virtual_environments: bool
-    expected_error_fragment: str | None
-    expected_code: str | None
-    expected_help_fragment: str | None
-
-
-@dataclass(frozen=True)
 class DbtSelectionErrorTestCase:
     description: str
     manifest_data: dict[str, object]

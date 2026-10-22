@@ -739,17 +739,6 @@ pub(crate) fn plan_selected_sql_tests<'py>(
     planned_sql_tests(project, adapter, selected_keys, sql_test_selection)
 }
 
-/// Whether a test is named by the selection or covers a selected resource, and not excluded.
-#[pyfunction]
-#[pyo3(signature = (*, test, selected_keys, sql_test_selection))]
-fn sql_test_is_selected(
-    test: &Bound<'_, PyAny>,
-    selected_keys: &Bound<'_, PyAny>,
-    sql_test_selection: &Bound<'_, PyAny>,
-) -> PyResult<bool> {
-    test_selected(test, selected_keys, sql_test_selection)
-}
-
 /// Selected SQL test entries and warnings, optionally narrowed to one parameterized case.
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
@@ -781,7 +770,6 @@ fn build_selected_test_entries<'py>(
 pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(plan_function, module)?)?;
     module.add_function(wrap_pyfunction!(plan_selected_sql_tests, module)?)?;
-    module.add_function(wrap_pyfunction!(sql_test_is_selected, module)?)?;
     module.add_function(wrap_pyfunction!(sql_test_model_chain_names_by_key, module)?)?;
     module.add_function(wrap_pyfunction!(build_selected_test_entries, module)?)
 }

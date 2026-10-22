@@ -190,14 +190,6 @@ impl RecallSession {
         counts.filtered += count;
     }
 
-    /// Count records a replacement sink failed on in `stream`.
-    pub fn record_failed(&self, stream: DeliveryStream, count: u64) {
-        let mut state = locked(&self.shared.state);
-        let counts = state.counts_mut(stream);
-        counts.accepted += count;
-        counts.failed += count;
-    }
-
     /// The accounting so far.
     #[must_use]
     pub fn summary(&self) -> DeliverySummary {

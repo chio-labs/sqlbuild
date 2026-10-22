@@ -439,24 +439,6 @@ class FakeJanitorAdapter(BaseAdapter):
         raise NotImplementedError
 
 
-class FailingDropAdapter(FakeJanitorAdapter):
-    def __init__(self, *, message: str) -> None:
-        super().__init__(relation_infos=())
-        self.message: str = message
-
-    def drop(
-        self,
-        connection: Any,
-        *,
-        destination: str,
-        if_exists: bool = True,
-        statement_recorder: StatementRecorder,
-    ) -> None:
-        del connection, if_exists, statement_recorder
-        self.dropped_targets.append(destination)
-        raise RuntimeError(self.message)
-
-
 class FoldingJanitorAdapter(FakeJanitorAdapter):
     """Warehouse double that filters case-insensitively and lists lowercase identifiers."""
 
@@ -613,17 +595,6 @@ def build_project(
             ),
         ),
         sources=sources,
-    )
-
-
-def relation_info_for_test(*, schema: str, name: str) -> RelationInfo:
-    return RelationInfo(
-        database=None,
-        schema=schema,
-        name=name,
-        relation_type="table",
-        created_at=None,
-        last_altered_at=None,
     )
 
 

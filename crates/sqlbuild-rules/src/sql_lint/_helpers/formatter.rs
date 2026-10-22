@@ -34,14 +34,6 @@ pub(crate) fn format_json_impl(request_json: &str) -> Result<String, String> {
     serde_json::to_string(&response).map_err(|error| error.to_string())
 }
 
-pub(crate) fn format_batch_json_impl(request_json: &str) -> Result<String, String> {
-    let requests: Vec<FormatRequest> =
-        serde_json::from_str(request_json).map_err(|error| error.to_string())?;
-    let responses: Result<Vec<FormatResponse>, String> =
-        requests.into_par_iter().map(format_sql).collect();
-    serde_json::to_string(&responses?).map_err(|error| error.to_string())
-}
-
 /// Format requests in parallel, in order; a request that fails is declined with its reason.
 pub(crate) fn format_requests(requests: Vec<FormatRequest>) -> Vec<FormatResponse> {
     requests

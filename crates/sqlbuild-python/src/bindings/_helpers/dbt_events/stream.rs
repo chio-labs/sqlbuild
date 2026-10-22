@@ -10,7 +10,6 @@ use pyo3::types::PyDict;
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_core::cli_text::models::CliStyle;
 use sqlbuild_core::dbt_events::main::consume_dbt_event::consume_dbt_event;
-use sqlbuild_core::dbt_events::main::format_dbt_active_nodes::format_dbt_active_nodes;
 use sqlbuild_core::dbt_events::main::render_dbt_node_row::render_dbt_node_row;
 use sqlbuild_core::dbt_events::models::{DbtRowPosition, DbtStreamState, DbtStreamUpdate};
 
@@ -146,17 +145,9 @@ pub(crate) fn render_dbt_node_result(
     ))
 }
 
-/// The progress line listing running dbt nodes by their start time.
-#[pyfunction]
-#[pyo3(signature = (*, active_nodes, now))]
-fn format_dbt_active_node_status(active_nodes: Vec<(String, f64)>, now: f64) -> String {
-    format_dbt_active_nodes(&active_nodes, now)
-}
-
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<DbtEventStream>()?;
     module.add_class::<DbtEventStreamUpdate>()?;
     module.add_function(wrap_pyfunction!(render_dbt_node_result, module)?)?;
-    module.add_function(wrap_pyfunction!(format_dbt_active_node_status, module)?)?;
     Ok(())
 }

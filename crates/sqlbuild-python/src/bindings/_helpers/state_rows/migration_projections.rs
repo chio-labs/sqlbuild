@@ -173,19 +173,9 @@ fn old_name_views_binding<'py>(
     old_name_views(moves, facts)
 }
 
-#[pyfunction(name = "resolve_old_name_view_retention")]
-#[pyo3(signature = (*, config_values, project_retention))]
-fn retention_binding<'py>(
-    config_values: &Bound<'py, PyAny>,
-    project_retention: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    old_name_retention(config_values, project_retention)
-}
-
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(newest_move_binding, module)?)?;
     module.add_function(wrap_pyfunction!(newest_column_binding, module)?)?;
     module.add_function(wrap_pyfunction!(old_name_views_binding, module)?)?;
-    module.add_function(wrap_pyfunction!(retention_binding, module)?)?;
     Ok(())
 }

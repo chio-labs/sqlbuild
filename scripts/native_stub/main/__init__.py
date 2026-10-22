@@ -1,0 +1,1 @@
+"""Native stub check entrypoints."""

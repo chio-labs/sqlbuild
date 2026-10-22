@@ -5,7 +5,7 @@ use pyo3::{FromPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_rules::lint_text::models::InterpolationSite;
 use sqlbuild_rules::sql_lint::types::PreparedSql;
 
-use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
+use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::compiled_views::relation_keys;
 use crate::bindings::models::Positional;
 use crate::bindings::types::CompilerDetach;
@@ -54,40 +54,14 @@ fn prepare_lint_sql(
 }
 
 #[pyfunction]
-fn lint_backtick_identifiers(dialect: &str) -> PyResult<bool> {
-    compiler_guard(|| {
-        Ok(sqlbuild_rules::sql_lint::main::backtick_identifiers::backtick_identifiers(dialect))
-    })
-}
-
-#[pyfunction]
-fn lint_sql_batch_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.compiler_detach(|| {
-        sqlbuild_rules::sql_lint::main::batch_engine::lint_batch_json(request_json)
-    })
-    .map_err(value_error)
-}
-
-#[pyfunction]
 fn format_sql_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
     py.compiler_detach(|| sqlbuild_rules::sql_lint::main::formatter::format_json(request_json))
         .map_err(value_error)
 }
 
-#[pyfunction]
-fn format_sql_batch_json(py: Python<'_>, request_json: &str) -> PyResult<String> {
-    py.compiler_detach(|| {
-        sqlbuild_rules::sql_lint::main::batch_formatter::format_batch_json(request_json)
-    })
-    .map_err(value_error)
-}
-
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(lint_sql_json, module)?)?;
     module.add_function(wrap_pyfunction!(prepare_lint_sql, module)?)?;
-    module.add_function(wrap_pyfunction!(lint_backtick_identifiers, module)?)?;
-    module.add_function(wrap_pyfunction!(lint_sql_batch_json, module)?)?;
     module.add_function(wrap_pyfunction!(format_sql_json, module)?)?;
-    module.add_function(wrap_pyfunction!(format_sql_batch_json, module)?)?;
     relation_keys::register(module)
 }

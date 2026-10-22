@@ -345,44 +345,6 @@ def write_blocking_fake_sqb_command(*, root: Path, release_path: Path) -> list[s
     return ["python", str(script_path)]
 
 
-def write_blocking_clone_event_command(
-    *, root: Path, release_path: Path, command: str = "clone"
-) -> list[str]:
-    event_payload: str = json.dumps(
-        integration_result_payload(
-            command=command,
-            asset={"kind": "model", "name": "orders", "status": "success", "action": "cloned"},
-        )
-    )
-    script_path: Path = root / "blocking_clone_event.py"
-    script_path.write_text(
-        "\n".join(
-            (
-                "from pathlib import Path",
-                "import os",
-                "import sys",
-                "import time",
-                "event_path = Path(os.environ['SQLBUILD_INTEGRATION_RESULT_PATH'])",
-                f"event_path.write_text({event_payload + chr(10)!r}, encoding='utf-8')",
-                f"release_path = Path({str(release_path)!r})",
-                "while not release_path.exists():",
-                "    time.sleep(0.01)",
-                "json_path = Path(sys.argv[sys.argv.index('--json-output') + 1])",
-                "json_path.write_text("
-                '    \'{"version": 1, "command": "clone", "status": "success", \''
-                '    \'"summary": {"success_count": 1}, "assets": \''
-                '    \'[{"kind": "model", "name": "orders", "status": "success", \''
-                '    \'"action": "cloned"}], "checks": []}\','
-                "    encoding='utf-8',"
-                ")",
-            )
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    return ["python", str(script_path)]
-
-
 def write_blocking_execution_event_command(
     *, root: Path, release_path: Path, command: str, asset_name: str = "customers"
 ) -> list[str]:

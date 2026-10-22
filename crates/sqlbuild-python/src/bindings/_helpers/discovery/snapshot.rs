@@ -162,20 +162,11 @@ pub(crate) fn directory_snapshot_scope(
     }
 }
 
-/// The active snapshot of `project_dir`, or `None` outside its scope.
-#[pyfunction]
-#[pyo3(signature = (*, project_dir))]
-fn active_directory_snapshot<'py>(
-    project_dir: &Bound<'py, PyAny>,
-) -> PyResult<Option<Bound<'py, NativeDirectorySnapshot>>> {
-    active_snapshot(project_dir)
-}
-
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeDirectorySnapshot>()?;
     module.add_class::<NativeDirectorySnapshotScope>()?;
     module.add_function(wrap_pyfunction!(directory_snapshot_scope, module)?)?;
-    module.add_function(wrap_pyfunction!(active_directory_snapshot, module)?)
+    Ok(())
 }
 
 /// `str(project_dir / "_")` without its probe: the text printed before a relative path.

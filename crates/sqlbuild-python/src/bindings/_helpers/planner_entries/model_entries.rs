@@ -605,23 +605,6 @@ pub(crate) fn plan_model<'py>(
     })
 }
 
-/// Build a name-to-materialization-type lookup from planned model entries.
-#[pyfunction]
-#[pyo3(signature = (model_entries, /))]
-fn build_model_materializations<'py>(
-    model_entries: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyDict>> {
-    let lookup = PyDict::new(model_entries.py());
-    for entry in model_entries.try_iter()? {
-        let entry = entry?;
-        lookup.set_item(
-            native_field(&entry, "name")?,
-            native_field(&entry, "materialization_type")?,
-        )?;
-    }
-    Ok(lookup)
-}
-
 /// Check if any scope dependency is in the selected keys.
 #[pyfunction]
 #[pyo3(signature = (*, scope_deps, selected_keys))]
@@ -639,6 +622,5 @@ pub(crate) fn scope_overlaps(
 
 pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(plan_model, module)?)?;
-    module.add_function(wrap_pyfunction!(build_model_materializations, module)?)?;
     module.add_function(wrap_pyfunction!(scope_overlaps, module)?)
 }

@@ -18,13 +18,6 @@ class SqliteCommandE2ETestCase:
 
 
 @dataclass(frozen=True)
-class SqliteFileLayoutE2ETestCase:
-    description: str
-    expected_tables: tuple[str, ...]
-    absent_tables: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
 class SqliteProjectE2ETestCase:
     description: str
     files: dict[str, str]

@@ -284,24 +284,7 @@ pub(crate) fn microbatch_limit_config<'py>(
     Ok((positive_integer(Some(legacy))?, None))
 }
 
-/// `(max_batches, action)` from validated model config values.
-#[pyfunction]
-#[pyo3(signature = (*, values))]
-fn resolve_microbatch_limit_config<'py>(
-    values: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyTuple>> {
-    let py: Python<'py> = values.py();
-    let (max_batches, action) = microbatch_limit_config(values)?;
-    PyTuple::new(
-        py,
-        [
-            max_batches.unwrap_or_else(|| py.None().into_bound(py)),
-            action.unwrap_or_else(|| py.None().into_bound(py)),
-        ],
-    )
-}
-
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(microbatch_limit_warning, module)?)?;
-    module.add_function(wrap_pyfunction!(resolve_microbatch_limit_config, module)?)
+    Ok(())
 }
