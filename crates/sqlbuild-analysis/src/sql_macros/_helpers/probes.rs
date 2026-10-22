@@ -1,8 +1,9 @@
 //! Probe queries that read the caller's column types at each SQL macro call, and their verdicts.
 
+use polyglot_sql::ValidationSchema;
 use serde_json::{Value, json};
 
-use crate::query_analysis::main::analyze::analyze_json;
+use crate::query_analysis::main::output_types::output_types;
 use crate::sql_macros::_helpers::arguments::{fits, type_family};
 use crate::sql_macros::_helpers::header::unquoted;
 use crate::sql_macros::_helpers::lexing::{Token, TokenKind, tokens};
@@ -21,6 +22,13 @@ use crate::sql_macros::types::{ProbeColumns, RelationShapes};
 pub(crate) enum Evidence {
     Columns(usize),
     Column(usize, String),
+}
+
+/// The typed arguments of one scope, read by one probe, as `(check, argument)` positions.
+struct TypedProbe<'c> {
+    scope: &'c CallScope,
+    columns: Vec<String>,
+    arguments: Vec<(usize, usize)>,
 }
 
 /// The probes of one model and, per check and argument, where its evidence is.
@@ -164,14 +172,13 @@ pub(crate) fn probe_plan(sql: &str, checks: &[SqlMacroCheck]) -> ProbePlan {
             .collect();
         return plan;
     };
-    for check in checks {
+    let mut scopes: Vec<TypedProbe<'_>> = Vec::new();
+    for (position, check) in checks.iter().enumerate() {
         let mut evidence: Vec<Option<Evidence>> = vec![None; check.arguments.len()];
         if !check.plain_select {
             plan.evidence.push(evidence);
             continue;
         }
-        let mut typed: Vec<String> = Vec::new();
-        let mut typed_arguments: Vec<usize> = Vec::new();
         for (index, argument) in check.arguments.iter().enumerate() {
             match &argument.expected {
                 ArgumentExpectation::Relation { .. } => {
@@ -181,32 +188,53 @@ pub(crate) fn probe_plan(sql: &str, checks: &[SqlMacroCheck]) -> ProbePlan {
                     }
                 }
                 ArgumentExpectation::Typed { .. } => {
-                    typed.push(format!(
+                    let probe: &mut TypedProbe<'_> = typed_probe(&mut scopes, &check.scope);
+                    probe.columns.push(format!(
                         "({}) AS {PROBE_COLUMN_PREFIX}{}",
                         argument.text,
-                        typed.len()
+                        probe.columns.len()
                     ));
-                    typed_arguments.push(index);
+                    probe.arguments.push((position, index));
                 }
                 ArgumentExpectation::ColumnOf { .. } => {}
             }
         }
-        if !typed.is_empty()
-            && let Some((prefix, tail)) = scope_frame(sql, &parts, &check.scope)
-        {
-            plan.probes
-                .push(format!("{prefix}SELECT {} {tail}", typed.join(", ")));
-            let probe: usize = plan.probes.len() - 1;
-            for (position, index) in typed_arguments.into_iter().enumerate() {
-                evidence[index] = Some(Evidence::Column(
-                    probe,
-                    format!("{PROBE_COLUMN_PREFIX}{position}"),
-                ));
-            }
-        }
         plan.evidence.push(evidence);
     }
+    for probe in scopes {
+        let Some((prefix, tail)) = scope_frame(sql, &parts, probe.scope) else {
+            continue;
+        };
+        plan.probes.push(format!(
+            "{prefix}SELECT {} {tail}",
+            probe.columns.join(", ")
+        ));
+        let index: usize = plan.probes.len() - 1;
+        for (column, (check, argument)) in probe.arguments.into_iter().enumerate() {
+            plan.evidence[check][argument] = Some(Evidence::Column(
+                index,
+                format!("{PROBE_COLUMN_PREFIX}{column}"),
+            ));
+        }
+    }
     plan
+}
+
+/// The typed probe of `scope` among `scopes`, added empty when it is the first.
+fn typed_probe<'s, 'c>(
+    scopes: &'s mut Vec<TypedProbe<'c>>,
+    scope: &'c CallScope,
+) -> &'s mut TypedProbe<'c> {
+    let found: Option<usize> = scopes.iter().position(|probe| probe.scope == scope);
+    let index: usize = found.unwrap_or_else(|| {
+        scopes.push(TypedProbe {
+            scope,
+            columns: Vec::new(),
+            arguments: Vec::new(),
+        });
+        scopes.len() - 1
+    });
+    &mut scopes[index]
 }
 
 /// The column type of `name` in `columns`, matching names without case or quotes.
@@ -348,27 +376,32 @@ fn shown_type(inferred: &str) -> &str {
     }
 }
 
-/// Each probe's output columns, analysed against `schema`; `None` where analysis knew none.
+/// Each model's probes' output columns, inferred against that model's bound relations.
 pub(crate) fn analysed_probes(
     dialect: &str,
-    probes: &[String],
-    schema: &RelationShapes,
-) -> Option<Vec<ProbeColumns>> {
-    let tables: Vec<Value> = schema
+    models: &[(&[String], &RelationShapes)],
+) -> Vec<Vec<ProbeColumns>> {
+    models
         .iter()
-        .map(|(name, columns)| table(name, columns))
-        .collect();
-    let requests: Vec<Value> = probes
-        .iter()
-        .map(|sql| json!({"sql": sql, "dialect": dialect, "schema": {"tables": tables}}))
-        .collect();
-    let Ok(response) = analyze_json(&json!({ "requests": requests }).to_string()) else {
-        return None;
-    };
-    let Ok(Value::Array(analyses)) = serde_json::from_str::<Value>(&response) else {
-        return None;
-    };
-    Some(analyses.iter().map(probe_columns).collect())
+        .map(|(probes, schema)| {
+            if probes.is_empty() {
+                return Vec::new();
+            }
+            let tables: Vec<Value> = schema
+                .iter()
+                .map(|(name, columns)| table(name, columns))
+                .collect();
+            let Ok(schema) =
+                serde_json::from_value::<ValidationSchema>(json!({ "tables": tables }))
+            else {
+                return vec![None; probes.len()];
+            };
+            probes
+                .iter()
+                .map(|sql| output_types(sql, dialect, &schema).and_then(probe_columns))
+                .collect()
+        })
+        .collect()
 }
 
 /// One bound relation as a validation schema table, its qualified name split into parts.
@@ -389,22 +422,19 @@ fn table(name: &str, columns: &[(String, String)]) -> Value {
     entry
 }
 
-/// A probe analysis's output columns, unless it failed or left a star unresolved.
-fn probe_columns(analysis: &Value) -> ProbeColumns {
-    let projections: &Vec<Value> = analysis.pointer("/analysis/projections")?.as_array()?;
-    let mut columns: Vec<(String, Option<String>)> = Vec::with_capacity(projections.len());
-    for projection in projections {
-        let name: &str = projection.get("name")?.as_str()?;
-        let star: bool = projection.get("isStar").and_then(Value::as_bool) == Some(true);
-        if star || name == STAR_PROJECTION {
-            return None;
-        }
-        let hint: Option<&str> = projection.get("typeHint").and_then(Value::as_str);
-        let data_type: Option<String> = match hint {
-            Some(hint) if !hint.eq_ignore_ascii_case(UNKNOWN_TYPE_HINT) => Some(hint.to_owned()),
-            _ => None,
-        };
-        columns.push((name.to_owned(), data_type));
+/// A probe's typed output columns, unless analysis left a star unexpanded.
+fn probe_columns(outputs: Vec<(String, Option<String>)>) -> ProbeColumns {
+    if outputs.is_empty() || outputs.iter().any(|(name, _)| name == STAR_PROJECTION) {
+        return None;
     }
-    Some(columns)
+    Some(
+        outputs
+            .into_iter()
+            .map(|(name, data_type)| {
+                let known: Option<String> =
+                    data_type.filter(|hint| !hint.eq_ignore_ascii_case(UNKNOWN_TYPE_HINT));
+                (name, known)
+            })
+            .collect(),
+    )
 }

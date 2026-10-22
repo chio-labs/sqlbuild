@@ -171,30 +171,43 @@ fn authored_span(
     sql: &str,
     (start, end): (usize, usize),
 ) -> (SqlMacroLocation, (usize, usize)) {
-    let char_offset: usize = sql[..start].chars().count();
-    let query_byte: usize = origin.contents.find(origin.query).unwrap_or(0);
-    let query_start: usize = origin.contents[..query_byte].chars().count();
-    let authored: usize = if sql == origin.query {
-        query_start + char_offset
+    let query_byte: usize = if origin.contents.ends_with(origin.query) {
+        origin.contents.len() - origin.query.len()
     } else {
-        let snippet: &str = &sql[start..end];
+        origin.contents.find(origin.query).unwrap_or(0)
+    };
+    let snippet: &str = &sql[start..end];
+    let authored: usize = if sql == origin.query {
+        query_byte + start
+    } else {
         let ordinal: usize = sql[..start].match_indices(snippet).count();
         origin.contents[query_byte..]
             .match_indices(snippet)
             .nth(ordinal)
-            .map_or(query_start + char_offset, |(found, _)| {
-                origin.contents[..query_byte + found].chars().count()
-            })
+            .map_or(query_byte, |(found, _)| query_byte + found)
     };
-    let position = text_position(origin.contents, authored);
-    let ending = text_position(origin.contents, authored + sql[start..end].chars().count());
+    let (line, column) = byte_position(origin.contents, authored);
     (
         SqlMacroLocation {
             path: origin.relative_path.to_owned(),
-            line: position.line,
-            column: position.column,
+            line,
+            column,
         },
-        (ending.line, ending.column),
+        byte_position(origin.contents, authored + snippet.len()),
+    )
+}
+
+/// The one-based line and character column of byte `offset` of `text`.
+fn byte_position(text: &str, offset: usize) -> (usize, usize) {
+    let mut offset: usize = offset.min(text.len());
+    while !text.is_char_boundary(offset) {
+        offset -= 1;
+    }
+    let before: &str = &text[..offset];
+    let line_start: usize = before.rfind('\n').map_or(0, |newline| newline + 1);
+    (
+        before.matches('\n').count() + 1,
+        before[line_start..].chars().count() + 1,
     )
 }
 
