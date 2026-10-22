@@ -440,6 +440,11 @@ h3 {
 	font-size: 15px;
 }
 
+.step-text .more {
+	margin-top: 14px;
+	font-size: 14px;
+}
+
 .terminal {
 	margin: 0;
 	padding: 22px 24px;
