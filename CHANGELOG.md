@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.168.0](https://github.com/chio-labs/sqlbuild/compare/v0.167.2...v0.168.0) (2026-10-22)
+
+
+### Features
+
+* create the Recall database automatically and lead the Recall docs with the intended workflow ([#1222](https://github.com/chio-labs/sqlbuild/issues/1222)) ([65a5ee0](https://github.com/chio-labs/sqlbuild/commit/65a5ee01e4cb27b197fc4b40b3e0cd7a17dbba66))
+
 ## [0.167.2](https://github.com/chio-labs/sqlbuild/compare/v0.167.1...v0.167.2) (2026-10-22)
 
 
