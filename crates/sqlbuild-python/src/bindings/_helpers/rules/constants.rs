@@ -18,8 +18,8 @@ pub(crate) const RULE_FIX_AVAILABLE_NOTE: &str =
 pub(crate) const RULES_NATIVE_API_VERSION: i64 = 1;
 /// File name of the custom-rule result cache under the project cache directory.
 pub(crate) const CUSTOM_RULES_CACHE_FILE: &str = "custom-rules.json";
-/// Bulk cache subdirectory of a selected run's whole-project pass, kept apart from its slice's.
-pub(crate) const WHOLE_PROJECT_CACHE_DIRECTORY: &str = "whole-project";
+/// Code prefix of the SQL lint rules, which check each selected file on its own.
+pub(crate) const SQL_RULE_PREFIX: &str = "SQBRSQL";
 /// Suffix of a custom host scratch directory abandoned by a cancelled run.
 pub(crate) const CUSTOM_HOST_ABANDONED_SUFFIX: &str = ".abandoned";
 /// Marker file whose presence tells split custom hosts the run was cancelled.

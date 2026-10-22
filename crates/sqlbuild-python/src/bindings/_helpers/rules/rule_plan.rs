@@ -19,7 +19,7 @@ use crate::bindings::_helpers::rules::catalogue::{
     references_custom_rules, resolved_ignore_selectors, rule_catalogue, select_rules,
     verify_custom_rules,
 };
-use crate::bindings::_helpers::rules::constants::TYPE_PROOF_RULE_CODES;
+use crate::bindings::_helpers::rules::constants::{SQL_RULE_PREFIX, TYPE_PROOF_RULE_CODES};
 use crate::bindings::_helpers::rules::fact_replay::{project_attribute, project_models};
 use crate::bindings::_helpers::rules::rule_run::freed_memory_released;
 
@@ -142,16 +142,16 @@ pub(crate) fn rule_run_plan<'py>(
     )
 }
 
-/// The selected project-wide codes a model selection still evaluates over the whole project.
+/// The selected non-SQL-lint codes a model selection evaluates over the whole project.
 pub(crate) fn whole_project_codes(plan: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     let mut codes: Vec<String> = Vec::new();
     if field(plan, "model_paths")?.is_none() {
         return Ok(codes);
     }
     for rule in field(plan, "selected")?.try_iter()? {
-        let rule: Bound<'_, PyAny> = rule?;
-        if field(&rule, "project_wide")?.is_truthy()? {
-            codes.push(field(&rule, "code")?.extract()?);
+        let code: String = field(&rule?, "code")?.extract()?;
+        if !code.starts_with(SQL_RULE_PREFIX) {
+            codes.push(code);
         }
     }
     Ok(codes)

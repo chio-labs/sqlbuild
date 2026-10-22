@@ -30,6 +30,7 @@ use crate::bindings::_helpers::records::fields::field;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::rules::constants::SAFE_RULE_FIX_CODES;
+use crate::bindings::_helpers::rules::constants::SQL_RULE_PREFIX;
 use crate::bindings::_helpers::rules::early_sql_lint::{
     EarlyLintResult, EarlySqlLint, PreparedSqlLint, sql_lint_settings, sql_rule_cache_path,
 };
@@ -51,7 +52,6 @@ const DATACLASSES_MODULE: &str = "dataclasses";
 const JSON_MODULE: &str = "json";
 const BUILTINS_MODULE: &str = "builtins";
 const PATHLIB_MODULE: &str = "pathlib";
-const SQL_RULE_PREFIX: &str = "SQBRSQL";
 const SQL_RULE_SUPPRESSION_CODE: &str = "SQBRSQL000";
 const DEFAULT_REMEDIATION: &str = "Update the authored SQL to satisfy this rule.";
 const UTF8: &str = "utf-8";
