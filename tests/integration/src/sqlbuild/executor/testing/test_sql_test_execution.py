@@ -24,6 +24,7 @@ from sqlbuild.executor.testing.models import (
 )
 from sqlbuild.executor.testing.types import SqlTestDifferenceDirection, SqlTestOutcome
 from tests.integration.src.sqlbuild.executor.testing._test_types import (
+    EngineInternalErrorTestCase,
     ExpectedBooleanTestCase,
     LaterStepStorageTestCase,
     OutputStorageTestCase,
@@ -86,6 +87,29 @@ class SecondStorageFailingDuckDbAdapter(DuckDbAdapter):
         if self._stored > 1:
             raise RuntimeError("no more temporary tables in this session")
         return super().create_sql_test_output(connection=connection, sql=sql, name=name)
+
+
+class InternalException(Exception):
+    """Stands in for DuckDB's engine assertion error, which the adapter matches by class name."""
+
+
+class InternalErrorOnStoreDuckDbAdapter(DuckDbAdapter):
+    """With ``fail``, the bare output query hits an engine assertion error; comparisons do not."""
+
+    def __init__(self, *, fail: bool) -> None:
+        super().__init__()
+        self._fail: bool = fail
+        self._outputs: set[str] = set()
+
+    def create_sql_test_output(self, *, connection: Any, sql: str, name: str) -> str | None:
+        self._outputs.add(sql)
+        return super().create_sql_test_output(connection=connection, sql=sql, name=name)
+
+    def execute(self, *, connection: Any, sql: str) -> Any:
+        stored: bool = sql.startswith("CREATE TEMPORARY TABLE")
+        if self._fail and (stored or sql in self._outputs):
+            raise InternalException('INTERNAL Error: Failed to bind column reference ""')
+        return super().execute(connection=connection, sql=sql)
 
 
 class DescriptionlessDifferenceSampleDuckDbAdapter(DuckDbAdapter):
@@ -827,3 +851,47 @@ def test_given_later_step_that_cannot_be_stored_when_executing_then_it_is_checke
     assert result.outcome == test_case.expected_outcome, result.error_message
     assert test_case.expected_error_fragment in (result.error_message or "")
     assert test_case.unexpected_error_fragment not in (result.error_message or "")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        EngineInternalErrorTestCase(
+            description="an engine assertion error storing the output compares inline",
+            chain_steps=(("orders", "SELECT 1 AS order_id", "SELECT 1 AS order_id"),),
+            raise_internal_error=True,
+            expected_outcome=SqlTestOutcome.PASS,
+        ),
+        EngineInternalErrorTestCase(
+            description="an engine assertion error does not hide a mismatch",
+            chain_steps=(("orders", "SELECT 1 AS order_id", "SELECT 2 AS order_id"),),
+            raise_internal_error=True,
+            expected_outcome=SqlTestOutcome.FAIL,
+        ),
+        EngineInternalErrorTestCase(
+            description="two equal windows over a grouped constant fixture pass",
+            chain_steps=(
+                (
+                    "orders",
+                    "SELECT MAX(amount) OVER (PARTITION BY order_id) AS high, "
+                    "MAX(amount) OVER (PARTITION BY order_id) AS top "
+                    "FROM (SELECT 1 AS order_id, 1 AS amount) GROUP BY order_id, amount",
+                    "SELECT 1 AS high, 1 AS top",
+                ),
+            ),
+            raise_internal_error=False,
+            expected_outcome=SqlTestOutcome.PASS,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_engine_internal_error_storing_output_when_executing_then_compares_inline(
+    test_case: EngineInternalErrorTestCase, connection: Any
+) -> None:
+    result: SqlTestExecutionResult = execute_sql_test(
+        test_entry=build_sql_test_plan_entry(name="orders_ids", chain_steps=test_case.chain_steps),
+        adapter=InternalErrorOnStoreDuckDbAdapter(fail=test_case.raise_internal_error),
+        connection=connection,
+    )
+
+    assert result.outcome == test_case.expected_outcome, result.error_message

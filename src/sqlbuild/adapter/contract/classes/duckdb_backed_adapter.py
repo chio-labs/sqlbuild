@@ -40,6 +40,7 @@ from sqlbuild.adapter.contract.constants import (
     CANCELLABLE_DURATION_LIMIT_SECONDS,
     DIFF_LEFT_SIDE,
     DIFF_RIGHT_SIDE,
+    DUCKDB_INTERNAL_ERROR_CLASS_NAME,
     DUCKDB_MISSING_OBJECT_MARKER,
     DUCKDB_NOT_FOUND_ERROR_CLASS_NAMES,
     QUALIFIED_NAME_SEPARATOR,
@@ -91,6 +92,8 @@ from sqlbuild.adapter.type_system.main.first_arg_nullability import first_arg_nu
 from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize_numeric_family
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.compiler.compile.types import FunctionLanguage
+from sqlbuild.diagnostics.classes.diagnostic_record_redactor import DiagnosticRecordRedactor
+from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.diagnostics.main.log_sql import log_sql
 from sqlbuild.runtime.user_code.main.user_code_spec import user_code_spec
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
@@ -118,9 +121,19 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
     execution_duration_limit_seconds: ClassVar[int | None] = CANCELLABLE_DURATION_LIMIT_SECONDS
 
     def create_sql_test_output(self, *, connection: Any, sql: str, name: str) -> str | None:
-        """Store a unit test's actual output once in a session temporary table."""
+        """Store a unit test's output in a temporary table; compare inline on an engine bug."""
 
-        _ = self.execute(connection=connection, sql=f"CREATE TEMPORARY TABLE {name} AS {sql}")
+        try:
+            _ = self.execute(connection=connection, sql=f"CREATE TEMPORARY TABLE {name} AS {sql}")
+        except Exception as error:
+            if type(error).__name__ != DUCKDB_INTERNAL_ERROR_CLASS_NAME:
+                raise
+            log_debug_event(
+                logger=logging.getLogger("sqlbuild.adapter.duckdb"),
+                message="DuckDB could not store a SQL test output; comparing inline",
+                sqlbuild_error=DiagnosticRecordRedactor.text(str(error)),
+            )
+            return None
         return name
 
     def drop_sql_test_output(self, *, connection: Any, relation: str) -> None:

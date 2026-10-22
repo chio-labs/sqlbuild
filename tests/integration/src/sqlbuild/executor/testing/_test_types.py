@@ -87,3 +87,13 @@ class LaterStepStorageTestCase:
     expected_outcome: SqlTestOutcome
     expected_error_fragment: str
     unexpected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class EngineInternalErrorTestCase:
+    """A tested output DuckDB fails to store with an engine assertion error."""
+
+    description: str
+    chain_steps: tuple[tuple[str, str, str | None], ...]
+    raise_internal_error: bool
+    expected_outcome: SqlTestOutcome
