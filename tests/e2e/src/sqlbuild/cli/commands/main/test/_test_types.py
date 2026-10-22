@@ -533,6 +533,8 @@ class SinceJsonOutputE2ETestCase:
     expected_stderr_fragments: tuple[str, ...]
     expected_test_names: tuple[str, ...]
     unexpected_stdout_fragments: tuple[str, ...]
+    # The `since` section's selected items and their reasons, by name.
+    expected_selected: Mapping[str, tuple[str, ...]]
 
 
 @dataclass(frozen=True)
@@ -542,6 +544,18 @@ class SinceShallowCloneE2ETestCase:
     description: str
     clone_arguments: tuple[str, ...]
     fetch_arguments: tuple[str, ...]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SinceBrokenBaseE2ETestCase:
+    """A base revision that does not compile, and the error `--since` must report."""
+
+    description: str
+    base_files: Mapping[str, str]
+    deletions: tuple[str, ...]
     command: tuple[str, ...]
     expected_exit_code: int
     expected_fragments: tuple[str, ...]

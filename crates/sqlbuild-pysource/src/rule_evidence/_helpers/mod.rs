@@ -1,4 +1,5 @@
 pub(crate) mod cases;
+pub(crate) mod closure;
 pub(crate) mod evidence;
 pub(crate) mod imports;
 pub(crate) mod owners;

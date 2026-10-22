@@ -43,13 +43,15 @@ sqb scenario test [flags]
 `--since <ref>` applies the rules of [`sqb test --since`](/docs/cli/test#run-only-affected-tests)
 to scenarios. A scenario is selected when its own file (its definition and fixtures) or its
 captured local snapshots changed, or when any node it actually executes changed: the models it
-builds, the seeds it loads, the functions they call, and the macros, enums and constants they and
-the scenario use. A model the scenario replaces with a `__ref__` fixture, or a seed it replaces
-with a `__seed__` fixture, is not executed, so its changes do not select the scenario.
+builds, the seeds and sources it reads, the functions they call, the audits attached to its models,
+and the macros, enums and constants they and the scenario use. A model the scenario replaces with a
+`__ref__` fixture, a source it replaces with a `__source__` fixture, or a seed it replaces with a
+`__seed__` fixture, is not executed, so its changes do not select the scenario.
 
-`--select` and `--exclude` narrow the affected scenarios further. Both commands share the cached
-base compile, so `sqb test --since origin/main` and `sqb scenario test --since origin/main` in one
-CI job resolve the same changed set:
+`--select` and `--exclude` narrow the affected scenarios further. With `--json`, the document gains
+the same `since` section as `sqb test`, listing each selected scenario with its reasons. Both
+commands share the cached base compile, so `sqb test --since origin/main` and
+`sqb scenario test --since origin/main` in one CI job resolve the same changed set:
 
 ```bash
 sqb test --since "origin/$TARGET_BRANCH"

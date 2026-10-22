@@ -34,7 +34,7 @@ use crate::bindings::_helpers::change_selection::base_snapshot::{
     BaseComparison, base_comparison, base_variant,
 };
 use crate::bindings::_helpers::change_selection::selection::{
-    ChangedProject, changed_project, tests_and_models,
+    ChangedProject, changed_project, tests_and_models, with_since_section,
 };
 use crate::bindings::_helpers::command_runtime::concurrency::resolve_concurrency;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_reported_command_invocation;
@@ -61,6 +61,13 @@ const PASS_OUTCOME: &str = "pass";
 
 /// Why `--since` selected each test, by inspection label.
 type SelectionReasons = HashMap<String, Vec<String>>;
+
+/// What a `--since` selection kept: the narrowed pipeline, reasons by label, and its JSON section.
+struct ChangedSelection<'py> {
+    pipeline: Bound<'py, PyAny>,
+    reasons: SelectionReasons,
+    json: String,
+}
 const EXPECT_LABEL: &str = "expect";
 const UNKNOWN_GROUP: &str = "(unknown)";
 const EXECUTION_COMMAND: &str = "sqb test";
@@ -433,14 +440,14 @@ fn inspect(
 
 /// Keep the planned tests that execute something changed, with each one's reasons by label.
 fn select_changed<'py>(
-    (pipeline, stream): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    (pipeline, stream, discovered): (&Bound<'py, PyAny>, &Bound<'py, PyAny>, &Bound<'py, PyAny>),
     project_dir: &std::path::Path,
     base: BaseComparison,
     explain: bool,
-) -> PyResult<(Bound<'py, PyAny>, SelectionReasons)> {
+) -> PyResult<ChangedSelection<'py>> {
     let py: Python<'py> = pipeline.py();
     let project: Bound<'py, PyAny> = native_field(pipeline, "project")?;
-    let changed: ChangedProject = changed_project(&project, project_dir, base)?;
+    let changed: ChangedProject = changed_project((&project, discovered), project_dir, base)?;
     let (tests, models) = tests_and_models(&project)?;
     let plan_output: Bound<'py, PyAny> = native_field(pipeline, "plan_output")?;
     let mut kept: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -468,10 +475,11 @@ fn select_changed<'py>(
         &plan_output,
         &[("test_entries", PyTuple::new(py, kept)?.into_any())],
     )?;
-    Ok((
-        replaced(pipeline, &[("plan_output", plan_output)])?,
+    Ok(ChangedSelection {
+        pipeline: replaced(pipeline, &[("plan_output", plan_output)])?,
         reasons,
-    ))
+        json: changed.json((total, &selected)),
+    })
 }
 
 /// Write the ready header and run the tests with nested progress; returns the results.
@@ -615,7 +623,7 @@ pub(crate) fn timeout_record<'py>(
 fn complete(
     request: &Bound<'_, PyAny>,
     invocation: &Bound<'_, PyAny>,
-    results: &[Bound<'_, PyAny>],
+    (results, since_json): (&[Bound<'_, PyAny>], Option<&str>),
 ) -> PyResult<i32> {
     let py: Python<'_> = request.py();
     let mut failures: Vec<TestFailure> = Vec::new();
@@ -647,8 +655,11 @@ fn complete(
     )?;
     stream.call_method0("flush")?;
     let tuple: Bound<'_, PyAny> = PyTuple::new(py, results)?.into_any();
-    let payload: Bound<'_, PyAny> =
-        PyString::new(py, &format_test_execution_json(py, tuple)?).into_any();
+    let payload: Bound<'_, PyAny> = PyString::new(
+        py,
+        &with_since_section(py, format_test_execution_json(py, tuple)?, since_json)?,
+    )
+    .into_any();
     write_execution_json_output(
         py,
         payload,
@@ -684,13 +695,20 @@ pub(crate) fn run_test_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> Py
     };
     let mut pipeline: Bound<'_, PyAny> = compile_tests(request, &invocation)?;
     let mut reasons: HashMap<String, Vec<String>> = HashMap::new();
+    let mut since_json: Option<String> = None;
     if let Some(base) = base {
-        (pipeline, reasons) = select_changed(
-            (&pipeline, &stream),
+        let selection: ChangedSelection<'_> = select_changed(
+            (
+                &pipeline,
+                &stream,
+                &native_field(&invocation, "discovered_inputs")?,
+            ),
             &project_dir.extract::<PathBuf>()?,
             base,
             native_field(request, "explain")?.is_truthy()?,
         )?;
+        (pipeline, reasons) = (selection.pipeline, selection.reasons);
+        since_json = Some(selection.json);
     }
     if inspect_only {
         return inspect(&stream, &pipeline.getattr("plan_output")?, &reasons);
@@ -728,7 +746,7 @@ pub(crate) fn run_test_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> Py
         &pipeline.getattr("plan_output")?,
         &PyTuple::new(py, &results)?.into_any(),
     )?;
-    complete(request, &invocation, &results)
+    complete(request, &invocation, (&results, since_json.as_deref()))
 }
 
 /// Add source and safe typed values only for parameterized test rows.

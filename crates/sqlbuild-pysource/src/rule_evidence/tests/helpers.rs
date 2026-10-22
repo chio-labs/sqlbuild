@@ -29,3 +29,15 @@ fn write(path: &Path, contents: &str) {
     let _ = std::fs::create_dir_all(path.parent().unwrap_or(path));
     let _ = std::fs::write(path, contents);
 }
+
+/// A fresh project directory named `name` holding `files`.
+pub(crate) fn project_with(name: &str, files: &[(&str, &str)]) -> PathBuf {
+    let root: PathBuf = std::env::temp_dir()
+        .join(format!("sqlbuild-project-closure-{}", std::process::id()))
+        .join(name);
+    let _ = std::fs::remove_dir_all(&root);
+    for (path, contents) in files {
+        write(&root.join(path), contents);
+    }
+    std::fs::canonicalize(&root).unwrap_or(root)
+}

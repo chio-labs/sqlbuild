@@ -68,19 +68,30 @@ running the whole suite. SQLBuild compiles the project as it was at the merge ba
 uncommitted edits included. A test is selected when:
 
 - its own file changed or is new, or
-- any node it actually executes changed: the models in its chain, the seeds and functions they
-  read, and the macros, enums and constants they use. The resolution is the one `--inspect`
-  shows, so a test that mocks a changed model, seed or macro is not selected, while a downstream
-  test that really runs it is.
+- any node it actually executes changed: the models in its chain, the seeds, sources and
+  functions they read, and the macros, enums, constants and audits they use. The resolution is the
+  one `--inspect` shows, so a test that mocks a changed model, source, seed or macro is not
+  selected, while a downstream test that really runs it is.
 
 A node changed when its definition fingerprint differs. The fingerprint covers the model SQL with
-formatting and comments ignored, the header configuration, columns and contract, attached audits,
-and every macro, enum, constant, function and seed the node uses, resolved through
-[scopes](../concepts/declaration-scopes.md). Descriptions and `meta` do not count. A macro counts as
-changed when the Python file that defines it changes, and an enum, constant or audit when its
-declaration file changes other than in formatting and comments. Added nodes count as changed. A model renamed with
-`migrate_from` is compared with its old definition, so a pure rename selects nothing. Deleted
-nodes select nothing and are listed in the summary.
+formatting and comments ignored, the resolved configuration (including what `[defaults]` and
+`[path_defaults]` contribute), columns and contract, attached audits, the values of the project
+variables the model reads with `@@name`, and every macro, enum, constant, audit, function and seed
+the node uses, resolved through [scopes](../concepts/declaration-scopes.md). A change to the
+`[settings]` that shape compiled models counts as a change to every model. Descriptions do not
+count; `meta` does.
+
+A macro counts as changed when the Python file that defines it changes, or any project module it
+imports, such as a helper under `python/`; when that code reads `ctx.vars`, a change to any project
+variable counts too. An enum, constant or audit counts as changed when its declaration file
+changes other than in formatting and comments. A seed counts as changed with its data or column
+types, a source with its declaration or inline expression, and a function with its definition.
+Loaders, tasks, assets and checks are compared by their Python modules and the project modules
+they import; they appear in the change summary but no unit test runs them.
+
+Added nodes count as changed. A model renamed with `migrate_from` is compared with its old
+definition, so a pure rename selects nothing, while a rename that also edits the model counts as a
+change. Deleted nodes select nothing and are listed in the summary.
 
 ```bash
 # Tests affected by this branch
@@ -112,6 +123,29 @@ Selected 2 of 9 tests
 The base compile is cached per merge-base commit under `target/since/`, so `sqb test --since` and
 `sqb scenario test --since` in the same CI job compile the base once and compare against the same
 changed set. When no test is affected, the command says so and exits successfully.
+
+With `--json`, the progress and selection lines go to stderr, and the JSON document on stdout gains a
+`since` section: the ref and merge base, the `changed`, `renamed` and `deleted` nodes, the number
+of candidate tests, and each selected test with its reasons:
+
+```json
+"since": {
+  "ref": "origin/main",
+  "merge_base": "1a2b3c4d5e...",
+  "changed": [
+    {"kind": "model", "name": "stg_orders", "added": false, "aspects": ["sql"], "renamed_from": null}
+  ],
+  "renamed": [],
+  "deleted": [{"kind": "model", "name": "legacy_orders"}],
+  "candidate_count": 9,
+  "selected": [
+    {"name": "orders_rollup", "reasons": ["executes stg_orders (model SQL changed)"]}
+  ]
+}
+```
+
+The base revision must compile. When it does not, `--since` fails with the compile error instead
+of guessing; compare with a later ref whose project compiles, or run without `--since`.
 
 `<ref>` is any git ref or commit, such as the merge request's target branch from a CI variable.
 `--since` always takes a value. A ref that does not exist, or a shallow clone that does not reach

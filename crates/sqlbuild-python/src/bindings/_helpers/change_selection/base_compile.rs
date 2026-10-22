@@ -78,15 +78,18 @@ fn write_base_definition_snapshot(
         Some(keywords(
             py,
             &[
-                ("discovered_inputs", discovered),
+                ("discovered_inputs", discovered.clone()),
                 ("adapter", native_field(&context, "adapter")?),
                 ("options", options),
                 ("on_progress", none()),
             ],
         )?),
     )?;
-    let snapshot: DefinitionSnapshot =
-        definition_snapshot(&native_field(&pipeline, "project")?, &project_dir)?;
+    let snapshot: DefinitionSnapshot = definition_snapshot(
+        &native_field(&pipeline, "project")?,
+        &discovered,
+        &project_dir,
+    )?;
     std::fs::write(&output_path, definition_snapshot_json(&snapshot))?;
     Ok(())
 }

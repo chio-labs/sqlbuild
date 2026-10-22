@@ -2223,6 +2223,113 @@ def build_since_project_files() -> dict[str, str]:
     }
 
 
+def build_since_indirect_files() -> dict[str, str]:
+    """Build files that reach tests indirectly: variables, defaults, helpers, seeds and functions."""
+
+    base: dict[str, str] = build_since_project_files()
+    return {
+        "sqlbuild_project.toml": base["sqlbuild_project.toml"] + "\n[vars]\nmin_amount = \"100\"\n",
+        "python/_rates.py": 'DIVISOR = "100"\n',
+        "models/_macros/money.py": (
+            "from python._rates import DIVISOR\n\n\n"
+            "def cents_to_dollars(expression: str) -> str:\n"
+            '    return f"CAST({expression} AS DOUBLE) / {DIVISOR}"\n'
+        ),
+        "audits/generic/at_least.sql": (
+            'AUDIT ();\n\nSELECT *\nFROM __ref("@model")\nWHERE @column < @minimum\n'
+        ),
+        "models/order_totals.sql": (
+            "MODEL (\n  description 'Order totals in dollars.',\n"
+            "  audits [at_least (column amount, minimum 0)],\n);\n\n"
+            'SELECT order_id, @cents_to_dollars("amount_cents") AS amount\n'
+            'FROM __ref("stg_orders")\n'
+        ),
+        "models/big_orders.sql": (
+            "MODEL (description 'Large orders.');\n\n"
+            'SELECT order_id FROM __ref("stg_orders") WHERE amount_cents >= @@min_amount\n'
+        ),
+        "models/marts/order_counts.sql": (
+            "MODEL (description 'Order counts.');\n\n"
+            'SELECT COUNT(*) AS order_count FROM __ref("stg_orders")\n'
+        ),
+        "seeds/regions.csv": "region_id,region_name\n1,north\n",
+        "seeds/regions.yml": (
+            "seeds:\n  - name: regions\n    description: Sales regions.\n    columns:\n"
+            "      - name: region_id\n        type: INTEGER\n"
+            "      - name: region_name\n        type: VARCHAR\n"
+        ),
+        "functions/sql/is_open.sql": (
+            "FUNCTION (\n  description 'Whether an order is open.',\n  arguments (order_status VARCHAR),\n  returns BOOLEAN,\n);\n\n"
+            "order_status = 'open'\n"
+        ),
+        "models/regional_orders.sql": (
+            "MODEL (description 'Orders with their region.');\n\n"
+            "SELECT o.order_id, r.region_id\n"
+            'FROM __ref("stg_orders") o CROSS JOIN __seed("regions") r\n'
+        ),
+        "models/order_flags.sql": (
+            "MODEL (description 'Whether each order is open.');\n\n"
+            'SELECT order_id, __udf("is_open")(status) AS is_open FROM __ref("stg_orders")\n'
+        ),
+        "models/order_archive.sql": (
+            "MODEL (description 'Archived orders.');\n\n"
+            'SELECT order_id FROM __ref("stg_orders")\n'
+        ),
+        "models/archive_counts.sql": (
+            "MODEL (description 'Archived order count.');\n\n"
+            'SELECT COUNT(*) AS archived FROM __ref("order_archive")\n'
+        ),
+        "tests/unit/test_archive_counts.sql": (
+            "TEST ();\n\nWITH\n"
+            "__source__raw_orders AS (\n"
+            "  SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents\n"
+            "),\n"
+            "__expected__archive_counts AS (SELECT 1 AS archived)\nSELECT 1\n"
+        ),
+        "python/tasks/report.py": (
+            "from sqlbuild.tasks import task\n\n\n"
+            "@task()\ndef report_orders(ctx):\n"
+            '    """Report orders."""\n\n'
+            "    return ctx.result(payload={})\n"
+        ),
+        "tests/unit/test_big_orders.sql": (
+            "TEST ();\n\nWITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents),\n"
+            "__expected__big_orders AS (SELECT 1 AS order_id)\nSELECT 1\n"
+        ),
+        "tests/unit/test_order_counts.sql": (
+            "TEST ();\n\nWITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents),\n"
+            "__expected__order_counts AS (SELECT 1 AS order_count)\nSELECT 1\n"
+        ),
+        "tests/unit/test_regional_orders.sql": (
+            "TEST ();\n\nWITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents),\n"
+            "__seed__regions AS (SELECT 1 AS region_id, 'north' AS region_name),\n"
+            "__expected__regional_orders AS (SELECT 1 AS order_id, 1 AS region_id)\nSELECT 1\n"
+        ),
+        "tests/unit/test_order_flags.sql": (
+            "TEST ();\n\nWITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents),\n"
+            "__expected__order_flags AS (SELECT 1 AS order_id, TRUE AS is_open)\nSELECT 1\n"
+        ),
+        "tests/scenarios/regional_orders_end_to_end.sql": (
+            "SCENARIO (description 'Regional orders from raw orders and the region seed');\n\n"
+            "WITH\n__source__raw_orders AS (\n"
+            "  SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents\n"
+            "),\n"
+            "__expected__regional_orders AS (SELECT 1 AS order_id, 1 AS region_id)\nSELECT 1\n"
+        ),
+        "tests/unit/test_order_totals_from_source.sql": (
+            "TEST ();\n\nWITH\n"
+            "__source__raw_orders AS (\n"
+            "  SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents\n"
+            "),\n"
+            "__expected__order_totals AS (SELECT 1 AS order_id, 2.5 AS amount)\nSELECT 1\n"
+        ),
+    }
+
+
 _GIT_IDENTITY: dict[str, str] = {
     "GIT_AUTHOR_NAME": "Example",
     "GIT_AUTHOR_EMAIL": "dev@example.com",

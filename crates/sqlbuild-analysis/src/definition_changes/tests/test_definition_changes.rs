@@ -1,7 +1,11 @@
+use serde_json::json;
+
+use crate::definition_changes::constants::DEFINITION_SNAPSHOT_FORMAT;
 use crate::definition_changes::main::changes_summary::changes_summary;
 use crate::definition_changes::main::compare_definitions::compare_definitions;
 use crate::definition_changes::main::definition_snapshot_json::definition_snapshot_json;
 use crate::definition_changes::main::parse_definition_snapshot::parse_definition_snapshot;
+use crate::definition_changes::main::selection_json::selection_json;
 use crate::definition_changes::main::selection_reasons::selection_reasons;
 use crate::definition_changes::main::selection_report::selection_report;
 use crate::definition_changes::main::sql_definition_digest::sql_definition_digest;
@@ -10,8 +14,8 @@ use crate::definition_changes::tests::helpers::{
     base_orders, current_orders, item, keys, node, renamed, snapshot, with_node,
 };
 use crate::definition_changes::tests::test_types::{
-    CompareTestCase, SelectionReasonTestCase, SelectionReportTestCase, SnapshotJsonTestCase,
-    SqlDigestTestCase,
+    CompareTestCase, SelectionJsonTestCase, SelectionReasonTestCase, SelectionReportTestCase,
+    SnapshotJsonTestCase, SqlDigestTestCase,
 };
 
 #[test]
@@ -219,7 +223,7 @@ fn given_executed_item_when_explaining_selection_then_lists_each_changed_depende
                 node("seed", "countries", &[("definition", "d2")], &[]),
             ),
             item: item(&[], &["model:orders", "seed:countries"], &[], &[]),
-            expected_reasons: &["executes seed countries (changed)"],
+            expected_reasons: &["reads seed countries (changed)"],
         },
     ];
     for test_case in test_cases {
@@ -297,7 +301,13 @@ fn given_stored_snapshot_when_reading_then_accepts_only_the_same_format() {
         },
         SnapshotJsonTestCase {
             description: "another format version is recomputed",
-            stored: |text| text.replacen("\"format\":1", "\"format\":0", 1),
+            stored: |text| {
+                text.replacen(
+                    &format!("\"format\":{DEFINITION_SNAPSHOT_FORMAT}"),
+                    "\"format\":0",
+                    1,
+                )
+            },
             expected_snapshot: None,
         },
         SnapshotJsonTestCase {
@@ -339,6 +349,50 @@ fn given_sql_when_fingerprinting_definition_then_ignores_layout_and_comments_onl
         assert_eq!(
             digest == original,
             test_case.expected_same_as_original,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_changes_and_selection_when_writing_json_then_lists_nodes_and_reasons() {
+    let test_cases = [SelectionJsonTestCase {
+        description: "changed, renamed and deleted nodes with each selected item's reasons",
+        selected: vec![SelectedItem {
+            label: "orders_rollup".to_owned(),
+            reasons: keys(&["executes stg_orders (model SQL changed)"]),
+        }],
+        expected_json: json!({
+            "ref": "origin/main",
+            "merge_base": "abc123",
+            "changed": [{
+                "kind": "model",
+                "name": "stg_orders",
+                "added": false,
+                "aspects": ["sql"],
+                "renamed_from": null,
+            }],
+            "renamed": [{ "kind": "model", "from": "old_customers", "to": "customers" }],
+            "deleted": [{ "kind": "seed", "name": "countries" }],
+            "candidate_count": 9,
+            "selected": [{
+                "name": "orders_rollup",
+                "reasons": ["executes stg_orders (model SQL changed)"],
+            }],
+        }),
+    }];
+    for test_case in test_cases {
+        let changes: DefinitionChanges = compare_definitions(&base_orders(), &current_orders());
+
+        let document: serde_json::Value = selection_json(
+            ("origin/main", "abc123"),
+            &changes,
+            (9, &test_case.selected),
+        );
+
+        assert_eq!(
+            document, test_case.expected_json,
             "{}",
             test_case.description
         );

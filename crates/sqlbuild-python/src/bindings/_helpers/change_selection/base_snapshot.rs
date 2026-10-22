@@ -82,8 +82,9 @@ fn compile_failed(py: Python<'_>, base: &GitBase, detail: &str) -> PyErr {
                 base.reference
             ),
             help: Some(
-                "--since compares with the base revision, so it must compile; compare with a \
-                 later ref, or run without --since"
+                "--since compares with the project as it was at the merge base, so that \
+                 revision must compile. Compare with a later ref whose project compiles, or run \
+                 without --since to run everything"
                     .to_owned(),
             ),
         },
@@ -194,7 +195,14 @@ pub(crate) fn base_comparison<'py>(
     )?;
     let vars: &str = &variant.vars_json;
     let target: Option<&str> = variant.selected_target.as_deref();
-    let key: String = definition_digest(&[NATIVE_BUILD_IDENTITY, target.unwrap_or_default(), vars]);
+    let local_config: String =
+        std::fs::read_to_string(directory.join(LOCAL_CONFIG_FILE)).unwrap_or_default();
+    let key: String = definition_digest(&[
+        NATIVE_BUILD_IDENTITY,
+        target.unwrap_or_default(),
+        vars,
+        &local_config,
+    ]);
     let cache_dir: PathBuf = CACHE_DIRECTORY
         .iter()
         .fold(directory.clone(), |path, part| path.join(part));

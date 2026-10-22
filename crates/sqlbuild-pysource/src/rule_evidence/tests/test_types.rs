@@ -20,3 +20,10 @@ pub(crate) struct DisallowedImportTestCase {
         crate::rule_evidence::models::UnparsedSource,
     >,
 }
+
+pub(crate) struct ProjectClosureTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) files: Vec<(&'static str, &'static str)>,
+    pub(crate) source: &'static str,
+    pub(crate) expected_closure: Vec<&'static str>,
+}

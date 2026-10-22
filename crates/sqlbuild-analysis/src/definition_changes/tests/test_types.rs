@@ -49,3 +49,9 @@ pub(crate) struct SqlDigestTestCase {
     pub(crate) sql: &'static str,
     pub(crate) expected_same_as_original: bool,
 }
+
+pub(crate) struct SelectionJsonTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) selected: Vec<crate::definition_changes::models::SelectedItem>,
+    pub(crate) expected_json: serde_json::Value,
+}

@@ -3,14 +3,16 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
 use sqlbuild_analysis::definition_changes::constants::{
-    MACRO_KIND, MODEL_KIND, SCENARIO_KIND, SEED_KIND, TABLE_FUNCTION_KIND, TEST_FILE_KIND,
+    MACRO_KIND, MODEL_KIND, SCENARIO_KIND, SEED_KIND, SOURCE_KIND, TABLE_FUNCTION_KIND,
+    TEST_FILE_KIND,
 };
 use sqlbuild_analysis::definition_changes::main::changes_summary::changes_summary;
 use sqlbuild_analysis::definition_changes::main::compare_definitions::compare_definitions;
 use sqlbuild_analysis::definition_changes::main::node_key::node_key;
+use sqlbuild_analysis::definition_changes::main::selection_json::selection_json;
 use sqlbuild_analysis::definition_changes::main::selection_reasons::selection_reasons;
 use sqlbuild_analysis::definition_changes::main::selection_report::selection_report;
 use sqlbuild_analysis::definition_changes::models::{
@@ -29,6 +31,11 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::scenario_command::setup::{flush, write};
 
 const MACRO_TEST_MODE: &str = "macro";
+const JSON_MODULE: &str = "json";
+/// The JSON document key of the changes and selection of a `--since` run.
+const SINCE_SECTION: &str = "since";
+/// The relation call a test or scenario file reads a source with.
+const SOURCE_CALL: &str = "__source(";
 
 /// Compiled tests or models by name.
 pub(crate) type ByName<'py> = HashMap<String, Bound<'py, PyAny>>;
@@ -37,21 +44,23 @@ const TEST_CONSUMER_KIND: &str = "test";
 /// The changes since the base revision and what the current revision uses.
 pub(crate) struct ChangedProject {
     pub(crate) reference: String,
+    merge_base: String,
     pub(crate) current: DefinitionSnapshot,
     pub(crate) changes: DefinitionChanges,
     uses: BTreeMap<String, BTreeSet<String>>,
 }
 
-/// Compare the compiled working tree `project` with the base snapshot.
+/// Compare the compiled working tree `project`, discovered as `discovered`, with the base snapshot.
 pub(crate) fn changed_project(
-    project: &Bound<'_, PyAny>,
+    (project, discovered): (&Bound<'_, PyAny>, &Bound<'_, PyAny>),
     project_dir: &Path,
     base: BaseComparison,
 ) -> PyResult<ChangedProject> {
-    let current: DefinitionSnapshot = definition_snapshot(project, project_dir)?;
+    let current: DefinitionSnapshot = definition_snapshot(project, discovered, project_dir)?;
     let changes: DefinitionChanges = compare_definitions(&base.snapshot, &current);
     Ok(ChangedProject {
         reference: base.base.reference,
+        merge_base: base.base.merge_base,
         current,
         changes,
         uses: declaration_uses(project)?,
@@ -60,6 +69,37 @@ pub(crate) fn changed_project(
 
 fn strings(value: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     value.try_iter()?.map(|item| item?.extract()).collect()
+}
+
+/// Names of the sources `sql` reads with `__source("name")`.
+fn source_calls(sql: &str) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    for (index, _) in sql.match_indices(SOURCE_CALL) {
+        let rest: &str = sql[index + SOURCE_CALL.len()..].trim_start();
+        let Some(quote) = rest
+            .chars()
+            .next()
+            .filter(|quote| *quote == '"' || *quote == '\'')
+        else {
+            continue;
+        };
+        if let Some(end) = rest[1..].find(quote) {
+            names.push(rest[1..=end].to_owned());
+        }
+    }
+    names
+}
+
+/// The sources `model` reads, other than `mocked` ones, as node keys.
+fn read_sources(model: &Bound<'_, PyAny>, mocked: &[String]) -> PyResult<Vec<String>> {
+    let mut keys: Vec<String> = Vec::new();
+    for dependency in model_reads::deps(model)?.try_iter()? {
+        let (kind, name) = native_key(&dependency?)?;
+        if kind == SOURCE_KIND && !mocked.contains(&name) {
+            keys.push(node_key(SOURCE_KIND, &name));
+        }
+    }
+    Ok(keys)
 }
 
 impl ChangedProject {
@@ -85,6 +125,16 @@ impl ChangedProject {
     /// Why `item` is affected; empty when nothing it runs changed.
     pub(crate) fn reasons(&self, item: &ExecutedItem) -> Vec<String> {
         selection_reasons(item, &self.current, &self.changes)
+    }
+
+    /// The `since` section of the run's JSON document.
+    pub(crate) fn json(&self, (total, selected): (usize, &[SelectedItem])) -> String {
+        selection_json(
+            (&self.reference, &self.merge_base),
+            &self.changes,
+            (total, selected),
+        )
+        .to_string()
     }
 
     /// Write the change summary and the selection to `stream`.
@@ -118,6 +168,7 @@ impl ChangedProject {
             ..ExecutedItem::default()
         };
         let mocked_seeds: Vec<String> = strings(&native_field(entry, "mock_seed_names")?)?;
+        let mocked_sources: Vec<String> = strings(&native_field(entry, "mock_source_names")?)?;
         let mocked_functions: Vec<String> =
             strings(&native_field(entry, "mock_table_function_names")?)?;
         item.mocked
@@ -131,6 +182,12 @@ impl ChangedProject {
                     .to_string()
                     .replace('\\', "/"),
             ));
+            let contents: String = native_field(&file, "contents")?.extract()?;
+            for name in source_calls(&contents) {
+                if !mocked_sources.contains(&name) {
+                    item.executed.push(node_key(SOURCE_KIND, &name));
+                }
+            }
             let payload: Bound<'_, PyAny> = native_field(test, "payload")?;
             if let Ok(mocks) = native_field(&payload, "macro_mocks")
                 && let Ok(mocks) = mocks.cast::<PyDict>()
@@ -156,6 +213,7 @@ impl ChangedProject {
             let Some(model) = models.get(&model_name) else {
                 continue;
             };
+            item.executed.extend(read_sources(model, &mocked_sources)?);
             for dependency in model_reads::deps(model)?.try_iter()? {
                 let (kind, dependency_name) = native_key(&dependency?)?;
                 if kind == SEED_KIND && !mocked_seeds.contains(&dependency_name) {
@@ -174,7 +232,7 @@ impl ChangedProject {
     pub(crate) fn scenario_item(
         &self,
         scenario: &Bound<'_, PyAny>,
-        project: &Bound<'_, PyAny>,
+        (project, models): (&Bound<'_, PyAny>, &ByName<'_>),
     ) -> PyResult<ExecutedItem> {
         let name: String = native_field(scenario, "name")?.extract()?;
         let key: String = node_key(SCENARIO_KIND, &name);
@@ -184,8 +242,17 @@ impl ChangedProject {
             declarations: self.declarations_of(&key),
             ..ExecutedItem::default()
         };
+        let source_fixtures: Vec<String> = strings(&native_field(&graph, "source_fixture_names")?)?;
+        for name in source_calls(&native_field(scenario, "sql_body")?.extract::<String>()?) {
+            if !source_fixtures.contains(&name) {
+                item.executed.push(node_key(SOURCE_KIND, &name));
+            }
+        }
         for model_name in strings(&native_field(&graph, "model_names")?)? {
             item.executed.push(node_key(MODEL_KIND, &model_name));
+            if let Some(model) = models.get(&model_name) {
+                item.executed.extend(read_sources(model, &source_fixtures)?);
+            }
         }
         let fixtures: Vec<String> = strings(&native_field(&graph, "seed_fixture_names")?)?;
         for seed_name in strings(&native_field(&graph, "seed_names")?)? {
@@ -199,6 +266,26 @@ impl ChangedProject {
         }
         Ok(item)
     }
+}
+
+/// `payload`, a JSON document, with the `since` section added when the run used `--since`.
+pub(crate) fn with_since_section(
+    py: Python<'_>,
+    payload: String,
+    since: Option<&str>,
+) -> PyResult<String> {
+    let Some(since) = since else {
+        return Ok(payload);
+    };
+    let json: Bound<'_, PyModule> = py.import(JSON_MODULE)?;
+    let document: Bound<'_, PyAny> = json.call_method1("loads", (payload,))?;
+    document.set_item(SINCE_SECTION, json.call_method1("loads", (since,))?)?;
+    let options: Bound<'_, PyDict> = PyDict::new(py);
+    options.set_item("indent", 2)?;
+    let text: String = json
+        .call_method("dumps", (document,), Some(&options))?
+        .extract()?;
+    Ok(format!("{text}\n"))
 }
 
 /// The project's compiled tests and models by name.

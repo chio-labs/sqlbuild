@@ -3,7 +3,9 @@
 use std::collections::BTreeSet;
 
 use crate::definition_changes::_helpers::aspects::{aspect_label, joined, kind_words};
-use crate::definition_changes::constants::{CONSTANT_KIND, ENUM_KIND, MODEL_KIND, TEST_FILE_KIND};
+use crate::definition_changes::constants::{
+    CONSTANT_KIND, ENUM_KIND, MODEL_KIND, SEED_KIND, SETTINGS_KIND, SOURCE_KIND, TEST_FILE_KIND,
+};
 use crate::definition_changes::models::{DefinitionSnapshot, ExecutedItem, NodeChange};
 
 fn aspect_phrase(change: &NodeChange) -> String {
@@ -43,16 +45,29 @@ fn change_detail(change: &NodeChange) -> String {
     }
 }
 
+/// `executes stg_orders (model SQL changed)`, `reads seed countries (changed)`.
 pub(crate) fn executed_reason(change: &NodeChange) -> String {
     let subject: String = if change.kind == MODEL_KIND {
         change.name.clone()
     } else {
         format!("{} {}", kind_words(&change.kind).0, change.name)
     };
-    format!("executes {subject} ({})", change_detail(change))
+    let verb: &str = if change.kind == SEED_KIND || change.kind == SOURCE_KIND {
+        "reads"
+    } else {
+        "executes"
+    };
+    format!("{verb} {subject} ({})", change_detail(change))
 }
 
+/// `executes macro to_utc (changed)`, `uses enum status (changed)`, `uses project settings (changed)`.
 pub(crate) fn declaration_reason(change: &NodeChange) -> String {
+    if change.kind == SETTINGS_KIND {
+        return format!("uses project settings ({})", change_detail(change));
+    }
+    if change.kind == SOURCE_KIND {
+        return executed_reason(change);
+    }
     let verb: &str = if change.kind == ENUM_KIND || change.kind == CONSTANT_KIND {
         "uses"
     } else {
