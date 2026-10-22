@@ -1,6 +1,6 @@
 //! `sqb janitor` phases: compile, connect, inspect and plan, clean up and close.
 
-use sqlbuild_host::entries::models::ExecutorHost;
+use sqlbuild_host::entries::models::{AdapterHost, ExecutorHost};
 
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
@@ -234,7 +234,14 @@ pub(crate) fn build_janitor_execution_plan<'py>(
     let plan: Bound<'py, PyAny> = within(
         &lifecycle(py, ("janitor", "janitor_candidate_planning"))?,
         |lifecycle| {
-            let plan: Bound<'py, PyAny> = build_plan(
+            let catalog: Bound<'py, PyAny> = call_with(
+                &host::entry(py, AdapterHost::OpenInspectionCatalog)?,
+                &[
+                    ("adapter", compiled.adapter.clone()),
+                    ("connection", connection.clone()),
+                ],
+            )?;
+            let plan: Bound<'py, PyAny> = within(&catalog, |_| build_plan(
                 (
                     &compiled.project,
                     &Warehouse {
@@ -263,7 +270,7 @@ pub(crate) fn build_janitor_execution_plan<'py>(
                     protected_keys: Vec::new(),
                     reasons: Vec::new(),
                 },
-            )?;
+            ))?;
             let metadata: Bound<'py, PyDict> = PyDict::new(py);
             metadata.set_item("item_count", candidate_count(&plan)?)?;
             let options: Bound<'py, PyDict> = PyDict::new(py);

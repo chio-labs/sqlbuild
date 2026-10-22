@@ -103,6 +103,7 @@ from sqlbuild.adapter.relations.constants import INSPECTION_IN_LIST_LIMIT
 from sqlbuild.adapter.relations.main.active_inspection_catalog import active_inspection_catalog
 from sqlbuild.adapter.relations.main.relation_age_timestamp import relation_age_timestamp_utc
 from sqlbuild.adapter.relations.main.render_inspection_sql import render_inspection_sql
+from sqlbuild.adapter.relations.main.cached_view_definition import cached_view_definition
 from sqlbuild.adapter.relations.main.run_bounded_inspections import run_bounded_inspections
 from sqlbuild.adapter.relations.main.run_recorded_inspection_query import (
     run_recorded_inspection_query,
@@ -3011,6 +3012,11 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def read_view_definition(
         self, *, connection: Any, database: str | None, schema: str, name: str
     ) -> str | None:
+        prefetched: tuple[bool, str | None] = cached_view_definition(
+            adapter=self, connection=connection, database=database, schema=schema, name=name
+        )
+        if prefetched[0]:
+            return prefetched[1]
         views: str = (
             "INFORMATION_SCHEMA.VIEWS"
             if database is None
@@ -3031,6 +3037,38 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             ),
         ).fetchall()
         return None if not rows else str(rows[0][0])
+
+    def read_view_definitions(
+        self, *, connection: Any, database: str | None, schema: str, names: tuple[str, ...]
+    ) -> dict[str, str]:
+        """Read the stored definitions of several views in one schema with one query.
+
+        Names match case-insensitively, as ``read_view_definition`` matches one name.
+        """
+
+        if not names:
+            return {}
+        views: str = (
+            "INFORMATION_SCHEMA.VIEWS"
+            if database is None
+            else (f"{database}.INFORMATION_SCHEMA.VIEWS")
+        )
+        literals: str = ", ".join(
+            "UPPER('" + name.replace("'", "''") + "')" for name in names
+        )
+        rows: list[tuple[Any, ...]] = self.execute(
+            connection=connection,
+            sql=(
+                f"SELECT TABLE_NAME, VIEW_DEFINITION FROM {views} WHERE UPPER(TABLE_SCHEMA) = "
+                "UPPER('" + schema.replace("'", "''") + "') "
+                f"AND UPPER(TABLE_NAME) IN ({literals})"
+            ),
+        ).fetchall()
+        found: dict[str, str] = {}
+        row: tuple[Any, ...]
+        for row in rows:
+            found.setdefault(str(row[0]).upper(), str(row[1]))
+        return {name: found[name.upper()] for name in names if name.upper() in found}
 
     def view_definition_matches(
         self, *, connection: Any, database: str | None, schema: str, name: str, sql: str

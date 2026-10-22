@@ -20,6 +20,8 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RelationLookup
+from sqlbuild.adapter.relations.classes.inspection_catalog import InspectionCatalog
+from sqlbuild.adapter.relations.main.active_inspection_catalog import active_inspection_catalog
 from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
 from sqlbuild.compiler.fingerprints.constants import NODE_TYPE_QUERY_DIFF_ARTIFACT
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
@@ -184,10 +186,13 @@ def inspect_query_diff_artifacts(
 ) -> QueryDiffArtifactInspection:
     """Classify strict-name query artifacts using immutable fingerprint ownership."""
 
-    relations: tuple[RelationInfo, ...] = adapter.list_relations(
-        connection=connection,
-        database=database,
-        schemas=(schema,),
+    catalog: InspectionCatalog | None = active_inspection_catalog(
+        adapter=adapter, connection=connection
+    )
+    relations: tuple[RelationInfo, ...] = (
+        adapter.list_relations(connection=connection, database=database, schemas=(schema,))
+        if catalog is None
+        else catalog.list_relations(database=database, schemas=(schema,))
     )
     candidates: tuple[RelationInfo, ...] = tuple(
         relation
