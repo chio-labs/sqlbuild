@@ -33,8 +33,6 @@ use std::collections::{BTreeMap, BTreeSet};
 const MATERIALIZED_KEY: &str = "materialized";
 
 /// The resolved config of the planned target, or defaults without one.
-#[pyfunction]
-#[pyo3(signature = (*, runtime))]
 pub(crate) fn effective_target_config<'py>(
     runtime: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {

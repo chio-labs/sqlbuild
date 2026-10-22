@@ -60,8 +60,6 @@ fn version_identities<'py>(
     )
 }
 
-#[pyfunction]
-#[pyo3(signature = (*, project, scopes, include_stale_warning_identities=true))]
 pub(crate) fn build_planner_identity_context<'py>(
     project: &Bound<'py, PyAny>,
     scopes: &Bound<'py, PyAny>,

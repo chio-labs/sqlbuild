@@ -240,8 +240,6 @@ pub(crate) fn resolve_microbatch_lookback(
 }
 
 /// Declared seed columns with types, as `ColumnInfo`.
-#[pyfunction]
-#[pyo3(signature = (seed))]
 pub(crate) fn extract_seed_columns<'py>(seed: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
     schema_columns(seed, true)
 }

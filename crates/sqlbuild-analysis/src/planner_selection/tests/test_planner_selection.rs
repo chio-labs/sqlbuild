@@ -2,7 +2,9 @@ use crate::planner_selection::main::split_selector_expansion::split_selector_exp
 use crate::planner_selection::main::split_unit_test_selectors::split_unit_test_selectors;
 use crate::planner_selection::main::sqlbuild_model_selector_names::sqlbuild_model_selector_names;
 use crate::planner_selection::models::{ModelSelectorNames, SelectorExpansion, SelectorGroups};
-use crate::planner_selection::tests::helpers::{failure, models, selector_names, split, texts};
+use crate::planner_selection::tests::helpers::{
+    failure, full_split, models, order_selector_names, selector_names, split, texts,
+};
 use crate::planner_selection::tests::test_types::{
     ExpansionTestCase, ModelSelectorTestCase, UnitTestSplitTestCase,
 };
@@ -158,6 +160,11 @@ fn given_model_selector_term_when_resolving_then_returns_model_names() {
             expected_names: names(&["orders", "customers"], Some("path:models/staging")),
         },
         ModelSelectorTestCase {
+            description: "path selects the folder's models",
+            term: "path:models/marts",
+            expected_names: names(&["report"], None),
+        },
+        ModelSelectorTestCase {
             description: "other terms",
             term: "source:raw",
             expected_names: names(&[], None),
@@ -167,6 +174,168 @@ fn given_model_selector_term_when_resolving_then_returns_model_names() {
         assert_eq!(
             sqlbuild_model_selector_names(&models(), test_case.term),
             test_case.expected_names,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_order_selectors_when_splitting_unit_tests_then_tests_and_resources_separate() {
+    let test_cases = [
+        UnitTestSplitTestCase {
+            description: "a bare test name selects only that test and no models",
+            select: texts(&["order_status"]),
+            exclude: Vec::new(),
+            accepts_unit_tests: true,
+            expected_split: Ok(full_split((&[], &[]), (&["order_status"], &[]), false)),
+        },
+        UnitTestSplitTestCase {
+            description: "test: selectors union with model selectors",
+            select: texts(&["test:customer_status orders+", "tag:daily"]),
+            exclude: Vec::new(),
+            accepts_unit_tests: true,
+            expected_split: Ok(full_split(
+                (&["orders+", "tag:daily"], &[]),
+                (&["customer_status"], &[]),
+                true,
+            )),
+        },
+        UnitTestSplitTestCase {
+            description: "test: patterns match unit tests with fnmatch",
+            select: texts(&["test:order_*"]),
+            exclude: Vec::new(),
+            accepts_unit_tests: true,
+            expected_split: Ok(full_split(
+                (&[], &[]),
+                (&["order_status", "order_totals_check"], &[]),
+                false,
+            )),
+        },
+        UnitTestSplitTestCase {
+            description: "a bare pattern that matches resources keeps its resource meaning",
+            select: texts(&["order*"]),
+            exclude: texts(&["test:order_totals_check"]),
+            accepts_unit_tests: true,
+            expected_split: Ok(full_split(
+                (&["order*"], &[]),
+                (&[], &["order_totals_check"]),
+                true,
+            )),
+        },
+        UnitTestSplitTestCase {
+            description: "empty and blank select values are kept and select nothing",
+            select: texts(&["", "  "]),
+            exclude: Vec::new(),
+            accepts_unit_tests: true,
+            expected_split: Ok(full_split((&["", "  "], &[]), (&[], &[]), true)),
+        },
+        UnitTestSplitTestCase {
+            description: "a test-only selector beside an empty value still selects no models",
+            select: texts(&["", "order_status"]),
+            exclude: Vec::new(),
+            accepts_unit_tests: true,
+            expected_split: Ok(full_split((&[""], &[]), (&["order_status"], &[]), true)),
+        },
+        UnitTestSplitTestCase {
+            description: "selectors without unit tests pass through unchanged",
+            select: texts(&["orders", "customers,tag:daily", "models/marts"]),
+            exclude: texts(&["raw_orders"]),
+            accepts_unit_tests: true,
+            expected_split: Ok(full_split(
+                (
+                    &["orders", "customers,tag:daily", "models/marts"],
+                    &["raw_orders"],
+                ),
+                (&[], &[]),
+                true,
+            )),
+        },
+        UnitTestSplitTestCase {
+            description: "a command that runs no unit tests rejects a bare test name",
+            select: texts(&["order_status"]),
+            exclude: Vec::new(),
+            accepts_unit_tests: false,
+            expected_split: Err(failure(
+                "S013",
+                "selector 'order_status' selects a unit test; only `sqb test` and `sqb build` accept unit-test selectors",
+                None,
+            )),
+        },
+        UnitTestSplitTestCase {
+            description: "a command that runs no unit tests rejects test: selectors",
+            select: texts(&["orders test:customer_status"]),
+            exclude: Vec::new(),
+            accepts_unit_tests: false,
+            expected_split: Err(failure(
+                "S013",
+                "selector 'test:customer_status' selects a unit test; only `sqb test` and `sqb build` accept unit-test selectors",
+                None,
+            )),
+        },
+        UnitTestSplitTestCase {
+            description: "an unknown test: name suggests the nearest unit tests",
+            select: texts(&["test:order_stats"]),
+            exclude: Vec::new(),
+            accepts_unit_tests: true,
+            expected_split: Err(failure(
+                "S007",
+                "unknown unit test name 'order_stats'",
+                Some("did you mean 'order_status'?"),
+            )),
+        },
+        UnitTestSplitTestCase {
+            description: "an unknown bare name suggests the closest unit test",
+            select: texts(&["customer_stat"]),
+            exclude: Vec::new(),
+            accepts_unit_tests: true,
+            expected_split: Err(failure(
+                "S007",
+                "unknown selector name 'customer_stat'",
+                Some("did you mean 'customer_status'?"),
+            )),
+        },
+        UnitTestSplitTestCase {
+            description: "graph expansion of a unit test is refused",
+            select: texts(&["+order_status"]),
+            exclude: Vec::new(),
+            accepts_unit_tests: true,
+            expected_split: Err(failure(
+                "S013",
+                "selector '+order_status' expands a unit test with '+'; unit tests have no lineage, so select them by name without '+'",
+                None,
+            )),
+        },
+        UnitTestSplitTestCase {
+            description: "intersecting a unit test is refused",
+            select: texts(&["order_status,tag:daily"]),
+            exclude: Vec::new(),
+            accepts_unit_tests: true,
+            expected_split: Err(failure(
+                "S013",
+                "selector 'order_status,tag:daily' intersects a unit test with ','; unit tests can only be selected whole, by name",
+                None,
+            )),
+        },
+        UnitTestSplitTestCase {
+            description: "a stray trailing comma after a unit test reports the empty selector",
+            select: texts(&["test:order_status,"]),
+            exclude: Vec::new(),
+            accepts_unit_tests: true,
+            expected_split: Err(failure("S001", "empty selector", None)),
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            split_unit_test_selectors(
+                SelectorGroups {
+                    select: &test_case.select,
+                    exclude: &test_case.exclude,
+                },
+                &order_selector_names(),
+                test_case.accepts_unit_tests,
+            ),
+            test_case.expected_split,
             "{}",
             test_case.description
         );

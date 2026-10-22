@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from sqlbuild._native import ParsedSelector, PythonSqlRunSelection
+from sqlbuild._native import PythonSqlRunSelection
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.python_nodes.models import SqlResourceRef
 
@@ -27,13 +27,6 @@ class PythonNodeSelectorTestCase:
     select: tuple[str, ...]
     exclude: tuple[str, ...]
     expected_names: frozenset[str]
-
-
-@dataclass(frozen=True)
-class PythonNodeParseSelectorTestCase:
-    description: str
-    raw: str
-    expected_result: ParsedSelector
 
 
 @dataclass(frozen=True)

@@ -70,8 +70,6 @@ pub(crate) fn optional_text_check(value: &Bound<'_, PyAny>, field_name: &str) ->
 }
 
 /// Validate a timezone-aware UTC timestamp.
-#[pyfunction(name = "validate_lifecycle_timestamp")]
-#[pyo3(signature = (*, value))]
 pub(crate) fn timestamp_check(value: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = value.py();
     let datetime: Bound<'_, PyAny> = imported(py, "datetime", "datetime")?;
@@ -90,8 +88,6 @@ pub(crate) fn timestamp_check(value: &Bound<'_, PyAny>) -> PyResult<()> {
 }
 
 /// Validate correlations and safe payload fields for a catalogued event.
-#[pyfunction(name = "validate_known_lifecycle_event")]
-#[pyo3(signature = (*, event))]
 pub(crate) fn known_event_check(event: &Bound<'_, PyAny>) -> PyResult<()> {
     let mut correlations: Vec<(&'static str, bool)> = Vec::new();
     for field in CORRELATION_FIELDS {
@@ -111,6 +107,5 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(frozen_json, module)?)?;
     module.add_function(wrap_pyfunction!(required_text_check, module)?)?;
     module.add_function(wrap_pyfunction!(optional_text_check, module)?)?;
-    module.add_function(wrap_pyfunction!(timestamp_check, module)?)?;
-    module.add_function(wrap_pyfunction!(known_event_check, module)?)
+    Ok(())
 }

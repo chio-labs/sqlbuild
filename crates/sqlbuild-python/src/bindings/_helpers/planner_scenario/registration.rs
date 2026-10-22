@@ -1,7 +1,7 @@
 //! Register scenario planning bindings.
 
 use crate::bindings::_helpers::planner_scenario::{
-    artifacts, cli, entries, execution, fixtures, graph, relations, sql,
+    artifacts, cli, execution, fixtures, graph, relations, sql,
 };
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult};
 use pyo3::wrap_pyfunction;
@@ -15,10 +15,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         fixtures::build_scenario_fixture_plans,
         module
     )?)?;
-    module.add_function(wrap_pyfunction!(
-        entries::build_scenario_seed_entries,
-        module
-    )?)?;
     module.add_function(wrap_pyfunction!(sql::resolve_scenario_check_sql, module)?)?;
     module.add_function(wrap_pyfunction!(
         artifacts::compute_scenario_hash_prefix,
@@ -30,14 +26,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     module.add_function(wrap_pyfunction!(
         artifacts::build_scenario_artifact_name,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
-        artifacts::build_scenario_artifact_physical_name,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
-        artifacts::fit_scenario_artifact_logical_name,
         module
     )?)?;
     module.add_function(wrap_pyfunction!(

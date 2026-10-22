@@ -384,8 +384,6 @@ pub(crate) fn build_seed_command_plan<'py>(
 }
 
 /// Project static relation data for Python checks.
-#[pyfunction]
-#[pyo3(signature = (*, project, scope, relations))]
 pub(crate) fn build_relation_command_plan<'py>(
     project: &Bound<'py, PyAny>,
     scope: &Bound<'py, PyAny>,
@@ -497,6 +495,5 @@ pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(build_audit_command_plan, module)?)?;
     module.add_function(wrap_pyfunction!(build_test_command_plan, module)?)?;
     module.add_function(wrap_pyfunction!(build_seed_command_plan, module)?)?;
-    module.add_function(wrap_pyfunction!(build_relation_command_plan, module)?)?;
     module.add_function(wrap_pyfunction!(read_selected_seed_fingerprints, module)?)
 }

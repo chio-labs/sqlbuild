@@ -5,9 +5,8 @@ use crate::bindings::_helpers::model_config::typed_config::{config_value, model_
 use crate::bindings::_helpers::records::construct::{enum_from_value, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::PyString;
-use pyo3::{pyfunction, wrap_pyfunction};
 
 const POLICY_DISABLED: &str = "disabled";
 
@@ -83,15 +82,9 @@ pub(crate) fn start_cursor_config<'py>(
 }
 
 /// Resolve automatic-start policy with model config taking precedence.
-#[pyfunction]
-#[pyo3(signature = (*, model, project_config))]
 pub(crate) fn resolve_start_cursor_config<'py>(
     model: &Bound<'py, PyAny>,
     project_config: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     start_cursor_config(model, project_config)
-}
-
-pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(resolve_start_cursor_config, module)?)
 }

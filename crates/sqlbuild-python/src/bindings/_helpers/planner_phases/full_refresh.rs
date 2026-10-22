@@ -19,8 +19,6 @@ fn configured_full_refresh<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py
 }
 
 /// dbt-compatible nullable model full-refresh semantics.
-#[pyfunction]
-#[pyo3(signature = (*, model, cli_full_refresh))]
 pub(crate) fn resolve_model_full_refresh(
     model: &Bound<'_, PyAny>,
     cli_full_refresh: bool,
@@ -33,8 +31,6 @@ pub(crate) fn resolve_model_full_refresh(
 }
 
 /// Names of models effectively full refreshed for this invocation.
-#[pyfunction]
-#[pyo3(signature = (*, project, cli_full_refresh))]
 pub(crate) fn effectively_full_refreshed_model_names<'py>(
     project: &Bound<'py, PyAny>,
     cli_full_refresh: bool,

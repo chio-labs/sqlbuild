@@ -3,11 +3,8 @@
 use std::collections::BTreeSet;
 
 use pyo3::exceptions::PyValueError;
-use pyo3::prelude::{
-    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
-};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
-use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::cli_text::models::CliStyle;
 use sqlbuild_core::freshness_text::main::freshness_exit_code::freshness_exit_code;
 use sqlbuild_core::freshness_text::main::freshness_json::freshness_json;
@@ -272,8 +269,6 @@ fn write_json_output(
 }
 
 /// Run one `sqb freshness` request.
-#[pyfunction]
-#[pyo3(signature = (*, request))]
 pub(crate) fn run_freshness_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let fail_on_stale: bool = native_field(request, "fail_on_stale")?.extract()?;
     let fail_on_error: bool = native_field(request, "fail_on_error")?.extract()?;
@@ -344,9 +339,4 @@ pub(crate) fn run_freshness_command(py: Python<'_>, request: &Bound<'_, PyAny>) 
         &results,
         (fail_on_stale, fail_on_error),
     ))
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(run_freshness_command, module)?)?;
-    Ok(())
 }

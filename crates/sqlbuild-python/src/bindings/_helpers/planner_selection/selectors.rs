@@ -1,10 +1,7 @@
 //! Planner selector parsing and resolution over native project graphs, raising `PlannerInputError`.
 
-use pyo3::prelude::{
-    Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRef, PyResult, Python,
-};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyRef, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyFrozenSet, PySetMethods, PyString};
-use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::assembly::project::types::ObjectKey;
 use sqlbuild_analysis::graph::errors::SelectorError;
 use sqlbuild_analysis::graph::main::match_selector::match_selector;
@@ -117,7 +114,6 @@ fn view_graph(mappings: GraphViewMappings<'_, '_>) -> PyResult<NativeProjectGrap
 }
 
 /// Parse one selector token into Python's `ParsedSelector` or `PathSelector`.
-#[pyfunction]
 pub(crate) fn parse_project_selector<'py>(
     raw: &Bound<'py, PyString>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -128,8 +124,6 @@ pub(crate) fn parse_project_selector<'py>(
 }
 
 /// `--select` minus `--exclude` on a native graph, adding the functions selected models need.
-#[pyfunction]
-#[pyo3(signature = (*, graph, select, exclude))]
 pub(crate) fn resolve_graph_selection<'py>(
     graph: PyRef<'py, NativeProjectGraph>,
     select: &Bound<'py, PyAny>,
@@ -139,8 +133,6 @@ pub(crate) fn resolve_graph_selection<'py>(
 }
 
 /// `--select` minus `--exclude` on a project graph, adding the functions selected models need.
-#[pyfunction]
-#[pyo3(signature = (*, graph, select, exclude))]
 pub(crate) fn select_project_graph<'py>(
     graph: &Bound<'py, PyAny>,
     select: &Bound<'py, PyAny>,
@@ -154,8 +146,6 @@ pub(crate) fn select_project_graph<'py>(
 }
 
 /// Model, source, seed and function selectors resolved against compiled graph mappings.
-#[pyfunction]
-#[pyo3(signature = (**options))]
 pub(crate) fn resolve_project_selectors<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
@@ -174,8 +164,6 @@ pub(crate) fn resolve_project_selectors<'py>(
 }
 
 /// The keys whitespace-separated selector tokens match, without required build resources.
-#[pyfunction]
-#[pyo3(signature = (**options))]
 pub(crate) fn resolve_project_selector_tokens<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
@@ -206,8 +194,6 @@ fn arguments_graph(arguments: &KeywordArguments<'_>) -> PyResult<NativeProjectGr
 }
 
 /// The keys one parsed selector matches before `+` graph expansion.
-#[pyfunction]
-#[pyo3(signature = (*, parsed, all_keys, tag_index, path_index))]
 pub(crate) fn match_project_selector<'py>(
     parsed: &Bound<'py, PyAny>,
     all_keys: &Bound<'py, PyAny>,
@@ -236,23 +222,10 @@ pub(crate) fn match_project_selector<'py>(
 }
 
 /// The upstream key closure of one compiled graph key.
-#[pyfunction]
-#[pyo3(signature = (*, key, upstream_deps))]
 pub(crate) fn expand_project_upstream_keys<'py>(
     key: Bound<'py, PyAny>,
     upstream_deps: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyFrozenSet>> {
     let visited = closure(vec![key], upstream_deps, (false, None))?;
     PyFrozenSet::new(upstream_deps.py(), visited.iter())
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(parse_project_selector, module)?)?;
-    module.add_function(wrap_pyfunction!(resolve_graph_selection, module)?)?;
-    module.add_function(wrap_pyfunction!(select_project_graph, module)?)?;
-    module.add_function(wrap_pyfunction!(resolve_project_selectors, module)?)?;
-    module.add_function(wrap_pyfunction!(resolve_project_selector_tokens, module)?)?;
-    module.add_function(wrap_pyfunction!(match_project_selector, module)?)?;
-    module.add_function(wrap_pyfunction!(expand_project_upstream_keys, module)?)?;
-    Ok(())
 }

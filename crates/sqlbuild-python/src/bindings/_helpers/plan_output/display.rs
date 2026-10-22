@@ -13,9 +13,7 @@ use sqlbuild_core::plan_display::main::cursor_bound_display::cursor_bound_displa
 use sqlbuild_core::plan_display::main::effective_microbatch_batch_size::effective_microbatch_batch_size;
 use sqlbuild_core::plan_display::main::format_no_input_rows::format_no_input_rows as no_input_rows;
 use sqlbuild_core::plan_display::main::format_waiting_on_empty_inputs::format_waiting_on_empty_inputs as waiting_on_empty_inputs;
-use sqlbuild_core::plan_display::main::model_execution_annotation::model_execution_annotation as execution_annotation;
 use sqlbuild_core::plan_display::main::model_materialization_label::model_materialization_label as materialization_label;
-use sqlbuild_core::plan_display::main::model_resource_type::model_resource_type as resource_type;
 use sqlbuild_core::plan_display::models::{ModelLabelFacts, ParsedBound};
 
 use crate::bindings::_helpers::boundary::python_calls::imported;
@@ -93,8 +91,6 @@ pub(crate) fn inclusive_cursor_end(
 }
 
 /// A fully bounded inclusive operator override as an executable interval.
-#[pyfunction]
-#[pyo3(signature = (*, start_cursor_override, end_cursor_override, cursor_type, cursor_grain))]
 pub(crate) fn resolve_bounded_cursor_override<'py>(
     start_cursor_override: &Bound<'py, PyAny>,
     end_cursor_override: &Bound<'py, PyAny>,
@@ -167,21 +163,8 @@ pub(crate) fn cursor_bound_display(
 }
 
 /// The full materialization label used in plan summaries.
-#[pyfunction]
 pub(crate) fn model_materialization_label(entry: &Bound<'_, PyAny>) -> PyResult<String> {
     Ok(materialization_label(&label_facts(entry)?))
-}
-
-/// The left-column resource type used in execution progress rows.
-#[pyfunction]
-fn model_resource_type(entry: &Bound<'_, PyAny>) -> PyResult<&'static str> {
-    Ok(resource_type(optional_facts(entry)?.as_ref()))
-}
-
-/// The model annotation used in execution progress rows.
-#[pyfunction]
-fn model_execution_annotation(entry: &Bound<'_, PyAny>) -> PyResult<String> {
-    Ok(execution_annotation(optional_facts(entry)?.as_ref()))
 }
 
 fn names(input_names: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
@@ -192,7 +175,6 @@ fn names(input_names: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
 }
 
 /// Explain that a cursor window is empty because its inputs have no rows.
-#[pyfunction]
 pub(crate) fn format_no_input_rows(input_names: &Bound<'_, PyAny>) -> PyResult<String> {
     Ok(no_input_rows(&names(input_names)?))
 }
@@ -263,12 +245,7 @@ pub(crate) fn aligned_timestamp_bounds<'py>(
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(inclusive_cursor_end, module)?)?;
-    module.add_function(wrap_pyfunction!(resolve_bounded_cursor_override, module)?)?;
     module.add_function(wrap_pyfunction!(cursor_bound_display, module)?)?;
-    module.add_function(wrap_pyfunction!(model_materialization_label, module)?)?;
-    module.add_function(wrap_pyfunction!(model_resource_type, module)?)?;
-    module.add_function(wrap_pyfunction!(model_execution_annotation, module)?)?;
-    module.add_function(wrap_pyfunction!(format_no_input_rows, module)?)?;
     module.add_function(wrap_pyfunction!(format_waiting_on_empty_inputs, module)?)?;
     module.add_function(wrap_pyfunction!(
         resolve_effective_microbatch_batch_size,

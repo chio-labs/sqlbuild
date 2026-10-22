@@ -28,8 +28,6 @@ pub(crate) fn upstream_loader_dependency_names<'py>(
     PyTuple::new(loader_function.py(), graph.upstream(&deps))
 }
 
-#[pyfunction]
-#[pyo3(signature = (*, project, loader))]
 pub(crate) fn loader_to_source_entry<'py>(
     project: &Bound<'py, PyAny>,
     loader: &Bound<'py, PyAny>,
@@ -101,8 +99,6 @@ pub(crate) fn build_intermediate_source_map<'py>(
     intermediate_map(project, selected_keys, false)
 }
 
-#[pyfunction]
-#[pyo3(signature = (*, project, selected_keys))]
 pub(crate) fn build_upstream_intermediate_source_map<'py>(
     project: &Bound<'py, PyAny>,
     selected_keys: &Bound<'py, PyAny>,

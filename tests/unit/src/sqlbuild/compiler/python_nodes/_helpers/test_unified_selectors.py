@@ -5,11 +5,9 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
-    CompiledObjectKey,
     ProjectGraph,
     PythonNodeGraph,
     PythonSqlRunSelection,
-    resolve_project_selectors,
 )
 from sqlbuild.refs import seed
 from tests.unit.src.sqlbuild.compiler.python_nodes._helpers._test_types import (
@@ -357,18 +355,8 @@ def test_given_sql_only_selector_when_resolving_unified_then_sql_keys_match_sql_
         project_graph=project_graph,
         python_graph=build_sibling_sql_ref_python_node_graph(),
     )
-    sql_only: frozenset[CompiledObjectKey] = resolve_project_selectors(
-        select=(test_case.selector,),
-        exclude=(),
-        all_keys=project_graph.all_keys,
-        upstream_deps=project_graph.upstream_deps,
-        downstream_deps=project_graph.downstream_deps,
-        tag_index=project_graph.tag_index,
-        path_index=project_graph.path_index,
-    )
 
     assert frozenset(key.name for key in result.sql_keys) == test_case.expected_sql_names
-    assert frozenset(key.name for key in sql_only) == test_case.expected_sql_names
 
 
 @pytest.mark.parametrize(

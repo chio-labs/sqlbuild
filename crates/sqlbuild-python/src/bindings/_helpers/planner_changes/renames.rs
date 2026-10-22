@@ -136,8 +136,6 @@ fn origin_reference_names_of<'py>(
 }
 
 /// This plan's renames plus recorded renames, read only when a selected query that references models changed.
-#[pyfunction]
-#[pyo3(signature = (**options))]
 pub(crate) fn plan_reference_renames<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
@@ -263,6 +261,5 @@ fn changed_referencing_query(
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(plan_reference_renames, module)?)?;
     module.add_function(wrap_pyfunction!(origin_reference_names_of, module)?)
 }

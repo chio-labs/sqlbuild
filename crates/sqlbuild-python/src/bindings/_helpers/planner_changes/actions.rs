@@ -13,8 +13,6 @@ const INCREMENTAL_MATERIALIZATION: &str = "incremental";
 const CREATE_TABLE_ACTION: &str = "create_table";
 
 /// Each selected model's change with the backfill its own `replay_on_change` decided.
-#[pyfunction]
-#[pyo3(signature = (*, scope, changes))]
 pub(crate) fn resolve_model_actions<'py>(
     scope: &Bound<'py, PyAny>,
     changes: &Bound<'py, PyAny>,
@@ -60,6 +58,5 @@ pub(crate) fn replaces_incremental_relation(materialization_type: &str, action: 
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(resolve_model_actions, module)?)?;
     module.add_function(wrap_pyfunction!(replaces_incremental_relation, module)?)
 }

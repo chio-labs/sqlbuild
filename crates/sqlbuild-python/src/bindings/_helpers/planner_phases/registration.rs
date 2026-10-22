@@ -13,27 +13,11 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module
     )?)?;
     module.add_function(wrap_pyfunction!(
-        super::identities::build_planner_identity_context,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
         super::identities::planner_identity_work_info,
         module
     )?)?;
     module.add_function(wrap_pyfunction!(
         super::identities::detect_stale_warning_changes_of,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
-        super::buildability::check_selected_scope_buildability,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
-        super::full_refresh::resolve_model_full_refresh,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
-        super::full_refresh::effectively_full_refreshed_model_names,
         module
     )?)?;
     module.add_function(wrap_pyfunction!(
@@ -45,10 +29,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module
     )?)?;
     module.add_function(wrap_pyfunction!(
-        super::retention::effective_target_config,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
         super::retention::table_type_copy_name,
         module
     )?)?;
@@ -57,12 +37,5 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module
     )?)?;
     module.add_function(wrap_pyfunction!(super::retention::plan_retention, module)?)?;
-    module.add_function(wrap_pyfunction!(
-        super::output_assembly::with_column_rename_hints,
-        module
-    )?)?;
-    module.add_function(wrap_pyfunction!(
-        super::warehouse_state::gather_planner_warehouse_state,
-        module
-    )?)
+    Ok(())
 }

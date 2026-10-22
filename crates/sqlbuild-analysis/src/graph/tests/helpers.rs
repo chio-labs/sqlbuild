@@ -1,13 +1,15 @@
+use std::collections::BTreeSet;
+
 use crate::assembly::project::types::ObjectKey;
 use crate::graph::errors::SelectorError;
 use crate::graph::main::build_project_graph::build_project_graph;
 use crate::graph::main::resolve_selectors::resolve_selectors;
-use crate::graph::models::{GraphResource, ProjectGraph};
+use crate::graph::models::{GraphResource, ParsedSelector, ProjectGraph};
 use crate::graph::tests::test_types::SelectorFailure;
 
 type OwnedFailure = (String, String, Option<String>);
 
-type ResourceSpec = (
+pub(super) type ResourceSpec = (
     &'static str,
     &'static str,
     &'static [(&'static str, &'static str)],
@@ -48,8 +50,101 @@ pub(super) fn key(pair: &(&str, &str)) -> ObjectKey {
     (pair.0.to_owned(), pair.1.to_owned())
 }
 
+/// Two sources feeding two models that a third joins, plus a seed nothing reads.
+pub(super) const DIAMOND_PROJECT: &[ResourceSpec] = &[
+    (
+        "model",
+        "orders",
+        &[("source", "raw_orders")],
+        &["nightly", "staging"],
+        None,
+    ),
+    (
+        "model",
+        "customers",
+        &[("source", "raw_customers")],
+        &[],
+        None,
+    ),
+    (
+        "model",
+        "joined",
+        &[("model", "orders"), ("model", "customers")],
+        &["nightly"],
+        None,
+    ),
+    ("source", "raw_orders", &[], &[], None),
+    ("source", "raw_customers", &[], &[], None),
+    ("seed", "codes", &[], &[], None),
+];
+
+/// Staging, nested staging, intermediate and mart folders over two sources.
+pub(super) const FOLDER_PROJECT: &[ResourceSpec] = &[
+    (
+        "model",
+        "stg_orders",
+        &[("source", "raw_orders")],
+        &[],
+        Some("staging"),
+    ),
+    (
+        "model",
+        "stg_customers",
+        &[("source", "raw_customers")],
+        &[],
+        Some("staging"),
+    ),
+    (
+        "model",
+        "stg_deep",
+        &[("source", "raw_orders")],
+        &[],
+        Some("staging/raw"),
+    ),
+    (
+        "model",
+        "int_enriched",
+        &[("model", "stg_orders"), ("model", "stg_customers")],
+        &[],
+        Some("intermediate"),
+    ),
+    (
+        "model",
+        "fact_orders",
+        &[("model", "int_enriched")],
+        &[],
+        Some("marts"),
+    ),
+    ("source", "raw_orders", &[], &[], None),
+    ("source", "raw_customers", &[], &[], None),
+];
+
+/// A model read through a table function by another model.
+pub(super) const TABLE_FUNCTION_PROJECT: &[ResourceSpec] = &[
+    ("model", "orders", &[], &[], None),
+    (
+        "table_fn",
+        "customer_orders",
+        &[("model", "orders")],
+        &[],
+        None,
+    ),
+    (
+        "model",
+        "customer_order_summary",
+        &[("table_fn", "customer_orders")],
+        &[],
+        None,
+    ),
+];
+
 pub(super) fn orders_graph() -> ProjectGraph {
-    let resources: Vec<GraphResource> = ORDERS_PROJECT
+    project_graph(ORDERS_PROJECT)
+}
+
+/// The graph of a resource table.
+pub(super) fn project_graph(project: &[ResourceSpec]) -> ProjectGraph {
+    let resources: Vec<GraphResource> = project
         .iter()
         .map(|(kind, name, deps, tags, folder)| GraphResource {
             key: key(&(kind, name)),
@@ -63,13 +158,31 @@ pub(super) fn orders_graph() -> ProjectGraph {
 
 /// The resolved keys, or the error's `(code, message, help)`.
 pub(super) fn resolved(select: &[&str], exclude: &[&str]) -> Result<Vec<ObjectKey>, OwnedFailure> {
+    resolved_in(&orders_graph(), select, exclude)
+}
+
+/// The names `select` minus `exclude` resolves to in a project, sorted, or the error.
+pub(super) fn resolved_names(
+    project: &[ResourceSpec],
+    select: &[&str],
+    exclude: &[&str],
+) -> Result<BTreeSet<String>, OwnedFailure> {
+    resolved_in(&project_graph(project), select, exclude)
+        .map(|keys| keys.into_iter().map(|(_, name)| name).collect())
+}
+
+fn resolved_in(
+    graph: &ProjectGraph,
+    select: &[&str],
+    exclude: &[&str],
+) -> Result<Vec<ObjectKey>, OwnedFailure> {
     let owned = |values: &[&str]| {
         values
             .iter()
             .map(|value| (*value).to_owned())
             .collect::<Vec<_>>()
     };
-    resolve_selectors(&orders_graph(), &owned(select), &owned(exclude)).map_err(
+    resolve_selectors(graph, &owned(select), &owned(exclude)).map_err(
         |SelectorError {
              code,
              message,
@@ -86,4 +199,29 @@ pub(super) fn keys(pairs: &[(&str, &str)]) -> Vec<ObjectKey> {
 /// An owned copy of the `(code, message, help)` a selector case expects.
 pub(super) fn failure((code, message, help): SelectorFailure) -> OwnedFailure {
     (code.to_owned(), message.to_owned(), help.map(str::to_owned))
+}
+
+/// A sorted name set.
+pub(super) fn names(values: &[&str]) -> BTreeSet<String> {
+    values.iter().map(|value| (*value).to_owned()).collect()
+}
+
+/// A `kind:value` selector with its expansion flags.
+pub(super) fn kind(kind: &str, value: &str, upstream: bool, downstream: bool) -> ParsedSelector {
+    ParsedSelector::Kind {
+        kind: kind.to_owned(),
+        value: value.to_owned(),
+        upstream,
+        downstream,
+    }
+}
+
+/// A `start~end` selector with its expansion flags.
+pub(super) fn path(start: &str, end: &str, upstream: bool, downstream: bool) -> ParsedSelector {
+    ParsedSelector::Path {
+        start: start.to_owned(),
+        end: end.to_owned(),
+        upstream,
+        downstream,
+    }
 }

@@ -5,57 +5,16 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild._native import (
-    ParsedSelector,
     PythonNodeGraph,
-    SelectorKind,
-    parse_project_selector,
     resolve_python_node_selection,
 )
 from tests.unit.src.sqlbuild.compiler.python_nodes._helpers._test_types import (
-    PythonNodeParseSelectorTestCase,
     PythonNodeSelectorErrorTestCase,
     PythonNodeSelectorTestCase,
 )
 from tests.unit.src.sqlbuild.compiler.python_nodes._helpers.helpers import (
     build_orders_python_node_graph,
 )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        PythonNodeParseSelectorTestCase(
-            description="parses task typed selector",
-            raw="task:prepare_orders",
-            expected_result=ParsedSelector(kind=SelectorKind.TASK, value="prepare_orders"),
-        ),
-        PythonNodeParseSelectorTestCase(
-            description="parses asset typed selector",
-            raw="asset:export_orders",
-            expected_result=ParsedSelector(kind=SelectorKind.ASSET, value="export_orders"),
-        ),
-        PythonNodeParseSelectorTestCase(
-            description="parses loader typed selector",
-            raw="loader:load_events",
-            expected_result=ParsedSelector(kind=SelectorKind.LOADER, value="load_events"),
-        ),
-        PythonNodeParseSelectorTestCase(
-            description="parses check typed selector",
-            raw="check:check_orders_export",
-            expected_result=ParsedSelector(
-                kind=SelectorKind.CHECK,
-                value="check_orders_export",
-            ),
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_python_node_typed_selector_when_parsing_then_returns_expected_kind(
-    test_case: PythonNodeParseSelectorTestCase,
-) -> None:
-    result: object = parse_project_selector(test_case.raw)
-
-    assert result == test_case.expected_result
 
 
 @pytest.mark.parametrize(

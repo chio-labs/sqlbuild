@@ -25,9 +25,6 @@ use sqlbuild_analysis::planner_warehouse::main::freshness_unknown_message::fresh
 use std::collections::BTreeSet;
 
 /// One warning per reason that left configured source freshness unknown.
-#[pyfunction]
-#[pyo3(name = "build_source_freshness_unknown_warnings")]
-#[pyo3(signature = (*, source_freshness))]
 pub(crate) fn source_freshness_unknown_warnings<'py>(
     source_freshness: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
