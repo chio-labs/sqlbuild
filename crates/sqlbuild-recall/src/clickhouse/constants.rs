@@ -4,8 +4,8 @@ use crate::schema::models::Table;
 
 /// Rows one insert batch takes; ClickHouse prefers few large inserts to many small ones.
 pub const BATCH_ROWS: usize = 5_000;
-/// Longest wait for a batch to fill, so each table gets at most about one part per second per writer.
-pub const BATCH_WINDOW_MS: u64 = 1_000;
+/// Longest wait for a batch to fill, so a long command adds at most one part per table every five seconds. A closing session sends what it holds at once, and heartbeats never wait for it.
+pub const BATCH_WINDOW_MS: u64 = 5_000;
 /// ClickHouse `READONLY`.
 pub const READONLY_CODE: u64 = 164;
 /// ClickHouse `DATABASE_ACCESS_DENIED`.

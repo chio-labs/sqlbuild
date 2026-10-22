@@ -24,9 +24,9 @@ use crate::store::types::{RecallStore, RecallStoreOpener};
 use crate::writer::_helpers::materialize::{Built, Materializer};
 use crate::writer::_helpers::queue::{Queued, WriterState};
 use crate::writer::constants::{
-    BATCH_ROWS, BATCH_WINDOW_MS, CLOCK_CHECK_MS, FINAL_ROWS_BUDGET_MS, HEARTBEAT_STALE_INTERVALS,
-    MAX_RETRY_BACKOFF_MS, MINIMUM_MAINTENANCE_MS, OUTPUT_COALESCE_MS, RUNNING_RETRY_LIMIT_MS,
-    SETUP_RETRY_MS,
+    BATCH_ROWS, BATCH_WINDOW_MS, CLOCK_CHECK_MS, EARLY_BATCH_BYTES, FINAL_ROWS_BUDGET_MS,
+    HEARTBEAT_STALE_INTERVALS, MAX_RETRY_BACKOFF_MS, MINIMUM_MAINTENANCE_MS, OUTPUT_COALESCE_MS,
+    RUNNING_RETRY_LIMIT_MS, SETUP_RETRY_MS,
 };
 use crate::writer::models::{DeliveryStream, SessionConfig, SessionStore, SetupOutcome};
 use crate::writer::types::OutputReplacement;
@@ -238,7 +238,7 @@ fn batching(config: &SessionConfig) -> Batching {
     }
 }
 
-/// Wait until a batch is due: its row limit, the batch window, closing, or a timed duty.
+/// Wait until a batch is due: its row or byte limit, the batch window, closing, or a timed duty.
 fn next_batch(
     shared: &Shared,
     next_heartbeat: SystemTime,
@@ -260,7 +260,10 @@ fn next_batch(
         }
         let window_over =
             first_seen.is_some_and(|seen| now.duration_since(seen) >= batching.window);
-        if state.ready() >= batching.rows || (state.ready() > 0 && (window_over || state.closing)) {
+        if state.ready() >= batching.rows
+            || state.ready_bytes() >= EARLY_BATCH_BYTES
+            || (state.ready() > 0 && (window_over || state.closing))
+        {
             return (state.take_batch(batching.rows), state.closing);
         }
         if state.closing && state.queued() == 0 && !state.has_pending_output() {

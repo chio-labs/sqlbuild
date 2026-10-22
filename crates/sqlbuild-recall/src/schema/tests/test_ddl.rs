@@ -19,6 +19,19 @@ const NEW_COLUMN: ColumnSpec = ColumnSpec {
     column_type: ColumnType::Integer,
     nullable: false,
 };
+/// Views whose rows or counts would repeat with a key's stored copies.
+const FINAL_VIEWS: [&str; 8] = [
+    "audit_results",
+    "output_invocations",
+    "output_tail",
+    "output_transcripts",
+    "events",
+    "diagnostics",
+    "artifacts",
+    "conflicts",
+];
+/// Views that fold every copy of a key to the same result.
+const FOLDING_VIEWS: [&str; 2] = ["invocations", "statements"];
 
 #[test]
 fn given_sqlite_script_when_run_then_every_table_view_and_retention_statement_prepares() {
@@ -112,6 +125,13 @@ fn given_clickhouse_statement_sets_when_rendered_then_every_statement_has_the_sh
             .map(|(_, statement)| statement)
             .collect()
     };
+    let named_views = |names: &[&str]| -> Vec<String> {
+        view_statements(Dialect::ClickHouse, &options(None))
+            .into_iter()
+            .filter(|(name, _)| names.contains(name))
+            .map(|(_, statement)| statement)
+            .collect()
+    };
     let test_cases = [
         StatementSetTestCase {
             description: "every clustered table is created on the cluster",
@@ -134,7 +154,7 @@ fn given_clickhouse_statement_sets_when_rendered_then_every_statement_has_the_sh
                 .collect(),
             required_fragments: &[
                 "INSERT INTO `observability`.`recall_meta`",
-                "SELECT 'schema', 'schema_version', '2'",
+                "SELECT 'schema', 'schema_version', '3'",
             ],
             expected_count: 1,
         },
@@ -150,9 +170,33 @@ fn given_clickhouse_statement_sets_when_rendered_then_every_statement_has_the_sh
             expected_count: 1,
         },
         StatementSetTestCase {
-            description: "views deduplicate rows and filter by retention",
+            description: "views filter by retention",
             statements: views(None),
-            required_fragments: &["now64(6) - INTERVAL 14 DAY", " FINAL WHERE "],
+            required_fragments: &["now64(6) - INTERVAL 14 DAY"],
+            expected_count: VIEW_NAMES.len(),
+        },
+        StatementSetTestCase {
+            description: "views that list or count rows read each key once",
+            statements: named_views(&FINAL_VIEWS),
+            required_fragments: &[" FINAL WHERE "],
+            expected_count: FINAL_VIEWS.len(),
+        },
+        StatementSetTestCase {
+            description: "views that only fold a key's copies read the tables without FINAL",
+            statements: named_views(&FOLDING_VIEWS)
+                .into_iter()
+                .filter(|statement| !statement.contains(" FINAL "))
+                .collect(),
+            required_fragments: &["GROUP BY invocation_id, invocation_started_at"],
+            expected_count: FOLDING_VIEWS.len(),
+        },
+        StatementSetTestCase {
+            description: "no view sets query settings or depends on join_use_nulls",
+            statements: views(None)
+                .into_iter()
+                .filter(|statement| !statement.contains("SETTINGS"))
+                .collect(),
+            required_fragments: &["CREATE OR REPLACE VIEW"],
             expected_count: VIEW_NAMES.len(),
         },
     ];

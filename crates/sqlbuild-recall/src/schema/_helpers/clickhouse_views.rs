@@ -1,9 +1,84 @@
-//! The bodies of the supported views in ClickHouse: rows deduplicated by key, within retention.
+//! The bodies of the supported views in ClickHouse: each key counted once, within retention.
 
 use crate::schema::_helpers::rendering::clickhouse_table;
 use crate::schema::constants::{OUTPUT_TAIL_RECORDS, REPLACING_ENGINE};
 use crate::schema::main::table_spec::table_spec;
 use crate::schema::models::{DdlOptions, Table};
+
+/// The columns the `invocations` pass reads from its three sources, NULL (the terminal flag 0) where a source does not give them.
+const INVOCATION_SOURCE_COLUMNS: [(&str, &str, &str); 28] = [
+    ("ctx_command", "Nullable(String)", "NULL"),
+    ("ctx_subcommand", "Nullable(String)", "NULL"),
+    ("ctx_target", "Nullable(String)", "NULL"),
+    ("ctx_adapter", "Nullable(String)", "NULL"),
+    ("ctx_project_name", "Nullable(String)", "NULL"),
+    ("ctx_selection", "Nullable(String)", "NULL"),
+    ("ctx_exclusion", "Nullable(String)", "NULL"),
+    ("ctx_sqlbuild_version", "Nullable(String)", "NULL"),
+    ("ctx_git_revision", "Nullable(String)", "NULL"),
+    ("ctx_git_dirty", "Nullable(UInt8)", "NULL"),
+    ("ctx_host_token", "Nullable(String)", "NULL"),
+    ("ctx_pid", "Nullable(Int64)", "NULL"),
+    ("ctx_external_context", "Nullable(String)", "NULL"),
+    ("ctx_recall_filter_active", "Nullable(UInt8)", "NULL"),
+    ("heartbeat_at", "Nullable(DateTime64(6, 'UTC'))", "NULL"),
+    ("beat_stale_at", "Nullable(DateTime64(6, 'UTC'))", "NULL"),
+    ("beat_command", "Nullable(String)", "NULL"),
+    ("beat_subcommand", "Nullable(String)", "NULL"),
+    ("lifecycle_event", "Nullable(String)", "NULL"),
+    (
+        "event_occurred_at",
+        "Nullable(DateTime64(6, 'UTC'))",
+        "NULL",
+    ),
+    ("event_sequence", "Nullable(Int64)", "NULL"),
+    ("event_command", "Nullable(String)", "NULL"),
+    ("event_exit_code", "Nullable(Int64)", "NULL"),
+    ("event_duration_ms", "Nullable(Float64)", "NULL"),
+    ("event_error_type", "Nullable(String)", "NULL"),
+    ("event_error_code", "Nullable(String)", "NULL"),
+    ("event_error_message", "Nullable(String)", "NULL"),
+    ("event_is_terminal", "UInt8", "0"),
+];
+
+/// The statement columns each statement event carries into the second fold, in tuple order.
+const STATEMENT_FACT_COLUMNS: [&str; 17] = [
+    "statement_id",
+    "event_type",
+    "occurred_at",
+    "invocation_sequence",
+    "run_id",
+    "resource_attempt_id",
+    "operation_id",
+    "intent",
+    "statement_kind",
+    "purpose",
+    "sql_digest",
+    "query_id",
+    "error_type",
+    "error_code",
+    "duration_ms",
+    "row_count",
+    "affected_rows",
+];
+
+/// The columns the `output_invocations` pass reads: the chunk's own values default to what adds nothing to a sum, and the delivery and context values to NULL.
+const OUTPUT_SOURCE_COLUMNS: [(&str, &str, &str); 14] = [
+    ("chunk_stream", "String", "''"),
+    ("chunk_bytes", "Int64", "0"),
+    ("chunk_sequence", "Nullable(Int64)", "NULL"),
+    ("chunk_dropped_before", "Int64", "0"),
+    ("chunk_spans", "Int64", "0"),
+    ("chunk_omitted_bytes", "Int64", "0"),
+    ("delivery_accepted", "Nullable(Int64)", "NULL"),
+    ("delivery_delivered", "Nullable(Int64)", "NULL"),
+    ("delivery_filtered", "Nullable(Int64)", "NULL"),
+    ("delivery_dropped", "Nullable(Int64)", "NULL"),
+    ("delivery_failed", "Nullable(Int64)", "NULL"),
+    ("delivery_flush_complete", "Nullable(UInt8)", "NULL"),
+    ("context_filter_active", "Nullable(UInt8)", "NULL"),
+    ("is_listed", "UInt8", "0"),
+];
 
 /// `table`'s rows within its TTL, one copy per key: `FINAL` for replacing tables, so filters on the sorting key reach the read, else the first ingested copy. SQL text outlives retention like its TTL, so every reference still within retention finds it.
 fn deduplicated(table: Table, options: &DdlOptions) -> String {
@@ -25,112 +100,236 @@ fn deduplicated(table: Table, options: &DdlOptions) -> String {
     )
 }
 
-/// Every fold groups by `invocation_id` and `invocation_started_at`, which an invocation's rows share, so a filter on either reaches the table reads instead of folding the whole retention window.
-fn invocations(options: &DdlOptions) -> String {
-    let context = deduplicated(Table::Invocations, options);
-    let events = deduplicated(Table::Events, options);
-    let beats = deduplicated(Table::Heartbeats, options);
+/// `table`'s rows within its TTL that match `filter`, every stored copy included. Only for folds whose result is the same however often a row repeats (`any`, `min`, `max`, `argMin`, `argMax`, a count compared with zero): copies of one key hold the same content, since a write with other content is refused as a conflict.
+fn retained(table: Table, options: &DdlOptions, filter: &str) -> String {
+    let spec = table_spec(table);
+    let days: u32 = options.retention_days.saturating_add(spec.ttl_extra_days);
+    let filter: String = if filter.is_empty() {
+        String::new()
+    } else {
+        format!(" AND {filter}")
+    };
     format!(
-        "WITH
-ids AS (
-    SELECT invocation_id, invocation_started_at
-    FROM (
-        SELECT invocation_id, invocation_started_at FROM {context}
-        UNION ALL SELECT invocation_id, invocation_started_at FROM {beats}
-        UNION ALL SELECT invocation_id, invocation_started_at FROM {events}
-            WHERE event_type IN ('invocation_started', 'invocation_completed', 'invocation_failed')
-    )
-    GROUP BY invocation_id, invocation_started_at
-),
-started AS (
-    SELECT invocation_id, invocation_started_at, min(occurred_at) AS started_at,
-        any(command) AS command
-    FROM {events} WHERE event_type = 'invocation_started'
-    GROUP BY invocation_id, invocation_started_at
-),
-terminals AS (
-    SELECT invocation_id, invocation_started_at,
-        argMax(event_type, tuple(invocation_sequence, occurred_at)) AS terminal_type,
-        argMax(occurred_at, tuple(invocation_sequence, occurred_at)) AS terminal_at,
-        argMax(exit_code, tuple(invocation_sequence, occurred_at)) AS terminal_exit_code,
-        argMax(duration_ms, tuple(invocation_sequence, occurred_at)) AS terminal_duration_ms,
-        argMax(error_type, tuple(invocation_sequence, occurred_at)) AS terminal_error_type,
-        argMax(error_code, tuple(invocation_sequence, occurred_at)) AS terminal_error_code,
-        argMax(JSONExtract(payload, 'error_message', 'Nullable(String)'),
-            tuple(invocation_sequence, occurred_at)) AS terminal_error_message
-    FROM {events}
-    WHERE event_type IN ('invocation_completed', 'invocation_failed')
-    GROUP BY invocation_id, invocation_started_at
-),
-beats AS (
-    SELECT invocation_id, invocation_started_at, max(beat_at) AS last_heartbeat_at, max(stale_at) AS stale_at,
-        min(command) AS command, min(subcommand) AS subcommand
-    FROM {beats} GROUP BY invocation_id, invocation_started_at
-)
-SELECT
-    ids.invocation_id AS invocation_id,
-    ids.invocation_started_at AS invocation_started_at,
-    coalesce(started.started_at, ids.invocation_started_at) AS started_at,
-    multiIf(
-        terminals.terminal_type = 'invocation_completed', 'completed',
-        terminals.terminal_type = 'invocation_failed', 'failed',
-        beats.stale_at IS NULL, 'unknown',
-        beats.stale_at >= now64(6), 'running',
-        'abandoned'
-    ) AS status,
-    if(terminals.terminal_type IS NOT NULL, terminals.terminal_at,
-        if(beats.stale_at < now64(6), beats.last_heartbeat_at, NULL)) AS ended_at,
-    if(terminals.terminal_type IS NOT NULL, terminals.terminal_duration_ms,
-        if(beats.stale_at < now64(6),
-            toFloat64(dateDiff('millisecond', started_at, beats.last_heartbeat_at)), NULL))
-        AS duration_ms,
-    terminals.terminal_exit_code AS exit_code,
-    terminals.terminal_error_type AS error_type,
-    terminals.terminal_error_code AS error_code,
-    terminals.terminal_error_message AS error_message,
-    coalesce(context.command, started.command, beats.command) AS command,
-    coalesce(context.subcommand, beats.subcommand) AS subcommand,
-    context.target AS target,
-    context.adapter AS adapter,
-    context.project_name AS project_name,
-    context.selection AS selection,
-    context.exclusion AS exclusion,
-    context.sqlbuild_version AS sqlbuild_version,
-    context.git_revision AS git_revision,
-    context.git_dirty AS git_dirty,
-    context.host_token AS host_token,
-    context.pid AS pid,
-    context.external_context AS external_context,
-    context.recall_filter_active AS recall_filter_active,
-    beats.last_heartbeat_at AS last_heartbeat_at
-FROM ids
-LEFT JOIN {context} AS context ON context.invocation_id = ids.invocation_id
-    AND context.invocation_started_at = ids.invocation_started_at
-LEFT JOIN started ON started.invocation_id = ids.invocation_id
-    AND started.invocation_started_at = ids.invocation_started_at
-LEFT JOIN terminals ON terminals.invocation_id = ids.invocation_id
-    AND terminals.invocation_started_at = ids.invocation_started_at
-LEFT JOIN beats ON beats.invocation_id = ids.invocation_id
-    AND beats.invocation_started_at = ids.invocation_started_at
-SETTINGS join_use_nulls = 1"
+        "(SELECT * FROM {name} WHERE {expiry} >= now64(6) - INTERVAL {days} DAY{filter})",
+        name = clickhouse_table(spec.name, options),
+        expiry = spec.expiry_column,
     )
 }
 
-/// One fold per statement, grouped by its invocation as well, so a filter on `invocation_id` or `invocation_started_at` reaches the table reads.
+/// The value `values` gives column `name`, if any.
+fn branch_value<'a>(values: &[(&str, &'a str)], name: &str) -> Option<&'a str> {
+    values
+        .iter()
+        .find(|(column, _)| *column == name)
+        .map(|(_, value)| *value)
+}
+
+/// One branch of a single-pass `UNION ALL` reading `from`: `invocation_id`, `invocation_started_at`, the `source` label, then every column of `columns` (name, type, default), taken from `values` where given and the default elsewhere. Column names differ from the tables' own, so no alias hides a table column.
+fn union_branch(
+    source: &str,
+    columns: &[(&str, &str, &str)],
+    values: &[(&str, &str)],
+    from: &str,
+) -> String {
+    let selected: Vec<String> = columns
+        .iter()
+        .map(|(name, column_type, default)| {
+            let value: &str = branch_value(values, name).unwrap_or(*default);
+            format!("        CAST({value} AS {column_type}) AS {name}")
+        })
+        .collect();
+    format!(
+        "    SELECT invocation_id, invocation_started_at, '{source}' AS source,\n{}\n    FROM {from}",
+        selected.join(",\n")
+    )
+}
+
+/// One pass over the context rows, heartbeats and lifecycle events, folded by `invocation_id` and `invocation_started_at`, which an invocation's rows share: each table is read once, a filter on either column reaches every read, and no join needs `join_use_nulls`.
+fn invocations(options: &DdlOptions) -> String {
+    let context = retained(Table::Invocations, options, "");
+    let events = retained(
+        Table::Events,
+        options,
+        "event_type IN ('invocation_started', 'invocation_completed', 'invocation_failed')",
+    );
+    let beats = retained(Table::Heartbeats, options, "");
+    let columns = &INVOCATION_SOURCE_COLUMNS;
+    let context_rows = union_branch(
+        "context",
+        columns,
+        &[
+            ("ctx_command", "command"),
+            ("ctx_subcommand", "subcommand"),
+            ("ctx_target", "target"),
+            ("ctx_adapter", "adapter"),
+            ("ctx_project_name", "project_name"),
+            ("ctx_selection", "selection"),
+            ("ctx_exclusion", "exclusion"),
+            ("ctx_sqlbuild_version", "sqlbuild_version"),
+            ("ctx_git_revision", "git_revision"),
+            ("ctx_git_dirty", "git_dirty"),
+            ("ctx_host_token", "host_token"),
+            ("ctx_pid", "pid"),
+            ("ctx_external_context", "external_context"),
+            ("ctx_recall_filter_active", "recall_filter_active"),
+        ],
+        &context,
+    );
+    let beat_rows = union_branch(
+        "beat",
+        columns,
+        &[
+            ("heartbeat_at", "beat_at"),
+            ("beat_stale_at", "stale_at"),
+            ("beat_command", "command"),
+            ("beat_subcommand", "subcommand"),
+        ],
+        &beats,
+    );
+    let event_rows = union_branch(
+        "event",
+        columns,
+        &[
+            ("lifecycle_event", "event_type"),
+            ("event_occurred_at", "occurred_at"),
+            ("event_sequence", "invocation_sequence"),
+            ("event_command", "command"),
+            ("event_exit_code", "exit_code"),
+            ("event_duration_ms", "duration_ms"),
+            ("event_error_type", "error_type"),
+            ("event_error_code", "error_code"),
+            (
+                "event_error_message",
+                "JSONExtract(payload, 'error_message', 'Nullable(String)')",
+            ),
+            (
+                "event_is_terminal",
+                "event_type IN ('invocation_completed', 'invocation_failed')",
+            ),
+        ],
+        &events,
+    );
+    let order = "tuple(event_sequence, event_occurred_at)";
+    let context_fields: String = INVOCATION_SOURCE_COLUMNS
+        .iter()
+        .filter_map(|(name, _, _)| name.strip_prefix("ctx_"))
+        .map(|field| format!("        anyIf(ctx_{field}, source = 'context') AS context_{field},"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let terminal = |column: &str, alias: &str| {
+        format!("        argMaxIf({column}, {order}, event_is_terminal = 1) AS {alias},")
+    };
+    format!(
+        "WITH
+source_rows AS (
+{context_rows}
+    UNION ALL
+{beat_rows}
+    UNION ALL
+{event_rows}
+),
+folded AS (
+    SELECT invocation_id, invocation_started_at,
+{context_fields}
+        minIf(event_occurred_at, lifecycle_event = 'invocation_started') AS started_occurred_at,
+        anyIf(event_command, lifecycle_event = 'invocation_started') AS started_command,
+{terminal_type}
+{terminal_at}
+{terminal_exit_code}
+{terminal_duration_ms}
+{terminal_error_type}
+{terminal_error_code}
+{terminal_error_message}
+        maxIf(heartbeat_at, source = 'beat') AS last_heartbeat_at,
+        maxIf(beat_stale_at, source = 'beat') AS stale_at,
+        minIf(beat_command, source = 'beat') AS first_beat_command,
+        minIf(beat_subcommand, source = 'beat') AS first_beat_subcommand
+    FROM source_rows
+    GROUP BY invocation_id, invocation_started_at
+)
+SELECT
+    invocation_id,
+    invocation_started_at,
+    coalesce(started_occurred_at, invocation_started_at) AS started_at,
+    multiIf(
+        terminal_type = 'invocation_completed', 'completed',
+        terminal_type = 'invocation_failed', 'failed',
+        stale_at IS NULL, 'unknown',
+        stale_at >= now64(6), 'running',
+        'abandoned'
+    ) AS status,
+    if(terminal_type IS NOT NULL, terminal_at,
+        if(stale_at < now64(6), last_heartbeat_at, NULL)) AS ended_at,
+    if(terminal_type IS NOT NULL, terminal_duration_ms,
+        if(stale_at < now64(6),
+            toFloat64(dateDiff('millisecond', started_at, last_heartbeat_at)), NULL))
+        AS duration_ms,
+    terminal_exit_code AS exit_code,
+    terminal_error_type AS error_type,
+    terminal_error_code AS error_code,
+    terminal_error_message AS error_message,
+    coalesce(context_command, started_command, first_beat_command) AS command,
+    coalesce(context_subcommand, first_beat_subcommand) AS subcommand,
+    context_target AS target,
+    context_adapter AS adapter,
+    context_project_name AS project_name,
+    context_selection AS selection,
+    context_exclusion AS exclusion,
+    context_sqlbuild_version AS sqlbuild_version,
+    context_git_revision AS git_revision,
+    context_git_dirty AS git_dirty,
+    context_host_token AS host_token,
+    context_pid AS pid,
+    context_external_context AS external_context,
+    context_recall_filter_active AS recall_filter_active,
+    last_heartbeat_at
+FROM folded",
+        terminal_type = terminal("lifecycle_event", "terminal_type"),
+        terminal_at = terminal("event_occurred_at", "terminal_at"),
+        terminal_exit_code = terminal("event_exit_code", "terminal_exit_code"),
+        terminal_duration_ms = terminal("event_duration_ms", "terminal_duration_ms"),
+        terminal_error_type = terminal("event_error_type", "terminal_error_type"),
+        terminal_error_code = terminal("event_error_code", "terminal_error_code"),
+        terminal_error_message = terminal("event_error_message", "terminal_error_message"),
+    )
+}
+
+/// Two folds over one read of the events: by resource, which names the resource and gathers its statement events, then by statement. Both group by `invocation_id` and `invocation_started_at`, so a filter on either reaches the read; `sql_available` looks digests up in the stored SQL, which is shared across invocations.
 fn statements(options: &DdlOptions) -> String {
-    let events = deduplicated(Table::Events, options);
+    let events = retained(Table::Events, options, "");
     let artifacts = clickhouse_table(table_spec(Table::Artifacts).name, options);
     let order = "tuple(invocation_sequence, occurred_at)";
     let terminal = "event_type IN ('statement_completed', 'statement_failed')";
+    let statement_event = "statement_id IS NOT NULL AND startsWith(event_type, 'statement_')";
+    let facts: String = STATEMENT_FACT_COLUMNS.join(", ");
+    let unpacked: String = STATEMENT_FACT_COLUMNS
+        .iter()
+        .enumerate()
+        .map(|(index, column)| format!("fact.{} AS {column}", index + 1))
+        .collect::<Vec<_>>()
+        .join(", ");
     format!(
         "WITH
-facts AS (
-    SELECT * FROM {events} WHERE statement_id IS NOT NULL AND startsWith(event_type, 'statement_')
+by_resource AS (
+    SELECT invocation_id, invocation_started_at, resource_id,
+        min(resource_name) AS group_resource_name,
+        minIf(resource_kind, resource_name IS NOT NULL) AS group_resource_kind,
+        groupArrayIf(tuple({facts}), {statement_event}) AS facts
+    FROM {events}
+    WHERE ({statement_event}) OR (resource_id IS NOT NULL AND resource_name IS NOT NULL)
+    GROUP BY invocation_id, invocation_started_at, resource_id
+),
+statement_events AS (
+    SELECT invocation_id, invocation_started_at, resource_id, group_resource_name, group_resource_kind,
+        {unpacked}
+    FROM by_resource ARRAY JOIN facts AS fact
 ),
 folded AS (
     SELECT invocation_id, invocation_started_at, statement_id,
         argMin(run_id, {order}) AS first_run_id,
         argMin(resource_id, {order}) AS first_resource_id,
+        argMinIf(tuple(group_resource_name, group_resource_kind), {order}, resource_id IS NOT NULL)
+            AS first_resource,
         argMin(resource_attempt_id, {order}) AS first_resource_attempt_id,
         argMin(operation_id, {order}) AS first_operation_id,
         argMin(intent, {order}) AS first_intent,
@@ -140,7 +339,7 @@ folded AS (
         minIf(occurred_at, event_type = 'statement_started') AS started_at,
         minIf(occurred_at, event_type = 'statement_submitted') AS submitted_at,
         max(query_id) AS any_query_id,
-        countIf({terminal}) AS terminal_count,
+        countIf({terminal}) > 0 AS has_terminal,
         argMaxIf(event_type, {order}, {terminal}) AS last_event_type,
         argMaxIf(occurred_at, {order}, {terminal}) AS last_ended_at,
         argMaxIf(query_id, {order}, {terminal}) AS last_query_id,
@@ -149,51 +348,38 @@ folded AS (
         argMaxIf(duration_ms, {order}, {terminal}) AS last_duration_ms,
         argMaxIf(row_count, {order}, {terminal}) AS last_row_count,
         argMaxIf(affected_rows, {order}, {terminal}) AS last_affected_rows
-    FROM facts GROUP BY invocation_id, invocation_started_at, statement_id
-),
-resources AS (
-    SELECT invocation_id, invocation_started_at, resource_id,
-        min(resource_name) AS first_resource_name, min(resource_kind) AS first_resource_kind
-    FROM {events}
-    WHERE resource_id IS NOT NULL AND resource_name IS NOT NULL
-    GROUP BY invocation_id, invocation_started_at, resource_id
+    FROM statement_events GROUP BY invocation_id, invocation_started_at, statement_id
 )
 SELECT
-    folded.invocation_id AS invocation_id,
-    folded.invocation_started_at AS invocation_started_at,
-    folded.statement_id AS statement_id,
-    folded.first_run_id AS run_id,
-    folded.first_resource_id AS resource_id,
-    resources.first_resource_name AS resource_name,
-    resources.first_resource_kind AS resource_kind,
-    folded.first_resource_attempt_id AS resource_attempt_id,
-    folded.first_operation_id AS operation_id,
-    folded.first_intent AS intent,
-    folded.first_statement_kind AS statement_kind,
-    folded.first_purpose AS purpose,
-    if(folded.terminal_count > 0, coalesce(folded.last_query_id, folded.any_query_id),
-        folded.any_query_id) AS query_id,
-    folded.started_at AS started_at,
-    folded.submitted_at AS submitted_at,
-    if(folded.terminal_count > 0, folded.last_ended_at, NULL) AS ended_at,
+    invocation_id,
+    invocation_started_at,
+    statement_id,
+    first_run_id AS run_id,
+    first_resource_id AS resource_id,
+    tupleElement(first_resource, 1) AS resource_name,
+    tupleElement(first_resource, 2) AS resource_kind,
+    first_resource_attempt_id AS resource_attempt_id,
+    first_operation_id AS operation_id,
+    first_intent AS intent,
+    first_statement_kind AS statement_kind,
+    first_purpose AS purpose,
+    if(has_terminal, coalesce(last_query_id, any_query_id), any_query_id) AS query_id,
+    started_at,
+    submitted_at,
+    if(has_terminal, last_ended_at, NULL) AS ended_at,
     multiIf(
-        folded.terminal_count = 0, 'no_terminal',
-        folded.last_event_type = 'statement_completed', 'completed',
+        NOT has_terminal, 'no_terminal',
+        last_event_type = 'statement_completed', 'completed',
         'failed'
     ) AS outcome,
-    if(folded.terminal_count > 0, folded.last_error_type, NULL) AS error_type,
-    if(folded.terminal_count > 0, folded.last_error_code, NULL) AS error_code,
-    if(folded.terminal_count > 0, folded.last_duration_ms, NULL) AS duration_ms,
-    if(folded.terminal_count > 0, folded.last_row_count, NULL) AS row_count,
-    if(folded.terminal_count > 0, folded.last_affected_rows, NULL) AS affected_rows,
-    folded.first_sql_digest AS sql_digest,
-    concat('sha256:', folded.first_sql_digest) IN (SELECT digest FROM {artifacts}) AS sql_available
-FROM folded
-LEFT JOIN resources
-    ON resources.invocation_id = folded.invocation_id
-    AND resources.invocation_started_at = folded.invocation_started_at
-    AND resources.resource_id = folded.first_resource_id
-SETTINGS join_use_nulls = 1"
+    if(has_terminal, last_error_type, NULL) AS error_type,
+    if(has_terminal, last_error_code, NULL) AS error_code,
+    if(has_terminal, last_duration_ms, NULL) AS duration_ms,
+    if(has_terminal, last_row_count, NULL) AS row_count,
+    if(has_terminal, last_affected_rows, NULL) AS affected_rows,
+    first_sql_digest AS sql_digest,
+    concat('sha256:', first_sql_digest) IN (SELECT digest FROM {artifacts}) AS sql_available
+FROM folded"
     )
 }
 
@@ -230,59 +416,99 @@ WHERE event_type = 'audit_completed'"
     )
 }
 
+/// One pass over the output chunks, the output delivery row and the context row, folded by invocation without joins. Chunks are counted and summed, so they keep `FINAL`; the delivery and context rows are only picked with `any`.
 fn output_invocations(options: &DdlOptions) -> String {
     let output = deduplicated(Table::Output, options);
-    let delivery = deduplicated(Table::Delivery, options);
-    let context = deduplicated(Table::Invocations, options);
+    let delivery = retained(Table::Delivery, options, "stream = 'output'");
+    let context = retained(Table::Invocations, options, "");
+    let columns = &OUTPUT_SOURCE_COLUMNS;
+    let chunk_rows = union_branch(
+        "output",
+        columns,
+        &[
+            ("chunk_stream", "stream"),
+            ("chunk_bytes", "byte_count"),
+            ("chunk_sequence", "sequence"),
+            ("chunk_dropped_before", "dropped_before"),
+            ("chunk_spans", "coalesce(omitted_sequences, 1)"),
+            ("chunk_omitted_bytes", "coalesce(omitted_bytes, 0)"),
+            ("is_listed", "1"),
+        ],
+        &output,
+    );
+    let delivery_rows = union_branch(
+        "delivery",
+        columns,
+        &[
+            ("delivery_accepted", "accepted"),
+            ("delivery_delivered", "delivered"),
+            ("delivery_filtered", "filtered"),
+            ("delivery_dropped", "dropped"),
+            ("delivery_failed", "failed"),
+            ("delivery_flush_complete", "flush_complete"),
+            ("is_listed", "1"),
+        ],
+        &delivery,
+    );
+    let context_rows = union_branch(
+        "context",
+        columns,
+        &[("context_filter_active", "recall_filter_active")],
+        &context,
+    );
     format!(
         "WITH
-received AS (
-    SELECT invocation_id,
-        min(invocation_started_at) AS invocation_started_at,
-        count() AS chunks,
-        sum(byte_count) AS bytes,
-        sumIf(byte_count, stream = 'stdout') AS stdout_bytes,
-        sumIf(byte_count, stream = 'stderr') AS stderr_bytes,
-        max(sequence) AS max_sequence,
-        sum(dropped_before) AS queue_drops,
-        sum(coalesce(omitted_sequences, 1)) AS spans,
-        sum(coalesce(omitted_bytes, 0)) AS truncated_bytes
-    FROM {output} GROUP BY invocation_id
+source_rows AS (
+{chunk_rows}
+    UNION ALL
+{delivery_rows}
+    UNION ALL
+{context_rows}
 ),
-delivery AS (SELECT * FROM {delivery} WHERE stream = 'output'),
-ids AS (
-    SELECT DISTINCT invocation_id, invocation_started_at
-    FROM (
-        SELECT invocation_id, invocation_started_at FROM received
-        UNION ALL SELECT invocation_id, invocation_started_at FROM delivery
-    )
+folded AS (
+    SELECT invocation_id, invocation_started_at,
+        countIf(source = 'output') AS chunks,
+        sumIf(chunk_bytes, source = 'output') AS bytes,
+        sumIf(chunk_bytes, source = 'output' AND chunk_stream = 'stdout') AS stdout_bytes,
+        sumIf(chunk_bytes, source = 'output' AND chunk_stream = 'stderr') AS stderr_bytes,
+        maxIf(chunk_sequence, source = 'output') AS max_sequence,
+        sumIf(chunk_dropped_before, source = 'output') AS queue_drops,
+        sumIf(chunk_spans, source = 'output') AS spans,
+        sumIf(chunk_omitted_bytes, source = 'output') AS truncated_bytes,
+        anyIf(delivery_accepted, source = 'delivery') AS accepted,
+        anyIf(delivery_delivered, source = 'delivery') AS delivered,
+        anyIf(delivery_filtered, source = 'delivery') AS filtered_count,
+        anyIf(delivery_dropped, source = 'delivery') AS dropped,
+        anyIf(delivery_failed, source = 'delivery') AS failed_count,
+        anyIf(delivery_flush_complete, source = 'delivery') AS flush_flag,
+        countIf(source = 'delivery') > 0 AS delivery_reported,
+        anyIf(context_filter_active, source = 'context') AS filter_flag
+    FROM source_rows
+    GROUP BY invocation_id, invocation_started_at
+    HAVING max(is_listed) = 1
 ),
 counted AS (
     SELECT
-        ids.invocation_id AS invocation_id,
-        ids.invocation_started_at AS invocation_started_at,
-        coalesce(received.chunks, 0) AS chunks,
-        coalesce(received.bytes, 0) AS bytes,
-        coalesce(received.stdout_bytes, 0) AS stdout_bytes,
-        coalesce(received.stderr_bytes, 0) AS stderr_bytes,
-        coalesce(received.truncated_bytes, 0) AS truncated_bytes,
-        received.max_sequence AS max_sequence,
+        invocation_id,
+        invocation_started_at,
+        chunks,
+        bytes,
+        stdout_bytes,
+        stderr_bytes,
+        truncated_bytes,
+        max_sequence,
         greatest(
-            coalesce(toInt64(received.max_sequence) + 1 - toInt64(received.spans), 0),
-            coalesce(toInt64(delivery.accepted), 0) - coalesce(toInt64(received.chunks), 0)
+            coalesce(toInt64(max_sequence) + 1 - toInt64(spans), 0),
+            coalesce(toInt64(accepted), 0) - coalesce(toInt64(chunks), 0)
         ) AS missing_sequences,
-        greatest(coalesce(received.queue_drops, 0), coalesce(delivery.dropped, 0)) AS reported_drops,
-        coalesce(delivery.filtered, 0) AS filtered,
-        coalesce(delivery.failed, 0) AS failed,
-        coalesce(context.recall_filter_active, 0) AS filter_active,
-        coalesce(delivery.flush_complete, 0) AS flush_complete,
-        delivery.invocation_id IS NOT NULL AS delivery_reported,
-        coalesce(delivery.delivered, 0) AS delivered
-    FROM ids
-    LEFT JOIN received ON received.invocation_id = ids.invocation_id
-    LEFT JOIN delivery ON delivery.invocation_id = ids.invocation_id
-    LEFT JOIN {context} AS context ON context.invocation_id = ids.invocation_id
-    SETTINGS join_use_nulls = 1
+        greatest(coalesce(queue_drops, 0), coalesce(dropped, 0)) AS reported_drops,
+        coalesce(filtered_count, 0) AS filtered,
+        coalesce(failed_count, 0) AS failed,
+        coalesce(filter_flag, 0) AS filter_active,
+        coalesce(flush_flag, 0) AS flush_complete,
+        delivery_reported,
+        coalesce(delivered, 0) AS delivered
+    FROM folded
 )
 SELECT
     invocation_id, invocation_started_at, chunks, bytes, stdout_bytes, stderr_bytes,
@@ -335,6 +561,7 @@ fn passthrough(table: Table, options: &DdlOptions) -> String {
     format!("SELECT * FROM {}", deduplicated(table, options))
 }
 
+/// Every reference with what is stored for its digest. The stored side is nullable before the join, so a reference without stored SQL reads NULL whether or not the session sets `join_use_nulls`.
 fn artifacts(options: &DdlOptions) -> String {
     let refs = deduplicated(Table::ArtifactRefs, options);
     let stored = deduplicated(Table::Artifacts, options);
@@ -347,16 +574,24 @@ fn artifacts(options: &DdlOptions) -> String {
     refs.role AS role,
     refs.statement_id AS statement_id,
     refs.resource_id AS resource_id,
-    artifact.kind AS kind,
-    artifact.media_type AS media_type,
-    artifact.size AS size,
-    artifact.digest IS NOT NULL AS available,
-    if(artifact.digest IS NULL, 'expired_or_not_captured', NULL) AS unavailable_reason,
-    if(startsWith(artifact.media_type, 'text/'), toValidUTF8(artifact.content), NULL) AS text,
-    artifact.content AS content
+    artifact.stored_kind AS kind,
+    artifact.stored_media_type AS media_type,
+    artifact.stored_size AS size,
+    artifact.stored_digest IS NOT NULL AS available,
+    if(artifact.stored_digest IS NULL, 'expired_or_not_captured', NULL) AS unavailable_reason,
+    if(startsWith(artifact.stored_media_type, 'text/'), toValidUTF8(artifact.stored_content), NULL)
+        AS text,
+    artifact.stored_content AS content
 FROM {refs} AS refs
-LEFT JOIN {stored} AS artifact ON artifact.digest = refs.digest
-SETTINGS join_use_nulls = 1"
+LEFT JOIN (
+    SELECT digest,
+        CAST(digest AS Nullable(String)) AS stored_digest,
+        CAST(kind AS Nullable(String)) AS stored_kind,
+        CAST(media_type AS Nullable(String)) AS stored_media_type,
+        CAST(size AS Nullable(Int64)) AS stored_size,
+        CAST(content AS Nullable(String)) AS stored_content
+    FROM {stored}
+) AS artifact ON artifact.digest = refs.digest"
     )
 }
 

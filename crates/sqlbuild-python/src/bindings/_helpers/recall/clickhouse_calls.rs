@@ -1,7 +1,7 @@
 //! Calls into the ClickHouse adapter's Recall store operations, through the native host.
 
 use pyo3::prelude::{Bound, FromPyObject, PyAny, PyAnyMethods, PyErr, PyResult, Python};
-use pyo3::types::{PyBytes, PyDict, PyDictMethods, PyInt, PyList, PyString};
+use pyo3::types::{PyBool, PyBytes, PyDict, PyDictMethods, PyInt, PyList, PyString};
 use sqlbuild_config::models::ConfigValue;
 use sqlbuild_host::entries::models::AdapterHost;
 use sqlbuild_recall::clickhouse::main::error_kind::error_kind;
@@ -85,10 +85,17 @@ fn reply<'py>(
     }
 }
 
-/// Connect with the store's connection options; a `quiet` caller, Recall's delivery thread, never has its output captured.
+/// How a store connection is used: the delivery thread writes and is never captured; a reader skips the session settings under `readonly = 1`, so that user can read.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ConnectionRole {
+    Writer,
+    Reader,
+}
+
+/// Connect with the store's connection options for `role`.
 pub(crate) fn connect(
     py: Python<'_>,
-    (config, quiet): (&[(String, ConfigValue)], bool),
+    (config, role): (&[(String, ConfigValue)], ConnectionRole),
     action: &str,
 ) -> Result<StoreHandle, StoreError> {
     let options = PyDict::new(py);
@@ -104,11 +111,17 @@ pub(crate) fn connect(
             ("config", options.into_any()),
             (
                 "quiet_thread_attribute",
-                if quiet {
+                if role == ConnectionRole::Writer {
                     PyString::new(py, OUTPUT_SUPPRESSED_ATTRIBUTE).into_any()
                 } else {
                     py.None().into_bound(py)
                 },
+            ),
+            (
+                "read_only",
+                PyBool::new(py, role == ConnectionRole::Reader)
+                    .to_owned()
+                    .into_any(),
             ),
         ],
         action,
@@ -132,11 +145,11 @@ fn cell_value(cell: Option<Cell>) -> RecallValue {
     }
 }
 
-/// The columns, rows and statistics of `sql` run with `settings`.
+/// The columns, at most `row_cap` rows and the statistics of `sql`, run with those of `settings` the session does not already hold.
 pub(crate) fn query(
     py: Python<'_>,
     handle: StoreHandle,
-    (sql, settings): (&str, &[(&str, i64)]),
+    (sql, settings, row_cap): (&str, &[(&str, i64)], Option<usize>),
     action: &str,
 ) -> Result<(QueryResult, QueryStatistics), StoreError> {
     let query_settings = PyDict::new(py);
@@ -152,6 +165,13 @@ pub(crate) fn query(
             ("handle", handle_value(py, handle)),
             ("sql", PyString::new(py, sql).into_any()),
             ("settings", query_settings.into_any()),
+            (
+                "row_cap",
+                row_cap.map_or_else(
+                    || py.None().into_bound(py),
+                    |cap| PyInt::new(py, cap).into_any(),
+                ),
+            ),
         ],
         action,
     )?;

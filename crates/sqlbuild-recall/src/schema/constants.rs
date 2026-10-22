@@ -3,7 +3,7 @@
 use crate::schema::models::{ColumnSpec, ColumnType, Table, TableSpec};
 
 /// The Recall schema version this build writes. Raise it when a column or view is added.
-pub const RECALL_SCHEMA_VERSION: i64 = 2;
+pub const RECALL_SCHEMA_VERSION: i64 = 3;
 /// The oldest SQLite library the store's views run on (ordered `group_concat`).
 pub const MINIMUM_SQLITE_VERSION: (u32, u32) = (3, 44);
 /// The `recall_meta` component of schema rows.

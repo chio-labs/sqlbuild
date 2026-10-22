@@ -277,6 +277,16 @@ GRANT SELECT, INSERT ON observability.* TO recall_writer;
 GRANT SELECT ON observability.* TO recall_reader;
 ```
 
+The reader may be a standard read-only user (`SETTINGS readonly = 1`, or a settings profile with
+it), which may not change any setting. Such a user's queries run with the server's own settings;
+every other reader gets the
+[settings SQLBuild pins](../adapters/clickhouse.md#settings-sqlbuild-pins). The views
+return the same rows either way. `sqb recall query` runs with
+`readonly = 2`, which refuses writes but still allows query settings, unless the user is already
+read-only; a user that may not set the row limit gets the same truncated result, cut off while
+reading. A setting that Recall needs and the user may not change fails with an error naming it; set
+it in the user's profile, or give the user `readonly = 2`, which keeps it read-only.
+
 Then, as the administrator, create the store with the DDL that `sqb recall schema --ddl` prints
 (any connection that can read the database works, so the reader's is enough):
 
@@ -303,12 +313,14 @@ writing to an upgraded store. `--ddl` prints SQL, so it cannot be combined with 
   recorded. When it has expired anyway, a writer compares the stored tables' and views' columns
   with its own: it upgrades an older store, records its version on a current one, and never
   replaces the views of a store a newer SQLBuild version created.
-- **Writes.** History is sent in batches of up to 5,000 rows about once a second, one insert per
-  table, with the same queue, shutdown budget and exit-code guarantees as the local store. Many
-  concurrent commands can write one store.
+- **Writes.** History is sent in batches of up to 5,000 rows about every five seconds, one insert
+  per table, so a long command adds few parts; everything still queued is sent when it ends, with
+  the same queue, shutdown budget and exit-code guarantees as the local store. Many concurrent
+  commands can write one store.
 - **Duplicates.** Every row has a deterministic key. A retried batch is deduplicated by ClickHouse,
-  and the views read each key once (`FINAL` on `ReplacingMergeTree` tables), so a repeated delivery
-  is counted once. Before writing, Recall looks up the batch's keys: a key already stored with
+  and the views read each key once, so a repeated delivery is counted once: views that list or count
+  rows read the `ReplacingMergeTree` tables with `FINAL`, and `invocations` and `statements`, which
+  only take the first, last, smallest or largest value of a key's copies, read them without it. Before writing, Recall looks up the batch's keys: a key already stored with
   different content keeps the stored row, and the rejected copy is listed in `conflicts`.
 - **Retention.** Every table carries a TTL of `retention` (SQL text a week longer, and refreshed
   while it is still referenced), and the views hide rows past their TTL at once. ClickHouse drops

@@ -175,6 +175,8 @@ Every query runs with these settings so SQL behaves the same as on other adapter
 
 The connection's `settings` may repeat these values but not change them: a different value fails to connect with `A710`, because SQLBuild's generated SQL depends on them.
 
+A [Recall](../observability/recall.md) `read_connection` whose user is `readonly = 1`, and so may not change settings, sends none of them: its `sqb recall query` SQL runs with the server's own settings. Every other reader gets them.
+
 ClickHouse returns a type's default value (`0`, the epoch, an empty string) from `lag` and `lead` past the edge of a window frame unless the argument is `Nullable`. SQLBuild's generated snapshot SQL wraps those arguments in `toNullable` so they return `NULL` as on other adapters. Write the same in your own models when you rely on `NULL` there.
 
 ## SQL differences to watch
@@ -197,5 +199,6 @@ A ClickHouse connection can also hold [Recall](../observability/recall.md)'s com
 history for a whole team, whichever adapter the project builds with. Set
 `[recall] write_connection` and `read_connection` to it, one connection or separate writer and
 reader users. Recall creates its tables on first use, keeps every output byte by default, and needs
-only `SELECT` and `INSERT` once the tables exist; readers need only `SELECT`. See
+only `SELECT` and `INSERT` once the tables exist; readers need only `SELECT` and may be
+`readonly = 1` users. See
 [Sharing history in ClickHouse](../observability/recall.md#sharing-history-in-clickhouse).

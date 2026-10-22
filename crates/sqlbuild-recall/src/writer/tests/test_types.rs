@@ -1,3 +1,4 @@
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::records::models::{OutputChunk, OutputStream, RecallRow, RecallValue, RowEnvelope};
@@ -163,6 +164,56 @@ impl RecallStoreOpener for PartialStore {
 
     fn batch_window(&self) -> Duration {
         Duration::from_millis(10)
+    }
+}
+
+pub(crate) struct EarlyBatchTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) written_bytes: usize,
+    pub(crate) wait: Duration,
+    pub(crate) expected_minimum_sent_bytes: usize,
+    pub(crate) expected_dropped: u64,
+}
+
+/// A hosted store with a batch window far longer than any test, counting the output bytes it receives.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct OutputBytesStore {
+    pub(crate) received: Arc<Mutex<usize>>,
+}
+
+impl RecallStore for OutputBytesStore {
+    fn insert(&self, rows: &[RecallRow], _give_up: Instant) -> Result<InsertOutcome, StoreError> {
+        let bytes: usize = rows
+            .iter()
+            .filter(|row| row.table == Table::Output)
+            .map(|row| match row.value("data") {
+                Some(RecallValue::Blob(data)) => data.len(),
+                _ => 0,
+            })
+            .sum();
+        *self
+            .received
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) += bytes;
+        Ok(InsertOutcome::default())
+    }
+}
+
+impl RecallStoreOpener for OutputBytesStore {
+    fn open(
+        &self,
+        _envelope: &RowEnvelope,
+        _give_up: Instant,
+    ) -> Result<Box<dyn RecallStore>, StoreError> {
+        Ok(Box::new(self.clone()))
+    }
+
+    fn batch_rows(&self) -> usize {
+        1_000_000
+    }
+
+    fn batch_window(&self) -> Duration {
+        Duration::from_secs(600)
     }
 }
 

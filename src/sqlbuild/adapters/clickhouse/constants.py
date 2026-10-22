@@ -22,6 +22,8 @@ SESSION_SETTINGS: dict[str, object] = {
     "insert_null_as_default": 0,
 }
 SETTING_CONFLICT_CODE: str = "A710"
+READONLY_SETTING: str = "readonly"
+SETTINGS_LOCKED_READONLY: str = "1"
 CONNECTION_OPTION_KEYS: frozenset[str] = frozenset(
     {
         "host",

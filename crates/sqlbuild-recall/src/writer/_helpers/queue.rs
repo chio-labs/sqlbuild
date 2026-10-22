@@ -274,6 +274,19 @@ impl WriterState {
         }
     }
 
+    /// Bytes a batch may take now: held output stays queued.
+    pub(crate) fn ready_bytes(&self) -> usize {
+        if self.holding_output() {
+            let held: usize = self.buckets[Priority::Output as usize]
+                .iter()
+                .map(|record| record.bytes)
+                .sum();
+            self.bytes - held
+        } else {
+            self.bytes
+        }
+    }
+
     /// Up to `limit` rows, highest priority first; held output stays queued.
     pub(crate) fn take_batch(&mut self, limit: usize) -> Vec<Queued> {
         let mut batch: Vec<Queued> = Vec::new();

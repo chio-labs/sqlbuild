@@ -903,7 +903,7 @@ def test_given_a_large_store_when_filtering_a_view_then_the_filter_reaches_the_t
             description="views of an older version are replaced when its version row expired",
             stale_view="SELECT invocation_id, statement_id FROM {database}.recall_events",
             expected_statement_columns=((1,),),
-            expected_version=((2,),),
+            expected_version=((3,),),
         ),
     ],
     ids=lambda case: case.description,
@@ -1039,12 +1039,12 @@ def test_given_a_newer_store_whose_version_row_expired_when_an_older_writer_buil
         ClickHouseRecallVersionRefreshTestCase(
             description="a version row past half the retention is recorded again",
             row_age_days=20,
-            expected_rows=((2, 2, 1),),
+            expected_rows=((2, 3, 1),),
         ),
         ClickHouseRecallVersionRefreshTestCase(
             description="a recent version row is left as it is",
             row_age_days=1,
-            expected_rows=((1, 2, 0),),
+            expected_rows=((1, 3, 0),),
         ),
     ],
     ids=lambda case: case.description,
