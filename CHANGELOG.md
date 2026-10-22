@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.167.2](https://github.com/chio-labs/sqlbuild/compare/v0.167.1...v0.167.2) (2026-10-22)
+
+
+### Bug Fixes
+
+* let read-only users query Recall on ClickHouse and read each table once ([#1218](https://github.com/chio-labs/sqlbuild/issues/1218)) ([32aa75a](https://github.com/chio-labs/sqlbuild/commit/32aa75a1eb62078ce4c6afc6900a05955cc19a28))
+
 ## [0.167.1](https://github.com/chio-labs/sqlbuild/compare/v0.167.0...v0.167.1) (2026-10-22)
 
 
