@@ -403,7 +403,7 @@ TEST();
 
 WITH
 __source__raw__orders AS (
-  @mock_orders()
+  @py.mock_orders()
 ),
 __source__raw__payments AS (
   SELECT 1 AS payment_id, 1 AS order_id, 1500 AS amount_cents, 'credit_card' AS method
@@ -414,7 +414,7 @@ __expected__fact_orders AS (
 )
 ```
 
-The `@mock_orders()` call expands at compile time to whatever SQL the Python macro function returns.
+The `@py.mock_orders()` call expands at compile time to whatever SQL the Python macro function returns.
 
 Test SQL uses macros, enums, and constants available from the test file's directory under
 `tests/unit/`. Public enums and constants available to a model are also available when the test
@@ -446,7 +446,12 @@ __expected__stg_orders AS (
 )
 ```
 
-When a `__macro__` mock is defined, every call to `@country_filter(...)` in any model SQL resolved by the test is replaced with the mock value (`country_code = 'US'`). The macro's actual Python function is not called, and the arguments are ignored.
+When a `__macro__` mock is defined, every call to `@py.country_filter(...)` in any model SQL resolved by the test is replaced with the mock value (`country_code = 'US'`). The macro's actual Python function is not called, and the arguments are ignored.
+
+Mocks of [SQL macros](macros/sql-macros.md) work the same way: `__macro__net_amount`
+replaces every `@sql.net_amount(...)` call written in the model SQL with the mock value. A call
+inside another SQL macro's body is expanded as usual. Macro names are unique across both kinds, so
+the mock name never needs the `sql.` or `py.` prefix.
 
 The mock value must be a single `SELECT` with one string literal. Use doubled single quotes for quotes within the value (standard SQL escaping).
 
@@ -552,7 +557,7 @@ input_values AS (
   SELECT 950 AS price_cents, 3 AS quantity
 ),
 __macro_actual__ AS (
-  SELECT @line_total_cents("price_cents", "quantity") AS line_total_cents
+  SELECT @py.line_total_cents("price_cents", "quantity") AS line_total_cents
   FROM input_values
 ),
 __macro_expected__ AS (
@@ -561,6 +566,56 @@ __macro_expected__ AS (
 ```
 
 Macros are compile-time code, so macro tests expand the macro at compile time and compare the results. During `sqb build`, macro tests run before any model that uses the tested macro.
+
+[SQL macros](macros/sql-macros.md) are tested the same way. Call an expression macro in
+`__macro_actual__`:
+
+```sql
+TEST (mode macro, name "cents_to_dollars_rounds");
+
+WITH
+input_values AS (SELECT CAST(1250 AS BIGINT) AS amount_cents),
+__macro_actual__ AS (
+  SELECT @sql.cents_to_dollars(amount_cents) AS dollars FROM input_values
+),
+__macro_expected__ AS (SELECT CAST(12.5 AS DECIMAL(18, 2)) AS dollars)
+```
+
+Call a column-list macro as an item of the `__macro_actual__` select list, and pass a helper CTE
+as each `RELATION` argument:
+
+```sql
+TEST (mode macro, name "audit_columns_flag_updates");
+
+WITH
+input_rows AS (
+  SELECT TIMESTAMP '2026-01-01' AS created_at, TIMESTAMP '2026-01-02' AS updated_at
+),
+__macro_actual__ AS (SELECT @sql.audit_columns(input_rows) FROM input_rows),
+__macro_expected__ AS (
+  SELECT TIMESTAMP '2026-01-01' AS created_at, TIMESTAMP '2026-01-02' AS updated_at,
+    TRUE AS was_updated
+)
+```
+
+A CTE-list macro is called in the test's `WITH` list, the one place outside `__macro_actual__`
+where a macro test may call a macro, and `__macro_actual__` selects from one of its CTEs:
+
+```sql
+TEST (mode macro, name "clean_orders_keeps_latest_live");
+
+WITH
+input_orders AS (
+  SELECT 1 AS order_id, TIMESTAMP '2026-01-01' AS updated_at, FALSE AS is_deleted
+  UNION ALL SELECT 1, TIMESTAMP '2026-01-02', FALSE
+  UNION ALL SELECT 2, TIMESTAMP '2026-01-01', TRUE
+),
+@sql.clean_orders(input_orders)
+__macro_actual__ AS (SELECT order_id, updated_at FROM latest),
+__macro_expected__ AS (SELECT 1 AS order_id, TIMESTAMP '2026-01-02' AS updated_at)
+```
+
+Other test modes may not call a CTE-list macro in their `WITH` list.
 
 ### UDF tests
 
@@ -653,7 +708,7 @@ Each mode has strict CTE validation:
 | Mode | Actual CTE | Expected CTE | Allowed |
 |------|-----------|--------------|---------|
 | `model` (no actual CTE) | existing model-chain syntax | `__expected__<model>` | `__source__`, `__ref__`, `__seed__`, `__assert__`, `__macro__` |
-| `macro` | `__macro_actual__` | `__macro_expected__` | Helper CTEs, `@macro()` calls in actual |
+| `macro` | `__macro_actual__` | `__macro_expected__` | Helper CTEs, `@py.name()` and `@sql.name()` calls in actual, CTE-list `@sql.name()` calls in the `WITH` list |
 | `udf` | `__udf_actual__` | `__udf_expected__` | Helper CTEs, `__udf()` calls in actual |
 | `table_fn` | `__table_fn_actual__` | `__table_fn_expected__` | Helper CTEs, `__table_fn()` calls in actual |
 
@@ -774,7 +829,7 @@ parse TEST template and cases
 ```
 
 Values can therefore feed macro arguments, for example
-`@order_fixture(@param("source_status"))`. Parameters work in model, macro, UDF, and table-function
+`@py.order_fixture(@param("source_status"))`. Parameters work in model, macro, UDF, and table-function
 modes and preserve every expected model in multi-model tests.
 
 Text and JSON output include parent/case identity and safe typed values. Compile JSON, manifests,

@@ -115,7 +115,7 @@ _CONTRACT_ERROR_MODEL: str = (
             description="macro_built_reference_edit",
             edit=lambda root: replace_project_text(
                 root,
-                "models/marts/_sqlbuild/_macros/order_source.py",
+                "models/marts/_sqlbuild/_macros/python/order_source.py",
                 '"stg_orders"',
                 '"regional_orders"',
             ),
@@ -156,7 +156,7 @@ _CONTRACT_ERROR_MODEL: str = (
             description="macro_file_edit",
             edit=lambda root: replace_project_text(
                 root,
-                "macros/currency.py",
+                "macros/python/currency.py",
                 "{price_cents} * {quantity}",
                 "{quantity} * {price_cents}",
             ),
@@ -164,14 +164,14 @@ _CONTRACT_ERROR_MODEL: str = (
         CompileReuseInvalidationTestCase(
             description="module_imported_by_macro_edit",
             edit=lambda root: replace_project_text(
-                root, "macros/_rounding.py", "_SCALE: int = 2", "_SCALE: int = 3"
+                root, "macros/python/_rounding.py", "_SCALE: int = 2", "_SCALE: int = 3"
             ),
         ),
         CompileReuseInvalidationTestCase(
             description="scoped_macro_edit",
             edit=lambda root: replace_project_text(
                 root,
-                "models/marts/_sqlbuild/_macros/currency.py",
+                "models/marts/_sqlbuild/_macros/python/currency.py",
                 'return f"ROUND(({column}) / 100.0, 2)"',
                 'return f"ROUND(({column}) / 100.0, 3)"',
             ),

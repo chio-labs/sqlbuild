@@ -7,7 +7,7 @@ use crate::dsl_headers::_helpers::text::{line_count, position, rstrip, slice, st
 use crate::dsl_headers::_helpers::wrap::wrap_header_description;
 use crate::dsl_headers::constants::{
     DESCRIPTION_HEADER_KINDS, DESCRIPTION_REQUIRED_HEADER_KINDS, RULE_DESCRIPTION_LENGTH,
-    RULE_DESCRIPTION_PRESENT, RULE_HEADER_PARSE, RULE_HEADER_WHITESPACE,
+    RULE_DESCRIPTION_PRESENT, RULE_HEADER_PARSE, RULE_HEADER_WHITESPACE, SQL_MACRO_HEADER_KIND,
 };
 use crate::dsl_headers::main::inner_header_text::inner_header_text;
 use crate::dsl_headers::models::{
@@ -56,6 +56,9 @@ pub(crate) fn value_violations<P: HeaderParser>(
 ) -> Result<Vec<HeaderViolation>, P::Error> {
     let header_text: &[char] = slice(text, header.start, header.end);
     let kind: &str = &header.kind;
+    if kind == SQL_MACRO_HEADER_KIND {
+        return Ok(Vec::new());
+    }
     let values: P::Values = match parser.parse(kind, &string(inner_header_text(header_text))) {
         ParseOutcome::Parsed(values) => values,
         ParseOutcome::Rejected(failure) | ParseOutcome::Raised(_, failure) => {

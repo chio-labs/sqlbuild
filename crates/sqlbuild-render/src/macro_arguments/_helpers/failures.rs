@@ -17,7 +17,7 @@ const KEYWORD_HELP: &str = "Pass each keyword argument once, after every positio
 const SURROGATE_HELP: &str = "Lone surrogates are not valid Unicode text and cannot be sent to a \
     warehouse; write the character itself or the escape of a valid code point";
 const MISSING_COMMA_HELP: &str = "Separate arguments, and the items of lists, tuples and dicts, \
-    with commas, for example @cents('amount', 2)";
+    with commas, for example @py.cents('amount', 2)";
 const SURROGATE_PAIR_HELP: &str = "Python strings hold code points, not UTF-16 surrogate pairs; \
     write the character as one escape:";
 const NAMED_SEQUENCE_HELP: &str = "Write each character of the sequence with its own \\N{...} \

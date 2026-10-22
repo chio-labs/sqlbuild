@@ -312,7 +312,7 @@ def test_given_rule_finding_when_running_shared_compile_pipeline_then_planning_i
                 "models/_enums/status.sql": (
                     'ENUM (name order_status, members (ACTIVE "active", PAUSED "paused"));\n'
                 ),
-                "models/_macros/policy.py": (
+                "models/_macros/python/policy.py": (
                     "from sqlbuild.compiler.compile.models import MacroContext\n\n\n"
                     "def policy_columns(ctx: MacroContext) -> str:\n"
                     "    minimum = ctx.constants['minimum_quantity']\n"
@@ -337,7 +337,7 @@ def test_given_rule_finding_when_running_shared_compile_pipeline_then_planning_i
                     "    )\n"
                 ),
                 "models/policy_summary.sql": (
-                    "MODEL (description 'Test model policy_summary.', materialized view);\n\nSELECT @policy_columns()"
+                    "MODEL (description 'Test model policy_summary.', materialized view);\n\nSELECT @py.policy_columns()"
                 ),
             },
             expected_models={

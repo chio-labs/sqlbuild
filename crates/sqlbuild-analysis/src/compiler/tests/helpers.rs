@@ -56,7 +56,7 @@ pub(crate) fn empty_model_fixture_marker_preserves_direct_mode_validation() -> b
 pub(crate) fn expected_projection_errors_name_the_expected_cte() -> bool {
     let cases = [
         (
-            r#"{"tests":[{"sql":"WITH __macro_actual__ AS (SELECT @status() AS status), __macro_expected__ AS (SELECT 1 + 1) SELECT 1","fileLabel":"tests/status.sql","mode":"macro"}]}"#,
+            r#"{"tests":[{"sql":"WITH __macro_actual__ AS (SELECT @py.status() AS status), __macro_expected__ AS (SELECT 1 + 1) SELECT 1","fileLabel":"tests/status.sql","mode":"macro"}]}"#,
             "SQL test 'tests/status.sql' must alias every non-trivial __macro_expected__ projection",
         ),
         (

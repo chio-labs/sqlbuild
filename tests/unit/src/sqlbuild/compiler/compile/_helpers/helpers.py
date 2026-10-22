@@ -161,7 +161,7 @@ def build_scoped_macro_resolver(
 
 
 def build_loaded_macros(tmp_path: Path, macro_file_contents: str) -> dict[str, LoadedMacro]:
-    macros_dir: Path = tmp_path / "macros"
+    macros_dir: Path = tmp_path / "macros" / "python"
     macros_dir.mkdir(parents=True, exist_ok=True)
     macro_file_path: Path = macros_dir / "common.py"
     macro_file_path.write_text(macro_file_contents, encoding="utf-8")
@@ -169,7 +169,7 @@ def build_loaded_macros(tmp_path: Path, macro_file_contents: str) -> dict[str, L
         (
             DiscoveredMacroFile(
                 file_path=macro_file_path,
-                relative_path=Path("macros/common.py"),
+                relative_path=Path("macros/python/common.py"),
                 contents=macro_file_contents,
             ),
         )
@@ -427,21 +427,21 @@ def write_scoped_macro_orders_project(project_dir: Path) -> None:
     model: Path = project_dir / "models" / "orders.sql"
     model.parent.mkdir(parents=True)
     model.write_text(
-        'MODEL (description "Orders");\nSELECT 1 AS order_id WHERE @order_filter("1")\n',
+        'MODEL (description "Orders");\nSELECT 1 AS order_id WHERE @py.order_filter("1")\n',
         encoding="utf-8",
     )
-    (project_dir / "macros").mkdir()
-    (project_dir / "macros" / "order_filter.py").write_text(
+    (project_dir / "macros" / "python").mkdir(parents=True)
+    (project_dir / "macros" / "python" / "order_filter.py").write_text(
         'def order_filter(column: str) -> str:\n    return f"{column} > 0"\n', encoding="utf-8"
     )
     tests_dir: Path = project_dir / "tests" / "unit"
-    (tests_dir / "_macros").mkdir(parents=True)
-    (tests_dir / "_macros" / "row_limit.py").write_text(
+    (tests_dir / "_macros" / "python").mkdir(parents=True)
+    (tests_dir / "_macros" / "python" / "row_limit.py").write_text(
         'def row_limit() -> str:\n    return "LIMIT 1"\n', encoding="utf-8"
     )
     (tests_dir / "test_orders.sql").write_text(
         "TEST ();\nWITH\n__ref__orders AS (SELECT 1 AS order_id),\n"
-        "__expected__orders AS (SELECT order_id FROM __ref__orders @row_limit())\n"
+        "__expected__orders AS (SELECT order_id FROM __ref__orders @py.row_limit())\n"
         "SELECT 1\n",
         encoding="utf-8",
     )

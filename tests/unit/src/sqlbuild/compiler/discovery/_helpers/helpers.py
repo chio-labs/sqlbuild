@@ -64,6 +64,12 @@ def declaration_contents(*, kind: str) -> tuple[str, str]:
     return _DECLARATION_CONTENTS_BY_KIND[kind]
 
 
+def declaration_kind_folder(*, kind: str) -> Path:
+    """Return the folder a declaration file of this kind lives in below its root."""
+
+    return {"macro": Path("python")}.get(kind, Path())
+
+
 def discover_declarations(
     *, project_dir: Path, kind: str
 ) -> tuple[DiscoveredMacroFile | DiscoveredEnumFile | DiscoveredConstantFile, ...]:

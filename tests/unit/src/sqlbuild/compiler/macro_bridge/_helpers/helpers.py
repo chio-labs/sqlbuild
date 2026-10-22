@@ -186,9 +186,9 @@ def write_environment_project(root: Path) -> None:
     """Write a model and a macro for store environment checks."""
 
     (root / "models").mkdir()
-    (root / "macros").mkdir()
+    (root / "macros" / "python").mkdir(parents=True)
     _ = (root / "models/orders.sql").write_text("SELECT 1\n", encoding="utf-8")
-    _ = (root / "macros/common.py").write_text("X = 1\n", encoding="utf-8")
+    _ = (root / "macros/python/common.py").write_text("X = 1\n", encoding="utf-8")
 
 
 EXCLUDED_MODEL_PATHS: list[str] = ["models/orders.sql"]

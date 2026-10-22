@@ -68,7 +68,7 @@ def test_given_generated_header_metadata_when_attaching_then_model_loop_matches_
         ),
         ColumnMetadataExpansionTestCase(
             description="a macro call in a column description is rejected",
-            header_column="amount (description '@cents(amount)')",
+            header_column="amount (description '@py.cents(amount)')",
             expected_type=None,
             expected_error="model config field 'columns.amount.description' does not allow macros",
         ),

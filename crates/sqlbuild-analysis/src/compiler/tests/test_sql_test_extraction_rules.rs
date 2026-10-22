@@ -42,7 +42,7 @@ fn given_authored_sql_tests_when_extracting_then_each_rule_holds() {
             mode: "macro",
             raw: true,
             syntax: "generic",
-            sql: "WITH my$helper AS (SELECT 1 AS a), __macro_actual__ AS (SELECT @m(1) AS a), __macro_expected__ AS (SELECT 1 AS a)",
+            sql: "WITH my$helper AS (SELECT 1 AS a), __macro_actual__ AS (SELECT @py.m(1) AS a), __macro_expected__ AS (SELECT 1 AS a)",
             expected_outcome: rejected_outcome(
                 "SQL test 'tests/t.sql' CTE name 'my$helper' must be an unquoted identifier of ASCII letters, digits and underscores",
                 NAME_HELP,
@@ -284,7 +284,7 @@ fn given_authored_sql_tests_when_extracting_then_each_rule_holds() {
             mode: "macro",
             raw: true,
             syntax: "generic",
-            sql: "WITH h AS (SELECT __udf(\"f\")(1) AS a), __macro_actual__ AS (SELECT @m(1) AS a), __macro_expected__ AS (SELECT 1 AS a)",
+            sql: "WITH h AS (SELECT __udf(\"f\")(1) AS a), __macro_actual__ AS (SELECT @py.m(1) AS a), __macro_expected__ AS (SELECT 1 AS a)",
             expected_outcome: rejected_outcome(
                 "SQL test 'tests/t.sql' mode 'macro' helper CTE 'h' must not call udf; call reusable logic only in __macro_actual__",
                 None,
@@ -316,7 +316,7 @@ fn given_authored_sql_tests_when_extracting_then_each_rule_holds() {
             mode: "macro",
             raw: true,
             syntax: "generic",
-            sql: "WITH h AS (SELECT @tidy(a) AS a), __macro_actual__ AS (SELECT @m(1) AS a), __macro_expected__ AS (SELECT 1 AS a)",
+            sql: "WITH h AS (SELECT @py.tidy(a) AS a), __macro_actual__ AS (SELECT @py.m(1) AS a), __macro_expected__ AS (SELECT 1 AS a)",
             expected_outcome: rejected_outcome(
                 "SQL test 'tests/t.sql' mode 'macro' helper CTE 'h' must not call macros; call macros only in __macro_actual__",
                 None,
@@ -328,7 +328,7 @@ fn given_authored_sql_tests_when_extracting_then_each_rule_holds() {
             mode: "udf",
             raw: true,
             syntax: "generic",
-            sql: "WITH __udf_actual__ AS (SELECT __udf(\"f\")(1) AS a), __udf_expected__ AS (SELECT @var('x') AS a)",
+            sql: "WITH __udf_actual__ AS (SELECT __udf(\"f\")(1) AS a), __udf_expected__ AS (SELECT @py.var('x') AS a)",
             expected_outcome: rejected_outcome(
                 "SQL test 'tests/t.sql' mode 'udf' CTE __udf_expected__ must not call macros",
                 None,
@@ -340,7 +340,7 @@ fn given_authored_sql_tests_when_extracting_then_each_rule_holds() {
             mode: "udf",
             raw: true,
             syntax: "generic",
-            sql: "WITH __udf_actual__ AS (SELECT __udf(\"f\")(1) AS a), __udf_expected__ AS (SELECT @enum('Status', 'PAID') AS a, @const(@m(1)) AS b)",
+            sql: "WITH __udf_actual__ AS (SELECT __udf(\"f\")(1) AS a), __udf_expected__ AS (SELECT @enum('Status', 'PAID') AS a, @const(@py.m(1)) AS b)",
             expected_outcome: accepted_outcome(false),
         },
         ExtractionRuleTestCase {

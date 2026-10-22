@@ -33,14 +33,14 @@ from scripts.compiler_differential.constants import (
 )
 from sqlbuild._native import STAGE_CAPTURE_OMITTED_ATTRIBUTES, CompileProjectInputs
 
-_MACRO_CALL: re.Pattern[str] = re.compile(r"@([A-Za-z_]\w*)\(")
+_MACRO_CALL: re.Pattern[str] = re.compile(r"@(?:py\.)?([A-Za-z_]\w*)\(")
 _REFERENCE_CALL: re.Pattern[str] = re.compile(r"__(ref|source|seed)\(\s*\"([^\"]+)\"\s*\)")
 _PROJECT_VARIABLE: re.Pattern[str] = re.compile(r"(?<!@)@@(?!@)(?!ENV:|CTX:)[A-Za-z_]")
 _ENVIRONMENT_VARIABLE: str = "@@ENV:"
 _CONTEXT_VARIABLE: str = "@@CTX:"
 _RUNTIME_PLACEHOLDER: re.Pattern[str] = re.compile(r"@@@([A-Za-z_]\w*)")
 _CURSOR_INTRINSIC: str = "__cursor_start()"
-_TEMPLATE_ARGUMENT: re.Pattern[str] = re.compile(r"(?<!@)@'?[A-Za-z_]\w*'?(?!\w|\()")
+_TEMPLATE_ARGUMENT: re.Pattern[str] = re.compile(r"(?<!@)@'?[A-Za-z_]\w*'?(?!\w|\(|\.)")
 _PLACEHOLDERS_KEY: str = "placeholders"
 _MATERIALIZED_KEY: str = "materialized"
 _INCREMENTAL: str = "incremental"

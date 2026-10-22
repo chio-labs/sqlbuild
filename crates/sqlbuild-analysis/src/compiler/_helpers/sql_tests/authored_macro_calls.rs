@@ -47,6 +47,16 @@ fn call_open(sql: &str, at: usize) -> Option<usize> {
         return None;
     }
     let mut cursor = at + 1 + first.len_utf8();
+    for prefix in ["py.", "sql."] {
+        if sql[at + 1..].starts_with(prefix) {
+            cursor = at + 1 + prefix.len();
+            let first = char_at(sql, cursor)?;
+            if !(first == '_' || first.is_alphabetic()) {
+                return None;
+            }
+            cursor += first.len_utf8();
+        }
+    }
     while let Some(character) = char_at(sql, cursor) {
         if !is_identifier_continue(character) {
             break;

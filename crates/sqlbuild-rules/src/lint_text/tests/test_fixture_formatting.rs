@@ -36,7 +36,7 @@ fn given_authored_blocks_when_formatting_then_only_unique_model_fixtures_change(
         },
         FixtureBlockTestCase {
             description: "macro-bearing blocks are retained",
-            sql: "WITH __ref__orders AS (SELECT CAST(NULL AS INTEGER) AS id WHERE FALSE) SELECT @value()",
+            sql: "WITH __ref__orders AS (SELECT CAST(NULL AS INTEGER) AS id WHERE FALSE) SELECT @py.value()",
             model_mode: true,
             expected_sql: None,
         },

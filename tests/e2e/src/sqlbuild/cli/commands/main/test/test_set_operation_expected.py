@@ -22,7 +22,7 @@ _PROJECT_FILES: dict[str, str] = {
         '[connection]\ndatabase = "set_operation_expected.duckdb"\n\n'
         '[defaults]\nmaterialized = "table"\n'
     ),
-    "macros/status.py": (
+    "macros/python/status.py": (
         'def normalize_status(value: str) -> str:\n    return f"LOWER(TRIM({value}))"\n'
     ),
     "sources/raw_orders.yml": (
@@ -36,7 +36,7 @@ _PROJECT_FILES: dict[str, str] = {
     ),
     "models/orders.sql": (
         "MODEL (description 'Test model orders.');\n\n"
-        'SELECT order_id, @normalize_status("status") AS status FROM __source("raw_orders")\n'
+        'SELECT order_id, @py.normalize_status("status") AS status FROM __source("raw_orders")\n'
     ),
 }
 _SOURCE_MOCK: str = (
@@ -75,7 +75,7 @@ _SOURCE_MOCK: str = (
                     'TEST (mode macro, name "normalizes_status");\n\nWITH\n'
                     "input_values AS (SELECT '  PAID  ' AS raw_status),\n"
                     "__macro_actual__ AS (\n"
-                    '  SELECT @normalize_status("raw_status") AS status FROM input_values\n'
+                    '  SELECT @py.normalize_status("raw_status") AS status FROM input_values\n'
                     "),\n"
                     "__macro_expected__ AS (\n"
                     "  SELECT 'paid' AS status\n"

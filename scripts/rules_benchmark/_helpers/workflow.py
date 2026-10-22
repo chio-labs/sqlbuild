@@ -292,7 +292,7 @@ def _ci_five_thousand_invalidation_results(*, project_dir: Path) -> tuple[Benchm
             project_dir=project_dir,
             iterations=1,
             mutate=lambda iteration: _set_macro_offset(
-                path=project_dir / "macros" / "macro_00000.py",
+                path=project_dir / "macros" / "python" / "macro_00000.py",
                 iteration=iteration,
             ),
         ),
@@ -722,7 +722,7 @@ def _run_scenarios(
             project_dir=project_dir,
             iterations=iterations,
             mutate=lambda iteration: _set_macro_offset(
-                path=project_dir / "macros" / "macro_00000.py",
+                path=project_dir / "macros" / "python" / "macro_00000.py",
                 iteration=iteration,
             ),
         )

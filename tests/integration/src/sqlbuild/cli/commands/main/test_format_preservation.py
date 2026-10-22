@@ -65,8 +65,8 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import Formatt
         ),
         FormatterSyntaxTestCase(
             "CTE-producing macro",
-            "WITH @order_input(), final AS (SELECT order_id FROM orders) SELECT * FROM final",
-            ("@order_input()", "final AS ("),
+            "WITH @py.order_input(), final AS (SELECT order_id FROM orders) SELECT * FROM final",
+            ("@py.order_input()", "final AS ("),
             'def order_input() -> str:\n    """Return an orders input CTE."""\n'
             '    return "orders AS (SELECT 1 AS order_id)"\n',
         ),
@@ -77,7 +77,7 @@ def test_given_authored_syntax_when_formatting_then_spelling_and_idempotence_are
     test_case: FormatterSyntaxTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "snowflake"\n')
-    macros: Path = tmp_path / "models" / "_macros"
+    macros: Path = tmp_path / "models" / "_macros" / "python"
     macros.mkdir(parents=True)
     (macros / "orders.py").write_text(test_case.macro_source)
     model: Path = tmp_path / "models" / "order_summary.sql"
@@ -195,14 +195,14 @@ def test_given_sqlbuild_call_when_formatting_then_authored_spelling_is_preserved
         FormatterSyntaxTestCase(
             "several CTE macros with attached comments",
             "WITH base AS (SELECT 1 AS order_id),\n"
-            '-- First order stage.\n@make_ctes("first_orders", "base"),\n'
-            '-- Second order stage.\n@make_ctes("second_orders", "first_orders"),\n'
-            '@other_ctes("third_orders", "second_orders"),\n'
+            '-- First order stage.\n@py.make_ctes("first_orders", "base"),\n'
+            '-- Second order stage.\n@py.make_ctes("second_orders", "first_orders"),\n'
+            '@py.other_ctes("third_orders", "second_orders"),\n'
             "-- Publish order identifiers.\nfinal AS (SELECT order_id FROM third_orders)\nSELECT * FROM final",
             (
-                '\n@make_ctes("first_orders", "base"),\n',
-                '\n@make_ctes("second_orders", "first_orders"),\n',
-                '\n@other_ctes("third_orders", "second_orders"),\n',
+                '\n@py.make_ctes("first_orders", "base"),\n',
+                '\n@py.make_ctes("second_orders", "first_orders"),\n',
+                '\n@py.other_ctes("third_orders", "second_orders"),\n',
                 "\n-- Publish order identifiers.\nfinal AS (",
             ),
         )
@@ -215,7 +215,7 @@ def test_given_cte_macros_and_comments_when_formatting_then_layout_and_rules_sta
     (tmp_path / "sqlbuild_project.toml").write_text(
         'name = "orders"\nadapter = "duckdb"\n[rules]\nselect = ["SQBRSQL033"]\n'
     )
-    macros: Path = tmp_path / "models" / "_macros"
+    macros: Path = tmp_path / "models" / "_macros" / "python"
     macros.mkdir(parents=True)
     (macros / "ctes.py").write_text(
         "def make_ctes(name: str, source: str) -> str:\n"
@@ -247,7 +247,7 @@ def test_given_cte_macros_and_comments_when_formatting_then_layout_and_rules_sta
             f"Unicode restoration after {prefix}",
             f"WITH orders AS (SELECT '{prefix}' AS label, order_id, payload FROM __ref(\"raw_orders\")),\n"
             "values_input AS (SELECT column1 AS order_flag FROM VALUES (1)),\n"
-            f'-- Stage {prefix} orders.\n@copy_orders("staged_orders", "orders"),\n'
+            f'-- Stage {prefix} orders.\n@py.copy_orders("staged_orders", "orders"),\n'
             "final AS (SELECT label, "
             f"CAST(order_id AS NUMERIC(/* type {prefix} */ 10, 2)) AS order_id, "
             "payload:customer.name::VARCHAR AS customer_name, __cursor_start() AS start_at, "
@@ -265,7 +265,7 @@ def test_given_cte_macros_and_comments_when_formatting_then_layout_and_rules_sta
                 "FROM VALUES (1)",
                 "FIRST_VALUE(order_id IGNORE NULLS)",
                 f"POSITION('{prefix}' IN label)",
-                '\n@copy_orders("staged_orders", "orders"),\n',
+                '\n@py.copy_orders("staged_orders", "orders"),\n',
                 "\nfinal AS (",
             ),
         )
@@ -277,7 +277,7 @@ def test_given_multibyte_text_before_restorations_when_formatting_then_output_is
     test_case: FormatterSyntaxTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "snowflake"\n')
-    macros: Path = tmp_path / "models" / "_macros"
+    macros: Path = tmp_path / "models" / "_macros" / "python"
     macros.mkdir(parents=True)
     (macros / "orders.py").write_text(
         "def copy_orders(name: str, source: str) -> str:\n"

@@ -73,7 +73,7 @@ fn given_model_headers_when_building_config_then_values_expand_and_layer_as_pyth
         },
         BuildTestCase {
             description: "a macro call in a config value is rejected",
-            header: vec![named("description", text("@note()"))],
+            header: vec![named("description", text("@py.note()"))],
             target_namespace: None,
             expected_outcome: Err(ConfigBuildHalt::Config(ConfigError::compile(
                 "model config field 'description' does not allow macros".to_owned(),

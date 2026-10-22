@@ -108,8 +108,8 @@ fn given_sql_test_blocks_when_classifying_then_outcomes_are_exact() {
         },
         BatchClassificationTestCase {
             description: "direct roles: extracts unsuffixed macro actual expected ctes in macro mode",
-            request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH input_values AS (SELECT '  PAID  ' AS raw_status),\n        __macro_actual__ AS (\n          SELECT @normalize_status(\"raw_status\") AS status FROM input_values\n        ),\n        __macro_expected__ AS (SELECT 'paid' AS status)\n        SELECT 1", "fileLabel": "tests/unit/orders.sql", "mode": "macro", "raw": true}]}"####,
-            expected_response: r####"{"tests":[{"kind":"direct","mode":"macro","helpers":[["input_values","SELECT '  PAID  ' AS raw_status"]],"actual":["__macro_actual__","SELECT @normalize_status(\"raw_status\") AS status FROM input_values"],"expected":["__macro_expected__","SELECT 'paid' AS status"],"invalidCalls":false}]}"####,
+            request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH input_values AS (SELECT '  PAID  ' AS raw_status),\n        __macro_actual__ AS (\n          SELECT @py.normalize_status(\"raw_status\") AS status FROM input_values\n        ),\n        __macro_expected__ AS (SELECT 'paid' AS status)\n        SELECT 1", "fileLabel": "tests/unit/orders.sql", "mode": "macro", "raw": true}]}"####,
+            expected_response: r####"{"tests":[{"kind":"direct","mode":"macro","helpers":[["input_values","SELECT '  PAID  ' AS raw_status"]],"actual":["__macro_actual__","SELECT @py.normalize_status(\"raw_status\") AS status FROM input_values"],"expected":["__macro_expected__","SELECT 'paid' AS status"],"invalidCalls":false}]}"####,
         },
         BatchClassificationTestCase {
             description: "direct roles: extracts unsuffixed udf actual expected ctes in udf mode",
@@ -123,8 +123,8 @@ fn given_sql_test_blocks_when_classifying_then_outcomes_are_exact() {
         },
         BatchClassificationTestCase {
             description: "direct roles: extracts macro ctes when the trailing select is omitted",
-            request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH __macro_actual__ AS (SELECT @double(2) AS value),\n        __macro_expected__ AS (SELECT 4 AS value)", "fileLabel": "tests/unit/orders.sql", "mode": "macro", "raw": true}]}"####,
-            expected_response: r####"{"tests":[{"kind":"direct","mode":"macro","helpers":[],"actual":["__macro_actual__","SELECT @double(2) AS value"],"expected":["__macro_expected__","SELECT 4 AS value"],"invalidCalls":false}]}"####,
+            request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH __macro_actual__ AS (SELECT @py.double(2) AS value),\n        __macro_expected__ AS (SELECT 4 AS value)", "fileLabel": "tests/unit/orders.sql", "mode": "macro", "raw": true}]}"####,
+            expected_response: r####"{"tests":[{"kind":"direct","mode":"macro","helpers":[],"actual":["__macro_actual__","SELECT @py.double(2) AS value"],"expected":["__macro_expected__","SELECT 4 AS value"],"invalidCalls":false}]}"####,
         },
         BatchClassificationTestCase {
             description: "invalid: raises when ceremonial select is wrapped in a final result cte",
@@ -138,7 +138,7 @@ fn given_sql_test_blocks_when_classifying_then_outcomes_are_exact() {
         },
         BatchClassificationTestCase {
             description: "invalid: raises when unparsed assertion uses quoted expected result",
-            request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH\n        __source__raw_orders AS (SELECT 1 AS order_id),\n        __expected__orders AS (SELECT 1 AS order_id),\n        __assert__expected_is_nonempty AS (\n          SELECT @normalize_order(order_id) FROM \"__expected__orders\"\n        )\n        SELECT 1", "fileLabel": "tests/unit/orders.sql", "mode": "model", "raw": true}]}"####,
+            request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH\n        __source__raw_orders AS (SELECT 1 AS order_id),\n        __expected__orders AS (SELECT 1 AS order_id),\n        __assert__expected_is_nonempty AS (\n          SELECT @py.normalize_order(order_id) FROM \"__expected__orders\"\n        )\n        SELECT 1", "fileLabel": "tests/unit/orders.sql", "mode": "model", "raw": true}]}"####,
             expected_response: r####"{"error":{"index":0,"message":"SQL test 'tests/unit/orders.sql' check CTE '__assert__expected_is_nonempty' must not depend on '__expected__orders'; expected results and assertions must be independent","help":null,"token":null,"tokenOffset":null}}"####,
         },
         BatchClassificationTestCase {
@@ -258,7 +258,7 @@ fn given_sql_test_blocks_when_classifying_then_outcomes_are_exact() {
         },
         BatchClassificationTestCase {
             description: "invalid: raises when model mode includes macro actual cte",
-            request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH __macro_actual__ AS (SELECT @normalize_status('paid') AS status),\n        __macro_expected__ AS (SELECT 'paid' AS status)\n        SELECT 1", "fileLabel": "tests/unit/orders.sql", "mode": "model", "raw": true}]}"####,
+            request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH __macro_actual__ AS (SELECT @py.normalize_status('paid') AS status),\n        __macro_expected__ AS (SELECT 'paid' AS status)\n        SELECT 1", "fileLabel": "tests/unit/orders.sql", "mode": "model", "raw": true}]}"####,
             expected_response: r####"{"error":{"index":0,"message":"SQL test 'tests/unit/orders.sql' is mode 'model' but defines macro-test CTE '__macro_actual__'; use TEST (mode macro)","help":null,"token":null,"tokenOffset":null}}"####,
         },
         BatchClassificationTestCase {
@@ -273,17 +273,17 @@ fn given_sql_test_blocks_when_classifying_then_outcomes_are_exact() {
         },
         BatchClassificationTestCase {
             description: "invalid: raises when macro mode includes model test cte",
-            request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH __source__raw_orders AS (SELECT 1 AS order_id),\n        __macro_actual__ AS (SELECT @normalize_status('paid') AS status),\n        __macro_expected__ AS (SELECT 'paid' AS status)\n        SELECT 1", "fileLabel": "tests/unit/orders.sql", "mode": "macro", "raw": true}]}"####,
+            request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH __source__raw_orders AS (SELECT 1 AS order_id),\n        __macro_actual__ AS (SELECT @py.normalize_status('paid') AS status),\n        __macro_expected__ AS (SELECT 'paid' AS status)\n        SELECT 1", "fileLabel": "tests/unit/orders.sql", "mode": "macro", "raw": true}]}"####,
             expected_response: r####"{"error":{"index":0,"message":"SQL test 'tests/unit/orders.sql' is mode 'macro' but defines model-test CTE '__source__raw_orders'","help":null,"token":null,"tokenOffset":null}}"####,
         },
         BatchClassificationTestCase {
             description: "invalid: raises when macro expected calls macro",
-            request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH __macro_actual__ AS (SELECT @normalize_status('paid') AS status),\n        __macro_expected__ AS (SELECT @normalize_status('paid') AS status)\n        SELECT 1", "fileLabel": "tests/unit/orders.sql", "mode": "macro", "raw": true}]}"####,
+            request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH __macro_actual__ AS (SELECT @py.normalize_status('paid') AS status),\n        __macro_expected__ AS (SELECT @py.normalize_status('paid') AS status)\n        SELECT 1", "fileLabel": "tests/unit/orders.sql", "mode": "macro", "raw": true}]}"####,
             expected_response: r####"{"error":{"index":0,"message":"SQL test 'tests/unit/orders.sql' mode 'macro' CTE __macro_expected__ must not call macros","help":null,"token":null,"tokenOffset":null}}"####,
         },
         BatchClassificationTestCase {
             description: "invalid: raises when macro helper calls macro",
-            request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH helper AS (SELECT @normalize_status('paid') AS status),\n        __macro_actual__ AS (SELECT status FROM helper),\n        __macro_expected__ AS (SELECT 'paid' AS status)\n        SELECT 1", "fileLabel": "tests/unit/orders.sql", "mode": "macro", "raw": true}]}"####,
+            request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH helper AS (SELECT @py.normalize_status('paid') AS status),\n        __macro_actual__ AS (SELECT status FROM helper),\n        __macro_expected__ AS (SELECT 'paid' AS status)\n        SELECT 1", "fileLabel": "tests/unit/orders.sql", "mode": "macro", "raw": true}]}"####,
             expected_response: r####"{"error":{"index":0,"message":"SQL test 'tests/unit/orders.sql' mode 'macro' helper CTE 'helper' must not call macros; call macros only in __macro_actual__","help":null,"token":null,"tokenOffset":null}}"####,
         },
         BatchClassificationTestCase {
@@ -398,12 +398,12 @@ fn given_sql_test_blocks_when_classifying_then_outcomes_are_exact() {
         },
         BatchClassificationTestCase {
             description: "direct logic: macro helper calls macro",
-            request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH helper AS (SELECT @normalize_status('paid') AS status), __macro_actual__ AS (SELECT 1 AS status), __macro_expected__ AS (SELECT 1 AS status)", "fileLabel": "tests/unit/orders.sql", "mode": "macro", "raw": true}]}"####,
+            request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH helper AS (SELECT @py.normalize_status('paid') AS status), __macro_actual__ AS (SELECT 1 AS status), __macro_expected__ AS (SELECT 1 AS status)", "fileLabel": "tests/unit/orders.sql", "mode": "macro", "raw": true}]}"####,
             expected_response: r####"{"error":{"index":0,"message":"SQL test 'tests/unit/orders.sql' mode 'macro' helper CTE 'helper' must not call macros; call macros only in __macro_actual__","help":null,"token":null,"tokenOffset":null}}"####,
         },
         BatchClassificationTestCase {
             description: "direct logic: macro expected calls macro",
-            request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH __macro_actual__ AS (SELECT 1 AS status), __macro_expected__ AS (SELECT @normalize_status('paid') AS status)", "fileLabel": "tests/unit/orders.sql", "mode": "macro", "raw": true}]}"####,
+            request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH __macro_actual__ AS (SELECT 1 AS status), __macro_expected__ AS (SELECT @py.normalize_status('paid') AS status)", "fileLabel": "tests/unit/orders.sql", "mode": "macro", "raw": true}]}"####,
             expected_response: r####"{"error":{"index":0,"message":"SQL test 'tests/unit/orders.sql' mode 'macro' CTE __macro_expected__ must not call macros","help":null,"token":null,"tokenOffset":null}}"####,
         },
         BatchClassificationTestCase {
@@ -453,7 +453,7 @@ fn given_sql_test_blocks_when_classifying_then_outcomes_are_exact() {
         },
         BatchClassificationTestCase {
             description: "direct logic: udf helper calls macro",
-            request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH helper AS (SELECT @normalize_status('paid') AS status), __udf_actual__ AS (SELECT 1 AS formatted), __udf_expected__ AS (SELECT 1 AS formatted)", "fileLabel": "tests/unit/orders.sql", "mode": "udf", "raw": true}]}"####,
+            request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH helper AS (SELECT @py.normalize_status('paid') AS status), __udf_actual__ AS (SELECT 1 AS formatted), __udf_expected__ AS (SELECT 1 AS formatted)", "fileLabel": "tests/unit/orders.sql", "mode": "udf", "raw": true}]}"####,
             expected_response: r####"{"error":{"index":0,"message":"SQL test 'tests/unit/orders.sql' mode 'udf' helper CTE 'helper' must not call macros","help":null,"token":null,"tokenOffset":null}}"####,
         },
         BatchClassificationTestCase {
@@ -738,7 +738,7 @@ fn given_macro_free_sql_tests_when_classifying_before_and_after_expansion_then_p
         },
         ExtractionParityTestCase {
             description: "macro direct logic retains helper actual and expected payloads",
-            sql: "WITH input AS (SELECT 'created' AS status), __macro_actual__ AS (SELECT @normalize_status(status) AS status FROM input), __macro_expected__ AS (SELECT 'created' AS status) SELECT 1",
+            sql: "WITH input AS (SELECT 'created' AS status), __macro_actual__ AS (SELECT @py.normalize_status(status) AS status FROM input), __macro_expected__ AS (SELECT 'created' AS status) SELECT 1",
             mode: "macro",
             expected_matches: true,
         },

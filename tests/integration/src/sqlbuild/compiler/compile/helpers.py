@@ -42,11 +42,13 @@ if TYPE_CHECKING:
 MACRO_CALL_LOG_ENV_VAR: str = "SQLBUILD_TEST_MACRO_CALL_LOG"
 _RUN_ID_PATTERN: re.Pattern[str] = re.compile(r'"run_id": "[^"]*"')
 _DIFFERENTIAL_FRAGMENTS: tuple[str, ...] = (
-    "@m('a')", "@m(1)", "@m()", "@mm(2)", "@mm (2)", "@m (1)", "@n(@m('b'))", "@n(@m(@n()))",
-    "@n(@mm(3), '@m(4)')", "@tag(__ref('orders'))", "@tag(__seed('rates'))",
-    "@tag(__ref('customers'))", "@cols(__ref('orders'))", "@gen()", "@nope(1)", "@m(x)",
-    "@ab c(1)", "@m('é')", "'@m(1)'", "-- @m(1)\n", "/* @n() */", "$$@m()$$", "`@m()`", "@@v",
-    "@", " ", "\n", "\u3000", "é", "'", "(", ")", "SELECT ", ", ", "\"q\"", "@sur()",
+    "@py.m('a')", "@py.m(1)", "@py.m()", "@py.mm(2)", "@py.mm (2)", "@py.m (1)",
+    "@py.n(@py.m('b'))", "@py.n(@py.m(@py.n()))",
+    "@py.n(@py.mm(3), '@py.m(4)')", "@py.tag(__ref('orders'))", "@py.tag(__seed('rates'))",
+    "@py.tag(__ref('customers'))", "@py.cols(__ref('orders'))", "@py.gen()", "@py.nope(1)",
+    "@py.m(x)", "@py.ab c(1)", "@m(1)", "@sql.m(1)", "@py.m('é')", "'@py.m(1)'",
+    "-- @py.m(1)\n", "/* @py.n() */", "$$@py.m()$$", "`@py.m()`", "@@v",
+    "@", " ", "\n", "\u3000", "é", "'", "(", ")", "SELECT ", ", ", "\"q\"", "@py.sur()",
 )  # fmt: skip
 _DIFFERENTIAL_FILE: Path = Path("models/orders_summary.sql")
 
@@ -66,7 +68,7 @@ MACRO_BRIDGE_PROJECT_FILES: dict[str, str] = {
         "[scopes]\n"
         "enforce_placement = false\n"
     ),
-    "macros/common.py": (
+    "macros/python/common.py": (
         '"""Shared macros for the bridge demo."""\n\n'
         "import os\n\n\n"
         "def cents(column: str) -> str:\n"
@@ -110,7 +112,7 @@ MACRO_BRIDGE_PROJECT_FILES: dict[str, str] = {
     "enums/order_status.sql": (
         'ENUM (\n  name order_status,\n  members (PLACED "placed", SHIPPED "shipped"),\n);\n'
     ),
-    "models/north/_sqlbuild/_macros/fmt.py": (
+    "models/north/_sqlbuild/_macros/python/fmt.py": (
         'def fmt(value: str) -> str:\n    """Label a value."""\n    return f"\'north:{value}\'"\n'
     ),
     "constants/base_rate.sql": "CONSTANT (name base_rate, value 1);\n",
@@ -123,7 +125,7 @@ MACRO_BRIDGE_PROJECT_FILES: dict[str, str] = {
         'MODEL (description "Orders source");\n\nSELECT 1 AS id, 3 AS amount\n'
     ),
     "hooks/sql/stamp.sql": (
-        "HOOK (description \"Stamp a value\");\n\nSELECT @cents('2') AS stamped\n"
+        "HOOK (description \"Stamp a value\");\n\nSELECT @py.cents('2') AS stamped\n"
     ),
     "functions/sql/udf__cents_of.sql": (
         "FUNCTION (\n"
@@ -131,23 +133,23 @@ MACRO_BRIDGE_PROJECT_FILES: dict[str, str] = {
         "  arguments (v INTEGER),\n"
         "  returns INTEGER,\n"
         ");\n\n"
-        '@cents("v")\n'
+        '@py.cents("v")\n'
     ),
     "audits/generic/positive_cents.sql": (
-        'AUDIT ();\n\nSELECT *\nFROM __ref("@model")\nWHERE @cents("amount") < 0\n'
+        'AUDIT ();\n\nSELECT *\nFROM __ref("@model")\nWHERE @py.cents("amount") < 0\n'
     ),
     "sources/raw.yml": (
         "sources:\n"
         "  - name: raw__payments\n"
         "    description: Payments\n"
         "    expression: |\n"
-        "      SELECT @cents('5') AS amount_cents, @wrap(@cents('6')) AS wrapped\n"
+        "      SELECT @py.cents('5') AS amount_cents, @py.wrap(@py.cents('6')) AS wrapped\n"
     ),
     "tests/unit/test_cents_macro.sql": (
         'TEST (mode macro, name "converts_to_cents");\n\n'
         "WITH\n"
         "__macro_actual__ AS (\n"
-        '  SELECT @cents("3") AS cents\n'
+        '  SELECT @py.cents("3") AS cents\n'
         "),\n"
         "__macro_expected__ AS (\n"
         "  SELECT 300 AS cents\n"
@@ -158,23 +160,24 @@ MACRO_BRIDGE_PROJECT_FILES: dict[str, str] = {
 
 _REGION_MODEL_BODY: str = (
     "SELECT\n"
-    '  @cents("amount") AS amount_cents,\n'
-    '  @wrap(@cents("amount")) AS wrapped,\n'
-    '  @scale("amount") AS scaled,\n'
-    "  @visible_constants() AS visible,\n"
+    '  @py.cents("amount") AS amount_cents,\n'
+    '  @py.wrap(@py.cents("amount")) AS wrapped,\n'
+    '  @py.scale("amount") AS scaled,\n'
+    "  @py.visible_constants() AS visible,\n"
     "  {label} AS label,\n"
-    "  @region_filter() AS region_check,\n"
-    "  @status_code() AS status_value,\n"
-    "  @optional_label() AS optional_label,\n"
+    "  @py.region_filter() AS region_check,\n"
+    "  @py.status_code() AS status_value,\n"
+    "  @py.optional_label() AS optional_label,\n"
     "  {ref_tags},\n"
-    '  @logged("amount") AS logged_amount,\n'
-    "  'quoted @cents(1)' AS quoted -- @cents(2)\n"
-    'FROM (@columns_of(__ref("customers"))) AS c\n'
-    "WHERE id IN @generated_join()\n"
+    '  @py.logged("amount") AS logged_amount,\n'
+    "  'quoted @py.cents(1)' AS quoted -- @py.cents(2)\n"
+    'FROM (@py.columns_of(__ref("customers"))) AS c\n'
+    "WHERE id IN @py.generated_join()\n"
 )
-_NORTH_REF_TAGS: str = '@ref_tag(__ref("orders_source")) AS first_tag'
+_NORTH_REF_TAGS: str = '@py.ref_tag(__ref("orders_source")) AS first_tag'
 _SOUTH_REF_TAGS: str = (
-    '@ref_tag(__ref("customers")) AS first_tag, @ref_tag(__ref("orders_source")) AS second_tag'
+    '@py.ref_tag(__ref("customers")) AS first_tag, @py.ref_tag(__ref("orders_source")) AS '
+    "second_tag"
 )
 
 
@@ -188,7 +191,7 @@ def _region_model(*, description: str, hooks: str, ref_tags: str, label: str) ->
 
 _NORTH_HOOKS: str = (
     "  pre_hooks [\n"
-    "    inline_sql(\"SELECT @cents('1') AS hook_value\"),\n"
+    "    inline_sql(\"SELECT @py.cents('1') AS hook_value\"),\n"
     '    sql("stamp"),\n'
     "  ],\n"
 )
@@ -198,13 +201,13 @@ MACRO_BRIDGE_PROJECT_FILES.update(
             description="North orders",
             hooks=_NORTH_HOOKS,
             ref_tags=_NORTH_REF_TAGS,
-            label='@fmt("x")',
+            label='@py.fmt("x")',
         ),
         "models/north/orders_north_copy.sql": _region_model(
             description="North orders copy",
             hooks=_NORTH_HOOKS,
             ref_tags=_NORTH_REF_TAGS,
-            label='@fmt("x")',
+            label='@py.fmt("x")',
         ),
         "models/south/orders_south.sql": _region_model(
             description="South orders", hooks="", ref_tags=_SOUTH_REF_TAGS, label="'south'"
@@ -291,7 +294,7 @@ def _generated() -> str:
 
 
 def _loaded_macro(*, name: str, function: Callable[..., object]) -> LoadedMacro:
-    path: Path = Path(f"macros/{name}.py")
+    path: Path = Path(f"macros/python/{name}.py")
     return LoadedMacro(
         name=name, file_path=path, relative_path=path, raw_source="", function=function
     )
@@ -407,11 +410,11 @@ _CYCLIC_MACROS: str = (
     "    return ping(column)\n"
 )
 _FAILING_CALLS: tuple[str, ...] = (
-    *("@cents('{arg}')",) * 24, *("@wrap(@cents('{arg}'))",) * 6, "@mart_only('{arg}')",
-    "@mart_only('{arg}')", "@explode('{arg}')",
-    "@wrap(@explode('{arg}'))", "@number('{arg}')", "@cents('{arg}', 'extra')",
-    "@cents('{arg}',,)", "@cents({arg})", "@nope('{arg}')", "@_hidden('{arg}')",
-    "@cents('{arg}'", "@cents x('{arg}')",
+    *("@py.cents('{arg}')",) * 24, *("@py.wrap(@py.cents('{arg}'))",) * 6, "@py.mart_only('{arg}')",
+    "@py.mart_only('{arg}')", "@py.explode('{arg}')",
+    "@py.wrap(@py.explode('{arg}'))", "@py.number('{arg}')", "@py.cents('{arg}', 'extra')",
+    "@py.cents('{arg}',,)", "@py.cents({arg})", "@py.nope('{arg}')", "@py._hidden('{arg}')",
+    "@py.cents('{arg}'", "@cents x('{arg}')",
 )  # fmt: skip
 _MODEL_FOLDERS: tuple[str, ...] = ("staging", "marts")
 _ERROR_SPECIFICS: re.Pattern[str] = re.compile(r"'[^']*'|c\d+_\d+")
@@ -424,13 +427,13 @@ def generated_failing_macro_project(*, rng: random.Random) -> dict[str, str]:
     models: dict[str, str] = dict(
         _generated_model(rng=rng, model=model) for model in range(rng.randint(2, 6))
     )
-    cyclic: dict[str, str] = {True: {"macros/cyclic.py": _CYCLIC_MACROS}, False: {}}[
+    cyclic: dict[str, str] = {True: {"macros/python/cyclic.py": _CYCLIC_MACROS}, False: {}}[
         rng.choice(_CYCLE_CHANCE)
     ]
     return {
         "sqlbuild_project.toml": MACRO_BRIDGE_PROJECT_FILES["sqlbuild_project.toml"],
-        "macros/common.py": _FAILING_MACROS,
-        "models/marts/_sqlbuild/macros/local.py": _LOCAL_MACROS,
+        "macros/python/common.py": _FAILING_MACROS,
+        "models/marts/_sqlbuild/macros/python/local.py": _LOCAL_MACROS,
         **cyclic,
         **models,
     }

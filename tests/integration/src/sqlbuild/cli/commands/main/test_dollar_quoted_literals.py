@@ -20,13 +20,13 @@ from tests.integration.src.sqlbuild.cli.commands.main.helpers import run_build
             description="dollar-quoted literals stay opaque while real references build",
             projection=(
                 '$$Customer\'s order -- __ref("missing_orders") costs $5$$ AS order_label,\n'
-                '  $note$ $$ nested __seed("missing_seed") @missing_macro() $note$ AS order_note,\n'
+                '  $note$ $$ nested __seed("missing_seed") @py.missing_macro() $note$ AS order_note,\n'
                 "  o.order_id"
             ),
             expected_rows=(
                 (
                     'Customer\'s order -- __ref("missing_orders") costs $5',
-                    ' $$ nested __seed("missing_seed") @missing_macro() ',
+                    ' $$ nested __seed("missing_seed") @py.missing_macro() ',
                     1,
                 ),
             ),

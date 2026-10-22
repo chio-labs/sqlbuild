@@ -26,7 +26,7 @@ fn given_model_headers_when_reading_native_facts_then_they_match_the_python_proj
         },
         HeaderFactsTestCase {
             description: "templates and macro calls are found per entry with their path",
-            contents: "MODEL (\n  description '${env.ORDERS}',\n  columns (\n    id (description '@cents(id)'),\n  ),\n);\nSELECT 1 AS id",
+            contents: "MODEL (\n  description '${env.ORDERS}',\n  columns (\n    id (description '@py.cents(id)'),\n  ),\n);\nSELECT 1 AS id",
             expected_entries: vec![
                 ("description", true, None, true),
                 (
@@ -36,7 +36,7 @@ fn given_model_headers_when_reading_native_facts_then_they_match_the_python_proj
                     true,
                 ),
             ],
-            expected_columns: Some(vec![("id", None, None, Some("@cents(id)"), vec![])]),
+            expected_columns: Some(vec![("id", None, None, Some("@py.cents(id)"), vec![])]),
         },
         HeaderFactsTestCase {
             description: "columns that fail to parse leave the Python parse to raise the error",

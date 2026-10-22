@@ -346,9 +346,9 @@ def attachment_failure_cases() -> tuple[FailureCase, ...]:
                 "$ or non-ASCII characters are not supported"
             ),
             files={
-                "macros/amounts.py": "def doubled(value):\n    return f'{value} * 2'\n",
+                "macros/python/amounts.py": "def doubled(value):\n    return f'{value} * 2'\n",
                 _TEST_PATH: 'TEST (mode macro, name "doubled");\n\nWITH\n'
-                "\"__macro_actual__\" AS (\n  SELECT @doubled('1') AS amount\n),\n"
+                "\"__macro_actual__\" AS (\n  SELECT @py.doubled('1') AS amount\n),\n"
                 "__macro_expected__ AS (\n  SELECT 2 AS amount\n)\nSELECT 1\n",
             },
         ),

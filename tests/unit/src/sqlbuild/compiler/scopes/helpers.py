@@ -207,7 +207,7 @@ def scope_index() -> ScopeIndex:
     )
     macro: DeclarationRecord = DeclarationRecord(
         DeclarationIdentity(DeclarationKind.MACRO, "normalize_status"),
-        "macros/normalize_status.py",
+        "macros/python/normalize_status.py",
         1,
         1,
         ScopeKind.GLOBAL,
@@ -284,7 +284,7 @@ def report_scope_lookup(*, extra_globals: int = 0) -> ScopeLookup:
     )
     macro: DeclarationRecord = DeclarationRecord(
         DeclarationIdentity(DeclarationKind.MACRO, "normalize"),
-        "macros/normalize.py",
+        "macros/python/normalize.py",
         1,
         1,
         ScopeKind.GLOBAL,
@@ -364,7 +364,7 @@ def relocation_index(consumer_paths: tuple[str, ...]) -> ScopeIndex:
             ),
             DeclarationRecord(
                 identity=_CENTS_MACRO,
-                path="models/staging/_sqlbuild/_macros/cents.py",
+                path="models/staging/_sqlbuild/_macros/python/cents.py",
                 line=1,
                 column=1,
                 scope=ScopeKind.LOCAL,

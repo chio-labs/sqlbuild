@@ -30,7 +30,7 @@ _MACRO_TEST_CTES: str = (
     "  SELECT '  PAID  ' AS raw_status\n"
     "),\n"
     "__macro_actual__ AS (\n"
-    '  SELECT @normalize_status("raw_status") AS status\n'
+    '  SELECT @py.normalize_status("raw_status") AS status\n'
     "  FROM input_values\n"
     "),\n"
     "__macro_expected__ AS (\n"

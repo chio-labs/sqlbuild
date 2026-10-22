@@ -5,13 +5,18 @@ use std::collections::BTreeSet;
 use sqlbuild_core::json::models::{JsonInteger, JsonValue};
 
 use crate::scope_index::main::format_identity::format_identity;
-use crate::scope_index::models::{DeclarationRecord, QualifiedIdentity, ScopeKind};
+use crate::scope_index::models::{
+    DeclarationKind, DeclarationRecord, QualifiedIdentity, ScopeKind,
+};
 use crate::scope_report::_helpers::context::Context;
 use crate::scope_report::_helpers::paths::safe_scope_path;
 use crate::scope_report::constants::{ENUM_MEMBER_PREVIEW, GROUP_DIRECTORY, PATH_SEPARATOR};
 use crate::scope_report::models::{
     DeclarationReport, DeclarationValues, MacroValues, Provenance, SourceLocation,
 };
+
+/// The kind folders of a macro role, which are layout rather than buckets.
+const MACRO_KIND_DIRECTORIES: [&str; 2] = ["python", "sql"];
 
 /// `_declaration_container`: role, visibility label, role root and bucket path.
 pub(crate) struct Container {
@@ -74,7 +79,15 @@ pub(crate) fn container(record: &DeclarationRecord) -> Container {
     }
     let role_end: usize = (role_index + role_parts.len()).min(parts.len());
     let bucket_end: usize = parts.len().saturating_sub(1).max(role_end);
-    let bucket: String = parts[role_end..bucket_end].join("/");
+    let bucket_start: usize = if record.identity.kind == DeclarationKind::Macro
+        && role_end < bucket_end
+        && MACRO_KIND_DIRECTORIES.contains(&parts[role_end])
+    {
+        role_end + 1
+    } else {
+        role_end
+    };
+    let bucket: String = parts[bucket_start..bucket_end].join("/");
     Container {
         role: Some(role_parts.join("/")),
         visibility,

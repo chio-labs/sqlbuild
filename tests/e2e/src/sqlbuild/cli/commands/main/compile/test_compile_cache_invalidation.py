@@ -123,7 +123,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
             description="project_macro_edit",
             edit=lambda root: replace_project_text(
                 root,
-                "macros/currency.py",
+                "macros/python/currency.py",
                 'return f"{price_cents} * {quantity}"',
                 'return f"({price_cents}) * ({quantity})"',
             ),
@@ -132,7 +132,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
             description="scoped_macro_edit",
             edit=lambda root: replace_project_text(
                 root,
-                "models/marts/_sqlbuild/_macros/currency.py",
+                "models/marts/_sqlbuild/_macros/python/currency.py",
                 'return f"ROUND(({column}) / 100.0, 2)"',
                 'return f"ROUND(({column}) / 100.0, 3)"',
             ),

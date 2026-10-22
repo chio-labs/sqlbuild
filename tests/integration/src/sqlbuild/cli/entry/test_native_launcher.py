@@ -290,13 +290,15 @@ def test_given_cached_compile_when_startup_search_path_changes_then_new_helper_i
 ) -> None:
     program, startup, new_helpers = startup_install(tmp_path / "environment")
     project_dir: Path = write_project(tmp_path / "project")
-    (project_dir / "models" / "_macros").mkdir()
-    _ = (project_dir / "models" / "_macros" / "orders.py").write_text(
+    (project_dir / "models" / "_macros" / "python").mkdir(parents=True)
+    _ = (project_dir / "models" / "_macros" / "python" / "orders.py").write_text(
         'import catalog_helper\n\ndef order_value() -> str:\n    """The order value."""\n    return catalog_helper.SQL\n',
         encoding="utf-8",
     )
     model: Path = project_dir / "models" / "orders.sql"
-    _ = model.write_text(model.read_text().replace("1 AS order_id", "@order_value() AS order_id"))
+    _ = model.write_text(
+        model.read_text().replace("1 AS order_id", "@py.order_value() AS order_id")
+    )
     first: LauncherRun = run(program, args=test_case.args, cwd=project_dir)
     assert first[0] == 0, first[2]
     assert launch_records(project_dir)

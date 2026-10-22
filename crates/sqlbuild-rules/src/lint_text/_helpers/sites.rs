@@ -114,7 +114,16 @@ fn macro_site_end(text: &str, start: usize, policy: QuotePolicy) -> Option<usize
     if !(first.is_alphabetic() || first == '_') {
         return None;
     }
-    let end: usize = name_end(text, name_start, false);
+    let mut end: usize = name_end(text, name_start, false);
+    if matches!(&text[name_start..end], "py" | "sql")
+        && text.as_bytes().get(end) == Some(&b'.')
+        && text[end + 1..]
+            .chars()
+            .next()
+            .is_some_and(|next| next.is_alphabetic() || next == '_')
+    {
+        end = name_end(text, end + 1, false);
+    }
     if text.as_bytes().get(end) == Some(&b'(') {
         paren_end(text.as_bytes(), end, policy)
     } else {
@@ -203,4 +212,37 @@ pub(crate) fn byte_offset(text: &str, position: usize) -> Option<usize> {
         .map(|(index, _)| index)
         .chain(std::iter::once(text.len()))
         .nth(position)
+}
+
+/// End of an ASCII `[A-Za-z_][A-Za-z0-9_]*` name at `start`, or `start` when none begins there.
+pub(crate) fn ascii_name_end(bytes: &[u8], start: usize) -> usize {
+    match bytes.get(start) {
+        Some(byte) if byte.is_ascii_alphabetic() || *byte == b'_' => {}
+        _ => return start,
+    }
+    let mut end: usize = start + 1;
+    while bytes
+        .get(end)
+        .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_')
+    {
+        end += 1;
+    }
+    end
+}
+
+/// Whether `@py.name(` or `@sql.name(` starts at the kind name ending at `end`.
+pub(crate) fn opens_kind_call(body: &str, start: usize, end: usize) -> bool {
+    let bytes: &[u8] = body.as_bytes();
+    if !matches!(&body[start..end], "py" | "sql") || bytes.get(end) != Some(&b'.') {
+        return false;
+    }
+    let name_end: usize = ascii_name_end(bytes, end + 1);
+    name_end > end + 1 && opens_call(body, name_end)
+}
+
+pub(crate) fn opens_call(body: &str, end: usize) -> bool {
+    body[end..]
+        .chars()
+        .find(|character| !python_isspace(*character))
+        == Some('(')
 }

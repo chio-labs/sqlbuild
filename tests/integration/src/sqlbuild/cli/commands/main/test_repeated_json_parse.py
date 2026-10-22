@@ -53,7 +53,7 @@ _DUCKDB_EVENTS: str = "WITH events AS (SELECT 1 AS event_id, '{\"order_id\": 1}'
                 "  SELECT\n"
                 "    e.event_id,\n"
                 "    json(e.payload)->>'status' AS status,\n"
-                "    @order_id_field() AS order_id\n"
+                "    @py.order_id_field() AS order_id\n"
                 "  FROM events AS e\n"
                 ")\n"
                 "SELECT event_id, order_id, status FROM final\n"
@@ -62,7 +62,7 @@ _DUCKDB_EVENTS: str = "WITH events AS (SELECT 1 AS event_id, '{\"order_id\": 1}'
             expected_detail="JSON(e.payload) is parsed 2 times in one SELECT.",
             extra_files=(
                 (
-                    "macros/fields.py",
+                    "macros/python/fields.py",
                     "def order_id_field(ctx):\n    return \"json(e.payload)->>'order_id'\"\n",
                 ),
             ),

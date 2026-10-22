@@ -39,7 +39,7 @@ from tests.integration.src.sqlbuild.compiler.helpers import (
 
 _FAILURE_BASE_FILES: dict[str, str] = {
     "sqlbuild_project.toml": MACRO_BRIDGE_PROJECT_FILES["sqlbuild_project.toml"],
-    "macros/common.py": (
+    "macros/python/common.py": (
         "def cents(column: str) -> str:\n"
         '    """Convert an amount to cents."""\n'
         '    return f"{column} * 100"\n\n\n'
@@ -51,7 +51,7 @@ _FAILURE_BASE_FILES: dict[str, str] = {
         "    return 1\n"
     ),
     "models/a_first.sql": (
-        'MODEL (description "First");\n\nSELECT @cents("amount") AS amount_cents\n'
+        'MODEL (description "First");\n\nSELECT @py.cents("amount") AS amount_cents\n'
     ),
 }
 
@@ -121,7 +121,7 @@ def test_given_repeated_macro_calls_when_rendering_natively_then_each_call_class
             files={
                 **_FAILURE_BASE_FILES,
                 "models/b_second.sql": (
-                    'MODEL (description "Second");\n\nSELECT @explode("amount") AS bogus\n'
+                    'MODEL (description "Second");\n\nSELECT @py.explode("amount") AS bogus\n'
                 ),
             },
             expected_message_fragment="failed: cannot render amount",
@@ -132,17 +132,17 @@ def test_given_repeated_macro_calls_when_rendering_natively_then_each_call_class
                 **_FAILURE_BASE_FILES,
                 "models/b_second.sql": (
                     'MODEL (description "Second");\n\n'
-                    'SELECT @cents("amount") AS a, @nope("amount") AS b\n'
+                    'SELECT @py.cents("amount") AS a, @py.nope("amount") AS b\n'
                 ),
             },
-            expected_message_fragment="Unknown macro '@nope'",
+            expected_message_fragment="Unknown macro '@py.nope'",
         ),
         MacroBridgeFailureTestCase(
             description="macro returns a value that is not SQL",
             files={
                 **_FAILURE_BASE_FILES,
                 "models/b_second.sql": (
-                    'MODEL (description "Second");\n\nSELECT @number("amount") AS b\n'
+                    'MODEL (description "Second");\n\nSELECT @py.number("amount") AS b\n'
                 ),
             },
             expected_message_fragment="must return a SQL string",
@@ -153,7 +153,7 @@ def test_given_repeated_macro_calls_when_rendering_natively_then_each_call_class
                 **_FAILURE_BASE_FILES,
                 "models/b_second.sql": (
                     'MODEL (description "Second");\n\n'
-                    'SELECT @cents("amount") AS a, @cents x("amount") AS b\n'
+                    'SELECT @py.cents("amount") AS a, @py.cents x("amount") AS b\n'
                 ),
             },
             expected_message_fragment="expected opening parenthesis",
@@ -210,24 +210,26 @@ def test_given_random_macro_sql_when_expanding_through_bridge_then_matches_pytho
         MacroExpansionEdgeTestCase(
             description="nested argument scan edges",
             texts=(
-                "@n(@nope(1))",
-                "@n(@m(1)",
-                "@n(@ab c(1))",
-                "@n(@m('x), 1)",
-                "@n(@m(1), 'oops)",
-                "@n(@mm (2), @m('é'))",
-                "@n(@é(1))",
-                "@n(/* @m( */ @m(1))",
-                "@n(@nope(1), @m(')",
-                "@n(@m(1) @xy z(2))",
-                "@n(@m(1) @mm z(2))",
-                "@mm z(2)",
-                "@n($$ ) $$, @m(1))",
-                '@n("@m(1)")',
-                "@n(@n(@n(@nope())))",
-                "@n(@m(1), -- )\n @m(2))",
-                "@n(@m(1), /* open)",
-                "@n(@m(@n(@m('é'))))",
+                "@py.n(@py.nope(1))",
+                "@py.n(@py.m(1)",
+                "@py.n(@py.ab c(1))",
+                "@py.n(@py.m('x), 1)",
+                "@py.n(@py.m(1), 'oops)",
+                "@py.n(@py.mm (2), @py.m('é'))",
+                "@py.n(@py.é(1))",
+                "@py.n(/* @py.m( */ @py.m(1))",
+                "@py.n(@py.nope(1), @py.m(')",
+                "@py.n(@py.m(1) @py.xy z(2))",
+                "@py.n(@py.m(1) @py.mm z(2))",
+                "@py.mm z(2)",
+                "@py.n(@m(1))",
+                "@py.n(@sql.m(1))",
+                "@py.n($$ ) $$, @py.m(1))",
+                '@py.n("@py.m(1)")',
+                "@py.n(@py.n(@py.n(@py.nope())))",
+                "@py.n(@py.m(1), -- )\n @py.m(2))",
+                "@py.n(@py.m(1), /* open)",
+                "@py.n(@py.m(@py.n(@py.m('é'))))",
             ),
             expected_mismatches=[],
         ),

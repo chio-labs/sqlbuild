@@ -23,13 +23,13 @@ _COUNTED_MACRO: str = (
     "from pathlib import Path\n\n\n"
     "def counted(expression: str) -> str:\n"
     '    """Return the expression, logging each execution."""\n\n'
-    f"    with (Path(__file__).resolve().parents[1] / {_CALL_LOG!r}).open(\n"
+    f"    with (Path(__file__).resolve().parents[2] / {_CALL_LOG!r}).open(\n"
     '        "a", encoding="utf-8"\n'
     "    ) as log:\n"
     '        _ = log.write("call\\n")\n'
     "    return expression\n"
 )
-_COUNTED_MART: str = FAILURE_BASE_MART.replace("SUM(amount)", "SUM(@counted('amount'))")
+_COUNTED_MART: str = FAILURE_BASE_MART.replace("SUM(amount)", "SUM(@py.counted('amount'))")
 _STAGING_PATH: str = "models/staging/stg_orders.sql"
 _STAGING_PREFIX: str = (
     'MODEL (\n  description "Staged orders",\n);\n\n'
@@ -112,7 +112,7 @@ def test_given_declaration_error_when_compiling_natively_then_error_matches_pyth
     project_dir: Path = tmp_path / "orders"
     files: dict[str, str] = {
         **FAILURE_BASE_FILES,
-        "macros/counted.py": _COUNTED_MACRO,
+        "macros/python/counted.py": _COUNTED_MACRO,
         "models/marts/customer_totals.sql": _COUNTED_MART,
         **test_case.project_files,
     }
@@ -157,7 +157,7 @@ def test_given_declaration_error_when_compiling_then_lifecycle_error_type_matche
     project_dir: Path = tmp_path / "orders"
     for relative_path, contents in {
         **FAILURE_BASE_FILES,
-        "macros/counted.py": _COUNTED_MACRO,
+        "macros/python/counted.py": _COUNTED_MACRO,
         "models/marts/customer_totals.sql": _COUNTED_MART,
         _CALL_LOG: "",
         **test_case.project_files,

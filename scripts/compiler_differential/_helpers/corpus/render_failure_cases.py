@@ -17,8 +17,8 @@ from scripts.compiler_differential.models import FailureCase
 _STAGING_HEADER: str = '"Staged orders",'
 _MART_HEADER: str = '"Order totals per customer",'
 _STAGING_COLUMNS: str = "amount, status"
-_STAGING_MACROS: str = "models/staging/_sqlbuild/_macros/orders.py"
-_MART_MACROS: str = "models/marts/_sqlbuild/_macros/orders.py"
+_STAGING_MACROS: str = "models/staging/_sqlbuild/_macros/python/orders.py"
+_MART_MACROS: str = "models/marts/_sqlbuild/_macros/python/orders.py"
 _CENTS_MACRO: str = (
     'def cents(expression: str) -> str:\n    """Convert to cents."""\n'
     '    return f"({expression} * 100)"\n'
@@ -53,8 +53,25 @@ _RAW_ORDERS_MOCK: str = (
 )
 _CENTS_TEST_PREFIX: str = (
     "TEST (mode macro);\n\nWITH\ninput_values AS (SELECT 5 AS amount),\n"
-    '__macro_actual__ AS (SELECT @cents("amount") AS cents FROM input_values),\n'
+    '__macro_actual__ AS (SELECT @py.cents("amount") AS cents FROM input_values),\n'
 )
+
+_SQL_MACRO_MACROS: str = "models/staging/_sqlbuild/_macros/sql"
+_SQL_MACRO_STAGING_COLUMNS: str = "amount, status"
+_SQL_MACRO_X_HEADER: str = 'MACRO (description "X", arguments ({arguments}){returns});\n\n'
+_SQL_MACRO_CENTS: dict[str, str] = {
+    f"{_SQL_MACRO_MACROS}/cents.sql": (
+        'MACRO (\n  description "Amount in cents",\n  arguments (amount DOUBLE),\n'
+        "  returns DOUBLE,\n);\n\n@amount * 100\n"
+    )
+}
+_SQL_MACRO_LIVE_ORDERS: dict[str, str] = {
+    f"{_SQL_MACRO_MACROS}/live_orders.sql": (
+        'MACRO (\n  description "Placed orders",\n'
+        "  arguments (src RELATION (order_id INTEGER, status VARCHAR)),\n);\n\n"
+        "WITH live AS (SELECT * FROM @src WHERE status = 'placed')\n"
+    )
+}
 
 
 def _staging_header(extra: str) -> dict[str, str]:
@@ -75,6 +92,7 @@ def render_failure_cases() -> tuple[FailureCase, ...]:
 
     return (
         *_macro_cases(),
+        *_sql_macro_cases(),
         *_interpolation_cases(),
         *_reference_cases(),
         *_attachment_cases(),
@@ -89,7 +107,7 @@ def _macro_cases() -> tuple[FailureCase, ...]:
             expected_code="P001",
             expected_message="must return a SQL string",
             files=_staging_columns(
-                columns="amount, status, @answer() AS answer",
+                columns="amount, status, @py.answer() AS answer",
                 files={
                     _STAGING_MACROS: (
                         'def answer() -> int:\n    """Return a number."""\n    return 42\n'
@@ -102,7 +120,7 @@ def _macro_cases() -> tuple[FailureCase, ...]:
             expected_code="P001",
             expected_message="failed: cannot render status",
             files=_staging_columns(
-                columns='@cents("amount") AS amount, @explode("status") AS status',
+                columns='@py.cents("amount") AS amount, @py.explode("status") AS status',
                 files={_STAGING_MACROS: _CENTS_MACRO + _EXPLODE_MACRO},
             ),
         ),
@@ -111,16 +129,16 @@ def _macro_cases() -> tuple[FailureCase, ...]:
             expected_code="P001",
             expected_message="could not be parsed",
             files=_staging_columns(
-                columns='amount, status, @cents("amount",,) AS cents',
+                columns='amount, status, @py.cents("amount",,) AS cents',
                 files={_STAGING_MACROS: _CENTS_MACRO},
             ),
         ),
         failure_case(
             name="macro-private-helper",
             expected_code="P001",
-            expected_message="Unknown macro '@_scaled'",
+            expected_message="Unknown macro '@py._scaled'",
             files=_staging_columns(
-                columns='amount, status, @_scaled("amount") AS scaled',
+                columns='amount, status, @py._scaled("amount") AS scaled',
                 files={
                     _STAGING_MACROS: _CENTS_MACRO
                     + "\n\ndef _scaled(expression: str) -> str:\n    return expression\n"
@@ -133,25 +151,25 @@ def _macro_cases() -> tuple[FailureCase, ...]:
             expected_message="failed: cannot render total",
             files={
                 **_staging_columns(
-                    columns='amount, @explode("status") AS status',
+                    columns='amount, @py.explode("status") AS status',
                     files={_STAGING_MACROS: _CENTS_MACRO + _EXPLODE_MACRO},
                 ),
-                "macros/explode.py": _EXPLODE_MACRO.replace("def explode", "def blow_up"),
+                "macros/python/explode.py": _EXPLODE_MACRO.replace("def explode", "def blow_up"),
                 FAILURE_MART_PATH: FAILURE_BASE_MART.replace(
-                    "SUM(amount)", 'SUM(@blow_up("total"))'
+                    "SUM(amount)", 'SUM(@py.blow_up("total"))'
                 ),
             },
         ),
         failure_case(
             name="macro-output-calls-macro",
             expected_code="P001",
-            expected_message="returned SQLBuild call(s) @cents()",
+            expected_message="returned SQLBuild call(s) @py.cents()",
             files=_staging_columns(
-                columns='amount, status, @wrapped("amount") AS wrapped',
+                columns='amount, status, @py.wrapped("amount") AS wrapped',
                 files={
                     _STAGING_MACROS: _CENTS_MACRO
                     + '\n\ndef wrapped(expression: str) -> str:\n    """Wrap a call."""\n'
-                    + "    return f'@cents(\"{expression}\")'\n"
+                    + "    return f'@py.cents(\"{expression}\")'\n"
                 },
             ),
         ),
@@ -160,7 +178,7 @@ def _macro_cases() -> tuple[FailureCase, ...]:
             expected_code="P001",
             expected_message="must use only Python literals",
             files=_staging_columns(
-                columns="amount, status, @cents(amount) AS cents",
+                columns="amount, status, @py.cents(amount) AS cents",
                 files={_STAGING_MACROS: _CENTS_MACRO},
             ),
         ),
@@ -169,7 +187,7 @@ def _macro_cases() -> tuple[FailureCase, ...]:
             expected_code="P001",
             expected_message="is inaccessible",
             files=_staging_columns(
-                columns='amount, status, @cents("amount") AS cents',
+                columns='amount, status, @py.cents("amount") AS cents',
                 files={_MART_MACROS: _CENTS_MACRO},
             ),
         ),
@@ -178,14 +196,14 @@ def _macro_cases() -> tuple[FailureCase, ...]:
             expected_code="S007",
             files={
                 _STAGING_MACROS: _CENTS_MACRO,
-                "models/staging/_sqlbuild/macros/wrapping.py": (
-                    "from models.staging._sqlbuild._macros.orders import cents\n\n\n"
+                "models/staging/_sqlbuild/macros/python/wrapping.py": (
+                    "from models.staging._sqlbuild._macros.python.orders import cents\n\n\n"
                     'def wrapped(expression: str) -> str:\n    """Wrap cents."""\n'
                     "    return cents(expression)\n"
                 ),
                 "models/staging/regional/stg_regional_orders.sql": (
                     'MODEL (\n  description "Regional orders",\n);\n\n'
-                    'SELECT order_id, @wrapped("amount") AS amount_cents\n'
+                    'SELECT order_id, @py.wrapped("amount") AS amount_cents\n'
                     'FROM __ref("stg_orders")\n'
                 ),
             },
@@ -452,7 +470,7 @@ def _reference_cases() -> tuple[FailureCase, ...]:
                 "__macro_actual__"
             ),
             files={
-                "tests/unit/_macros/orders.py": _CENTS_MACRO,
+                "tests/unit/_macros/python/orders.py": _CENTS_MACRO,
                 "tests/unit/test_cents.sql": (
                     _CENTS_TEST_PREFIX + 'labels AS (SELECT __udf("is_large")(5) AS is_large),\n'
                     "__macro_expected__ AS (SELECT 500 AS cents)\n"
@@ -465,7 +483,7 @@ def _reference_cases() -> tuple[FailureCase, ...]:
             expected_message='__source("raw", "orders") is not a valid __source() call',
             expected_location=(6, 33),
             files={
-                "tests/unit/_macros/orders.py": _CENTS_MACRO,
+                "tests/unit/_macros/python/orders.py": _CENTS_MACRO,
                 "tests/unit/test_cents.sql": (
                     _CENTS_TEST_PREFIX
                     + 'sample_orders AS (SELECT * FROM __source("raw", "orders")),\n'
@@ -632,5 +650,159 @@ def _model_config_cases() -> tuple[FailureCase, ...]:
             expected_code="P001",
             expected_message="unterminated",
             files=_staging_header('  schema "${coalesce(\'orders)}",'),
+        ),
+    )
+
+
+def _sql_macro_columns(*, columns: str, files: dict[str, str]) -> dict[str, str]:
+    return {
+        **files,
+        **staging_files(FAILURE_BASE_STAGING.replace(_SQL_MACRO_STAGING_COLUMNS, columns, 1)),
+    }
+
+
+def _x_macro(*, arguments: str, returns: str, body: str) -> dict[str, str]:
+    return {
+        f"{_SQL_MACRO_MACROS}/x.sql": _SQL_MACRO_X_HEADER.format(
+            arguments=arguments, returns=returns
+        )
+        + body
+    }
+
+
+def _sql_macro_cases() -> tuple[FailureCase, ...]:
+    return (
+        failure_case(
+            name="sql-macro-bare-call",
+            expected_code="P014",
+            expected_message="macro call @cents() does not say which kind of macro it calls",
+            files=_sql_macro_columns(
+                columns="@cents(amount) AS amount, status", files=_SQL_MACRO_CENTS
+            ),
+        ),
+        failure_case(
+            name="sql-macro-invalid-definition",
+            expected_code="P015",
+            expected_message="expression macro x() needs returns <type> in its MACRO header",
+            files=_sql_macro_columns(
+                columns="@sql.x(amount) AS amount, status",
+                files=_x_macro(arguments="v DOUBLE", returns="", body="@v + 1\n"),
+            ),
+        ),
+        failure_case(
+            name="sql-macro-reference-in-body",
+            expected_code="P016",
+            expected_message="macro x() reads source:raw_orders through __source() in its body",
+            files=_sql_macro_columns(
+                columns="@sql.x(amount) AS amount, status",
+                files=_x_macro(
+                    arguments="v DOUBLE",
+                    returns=", returns DOUBLE",
+                    body='@v + (SELECT MAX(amount) FROM __source("raw_orders"))\n',
+                ),
+            ),
+        ),
+        failure_case(
+            name="sql-macro-argument-mismatch",
+            expected_code="P017",
+            expected_message="call to macro cents() is missing argument amount DOUBLE",
+            files=_sql_macro_columns(
+                columns="@sql.cents() AS amount, status", files=_SQL_MACRO_CENTS
+            ),
+        ),
+        failure_case(
+            name="sql-macro-cte-name-clash",
+            expected_code="P018",
+            expected_message=(
+                'CTE "live" from macro live_orders() clashes with a CTE already defined'
+            ),
+            files={
+                **_SQL_MACRO_LIVE_ORDERS,
+                **staging_files(
+                    'MODEL (\n  description "Staged orders",\n);\n\n'
+                    'WITH orders AS (SELECT * FROM __source("raw_orders")),\n'
+                    "live AS (SELECT * FROM orders),\n@sql.live_orders(orders)\n"
+                    "SELECT order_id, customer_id, amount, status FROM live\n"
+                ),
+            },
+        ),
+        failure_case(
+            name="sql-macro-cycle",
+            expected_code="P019",
+            expected_message="SQL macros call each other in a cycle",
+            files=_sql_macro_columns(
+                columns="@sql.x(amount) AS amount, status",
+                files={
+                    **_x_macro(
+                        arguments="v DOUBLE", returns=", returns DOUBLE", body="@sql.y(@v)\n"
+                    ),
+                    f"{_SQL_MACRO_MACROS}/y.sql": _SQL_MACRO_X_HEADER.format(
+                        arguments="v DOUBLE", returns=", returns DOUBLE"
+                    )
+                    + "@sql.x(@v)\n",
+                },
+            ),
+        ),
+        failure_case(
+            name="sql-macro-called-as-python",
+            expected_code="P020",
+            expected_message="cents() is a SQL macro, called as a Python macro with @py.cents()",
+            files=_sql_macro_columns(
+                columns='@py.cents("amount") AS amount, status', files=_SQL_MACRO_CENTS
+            ),
+        ),
+        failure_case(
+            name="sql-macro-misplaced-call",
+            expected_code="P021",
+            expected_message="CTE-list macro live_orders() must be called inside a WITH list",
+            files=_sql_macro_columns(
+                columns="amount, status, @sql.live_orders(o) AS live", files=_SQL_MACRO_LIVE_ORDERS
+            ),
+        ),
+        failure_case(
+            name="sql-macro-undeclared-parameter",
+            expected_code="P022",
+            expected_message="@w in the body of macro x() names no parameter of the macro",
+            files=_sql_macro_columns(
+                columns="@sql.x(amount) AS amount, status",
+                files=_x_macro(arguments="v DOUBLE", returns=", returns DOUBLE", body="@v + @w\n"),
+            ),
+        ),
+        failure_case(
+            name="sql-macro-runtime-parameter-as-literal",
+            expected_code="P023",
+            expected_message="n is used where a literal is required; declare it n INTEGER CONST",
+            files={
+                **_x_macro(
+                    arguments="src RELATION (order_id INTEGER), n INTEGER",
+                    returns="",
+                    body="WITH firsts AS (SELECT order_id FROM @src LIMIT @n)\n",
+                ),
+                **staging_files(
+                    'MODEL (\n  description "Staged orders",\n);\n\n'
+                    'WITH orders AS (SELECT * FROM __source("raw_orders")),\n@sql.x(orders, 1)\n'
+                    "SELECT order_id, 10 AS customer_id, 5.0 AS amount, 'placed' AS status "
+                    "FROM firsts\n"
+                ),
+            },
+        ),
+        failure_case(
+            name="sql-macro-body-declaration-not-visible",
+            expected_code="S026",
+            expected_message="constant price_places is not visible from macros/sql/x.sql",
+            files={
+                "models/staging/_sqlbuild/_constants/places.sql": (
+                    "CONSTANT (name price_places, value 2);\n"
+                ),
+                "macros/sql/x.sql": _SQL_MACRO_X_HEADER.format(
+                    arguments="v DOUBLE", returns=", returns DOUBLE"
+                )
+                + 'ROUND(@v, @const("price_places"))\n',
+                **staging_files(
+                    FAILURE_BASE_STAGING.replace(
+                        _SQL_MACRO_STAGING_COLUMNS, "@sql.x(amount) AS amount, status", 1
+                    )
+                ),
+            },
         ),
     )

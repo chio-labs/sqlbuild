@@ -246,7 +246,18 @@ impl Scanner<'_> {
         if !(is_letter(first) || first == '_') {
             return None;
         }
-        let name_end = self.identifier_end(name_start);
+        let mut name_end = self.identifier_end(name_start);
+        if self.at(name_end) == Some('.')
+            && matches!(
+                self.body.get(name_start..name_end),
+                Some(['p', 'y'] | ['s', 'q', 'l'])
+            )
+            && self
+                .at(name_end + 1)
+                .is_some_and(|next| is_letter(next) || next == '_')
+        {
+            name_end = self.identifier_end(name_end + 1);
+        }
         if self.at(name_end) != Some('(') {
             return Some(name_end);
         }

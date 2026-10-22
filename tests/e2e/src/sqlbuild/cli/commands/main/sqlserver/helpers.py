@@ -283,7 +283,7 @@ def prepare_sqlserver_waffle_shop(*, tmp_path: Path, config: dict[str, object]) 
     (project_dir / "models" / "marts" / "daily_order_partitioned.sql").unlink(missing_ok=True)
     (project_dir / "tests" / "unit" / "test_is_completed_order_udf.sql").unlink(missing_ok=True)
 
-    macro_path: Path = project_dir / "models" / "marts" / "_macros" / "time.py"
+    macro_path: Path = project_dir / "models" / "marts" / "_macros" / "python" / "time.py"
     _rewrite(
         macro_path,
         (

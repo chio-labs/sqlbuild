@@ -48,13 +48,13 @@ _DEPENDENCY_PROJECT_FILES: dict[str, str] = {
         TypedMacroReferenceTestCase(
             description="single model reference renders as the call-site reference",
             macro_file_contents=_BASE_MACRO,
-            sql='@base(__ref("orders"))',
+            sql='@py.base(__ref("orders"))',
             expected_sql='SELECT * FROM __ref("orders")',
         ),
         TypedMacroReferenceTestCase(
             description="references inside a list render in order",
             macro_file_contents=_UNION_MACRO,
-            sql='@union_all([__ref("orders_eu"), __ref("orders_us")])',
+            sql='@py.union_all([__ref("orders_eu"), __ref("orders_us")])',
             expected_sql=(
                 'SELECT order_id FROM __ref("orders_eu") UNION ALL '
                 'SELECT order_id FROM __ref("orders_us")'
@@ -65,7 +65,7 @@ _DEPENDENCY_PROJECT_FILES: dict[str, str] = {
             macro_file_contents=(
                 "def pick(relations, key):\n    return f'SELECT * FROM {relations[key]}'\n"
             ),
-            sql='@pick(relations={"eu": __ref("orders_eu"), "us": __ref("orders_us")}, key="us")',
+            sql='@py.pick(relations={"eu": __ref("orders_eu"), "us": __ref("orders_us")}, key="us")',
             expected_sql='SELECT * FROM __ref("orders_us")',
         ),
         TypedMacroReferenceTestCase(
@@ -74,7 +74,7 @@ _DEPENDENCY_PROJECT_FILES: dict[str, str] = {
                 "def join_lookup(orders, countries):\n"
                 "    return f'SELECT * FROM {orders} JOIN {countries} USING (country_code)'\n"
             ),
-            sql='@join_lookup(__source("raw_orders"), __seed("country_codes"))',
+            sql='@py.join_lookup(__source("raw_orders"), __seed("country_codes"))',
             expected_sql=(
                 'SELECT * FROM __source("raw_orders") JOIN __seed("country_codes") '
                 "USING (country_code)"
@@ -89,7 +89,7 @@ _DEPENDENCY_PROJECT_FILES: dict[str, str] = {
                 "    assert relation.kind is SqlResourceRefKind.SEED\n"
                 "    return f\"SELECT '{relation.name}' AS seed_name FROM {relation}\"\n"
             ),
-            sql='@describe(__seed("country_codes"))',
+            sql='@py.describe(__seed("country_codes"))',
             expected_sql="SELECT 'country_codes' AS seed_name FROM __seed(\"country_codes\")",
         ),
         TypedMacroReferenceTestCase(
@@ -98,7 +98,7 @@ _DEPENDENCY_PROJECT_FILES: dict[str, str] = {
                 f"{_BASE_MACRO}\n"
                 "def wrap(sql):\n    return f'SELECT order_id FROM ({sql}) AS wrapped'\n"
             ),
-            sql='@wrap(@base(__ref("orders")))',
+            sql='@py.wrap(@py.base(__ref("orders")))',
             expected_sql='SELECT order_id FROM (SELECT * FROM __ref("orders")) AS wrapped',
         ),
     ],
@@ -120,18 +120,18 @@ def test_given_typed_reference_arguments_when_expanding_then_renders_call_site_r
         MacroGeneratedReferenceErrorTestCase(
             description="macro code that emits a model reference",
             macro_file_contents=_EMITTING_MACRO,
-            sql="@orders_base()",
+            sql="@py.orders_base()",
             expected_error_fragments=(
                 "model:order_summary depends on model:stg_orders through macro orders_base()",
-                "--> macros/common.py",
-                'pass it in: @orders_base(__ref("stg_orders"))',
+                "--> macros/python/common.py",
+                'pass it in: @py.orders_base(__ref("stg_orders"))',
                 "[references]\n            enforce_explicit = false",
             ),
         ),
         MacroGeneratedReferenceErrorTestCase(
             description="quoted string argument smuggling a reference",
             macro_file_contents="def wrap(sql):\n    return f'SELECT * FROM ({sql})'\n",
-            sql="@wrap('__ref(\"stg_orders\")')",
+            sql="@py.wrap('__ref(\"stg_orders\")')",
             expected_error_fragments=(
                 "model:order_summary depends on model:stg_orders through macro wrap()",
                 "[references]\n            enforce_explicit = false",
@@ -142,7 +142,7 @@ def test_given_typed_reference_arguments_when_expanding_then_renders_call_site_r
             macro_file_contents=(
                 "def raw_orders():\n    return 'SELECT * FROM __source(\"raw_orders\")'\n"
             ),
-            sql="@raw_orders()",
+            sql="@py.raw_orders()",
             expected_error_fragments=("depends on source:raw_orders through macro raw_orders()",),
         ),
         MacroGeneratedReferenceErrorTestCase(
@@ -151,7 +151,7 @@ def test_given_typed_reference_arguments_when_expanding_then_renders_call_site_r
                 "from sqlbuild.refs import model\n\n"
                 "def orders_base():\n    return f'SELECT * FROM {model(\"stg_orders\")}'\n"
             ),
-            sql="@orders_base()",
+            sql="@py.orders_base()",
             expected_error_fragments=(
                 "model:order_summary depends on model:stg_orders through macro orders_base()",
             ),
@@ -163,7 +163,7 @@ def test_given_typed_reference_arguments_when_expanding_then_renders_call_site_r
                 "def enrich(relation):\n"
                 "    return f'SELECT * FROM {relation} JOIN {source(\"raw_orders\")} ON true'\n"
             ),
-            sql='@enrich(__ref("stg_orders"))',
+            sql='@py.enrich(__ref("stg_orders"))',
             expected_error_fragments=("depends on source:raw_orders through macro enrich()",),
         ),
         MacroGeneratedReferenceErrorTestCase(
@@ -173,7 +173,7 @@ def test_given_typed_reference_arguments_when_expanding_then_renders_call_site_r
                 "def countries():\n    return seed('country_codes')\n\n"
                 "def base(relation):\n    return f'SELECT * FROM {relation}'\n"
             ),
-            sql="@base(@countries())",
+            sql="@py.base(@py.countries())",
             expected_error_fragments=("depends on seed:country_codes through macro base()",),
         ),
         MacroGeneratedReferenceErrorTestCase(
@@ -182,7 +182,7 @@ def test_given_typed_reference_arguments_when_expanding_then_renders_call_site_r
                 "def countries():\n    return '__seed(\"country_codes\")'\n\n"
                 "def wrap(sql):\n    return f'SELECT * FROM {sql}'\n"
             ),
-            sql="@wrap(@countries())",
+            sql="@py.wrap(@py.countries())",
             expected_error_fragments=("depends on seed:country_codes through macro countries()",),
         ),
     ],
@@ -211,7 +211,7 @@ def test_given_macro_output_reference_when_expanding_then_raises_explicit_refere
                 '    return \'SELECT * FROM __ref("stg_orders") JOIN __seed("country_codes") ON 1\'\n\n'
                 "def raw_orders():\n    return 'SELECT * FROM __source(\"raw_orders\")'\n"
             ),
-            sql="@pair() UNION ALL @pair() UNION ALL @raw_orders()",
+            sql="@py.pair() UNION ALL @py.pair() UNION ALL @py.raw_orders()",
             expected_messages=(
                 "model:order_summary depends on model:stg_orders through macro pair()",
                 "model:order_summary depends on seed:country_codes through macro pair()",
@@ -239,13 +239,13 @@ def test_given_several_macro_output_references_when_collecting_then_reports_each
         MacroGeneratedReferenceSwitchTestCase(
             description="macro code that emits a model reference",
             macro_file_contents=_EMITTING_MACRO,
-            sql="@orders_base()",
+            sql="@py.orders_base()",
             expected_sql='SELECT * FROM __ref("stg_orders")',
         ),
         MacroGeneratedReferenceSwitchTestCase(
             description="quoted string argument smuggling a reference",
             macro_file_contents="def wrap(sql):\n    return f'SELECT * FROM {sql}'\n",
-            sql="@wrap('__ref(\"stg_orders\")')",
+            sql="@py.wrap('__ref(\"stg_orders\")')",
             expected_sql='SELECT * FROM __ref("stg_orders")',
         ),
         MacroGeneratedReferenceSwitchTestCase(
@@ -254,7 +254,7 @@ def test_given_several_macro_output_references_when_collecting_then_reports_each
                 "from sqlbuild.refs import model\n\n"
                 "def orders_base():\n    return f'SELECT * FROM {model(\"stg_orders\")}'\n"
             ),
-            sql="@orders_base()",
+            sql="@py.orders_base()",
             expected_sql='SELECT * FROM __ref("stg_orders")',
         ),
     ],
@@ -278,22 +278,22 @@ def test_given_enforcement_disabled_when_macro_emits_reference_then_expands_unch
     [
         MalformedTypedMacroReferenceTestCase(
             description="non-string name",
-            sql="@base(__ref(1))",
+            sql="@py.base(__ref(1))",
             expected_error_fragment="must give __ref() exactly one quoted resource name",
         ),
         MalformedTypedMacroReferenceTestCase(
             description="two names",
-            sql='@base(__ref("a", "b"))',
+            sql='@py.base(__ref("a", "b"))',
             expected_error_fragment="must give __ref() exactly one quoted resource name",
         ),
         MalformedTypedMacroReferenceTestCase(
             description="keyword name",
-            sql='@base(__ref(name="a"))',
+            sql='@py.base(__ref(name="a"))',
             expected_error_fragment="must give __ref() exactly one quoted resource name",
         ),
         MalformedTypedMacroReferenceTestCase(
             description="unsupported reference function",
-            sql='@base(__udf("a"))',
+            sql='@py.base(__udf("a"))',
             expected_error_fragment="__ref(), __source(), or __seed() references",
         ),
     ],
@@ -343,7 +343,7 @@ def test_given_adapter_when_resolving_typed_macro_reference_then_uses_adapter_qu
     test_case: TypedReferenceAdapterRenderingTestCase, tmp_path: Path
 ) -> None:
     expanded: str = expand_typed_macro_sql(
-        tmp_path=tmp_path, macro_file_contents=_BASE_MACRO, sql='@base(__ref("orders"))'
+        tmp_path=tmp_path, macro_file_contents=_BASE_MACRO, sql='@py.base(__ref("orders"))'
     )
 
     resolved: str = resolve_model_references_for_adapter(
@@ -359,7 +359,7 @@ def test_given_adapter_when_resolving_typed_macro_reference_then_uses_adapter_qu
         TypedMacroArgumentDependencyTestCase(
             description="argument the macro ignores",
             macro_file_contents="def unused(relation):\n    return 'SELECT 1 AS order_id'\n",
-            sql='@unused(__ref("orders_eu"))',
+            sql='@py.unused(__ref("orders_eu"))',
             expected_dependency_names=frozenset({"orders_eu"}),
         ),
         TypedMacroArgumentDependencyTestCase(
@@ -367,7 +367,7 @@ def test_given_adapter_when_resolving_typed_macro_reference_then_uses_adapter_qu
             macro_file_contents=(
                 "def pick(relations, key):\n    return f'SELECT * FROM {relations[key]}'\n"
             ),
-            sql='@pick({"eu": __ref("orders_eu"), "us": __ref("orders_us")}, key="eu")',
+            sql='@py.pick({"eu": __ref("orders_eu"), "us": __ref("orders_us")}, key="eu")',
             expected_dependency_names=frozenset({"orders_eu", "orders_us"}),
         ),
         TypedMacroArgumentDependencyTestCase(
@@ -376,7 +376,7 @@ def test_given_adapter_when_resolving_typed_macro_reference_then_uses_adapter_qu
                 "def first(relations):\n    return str(relations[0])\n\n"
                 "def base(relation):\n    return f'SELECT * FROM {relation}'\n"
             ),
-            sql='@base(@first([__ref("orders_eu"), __ref("orders_us")]))',
+            sql='@py.base(@py.first([__ref("orders_eu"), __ref("orders_us")]))',
             expected_dependency_names=frozenset({"orders_eu", "orders_us"}),
         ),
     ],
@@ -391,7 +391,7 @@ def test_given_typed_macro_arguments_when_compiling_then_every_argument_is_a_dep
         tmp_path,
         _DEPENDENCY_PROJECT_FILES
         | {
-            "macros/common.py": test_case.macro_file_contents,
+            "macros/python/common.py": test_case.macro_file_contents,
             "models/order_summary.sql": f"MODEL (description 'Test model order_summary.');\n{test_case.sql}",
         },
     )

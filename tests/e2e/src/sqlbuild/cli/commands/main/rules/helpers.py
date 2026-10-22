@@ -306,11 +306,11 @@ INCREMENTAL_RULES_PROJECT: dict[str, str] = {
         "    order_id (type INTEGER, nullable false, audits [not_null]),\n"
         "    net_amount (type DOUBLE),\n  ),\n);\n\n"
         "SELECT\n  o.order_id,\n"
-        '  CAST(@discounted("o.amount") * (1 - CAST(@@discount_rate AS DOUBLE)) AS DOUBLE)'
+        '  CAST(@py.discounted("o.amount") * (1 - CAST(@@discount_rate AS DOUBLE)) AS DOUBLE)'
         " AS net_amount\n"
         'FROM __ref("stg_orders") AS o\n'
     ),
-    "models/marts/_sqlbuild/_macros/amounts.py": (
+    "models/marts/_sqlbuild/_macros/python/amounts.py": (
         'def discounted(amount: str) -> str:\n    return f"({amount}) * 0.9"\n'
     ),
     "tests/unit/test_order_totals.sql": (

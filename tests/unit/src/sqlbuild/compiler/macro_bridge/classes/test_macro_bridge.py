@@ -37,7 +37,7 @@ from tests.unit.src.sqlbuild.compiler.macro_bridge.classes._test_types import (
 def test_given_deeply_nested_calls_when_scanning_then_the_native_scan_returns_promptly(
     test_case: DeepNestingScanTestCase,
 ) -> None:
-    sql: str = "@m(" * test_case.depth + "x" + ")" * test_case.depth
+    sql: str = "@py.m(" * test_case.depth + "x" + ")" * test_case.depth
     started: float = time.perf_counter()
 
     rows, failure = _native.scan_macro_call_sites(sql)

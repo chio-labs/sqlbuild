@@ -39,7 +39,7 @@ const ENFORCE_ATTRIBUTE: &str = "_enforce_explicit_references";
 #[derive(FromPyObject)]
 #[pyo3(from_item_all)]
 pub(crate) struct MacroClasses<'py> {
-    loaded_macros: Py<PyDict>,
+    pub(crate) loaded_macros: Py<PyDict>,
     macro_context: Bound<'py, PyAny>,
     /// The active `MacroBridge`, or `None`.
     bridge: Bound<'py, PyAny>,

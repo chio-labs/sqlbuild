@@ -51,6 +51,7 @@ use crate::bindings::_helpers::input_loops::source_loop::{
     AuthoredExpansion, expanded_authored_sql, scoped_declarations,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::render::sql_macro_tests::without_with_list_calls;
 
 const MODEL_MODE: &str = "model";
 const MACRO_MODE: &str = "macro";
@@ -162,12 +163,19 @@ impl<'py> TestScope<'_, 'py> {
             None => sql_body.clone(),
         };
         let origin: FileOrigin<'_> = (file_path, relative_path, contents);
+        let (classified_sql, with_list_macros) = without_with_list_calls(&parameter_sql);
+        if let Some(called) = with_list_macros.first().filter(|_| mode != MACRO_MODE) {
+            return Err(self.error(&format!(
+                "SQL test '{test_name}' in {relative_path} calls CTE-list SQL macro \
+                 @sql.{called}() in its WITH list; only a mode macro test may call one there"
+            )));
+        }
         let tested: Vec<String> = if mode == MODEL_MODE {
             Vec::new()
         } else {
             let direct: SqlTestClassification =
-                self.raw_direct(&parameter_sql, (file, block), mode)?;
-            self.tested_names(&direct, mode, origin)?
+                self.raw_direct(&classified_sql, (file, block), mode)?;
+            self.tested_names(&direct, mode, origin, &with_list_macros)?
         };
         let macro_mode: bool = mode == MACRO_MODE;
         let expansion_declarations: Bound<'py, PyAny> = if macro_mode {
@@ -391,6 +399,7 @@ impl<'py> TestScope<'_, 'py> {
         classification: &SqlTestClassification,
         mode: &str,
         origin: FileOrigin<'_>,
+        with_list_macros: &[String],
     ) -> PyResult<Vec<String>> {
         let relative_path: &str = origin.1;
         let SqlTestClassification::Direct { actual, .. } = classification else {
@@ -400,8 +409,20 @@ impl<'py> TestScope<'_, 'py> {
             )));
         };
         if mode == MACRO_MODE {
-            let names: Vec<String> =
-                top_level_macro_names(&actual.1).map_err(|message| self.error(message))?;
+            if let Some(unknown) = with_list_macros
+                .iter()
+                .find(|name| !self.catalog.macros.contains(*name))
+            {
+                return Err(self.error(&format!(
+                    "SQL test file {relative_path} references unknown macro '@sql.{unknown}'"
+                )));
+            }
+            let mut names: Vec<String> = with_list_macros.to_vec();
+            for name in top_level_macro_names(&actual.1).map_err(|message| self.error(message))? {
+                if !names.contains(&name) {
+                    names.push(name);
+                }
+            }
             if names.is_empty() {
                 return Err(self.error(&format!(
                     "SQL test file {relative_path} mode 'macro' must call at least one macro in \
@@ -413,7 +434,7 @@ impl<'py> TestScope<'_, 'py> {
                 .find(|name| !self.catalog.macros.contains(*name))
             {
                 return Err(self.error(&format!(
-                    "SQL test file {relative_path} references unknown macro '@{unknown}'"
+                    "SQL test file {relative_path} references unknown macro '@py.{unknown}'"
                 )));
             }
             return Ok(names);

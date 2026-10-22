@@ -1,0 +1,125 @@
+//! `@name` parameter references in a SQL macro body, as generic audits write their parameters.
+
+use crate::sql_macros::_helpers::lexing::{Token, TokenKind};
+
+const PLACEHOLDER_PREFIX: &str = "__sqlbuild_parameter__";
+/// Words that may follow a table reference without being its alias.
+const FOLLOWING_KEYWORDS: [&str; 34] = [
+    "WHERE",
+    "JOIN",
+    "LEFT",
+    "RIGHT",
+    "INNER",
+    "FULL",
+    "CROSS",
+    "OUTER",
+    "NATURAL",
+    "ON",
+    "USING",
+    "GROUP",
+    "ORDER",
+    "LIMIT",
+    "OFFSET",
+    "FETCH",
+    "HAVING",
+    "QUALIFY",
+    "WINDOW",
+    "UNION",
+    "EXCEPT",
+    "INTERSECT",
+    "MINUS",
+    "LATERAL",
+    "PIVOT",
+    "UNPIVOT",
+    "SAMPLE",
+    "TABLESAMPLE",
+    "ASOF",
+    "POSITIONAL",
+    "ANTI",
+    "SEMI",
+    "FOR",
+    "AT",
+];
+
+/// One `@name` parameter reference: byte spans of the whole reference and of the name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ParameterReference {
+    pub(crate) start: usize,
+    pub(crate) end: usize,
+    pub(crate) name: String,
+    /// Index of the reference's name token.
+    pub(crate) token: usize,
+}
+
+/// Every `@name` of `sql` that is neither a macro call, a built-in call nor `@@`.
+pub(crate) fn parameter_references(sql: &str, scanned: &[Token]) -> Vec<ParameterReference> {
+    let mut found: Vec<ParameterReference> = Vec::new();
+    for (index, at) in scanned.iter().enumerate() {
+        if !at.is(sql, "@") {
+            continue;
+        }
+        if index > 0 && scanned[index - 1].is(sql, "@") && scanned[index - 1].end == at.start {
+            continue;
+        }
+        let Some(word) = scanned
+            .get(index + 1)
+            .filter(|word| word.kind == TokenKind::Word && word.start == at.end)
+        else {
+            continue;
+        };
+        let after: Option<&Token> = scanned.get(index + 2);
+        if after.is_some_and(|open| open.is(sql, "(")) {
+            continue;
+        }
+        let name: &str = word.text(sql);
+        if matches!(name, "sql" | "py")
+            && after.is_some_and(|dot| dot.is(sql, ".") && dot.start == word.end)
+            && scanned.get(index + 4).is_some_and(|open| open.is(sql, "("))
+        {
+            continue;
+        }
+        found.push(ParameterReference {
+            start: at.start,
+            end: word.end,
+            name: name.to_owned(),
+            token: index + 1,
+        });
+    }
+    found
+}
+
+/// The word placed where `@name` stood while the body is parsed for its shape.
+pub(crate) fn placeholder(name: &str) -> String {
+    format!("{PLACEHOLDER_PREFIX}{name}")
+}
+
+/// The parameter a placeholder word names, if the word is one.
+pub(crate) fn placeholder_parameter(word: &str) -> Option<&str> {
+    word.strip_prefix(PLACEHOLDER_PREFIX)
+}
+
+/// `sql` with each reference replaced by its placeholder word, for parsing.
+pub(crate) fn with_placeholders(sql: &str, references: &[ParameterReference]) -> String {
+    let mut text: String =
+        String::with_capacity(sql.len() + references.len() * PLACEHOLDER_PREFIX.len());
+    let mut cursor: usize = 0;
+    for reference in references {
+        text.push_str(&sql[cursor..reference.start]);
+        text.push_str(&placeholder(&reference.name));
+        cursor = reference.end;
+    }
+    text.push_str(&sql[cursor..]);
+    text
+}
+
+/// Whether the table reference whose last token is `index` is followed by an alias.
+pub(crate) fn alias_follows(sql: &str, scanned: &[Token], index: usize) -> bool {
+    match scanned.get(index + 1) {
+        Some(next) if next.is_word(sql, "AS") => true,
+        Some(next) if next.kind == TokenKind::Word => !FOLLOWING_KEYWORDS
+            .iter()
+            .any(|keyword| next.is_word(sql, keyword)),
+        Some(next) => next.kind == TokenKind::Quoted,
+        None => false,
+    }
+}

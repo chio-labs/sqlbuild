@@ -27,9 +27,9 @@ MODEL (
 );
 
 SELECT
-  @timestamp_trunc('day', 'activity_hour') AS activity_day,
+  @py.timestamp_trunc('day', 'activity_hour') AS activity_day,
   SUM(orders_placed) AS orders_placed,
   SUM(waffles_ordered) AS waffles_ordered,
   SUM(revenue_cents) AS revenue_cents
 FROM __ref("hourly_order_activity")
-GROUP BY @timestamp_trunc('day', 'activity_hour')
+GROUP BY @py.timestamp_trunc('day', 'activity_hour')

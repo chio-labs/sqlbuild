@@ -24,16 +24,16 @@ fn given_usages_when_validating_placement_then_unused_and_misplaced_declarations
                 (
                     1,
                     "S010",
-                    "Unused global declaration 'macro:unused' at macros/unused.py; remove it or \
+                    "Unused global declaration 'macro:unused' at macros/python/unused.py; remove it or \
                      add a genuine runtime use",
                 ),
                 (
                     2,
                     "S007",
                     "Declaration 'macro:shared' is currently exact-owner-private at \
-                     'models/sales' (models/sales/_macros/shared.py); required descendant-public \
+                     'models/sales' (models/sales/_macros/python/shared.py); required descendant-public \
                      at 'models/sales'. Consumers: model:customers, model:orders. Move it to \
-                     'models/sales/_sqlbuild/macros/'",
+                     'models/sales/_sqlbuild/macros/python/'",
                 ),
             ],
         },
@@ -114,12 +114,12 @@ fn given_resource_move_when_relocating_then_chained_local_declarations_follow() 
             expected_relocations: Some(&[
                 (
                     0,
-                    "models/finance/_sqlbuild/_macros/cents.py",
+                    "models/finance/_sqlbuild/_macros/python/cents.py",
                     Some("models/finance"),
                 ),
                 (
                     1,
-                    "models/finance/_sqlbuild/_macros/round.py",
+                    "models/finance/_sqlbuild/_macros/python/round.py",
                     Some("models/finance"),
                 ),
             ]),

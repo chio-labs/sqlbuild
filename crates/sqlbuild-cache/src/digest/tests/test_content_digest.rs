@@ -7,13 +7,13 @@ fn given_parts_when_digesting_then_only_identical_parts_match() {
     let test_cases = [
         ContentDigestTestCase {
             description: "identical parts",
-            left: &["cents", "@cents(amount)"],
-            right: &["cents", "@cents(amount)"],
+            left: &["cents", "@py.cents(amount)"],
+            right: &["cents", "@py.cents(amount)"],
             expected_equal: true,
         },
         ContentDigestTestCase {
             description: "a boundary moved between parts",
-            left: &["cents", "@cents(amount)"],
+            left: &["cents", "@py.cents(amount)"],
             right: &["cents@", "cents(amount)"],
             expected_equal: false,
         },

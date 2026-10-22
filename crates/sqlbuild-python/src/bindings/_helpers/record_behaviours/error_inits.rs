@@ -71,11 +71,11 @@ pub(crate) fn macro_argument_error_init(
     let (scope, suffix): (String, String) = if location.is_none() {
         (
             format!("in '{file_path}'"),
-            format!(" of the '@{macro_name}' arguments"),
+            format!(" of the '@py.{macro_name}' arguments"),
         )
     } else {
         (
-            format!("of '@{macro_name}' in '{file_path}'"),
+            format!("of '@py.{macro_name}' in '{file_path}'"),
             String::new(),
         )
     };

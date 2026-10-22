@@ -1,7 +1,7 @@
 //! Formatter-owned folders, selector syntax and report layout.
 
 /// The project folders whose SQL files the formatter owns, in collection order.
-pub const LINT_DIRECTORY_NAMES: [&str; 8] = [
+pub const LINT_DIRECTORY_NAMES: [&str; 9] = [
     "models",
     "tests",
     "audits",
@@ -10,6 +10,7 @@ pub const LINT_DIRECTORY_NAMES: [&str; 8] = [
     "constants",
     "hooks",
     "schemas",
+    "macros",
 ];
 pub(crate) const PATH_SELECTOR_PREFIX: &str = "path:";
 pub(crate) const PATH_SEPARATOR: char = '/';

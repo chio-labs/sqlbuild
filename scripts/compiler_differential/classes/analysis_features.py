@@ -283,7 +283,7 @@ class AnalysisFeatureWriter:
         self._features.add("sql_test_mocks")
         base: ModelPlan = self._base()
         region: str = self._random.choice(("north", "south", "east"))
-        self._files[f"{GENERATOR_ANALYSIS_FOLDER}/_sqlbuild/_macros/regions.py"] = (
+        self._files[f"{GENERATOR_ANALYSIS_FOLDER}/_sqlbuild/_macros/python/regions.py"] = (
             "def analysis_region() -> str:\n"
             '    """Return the region rows are assigned to."""\n'
             f"    return \"'{region}'\"\n"
@@ -293,7 +293,7 @@ class AnalysisFeatureWriter:
             name=model,
             description=f"Regional copy of {base.name}",
             header="",
-            body=f'SELECT id, amount, @analysis_region() AS region\nFROM __ref("{base.name}")\n',
+            body=f'SELECT id, amount, @py.analysis_region() AS region\nFROM __ref("{base.name}")\n',
         )
         self._files[f"{GENERATOR_ANALYSIS_TEST_FOLDER}/test_{model}.sql"] = (
             "TEST();\n\nWITH\n"

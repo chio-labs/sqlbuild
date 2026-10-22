@@ -8,6 +8,10 @@ pub enum ScanError {
     UnclosedParenthesis,
     /// A call start whose name is not followed by its parenthesis.
     MissingParenthesis,
+    /// `@name(...)` without `py.` or `sql.`, which says which kind of macro it calls.
+    BareCall,
+    /// `@sql.name(...)` where only Python macro calls are expanded.
+    SqlCall,
 }
 
 impl ScanError {
@@ -18,6 +22,8 @@ impl ScanError {
             Self::UnclosedComment => "Macro expansion contains an unclosed block comment",
             Self::UnclosedParenthesis => "Macro expansion contains an unclosed parenthesis",
             Self::MissingParenthesis => "expected opening parenthesis",
+            Self::BareCall => "macro call does not say which kind of macro it calls",
+            Self::SqlCall => "SQL macro calls are not expanded here",
         }
     }
 }

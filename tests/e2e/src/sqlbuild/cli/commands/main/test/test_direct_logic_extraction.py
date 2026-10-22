@@ -29,7 +29,7 @@ _PROJECT_FILES: dict[str, str] = {
         "MODEL (description 'Staged orders.', materialized table);\n\n"
         "SELECT 1 AS order_id, 'Placed ' AS status\n"
     ),
-    "tests/unit/_macros/labels.py": (
+    "tests/unit/_macros/python/labels.py": (
         "def tidy_label(expression: str) -> str:\n"
         '    """Trim and lower-case a label."""\n'
         '    return f"LOWER(TRIM({expression}))"\n'
@@ -46,9 +46,9 @@ _PROJECT_FILES: dict[str, str] = {
     _MACRO_TEST: (
         "TEST (mode macro);\n\nWITH\n"
         "input_values AS (\n"
-        "  SELECT ' Placed ' AS status -- @tidy_label(\"status\")\n"
+        "  SELECT ' Placed ' AS status -- @py.tidy_label(\"status\")\n"
         "),\n"
-        '__macro_actual__ AS (SELECT @tidy_label("status") AS status FROM input_values),\n'
+        '__macro_actual__ AS (SELECT @py.tidy_label("status") AS status FROM input_values),\n'
         "__macro_expected__ AS (SELECT 'placed' AS status)\n"
     ),
     _UDF_TEST: (
@@ -90,7 +90,7 @@ _HELPER_CALLS_UDF: dict[str, str] = {
     _MACRO_TEST: (
         "TEST (mode macro);\n\nWITH\n"
         "input_values AS (SELECT __udf(\"order_label\")(' Placed ') AS status),\n"
-        '__macro_actual__ AS (SELECT @tidy_label("status") AS status FROM input_values),\n'
+        '__macro_actual__ AS (SELECT @py.tidy_label("status") AS status FROM input_values),\n'
         "__macro_expected__ AS (SELECT 'placed' AS status)\n"
     )
 }
@@ -120,7 +120,7 @@ _LOCATED_CASE_NAME: dict[str, str] = {
         "WITH\n"
         "input_values AS (SELECT ' Placed ' AS status, @param(\"qty\") AS qty),\n"
         "  a$b AS (SELECT 1 AS x),\n"
-        '__macro_actual__ AS (SELECT @tidy_label("status") AS status FROM input_values),\n'
+        '__macro_actual__ AS (SELECT @py.tidy_label("status") AS status FROM input_values),\n'
         "__macro_expected__ AS (SELECT 'placed' AS status)\n"
     )
 }
@@ -157,7 +157,7 @@ _ALIASED_OPERATORS: dict[str, str] = {
         "TEST (mode macro);\n\nWITH\n"
         "input_values AS (SELECT ' Placed ' AS status),\n"
         "__macro_actual__ AS (\n"
-        '  SELECT @tidy_label("status") AS status, [1, 2] AS item_ids FROM input_values\n'
+        '  SELECT @py.tidy_label("status") AS status, [1, 2] AS item_ids FROM input_values\n'
         "),\n"
         "__macro_expected__ AS (SELECT 'placed' AS status, [1, 2] AS item_ids)\n"
     ),

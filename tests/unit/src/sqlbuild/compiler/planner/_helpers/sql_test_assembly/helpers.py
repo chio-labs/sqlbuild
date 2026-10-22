@@ -446,8 +446,8 @@ def _build_loaded_macros(macro_outputs: dict[str, str]) -> dict[str, LoadedMacro
     for name, output in macro_outputs.items():
         loaded_macros[name] = LoadedMacro(
             name=name,
-            file_path=Path("macros/test_macros.py"),
-            relative_path=Path("macros/test_macros.py"),
+            file_path=Path("macros/python/test_macros.py"),
+            relative_path=Path("macros/python/test_macros.py"),
             raw_source="",
             function=_macro_function(output),
         )

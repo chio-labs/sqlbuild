@@ -1238,6 +1238,7 @@ const R_LOADED_MACRO: RecordSpec = RecordSpec {
         FieldSpec::required("raw_source"),
         FieldSpec::required("function"),
         FieldSpec::new("dependencies", FieldDefault::EmptyTuple),
+        FieldSpec::new("language", FieldDefault::Text("python")),
     ],
 };
 const R_STATIC_MACRO_EXPORT: RecordSpec = RecordSpec {

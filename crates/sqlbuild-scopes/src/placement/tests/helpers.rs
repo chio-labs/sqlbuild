@@ -68,9 +68,13 @@ pub(super) fn descendant_models() -> PlacementIndex {
             model_record("customers", "models/sales/crm/customers.sql"),
         ],
         declarations: vec![
-            macro_record("cents", "models/sales/_macros/cents.py", SALES),
-            macro_record("unused", "macros/unused.py", (ScopeKind::Global, None)),
-            macro_record("shared", "models/sales/_macros/shared.py", SALES),
+            macro_record("cents", "models/sales/_macros/python/cents.py", SALES),
+            macro_record(
+                "unused",
+                "macros/python/unused.py",
+                (ScopeKind::Global, None),
+            ),
+            macro_record("shared", "models/sales/_macros/python/shared.py", SALES),
         ],
         usages: vec![
             runtime("orders", "cents"),
@@ -85,8 +89,8 @@ pub(super) fn chained_macros() -> PlacementIndex {
     PlacementIndex {
         resources: vec![model_record("orders", "models/sales/orders.sql")],
         declarations: vec![
-            macro_record("cents", "models/sales/_macros/cents.py", SALES),
-            macro_record("round", "models/sales/_macros/round.py", SALES),
+            macro_record("cents", "models/sales/_macros/python/cents.py", SALES),
+            macro_record("round", "models/sales/_macros/python/round.py", SALES),
         ],
         usages: vec![
             runtime("orders", "cents"),

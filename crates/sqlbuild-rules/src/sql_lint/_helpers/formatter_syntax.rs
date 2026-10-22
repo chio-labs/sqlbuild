@@ -37,8 +37,7 @@ impl ProtectedSql {
         }
         let mut edits: Vec<(usize, usize, String)> = Vec::new();
         for (placeholder, original) in &self.fragments {
-            let key = placeholder
-                .strip_suffix(" AS (SELECT 1)")
+            let key = cte_placeholder_sentinel(placeholder)
                 .unwrap_or(placeholder)
                 .trim_start_matches(':')
                 .trim_start_matches('.')
@@ -69,7 +68,7 @@ impl ProtectedSql {
                     " IN".to_string(),
                 ));
             }
-            if let Some(sentinel) = placeholder.strip_suffix(" AS (SELECT 1)") {
+            if let Some(sentinel) = cte_placeholder_sentinel(placeholder) {
                 let _ = sentinel;
                 edits.push(restore_cte_macro(&tokens, index, original)?);
                 continue;
@@ -105,6 +104,12 @@ impl ProtectedSql {
     }
 }
 
+/// The sentinel of a CTE macro placeholder, with or without the comma added after it.
+fn cte_placeholder_sentinel(placeholder: &str) -> Option<&str> {
+    let placeholder: &str = placeholder.strip_suffix(',').unwrap_or(placeholder);
+    placeholder.strip_suffix(" AS (SELECT 1)")
+}
+
 pub(super) fn protect_syntax(
     sql: &str,
     tokens: &[Token],
@@ -135,7 +140,12 @@ pub(super) fn protect_syntax(
             continue;
         }
         let (end, replacement) = if cte_macros.contains(&index) {
-            (index, format!("{} AS (SELECT 1)", sentinel()))
+            let separator: &str = if cte_macro_needs_comma(tokens, index) {
+                ","
+            } else {
+                ""
+            };
+            (index, format!("{} AS (SELECT 1){separator}", sentinel()))
         } else if !expressions {
             index += 1;
             continue;
@@ -289,14 +299,44 @@ pub(super) fn cte_macro_indices(tokens: &[Token]) -> HashSet<usize> {
                 tokens[index - 1].token_type,
                 TokenType::With | TokenType::Comma
             )
-            && tokens
-                .get(index + 1)
-                .is_some_and(|next| matches!(next.token_type, TokenType::Comma | TokenType::Select))
+            && tokens.get(index + 1).is_some_and(|next| {
+                matches!(next.token_type, TokenType::Comma | TokenType::Select)
+                    || starts_cte(tokens, index + 1)
+            })
         {
             indices.insert(index);
         }
     }
     indices
+}
+
+/// Whether a CTE definition, `name AS (` or another macro sentinel, starts at token `index`.
+fn starts_cte(tokens: &[Token], index: usize) -> bool {
+    let Some(token) = tokens.get(index) else {
+        return false;
+    };
+    if token.text.starts_with(LINT_SENTINEL_PREFIX) {
+        return true;
+    }
+    let named: bool = matches!(
+        token.token_type,
+        TokenType::Var | TokenType::Identifier | TokenType::QuotedIdentifier
+    ) || token
+        .text
+        .chars()
+        .all(|character| character.is_alphanumeric() || character == '_');
+    named
+        && tokens
+            .get(index + 1)
+            .is_some_and(|next| next.token_type == TokenType::As)
+        && tokens
+            .get(index + 2)
+            .is_some_and(|open| open.token_type == TokenType::LParen)
+}
+
+/// Whether the CTE macro sentinel at token `index` needs a comma to separate it from the next CTE.
+pub(super) fn cte_macro_needs_comma(tokens: &[Token], index: usize) -> bool {
+    starts_cte(tokens, index + 1)
 }
 
 fn restore_cte_macro(

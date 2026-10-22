@@ -26,9 +26,9 @@ MODEL (
 );
 
 SELECT
-  @timestamp_trunc('hour', 'o.ordered_at') AS activity_hour,
+  @py.timestamp_trunc('hour', 'o.ordered_at') AS activity_hour,
   COUNT(*) AS orders_placed,
   SUM(o.quantity) AS waffles_ordered,
   SUM(o.line_total_cents) AS revenue_cents
 FROM __ref("fact_orders") o
-GROUP BY @timestamp_trunc('hour', 'o.ordered_at')
+GROUP BY @py.timestamp_trunc('hour', 'o.ordered_at')

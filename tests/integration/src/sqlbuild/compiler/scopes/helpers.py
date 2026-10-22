@@ -58,49 +58,51 @@ RAW_SOURCES: str = (
 SCOPED_PROJECT: dict[str, str] = {
     "sqlbuild_project.toml": PROJECT_CONFIG,
     "sources/raw.yml": RAW_SOURCES,
-    "macros/money.py": 'def cents(value: str) -> str:\n    return f"{value} * 100"\n',
+    "macros/python/money.py": 'def cents(value: str) -> str:\n    return f"{value} * 100"\n',
     "enums/status.sql": "ENUM (name order_status, members [PLACED, SHIPPED]);\n",
-    "models/sales/_sqlbuild/macros/labels.py": (
+    "models/sales/_sqlbuild/macros/python/labels.py": (
         "def sales_label(value: str) -> str:\n    return f\"'sales:' || {value}\"\n"
     ),
     "models/sales/_sqlbuild/constants/limits.sql": "CONSTANT (name sales_cap, value 3);\n",
-    "models/sales/eu/_macros/rates.py": (
+    "models/sales/eu/_macros/python/rates.py": (
         'def eu_rate(value: str) -> str:\n    return f"{value} * 2"\n'
     ),
     "models/sales/eu/_enums/region.sql": "ENUM (name eu_region, members [NORTH, SOUTH]);\n",
     "models/sales/orders.sql": (
         'MODEL (\n  description "Orders",\n  enums (\n    _state [OPEN, CLOSED],\n  ),\n);\n\n'
-        "SELECT\n  order_id,\n  @sales_label('1') AS label,\n"
+        "SELECT\n  order_id,\n  @py.sales_label('1') AS label,\n"
         '  @const("sales_cap") AS cap,\n  @enum("_state").OPEN AS state,\n'
         '  @enum("order_status").PLACED AS status\nFROM __source("raw_orders")\n'
     ),
     "models/sales/eu/eu_orders.sql": (
         'MODEL (\n  description "EU orders",\n);\n\n'
-        "SELECT\n  order_id,\n  @eu_rate('2') AS rate,\n"
-        "  @enum(\"eu_region\").NORTH AS region,\n  @cents('3') AS cents,\n"
-        "  @sales_label('4') AS label,\n  @const(\"sales_cap\") AS cap\n"
+        "SELECT\n  order_id,\n  @py.eu_rate('2') AS rate,\n"
+        "  @enum(\"eu_region\").NORTH AS region,\n  @py.cents('3') AS cents,\n"
+        "  @py.sales_label('4') AS label,\n  @const(\"sales_cap\") AS cap\n"
         'FROM __ref("orders")\n'
     ),
     "models/other/customers.sql": (
         'MODEL (\n  description "Customers",\n);\n\n'
-        "SELECT 1 AS customer_id, @enum(\"order_status\").SHIPPED AS status, @cents('5') AS cents\n"
+        "SELECT 1 AS customer_id, @enum(\"order_status\").SHIPPED AS status, @py.cents('5') AS "
+        "cents\n"
     ),
     "tests/unit/test_orders.sql": (
         'TEST (name "orders_label");\n\nWITH\n'
         "__source__raw_orders AS (\n  SELECT 1 AS order_id\n),\n"
         "__expected__orders AS (\n"
-        "  SELECT 1 AS order_id, @sales_label('1') AS label, @const(\"sales_cap\") AS cap\n)\n"
+        "  SELECT 1 AS order_id, @py.sales_label('1') AS label, @const(\"sales_cap\") AS cap\n)\n"
         "SELECT 1\n"
     ),
     "tests/unit/test_eu.sql": (
         'TEST (name "eu_rate");\n\nWITH\n__ref__orders AS (\n  SELECT 1 AS order_id\n),\n'
         "__expected__eu_orders AS (\n"
-        "  SELECT 1 AS order_id, @eu_rate('2') AS rate, @enum(\"eu_region\").NORTH AS region\n)\n"
+        "  SELECT 1 AS order_id, @py.eu_rate('2') AS rate, @enum(\"eu_region\").NORTH AS "
+        "region\n)\n"
         "SELECT 1\n"
     ),
     "tests/unit/test_label_macro.sql": (
         'TEST (mode macro, name "labels_sales");\n\nWITH\n'
-        "__macro_actual__ AS (\n  SELECT @sales_label('1') AS label\n),\n"
+        "__macro_actual__ AS (\n  SELECT @py.sales_label('1') AS label\n),\n"
         "__macro_expected__ AS (\n  SELECT 'sales:' || 1 AS label\n)\nSELECT 1\n"
     ),
     "tests/scenarios/eu_flow.sql": (
@@ -209,7 +211,12 @@ def generated_scope_files(*, rng: random.Random) -> dict[str, str]:
 def _macro_writer(*, path: str, index: int, variant: int) -> tuple[str, str, tuple[str, ...]]:
     del variant
     name: str = f"macro_{index}"
-    return f"{path}.py", f"def {name}(value: str) -> str:\n    return value\n", (name,)
+    root, stem = path.rsplit("/", 1)
+    return (
+        f"{root}/python/{stem}.py",
+        f"def {name}(value: str) -> str:\n    return value\n",
+        (name,),
+    )
 
 
 def _enum_writer(*, path: str, index: int, variant: int) -> tuple[str, str, tuple[str, ...]]:
@@ -231,7 +238,7 @@ _DECLARATION_WRITERS: dict[str, Callable[..., tuple[str, str, tuple[str, ...]]]]
 
 def _macro_calls(*, rng: random.Random, macros: list[str]) -> str:
     return "".join(
-        f", @{name}('{position}') AS value_{position}"
+        f", @py.{name}('{position}') AS value_{position}"
         for position, name in enumerate(rng.sample(macros, k=min(len(macros), rng.randint(0, 2))))
     )
 

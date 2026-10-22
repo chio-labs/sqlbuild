@@ -23,7 +23,7 @@ from tests.unit.src.sqlbuild.compiler.scopes.helpers import relocation_index
             destination="models/marts/orders.sql",
             expected_paths=(
                 "models/marts/_sqlbuild/_schemas/order_shape.sql",
-                "models/marts/_sqlbuild/_macros/cents.py",
+                "models/marts/_sqlbuild/_macros/python/cents.py",
             ),
         ),
         RelocationCase(
@@ -36,7 +36,7 @@ from tests.unit.src.sqlbuild.compiler.scopes.helpers import relocation_index
             description="consumers spanning the models root use top-level roles",
             consumer_paths=("models/staging/orders.sql", "models/staging/refunds.sql"),
             destination="models/marts/orders.sql",
-            expected_paths=("schemas/order_shape.sql", "macros/cents.py"),
+            expected_paths=("schemas/order_shape.sql", "macros/python/cents.py"),
         ),
         RelocationCase(
             description="move within the owner changes nothing",

@@ -54,6 +54,27 @@ pub(crate) fn new_error(py: Python<'_>, id: ErrorId, message: String, code: &str
     }
 }
 
+/// A raisable native `id` error carrying `message`, the diagnostic `code` and optional `help`.
+pub(crate) fn new_helped_error(
+    py: Python<'_>,
+    id: ErrorId,
+    (message, code): (String, &str),
+    help: Option<&str>,
+) -> PyErr {
+    let raised = (|| {
+        let options: Bound<'_, PyDict> = PyDict::new(py);
+        options.set_item("code", code)?;
+        if let Some(help) = help {
+            options.set_item("help", help)?;
+        }
+        error_class(py, id)?.call((message,), Some(&options))
+    })();
+    match raised {
+        Ok(error) => PyErr::from_value(error),
+        Err(error) => error,
+    }
+}
+
 /// The native record class or string enum `id` as registered, ignoring later attribute replacement.
 pub(crate) fn record_class(py: Python<'_>, id: RecordId) -> PyResult<Bound<'_, PyAny>> {
     let classes: &Vec<Py<PyAny>> = CLASSES

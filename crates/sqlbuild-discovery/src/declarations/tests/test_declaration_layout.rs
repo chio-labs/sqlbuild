@@ -9,8 +9,10 @@ fn given_declaration_layouts_when_scanning_then_facts_and_failures_match_python(
             kind: None,
             description: "global, inherited, grouped and local roots sort by relative path",
             files: &[
-                "macros/text.py",
+                "macros/python/text.py",
+                "macros/python/__init__.py",
                 "macros/__init__.py",
+                "macros/sql/totals.sql",
                 "enums/status.sql",
                 "models/marts/_enums/local.sql",
                 "models/marts/_sqlbuild/constants/limits.sql",
@@ -20,7 +22,15 @@ fn given_declaration_layouts_when_scanning_then_facts_and_failures_match_python(
             expected_facts: Ok(&[
                 ("enums/status.sql", "enum", "global", "enums", None, "enums"),
                 (
-                    "macros/text.py",
+                    "macros/python/text.py",
+                    "macro",
+                    "global",
+                    "macros",
+                    None,
+                    "macros",
+                ),
+                (
+                    "macros/sql/totals.sql",
                     "macro",
                     "global",
                     "macros",
@@ -105,6 +115,29 @@ fn given_declaration_layouts_when_scanning_then_facts_and_failures_match_python(
                  by name, so folder-only visibility has no meaning; use \
                  _sqlbuild/audits/singular/",
             ),
+        },
+        LayoutTestCase {
+            kind: None,
+            description: "a macro file directly below a macro root names its kind folder",
+            files: &["models/marts/_sqlbuild/_macros/text.py"],
+            directories: &[],
+            expected_facts: Err(
+                "macro file models/marts/_sqlbuild/_macros/text.py must live in \
+                 models/marts/_sqlbuild/_macros/python/ or models/marts/_sqlbuild/_macros/sql/\n  \
+                 --> models/marts/_sqlbuild/_macros/text.py",
+            ),
+            expected_groups: Ok(&[("models", "models/marts/_sqlbuild")]),
+        },
+        LayoutTestCase {
+            kind: None,
+            description: "a macro file in the other kind folder fails",
+            files: &["macros/python/totals.sql"],
+            directories: &[],
+            expected_facts: Err(
+                "macro file macros/python/totals.sql must live in macros/python/ or \
+                 macros/sql/\n  --> macros/python/totals.sql",
+            ),
+            expected_groups: Ok(&[]),
         },
         LayoutTestCase {
             kind: None,

@@ -90,9 +90,11 @@ def write_dense_compile_project(*, project_dir: Path, model_count: int) -> None:
         models.mkdir(parents=True)
         macro_count: int = max(1, min(1000, model_count - cohort * 1000) // 80)
         _layered_write_macros(project_dir=project_dir, macro_count=macro_count)
-        macro_root: Path = project_dir / "macros"
+        macro_root: Path = project_dir / "macros" / "python"
         for macro_index, macro_path in enumerate(sorted(macro_root.glob("*.py"))):
-            bucket: Path = models / "_sqlbuild" / "macros" / f"adjustment{macro_index // 8:03d}"
+            bucket: Path = (
+                models / "_sqlbuild" / "macros" / "python" / f"adjustment{macro_index // 8:03d}"
+            )
             bucket.mkdir(parents=True, exist_ok=True)
             content: str = macro_path.read_text(encoding="utf-8")
             content = content.replace("macro_", f"macro_{cohort:03d}_").replace(
@@ -101,6 +103,7 @@ def write_dense_compile_project(*, project_dir: Path, model_count: int) -> None:
             (bucket / f"offset{macro_index:05d}.py").write_text(content, encoding="utf-8")
             macro_path.unlink()
         macro_root.rmdir()
+        macro_root.parent.rmdir()
     for index in range(model_count):
         name: str = dense_model_name(index)
         domain: str = f"sales{index // 1000:03d}"
@@ -294,7 +297,7 @@ def _model_sql(*, index: int, source_count: int, function_count: int, macro_coun
         f" + COALESCE(l{lookup}.amount, 0)" for lookup in range(joins)
     )
     if index % 10 < DENSE_MACRO_SHARE:
-        amount = f'@macro_{index // 1000:03d}_{index % 1000 % macro_count:05d}("{amount}")'
+        amount = f'@py.macro_{index // 1000:03d}_{index % 1000 % macro_count:05d}("{amount}")'
     if index % 1000 % 43 == 0:
         function_start: int = index // 1000 * 25
         function_index: int = function_start + index % 1000 % min(
@@ -302,7 +305,7 @@ def _model_sql(*, index: int, source_count: int, function_count: int, macro_coun
         )
         amount = f'__udf("fn_{function_index:05d}")({amount})'
     identity: str = (
-        f'@macro_{index // 1000:03d}_{index % 1000 % macro_count:05d}("b.id")'
+        f'@py.macro_{index // 1000:03d}_{index % 1000 % macro_count:05d}("b.id")'
         if index % 10 < DENSE_MACRO_SHARE
         else "b.id"
     )
@@ -314,7 +317,7 @@ def _model_sql(*, index: int, source_count: int, function_count: int, macro_coun
         expression: str = "COALESCE(b.amount, 0) + CAST(b.id AS DOUBLE)"
         if index % 10 < DENSE_MACRO_SHARE and column < DENSE_MACRO_QUANTITY_COLUMNS:
             expression = (
-                f'@macro_{index // 1000:03d}_{index % 1000 % macro_count:05d}("{expression}")'
+                f'@py.macro_{index // 1000:03d}_{index % 1000 % macro_count:05d}("{expression}")'
             )
         projections.append(f"CAST({expression} AS DOUBLE) AS {name}")
     join_sql: str = "".join(

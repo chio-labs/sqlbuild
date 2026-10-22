@@ -69,7 +69,7 @@ FUNCTION (description "Test function by_customer.",
 SELECT customer_id
 """.strip()
                 + "\n",
-                "tests/unit/_macros/identity.py": (
+                "tests/unit/_macros/python/identity.py": (
                     "def identity(value):\n    return value\n\n"
                     "def parameterized_fixture(value):\n    return str(value)\n"
                 ),
@@ -108,10 +108,10 @@ WITH
 __source__raw_orders AS (SELECT @param("count") AS order_id),
 __ref__orders AS (
   SELECT
-    @identity(@param("status")) AS status,
+    @py.identity(@param("status")) AS status,
     @param("status") AS status_copy,
     @param("count") AS count,
-    @parameterized_fixture(@param("count")) AS boundary_count,
+    @py.parameterized_fixture(@param("count")) AS boundary_count,
     @param("enabled") AS enabled,
     @param("ratio") AS ratio,
     @param("amount") AS amount,
@@ -138,7 +138,7 @@ TEST (
 );
 
 WITH
-__macro_actual__ AS (SELECT @identity(@param("value")) AS value),
+__macro_actual__ AS (SELECT @py.identity(@param("value")) AS value),
 __macro_expected__ AS (SELECT @param("value") AS value)
 SELECT 1
 """.strip()
