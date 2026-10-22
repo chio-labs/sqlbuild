@@ -3,6 +3,7 @@
 use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::compiled_views::project_reads;
+use crate::bindings::_helpers::compiled_views::source_reads;
 use crate::bindings::_helpers::graph::algorithms::closure;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_scope::loaders::intermediate_map;
@@ -34,11 +35,11 @@ pub(crate) fn build_source_load_map<'py>(
     for source in project_reads::sources(project)?.try_iter()? {
         let source = source?;
         if let Some(keys) = &relevant
-            && !keys.contains(native_field(&source, "key")?)?
+            && !keys.contains(source_reads::key(&source)?)?
         {
             continue;
         }
-        let entry = native_field(&source, "source_entry")?;
+        let entry = source_reads::source_entry(&source)?;
         result.set_item(native_field(&entry, "name")?, entry)?;
     }
     for upstream in [false, true] {

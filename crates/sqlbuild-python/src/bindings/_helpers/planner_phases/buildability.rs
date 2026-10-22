@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compiled_views::project_reads;
+use crate::bindings::_helpers::compiled_views::seed_reads;
 use crate::bindings::_helpers::planner_identity::graph::build_execution_edge_origins;
 use crate::bindings::_helpers::planner_identity::graph::check_buildability;
 use crate::bindings::_helpers::planner_identity::graph::missing_upstream_message;
@@ -31,8 +32,8 @@ pub(crate) fn check_selected_scope_buildability<'py>(
     let mut external_seeds: Vec<_> = Vec::new();
     for seed in project_reads::seeds(&project)?.try_iter()? {
         let seed = seed?;
-        if native_field(&seed, "external")?.is_truthy()? {
-            external_seeds.push(native_field(&seed, "key")?);
+        if seed_reads::external(&seed)?.is_truthy()? {
+            external_seeds.push(seed_reads::key(&seed)?);
         }
     }
     let missing = object(

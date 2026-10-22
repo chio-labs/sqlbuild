@@ -14,6 +14,9 @@ use sqlbuild_core::text::main::python_casefold::python_casefold;
 use crate::bindings::_helpers::analysis_session::fixture_inferences::FixtureColumnInferences;
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::compiled_views::project_reads;
+use crate::bindings::_helpers::compiled_views::resource_reads;
+use crate::bindings::_helpers::compiled_views::seed_reads;
+use crate::bindings::_helpers::compiled_views::source_reads;
 use crate::bindings::_helpers::planner_strategy::constants::{
     MODEL_REFERENCE_KIND, SEED_REFERENCE_KIND, SOURCE_REFERENCE_KIND,
 };
@@ -68,10 +71,7 @@ pub(crate) fn planning_context(
             model_fixture_relation(&model)?,
         );
     }
-    for (entry, kind, source) in [
-        ("source_entry", SOURCE_REFERENCE_KIND, true),
-        ("schema_entry", SEED_REFERENCE_KIND, false),
-    ] {
+    for (kind, source) in [(SOURCE_REFERENCE_KIND, true), (SEED_REFERENCE_KIND, false)] {
         let resources: Bound<'_, PyAny> = if source {
             project_reads::sources(project)?
         } else {
@@ -79,7 +79,11 @@ pub(crate) fn planning_context(
         };
         for resource in resources.try_iter()? {
             let resource = resource?;
-            let entry = native_field(&resource, entry)?;
+            let entry: Bound<'_, PyAny> = if source {
+                source_reads::source_entry(&resource)?
+            } else {
+                seed_reads::schema_entry(&resource)?
+            };
             let columns: Vec<FixtureColumn> = columns(&native_field(&entry, "columns")?, false)?;
             let authoritative = if source {
                 native_field(&entry, "contract")?.eq("enforced")?
@@ -87,7 +91,7 @@ pub(crate) fn planning_context(
                 !columns.is_empty()
             };
             relations.insert(
-                (kind.to_owned(), native_field(&resource, "name")?.extract()?),
+                (kind.to_owned(), resource_reads::name(&resource)?.extract()?),
                 FixtureRelation {
                     columns,
                     authoritative,

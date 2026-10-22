@@ -15,7 +15,9 @@ use sqlbuild_analysis::planner_identity::main::stable_identity_hash::stable_iden
 use sqlbuild_analysis::planner_identity::models::FunctionFingerprintFields;
 
 use crate::bindings::_helpers::boundary::python_calls::{imported, keywords, within};
+use crate::bindings::_helpers::compiled_views::function_reads;
 use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::seed_reads;
 use crate::bindings::_helpers::discovery::hook_entries::hook_entries;
 use crate::bindings::_helpers::model_config::typed_config::{config_value, model_values};
 use crate::bindings::_helpers::planner_identity::hashing::function_definition_hash;
@@ -282,14 +284,14 @@ pub(crate) fn function_local_hashes<'py>(
     let hashes: Bound<'py, PyDict> = PyDict::new(py);
     for function in functions.try_iter()? {
         let function: Bound<'py, PyAny> = function?;
-        let name: String = native_field(&function, "name")?.extract()?;
+        let name: String = function_reads::name(&function)?.extract()?;
         let language: Bound<'py, PyAny> =
-            native_field(&native_field(&function, "language")?, "value")?;
+            native_field(&function_reads::language(&function)?, "value")?;
         let body_hash: String = function_definition_hash(
             py,
             &name,
             (
-                &native_field(&function, "body_sql")?.extract::<String>()?,
+                &function_reads::body_sql(&function)?.extract::<String>()?,
                 &language.extract::<String>()?,
                 dialect,
             ),
@@ -297,18 +299,21 @@ pub(crate) fn function_local_hashes<'py>(
         let payload: Bound<'py, PyDict> = PyDict::new(py);
         payload.set_item(
             "arguments",
-            name_type_pairs(&native_field(&function, "arguments")?)?,
+            name_type_pairs(&function_reads::arguments(&function)?)?,
         )?;
-        payload.set_item("returns", native_field(&function, "returns")?)?;
+        payload.set_item("returns", function_reads::returns(&function)?)?;
         payload.set_item(
             "return_columns",
-            name_type_pairs(&native_field(&function, "return_columns")?)?,
+            name_type_pairs(&function_reads::return_columns(&function)?)?,
         )?;
         payload.set_item("body_sql", body_hash)?;
         payload.set_item("language", language)?;
-        for field in ["runtime_version", "entry_point", "packages"] {
-            payload.set_item(field, native_field(&function, field)?)?;
-        }
+        payload.set_item(
+            "runtime_version",
+            function_reads::runtime_version(&function)?,
+        )?;
+        payload.set_item("entry_point", function_reads::entry_point(&function)?)?;
+        payload.set_item("packages", function_reads::packages(&function)?)?;
         hashes.set_item(
             name,
             stable_identity_hash(&sorted_dumps(payload.as_any(), SPACED, true)?),
@@ -331,7 +336,12 @@ fn name_type_pairs<'py>(items: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList
 
 /// `f"{value or ''}"` of an optional attribute.
 fn text_or_empty(owner: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
-    let value: Bound<'_, PyAny> = match native_field(owner, name) {
+    text_of(native_field(owner, name))
+}
+
+/// `f"{value or ''}"` of an attribute read, empty when the read failed.
+fn text_of(read: PyResult<Bound<'_, PyAny>>) -> PyResult<String> {
+    let value: Bound<'_, PyAny> = match read {
         Ok(value) => value,
         Err(_) => return Ok(String::new()),
     };
@@ -355,39 +365,39 @@ fn rendered_pairs(items: &Bound<'_, PyAny>) -> PyResult<Vec<(String, String)>> {
 /// Stable function definition text used for change fingerprints.
 pub(crate) fn compiled_function_fingerprint_sql(function: &Bound<'_, PyAny>) -> PyResult<String> {
     Ok(function_fingerprint_sql(&FunctionFingerprintFields {
-        language: native_field(function, "language")?.str()?.extract()?,
-        arguments: rendered_pairs(&native_field(function, "arguments")?)?,
-        returns: native_field(function, "returns")?.str()?.extract()?,
-        return_columns: rendered_pairs(&native_field(function, "return_columns")?)?,
-        runtime_version: text_or_empty(function, "runtime_version")?,
-        entry_point: text_or_empty(function, "entry_point")?,
-        packages: native_field(function, "packages")?
+        language: function_reads::language(function)?.str()?.extract()?,
+        arguments: rendered_pairs(&function_reads::arguments(function)?)?,
+        returns: function_reads::returns(function)?.str()?.extract()?,
+        return_columns: rendered_pairs(&function_reads::return_columns(function)?)?,
+        runtime_version: text_of(function_reads::runtime_version(function))?,
+        entry_point: text_of(function_reads::entry_point(function))?,
+        packages: function_reads::packages(function)?
             .try_iter()?
             .map(|package| package?.extract::<String>())
             .collect::<PyResult<_>>()?,
-        body_sql: native_field(function, "body_sql")?.extract()?,
+        body_sql: function_reads::body_sql(function)?.extract()?,
     }))
 }
 
 /// `(identity_hash, metadata_json)` of one compiled seed from its content and load-affecting config.
 pub(crate) fn seed_identity(seed: &Bound<'_, PyAny>) -> PyResult<(String, String)> {
     let py: Python<'_> = seed.py();
-    let schema_entry: Bound<'_, PyAny> = native_field(seed, "schema_entry")?;
+    let schema_entry: Bound<'_, PyAny> = seed_reads::schema_entry(seed)?;
     let csv_settings: Bound<'_, PyAny> = native_field(&schema_entry, "csv_settings")?;
     let columns: Bound<'_, PyList> = PyList::empty(py);
     for column in native_field(&schema_entry, "columns")?.try_iter()? {
         columns.append(column_signature(&column?)?)?;
     }
-    let rows: Bound<'_, PyAny> = if native_field(seed, "external")?.is_truthy()? {
+    let rows: Bound<'_, PyAny> = if seed_reads::external(seed)?.is_truthy()? {
         PyList::empty(py).into_any()
     } else {
         seed_rows(
-            &native_field(&native_field(seed, "seed_file")?, "file_path")?,
+            &native_field(&seed_reads::seed_file(seed)?, "file_path")?,
             &csv_settings,
         )?
     };
     let payload: Bound<'_, PyDict> = PyDict::new(py);
-    payload.set_item("name", native_field(seed, "name")?)?;
+    payload.set_item("name", seed_reads::name(seed)?)?;
     payload.set_item(
         "csv_settings",
         imported(py, DATACLASSES_MODULE, "asdict")?.call1((&csv_settings,))?,

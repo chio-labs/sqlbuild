@@ -1,6 +1,8 @@
 //! Build scenario relation locations through adapter qualification callbacks.
 
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compiled_views::project_reads;
+use crate::bindings::_helpers::compiled_views::source_reads;
 use crate::bindings::_helpers::planner_scenario::constants::{REF, SOURCE};
 use crate::bindings::_helpers::planner_scenario::constants::{
     SCENARIO_PLAN_INTERNAL, SCENARIO_PLAN_MISSING_RELATION_TARGET,
@@ -63,11 +65,11 @@ pub(crate) fn build_scenario_relation_plan<'py>(
         )?;
     }
     let sources = PyDict::new(py);
-    for source in native_field(&args.project, "sources")?.try_iter()? {
+    for source in project_reads::sources(&args.project)?.try_iter()? {
         let source = source?;
         sources.set_item(
-            native_field(&source, "name")?,
-            native_field(&source, "source_entry")?,
+            source_reads::name(&source)?,
+            source_reads::source_entry(&source)?,
         )?;
     }
     let models = PyDict::new(py);

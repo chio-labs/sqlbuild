@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::compiled_views::function_reads;
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::discovery::guidance::microbatch_guidance;
@@ -429,7 +430,7 @@ pub(crate) fn plan_entries<'py>(
     let functions_by_name = PyDict::new(py);
     for function in project_reads::functions(&project)?.try_iter()? {
         let function = function?;
-        functions_by_name.set_item(native_field(&function, "name")?, function)?;
+        functions_by_name.set_item(function_reads::name(&function)?, function)?;
     }
     let settings = native_field(&project, "settings")?;
     let models_by_name = native_field(&scope, "models_by_name")?;

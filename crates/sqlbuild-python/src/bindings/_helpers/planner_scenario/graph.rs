@@ -2,6 +2,8 @@
 
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::compiled_views::project_reads;
+use crate::bindings::_helpers::compiled_views::seed_reads;
+use crate::bindings::_helpers::compiled_views::source_reads;
 use crate::bindings::_helpers::graph::keys::{KeyCache, native_key};
 use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_GRAPH_VALIDATION;
 use crate::bindings::_helpers::planner_scenario::values::string;
@@ -47,12 +49,12 @@ pub(crate) fn plan_scenario_graph<'py>(
     for source in project_reads::sources(project)?.try_iter()? {
         input
             .project_sources
-            .insert(native_field(&source?, "name")?.extract()?);
+            .insert(source_reads::name(&source?)?.extract()?);
     }
     for seed in project_reads::seeds(project)?.try_iter()? {
         input
             .project_seeds
-            .insert(native_field(&seed?, "name")?.extract()?);
+            .insert(seed_reads::name(&seed?)?.extract()?);
     }
     let output = graph(&input);
     input.targets.sort();

@@ -3,6 +3,7 @@ from __future__ import annotations
 import _thread
 import json
 import os
+import shutil
 import sys
 import tempfile
 import threading
@@ -35,6 +36,8 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
 from tests.unit.src.sqlbuild.rule_engine._helpers.run.helpers import rebuild_identity
 
 STAGE_CAPTURE_SUFFIX: str = ".json"
+
+E2E_FIXTURES_DIR: Path = Path(__file__).resolve().parents[6] / "e2e" / "fixtures"
 
 
 def staging_directories(target_dir: Path) -> list[str]:
@@ -1011,8 +1014,28 @@ def typed_config_reads(*, project_dir: Path, extra_header: str) -> int:
     return native_module.compile_stage_work_info(reset=True).get("typed_config_reads", 0)
 
 
-def compiled_view_fallbacks(*, project_dir: Path, command: tuple[str, ...]) -> tuple[int, int]:
+def compiled_view_fallbacks(
+    *, project_dir: Path, write_project: Callable[[Path], None], command: tuple[str, ...]
+) -> tuple[int, int]:
     """The exit code of `command` over a native project and its reads that missed a native view."""
+
+    write_project(project_dir)
+    _ = native_module.compile_stage_work_info(reset=True)
+    exit_code: int = main(["--project-dir", str(project_dir), *command])
+    fallbacks: int = native_module.compile_stage_work_info(reset=True).get(
+        "compiled_view_fallbacks", 0
+    )
+    return exit_code, fallbacks
+
+
+def copy_waffle_shop(project_dir: Path) -> None:
+    """Copy the waffle shop fixture, with sources, seeds, functions and audits, to `project_dir`."""
+
+    _ = shutil.copytree(E2E_FIXTURES_DIR / "waffle_shop", project_dir)
+
+
+def write_orders_project(project_dir: Path) -> None:
+    """Write a three-model orders project to `project_dir`."""
 
     project_dir.mkdir(parents=True)
     (project_dir / "sqlbuild_project.toml").write_text(
@@ -1038,12 +1061,6 @@ def compiled_view_fallbacks(*, project_dir: Path, command: tuple[str, ...]) -> t
         'SELECT order_id FROM __ref("daily_orders")\n',
         encoding="utf-8",
     )
-    _ = native_module.compile_stage_work_info(reset=True)
-    exit_code: int = main(["--project-dir", str(project_dir), *command])
-    fallbacks: int = native_module.compile_stage_work_info(reset=True).get(
-        "compiled_view_fallbacks", 0
-    )
-    return exit_code, fallbacks
 
 
 FORMAT_CACHE_UNFORMATTED_MODELS: dict[str, str] = {

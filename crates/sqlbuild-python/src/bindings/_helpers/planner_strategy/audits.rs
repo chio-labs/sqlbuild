@@ -10,6 +10,7 @@ use sqlbuild_analysis::planner_strategy::main::singular_attachment::singular_att
 use sqlbuild_analysis::planner_strategy::models::{AuditAttachmentKind, AuditRunScope};
 
 use crate::bindings::_helpers::boundary::python_calls::imported;
+use crate::bindings::_helpers::compiled_views::audit_reads;
 use crate::bindings::_helpers::graph::algorithms::closure;
 use crate::bindings::_helpers::planner_strategy::values::{input_error, optional_string, text};
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record_with};
@@ -39,7 +40,7 @@ fn object_key<'py>(py: Python<'py>, kind: &str, name: &str) -> PyResult<Bound<'p
 /// The names of an audit's references of one kind, in order.
 fn reference_names(audit: &Bound<'_, PyAny>, kind: &str) -> PyResult<Vec<String>> {
     let mut names: Vec<String> = Vec::new();
-    for reference in native_field(audit, "references")?.try_iter()? {
+    for reference in audit_reads::references(audit)?.try_iter()? {
         let reference: Bound<'_, PyAny> = reference?;
         if text(&native_field(&reference, "ref_kind")?)? == kind {
             names.push(text(&native_field(&reference, "ref_name")?)?);
@@ -65,7 +66,7 @@ pub(crate) fn resolve_attachment_kind<'py>(
     downstream_deps: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = audit.py();
-    let attached_kind: Bound<'py, PyAny> = native_field(audit, "attached_target_kind")?;
+    let attached_kind: Bound<'py, PyAny> = audit_reads::attached_target_kind(audit)?;
     let (kind, name): (String, Option<String>) = if attached_kind.is_none() {
         let reaches = |from: &str, to: &str| -> PyResult<bool> {
             let start: Bound<'py, PyAny> = object_key(py, MODEL_RESOURCE_TYPE, from)?;
@@ -82,14 +83,14 @@ pub(crate) fn resolve_attachment_kind<'py>(
         )?;
         (attachment_value(kind).to_owned(), name)
     } else {
-        let name: Bound<'py, PyAny> = native_field(audit, "attached_target_name")?;
+        let name: Bound<'py, PyAny> = audit_reads::attached_target_name(audit)?;
         if name.is_none() {
             return Err(input_error(
                 py,
                 ErrorId::PlannerInput,
                 &format!(
                     "audit '{}': attached audit is missing an attached target name",
-                    text(&native_field(audit, "name")?)?
+                    text(&audit_reads::name(audit)?)?
                 ),
                 None,
             ));
@@ -117,8 +118,8 @@ pub(crate) fn reads_outside_target_lineage(
     upstream_deps: &Bound<'_, PyAny>,
 ) -> PyResult<bool> {
     let py: Python<'_> = audit.py();
-    let kind: Bound<'_, PyAny> = native_field(audit, "attached_target_kind")?;
-    let name: Bound<'_, PyAny> = native_field(audit, "attached_target_name")?;
+    let kind: Bound<'_, PyAny> = audit_reads::attached_target_kind(audit)?;
+    let name: Bound<'_, PyAny> = audit_reads::attached_target_name(audit)?;
     if kind.is_none() || name.is_none() {
         return Ok(false);
     }
@@ -126,7 +127,7 @@ pub(crate) fn reads_outside_target_lineage(
         text(&imported(py, COMPILE_TYPES_MODULE, "AttachedAuditTargetKind")?.call1((kind,))?)?;
     let target: Bound<'_, PyAny> = object_key(py, &kind, &text(&name)?)?;
     let lineage: Bound<'_, PySet> = closure(vec![target], upstream_deps, (true, None))?;
-    for dependency in native_field(audit, "scope_deps")?.try_iter()? {
+    for dependency in audit_reads::scope_deps(audit)?.try_iter()? {
         if !lineage.contains(dependency?)? {
             return Ok(true);
         }
