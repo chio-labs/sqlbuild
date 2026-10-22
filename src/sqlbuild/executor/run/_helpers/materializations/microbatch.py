@@ -112,6 +112,7 @@ from sqlbuild.executor.run.models import (
     FinalAuditRun,
     FullRefreshRelations,
     MicrobatchAccountingInterval,
+    MicrobatchBatchProgress,
     MicrobatchLifecycleState,
     MicrobatchPhaseOutcome,
     MicrobatchSchemaPhaseOutcome,
@@ -1188,10 +1189,21 @@ def _execute_microbatch_batches(
             raise
         lifecycle.completed(affected_rows=dml_result if isinstance(dml_result, int) else None)
         completed_batches += 1
+        batch_elapsed: float = time.monotonic() - batch_start_time
         if on_progress is not None:
-            batch_elapsed: float = time.monotonic() - batch_start_time
             on_progress(
                 f"batch {batch.index + 1}/{plan.batch_count} {display_window} {batch_elapsed:.1f}s"
+            )
+        if context.on_batch_complete is not None:
+            context.on_batch_complete(
+                MicrobatchBatchProgress(
+                    model_name=context.entry.name,
+                    batch_number=batch.index + 1,
+                    batch_count=plan.batch_count,
+                    window=display_window,
+                    rows_affected=dml_result if isinstance(dml_result, int) else None,
+                    elapsed_seconds=batch_elapsed,
+                )
             )
     return MicrobatchPhaseOutcome(
         state=state,

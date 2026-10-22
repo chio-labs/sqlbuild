@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 
@@ -1388,3 +1390,22 @@ class TargetMicrobatchWarningE2ETestCase:
     description: str
     command: tuple[str, ...]
     expected_warning_count: int
+
+
+@dataclass(frozen=True)
+class MicrobatchBatchProgressE2ETestCase:
+    """Per-batch microbatch progress lines for captured and terminal output."""
+
+    description: str
+    run: Callable[..., subprocess.CompletedProcess[str]]
+    expected_batches: tuple[tuple[str, str, str], ...]
+
+
+@dataclass(frozen=True)
+class DeferredMigrationOriginE2ETestCase:
+    """A deferred reference to a renamed model under different deferred-target states."""
+
+    description: str
+    prod_sql: str
+    expected_order_ids: tuple[int, ...]
+    expect_note: bool

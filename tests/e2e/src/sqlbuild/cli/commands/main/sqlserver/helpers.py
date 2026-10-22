@@ -283,9 +283,10 @@ def prepare_sqlserver_waffle_shop(*, tmp_path: Path, config: dict[str, object]) 
     (project_dir / "models" / "marts" / "daily_order_partitioned.sql").unlink(missing_ok=True)
     (project_dir / "tests" / "unit" / "test_is_completed_order_udf.sql").unlink(missing_ok=True)
 
-    macro_path: Path = project_dir / "macros" / "time.py"
-    macro_path.write_text(
-        macro_path.read_text(encoding="utf-8").replace(
+    macro_path: Path = project_dir / "models" / "marts" / "_macros" / "time.py"
+    _rewrite(
+        macro_path,
+        (
             '    if ctx.adapter_name == "bigquery":\n'
             '        return f"TIMESTAMP_TRUNC({expression}, {grain.upper()})"\n'
             "    return f\"DATE_TRUNC('{grain}', {expression})\"",
@@ -298,26 +299,24 @@ def prepare_sqlserver_waffle_shop(*, tmp_path: Path, config: dict[str, object]) 
             '            return f"CAST(CAST({expression} AS DATE) AS DATETIME2)"\n'
             "    return f\"DATE_TRUNC('{grain}', {expression})\"",
         ),
-        encoding="utf-8",
     )
     is_completed_order_path: Path = project_dir / "functions" / "sql" / "is_completed_order.sql"
-    is_completed_order_path.write_text(
-        is_completed_order_path.read_text(encoding="utf-8")
-        .replace("STRING", "NVARCHAR")
-        .replace("BOOLEAN", "BIT")
-        .replace(
+    _rewrite(is_completed_order_path, ("STRING", "NVARCHAR"))
+    _rewrite(is_completed_order_path, ("BOOLEAN", "BIT"))
+    _rewrite(
+        is_completed_order_path,
+        (
             "order_status = 'completed'",
             "CAST(CASE WHEN order_status = 'completed' THEN 1 ELSE 0 END AS BIT)",
         ),
-        encoding="utf-8",
     )
     fact_orders_path: Path = project_dir / "models" / "marts" / "fact_orders.sql"
-    fact_orders_path.write_text(
-        fact_orders_path.read_text(encoding="utf-8").replace(
+    _rewrite(
+        fact_orders_path,
+        (
             '__udf("is_completed_order_py")(o.status) AS is_completed_order_py,',
             '__udf("is_completed_order")(o.status) AS is_completed_order_py,',
         ),
-        encoding="utf-8",
     )
     project_file_path: Path = project_dir / "sqlbuild_project.toml"
     project_file_path.write_text(
@@ -333,20 +332,26 @@ def prepare_sqlserver_waffle_shop(*, tmp_path: Path, config: dict[str, object]) 
         encoding="utf-8",
     )
     lookups_path: Path = project_dir / "seeds" / "lookups.yml"
-    lookups_path.write_text(
-        lookups_path.read_text(encoding="utf-8").replace("type: VARCHAR", "type: NVARCHAR(100)"),
-        encoding="utf-8",
-    )
+    _rewrite(lookups_path, ("type: VARCHAR", "type: NVARCHAR(100)"))
     raw_sources_path: Path = project_dir / "sources" / "raw.yml"
     adapt_sqlserver_text_file(raw_sources_path)
-    raw_sources_path.write_text(
-        raw_sources_path.read_text(encoding="utf-8").replace(
+    _rewrite(
+        raw_sources_path,
+        (
             "      - name: ordered_at\n        type: DATETIME2",
             "      - name: ordered_at\n        type: DATETIME",
         ),
-        encoding="utf-8",
     )
     return project_dir, schema_name
+
+
+def _rewrite(path: Path, replacement: tuple[str, str]) -> None:
+    """Replace text in a copied fixture file, failing when the fixture no longer contains it."""
+
+    old, new = replacement
+    text: str = path.read_text(encoding="utf-8")
+    assert old in text, f"{path} no longer contains {old!r}; update the SQL Server fixture"
+    path.write_text(text.replace(old, new), encoding="utf-8")
 
 
 def prepare_sqlserver_source_loader_strategies(

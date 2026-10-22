@@ -184,6 +184,17 @@ pub struct StatementText {
     pub phase: String,
 }
 
+/// One completed microbatch of a model.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BatchProgressText {
+    pub model_name: String,
+    pub batch_number: usize,
+    pub batch_count: usize,
+    pub window: String,
+    pub rows_affected: Option<i64>,
+    pub elapsed_seconds: f64,
+}
+
 /// The node shown on the live spinner row.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SpinnerRow {

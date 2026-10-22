@@ -3,14 +3,19 @@
 use crate::dbt_events::_helpers::parse::{
     node_message, node_result, node_start, start_message, unique_id,
 };
-use crate::dbt_events::models::{DbtEvent, DbtStreamRow, DbtStreamState, DbtStreamUpdate};
+use crate::dbt_events::models::{
+    DbtEvent, DbtNodeResult, DbtStreamRow, DbtStreamState, DbtStreamUpdate,
+};
 
 /// Buffer node messages, number started nodes, and report each node's first final result once.
 pub fn consume_dbt_event(
     mut state: DbtStreamState,
     event: &DbtEvent,
 ) -> (DbtStreamState, Option<DbtStreamUpdate>) {
-    if let Some(message) = node_message(event) {
+    let result: Option<DbtNodeResult> = node_result(event);
+    if result.is_none()
+        && let Some(message) = node_message(event)
+    {
         if let Some(unique_id) = unique_id(event) {
             state
                 .pending_messages
@@ -43,13 +48,14 @@ pub fn consume_dbt_event(
         };
         return (state, Some(update));
     }
-    let Some(mut result) = node_result(event) else {
+    let Some(mut result) = result else {
         return (state, None);
     };
     result.messages = state
         .pending_messages
         .remove(&result.unique_id)
         .unwrap_or_default();
+    result.messages.extend(node_message(event));
     if !state.recorded_unique_ids.insert(result.unique_id.clone()) {
         return (state, None);
     }

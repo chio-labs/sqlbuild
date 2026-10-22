@@ -102,6 +102,7 @@ from sqlbuild.executor.run.classes.runtime_watermark_resolver import RuntimeWate
 from sqlbuild.executor.run.models import (
     BatchWindow,
     BoundViewGuard,
+    MicrobatchBatchProgress,
     MicrobatchPhaseOutcome,
     ModelExecutionResult,
     ModelMaterializationContext,
@@ -219,6 +220,9 @@ class BuildScheduler:
         self._effective_vars: dict[str, object] = runtime.effective_vars or {}
         self._warehouse_relations: dict[str, RelationInfo] = initial_state.warehouse_relations or {}
         self._on_sub_progress: Callable[[str], None] | None = callbacks.on_sub_progress
+        self._on_batch_complete: Callable[[MicrobatchBatchProgress], None] | None = (
+            callbacks.on_batch_complete
+        )
         self._on_statement_complete: Callable[[StatementExecutionTelemetry], None] | None = (
             callbacks.on_statement_complete
         )
@@ -1120,6 +1124,7 @@ class BuildScheduler:
                             microbatch_lease_check=self._runtime.microbatch_lease_check,
                             microbatch_global_concurrency=self._max_concurrency,
                             microbatch_batch_runner=microbatch_batch_runner,
+                            on_batch_complete=self._on_batch_complete,
                             watermark_resolver=self._watermark_resolver,
                             bound_views=bound_views,
                         ),

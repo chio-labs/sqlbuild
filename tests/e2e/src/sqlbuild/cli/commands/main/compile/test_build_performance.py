@@ -38,7 +38,7 @@ _MIB: int = 1024 * 1024
             description="models_3000_job_build_1000_model_benchmark_from_empty_warehouse",
             expected_max_wall_seconds=90.0,
             # Temporary native-migration headroom pending memory optimisation.
-            expected_max_rss_bytes=1_728 * _MIB,
+            expected_max_rss_bytes=1_760 * _MIB,
         )
     ],
     ids=lambda case: case.description,

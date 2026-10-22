@@ -24,6 +24,10 @@ function SQL from each target's project, so SQL analysis errors never stop it; s
 such as an unknown reference, still do. The hidden `--no-sql-analysis` flag (alias
 `--no-sql-validation`) is still accepted but has no effect.
 
+With `--debug`, clone logs how long each phase took: compiling each target it reads, inspecting
+sources, planning, and execution. The `--json-output` document reports the same durations in
+seconds under `phase_timings`.
+
 ## Usage
 
 ```bash

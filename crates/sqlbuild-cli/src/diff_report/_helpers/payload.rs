@@ -100,10 +100,31 @@ fn examples(model: &DiffModelFacts, options: DiffExampleOptions) -> JsonValue {
     let keys = |samples: &[Vec<DiffNamedValue>]| {
         JsonValue::Array(samples.iter().map(|sample| named_values(sample)).collect())
     };
-    object(vec![
+    let no_samples: &[Vec<DiffNamedValue>] = &[];
+    let (side_keys, side_rows) = if model.unkeyed {
+        (
+            (no_samples, no_samples),
+            Some((&model.left_only_keys, &model.right_only_keys)),
+        )
+    } else {
+        (
+            (
+                model.left_only_keys.as_slice(),
+                model.right_only_keys.as_slice(),
+            ),
+            None,
+        )
+    };
+    let mut entries: Vec<(&str, JsonValue)> = vec![
         ("unequal_rows", JsonValue::Array(unequal_rows)),
-        ("from_only_keys", keys(&model.left_only_keys)),
-        ("to_only_keys", keys(&model.right_only_keys)),
+        ("from_only_keys", keys(side_keys.0)),
+        ("to_only_keys", keys(side_keys.1)),
+    ];
+    if let Some((from_rows, to_rows)) = side_rows {
+        entries.push(("from_only_rows", keys(from_rows)));
+        entries.push(("to_only_rows", keys(to_rows)));
+    }
+    entries.extend([
         ("truncated_by_count", JsonValue::Bool(truncated_by_count)),
         ("values_truncated", JsonValue::Bool(values_truncated)),
         (
@@ -116,7 +137,8 @@ fn examples(model: &DiffModelFacts, options: DiffExampleOptions) -> JsonValue {
                 .max_value_length
                 .map_or(JsonValue::Null, |limit| integer(limit as i64)),
         ),
-    ])
+    ]);
+    object(entries)
 }
 
 fn model_payload(model: &DiffModelFacts, options: &DiffDocumentOptions) -> JsonValue {

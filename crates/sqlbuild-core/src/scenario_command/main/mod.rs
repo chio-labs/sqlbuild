@@ -4,6 +4,7 @@ pub mod capture_dialect_required_error;
 pub mod format_captured_at;
 pub mod render_capture_result;
 pub mod render_namespace_header;
+pub mod render_scenario_failures;
 pub mod render_scenario_result;
 pub mod render_snapshot_sync_result;
 pub mod resolve_scenario_namespace;
