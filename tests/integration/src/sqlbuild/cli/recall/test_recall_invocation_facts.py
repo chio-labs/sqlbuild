@@ -85,10 +85,11 @@ def test_given_an_orchestrated_build_when_running_the_documented_queries_then_th
     assert built.returncode == 0, built.stderr
     assert len(commands) == 4
     assert answered.returncode == 0, answered.stderr
-    assert (
-        selected_columns(result=json.loads(answered.stdout), columns=test_case.columns)
-        == test_case.expected_rows
-    )
+    # Row order follows measured durations, so compare the rows without their order.
+    assert sorted(
+        selected_columns(result=json.loads(answered.stdout), columns=test_case.columns),
+        key=repr,
+    ) == sorted(test_case.expected_rows, key=repr)
     assert printed.returncode == 0, printed.stderr
     assert len(printed.stdout.splitlines()) == 50
     assert printed.stdout.endswith(built.stdout.splitlines(keepends=True)[-1])
