@@ -1,13 +1,17 @@
-use crate::schema::constants::{ALL_TABLES, VIEW_NAMES};
+use crate::schema::constants::{ALL_TABLES, RECALL_SCHEMA_VERSION, VIEW_NAMES};
 use crate::schema::main::add_column_statement::add_column_statement;
 use crate::schema::main::ddl_script::ddl_script;
 use crate::schema::main::table_spec::table_spec;
 use crate::schema::main::table_statements::table_statements;
+use crate::schema::main::upgrade_statements::upgrade_statements;
 use crate::schema::main::view_statements::view_statements;
-use crate::schema::models::{ColumnSpec, ColumnType, Dialect, Table};
-use crate::schema::tests::helpers::{clickhouse_table, contained, options, sqlite_schema_after};
+use crate::schema::models::{ColumnSpec, ColumnType, Dialect, ObservedSchema, Table};
+use crate::schema::tests::helpers::{
+    clickhouse_table, contained, observed_store, options, sqlite_schema_after,
+};
 use crate::schema::tests::test_types::{
     AddColumnTestCase, FragmentTestCase, SqliteScriptTestCase, StatementSetTestCase,
+    UpgradeStatementsTestCase,
 };
 
 const NEW_COLUMN: ColumnSpec = ColumnSpec {
@@ -130,7 +134,7 @@ fn given_clickhouse_statement_sets_when_rendered_then_every_statement_has_the_sh
                 .collect(),
             required_fragments: &[
                 "INSERT INTO `observability`.`recall_meta`",
-                "SELECT 'schema', 'schema_version', '1'",
+                "SELECT 'schema', 'schema_version', '2'",
             ],
             expected_count: 1,
         },
@@ -195,6 +199,79 @@ fn given_a_new_column_when_upgraded_then_the_statement_is_additive_and_nullable(
     for test_case in test_cases {
         assert_eq!(
             test_case.statement, test_case.expected_statement,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_an_observed_store_when_upgraded_then_only_the_missing_additive_statements_are_listed() {
+    let test_cases = [
+        UpgradeStatementsTestCase {
+            description: "a current store needs nothing",
+            observed: observed_store(Some(RECALL_SCHEMA_VERSION), (Table::Meta, ""), ""),
+            dialect: Dialect::Sqlite,
+            expected_count: 0,
+            expected_prefixes: &[],
+        },
+        UpgradeStatementsTestCase {
+            description: "an empty store gets the whole creation script",
+            observed: ObservedSchema::default(),
+            dialect: Dialect::ClickHouse,
+            expected_count: ALL_TABLES.len() + VIEW_NAMES.len() + 1,
+            expected_prefixes: &["CREATE TABLE IF NOT EXISTS `observability`.`recall_meta`"],
+        },
+        UpgradeStatementsTestCase {
+            description: "a store a version behind adds its column, replaces views and records the version",
+            observed: observed_store(
+                Some(RECALL_SCHEMA_VERSION - 1),
+                (Table::Heartbeats, "subcommand"),
+                "",
+            ),
+            dialect: Dialect::ClickHouse,
+            expected_count: 1 + VIEW_NAMES.len() + 1,
+            expected_prefixes: &[
+                "ALTER TABLE `observability`.`recall_heartbeats` ADD COLUMN IF NOT EXISTS `subcommand` Nullable(String)",
+                "CREATE OR REPLACE VIEW `observability`.`invocations`",
+                "INSERT INTO `observability`.`recall_meta`",
+            ],
+        },
+        UpgradeStatementsTestCase {
+            description: "a SQLite store without a recorded version replaces its views",
+            observed: observed_store(None, (Table::Meta, ""), ""),
+            dialect: Dialect::Sqlite,
+            expected_count: 2 * VIEW_NAMES.len() + 1,
+            expected_prefixes: &[
+                "DROP VIEW IF EXISTS \"invocations\"",
+                "INSERT OR IGNORE INTO",
+            ],
+        },
+        UpgradeStatementsTestCase {
+            description: "a current store missing a view only creates it",
+            observed: observed_store(Some(RECALL_SCHEMA_VERSION), (Table::Meta, ""), "statements"),
+            dialect: Dialect::ClickHouse,
+            expected_count: 1,
+            expected_prefixes: &["CREATE VIEW IF NOT EXISTS `observability`.`statements`"],
+        },
+    ];
+
+    for test_case in test_cases {
+        let statements: Vec<String> =
+            upgrade_statements(test_case.dialect, &options(None), &test_case.observed);
+        let found: Vec<&str> = test_case
+            .expected_prefixes
+            .iter()
+            .copied()
+            .filter(|prefix| {
+                statements
+                    .iter()
+                    .any(|statement| statement.starts_with(prefix))
+            })
+            .collect();
+        assert_eq!(
+            (statements.len(), found.as_slice()),
+            (test_case.expected_count, test_case.expected_prefixes),
             "{}",
             test_case.description
         );

@@ -6,7 +6,7 @@ use sqlbuild_config::models::ConfigValue;
 
 use crate::settings::constants::DEFAULT_SQLITE_MAX_OUTPUT_BYTES;
 
-/// Where Recall writes.
+/// Where Recall writes or reads.
 #[derive(Clone, Debug, PartialEq)]
 pub enum StoreLocation {
     /// A SQLite file, written natively.
@@ -39,9 +39,12 @@ pub struct RecallSettings {
     pub enabled: bool,
     /// The effective target; `None` for commands without one.
     pub target: Option<String>,
+    /// The store of the request's purpose: where this invocation's history is written, or where `sqb recall` reads it.
     pub store: StoreLocation,
-    /// The configured connection name, `None` for the built-in local store.
-    pub connection: Option<String>,
+    /// The configured write connection, `None` for the built-in local store.
+    pub write_connection: Option<String>,
+    /// The configured read connection, `None` for the built-in local store.
+    pub read_connection: Option<String>,
     pub retention_days: u32,
     pub shutdown_timeout_ms: u64,
     pub diagnostics_min_severity: String,
@@ -53,9 +56,19 @@ pub struct RecallSettings {
     pub destination_schema: Option<String>,
 }
 
-/// What selects the settings: the project directory and the `--target` option.
+/// Which connection an invocation uses, so only that one is resolved and its environment references expanded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StorePurpose {
+    /// Recording the invocation's own history through `write_connection`.
+    Record,
+    /// `sqb recall query`, `schema` and `output` through `read_connection`.
+    Read,
+}
+
+/// What selects the settings: the project directory, the `--target` option and the connection used.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SettingsRequest {
     pub project_dir: PathBuf,
     pub selected_target: Option<String>,
+    pub purpose: StorePurpose,
 }

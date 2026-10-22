@@ -14,6 +14,7 @@ fn given_parsed_command_when_choosing_services_then_matches_python_entry_rules()
                 observed: true,
                 maintains_skills: true,
                 recalled: true,
+                captured: true,
             },
         },
         InvocationPolicyTestCase {
@@ -24,6 +25,7 @@ fn given_parsed_command_when_choosing_services_then_matches_python_entry_rules()
                 observed: false,
                 maintains_skills: true,
                 recalled: false,
+                captured: false,
             },
         },
         InvocationPolicyTestCase {
@@ -34,6 +36,7 @@ fn given_parsed_command_when_choosing_services_then_matches_python_entry_rules()
                 observed: false,
                 maintains_skills: false,
                 recalled: false,
+                captured: false,
             },
         },
         InvocationPolicyTestCase {
@@ -47,16 +50,18 @@ fn given_parsed_command_when_choosing_services_then_matches_python_entry_rules()
                 observed: false,
                 maintains_skills: false,
                 recalled: false,
+                captured: true,
             },
         },
         InvocationPolicyTestCase {
-            description: "recall reads history and is never recorded itself",
+            description: "recall only reads history: no events, sinks, recording or compute logs",
             facts: facts("recall", Some("query")),
             expected_policy: InvocationPolicy {
                 creates_project: false,
-                observed: true,
+                observed: false,
                 maintains_skills: true,
                 recalled: false,
+                captured: false,
             },
         },
     ];

@@ -1,4 +1,4 @@
-use crate::debug_report::models::{ConnectionCheck, ConnectionValue, DebugReport};
+use crate::debug_report::models::{ConnectionCheck, ConnectionValue, DebugFailure, DebugReport};
 
 pub(super) struct FormatTestCase {
     pub(super) description: &'static str,
@@ -13,4 +13,10 @@ pub(super) struct ConnectionLinesTestCase {
     pub(super) settings: Vec<(String, ConnectionValue)>,
     pub(super) check: ConnectionCheck,
     pub(super) expected_lines: Vec<(&'static str, &'static str, Option<&'static str>)>,
+}
+
+pub(super) struct DebugFailureTestCase {
+    pub(super) description: &'static str,
+    pub(super) report: DebugReport,
+    pub(super) expected_failure: Option<DebugFailure>,
 }

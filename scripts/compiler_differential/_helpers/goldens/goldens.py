@@ -32,6 +32,7 @@ from scripts.compiler_differential.constants import (
     GOLDEN_SUFFIX,
     GOLDEN_VERSION_MASK,
     GOLDEN_WORK_MASK,
+    MACHINE_ERROR_KEY,
     PROJECT_DIRECTORY,
 )
 from scripts.compiler_differential.models import (
@@ -155,7 +156,7 @@ def _command(
         "exit_code": "timed out" if outcome.timed_out else outcome.exit_code,
         "diagnostics": (
             report.get("diagnostics", [])
-            if report is not None
+            if report is not None and MACHINE_ERROR_KEY not in report
             else _lines(
                 text=normalize_stderr(_masked(text=outcome.stderr, masked_paths=masked_paths))
             )

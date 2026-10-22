@@ -11,7 +11,7 @@ const STATEMENTS: &str = "WITH facts AS (
     WHERE statement_id IS NOT NULL AND event_type LIKE 'statement!_%' ESCAPE '!'
 ),
 firsts AS (
-    SELECT invocation_id, statement_id, run_id, resource_id, resource_attempt_id, operation_id,
+    SELECT invocation_id, invocation_started_at, statement_id, run_id, resource_id, resource_attempt_id, operation_id,
         intent, statement_kind, purpose, sql_digest,
         ROW_NUMBER() OVER (
             PARTITION BY statement_id ORDER BY invocation_sequence, occurred_at, event_id
@@ -48,6 +48,7 @@ resources AS (
 )
 SELECT
     firsts.invocation_id,
+    firsts.invocation_started_at,
     firsts.statement_id,
     firsts.run_id,
     firsts.resource_id,
@@ -251,6 +252,7 @@ started AS (
 ),
 terminals AS (
     SELECT invocation_id, event_type, occurred_at, exit_code, duration_ms, error_type, error_code,
+        json_extract(payload, '$.error_message') AS error_message,
         ROW_NUMBER() OVER (
             PARTITION BY invocation_id
             ORDER BY invocation_sequence DESC, occurred_at DESC, event_id DESC
@@ -282,6 +284,7 @@ projected AS (
         terminals.exit_code,
         terminals.error_type,
         terminals.error_code,
+        terminals.error_message,
         COALESCE(context.command, started.command, beats.command) AS command,
         COALESCE(context.subcommand, beats.subcommand) AS subcommand,
         context.target,
@@ -322,6 +325,7 @@ SELECT
     exit_code,
     error_type,
     error_code,
+    error_message,
     command,
     subcommand,
     target,

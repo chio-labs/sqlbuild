@@ -2,7 +2,9 @@
 
 use crate::models::ConfigValue;
 use crate::recall::_helpers::values::{non_empty, output_bytes, retention_days, timeout_ms};
-use crate::recall::constants::{MAX_RETENTION_DAYS, RECALL_KEYS, RECALL_SEVERITIES};
+use crate::recall::constants::{
+    MAX_RETENTION_DAYS, RECALL_KEYS, RECALL_SEVERITIES, REMOVED_CONNECTION_KEY,
+};
 use crate::recall::models::RecallSection;
 
 /// The settings of `value`, or the message naming its first problem at `label`.
@@ -20,7 +22,13 @@ pub fn recall_section(value: &ConfigValue, label: &str) -> Result<RecallSection,
                 ConfigValue::Bool(flag) => section.enabled = Some(*flag),
                 _ => return Err(format!("{label}.enabled must be true or false")),
             },
-            "connection" => section.connection = Some(non_empty(value, label, key)?.to_owned()),
+            "write_connection" => {
+                section.write_connection = Some(non_empty(value, label, key)?.to_owned());
+            }
+            "read_connection" => {
+                section.read_connection = Some(non_empty(value, label, key)?.to_owned());
+            }
+            REMOVED_CONNECTION_KEY => return Err(removed_connection(value, label)),
             "retention" => {
                 let text = non_empty(value, label, key)?;
                 section.retention_days = Some(retention_days(text).ok_or_else(|| {
@@ -66,4 +74,18 @@ pub fn recall_section(value: &ConfigValue, label: &str) -> Result<RecallSection,
         }
     }
     Ok(section)
+}
+
+/// The message for the removed `connection` key, naming its replacements.
+fn removed_connection(value: &ConfigValue, label: &str) -> String {
+    let name: String = match value {
+        ConfigValue::String(name) if !name.trim().is_empty() => name.trim().to_owned(),
+        _ => "<name>".to_owned(),
+    };
+    format!(
+        "{label}.connection was replaced by write_connection and read_connection: set \
+         write_connection = \"{name}\" and read_connection = \"{name}\" (or a separate \
+         read-only connection), or only read_connection to read shared history while this \
+         machine records to the local store"
+    )
 }

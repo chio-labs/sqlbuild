@@ -21,6 +21,14 @@ class JsonOutputRequest(Protocol):
     json_output_path: Path | None
 
 
+class UnprintableError(Exception):
+    """A handler error whose message raises when read."""
+
+    def __str__(self) -> str:
+        """Fail as a broken `__str__` does."""
+        raise RuntimeError("unreadable")
+
+
 def invalid_loader_destination_error(_: Path) -> SpecConfigError:
     """Return the contract error produced by an invalid loader destination."""
 

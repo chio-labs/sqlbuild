@@ -86,6 +86,7 @@ from sqlbuild.adapter.relations.main.get_columns_for_relations import (
 )
 from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize_numeric_family
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
+from sqlbuild.adapters.clickhouse._helpers.connect_clickhouse import connect_clickhouse
 from sqlbuild.adapters.clickhouse._helpers.output_columns import (
     alias_qualified_columns,
     key_identifiers,
@@ -108,22 +109,16 @@ from sqlbuild.adapters.clickhouse._helpers.type_text import (
 )
 from sqlbuild.adapters.clickhouse.classes.clickhouse_connection import _ClickHouseConnection
 from sqlbuild.adapters.clickhouse.classes.partition_locks import PartitionLocks
-from sqlbuild.adapters.clickhouse.classes.recall_connections import RecallConnections
 from sqlbuild.adapters.clickhouse.classes.relation_write_locks import RelationWriteLocks
 from sqlbuild.adapters.clickhouse.constants import (
-    CONNECTION_OPTION_KEYS,
     DEFAULT_COLUMN_DEFAULT_KIND,
     DEFAULT_DATABASE,
-    DEFAULT_HTTP_PORT,
-    DEFAULT_HTTPS_PORT,
-    DSN_OPTION,
     EXCHANGE_UNSUPPORTED_CODES,
     EXPECTED_OUTPUT_COLUMNS_CONFIG_KEY,
     FRESH_GENERATION_CLAUSE,
     GENERATION_COMMENT_PREFIX,
     MAX_IDENTIFIER_LENGTH,
     MAX_QUERY_SIZE_BYTES,
-    MINIMUM_SERVER_VERSION,
     MODEL_NAME_CONFIG_KEY,
     NULL_IN_ORDINARY_COLUMN_CODE,
     NULL_IN_ORDINARY_COLUMN_SERVER_CODE,
@@ -134,14 +129,10 @@ from sqlbuild.adapters.clickhouse.constants import (
     PHYSICAL_STORAGE_CONFIG_KEY,
     RELATION_NOT_FOUND_CODES,
     RELATION_SEPARATOR,
-    SESSION_SETTINGS,
-    SETTING_CONFLICT_CODE,
     SNAPSHOT_REBUILD_INFIX,
     SNAPSHOT_WORK_INFIX,
     STATE_TABLE_ENGINE_KEYWORD,
     STATE_TIMESTAMP_TYPE,
-    TIMEOUT_OPTIONS,
-    VERIFY_OPTION,
     VIEW_ENGINES,
 )
 from sqlbuild.adapters.clickhouse.models import (
@@ -182,58 +173,9 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     )
     _partition_locks: ClassVar[PartitionLocks] = PartitionLocks()
     _relation_locks: ClassVar[RelationWriteLocks] = RelationWriteLocks()
-    recall_connections: ClassVar[RecallConnections] = RecallConnections()
 
     def connect(self, config: dict[str, Any]) -> _ClickHouseConnection:
-        try:
-            import clickhouse_connect
-        except ImportError as error:
-            raise AdapterUserError(
-                message="ClickHouse adapter requires optional dependency clickhouse-connect. "
-                "Install with: pip install 'sqlbuild[clickhouse]'",
-                code="A701",
-            ) from error
-        unknown: tuple[str, ...] = tuple(sorted(set(config) - CONNECTION_OPTION_KEYS))
-        if unknown:
-            raise AdapterUserError(
-                message=f"ClickHouse connection has unsupported options: {', '.join(unknown)}",
-                code="A702",
-                help="Supported options: " + ", ".join(sorted(CONNECTION_OPTION_KEYS)),
-            )
-        secure: bool = bool(config.get("secure", False))
-        settings: dict[str, object] = _session_settings(dict(config.get("settings") or {}))
-        client_options: dict[str, Any] = {
-            "host": str(config.get("host", "localhost")),
-            "port": int(config.get("port", DEFAULT_HTTPS_PORT if secure else DEFAULT_HTTP_PORT)),
-            "username": str(config.get("username", config.get("user", "default"))),
-            "password": str(config.get("password", "")),
-            "database": str(config.get("database", DEFAULT_DATABASE)),
-            "secure": secure,
-            "settings": settings,
-            "autogenerate_session_id": False,
-        }
-        if VERIFY_OPTION in config:
-            client_options[VERIFY_OPTION] = bool(config[VERIFY_OPTION])
-        if DSN_OPTION in config:
-            client_options[DSN_OPTION] = str(config[DSN_OPTION])
-        for timeout_key in TIMEOUT_OPTIONS:
-            if timeout_key in config:
-                client_options[timeout_key] = int(config[timeout_key])
-
-        def create_client() -> Any:
-            return clickhouse_connect.get_client(**client_options)
-
-        client: Any = create_client()
-        version: str = str(client.server_version)
-        if _version_tuple(version) < MINIMUM_SERVER_VERSION:
-            client.close()
-            minimum: str = ".".join(str(part) for part in MINIMUM_SERVER_VERSION)
-            raise AdapterUserError(
-                message=f"ClickHouse server {version} is older than the supported {minimum}",
-                code="A703",
-                help=f"Upgrade the server to ClickHouse {minimum} or newer.",
-            )
-        return _ClickHouseConnection(client=client, interrupt_client_factory=create_client)
+        return connect_clickhouse(config)
 
     def _execute(self, *, connection: _ClickHouseConnection, sql: str) -> Any:
         log_sql(logger=logging.getLogger("sqlbuild.adapter.clickhouse"), sql=sql)
@@ -2702,14 +2644,6 @@ def _state_table_ddl(sql: str) -> str:
     return f"{ddl} ENGINE = MergeTree ORDER BY tuple()"
 
 
-def _version_tuple(version: str) -> tuple[int, ...]:
-    parts: list[int] = []
-    for part in version.split(".")[:2]:
-        digits: str = "".join(character for character in part if character.isdigit())
-        parts.append(int(digits or 0))
-    return tuple(parts)
-
-
 def _error_code(error: BaseException) -> int | None:
     current: BaseException | None = error
     while current is not None:
@@ -2809,33 +2743,3 @@ def _prune_history_sql(
         f"PARTITION BY {partition} ORDER BY {order}) AS __sqlbuild_history_rank FROM {table}) "
         f"WHERE __sqlbuild_history_rank > {retain_versions}) SETTINGS transform_null_in = 1"
     )
-
-
-def _session_settings(user_settings: dict[str, object]) -> dict[str, object]:
-    """Merge user settings under the required ones, refusing a user value that differs."""
-
-    conflicts: tuple[str, ...] = tuple(
-        sorted(
-            name
-            for name, value in user_settings.items()
-            if name in SESSION_SETTINGS
-            and _setting_text(value) != _setting_text(SESSION_SETTINGS[name])
-        )
-    )
-    if conflicts:
-        required: str = ", ".join(f"{name} = {SESSION_SETTINGS[name]!r}" for name in conflicts)
-        raise AdapterUserError(
-            message=(
-                "ClickHouse connection settings override settings SQLBuild requires: "
-                + ", ".join(conflicts)
-            ),
-            code=SETTING_CONFLICT_CODE,
-            help=f"Remove them from [connection.settings]; SQLBuild runs with {required}.",
-        )
-    return {**user_settings, **SESSION_SETTINGS}
-
-
-def _setting_text(value: object) -> str:
-    if isinstance(value, bool):
-        return "1" if value else "0"
-    return str(value).strip().lower()

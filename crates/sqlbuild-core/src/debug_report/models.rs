@@ -167,3 +167,11 @@ impl DebugLine {
         }
     }
 }
+
+/// Why `sqb debug` failed: the first failed check as an error type, code and message.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DebugFailure {
+    pub error_type: String,
+    pub error_code: String,
+    pub message: String,
+}

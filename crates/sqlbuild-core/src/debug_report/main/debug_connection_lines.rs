@@ -1,7 +1,8 @@
 //! The connection section of `sqb debug`.
 
 use crate::debug_report::constants::{
-    MASKED_VALUE, PREVIEW_CHARACTER_LIMIT, PREVIEW_EDGE_CHARACTERS, SECRET_CONNECTION_KEYS,
+    CONNECTION_TEST_LABEL, MASKED_VALUE, PREVIEW_CHARACTER_LIMIT, PREVIEW_EDGE_CHARACTERS,
+    QUERY_TEST_LABEL, SECRET_CONNECTION_KEYS,
 };
 use crate::debug_report::models::{ConnectionCheck, ConnectionValue, DebugLine, DebugStatus};
 
@@ -32,21 +33,21 @@ fn check_lines(check: &ConnectionCheck) -> [DebugLine; 2] {
     match check {
         ConnectionCheck::Skipped => [
             line(
-                "connection test",
+                CONNECTION_TEST_LABEL,
                 DebugStatus::Skip,
                 "skipped by --no-connection",
             ),
-            line("query test", DebugStatus::Skip, "connection skipped"),
+            line(QUERY_TEST_LABEL, DebugStatus::Skip, "connection skipped"),
         ],
         ConnectionCheck::ConnectFailed(error) => [
-            line("connection test", DebugStatus::Error, error),
-            line("query test", DebugStatus::Skip, "connection failed"),
+            line(CONNECTION_TEST_LABEL, DebugStatus::Error, error),
+            line(QUERY_TEST_LABEL, DebugStatus::Skip, "connection failed"),
         ],
         ConnectionCheck::Connected { query_error } => [
-            line("connection test", DebugStatus::Ok, "connected"),
+            line(CONNECTION_TEST_LABEL, DebugStatus::Ok, "connected"),
             match query_error {
-                Some(error) => line("query test", DebugStatus::Error, error),
-                None => line("query test", DebugStatus::Ok, "SELECT 1"),
+                Some(error) => line(QUERY_TEST_LABEL, DebugStatus::Error, error),
+                None => line(QUERY_TEST_LABEL, DebugStatus::Ok, "SELECT 1"),
             },
         ],
     }

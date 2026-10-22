@@ -30,3 +30,5 @@ pub const BINARY_UNIT_STEP: u64 = 1024;
 pub const DECIMAL_UNITS: [&str; 4] = ["kB", "MB", "GB", "TB"];
 /// Binary size units above bytes, for kept output.
 pub const BINARY_UNITS: [&str; 4] = ["KiB", "MiB", "GiB", "TiB"];
+/// The `sqlite_schema.type` of a view.
+pub(crate) const SQLITE_VIEW_TYPE: &str = "view";

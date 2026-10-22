@@ -420,7 +420,7 @@ pub(crate) const QUERY_ROUTE: Route = routed(
     },
 );
 
-const RECALL_ARGUMENTS: [Field; 13] = [
+const RECALL_ARGUMENTS: [Field; 14] = [
     PROJECT_DIR,
     SELECTED_TARGET,
     same("recall_command"),
@@ -434,6 +434,7 @@ const RECALL_ARGUMENTS: [Field; 13] = [
     attr("invocation", "recall_invocation"),
     attr("stream", "recall_stream"),
     attr("tail", "recall_tail"),
+    attr("ddl", "recall_ddl"),
 ];
 pub(crate) const RECALL_ROUTE: Route = routed(
     "run_recall",

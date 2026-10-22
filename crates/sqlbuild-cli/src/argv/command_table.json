@@ -6853,6 +6853,7 @@
               "json",
               "csv"
              ],
+             "help": "long (default) for reading, json for programs, csv for export; table is deprecated",
              "mutex_group": 0,
              "group": 1
             },
@@ -7018,6 +7019,19 @@
              "group": 1
             },
             {
+             "kind": "store_true",
+             "options": [
+              "--ddl"
+             ],
+             "dest": "recall_ddl",
+             "nargs": 0,
+             "const": true,
+             "default": false,
+             "help": "print the SQL that creates the Recall store or brings it up to this version",
+             "mutex_group": 0,
+             "group": 1
+            },
+            {
              "kind": "store",
              "options": [
               "--format"
@@ -7030,6 +7044,7 @@
               "json",
               "csv"
              ],
+             "help": "long (default) for reading, json for programs, csv for export; table is deprecated",
              "mutex_group": 0,
              "group": 1
             },

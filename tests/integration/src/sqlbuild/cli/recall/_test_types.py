@@ -1,4 +1,6 @@
+from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -200,3 +202,111 @@ class ThirdPartyLogTestCase:
     expected_present: tuple[str, ...]
     expected_absent: tuple[str, ...]
     expected_traceback_count: int
+
+
+@dataclass(frozen=True)
+class RecallConnectionErrorTestCase:
+    description: str
+    recall_toml: str
+    args: tuple[str, ...]
+    expected_message: str
+
+
+@dataclass(frozen=True)
+class ReadOnlyReaderTestCase:
+    description: str
+    expected_shared_invocations: list[list[object]]
+
+
+@dataclass(frozen=True)
+class BehindStoreTestCase:
+    description: str
+    expected_ddl_fragments: tuple[str, ...]
+    expected_up_to_date_note: str
+
+
+@dataclass(frozen=True)
+class JsonErrorTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_code: str
+
+
+@dataclass(frozen=True)
+class DeprecatedFormatTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_warning: bool
+
+
+@dataclass(frozen=True)
+class FailureCauseTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_failure: list[object]
+    expected_message_prefix: str
+
+
+@dataclass(frozen=True)
+class GitRevisionTestCase:
+    description: str
+    prepare: Callable[[Path], tuple[Path, str]]
+    environment: dict[str, str]
+    expected_dirty: object
+
+
+@dataclass(frozen=True)
+class LeanRecallTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_sink_log: bool
+
+
+@dataclass(frozen=True)
+class StatementStartTestCase:
+    description: str
+    sql: str
+    expected_rows: list[list[object]]
+
+
+@dataclass(frozen=True)
+class StoreBeingCreatedTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_error: str
+
+
+@dataclass(frozen=True)
+class SplitCredentialsTestCase:
+    description: str
+    writer_environment: dict[str, str]
+    reader_environment: dict[str, str]
+    expected_invocations: list[list[object]]
+
+
+@dataclass(frozen=True)
+class LayeredConnectionsTestCase:
+    description: str
+    project_toml: str
+    local_toml: str
+    expected_invocations: list[list[object]]
+
+
+@dataclass(frozen=True)
+class RecallUsageErrorTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_message: str
+
+
+@dataclass(frozen=True)
+class RecallDiagnosticsTestCase:
+    description: str
+    global_args: tuple[str, ...]
+    expected_debug_log: bool
+
+
+@dataclass(frozen=True)
+class UnsetWriterVariableTestCase:
+    description: str
+    expected_exit_code: int

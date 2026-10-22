@@ -6,11 +6,18 @@ use std::time::Instant;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyStringMethods};
 use sqlbuild_recall::records::models::OutputStream;
-use sqlbuild_recall::schema::models::Dialect;
+use sqlbuild_recall::schema::constants::VIEW_NAMES;
+use sqlbuild_recall::schema::main::ddl_statements::ddl_statements;
+use sqlbuild_recall::schema::main::render_script::render_script;
+use sqlbuild_recall::schema::main::upgrade_statements::upgrade_statements;
+use sqlbuild_recall::schema::models::{DdlOptions, Dialect};
 use sqlbuild_recall::settings::main::resolve_recall_settings::resolve_recall_settings;
-use sqlbuild_recall::settings::models::{RecallSettings, SettingsRequest, StoreLocation};
+use sqlbuild_recall::settings::models::{
+    RecallSettings, SettingsRequest, StoreLocation, StorePurpose,
+};
 use sqlbuild_recall::store::errors::{StoreError, StoreErrorKind};
 use sqlbuild_recall::store::main::describe_store::describe_store;
+use sqlbuild_recall::store::main::observe_sqlite_schema::observe_sqlite_schema;
 use sqlbuild_recall::store::main::open_sqlite_store::open_sqlite_store;
 use sqlbuild_recall::store::main::query_store::query_store;
 use sqlbuild_recall::store::main::read_output_transcript::read_output_transcript;
@@ -24,7 +31,8 @@ use crate::bindings::_helpers::recall::console::{write_stderr, write_stdout_byte
 use crate::bindings::_helpers::recall::constants::{
     DEFAULT_MAX_CELL_BYTES, DEFAULT_QUERY_LIMIT, JSON_FORMAT, LAST_INVOCATION, LONG_FORMAT,
     RECALL_AMBIGUOUS_CODE, RECALL_DISABLED_CODE, RECALL_NOT_FOUND_CODE, RECALL_OPTIONS,
-    RECALL_QUERY_CODE, RECALL_SETTINGS_CODE, RECALL_STORE_CODE, WAREHOUSE_BACKEND,
+    RECALL_QUERY_CODE, RECALL_SETTINGS_CODE, RECALL_STORE_CODE, TABLE_FORMAT,
+    TABLE_FORMAT_DEPRECATION, WAREHOUSE_BACKEND,
 };
 use crate::bindings::_helpers::recall::rendering::{QueryContext, render_result, render_schema};
 use crate::bindings::_helpers::records::construct::new_error;
@@ -59,6 +67,7 @@ struct RecallRequest {
     invocation: Option<String>,
     stream: Option<String>,
     tail: Option<i64>,
+    ddl: bool,
 }
 
 fn optional_text(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
@@ -87,7 +96,16 @@ fn recall_request(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResul
         invocation: text("invocation")?,
         stream: text("stream")?,
         tail: number("tail")?,
+        ddl: arguments.value("ddl")?.is_truthy()?,
     })
+}
+
+/// Warn once that `--format table` goes away in a later release; it still works in this one.
+fn warn_table_format(py: Python<'_>, recall: &RecallRequest) -> PyResult<()> {
+    if recall.format == TABLE_FORMAT {
+        write_stderr(py, TABLE_FORMAT_DEPRECATION)?;
+    }
+    Ok(())
 }
 
 /// The project directory, target and settings, or the coded failure.
@@ -100,6 +118,7 @@ fn settings(py: Python<'_>, recall: &RecallRequest) -> PyResult<(PathBuf, Recall
     let request = SettingsRequest {
         project_dir: project_dir.clone(),
         selected_target: recall.selected_target.clone(),
+        purpose: StorePurpose::Read,
     };
     let settings = resolve_recall_settings(&request)
         .map_err(|error| user_error(py, &error.message, RECALL_SETTINGS_CODE))?;
@@ -159,7 +178,8 @@ impl ReadStore {
     }
 }
 
-fn open_store(py: Python<'_>, settings: &RecallSettings) -> PyResult<ReadStore> {
+/// The read store; `checked` first confirms a ClickHouse store exists, which a query skips and confirms only if it fails.
+fn open_store(py: Python<'_>, settings: &RecallSettings, checked: bool) -> PyResult<ReadStore> {
     match &settings.store {
         StoreLocation::Sqlite { path } => {
             let store = open_sqlite_store(path, OpenMode::ReadOnly).map_err(|error| {
@@ -187,6 +207,13 @@ fn open_store(py: Python<'_>, settings: &RecallSettings) -> PyResult<ReadStore> 
             py,
             &ClickHouseLocation::new(config, database, settings.retention_days),
         )
+        .and_then(|reader| {
+            if checked && let Err(error) = reader.require_store(py) {
+                reader.close();
+                return Err(error);
+            }
+            Ok(reader)
+        })
         .map(ReadStore::ClickHouse)
         .map_err(|error| {
             let error = if error.kind == StoreErrorKind::NotFound {
@@ -213,6 +240,21 @@ fn open_store(py: Python<'_>, settings: &RecallSettings) -> PyResult<ReadStore> 
     }
 }
 
+/// The "no history yet" failure when a query failed because a writer is still creating the store's views, so it reads like the store not existing yet rather than an invalid query.
+fn not_created(store: &SqliteStore, path: &str) -> Option<StoreError> {
+    let complete: bool = match observe_sqlite_schema(store) {
+        Ok(observed) => VIEW_NAMES.iter().all(|view| observed.views.contains(*view)),
+        Err(_unreadable) => return None,
+    };
+    (!complete).then(|| StoreError {
+        kind: StoreErrorKind::Other,
+        message: format!(
+            "no Recall history is recorded yet at {path}, or its tables are still being created; \
+             run a command first"
+        ),
+    })
+}
+
 /// `sqb recall query --backend warehouse` and `schema --backend warehouse` run through `sqb query`.
 fn warehouse_query(
     py: Python<'_>,
@@ -237,6 +279,7 @@ fn limit(recall: &RecallRequest) -> Option<i64> {
 }
 
 fn run_query(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
+    warn_table_format(py, recall)?;
     let (project_dir, settings) = settings(py, recall)?;
     let sql: String = recall.sql.clone().unwrap_or_default();
     if sql.trim().is_empty() {
@@ -257,13 +300,13 @@ fn run_query(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
     if recall.backend.as_deref() == Some(WAREHOUSE_BACKEND) {
         return warehouse_query(py, recall, &project_dir, (&sql, limit));
     }
-    let store = open_store(py, &settings)?;
+    let store = open_store(py, &settings, false)?;
     let started = Instant::now();
     let limit = limit.map(|limit| usize::try_from(limit).unwrap_or(usize::MAX));
     let queried = match &store {
-        ReadStore::Sqlite { store, .. } => {
-            query_store(store, &sql, limit).map(|result| (result, None))
-        }
+        ReadStore::Sqlite { store, path } => query_store(store, &sql, limit)
+            .map(|result| (result, None))
+            .map_err(|failure| not_created(store, path).unwrap_or(failure)),
         ReadStore::ClickHouse(reader) => reader
             .query(py, &sql, limit)
             .map(|(result, statistics)| (result, Some(statistics))),
@@ -295,8 +338,70 @@ fn run_query(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
     Ok(0)
 }
 
+/// Print what creates the read store, or brings it up to this build's schema, without changing it.
+fn run_schema_ddl(py: Python<'_>, settings: &RecallSettings) -> PyResult<i32> {
+    let (statements, place): (Result<Vec<String>, StoreError>, String) = match &settings.store {
+        StoreLocation::Sqlite { path } => {
+            let options = DdlOptions {
+                database: None,
+                retention_days: settings.retention_days,
+                cluster: None,
+            };
+            let statements = if path.exists() {
+                open_sqlite_store(path, OpenMode::ReadOnly)
+                    .and_then(|store| observe_sqlite_schema(&store))
+                    .map(|observed| upgrade_statements(Dialect::Sqlite, &options, &observed))
+            } else {
+                Ok(ddl_statements(Dialect::Sqlite, &options))
+            };
+            (statements, format!("at {}", path.display()))
+        }
+        StoreLocation::ClickHouse {
+            config, database, ..
+        } => (
+            ClickHouseReader::upgrade_statements(
+                py,
+                &ClickHouseLocation::new(config, database, settings.retention_days),
+            ),
+            format!("in ClickHouse database `{database}`"),
+        ),
+        StoreLocation::Unsupported { .. } => {
+            return open_store(py, settings, true).map(|store| {
+                store.close();
+                0
+            });
+        }
+    };
+    let statements =
+        statements.map_err(|error| user_error(py, &error.message, RECALL_STORE_CODE))?;
+    if statements.is_empty() {
+        write_stderr(
+            py,
+            &format!(
+                "The Recall store {place} is up to date with this SQLBuild version; there is \
+                 nothing to run.\n"
+            ),
+        )?;
+    } else {
+        write_stdout_bytes(py, render_script(&statements).as_bytes())?;
+    }
+    Ok(0)
+}
+
 fn run_schema(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
+    warn_table_format(py, recall)?;
     let (project_dir, settings) = settings(py, recall)?;
+    if recall.ddl {
+        if recall.backend.as_deref() == Some(WAREHOUSE_BACKEND) {
+            return Err(user_error(
+                py,
+                "--ddl prints the Recall store's DDL and cannot be combined with --backend \
+                 warehouse",
+                RECALL_QUERY_CODE,
+            ));
+        }
+        return run_schema_ddl(py, &settings);
+    }
     if recall.backend.as_deref() == Some(WAREHOUSE_BACKEND) {
         let sql = match &recall.relation {
             Some(relation) => format!(
@@ -312,7 +417,7 @@ fn run_schema(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
         };
         return warehouse_query(py, recall, &project_dir, (&sql, None));
     }
-    let store = open_store(py, &settings)?;
+    let store = open_store(py, &settings, true)?;
     let described = match &store {
         ReadStore::Sqlite { store, .. } => describe_store(store),
         ReadStore::ClickHouse(reader) => reader.describe(py),
@@ -351,7 +456,7 @@ fn tail_lines(data: &[u8], lines: usize) -> &[u8] {
 
 fn run_output(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
     let (_, settings) = settings(py, recall)?;
-    let store = open_store(py, &settings)?;
+    let store = open_store(py, &settings, true)?;
     let selector: &str = recall.invocation.as_deref().unwrap_or(LAST_INVOCATION);
     let stream = recall.stream.as_deref().and_then(OutputStream::from_name);
     let read = store

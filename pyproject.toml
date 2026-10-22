@@ -46,7 +46,7 @@ sqlserver = [
   "pymssql>=2.3.0",
 ]
 clickhouse = [
-  "clickhouse-connect>=0.8",
+  "clickhouse-connect>=0.15",
 ]
 ingestr = [
   "dbc>=0.3.1",

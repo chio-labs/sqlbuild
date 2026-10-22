@@ -32,13 +32,11 @@ def dispatch_with_compute_logs(
     args: CliNamespace,
     identity: ExecutionIdentity,
     operation: Callable[[], int],
-    creates_project: bool,
     recall: RecallLifecycleSink | None = None,
+    capture: bool = True,
 ) -> int:
-    """Run one composed dispatch while retaining exact process streams best-effort."""
+    """Run one dispatch retaining process streams best-effort, or only routing diagnostics."""
 
-    if creates_project:
-        return operation()
     project_dir: Path = Path(args.project_dir) if args.project_dir is not None else Path.cwd()
     project_roots: tuple[str, ...] = diagnostic_project_roots(project_dir=project_dir)
     routing_options: DiagnosticRoutingOptions = DiagnosticRoutingOptions(
@@ -46,6 +44,14 @@ def dispatch_with_compute_logs(
         use_color=(not args.no_color) and supports_color(),
         project_roots=project_roots,
     )
+    if not capture:
+        with configure_diagnostics(
+            invocation_id=identity.invocation_id,
+            debug=args.debug,
+            use_color=routing_options.use_color,
+            project_roots=project_roots,
+        ):
+            return operation()
     started_at: datetime = datetime.now(UTC)
     command: str = "unknown" if args.command is None else str(args.command)
     metadata: CaptureMetadata = CaptureMetadata(

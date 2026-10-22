@@ -45,7 +45,14 @@ def test_given_reference_pages_when_checking_docs_skill_then_outdated_pages_fail
     (docs_root / "concepts").mkdir(parents=True)
     (tmp_path / "src/sidebar.json").write_text(_SIDEBAR_JSON, encoding="utf-8")
     (docs_root / "concepts/orders.mdx").write_text(_ORDERS_PAGE, encoding="utf-8")
-    arguments: list[str] = ["--docs-root", str(docs_root), "--output-dir", str(output_dir)]
+    arguments: list[str] = [
+        "--docs-root",
+        str(docs_root),
+        "--output-dir",
+        str(output_dir),
+        "--investigation-guide",
+        "",
+    ]
     _ = generate_docs_skill(arguments)
     for relative_path, contents in test_case.output_edits.items():
         (output_dir / relative_path).write_text(contents, encoding="utf-8")
