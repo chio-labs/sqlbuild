@@ -2885,6 +2885,13 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"ORDER BY {hash_expression}, {tie_break}"
         )
 
+    def _render_unkeyed_sample_sql(
+        self, *, joined_sql: str, select_list: str, predicate: str, limit: int
+    ) -> str:
+        """Render the bounded SQL Server side-only sample query."""
+
+        return f"{joined_sql} SELECT TOP ({limit}) {select_list} FROM __joined WHERE {predicate}"
+
     def _render_row_diff_key_hash(
         self,
         *,

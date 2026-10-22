@@ -255,3 +255,16 @@ _EVOLUTIONS: MappingProxyType[str, Callable[[SqliteAdapter, Any], None]] = Mappi
         "retype": _retype_column,
     }
 )
+
+
+class RecordingCursorSqliteAdapter(SqliteAdapter):
+    """Record every statement and the cursor it returned."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.executed: list[tuple[str, Any]] = []
+
+    def _execute(self, *, connection: Any, sql: str) -> Any:
+        cursor: Any = super()._execute(connection=connection, sql=sql)
+        self.executed.append((sql, cursor))
+        return cursor
