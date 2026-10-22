@@ -2,13 +2,15 @@
 
 use std::path::PathBuf;
 
-use pyo3::prelude::{Bound, IntoPyObject, PyAny, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::PyBool;
+use pyo3::prelude::{
+    Bound, IntoPyObject, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python,
+};
+use pyo3::types::{PyBool, PyDict};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::definition_changes::main::definition_snapshot_json::definition_snapshot_json;
 use sqlbuild_analysis::definition_changes::models::DefinitionSnapshot;
 
-use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, keywords};
 use crate::bindings::_helpers::change_selection::definition_snapshot::definition_snapshot;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_connection_context;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
@@ -22,22 +24,28 @@ fn flag(py: Python<'_>, value: bool) -> Bound<'_, PyAny> {
     PyBool::new(py, value).to_owned().into_any()
 }
 
-/// Compile the project at `project_dir` without SQL analysis and write its definition snapshot.
-///
-/// `--since` runs this in a separate interpreter for the exported base revision.
+/// Compile an exported base tree without SQL analysis and write its definition snapshot.
 #[pyfunction]
-#[pyo3(signature = (*, project_dir, output_path, selected_target = None, cli_vars = None))]
+#[pyo3(signature = (**options))]
 fn write_base_definition_snapshot(
     py: Python<'_>,
-    project_dir: PathBuf,
-    output_path: PathBuf,
-    selected_target: Option<Bound<'_, PyAny>>,
-    cli_vars: Option<Bound<'_, PyAny>>,
+    options: Option<Bound<'_, PyDict>>,
 ) -> PyResult<()> {
+    let arguments: KeywordArguments<'_> = KeywordArguments::read(
+        py,
+        "write_base_definition_snapshot",
+        options,
+        (
+            &["project_dir", "output_path"],
+            &["selected_target", "cli_vars"],
+        ),
+    )?;
     let none = || py.None().into_bound(py);
+    let project_dir: PathBuf = arguments.value("project_dir")?.extract()?;
+    let output_path: PathBuf = arguments.value("output_path")?.extract()?;
     let directory: Bound<'_, PyAny> = project_dir.clone().into_pyobject(py)?.into_any();
-    let target: Bound<'_, PyAny> = selected_target.unwrap_or_else(none);
-    let vars: Bound<'_, PyAny> = cli_vars.unwrap_or_else(none);
+    let target: Bound<'_, PyAny> = arguments.value("selected_target")?;
+    let vars: Bound<'_, PyAny> = arguments.value("cli_vars")?;
     let discovered: Bound<'_, PyAny> = discover_project_inputs(
         py,
         Some(keywords(py, &[("project_dir", directory.clone())])?),

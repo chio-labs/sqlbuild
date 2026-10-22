@@ -14,3 +14,6 @@ pub(crate) const UNKNOWN_REF_CODE: &str = "C481";
 pub(crate) const NO_MERGE_BASE_CODE: &str = "C482";
 pub(crate) const EXPORT_FAILED_CODE: &str = "C483";
 pub(crate) const BASE_REF_UNSET_CODE: &str = "C485";
+pub(crate) const DEPTH_HELP: &str = "Fetch enough history to reach the merge base, for example \
+                                     `git fetch --unshallow`, or in CI clone with a larger fetch \
+                                     depth";

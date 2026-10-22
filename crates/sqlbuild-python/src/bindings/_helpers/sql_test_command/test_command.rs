@@ -31,7 +31,7 @@ use crate::bindings::_helpers::build_progress::progress_text::{
 use crate::bindings::_helpers::build_progress::result_text::test_label;
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::change_selection::base_snapshot::{
-    BaseComparison, BaseVariant, base_comparison,
+    BaseComparison, base_comparison, base_variant,
 };
 use crate::bindings::_helpers::change_selection::selection::{
     ChangedProject, changed_project, tests_and_models,
@@ -58,6 +58,9 @@ use crate::bindings::_helpers::sql_test_command::timeouts::{
 };
 
 const PASS_OUTCOME: &str = "pass";
+
+/// Why `--since` selected each test, by inspection label.
+type SelectionReasons = HashMap<String, Vec<String>>;
 const EXPECT_LABEL: &str = "expect";
 const UNKNOWN_GROUP: &str = "(unknown)";
 const EXECUTION_COMMAND: &str = "sqb test";
@@ -428,14 +431,13 @@ fn inspect(
     Ok(code)
 }
 
-/// Keep only the planned tests that execute something changed since the base revision, write
-/// the summary, and return the narrowed pipeline with each kept test's reasons by label.
+/// Keep the planned tests that execute something changed, with each one's reasons by label.
 fn select_changed<'py>(
     (pipeline, stream): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
     project_dir: &std::path::Path,
     base: BaseComparison,
     explain: bool,
-) -> PyResult<(Bound<'py, PyAny>, HashMap<String, Vec<String>>)> {
+) -> PyResult<(Bound<'py, PyAny>, SelectionReasons)> {
     let py: Python<'py> = pipeline.py();
     let project: Bound<'py, PyAny> = native_field(pipeline, "project")?;
     let changed: ChangedProject = changed_project(&project, project_dir, base)?;
@@ -673,10 +675,10 @@ pub(crate) fn run_test_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> Py
         Some(since) => Some(base_comparison(
             (&stream, &project_dir),
             since,
-            &BaseVariant {
-                selected_target: native_field(request, "selected_target")?.extract()?,
-                cli_vars: native_field(request, "cli_vars")?,
-            },
+            &base_variant(
+                native_field(request, "selected_target")?.extract()?,
+                &native_field(request, "cli_vars")?,
+            )?,
         )?),
         None => None,
     };

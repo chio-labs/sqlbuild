@@ -19,7 +19,7 @@ use sqlbuild_host::entries::models::ExecutorHost;
 use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::change_selection::base_snapshot::{
-    BaseComparison, BaseVariant, base_comparison,
+    BaseComparison, base_comparison, base_variant,
 };
 use crate::bindings::_helpers::change_selection::selection::{ChangedProject, changed_project};
 use crate::bindings::_helpers::command_runtime::concurrency::resolve_concurrency;
@@ -402,10 +402,7 @@ pub(crate) fn run_scenario_test_command(
         Some(since) => Some(base_comparison(
             (&run.stream, &run.project.project_dir),
             since,
-            &BaseVariant {
-                selected_target: None,
-                cli_vars: py.None().into_bound(py),
-            },
+            &base_variant(None, &py.None().into_bound(py))?,
         )?),
         None => None,
     };

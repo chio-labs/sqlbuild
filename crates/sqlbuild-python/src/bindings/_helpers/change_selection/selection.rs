@@ -29,6 +29,9 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::scenario_command::setup::{flush, write};
 
 const MACRO_TEST_MODE: &str = "macro";
+
+/// Compiled tests or models by name.
+pub(crate) type ByName<'py> = HashMap<String, Bound<'py, PyAny>>;
 const TEST_CONSUMER_KIND: &str = "test";
 
 /// The changes since the base revision and what the current revision uses.
@@ -107,10 +110,7 @@ impl ChangedProject {
     pub(crate) fn test_item(
         &self,
         entry: &Bound<'_, PyAny>,
-        (tests, models): (
-            &HashMap<String, Bound<'_, PyAny>>,
-            &HashMap<String, Bound<'_, PyAny>>,
-        ),
+        (tests, models): (&ByName<'_>, &ByName<'_>),
     ) -> PyResult<ExecutedItem> {
         let name: String = native_field(entry, "name")?.extract()?;
         let mut item: ExecutedItem = ExecutedItem {
@@ -204,16 +204,13 @@ impl ChangedProject {
 /// The project's compiled tests and models by name.
 pub(crate) fn tests_and_models<'py>(
     project: &Bound<'py, PyAny>,
-) -> PyResult<(
-    HashMap<String, Bound<'py, PyAny>>,
-    HashMap<String, Bound<'py, PyAny>>,
-)> {
-    let mut tests: HashMap<String, Bound<'py, PyAny>> = HashMap::new();
+) -> PyResult<(ByName<'py>, ByName<'py>)> {
+    let mut tests: ByName<'py> = HashMap::new();
     for test in project_reads::sql_tests(project)?.try_iter()? {
         let test: Bound<'py, PyAny> = test?;
         tests.insert(native_field(&test, "name")?.extract()?, test);
     }
-    let mut models: HashMap<String, Bound<'py, PyAny>> = HashMap::new();
+    let mut models: ByName<'py> = HashMap::new();
     for model in project_reads::models(project)?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
         models.insert(model_reads::model_name(&model)?, model);

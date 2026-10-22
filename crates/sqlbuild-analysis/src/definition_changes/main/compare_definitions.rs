@@ -15,22 +15,22 @@ fn renamed_base<'a>(
     (base, current): (&'a DefinitionSnapshot, &DefinitionSnapshot),
     claimed: &BTreeSet<String>,
 ) -> Option<(String, &'a NodeDefinition)> {
-    node.migrate_from.iter().find_map(|old_name| {
+    for old_name in &node.migrate_from {
         let old_key: String = node_key(&node.kind, old_name);
         if old_key == current_key
             || claimed.contains(&old_key)
             || current.nodes.contains_key(&old_key)
         {
-            return None;
+            continue;
         }
-        base.nodes
-            .get(&old_key)
-            .map(|definition| (old_key, definition))
-    })
+        if let Some(definition) = base.nodes.get(&old_key) {
+            return Some((old_key, definition));
+        }
+    }
+    None
 }
 
-/// Added nodes count as changed, deleted nodes are listed, and renames follow `migrate_from`:
-/// a renamed node is changed only when its definition also changed.
+/// Added nodes are changed, deleted ones listed; a `migrate_from` rename changes only with its definition.
 pub fn compare_definitions(
     base: &DefinitionSnapshot,
     current: &DefinitionSnapshot,

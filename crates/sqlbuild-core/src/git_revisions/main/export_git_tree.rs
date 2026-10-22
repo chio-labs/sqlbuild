@@ -28,10 +28,7 @@ fn export_failed(base: &GitBase, detail: &str) -> GitRevisionError {
     }
 }
 
-/// Write the project tree at `base.merge_base` into `destination`; `false` when it had no project.
-///
-/// The tree is read from git objects through a private index file, so the working tree, the
-/// repository's index and `HEAD` are never changed.
+/// Write the base project tree to `destination` through a private index; `false` without a project.
 pub fn export_git_tree(base: &GitBase, destination: &Path) -> Result<bool, GitRevisionError> {
     let root: &Path = &base.repository_root;
     let tree: String = tree_of(base);

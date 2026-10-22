@@ -35,8 +35,7 @@ fn counted<'a>(kinds: impl Iterator<Item = &'a str>) -> Option<String> {
     Some(parts.join(", "))
 }
 
-/// `2 models, 1 macro changed; 1 seed added; 1 model renamed; deleted: model old_orders`, or
-/// `no definition changes`.
+/// `2 models, 1 macro changed; 1 seed added; deleted: model old_orders`, or `no definition changes`.
 pub fn changes_summary(changes: &DefinitionChanges) -> String {
     let mut parts: Vec<String> = Vec::new();
     let modified = changes.changed.values().filter(|change| !change.added);
@@ -47,11 +46,13 @@ pub fn changes_summary(changes: &DefinitionChanges) -> String {
     if let Some(text) = counted(added.map(|change| change.kind.as_str())) {
         parts.push(format!("{text} added"));
     }
-    let renamed = changes
-        .renamed
-        .iter()
-        .filter_map(|(_, key)| key.split_once(':').map(|(kind, _)| kind));
-    if let Some(text) = counted(renamed) {
+    let mut renamed: Vec<&str> = Vec::new();
+    for (_, key) in &changes.renamed {
+        if let Some((kind, _)) = key.split_once(':') {
+            renamed.push(kind);
+        }
+    }
+    if let Some(text) = counted(renamed.into_iter()) {
         parts.push(format!("{text} renamed"));
     }
     if !changes.deleted.is_empty() {

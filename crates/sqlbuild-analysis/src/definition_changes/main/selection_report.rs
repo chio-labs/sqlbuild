@@ -2,8 +2,7 @@
 
 use crate::definition_changes::models::SelectedItem;
 
-/// `Changed since <ref>: …`, then `Selected N of M <noun>` with each item's reasons when
-/// `explain` is set, or the line saying nothing is affected.
+/// The change summary, then the selected count with reasons when `explain` is set.
 pub fn selection_report(
     (reference, summary): (&str, &str),
     (singular, plural): (&str, &str),

@@ -2514,6 +2514,7 @@ module_layers = [
     "build_progress/transient_lines=infra",
     "build_progress/transient_status=infra",
     "cache=infra",
+    "change_selection=commands",
     "check=commands",
     "cli=commands",
     "cli/launch_state=infra",

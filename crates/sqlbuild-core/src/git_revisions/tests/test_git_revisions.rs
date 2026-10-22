@@ -1,12 +1,16 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::git_revisions::main::export_git_tree::export_git_tree;
 use crate::git_revisions::main::resolve_git_base::resolve_git_base;
 use crate::git_revisions::main::resolve_since_reference::resolve_since_reference;
-use crate::git_revisions::main::short_commit::short_commit;
 use crate::git_revisions::models::GitBase;
-use crate::git_revisions::tests::helpers::{git, project_repository, scratch_directory, write};
-use crate::git_revisions::tests::test_types::{GitBaseFailureTestCase, SinceReferenceTestCase};
+use crate::git_revisions::tests::helpers::{
+    git, project_repository, read, scratch_directory, write,
+};
+use crate::git_revisions::tests::test_types::{
+    AbsentProjectTestCase, ExportTreeTestCase, GitBaseFailureTestCase, GitBaseTestCase,
+    SinceReferenceTestCase,
+};
 
 #[test]
 fn given_since_value_when_resolving_then_reads_base_alias_from_config() {
@@ -15,25 +19,25 @@ fn given_since_value_when_resolving_then_reads_base_alias_from_config() {
             description: "a plain ref is used as given",
             value: "origin/main",
             configured: Some("origin/release"),
-            expected: Ok("origin/main"),
+            expected_reference: Ok("origin/main"),
         },
         SinceReferenceTestCase {
             description: "@base reads the configured base ref",
             value: "@base",
             configured: Some("origin/main"),
-            expected: Ok("origin/main"),
+            expected_reference: Ok("origin/main"),
         },
         SinceReferenceTestCase {
             description: "@base without a configured base ref fails",
             value: "@base",
             configured: None,
-            expected: Err("C485"),
+            expected_reference: Err("C485"),
         },
         SinceReferenceTestCase {
             description: "@base with a blank base ref fails",
             value: "@base",
             configured: Some("  "),
-            expected: Err("C485"),
+            expected_reference: Err("C485"),
         },
     ];
     for test_case in test_cases {
@@ -41,7 +45,7 @@ fn given_since_value_when_resolving_then_reads_base_alias_from_config() {
 
         assert_eq!(
             resolved.as_deref().map_err(|error| error.code),
-            test_case.expected,
+            test_case.expected_reference,
             "{}",
             test_case.description
         );
@@ -49,15 +53,34 @@ fn given_since_value_when_resolving_then_reads_base_alias_from_config() {
 }
 
 #[test]
-fn given_project_in_subdirectory_when_resolving_base_then_returns_merge_base_and_prefix() {
+fn given_project_directory_when_resolving_base_then_returns_merge_base_and_prefix() {
     let (root, main) = project_repository();
+    let test_cases = [
+        GitBaseTestCase {
+            description: "a project in a subdirectory",
+            project_directory: "warehouse",
+            reference: "main",
+            expected_prefix: "warehouse/",
+        },
+        GitBaseTestCase {
+            description: "a nested directory of the project",
+            project_directory: "warehouse/models",
+            reference: "main",
+            expected_prefix: "warehouse/models/",
+        },
+    ];
+    for test_case in test_cases {
+        let base: GitBase =
+            resolve_git_base(&root.join(test_case.project_directory), test_case.reference)
+                .expect(test_case.description);
 
-    let base: GitBase = resolve_git_base(&root.join("warehouse"), "main").expect("main resolves");
-
-    assert_eq!(base.merge_base, main);
-    assert_eq!(base.project_prefix, "warehouse/");
-    assert_eq!(base.reference, "main");
-    assert_eq!(short_commit(&base.merge_base).len(), 10);
+        assert_eq!(base.merge_base, main, "{}", test_case.description);
+        assert_eq!(
+            base.project_prefix, test_case.expected_prefix,
+            "{}",
+            test_case.description
+        );
+    }
 }
 
 #[test]
@@ -72,12 +95,14 @@ fn given_unresolvable_ref_when_resolving_base_then_fails_with_code() {
             reference: "origin/missing",
             expected_code: "C481",
             expected_message_fragment: "'origin/missing' does not name a commit",
+            expected_help_fragment: "git fetch origin <branch>",
         },
         GitBaseFailureTestCase {
             description: "a ref without shared history",
             reference: "unrelated",
             expected_code: "C482",
             expected_message_fragment: "'unrelated' and HEAD",
+            expected_help_fragment: "shares history with HEAD",
         },
     ];
     for test_case in test_cases {
@@ -90,7 +115,38 @@ fn given_unresolvable_ref_when_resolving_base_then_fails_with_code() {
             test_case.description
         );
         assert!(
-            error.message.contains(test_case.expected_message_fragment),
+            error.message.contains(test_case.expected_message_fragment)
+                && error.help.contains(test_case.expected_help_fragment),
+            "{}: {} ({})",
+            test_case.description,
+            error.message,
+            error.help
+        );
+    }
+}
+
+#[test]
+fn given_directory_outside_repository_when_resolving_base_then_fails_with_code() {
+    let directory: PathBuf = scratch_directory("plain");
+    let test_cases = [GitBaseFailureTestCase {
+        description: "a plain directory",
+        reference: "main",
+        expected_code: "C480",
+        expected_message_fragment: "is not inside one",
+        expected_help_fragment: "drop --since",
+    }];
+    for test_case in test_cases {
+        let error =
+            resolve_git_base(&directory, test_case.reference).expect_err(test_case.description);
+
+        assert_eq!(
+            error.code, test_case.expected_code,
+            "{}",
+            test_case.description
+        );
+        assert!(
+            error.message.contains(test_case.expected_message_fragment)
+                && error.help.contains(test_case.expected_help_fragment),
             "{}: {}",
             test_case.description,
             error.message
@@ -99,18 +155,10 @@ fn given_unresolvable_ref_when_resolving_base_then_fails_with_code() {
 }
 
 #[test]
-fn given_directory_outside_repository_when_resolving_base_then_fails_with_code() {
-    let directory: PathBuf = scratch_directory("plain");
-
-    let error = resolve_git_base(&directory, "main").expect_err("not a repository");
-
-    assert_eq!(error.code, "C480");
-}
-
-#[test]
 fn given_shallow_clone_without_shared_history_when_resolving_base_then_asks_for_depth() {
     let (root, _) = project_repository();
     let clone: PathBuf = scratch_directory("shallow");
+    let origin: String = format!("file://{}", root.display());
     git(
         &clone,
         &[
@@ -121,7 +169,7 @@ fn given_shallow_clone_without_shared_history_when_resolving_base_then_asks_for_
             "--branch",
             "feature",
             "--no-single-branch",
-            &format!("file://{}", root.display()),
+            &origin,
             "checkout",
         ],
     );
@@ -130,17 +178,31 @@ fn given_shallow_clone_without_shared_history_when_resolving_base_then_asks_for_
         &checkout,
         &["fetch", "--quiet", "--depth", "1", "origin", "main"],
     );
+    let test_cases = [GitBaseFailureTestCase {
+        description: "the merge base is outside the shallow history",
+        reference: "origin/main",
+        expected_code: "C482",
+        expected_message_fragment: "shallow clone",
+        expected_help_fragment: "--unshallow",
+    }];
+    for test_case in test_cases {
+        let error = resolve_git_base(&checkout.join("warehouse"), test_case.reference)
+            .expect_err(test_case.description);
 
-    let error = resolve_git_base(&checkout.join("warehouse"), "origin/main")
-        .expect_err("the merge base is outside the shallow history");
-
-    assert_eq!(error.code, "C482");
-    assert!(error.message.contains("shallow clone"), "{}", error.message);
-    assert!(error.help.contains("--unshallow"), "{}", error.help);
-}
-
-fn read(path: &Path) -> Option<String> {
-    std::fs::read_to_string(path).ok()
+        assert_eq!(
+            error.code, test_case.expected_code,
+            "{}",
+            test_case.description
+        );
+        assert!(
+            error.message.contains(test_case.expected_message_fragment)
+                && error.help.contains(test_case.expected_help_fragment),
+            "{}: {} ({})",
+            test_case.description,
+            error.message,
+            error.help
+        );
+    }
 }
 
 #[test]
@@ -154,21 +216,47 @@ fn given_merge_base_when_exporting_tree_then_writes_base_files_and_leaves_checko
     let status_before: String = git(&root, &["status", "--porcelain"]);
     let base: GitBase = resolve_git_base(&root.join("warehouse"), "main").expect("main resolves");
     let destination: PathBuf = scratch_directory("export").join("base");
-
     let exported: bool = export_git_tree(&base, &destination).expect("the tree exports");
-
     assert!(exported);
-    assert_eq!(
-        read(&destination.join("models/orders.sql")).as_deref(),
-        Some("SELECT 1 AS order_id\n")
-    );
-    assert_eq!(read(&destination.join("models/customers.sql")), None);
-    assert_eq!(
-        read(&root.join("warehouse/models/orders.sql")).as_deref(),
-        Some("SELECT 3 AS order_id\n")
-    );
     assert_eq!(git(&root, &["status", "--porcelain"]), status_before);
-    assert!(!destination.with_extension("index").exists());
+    let test_cases = [
+        ExportTreeTestCase {
+            description: "an edited model is exported as committed at the base",
+            relative_path: "models/orders.sql",
+            expected_exported: Some("SELECT 1 AS order_id\n"),
+            expected_working_tree: Some("SELECT 3 AS order_id\n"),
+        },
+        ExportTreeTestCase {
+            description: "a model added after the base is not exported",
+            relative_path: "models/customers.sql",
+            expected_exported: None,
+            expected_working_tree: Some("SELECT 1 AS customer_id\n"),
+        },
+        ExportTreeTestCase {
+            description: "the private index file is removed",
+            relative_path: "../base.index",
+            expected_exported: None,
+            expected_working_tree: None,
+        },
+    ];
+    for test_case in test_cases {
+        let exported_text: Option<String> = read(&destination.join(test_case.relative_path));
+        let working_text: Option<String> =
+            read(&root.join("warehouse").join(test_case.relative_path));
+
+        assert_eq!(
+            exported_text.as_deref(),
+            test_case.expected_exported,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            working_text.as_deref(),
+            test_case.expected_working_tree,
+            "{}",
+            test_case.description
+        );
+    }
 }
 
 #[test]
@@ -181,15 +269,33 @@ fn given_project_absent_at_merge_base_when_exporting_tree_then_reports_no_projec
     );
     git(&root, &["add", "."]);
     git(&root, &["commit", "--quiet", "-m", "billing"]);
-    let base: GitBase = GitBase {
-        reference: "main".to_owned(),
-        merge_base: main,
-        repository_root: root.clone(),
-        project_prefix: "billing/".to_owned(),
-    };
+    let test_cases = [
+        AbsentProjectTestCase {
+            description: "a project added after the base",
+            project_prefix: "billing/",
+            expected_exported: false,
+        },
+        AbsentProjectTestCase {
+            description: "a project present at the base",
+            project_prefix: "warehouse/",
+            expected_exported: true,
+        },
+    ];
+    for test_case in test_cases {
+        let base: GitBase = GitBase {
+            reference: "main".to_owned(),
+            merge_base: main.clone(),
+            repository_root: root.clone(),
+            project_prefix: test_case.project_prefix.to_owned(),
+        };
 
-    let exported: bool = export_git_tree(&base, &scratch_directory("absent").join("base"))
-        .expect("an absent tree is not an error");
+        let exported: bool = export_git_tree(&base, &scratch_directory("absent").join("base"))
+            .expect(test_case.description);
 
-    assert!(!exported);
+        assert_eq!(
+            exported, test_case.expected_exported,
+            "{}",
+            test_case.description
+        );
+    }
 }

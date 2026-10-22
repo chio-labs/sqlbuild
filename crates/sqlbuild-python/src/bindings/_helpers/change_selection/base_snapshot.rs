@@ -1,5 +1,4 @@
-//! The definition snapshot of the `--since` base revision: resolved from git, compiled from its
-//! objects in a separate interpreter, and cached per merge-base commit.
+//! The `--since` base snapshot: resolved from git, compiled in a child interpreter, cached per commit.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -8,9 +7,8 @@ use std::time::Instant;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use sqlbuild_analysis::definition_changes::constants::DEFINITION_SNAPSHOT_FORMAT;
 use sqlbuild_analysis::definition_changes::main::definition_digest::definition_digest;
-use sqlbuild_analysis::definition_changes::main::definition_snapshot_json::{
-    definition_snapshot_json, parse_definition_snapshot,
-};
+use sqlbuild_analysis::definition_changes::main::definition_snapshot_json::definition_snapshot_json;
+use sqlbuild_analysis::definition_changes::main::parse_definition_snapshot::parse_definition_snapshot;
 use sqlbuild_analysis::definition_changes::models::DefinitionSnapshot;
 use sqlbuild_core::git_revisions::constants::BASE_REF_ALIAS;
 use sqlbuild_core::git_revisions::errors::GitRevisionError;
@@ -32,8 +30,7 @@ const LOCAL_CONFIG_FILE: &str = "sqlbuild_local.toml";
 const PROJECT_CONFIG_FILE: &str = "sqlbuild_project.toml";
 const BASE_COMPILE_FAILED_CODE: &str = "C484";
 const FAILURE_TAIL_LINES: usize = 20;
-/// Compiles the exported base tree in a fresh interpreter, so the base revision's project Python
-/// never shares modules with the working tree's.
+/// Compiles the exported base tree in a fresh interpreter, apart from the working tree's modules.
 const BASE_COMPILE_PROGRAM: &str = "import json, sys\n\
 from sqlbuild._native import write_base_definition_snapshot\n\
 write_base_definition_snapshot(project_dir=sys.argv[1], output_path=sys.argv[2], \
@@ -46,9 +43,21 @@ pub(crate) struct BaseComparison {
 }
 
 /// The inputs that decide what the base compile produces besides its commit.
-pub(crate) struct BaseVariant<'py> {
+pub(crate) struct BaseVariant {
     pub(crate) selected_target: Option<String>,
-    pub(crate) cli_vars: Bound<'py, PyAny>,
+    /// `--vars` as sorted compact JSON.
+    pub(crate) vars_json: String,
+}
+
+/// The base variant of a command's `--target` and `--vars`.
+pub(crate) fn base_variant(
+    selected_target: Option<String>,
+    cli_vars: &Bound<'_, PyAny>,
+) -> PyResult<BaseVariant> {
+    Ok(BaseVariant {
+        selected_target,
+        vars_json: vars_json(cli_vars)?,
+    })
 }
 
 fn git_error(py: Python<'_>, error: GitRevisionError) -> PyErr {
@@ -161,13 +170,10 @@ fn compiled_base_snapshot(
 }
 
 /// Resolve `since` to its merge base and load, or compile and cache, the base snapshot.
-///
-/// Progress goes to `stream`: the merge base, then whether the base came from the cache or how
-/// long its compile took.
 pub(crate) fn base_comparison<'py>(
     (stream, project_dir): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
     since: &str,
-    variant: &BaseVariant<'py>,
+    variant: &BaseVariant,
 ) -> PyResult<BaseComparison> {
     let py: Python<'py> = stream.py();
     let directory: PathBuf = project_dir.extract()?;
@@ -186,18 +192,18 @@ pub(crate) fn base_comparison<'py>(
         stream,
         &format!("Comparing with {reference} (merge base {short})\n"),
     )?;
-    let vars: String = vars_json(&variant.cli_vars)?;
+    let vars: &str = &variant.vars_json;
     let target: Option<&str> = variant.selected_target.as_deref();
-    let key: String =
-        definition_digest(&[NATIVE_BUILD_IDENTITY, target.unwrap_or_default(), &vars]);
+    let key: String = definition_digest(&[NATIVE_BUILD_IDENTITY, target.unwrap_or_default(), vars]);
     let cache_dir: PathBuf = CACHE_DIRECTORY
         .iter()
         .fold(directory.clone(), |path, part| path.join(part));
     let cached: PathBuf = cache_dir.join(format!("{}-{}.json", base.merge_base, &key[..16]));
-    if let Some(snapshot) = std::fs::read_to_string(&cached)
-        .ok()
-        .and_then(|text| parse_definition_snapshot(&text))
-    {
+    let stored: Option<DefinitionSnapshot> = match std::fs::read_to_string(&cached) {
+        Ok(text) => parse_definition_snapshot(&text),
+        Err(_) => None,
+    };
+    if let Some(snapshot) = stored {
         write(stream, &format!("Using cached base revision {short}\n"))?;
         flush(stream)?;
         return Ok(BaseComparison { base, snapshot });
@@ -209,11 +215,11 @@ pub(crate) fn base_comparison<'py>(
     let _ = std::fs::remove_dir_all(&work);
     std::fs::create_dir_all(&work).map_err(|error| io_failed(py, &base, &error))?;
     let compiled: PyResult<DefinitionSnapshot> =
-        compiled_base_snapshot(py, (&base, &directory, &work), (target, &vars));
+        compiled_base_snapshot(py, (&base, &directory, &work), (target, vars));
     let _ = std::fs::remove_dir_all(&work);
     let snapshot: DefinitionSnapshot = compiled?;
     let staged: PathBuf = cached.with_extension(format!("{}.tmp", std::process::id()));
-    if std::fs::write(&staged, definition_snapshot_json(&snapshot)).is_ok() {
+    if let Ok(()) = std::fs::write(&staged, definition_snapshot_json(&snapshot)) {
         let _ = std::fs::rename(&staged, &cached);
     }
     write(

@@ -50,9 +50,7 @@ pub(super) fn write(root: &Path, relative: &str, contents: &str) {
     std::fs::write(path, contents).expect("the file is written");
 }
 
-/// A repository whose project lives in `warehouse/`: `main` has one commit, `feature` one more.
-///
-/// Returns the repository root and the hash of the `main` commit.
+/// A repository with a project in `warehouse/` and branches `main` and `feature`; root and `main`.
 pub(super) fn project_repository() -> (PathBuf, String) {
     let root: PathBuf = scratch_directory("repo");
     git(&root, &["init", "--quiet"]);
@@ -83,4 +81,9 @@ pub(super) fn project_repository() -> (PathBuf, String) {
     git(&root, &["add", "."]);
     git(&root, &["commit", "--quiet", "-m", "customers"]);
     (root, main)
+}
+
+/// The text of `path`, or `None` when it is absent.
+pub(super) fn read(path: &Path) -> Option<String> {
+    std::fs::read_to_string(path).ok()
 }

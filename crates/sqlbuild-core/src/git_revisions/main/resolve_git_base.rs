@@ -4,13 +4,10 @@ use std::path::{Path, PathBuf};
 
 use crate::git_revisions::_helpers::git_command::{GitFailure, git_output};
 use crate::git_revisions::constants::{
-    NO_MERGE_BASE_CODE, NOT_A_REPOSITORY_CODE, SHALLOW_TRUE, UNKNOWN_REF_CODE,
+    DEPTH_HELP, NO_MERGE_BASE_CODE, NOT_A_REPOSITORY_CODE, SHALLOW_TRUE, UNKNOWN_REF_CODE,
 };
 use crate::git_revisions::errors::GitRevisionError;
 use crate::git_revisions::models::GitBase;
-
-const DEPTH_HELP: &str = "Fetch enough history to reach the merge base, for example \
-                          `git fetch --unshallow`, or in CI clone with a larger fetch depth";
 
 fn not_a_repository(project_dir: &Path, failure: &GitFailure) -> GitRevisionError {
     let message: String = match failure {

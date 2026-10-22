@@ -3,5 +3,7 @@ pub mod compare_definitions;
 pub mod definition_digest;
 pub mod definition_snapshot_json;
 pub mod node_key;
+pub mod parse_definition_snapshot;
 pub mod selection_reasons;
 pub mod selection_report;
+pub mod sql_definition_digest;

@@ -2061,6 +2061,13 @@ def build_lint_expansion_context(
     declaration_scope: DeclarationScopeBuild | None = None,
     static_declaration_scope: DeclarationScopeBuild | None = None,
 ) -> SqlExpansionContext: ...
+def write_base_definition_snapshot(
+    *,
+    project_dir: str | Path,
+    output_path: str | Path,
+    selected_target: str | None = None,
+    cli_vars: dict[str, object] | None = None,
+) -> None: ...
 def build_dag_json(
     *, graph: ProjectGraph, project_name: str, python_graph: PythonNodeGraph | None = None
 ) -> str: ...

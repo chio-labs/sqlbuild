@@ -1,5 +1,4 @@
-//! The definition snapshot of a compiled project: one fingerprint per model, seed, function,
-//! macro, enum, constant, test file and scenario, and which declarations each node uses.
+//! The definition snapshot of a compiled project: one fingerprint per node and its declarations.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -15,10 +14,9 @@ use sqlbuild_analysis::definition_changes::constants::{
     FILE_ASPECT, MACRO_KIND, MODEL_KIND, SCENARIO_KIND, SEED_KIND, SNAPSHOTS_ASPECT, SQL_ASPECT,
     TEST_FILE_KIND,
 };
-use sqlbuild_analysis::definition_changes::main::definition_digest::{
-    definition_digest, sql_definition_digest,
-};
+use sqlbuild_analysis::definition_changes::main::definition_digest::definition_digest;
 use sqlbuild_analysis::definition_changes::main::node_key::node_key;
+use sqlbuild_analysis::definition_changes::main::sql_definition_digest::sql_definition_digest;
 use sqlbuild_analysis::definition_changes::models::{DefinitionSnapshot, NodeDefinition};
 
 use crate::bindings::_helpers::compiled_views::function_reads;
@@ -125,7 +123,11 @@ fn directory_digest(directory: &Path) -> Option<String> {
     let mut files: Vec<(String, String)> = Vec::new();
     let mut pending: Vec<PathBuf> = vec![directory.to_path_buf()];
     while let Some(next) = pending.pop() {
-        for entry in std::fs::read_dir(&next).ok()?.flatten() {
+        let entries: std::fs::ReadDir = match std::fs::read_dir(&next) {
+            Ok(entries) => entries,
+            Err(_) => return None,
+        };
+        for entry in entries.flatten() {
             let path: PathBuf = entry.path();
             if path.is_dir() {
                 pending.push(path);
@@ -197,16 +199,15 @@ pub(crate) fn declaration_uses(
     Ok(uses)
 }
 
-/// Scope declarations: a macro by its module source, and an enum, constant, audit, schema or
-/// hook by its declaration file with formatting and comments ignored.
+/// Scope declarations: a macro by its module source, any other by its normalised declaration file.
 fn declaration_nodes(
     project: &Bound<'_, PyAny>,
     project_dir: &Path,
-    nodes: &mut BTreeMap<String, NodeDefinition>,
-) -> PyResult<()> {
+) -> PyResult<BTreeMap<String, NodeDefinition>> {
+    let mut nodes: BTreeMap<String, NodeDefinition> = BTreeMap::new();
     let index: Bound<'_, PyAny> = native_field(project, "scope_index")?;
     if index.is_none() {
-        return Ok(());
+        return Ok(nodes);
     }
     for declaration in native_field(&index, "declarations")?.try_iter()? {
         let declaration: Bound<'_, PyAny> = declaration?;
@@ -229,15 +230,17 @@ fn declaration_nodes(
                     .collect(),
             )
         } else {
-            let contents: String =
-                std::fs::read_to_string(project_dir.join(&path)).unwrap_or_default();
-            (sql_definition_digest(&contents), Vec::new())
+            let digest: String = match std::fs::read_to_string(project_dir.join(&path)) {
+                Ok(contents) => sql_definition_digest(&contents),
+                Err(_) => definition_digest(&["missing"]),
+            };
+            (digest, Vec::new())
         };
         let mut definition: NodeDefinition = node(&kind, &name, vec![(DEFINITION_ASPECT, digest)]);
         definition.uses = uses;
         nodes.insert(declaration_key(&identity)?, definition);
     }
-    Ok(())
+    Ok(nodes)
 }
 
 fn migrate_from(config_values: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
@@ -247,14 +250,13 @@ fn migrate_from(config_values: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     let Some(value) = values.get_item(MIGRATE_FROM_KEY)? else {
         return Ok(Vec::new());
     };
-    if let Ok(name) = value.extract::<String>() {
-        return Ok(vec![name]);
+    if value.is_instance_of::<PyString>() {
+        return Ok(vec![value.extract()?]);
     }
-    Ok(value.extract::<Vec<String>>().unwrap_or_default())
+    value.try_iter()?.map(|name| name?.extract()).collect()
 }
 
-/// A model by its SQL before macro expansion, its header configuration, its declared columns
-/// and contract, and its audits.
+/// A model by its SQL before macro expansion, header configuration, columns, contract and audits.
 fn model_node(
     model: &Bound<'_, PyAny>,
     uses: &BTreeMap<String, BTreeSet<String>>,
@@ -308,9 +310,8 @@ pub(crate) fn definition_snapshot(
     project: &Bound<'_, PyAny>,
     project_dir: &Path,
 ) -> PyResult<DefinitionSnapshot> {
-    let mut nodes: BTreeMap<String, NodeDefinition> = BTreeMap::new();
     let uses: BTreeMap<String, BTreeSet<String>> = declaration_uses(project)?;
-    declaration_nodes(project, project_dir, &mut nodes)?;
+    let mut nodes: BTreeMap<String, NodeDefinition> = declaration_nodes(project, project_dir)?;
     for model in project_reads::models(project)?.try_iter()? {
         let (key, definition) = model_node(&model?, &uses)?;
         nodes.insert(key, definition);

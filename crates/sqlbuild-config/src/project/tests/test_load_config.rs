@@ -1,7 +1,7 @@
 use crate::project::main::load_git_base_ref::load_git_base_ref;
 use crate::project::models::ConfigFile;
 use crate::project::tests::helpers::{failure_at, first_failure, project_directory};
-use crate::project::tests::test_types::ProjectFailureTestCase;
+use crate::project::tests::test_types::{GitBaseRefTestCase, ProjectFailureTestCase};
 
 const PROJECT: &str = "name = 'orders'\nadapter = 'duckdb'\n";
 
@@ -120,15 +120,28 @@ fn given_project_files_when_loading_then_rejections_match_python_loader() {
 
 #[test]
 fn given_git_section_when_reading_base_ref_then_returns_configured_ref() {
-    let (_with, configured) = project_directory(
-        "name = 'orders'\nadapter = 'duckdb'\n[git]\nbase_ref = 'origin/main'\n",
-        "",
-    );
-    let (_without, unset) = project_directory(PROJECT, "");
+    let test_cases = [
+        GitBaseRefTestCase {
+            description: "a configured base ref",
+            project: "name = 'orders'\nadapter = 'duckdb'\n[git]\nbase_ref = 'origin/main'\n",
+            expected_base_ref: Some("origin/main"),
+        },
+        GitBaseRefTestCase {
+            description: "no git section",
+            project: PROJECT,
+            expected_base_ref: None,
+        },
+    ];
+    for test_case in test_cases {
+        let (_directory, paths) = project_directory(test_case.project, "");
 
-    assert_eq!(
-        load_git_base_ref(&configured).ok().flatten().as_deref(),
-        Some("origin/main")
-    );
-    assert_eq!(load_git_base_ref(&unset).ok().flatten(), None);
+        let base_ref = load_git_base_ref(&paths).expect(test_case.description);
+
+        assert_eq!(
+            base_ref.as_deref(),
+            test_case.expected_base_ref,
+            "{}",
+            test_case.description
+        );
+    }
 }

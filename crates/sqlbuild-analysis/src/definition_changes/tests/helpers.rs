@@ -1,8 +1,8 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::definition_changes::constants::DEFINITION_SNAPSHOT_FORMAT;
 use crate::definition_changes::main::node_key::node_key;
-use crate::definition_changes::models::{DefinitionSnapshot, NodeDefinition};
+use crate::definition_changes::models::{DefinitionSnapshot, ExecutedItem, NodeDefinition};
 
 /// One node with `aspects` as `(aspect, digest)` and `uses` as node keys.
 pub(super) fn node(
@@ -69,4 +69,66 @@ pub(super) fn base_orders() -> DefinitionSnapshot {
         node("enum", "order_status", &[("definition", "e1")], &[]),
         node("test_file", "tests/orders.sql", &[("file", "t1")], &[]),
     ])
+}
+
+pub(super) fn keys(values: &[&str]) -> Vec<String> {
+    values.iter().map(|value| (*value).to_owned()).collect()
+}
+
+/// The base orders project with `stg_orders` SQL edited, `customers` renamed and `countries` gone.
+pub(super) fn current_orders() -> DefinitionSnapshot {
+    snapshot(vec![
+        node(
+            "model",
+            "stg_orders",
+            &[("sql", "s1-edited"), ("config", "c1"), ("columns", "k1")],
+            &["macro:to_utc"],
+        ),
+        node(
+            "model",
+            "orders",
+            &[("sql", "s2"), ("config", "c2")],
+            &["enum:order_status"],
+        ),
+        renamed(
+            node("model", "customers", &[("sql", "s3")], &[]),
+            &["old_customers"],
+        ),
+        node(
+            "macro",
+            "to_utc",
+            &[("definition", "m1")],
+            &["macro:to_timestamp"],
+        ),
+        node("macro", "to_timestamp", &[("definition", "m2")], &[]),
+        node("enum", "order_status", &[("definition", "e1")], &[]),
+        node("test_file", "tests/orders.sql", &[("file", "t1")], &[]),
+    ])
+}
+
+/// What an item executes, by node keys.
+pub(super) fn item(
+    own: &[&str],
+    executed: &[&str],
+    declarations: &[&str],
+    mocked: &[&str],
+) -> ExecutedItem {
+    ExecutedItem {
+        own_keys: keys(own),
+        executed: keys(executed),
+        declarations: keys(declarations),
+        mocked: mocked
+            .iter()
+            .map(|key| (*key).to_owned())
+            .collect::<BTreeSet<_>>(),
+    }
+}
+
+/// `current` with `entry` added or replaced.
+pub(super) fn with_node(
+    mut current: DefinitionSnapshot,
+    entry: (String, NodeDefinition),
+) -> DefinitionSnapshot {
+    current.nodes.insert(entry.0, entry.1);
+    current
 }
