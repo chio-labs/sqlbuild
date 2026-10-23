@@ -1498,7 +1498,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
 
         log_sql(logger=logging.getLogger("sqlbuild.adapter.bigquery"), sql=sql)
         with StatementLifecycle(adapter="bigquery", sql=sql, intent="query") as lifecycle:
-            job: Any = connection.query_job(sql)
+            job: Any = connection.query_job(sql=sql)
             raw_job_id: object | None = getattr(job, "job_id", None)
             job_id: str | None = raw_job_id if isinstance(raw_job_id, str) else None
             lifecycle.submitted(job_id=job_id)

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class UsageQuery:
-    """One INFORMATION_SCHEMA.JOBS read: its SQL, location, window and table names."""
+    """One read of the region's jobs view: its SQL, location, window and table names."""
 
     sql: str
     location: str

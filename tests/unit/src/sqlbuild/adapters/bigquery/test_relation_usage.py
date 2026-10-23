@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 import pytest
 
 from sqlbuild.adapter.contract.models import RelationInfo, RelationUsageReport
-from sqlbuild.adapters.bigquery.constants import CLONE_STATEMENT_PATTERN, USAGE_UNAVAILABLE_REASON
+from sqlbuild.adapters.bigquery.constants import CLONE_STATEMENT_PATTERN
 from tests.unit.src.sqlbuild.adapters.bigquery._test_types import (
     BigQueryCloneStatementTestCase,
     BigQueryRelationUsageChunkTestCase,
@@ -27,6 +27,10 @@ from tests.unit.src.sqlbuild.adapters.bigquery.helpers import (
 )
 
 WINDOW_SECONDS: int = 7 * 86_400
+JOBS_UNAVAILABLE_REASON: str = (
+    "cannot read INFORMATION_SCHEMA.JOBS "
+    "(needs bigquery.jobs.listAll, for example the BigQuery Resource Viewer role)"
+)
 READ_AT: datetime = datetime(2026, 10, 21, 9, 30, tzinfo=UTC)
 EARLIER_READ_AT: datetime = datetime(2026, 10, 19, 14, 0, tzinfo=UTC)
 ORDERS_DAILY: tuple[RelationInfo, ...] = (usage_relation(None, "mart", "orders_daily"),)
@@ -198,22 +202,22 @@ def test_given_many_candidates_when_reading_usage_then_names_are_chunked(
                 "does not have permission bigquery.jobs.listAll",
                 403,
             ),
-            expected_report=RelationUsageReport(checked=False, reason=USAGE_UNAVAILABLE_REASON),
+            expected_report=RelationUsageReport(checked=False, reason=JOBS_UNAVAILABLE_REASON),
         ),
         BigQueryRelationUsageErrorTestCase(
             description="an unknown region is not checked",
             error=FakeBigQueryError("Not found: Dataset shop-analytics:region-xx", 404),
-            expected_report=RelationUsageReport(checked=False, reason=USAGE_UNAVAILABLE_REASON),
+            expected_report=RelationUsageReport(checked=False, reason=JOBS_UNAVAILABLE_REASON),
         ),
         BigQueryRelationUsageErrorTestCase(
             description="a Forbidden access denial is not checked",
             error=Forbidden("403 Access Denied: Project shop-analytics"),
-            expected_report=RelationUsageReport(checked=False, reason=USAGE_UNAVAILABLE_REASON),
+            expected_report=RelationUsageReport(checked=False, reason=JOBS_UNAVAILABLE_REASON),
         ),
         BigQueryRelationUsageErrorTestCase(
             description="an accessDenied reason is not checked",
             error=FakeBigQueryError("403 GET jobs", 403, ("accessDenied",)),
-            expected_report=RelationUsageReport(checked=False, reason=USAGE_UNAVAILABLE_REASON),
+            expected_report=RelationUsageReport(checked=False, reason=JOBS_UNAVAILABLE_REASON),
         ),
     ),
     ids=lambda case: case.description,

@@ -32,8 +32,15 @@ class _BigQueryConnection:
         self._jobs_lock: threading.Lock = threading.Lock()
 
     def execute(self, sql: str) -> _BigQueryCursor:
+        return self.run_statement(sql=sql)
+
+    def run_statement(
+        self, *, sql: str, location: str | None = None, query_parameters: tuple[Any, ...] = ()
+    ) -> _BigQueryCursor:
+        """Run one statement, optionally in another location and with bound parameters."""
+
         with StatementLifecycle(adapter="bigquery", sql=sql, intent="execute") as lifecycle:
-            job: Any = self.query_job(sql)
+            job: Any = self.query_job(sql=sql, location=location, query_parameters=query_parameters)
             job_id: str | None = _job_id(job=job)
             lifecycle.submitted(job_id=job_id)
             try:
@@ -49,24 +56,24 @@ class _BigQueryConnection:
                 lifecycle.completed(job_id=job_id, affected_rows=dml_affected_rows)
             return cursor
 
-    def query_job(self, sql: str) -> Any:
+    def query_job(
+        self, *, sql: str, location: str | None = None, query_parameters: tuple[Any, ...] = ()
+    ) -> Any:
         """Submit a job; only the whole-build limit becomes a job timeout, as it counts queueing."""
 
         deadline: ExecutionDeadline | ItemDeadline | None = current_execution_deadline()
         if deadline is not None:
             deadline.enforce()
         build: ExecutionDeadline | None = current_build_deadline()
-        if build is None:
-            return self.client.query(sql, location=self.location)
+        job_location: str | None = location or self.location
+        if build is None and not query_parameters:
+            return self.client.query(sql, location=job_location)
         from google.cloud import bigquery
 
-        return self.client.query(
-            sql,
-            location=self.location,
-            job_config=bigquery.QueryJobConfig(
-                job_timeout_ms=max(1, math.ceil(build.remaining_seconds * 1000))
-            ),
-        )
+        job_config: Any = bigquery.QueryJobConfig(query_parameters=list(query_parameters))
+        if build is not None:
+            job_config.job_timeout_ms = max(1, math.ceil(build.remaining_seconds * 1000))
+        return self.client.query(sql, location=job_location, job_config=job_config)
 
     def job_result(self, job: Any) -> Any:
         """Wait for a job while it is registered for cancellation at a deadline."""

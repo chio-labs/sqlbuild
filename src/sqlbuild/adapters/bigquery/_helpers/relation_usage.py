@@ -17,9 +17,13 @@ from sqlbuild.adapters.bigquery.constants import (
     USAGE_NAME_CHUNK_SIZE,
     USAGE_UNAVAILABLE_ERROR_REASONS,
     USAGE_UNAVAILABLE_MESSAGES,
-    USAGE_UNAVAILABLE_REASON,
 )
 from sqlbuild.adapters.bigquery.models import UsageQuery
+
+_USAGE_UNAVAILABLE_REASON: str = (
+    "cannot read INFORMATION_SCHEMA.JOBS "
+    "(needs bigquery.jobs.listAll, for example the BigQuery Resource Viewer role)"
+)
 
 
 def usage_object_name(*, project: str, dataset: str, table: str) -> str:
@@ -184,14 +188,13 @@ def dataset_locations(
 def run_usage_query(*, connection: Any, query: UsageQuery) -> list[tuple[object, ...]]:
     """Run one JOBS read with bound parameters in the query's location."""
 
-    from google.cloud import bigquery
-
-    job: Any = connection.client.query(
-        query.sql,
-        location=query.location,
-        job_config=bigquery.QueryJobConfig(query_parameters=query_parameters(query)),
+    return list(
+        connection.run_statement(
+            sql=query.sql,
+            location=query.location,
+            query_parameters=tuple(query_parameters(query)),
+        ).fetchall()
     )
-    return [tuple(row.values()) for row in connection.job_result(job)]
 
 
 def read_relation_usage(
@@ -235,4 +238,4 @@ def bigquery_relation_usage(
     except Exception as error:
         if not is_usage_unavailable_error(error):
             raise
-        return RelationUsageReport(checked=False, reason=USAGE_UNAVAILABLE_REASON)
+        return RelationUsageReport(checked=False, reason=_USAGE_UNAVAILABLE_REASON)

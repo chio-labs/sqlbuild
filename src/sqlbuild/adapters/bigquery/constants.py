@@ -32,10 +32,6 @@ NATIVE_TABLE_TYPE: str = "TABLE"
 PENDING_JOB_STATE: str = "PENDING"
 PENDING_JOB_POLL_SECONDS: float = 1.0
 USAGE_NAME_CHUNK_SIZE: int = 1_000
-USAGE_UNAVAILABLE_REASON: str = (
-    "cannot read INFORMATION_SCHEMA.JOBS "
-    "(needs bigquery.jobs.listAll, for example the BigQuery Resource Viewer role)"
-)
 FORBIDDEN_STATUS: int = 403
 NOT_FOUND_STATUS: int = 404
 FORBIDDEN_ERROR_CLASS_NAMES: frozenset[str] = frozenset({"Forbidden", "PermissionDenied"})

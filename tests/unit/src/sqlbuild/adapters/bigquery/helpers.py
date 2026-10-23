@@ -14,6 +14,9 @@ from sqlbuild.adapter.contract.models import (
 )
 from sqlbuild.adapter.contract.types import RetentionScope
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
+from sqlbuild.adapters.bigquery.classes.bigquery_connection import _BigQueryConnection
+
+USAGE_COLUMNS: tuple[str, ...] = ("object_name", "user_name", "query_count", "last_read_at")
 
 
 def build_retention_request(*, desired_days: int) -> RetentionRequest:
@@ -274,16 +277,6 @@ class Forbidden(Exception):
     """Stands in for google.api_core.exceptions.Forbidden, matched by class name."""
 
 
-class FakeUsageRow:
-    """A BigQuery result row."""
-
-    def __init__(self, values: tuple[object, ...]) -> None:
-        self._values: tuple[object, ...] = values
-
-    def values(self) -> tuple[object, ...]:
-        return self._values
-
-
 class FakeUsageDataset:
     def __init__(self, location: str) -> None:
         self.location: str = location
@@ -309,7 +302,7 @@ class FakeUsageClient:
     def get_dataset(self, dataset_id: str) -> FakeUsageDataset:
         return FakeUsageDataset(self.dataset_locations[dataset_id])
 
-    def query(self, sql: str, *, location: str, job_config: Any) -> list[FakeUsageRow]:
+    def query(self, sql: str, *, location: str, job_config: Any) -> FakeBigQueryJob:
         params: dict[str, object] = {
             parameter.name: getattr(parameter, "values", getattr(parameter, "value", None))
             for parameter in job_config.query_parameters
@@ -319,18 +312,12 @@ class FakeUsageClient:
         for error in self.errors:
             raise error
         names: frozenset[object] = frozenset(cast(list[object], params["object_names"]))
-        return [FakeUsageRow(row) for row in filter(lambda row: row[0] in names, self.rows)]
-
-
-class FakeUsageConnection:
-    """A BigQuery connection over the fake client, without a fixed location."""
-
-    def __init__(self, client: FakeUsageClient, location: str | None = None) -> None:
-        self.client: FakeUsageClient = client
-        self.location: str | None = location
-
-    def job_result(self, job: list[FakeUsageRow]) -> list[FakeUsageRow]:
-        return job
+        return FakeBigQueryJob(
+            FakeBigQueryRows(
+                columns=USAGE_COLUMNS,
+                rows=tuple(filter(lambda row: row[0] in names, self.rows)),
+            )
+        )
 
 
 def usage_relation(database: str | None, schema: str, name: str) -> RelationInfo:
@@ -345,7 +332,7 @@ def read_bigquery_usage(
     """BigQuery's usage report for the relations from the fake client."""
 
     return BigQueryAdapter().relation_usage(
-        connection=FakeUsageConnection(client),
+        connection=_BigQueryConnection(client=client, location=None),
         relations=relations,
         window_seconds=window_seconds,
     )

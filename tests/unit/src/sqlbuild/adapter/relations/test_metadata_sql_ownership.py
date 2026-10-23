@@ -15,6 +15,7 @@ _ALLOWED_METADATA_SQL_MODULES: frozenset[str] = frozenset(
     {
         "adapter/contract/classes/base_adapter.py",
         "adapter/contract/classes/duckdb_backed_adapter.py",
+        "adapters/bigquery/_helpers/relation_usage.py",
         "adapters/bigquery/classes/bigquery_adapter.py",
         "adapters/databricks/classes/databricks_adapter.py",
         "adapters/postgres/classes/postgres_adapter.py",
