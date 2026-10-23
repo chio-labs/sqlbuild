@@ -1,22 +1,28 @@
-"""E2E coverage for ANY SQL macro arguments."""
+"""E2E coverage for ANY SQL macro arguments and the declared returns type of a call."""
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.sql_macros._test_types import (
     SqlMacroBuildTestCase,
+    SqlMacroCommandTestCase,
+    SqlMacroCompileTestCase,
     SqlMacroErrorTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.sql_macros.helpers import (
     DATABASE,
+    contract_model,
     orders_model,
     output,
     run_project,
+    text_macro,
+    with_rules,
 )
-from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb, run_sqb
 
 _ORDER_KEY: dict[str, str] = {
     "macros/sql/order_key.sql": (
@@ -25,6 +31,29 @@ _ORDER_KEY: dict[str, str] = {
         "  returns VARCHAR,\n);\n\n"
         "@country_code || '::' || CAST(@order_ref AS VARCHAR)\n"
     )
+}
+
+_UNPROVEN: tuple[str, ...] = ("K003", "SQBRCONTRACT105")
+_TYPED_COLUMNS: str = "order_id (type BIGINT), shouted (type VARCHAR), status_bar (type VARCHAR)"
+_TYPED_RULES_AND_MACROS: dict[str, str] = {
+    **with_rules("SQBRCONTRACT105"),
+    **text_macro("shouted", "VARCHAR", "UPPER(@value)"),
+    **text_macro("status_bar", "VARCHAR", "bar(LENGTH(@value), 0, 10)"),
+}
+_TYPED_CALLS: dict[str, str] = {
+    **_TYPED_RULES_AND_MACROS,
+    **contract_model(
+        "orders",
+        _TYPED_COLUMNS,
+        "SELECT\n  o.order_id,\n  @sql.shouted(o.status) AS shouted,\n"
+        "  @sql.status_bar(o.status) AS status_bar\n"
+        'FROM __ref("stg_orders") AS o\n',
+    ),
+    **contract_model(
+        "order_bars",
+        "status_bar (type VARCHAR)",
+        'SELECT b.status_bar FROM __ref("orders") AS b\n',
+    ),
 }
 
 
@@ -106,3 +135,132 @@ def test_given_an_any_argument_misused_when_compiling_then_it_fails(
     assert f"error[{test_case.expected_code}]" in output(result)
     for fragment in test_case.expected_fragments:
         assert fragment in output(result)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlMacroCompileTestCase(
+            description="a_main_query_call_and_a_downstream_passthrough",
+            files=_TYPED_CALLS,
+            expected_returncode=0,
+            expected_fragments=("0 errors, 0 warnings",),
+            unexpected_fragments=_UNPROVEN,
+        ),
+        SqlMacroCompileTestCase(
+            description="a_call_in_a_final_cte_read_with_a_star",
+            files={
+                **_TYPED_RULES_AND_MACROS,
+                **contract_model(
+                    "orders",
+                    _TYPED_COLUMNS,
+                    "WITH final AS (\n  SELECT\n    o.order_id,\n"
+                    "    @sql.shouted(o.status) AS shouted,\n"
+                    "    @sql.status_bar(o.status) AS status_bar\n"
+                    '  FROM __ref("stg_orders") AS o\n)\nSELECT * FROM final\n',
+                ),
+            },
+            expected_returncode=0,
+            expected_fragments=("0 errors, 0 warnings",),
+            unexpected_fragments=_UNPROVEN,
+        ),
+        SqlMacroCompileTestCase(
+            description="a_call_through_a_two_cte_chain_and_a_join",
+            files={
+                **_TYPED_RULES_AND_MACROS,
+                **contract_model(
+                    "orders",
+                    _TYPED_COLUMNS,
+                    "WITH typed AS (\n  SELECT\n    o.order_id,\n"
+                    "    @sql.shouted(o.status) AS shouted,\n"
+                    "    @sql.status_bar(o.status) AS status_bar\n"
+                    '  FROM __ref("stg_orders") AS o\n),\n'
+                    "final AS (\n  SELECT t.order_id, t.shouted, b.status_bar\n"
+                    "  FROM typed AS t JOIN typed AS b ON b.order_id = t.order_id\n)\n"
+                    "SELECT * FROM final\n",
+                ),
+            },
+            expected_returncode=0,
+            expected_fragments=("0 errors, 0 warnings",),
+            unexpected_fragments=_UNPROVEN,
+        ),
+        SqlMacroCompileTestCase(
+            description="a_call_inside_a_larger_expression_is_typed_from_its_sql",
+            files={
+                **_TYPED_RULES_AND_MACROS,
+                **contract_model(
+                    "orders",
+                    "order_id (type BIGINT), status_bar (type VARCHAR)",
+                    "WITH final AS (\n  SELECT\n    o.order_id,\n"
+                    "    COALESCE(@sql.status_bar(o.status), @sql.status_bar(o.status)) "
+                    "AS status_bar\n"
+                    '  FROM __ref("stg_orders") AS o\n)\nSELECT * FROM final\n',
+                ),
+            },
+            expected_returncode=1,
+            expected_fragments=(
+                "warning[K003]: column 'status_bar' type could not be proven against declared "
+                "VARCHAR",
+                'error[SQBRCONTRACT105]: output "status_bar" is calculated without an outer '
+                "explicit cast",
+            ),
+        ),
+        SqlMacroCompileTestCase(
+            description="an_inferred_type_of_another_family_still_disagrees_through_a_cte",
+            files={
+                **text_macro("shouted", "BIGINT", "UPPER(@value)"),
+                **contract_model(
+                    "orders",
+                    "shouted (type BIGINT)",
+                    "WITH final AS (\n"
+                    '  SELECT @sql.shouted(o.status) AS shouted FROM __ref("stg_orders") AS o\n'
+                    ")\nSELECT * FROM final\n",
+                ),
+            },
+            expected_returncode=1,
+            expected_fragments=("error[K002]: column 'shouted' inferred as",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_returns_type_when_checking_contracts_then_the_call_has_that_type(
+    test_case: SqlMacroCompileTestCase, tmp_path: Path
+) -> None:
+    _, result = run_project(
+        tmp_path=tmp_path, files=test_case.files, command=("compile", "--no-cache")
+    )
+
+    assert result.returncode == test_case.expected_returncode, output(result)
+    for fragment in test_case.expected_fragments:
+        assert fragment in output(result)
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in output(result)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlMacroCommandTestCase(
+            description="a_warm_compile_types_the_call_the_same_way",
+            files=_TYPED_CALLS,
+            command=("compile",),
+            expected_returncode=0,
+            expected_fragments=("0 errors, 0 warnings",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_returns_type_when_compiling_warm_then_the_call_keeps_that_type(
+    test_case: SqlMacroCommandTestCase, tmp_path: Path
+) -> None:
+    project_dir, cold = run_project(
+        tmp_path=tmp_path, files=test_case.files, command=("compile", "--no-cache")
+    )
+    warm: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", *test_case.command), project_dir=project_dir
+    )
+
+    assert cold.returncode == 0, output(cold)
+    assert warm.returncode == test_case.expected_returncode, output(warm)
+    for fragment in test_case.expected_fragments:
+        assert fragment in output(warm)

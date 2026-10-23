@@ -256,6 +256,27 @@ pub struct SqlMacroCheck {
     pub arguments: Vec<ArgumentCheck>,
     /// The call's authored file location and where its text ends, when the host knows them.
     pub call: Option<(SqlMacroLocation, (usize, usize))>,
+    /// The output column an expression call is the whole select-list item of, and its type.
+    pub output: Option<TypedOutput>,
+}
+
+/// A select item that is one expression macro call, typed by the macro's `returns`.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct DeclaredOutput {
+    /// The top-level CTE the item is in, or `None` for the main query.
+    pub cte: Option<String>,
+    /// The item's alias, unquoted.
+    pub name: String,
+    pub returns: String,
+}
+
+/// A select-list item that is one expression macro call under an alias, as `@sql.m(x) AS name`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypedOutput {
+    /// The alias, unquoted.
+    pub name: String,
+    /// The macro's declared `returns` type.
+    pub returns: String,
 }
 
 /// The top-level part of the caller's query a call stands in.

@@ -2,9 +2,10 @@
 
 use crate::sql_macros::_helpers::lexing::{Token, TokenKind, closing_token, line_column, tokens};
 use crate::sql_macros::constants::{
-    ANY_KEYWORD, ARGUMENTS_KEY, COLUMN_KEYWORD, COMMA, CONST_KEYWORD, DEFAULT_KEYWORD, DESCRIPTION_KEY,
-    ENUM_KEYWORD, HEADER_KEYWORD, INVALID_DEFINITION_CODE, LIST_KEYWORD, OF_KEYWORD,
-    RAW_TYPE_NAMES, RELATION_COLUMN_MIN_TOKENS, RELATION_KEYWORD, RETURNS_KEY, SET_KEYWORD,
+    ANY_KEYWORD, ARGUMENTS_KEY, COLUMN_KEYWORD, COMMA, CONST_KEYWORD, DEFAULT_KEYWORD,
+    DESCRIPTION_KEY, ENUM_KEYWORD, HEADER_KEYWORD, INVALID_DEFINITION_CODE, LIST_KEYWORD,
+    OF_KEYWORD, RAW_TYPE_NAMES, RELATION_COLUMN_MIN_TOKENS, RELATION_KEYWORD, RETURNS_KEY,
+    SET_KEYWORD,
 };
 use crate::sql_macros::errors::LexError;
 use crate::sql_macros::errors::SqlMacroError;
@@ -278,8 +279,13 @@ impl HeaderParser<'_> {
             let element: &[Token] = &tokens[1..];
             if element.len() == 1 && element[0].is_word(source, ANY_KEYWORD) {
                 return Err(self
-                    .error(element[0].start, format!("argument {name} {keyword} ANY: ANY is for scalar arguments only"))
-                    .helped(format!("declare the element type, such as {name} {keyword} VARCHAR")));
+                    .error(
+                        element[0].start,
+                        format!("argument {name} {keyword} ANY: ANY is for scalar arguments only"),
+                    )
+                    .helped(format!(
+                        "declare the element type, such as {name} {keyword} VARCHAR"
+                    )));
             }
             if let Some((last, element)) = element.split_last()
                 && last.is_word(source, CONST_KEYWORD)

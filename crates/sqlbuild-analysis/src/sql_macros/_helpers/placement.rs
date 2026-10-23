@@ -2,7 +2,7 @@
 
 use crate::sql_macros::_helpers::header::unquoted;
 use crate::sql_macros::_helpers::lexing::{Token, TokenKind, closing_token};
-use crate::sql_macros::constants::{AT_SIGN, COMMA, SELECT_KEYWORD, WITH_KEYWORD};
+use crate::sql_macros::constants::{AS_KEYWORD, AT_SIGN, COMMA, SELECT_KEYWORD, WITH_KEYWORD};
 use crate::sql_macros::models::{CallPosition, CallScope};
 
 /// Tokens before the `(` of `DISTINCT ON (...)`.
@@ -250,6 +250,48 @@ impl<'a> CallSite<'a> {
             }
             _ => CallPosition::Expression,
         }
+    }
+
+    /// The alias of the select-list item the call is the whole of, as `@sql.m(x) AS name`.
+    pub(crate) fn whole_item_alias(&self) -> Option<String> {
+        let opens_item: bool = self.previous_token().is_some_and(|token| {
+            matches!(
+                token.text(self.sql).to_ascii_uppercase().as_str(),
+                "SELECT" | "DISTINCT" | "ALL" | ","
+            )
+        });
+        if !opens_item || self.position() != CallPosition::SelectList {
+            return None;
+        }
+        let next: usize = self.next?;
+        let alias_index: usize = if self.tokens[next].is_word(self.sql, AS_KEYWORD) {
+            next + 1
+        } else {
+            next
+        };
+        let alias: &Token = self.tokens.get(alias_index)?;
+        let alias_text: String = alias.text(self.sql).to_ascii_uppercase();
+        let named: bool = match alias.kind {
+            TokenKind::Quoted => true,
+            TokenKind::Word => {
+                !SELECT_LIST_ENDS.contains(&alias_text.as_str())
+                    && !EXPRESSION_OPERATOR_WORDS.contains(&alias_text.as_str())
+                    && alias_text != AS_KEYWORD
+            }
+            _ => false,
+        };
+        if !named {
+            return None;
+        }
+        let ends_item: bool = match self.tokens.get(alias_index + 1) {
+            None => true,
+            Some(after) => {
+                let text: String = after.text(self.sql).to_ascii_uppercase();
+                matches!(text.as_str(), "," | ")" | ";")
+                    || (after.kind == TokenKind::Word && SELECT_LIST_ENDS.contains(&text.as_str()))
+            }
+        };
+        ends_item.then(|| unquoted(alias.text(self.sql)))
     }
 
     /// Whether the token after the call ends a select-list item.

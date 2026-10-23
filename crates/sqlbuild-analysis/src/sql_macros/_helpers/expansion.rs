@@ -24,7 +24,7 @@ use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::models::{
     ArgumentCheck, ArgumentExpectation, ArgumentShape, BodyExpansion, BoundArgument, CallPosition,
     CallScope, InsertedNames, ParameterKind, RenderedArgument, SqlMacroCall, SqlMacroCheck,
-    SqlMacroDefinition, SqlMacroForm, SqlMacroLocation, TextContext,
+    SqlMacroDefinition, SqlMacroForm, SqlMacroLocation, TextContext, TypedOutput,
 };
 use crate::sql_macros::types::{ConstantShape, SqlMacroHost, SqlMacroScope};
 
@@ -214,24 +214,34 @@ pub(crate) fn expand_call<H: SqlMacroHost>(
             inserted,
         ));
     }
-    if matches!(context.scope, SqlMacroScope::Caller) && context.stack.is_empty() {
-        let check: SqlMacroCheck = SqlMacroCheck {
-            macro_name: definition.name.clone(),
-            scope: call_scope(context.text, scanned, call.start),
-            plain_select: plain_select(context.text, scanned, call.start),
-            arguments: argument_checks(&definition, &bound, &rendered),
-            call: None,
-        };
-        if !check.arguments.is_empty() {
-            host.record_check(check, (call.start, call.end));
-        }
-    }
     let site: CallSite<'_> = CallSite::new(
         context.text,
         scanned,
         (call.start, call.end),
         call.replaced_end,
     );
+    if matches!(context.scope, SqlMacroScope::Caller) && context.stack.is_empty() {
+        let output: Option<TypedOutput> = match (definition.form, &definition.returns) {
+            (SqlMacroForm::Expression, Some(returns)) => {
+                site.whole_item_alias().map(|name| TypedOutput {
+                    name,
+                    returns: returns.clone(),
+                })
+            }
+            _ => None,
+        };
+        let check: SqlMacroCheck = SqlMacroCheck {
+            macro_name: definition.name.clone(),
+            scope: call_scope(context.text, scanned, call.start),
+            plain_select: plain_select(context.text, scanned, call.start),
+            arguments: argument_checks(&definition, &bound, &rendered),
+            call: None,
+            output,
+        };
+        if !check.arguments.is_empty() || check.output.is_some() {
+            host.record_check(check, (call.start, call.end));
+        }
+    }
     let line_continues: bool = context.text[call.replaced_end..]
         .split('\n')
         .next()

@@ -265,6 +265,16 @@ parameters of a calling macro, and calls in models with runtime placeholders; th
 column checks still run on the expanded SQL. All other errors also point at the call and at the
 macro file.
 
+A select-list item that is one expression macro call under an alias, as in
+`@sql.cents_to_dollars(o.amount_cents) AS amount`, has the macro's `returns` type wherever the
+compiler infers no type for the expanded SQL or a type of the same family, such as `DECIMAL` for
+`DECIMAL(18, 2)`. This holds in the main query and in any top-level CTE, and the type flows on as
+an inferred type would: through `SELECT * FROM final`, pass-through columns and joins, to contract
+checks (`K002`, `K003`), `SQBRCONTRACT105` and models that read the column. Such a call needs no
+`CAST` to satisfy a matching contract column. If the inferred type has another family, the inferred
+type stands and `K002` reports the mismatch. A call inside a larger expression, a subquery or a
+`UNION` branch is typed from the expanded SQL as before.
+
 - `sqb format` formats SQL macro files, bodies of every form and the `MACRO` header, and
   normalises the commas around CTE-list and column-list calls.
 - [Rules](/docs/concepts/rules) and [column lineage](/docs/concepts/column-lineage) read the expanded

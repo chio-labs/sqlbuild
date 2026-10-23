@@ -62,3 +62,19 @@ pub(super) struct PythonArgumentTestCase {
 
 /// Argument parsing without Unicode name lookups, which these arguments never use.
 pub(super) struct AsciiArguments;
+
+/// One recorded call, one analysed select item and the type the item then has, if changed.
+pub(super) struct OutputTypeTestCase {
+    pub(super) description: &'static str,
+    pub(super) check: crate::sql_macros::models::SqlMacroCheck,
+    /// The item's CTE (`None` for the main query), name and inferred type.
+    pub(super) item: (Option<&'static str>, &'static str, Option<&'static str>),
+    pub(super) expected_type: Option<&'static str>,
+}
+
+/// Model SQL and the scope and alias of each whole-item SQL macro call.
+pub(super) struct OutputNamesTestCase {
+    pub(super) description: &'static str,
+    pub(super) sql: &'static str,
+    pub(super) expected_names: &'static [(Option<&'static str>, &'static str)],
+}

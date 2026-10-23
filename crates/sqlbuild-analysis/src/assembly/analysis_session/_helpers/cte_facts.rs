@@ -35,6 +35,8 @@ use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::nullability_rules::main::conditional_result_nullability::conditional_result_nullability;
 use crate::nullability_rules::main::first_arg_nullability::first_arg_nullability;
 use crate::nullability_rules::main::safe_cast_nullability::safe_cast_nullability;
+use crate::sql_macros::main::sql_macro_declared_type::sql_macro_declared_type;
+use crate::sql_macros::models::DeclaredOutput;
 use crate::type_system::main::normalize_type::normalize_type;
 use crate::type_system::models::{NormalizedType, TypeFamily};
 
@@ -58,6 +60,8 @@ pub(crate) struct RecoveryProfile<'a> {
     pub(crate) rules: Option<&'a Pairs>,
     /// Runs the adapter's own rules, those with the `python` rule id.
     pub(crate) callback: Option<&'a NullabilityCallback>,
+    /// The model's select items that are one SQL macro call each, typed by its `returns`.
+    pub(crate) declared: &'a [DeclaredOutput],
 }
 
 /// One enrichment's recovery request.
@@ -127,6 +131,25 @@ pub(crate) struct LegacyAnalysis {
     pub(crate) has_star: bool,
     /// Python's own lineage facts of the projections.
     pub(crate) lineage: Vec<LineageRow>,
+}
+
+/// The model query's output types its SQL macro call items change, given the relation types.
+pub(crate) fn declared_output_types(
+    cleaned_sql: &str,
+    types: &ShapeTable,
+    profile: &RecoveryProfile<'_>,
+) -> Fact<Vec<(String, String)>> {
+    let Some(parsed) = parse_one(cleaned_sql, profile.dialect)? else {
+        return Ok(Vec::new());
+    };
+    let facts: Relations = referenced_types(&parsed, types);
+    let context = Context { profile };
+    let declared: Vec<(String, String)> = context.model_passthrough_types(&parsed, &facts)?;
+    let plain: Vec<(String, String)> = context.passthrough_types(&parsed, &facts)?;
+    Ok(declared
+        .into_iter()
+        .filter(|(name, data_type)| dict_get(&plain, name) != Some(data_type))
+        .collect())
 }
 
 /// Python's legacy analysis of a model the native engine handed back, or why it defers.
@@ -472,11 +495,32 @@ struct Context<'a, 'b> {
 }
 
 impl Context<'_, '_> {
+    /// The model query's pass-through types, its SQL macro call items typed by `returns`.
+    fn model_passthrough_types(
+        &self,
+        root: &Expression,
+        facts: &Relations,
+    ) -> Fact<Vec<(String, String)>> {
+        let types: Vec<(String, String)> =
+            self.passthrough_types_in(root, facts, Some(self.profile.declared))?;
+        Ok(self.declared_types(None, types))
+    }
+
     /// Python's `_polyglot_cte_passthrough_types_from_parsed`.
     fn passthrough_types(
         &self,
         root: &Expression,
         facts: &Relations,
+    ) -> Fact<Vec<(String, String)>> {
+        self.passthrough_types_in(root, facts, None)
+    }
+
+    /// The pass-through types of `root`, typing the declared items of its own CTEs.
+    fn passthrough_types_in(
+        &self,
+        root: &Expression,
+        facts: &Relations,
+        declared: Option<&[DeclaredOutput]>,
     ) -> Fact<Vec<(String, String)>> {
         let ctes: Vec<(&str, bool, &Expression)> = top_level_ctes(root);
         if ctes.is_empty() {
@@ -487,8 +531,11 @@ impl Context<'_, '_> {
             if has_column_aliases {
                 continue;
             }
-            let inferred: Vec<(String, String)> =
+            let mut inferred: Vec<(String, String)> =
                 self.select_output_types(Some(body), &relations)?;
+            if declared.is_some() {
+                inferred = self.declared_types(Some(cte_name), inferred);
+            }
             if !inferred.is_empty() {
                 relations = dict_set(relations, cte_name, Rc::new(inferred));
             }
@@ -497,6 +544,32 @@ impl Context<'_, '_> {
             return self.set_operation_types(root, &relations);
         }
         self.direct_select_types(Some(root), &relations)
+    }
+
+    /// `types` of the main query or CTE `cte` with each declared SQL macro call item typed.
+    fn declared_types(
+        &self,
+        cte: Option<&str>,
+        mut types: Vec<(String, String)>,
+    ) -> Vec<(String, String)> {
+        for output in self.profile.declared {
+            let key: String = types
+                .iter()
+                .map(|(name, _)| name)
+                .find(|name| name.eq_ignore_ascii_case(&output.name))
+                .cloned()
+                .unwrap_or_else(|| output.name.clone());
+            let inferred: Option<&str> = dict_get(&types, &key).map(String::as_str);
+            if let Some(declared) = sql_macro_declared_type(
+                self.profile.declared,
+                (cte, &output.name),
+                inferred,
+                self.profile.dialect,
+            ) {
+                types = dict_set(types, &key, declared);
+            }
+        }
+        types
     }
 
     /// Python's `_polyglot_select_output_types`.

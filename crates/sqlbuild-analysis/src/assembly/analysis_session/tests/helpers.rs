@@ -471,6 +471,7 @@ pub(crate) fn recovered_facts(sql: &str) -> Option<(Pairs, Pairs, Vec<String>, V
             function_return_types: &Vec::new(),
             rules: Some(&rules),
             callback: None,
+            declared: &[],
         },
     })
     .ok()?;
@@ -550,6 +551,7 @@ pub(crate) fn legacy_lines(sql: &str) -> Option<Vec<String>> {
             function_return_types: &Vec::new(),
             rules: Some(&rules),
             callback: None,
+            declared: &[],
         },
     })
     .ok()?;
