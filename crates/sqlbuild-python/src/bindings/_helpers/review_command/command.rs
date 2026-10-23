@@ -8,10 +8,11 @@ use pyo3::exceptions::PyException;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::{pyfunction, wrap_pyfunction};
+use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::review_command::constants::{
-    AUDIT_FINDING, BUILT_NODE, FAILED_NODE, FINDING_NODE, MODEL_KIND, NO_COMPARISON_MODE,
-    NOT_VALIDATED_NODE, OK_NODE, PASSES_LIMIT, PLANNED_STATUS, TEST_FINDING, UNIT_TEST_LABEL,
+    AUDIT_FINDING, BUILT_NODE, FAILED_NODE, FINDING_NODE, MARKDOWN_WRITE_CODE, MODEL_KIND,
+    NO_COMPARISON_MODE, NOT_VALIDATED_NODE, OK_NODE, PASSES_LIMIT, PLANNED_STATUS, SEED_KIND,
+    TEST_FINDING, UNIT_TEST_LABEL,
 };
 use sqlbuild_analysis::review_command::main::downstream_policy_name::downstream_policy_name;
 use sqlbuild_analysis::review_command::main::plan_review::plan_review;
@@ -20,38 +21,45 @@ use sqlbuild_analysis::review_command::main::render_review_markdown::render_revi
 use sqlbuild_analysis::review_command::main::render_review_text::render_review_text;
 use sqlbuild_analysis::review_command::main::review_outcome::review_outcome;
 use sqlbuild_analysis::review_command::models::{
-    NodeReport, ReviewFinding, ReviewNode, ReviewPlan, ReviewReport, ReviewSchemaReport,
-    ValidationCounts,
+    IncompleteCheck, NodeReport, ReviewFailure, ReviewFinding, ReviewNode, ReviewPlan,
+    ReviewReport, ReviewSchemaReport, ValidationCounts,
 };
 use sqlbuild_core::git_revisions::main::head_commit::head_commit;
 
-use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::clone::clone_progress::write_line;
+use crate::bindings::_helpers::recall::console::{write_stderr, write_stdout_bytes};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::review_command::comparison::{
-    ComparisonContext, Comparisons, compare_models,
+    ComparisonContext, Comparisons, Sides, compare_models, prepare_sides,
 };
 use crate::bindings::_helpers::review_command::execution::{
     BuildOutcome, RunInputs, build_validated, incremental_starts, run_changed_tests,
 };
 use crate::bindings::_helpers::review_command::impact::affected_columns;
 use crate::bindings::_helpers::review_command::planning::{
-    ReviewProject, ReviewSettings, discover, review_project, review_settings, selected_tokens,
+    Compiled, ReviewProject, ReviewSettings, discover, review_project, review_settings,
+    selected_tokens,
 };
 use crate::bindings::_helpers::review_command::schema::{
     ReviewSchema, connection_config, create_review_schema, drop_review_schema, review_schema,
     with_review_target,
 };
 use crate::bindings::_helpers::review_command::support::{
-    error_parts, failed_error, invocation_id, phase, plan_error, utc_now_compact,
+    error_parts, failed_error, invocation_id, phase, plan_error, progress_stream, utc_now_compact,
 };
 
 const SUCCESS_STATUS: &str = "success";
 const SKIPPED_STATUS: &str = "skipped";
 const REVIEW_WORK_DIRECTORY: [&str; 2] = ["target", "review"];
+const BUILD_CHECK: &str = "build";
+const COMPARISON_CHECK: &str = "comparison";
+const SKIPPED_REASON: &str = "skipped after an upstream failure";
+const UNCOMPARED_SEED_REASON: &str =
+    "seeds are not compared: the diff pipeline compares models only";
+const NEW_NODE_REASON: &str = "new in this branch; nothing in --against to compare";
 
 /// The nodes the changed set reaches, with edges between them.
-fn impact_edges(project: &ReviewProject<'_>, plan: &ReviewPlan) -> Vec<(String, String)> {
+fn impact_edges(project: &ReviewProject, plan: &ReviewPlan) -> Vec<(String, String)> {
     let affected: BTreeSet<&str> = plan
         .changed
         .iter()
@@ -74,7 +82,7 @@ fn impact_edges(project: &ReviewProject<'_>, plan: &ReviewPlan) -> Vec<(String, 
 }
 
 /// Upstream nodes of the validated set that the build reads from `--against`.
-fn deferred(project: &ReviewProject<'_>, validated: &[String]) -> Vec<String> {
+fn deferred(project: &ReviewProject, validated: &[String]) -> Vec<String> {
     let built: BTreeSet<&str> = validated.iter().map(String::as_str).collect();
     let mut upstream: BTreeSet<String> = BTreeSet::new();
     for (parent, children) in &project.review_graph.downstream {
@@ -94,7 +102,7 @@ fn deferred(project: &ReviewProject<'_>, validated: &[String]) -> Vec<String> {
 }
 
 /// The impact tree's nodes before anything runs.
-fn planned_nodes(project: &ReviewProject<'_>, plan: &ReviewPlan, dry_run: bool) -> Vec<NodeReport> {
+fn planned_nodes(project: &ReviewProject, plan: &ReviewPlan, dry_run: bool) -> Vec<NodeReport> {
     let changed: BTreeSet<&str> = plan.changed.iter().map(|node| node.name.as_str()).collect();
     let validated: BTreeSet<&str> = plan.validated.iter().map(String::as_str).collect();
     let left_out: BTreeMap<&str, &str> = plan
@@ -172,7 +180,7 @@ fn settled_status(
         _ if with_findings.contains(&node.name) => (FINDING_NODE.to_owned(), reason),
         Some(SKIPPED_STATUS) => (
             NOT_VALIDATED_NODE.to_owned(),
-            Some("skipped after an upstream failure".to_owned()),
+            Some(SKIPPED_REASON.to_owned()),
         ),
         Some(SUCCESS_STATUS) | None if blocked => (FINDING_NODE.to_owned(), reason),
         Some(SUCCESS_STATUS) if compared => (OK_NODE.to_owned(), reason),
@@ -182,22 +190,49 @@ fn settled_status(
     }
 }
 
+/// Checks that never ran: skipped builds and built seeds, which no comparison covers.
+fn uncovered_checks(nodes: &[NodeReport], build: &BuildOutcome) -> Vec<IncompleteCheck> {
+    nodes
+        .iter()
+        .filter_map(|node| {
+            let status: Option<&str> = build.statuses.get(&node.name).map(String::as_str);
+            let (check, reason) = match status {
+                Some(SKIPPED_STATUS) => (BUILD_CHECK, SKIPPED_REASON),
+                Some(SUCCESS_STATUS) if node.kind == SEED_KIND => {
+                    (COMPARISON_CHECK, UNCOMPARED_SEED_REASON)
+                }
+                _ => return None,
+            };
+            Some(IncompleteCheck {
+                node: node.name.clone(),
+                check: check.to_owned(),
+                reason: reason.to_owned(),
+            })
+        })
+        .collect()
+}
+
 /// Settle each node's status from its build, audits, tests and comparison.
 fn settle_nodes(
     report: ReviewReport,
-    build: &BuildOutcome,
-    comparisons: Comparisons,
-    affected: &BTreeMap<String, Vec<String>>,
+    (build, comparisons): (&BuildOutcome, Comparisons),
+    (affected, new): (&BTreeMap<String, Vec<String>>, &BTreeSet<String>),
 ) -> ReviewReport {
     let Comparisons {
         mut findings,
         mut by_node,
-        incomplete,
+        mut incomplete,
     } = comparisons;
     findings.extend(check_findings(build, &report.tests));
     let with_findings: BTreeSet<String> = findings
         .iter()
         .map(|finding| finding.node.clone())
+        .collect();
+    let built: Vec<String> = report
+        .nodes
+        .iter()
+        .filter(|node| node.status != NOT_VALIDATED_NODE)
+        .map(|node| node.name.clone())
         .collect();
     let nodes: Vec<NodeReport> = report
         .nodes
@@ -205,16 +240,24 @@ fn settle_nodes(
         .map(|node| {
             let affected_columns: Vec<String> =
                 affected.get(&node.name).cloned().unwrap_or_default();
-            if node.status == NOT_VALIDATED_NODE {
+            if !built.contains(&node.name) {
                 return NodeReport {
                     affected_columns,
                     ..node
                 };
             }
+            let comparison = by_node.remove(&node.name);
+            let new_relation: bool = new.contains(&node.name)
+                && comparison
+                    .as_ref()
+                    .is_some_and(|comparison| comparison.mode == NO_COMPARISON_MODE);
             let built = NodeReport {
                 affected_columns,
                 build_status: build.statuses.get(&node.name).cloned(),
-                comparison: by_node.remove(&node.name),
+                comparison,
+                reason: new_relation
+                    .then(|| NEW_NODE_REASON.to_owned())
+                    .or(node.reason.clone()),
                 ..node
             };
             let (status, reason) = settled_status(&built, build, &with_findings);
@@ -225,6 +268,12 @@ fn settle_nodes(
             }
         })
         .collect();
+    let built_nodes: Vec<NodeReport> = nodes
+        .iter()
+        .filter(|node| built.contains(&node.name))
+        .cloned()
+        .collect();
+    incomplete.extend(uncovered_checks(&built_nodes, build));
     ReviewReport {
         nodes,
         findings,
@@ -234,37 +283,68 @@ fn settle_nodes(
 }
 
 /// The directory the review's sub-runs write their result documents to.
-fn work_directory(project: &ReviewProject<'_>, schema: &ReviewSchema<'_>) -> PyResult<PathBuf> {
+fn work_directory(project: &ReviewProject, schema: &ReviewSchema) -> PyResult<PathBuf> {
     let work_dir: PathBuf = REVIEW_WORK_DIRECTORY
         .iter()
-        .fold(project.project_dir.extract::<PathBuf>()?, |path, part| {
-            path.join(part)
-        })
+        .fold(project.project_dir.clone(), |path, part| path.join(part))
         .join(&schema.name);
     std::fs::create_dir_all(&work_dir)
         .map_err(|error| pyo3::exceptions::PyOSError::new_err(error.to_string()))?;
     Ok(work_dir)
 }
 
+/// A run's settings, plan and compiled project, then its connection config and connection.
+type RunContext<'a, 'py> = (
+    (&'a ReviewSettings, &'a ReviewProject, &'a Compiled<'py>),
+    (&'a Bound<'py, PyAny>, &'a Bound<'py, PyAny>),
+);
+
+/// The models a comparison covers: validated models that built.
+fn comparable<'a>(
+    project: &'a ReviewProject,
+    validated: &[String],
+    build: &BuildOutcome,
+) -> Vec<&'a ReviewNode> {
+    validated
+        .iter()
+        .filter(|name| build.statuses.get(*name).map(String::as_str) == Some(SUCCESS_STATUS))
+        .filter_map(|name| project.review_graph.nodes.get(name))
+        .filter(|node| node.kind == MODEL_KIND)
+        .collect()
+}
+
+/// Validated nodes new since the base revision.
+fn new_nodes(report: &ReviewReport) -> BTreeSet<String> {
+    report
+        .plan
+        .changed
+        .iter()
+        .filter(|node| node.added)
+        .map(|node| node.name.clone())
+        .collect()
+}
+
 /// Everything that needs the review schema: clone, build, tests, comparison and impact.
 fn validate(
     (request, stream, machine): (&Bound<'_, PyAny>, &Bound<'_, PyAny>, bool),
-    (settings, project, schema): (&ReviewSettings, &ReviewProject<'_>, &ReviewSchema<'_>),
-    (connection_config, connection): (&Bound<'_, PyAny>, &Bound<'_, PyAny>),
+    (((settings, project, compiled), (connection_config, connection)), schema): (
+        RunContext<'_, '_>,
+        &ReviewSchema,
+    ),
+    (review_discovered, sides): (&Bound<'_, PyAny>, Option<&Sides<'_>>),
     report: ReviewReport,
 ) -> Attempt {
     let mut report: ReviewReport = report;
     let outcome: PyResult<()> = (|| {
-        let review_discovered: Bound<'_, PyAny> =
-            with_review_target(&project.discovered, settings, schema)?;
+        let (_, adapter, graph) = compiled;
         let work_dir: PathBuf = work_directory(project, schema)?;
         let inputs: RunInputs<'_, '_> = RunInputs {
             request,
             project_dir: &project.project_dir,
-            review_discovered: &review_discovered,
+            review_discovered,
             review_target: &schema.name,
             work_dir: &work_dir,
-            machine,
+            output: (stream, machine),
         };
         let validated: Vec<String> = report.plan.validated.clone();
         let stateful: Vec<String> = validated
@@ -272,8 +352,7 @@ fn validate(
             .filter(|name| project.stateful.contains(*name))
             .cloned()
             .collect();
-        report.incremental_starts =
-            incremental_starts(&inputs, (settings, &project.adapter), &stateful)?;
+        report.incremental_starts = incremental_starts(&inputs, (settings, adapter), &stateful)?;
         let build: BuildOutcome = phase(
             stream,
             (
@@ -298,16 +377,12 @@ fn validate(
             ),
             || run_changed_tests(&inputs, settings),
         )?;
-        let comparable: Vec<&ReviewNode> = validated
-            .iter()
-            .filter(|name| build.statuses.get(*name).map(String::as_str) == Some(SUCCESS_STATUS))
-            .filter_map(|name| project.review_graph.nodes.get(name))
-            .filter(|node| node.kind == MODEL_KIND)
-            .collect();
+        let models: Vec<&ReviewNode> = comparable(project, &validated, &build);
+        let new: BTreeSet<String> = new_nodes(&report);
         let context: ComparisonContext<'_, '_> = ComparisonContext {
             request,
-            discovered: &review_discovered,
-            adapter: &project.adapter,
+            discovered: review_discovered,
+            adapter,
             connection,
             connection_config,
             review_target: &schema.name,
@@ -317,13 +392,13 @@ fn validate(
             (
                 &format!(
                     "Comparing {} models with {}",
-                    comparable.len(),
+                    models.len(),
                     settings.against
                 ),
                 "Compared the review models",
                 "Comparison failed",
             ),
-            || compare_models(&context, settings, &comparable),
+            || compare_models(&context, sides, (&models, &new)),
         )?;
         let affected_set: BTreeSet<String> =
             report.nodes.iter().map(|node| node.name.clone()).collect();
@@ -334,11 +409,15 @@ fn validate(
             .map(|node| node.name.clone())
             .collect();
         let affected: BTreeMap<String, Vec<String>> = affected_columns(
-            &project.project,
+            &native_field(graph, "project")?,
             (&changed, &affected_set),
             &comparisons.by_node,
         )?;
-        report = settle_nodes(std::mem::take(&mut report), &build, comparisons, &affected);
+        report = settle_nodes(
+            std::mem::take(&mut report),
+            (&build, comparisons),
+            (&affected, &new),
+        );
         Ok(())
     })();
     Attempt { report, outcome }
@@ -356,69 +435,118 @@ fn dropped_state(py: Python<'_>, dropped: PyResult<bool>) -> PyResult<(bool, Opt
     }
 }
 
-/// Connect and name this run's review schema.
+/// Name this run's review schema, refusing nodes that would build outside it, then connect.
 fn open_review<'py>(
     request: &Bound<'py, PyAny>,
-    (settings, project): (&ReviewSettings, &ReviewProject<'py>),
+    (settings, project, compiled): (&ReviewSettings, &ReviewProject, &Compiled<'py>),
     report: &ReviewReport,
-) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>, ReviewSchema<'py>)> {
+) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>, ReviewSchema)> {
     let py: Python<'py> = request.py();
-    let config: Bound<'py, PyAny> = connection_config(
-        request,
-        (&project.project_dir, &project.discovered),
-        settings,
-    )?;
+    let (discovered, adapter, _) = compiled;
     let run_id: String = report
         .invocation_id
         .clone()
         .unwrap_or_else(|| format!("{:x}", std::process::id()));
-    let schema: ReviewSchema<'py> = review_schema(
-        (&project.project, &project.discovered),
-        settings,
+    let schema: ReviewSchema = review_schema(
+        py,
+        (project, settings, &report.plan.validated),
         (utc_now_compact(py)?, &report.baseline.head, &run_id),
     )?;
-    let connection: Bound<'py, PyAny> = project.adapter.call_method1("connect", (&config,))?;
+    let config: Bound<'py, PyAny> = connection_config(
+        request,
+        (&(&project.project_dir).into_pyobject(py)?, discovered),
+        settings,
+    )?;
+    let connection: Bound<'py, PyAny> = adapter.call_method1("connect", (&config,))?;
     Ok((config, connection, schema))
+}
+
+/// The review target, and both sides of the comparison compiled before anything is created.
+fn prepare<'py>(
+    request: &Bound<'py, PyAny>,
+    ((settings, project, compiled), (config, connection)): RunContext<'_, 'py>,
+    (schema, report): (&ReviewSchema, &ReviewReport),
+) -> PyResult<(Bound<'py, PyAny>, Option<Sides<'py>>)> {
+    let (discovered, adapter, _) = compiled;
+    let review_discovered: Bound<'py, PyAny> = with_review_target(discovered, settings, schema)?;
+    let models: Vec<String> = report
+        .plan
+        .validated
+        .iter()
+        .filter(|name| {
+            project
+                .review_graph
+                .nodes
+                .get(*name)
+                .is_some_and(|node| node.kind == MODEL_KIND)
+        })
+        .cloned()
+        .collect();
+    let context: ComparisonContext<'_, 'py> = ComparisonContext {
+        request,
+        discovered: &review_discovered,
+        adapter,
+        connection,
+        connection_config: config,
+        review_target: &schema.name,
+    };
+    let sides: Option<Sides<'py>> =
+        prepare_sides(&context, settings, (&models, &new_nodes(report)))?;
+    Ok((review_discovered, sides))
 }
 
 /// Create the review schema, validate inside it, and always drop it.
 fn run_in_schema(
     (request, stream, machine): (&Bound<'_, PyAny>, &Bound<'_, PyAny>, bool),
-    (settings, project): (&ReviewSettings, &ReviewProject<'_>),
+    (settings, project, compiled): (&ReviewSettings, &ReviewProject, &Compiled<'_>),
     report: ReviewReport,
 ) -> Attempt {
     let py: Python<'_> = request.py();
-    let (config, connection, schema) = match open_review(request, (settings, project), &report) {
-        Ok(opened) => opened,
-        Err(error) => {
-            return Attempt {
-                report,
-                outcome: Err(error),
-            };
-        }
-    };
-    let adapter: &Bound<'_, PyAny> = &project.adapter;
+    let (config, connection, schema) =
+        match open_review(request, (settings, project, compiled), &report) {
+            Ok(opened) => opened,
+            Err(error) => {
+                return Attempt {
+                    report,
+                    outcome: Err(error),
+                };
+            }
+        };
+    let adapter: &Bound<'_, PyAny> = &compiled.1;
+    let run: RunContext<'_, '_> = ((settings, project, compiled), (&config, &connection));
     let mut state: ReviewSchemaReport = ReviewSchemaReport {
         database: schema.database.clone(),
         name: schema.name.clone(),
         ..ReviewSchemaReport::default()
     };
-    let created: PyResult<()> = phase(
+    let prepared = phase(
         stream,
         (
-            &format!("Creating review schema {}", schema.name),
-            "Created the review schema",
-            "Could not create the review schema",
+            &format!("Checking the relations to compare in {}", settings.against),
+            "Checked the relations to compare",
+            "Could not prepare the comparison",
         ),
-        || create_review_schema((adapter, &connection), &schema),
+        || prepare(request, run, (&schema, &report)),
     );
+    let created: PyResult<(Bound<'_, PyAny>, Option<Sides<'_>>)> = prepared.and_then(|ready| {
+        phase(
+            stream,
+            (
+                &format!("Creating review schema {}", schema.name),
+                "Created the review schema",
+                "Could not create the review schema",
+            ),
+            || create_review_schema((adapter, &connection), &schema),
+        )
+        .map(|()| ready)
+    });
     let attempt: Attempt = match created {
-        Ok(()) => {
+        Ok((review_discovered, sides)) => {
             state.created = true;
             validate(
                 (request, stream, machine),
-                (settings, project, &schema),
-                (&config, &connection),
+                (run, &schema),
+                (&review_discovered, sides.as_ref()),
                 report,
             )
         }
@@ -459,7 +587,7 @@ fn review(
     report: ReviewReport,
 ) -> Attempt {
     let mut report: ReviewReport = report;
-    let planned: PyResult<Option<(ReviewSettings, ReviewProject<'_>)>> = (|| {
+    let planned: PyResult<Option<(ReviewSettings, ReviewProject, Compiled<'_>)>> = (|| {
         let py: Python<'_> = request.py();
         let (project_dir, discovered) = discover(request)?;
         let settings: ReviewSettings = review_settings(request, (&project_dir, &discovered))?;
@@ -468,7 +596,7 @@ fn review(
         report.baseline.since_ref.clone_from(&settings.since);
         report.plan.policy = settings.policy;
         report.baseline.head = head_commit(&project_dir.extract::<PathBuf>()?).unwrap_or_default();
-        let project: ReviewProject<'_> = phase(
+        let (project, compiled): (ReviewProject, Compiled<'_>) = phase(
             stream,
             (
                 "Planning the review",
@@ -481,7 +609,7 @@ fn review(
         report.baseline.merge_base.clone_from(&project.merge_base);
         report.changes_json = project.changes_json.clone();
         report.changed_declarations = project.changed_declarations.clone();
-        let tokens = selected_tokens(request, &project.graph)?;
+        let tokens = selected_tokens(request, &compiled.2)?;
         report.plan = plan_review(
             &project.review_graph,
             &project.changed,
@@ -502,13 +630,24 @@ fn review(
                 downstream_policy_name(settings.policy),
             ),
         )?;
+        if !report.plan.hooks.is_empty() {
+            write_line(
+                stream,
+                &format!(
+                    "Hooks run against the review schema: {}",
+                    report.plan.hooks.join(", ")
+                ),
+            )?;
+        }
         let skip: bool = report.dry_run || report.plan.validated.is_empty();
-        Ok((!skip).then_some((settings, project)))
+        Ok((!skip).then_some((settings, project, compiled)))
     })();
     match planned {
-        Ok(Some((settings, project))) => {
-            run_in_schema((request, stream, machine), (&settings, &project), report)
-        }
+        Ok(Some((settings, project, compiled))) => run_in_schema(
+            (request, stream, machine),
+            (&settings, &project, &compiled),
+            report,
+        ),
         Ok(None) => Attempt {
             report,
             outcome: Ok(()),
@@ -520,28 +659,37 @@ fn review(
     }
 }
 
-fn publish(request: &Bound<'_, PyAny>, report: &ReviewReport, machine: bool) -> PyResult<()> {
-    let py: Python<'_> = request.py();
-    if let Some(path) = native_field(request, "markdown_path")?.extract::<Option<PathBuf>>()? {
-        if let Some(parent) = path
-            .parent()
-            .filter(|parent| !parent.as_os_str().is_empty())
-        {
-            std::fs::create_dir_all(parent)
-                .map_err(|error| pyo3::exceptions::PyOSError::new_err(error.to_string()))?;
-        }
-        std::fs::write(&path, render_review_markdown(report))
-            .map_err(|error| pyo3::exceptions::PyOSError::new_err(error.to_string()))?;
-    }
-    let stdout: Bound<'_, PyAny> = imported(py, "sys", "stdout")?;
+/// Write the Markdown report to `--markdown`, when given.
+fn write_markdown(request: &Bound<'_, PyAny>, report: &ReviewReport) -> PyResult<Option<String>> {
+    let Some(path) = native_field(request, "markdown_path")?.extract::<Option<PathBuf>>()? else {
+        return Ok(None);
+    };
+    let written: std::io::Result<()> = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .map_or(Ok(()), std::fs::create_dir_all)
+        .and_then(|()| std::fs::write(&path, render_review_markdown(report)));
+    Ok(written.err().map(|error| {
+        format!(
+            "could not write the Markdown report to {}: {error}",
+            path.display()
+        )
+    }))
+}
+
+/// Print the report to stdout, then write `--markdown`; the Markdown failure, if any.
+fn publish(
+    request: &Bound<'_, PyAny>,
+    report: &ReviewReport,
+    machine: bool,
+) -> PyResult<Option<String>> {
     let document: String = if machine {
         render_review_json(report)
     } else {
         render_review_text(report)
     };
-    stdout.call_method1("write", (document,))?;
-    stdout.call_method0("flush")?;
-    Ok(())
+    write_stdout_bytes(request.py(), document.as_bytes())?;
+    write_markdown(request, report)
 }
 
 /// Run one `sqb review` request.
@@ -551,11 +699,7 @@ pub(crate) fn run_review_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> 
     let started: Instant = Instant::now();
     let machine: bool = native_field(request, "json_output")?.is_truthy()?;
     let debug: bool = native_field(request, "debug")?.is_truthy()?;
-    let stream: Bound<'_, PyAny> = imported(
-        py,
-        "sys",
-        if machine || debug { "stderr" } else { "stdout" },
-    )?;
+    let stream: Bound<'_, PyAny> = progress_stream(py, machine || debug)?;
     let started_report: ReviewReport = ReviewReport {
         version: env!("CARGO_PKG_VERSION").to_owned(),
         dry_run: native_field(request, "dry_run")?.is_truthy()?,
@@ -572,13 +716,28 @@ pub(crate) fn run_review_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> 
             .transpose()?,
         ..report
     };
-    publish(request, &report, machine)?;
+    let markdown_failure: Option<String> = publish(request, &report, machine)?;
     if let Some(cause) = cause {
         if !cause.is_instance_of::<PyException>(py) {
             return Err(cause);
         }
+        if let Some(message) = &markdown_failure {
+            write_stderr(py, &format!("{message}\n"))?;
+        }
         let error = report.error.clone().unwrap_or_default();
         return Err(failed_error(py, &error, cause));
+    }
+    if let Some(message) = markdown_failure {
+        let failure = ReviewFailure {
+            code: MARKDOWN_WRITE_CODE.to_owned(),
+            message,
+            help: Some("pass a --markdown path in a writable directory".to_owned()),
+        };
+        return Err(failed_error(
+            py,
+            &failure,
+            pyo3::exceptions::PyOSError::new_err(failure.message.clone()),
+        ));
     }
     Ok(review_outcome(&report).1)
 }

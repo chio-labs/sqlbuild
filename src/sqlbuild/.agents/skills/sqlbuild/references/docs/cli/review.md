@@ -13,6 +13,7 @@ Online: https://sqlbuild.com/docs/cli/review/
 - What gets built
 - Selecting
 - The review schema
+- Hooks
 - Checks
 - Output
 - Exit codes
@@ -51,7 +52,7 @@ with `[git] base_ref` and `[review] against` runs a review with plain `sqb revie
 | `--against <target>` | Target to compare with and to read unchanged upstream from (default: `[review] against`) |
 | `--downstream <policy>` | Which unchanged downstream models to build and compare: `critical` (default), `all` or `none` |
 | `--select`, `-s` | Narrow the review to these nodes of the changed set; see [Selecting](#selecting) |
-| `--dry-run` | Print the plan without connecting to the warehouse |
+| `--dry-run` | Print the plan, including the nodes whose hooks would run, without connecting to the warehouse |
 | `--no-clone` | Start changed incremental models and snapshots from a full refresh instead of a clone |
 | `--bounded <window>` | Compare models too large for an exact comparison within a recent cursor window, such as `14d` |
 | `--markdown <path>` | Also write the report as Markdown to `<path>` |
@@ -77,6 +78,13 @@ source declaration or unit test, are listed under "What changed" but are not bui
 Downstream models the policy leaves out are always listed as **not validated**, with the reason.
 The impact tree is computed from the whole changed set, whatever the policy.
 
+A review never runs [Python nodes](../concepts/python-nodes/overview.md). A changed Python node,
+and every task, asset or check downstream of a change, appears in the impact tree as not validated
+with the reason. So does every model that reads a changed loader's source, directly or through
+other models: the review would build it from the `--against` data rather than from the changed
+loader, so it is listed as `reads Python node loader:<name>, not rebuilt by review` instead of
+being built.
+
 Upstream models outside the build are read from `--against`, as with
 [`sqb build --defer-to`](build.md). A changed incremental model or snapshot starts from a
 zero-copy clone of its `--against` table when the adapter supports zero-copy clones and the
@@ -86,25 +94,43 @@ a full refresh. The report says which start each one got and why.
 ## Selecting
 
 `--select` intersects with the review scope: only the selected nodes are built and compared; the
-rest of the scope is listed as not validated. Each selector must name something the review can
-check, or the review fails before connecting:
+rest of the scope is listed as not validated. Every changed node a selected node depends on is
+built and compared too, so a selected model never reads `--against` data where the branch differs;
+the report lists each one as also built because the selected node depends on it. Each selector must
+name something the review can check, or the review fails before connecting:
 
 | Selection | Error |
 |-----------|-------|
 | A name that matches no node | `C761` |
 | Only nodes the branch did not change and that nothing changed above | `C762` |
-| Only affected nodes the downstream policy leaves out | `C763` |
+| Only affected nodes the downstream policy leaves out, or that read a changed Python node | `C763` |
 
 ## The review schema
 
-A review builds into a schema named `<prefix>_<UTC timestamp>_<commit>_<run>`, for example
-`REVIEW_20261023T101500Z_3f9c2ab_4e1d0a`. Before creating it, the review writes an ownership marker
-to the active target schema's `_sqlbuild_fingerprints` table, and it refuses a schema that already
-exists. The schema is always dropped when the review ends, whether it passed or not; a failed drop
+A review builds into a schema named `<prefix>_<UTC timestamp>_<commit>_<run>` in lowercase, for
+example `review_20261023t101500z_3f9c2ab_4e1d0a`. Lowercase is how warehouses that fold unquoted
+names to lowercase store it, and warehouses that fold to uppercase compare schema names without
+case, so the review, the existence checks and the janitor all find the same schema. Before creating
+it, the review writes an ownership marker to the active target schema's `_sqlbuild_fingerprints`
+table, and it refuses a schema that already exists.
+
+Every model and seed the review builds goes to the review schema in the active target's database,
+including nodes that set their own `database`. When the active target sets no database, or sets it
+to `preserve`, and a node the review builds sets its own, the review refuses with `C776` before
+creating anything and names those nodes; set a database on the target to review them. The schema is always dropped when the review ends, whether it passed or not; a failed drop
 makes the review fail with exit code `3`. [`sqb janitor`](janitor.md#review-schemas) drops
 marked review schemas left behind for more than 24 hours.
 
 The adapter must be able to drop a whole schema: SQLite and SQL Server targets cannot run a review.
+
+## Hooks
+
+Model [pre- and post-hooks](../concepts/models/hooks.md) run during a review as they run during a
+build, with the review schema as the model's destination, so a hook that reaches its relation
+through the hook context, such as `@@CTX:destination.qualified`, acts on the review copy. A hook
+that hard-codes another relation's name acts on that relation, which may be outside the review
+schema. Check those hooks before reviewing; `--dry-run` and the run details list the nodes whose
+hooks will run.
 
 ## Checks
 
@@ -118,9 +144,17 @@ The adapter must be able to drop a whole schema: SQLite and SQL Server targets c
   model has a cursor. Models without a `unique_key` get the schema and row-count checks only.
 
 Any difference is a finding: a schema change, a different row count, branch-only or target-only
-keys, a changed value, a failed unit test or a failed audit. A check that could not run, such as
-the keyed diff of a model without a `unique_key`, is reported as **incomplete coverage**. A model
-that does not exist in `--against` yet is built but not compared, and the Baseline section says so.
+keys, a changed value, a failed unit test or a failed audit. A check that never ran is never
+reported as passing; it is **incomplete coverage**:
+
+- the keyed diff of a model without a `unique_key`, or of a model the size guard blocks;
+- a changed seed, since the comparison covers models only;
+- a node the build skipped;
+- a model that existed at the base revision but has no table in `--against`.
+
+A model new in the branch is built but has nothing to compare, and the impact tree says so. When
+`--against` has none of the tables of the models to compare that existed at the base revision, the
+review fails with `C774` before creating anything, since that usually means the wrong target.
 
 ## Output
 
@@ -145,9 +179,13 @@ that list only the columns that changed.
 | `0` | Passed: every check ran and found no difference, or a dry run |
 | `1` | Findings |
 | `2` | Incomplete coverage, and no findings |
-| `3` | The review could not set up, run or clean up |
+| `3` | The review could not set up, run or clean up, including invalid arguments and a `--markdown` file it could not write |
 
-A failure takes precedence over findings, and findings over incomplete coverage.
+A failure takes precedence over findings, and findings over incomplete coverage. Exit code `2`
+means only incomplete coverage: invalid arguments, such as an unknown `--downstream` policy, exit
+`3`, and with `--json` print the JSON document with the `C900` error. When the `--markdown` file
+cannot be written, the review prints its result on stdout first, then reports the error (`C775`)
+and exits `3`.
 
 ## Configuration
 
@@ -158,7 +196,7 @@ base_ref = "origin/main"
 [review]
 against = "prod"
 downstream = "critical"
-schema_prefix = "REVIEW"
+schema_prefix = "review"
 critical_tags = ["critical"]
 ```
 

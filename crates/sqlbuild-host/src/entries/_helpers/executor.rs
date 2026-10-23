@@ -835,13 +835,13 @@ pub(crate) const ENTRIES: &[HostEntry] = &[
         edge: HostEdge::Executor,
     },
     HostEntry {
-        name: "ReviewSchemaLifecycle",
-        kind: HostKind::Class,
+        name: "create_review_schema",
+        kind: HostKind::Function,
         edge: HostEdge::Executor,
     },
     HostEntry {
-        name: "ReviewSchemaMarker",
-        kind: HostKind::Class,
+        name: "drop_review_schema",
+        kind: HostKind::Function,
         edge: HostEdge::Executor,
     },
     HostEntry {

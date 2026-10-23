@@ -5,7 +5,8 @@ use crate::review_command::main::render_review_markdown::render_review_markdown;
 use crate::review_command::main::render_review_text::render_review_text;
 use crate::review_command::main::review_outcome::review_outcome;
 use crate::review_command::tests::helpers::{
-    dry_run_report, errored_report, failed_report, finding_report, incomplete_report, passed_report,
+    dry_run_report, errored_report, failed_report, finding_report, incomplete_report,
+    passed_report, selected_report,
 };
 use crate::review_command::tests::test_types::{JsonTestCase, OutcomeTestCase, RenderTestCase};
 
@@ -83,6 +84,15 @@ fn given_reports_when_rendering_json_then_document_is_versioned_and_complete() {
             ],
         },
         JsonTestCase {
+            description: "a selection that added a changed ancestor and ran hooks",
+            report: selected_report(),
+            expected_values: vec![
+                ("/added/0/name", Value::from("stg_orders")),
+                ("/added/0/required_by", Value::from("order_totals")),
+                ("/hooks/0", Value::from("order_totals")),
+            ],
+        },
+        JsonTestCase {
             description: "an error",
             report: errored_report(),
             expected_values: vec![
@@ -132,7 +142,7 @@ fn given_reports_when_rendering_markdown_then_sections_follow_the_agreed_layout(
                 "## Tests and audits\n\n- Unit tests: 2 of 5 ran (3 unaffected skipped): 2 passed, 0 failed\n- Audits: 3 ran: 3 passed, 0 failed",
                 "<details><summary>order_totals: 1 difference</summary>\n\n| Column | Metric | prod | branch | Limit |\n|---|---|---|---|---|\n| amount | rows differ | 0 | 1 | exact match |",
                 "rows prod 5, branch 5; 2 other columns compared with no difference (full comparison).",
-                "## Run details\n\n- Review schema `REVIEW_20261023T101500Z_3f2a9c1_a1b2c3`: dropped\n- Downstream policy: critical (critical: `daily_revenue`)\n- Recall: `sqb recall output a1b2c3d4e5f6`",
+                "## Run details\n\n- Review schema `review_20261023t101500z_3f2a9c1_a1b2c3`: dropped\n- Downstream policy: critical (critical: `daily_revenue`)\n- Recall: `sqb recall output a1b2c3d4e5f6`",
             ],
             unexpected_fragments: vec![],
         },
@@ -147,11 +157,20 @@ fn given_reports_when_rendering_markdown_then_sections_follow_the_agreed_layout(
             unexpected_fragments: vec![],
         },
         RenderTestCase {
+            description: "a selection that added a changed ancestor and ran hooks",
+            report: selected_report(),
+            expected_fragments: vec![
+                "- Also built: `stg_orders`, because `order_totals` depends on it",
+                "- Hooks run against the review schema: `order_totals`",
+            ],
+            unexpected_fragments: vec![],
+        },
+        RenderTestCase {
             description: "a cleanup failure",
             report: failed_report(),
             expected_fragments: vec![
                 "# Review failed\n",
-                "- Review schema `REVIEW_20261023T101500Z_3f2a9c1_a1b2c3`: not dropped: permission denied",
+                "- Review schema `review_20261023t101500z_3f2a9c1_a1b2c3`: not dropped: permission denied",
             ],
             unexpected_fragments: vec![],
         },

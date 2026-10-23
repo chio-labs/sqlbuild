@@ -3,8 +3,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
+use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyFrozenSet, PyString, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple};
 use serde_json::Value;
 use sqlbuild_analysis::definition_changes::main::node_key::node_key;
 use sqlbuild_analysis::review_command::constants::{
@@ -18,7 +19,7 @@ use sqlbuild_analysis::review_command::models::{
 };
 use sqlbuild_config::project::models::ReviewConfig;
 
-use crate::bindings::_helpers::boundary::python_calls::{imported, keywords};
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::build_command::support::{boolean, text};
 use crate::bindings::_helpers::change_selection::base_snapshot::{base_comparison, base_variant};
 use crate::bindings::_helpers::change_selection::definition_snapshot::project_wide_keys;
@@ -36,8 +37,9 @@ use crate::bindings::_helpers::discovery::project_config::{
     configured_git_base_ref, configured_review,
 };
 use crate::bindings::_helpers::execution_history::conversion::optional_text;
+use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::planner_selection::selectors::select_project_graph;
-use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::{field as native_field, mapping_get};
 use crate::bindings::_helpers::review_command::support::review_error;
 
 const BASE_REF_ALIAS: &str = "@base";
@@ -46,6 +48,10 @@ const TABLE_FUNCTION_KIND: &str = "table_fn";
 const SOURCE_KIND: &str = "source";
 const SNAPSHOT_MATERIALIZATION: &str = "snapshot";
 const INCREMENTAL_MATERIALIZATION: &str = "incremental";
+const LOADER_KIND: &str = "loader";
+const HOOK_KEYS: [&str; 2] = ["pre_hooks", "post_hooks"];
+/// A target database that keeps each node's own database.
+const PRESERVE_DATABASE: &str = "preserve";
 
 /// The flags and `[review]` defaults one review runs with.
 pub(crate) struct ReviewSettings {
@@ -57,13 +63,12 @@ pub(crate) struct ReviewSettings {
     critical_tags: Vec<String>,
 }
 
-/// The compiled project, its changes since the base revision, and the graph a review plans over.
-pub(crate) struct ReviewProject<'py> {
-    pub(crate) project_dir: Bound<'py, PyAny>,
-    pub(crate) discovered: Bound<'py, PyAny>,
-    pub(crate) adapter: Bound<'py, PyAny>,
-    pub(crate) graph: Bound<'py, PyAny>,
-    pub(crate) project: Bound<'py, PyAny>,
+/// The discovered project inputs, the adapter, and the compiled project graph, in that order.
+pub(crate) type Compiled<'py> = (Bound<'py, PyAny>, Bound<'py, PyAny>, Bound<'py, PyAny>);
+
+/// The project's changes since the base revision, and the graph a review plans over.
+pub(crate) struct ReviewProject {
+    pub(crate) project_dir: PathBuf,
     pub(crate) review_graph: ReviewGraph,
     pub(crate) changed: Vec<ChangedNode>,
     pub(crate) changed_declarations: Vec<(String, String, String)>,
@@ -72,6 +77,12 @@ pub(crate) struct ReviewProject<'py> {
     pub(crate) merge_base: String,
     /// Incremental and snapshot models by name.
     pub(crate) stateful: BTreeSet<String>,
+    /// Models and seeds whose compiled destination names a database, with that database.
+    pub(crate) databases: BTreeMap<String, String>,
+    /// The active target's expanded database, unless it keeps each node's own database.
+    pub(crate) target_database: Option<String>,
+    /// The active target's expanded schema.
+    pub(crate) target_schema: Option<String>,
 }
 
 fn strings(value: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
@@ -177,7 +188,7 @@ pub(crate) fn discover<'py>(
     let py: Python<'py> = request.py();
     let project_dir: Bound<'py, PyAny> = match native_field(request, "project_dir")? {
         directory if !directory.is_none() => directory,
-        _ => imported(py, "pathlib", "Path")?.call_method0("cwd")?,
+        _ => std::env::current_dir()?.into_pyobject(py)?,
     };
     let discovered: Bound<'py, PyAny> = discover_project_inputs(
         py,
@@ -187,7 +198,7 @@ pub(crate) fn discover<'py>(
 }
 
 fn config_value<'py>(values: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
-    values.call_method1("get", (key,))
+    mapping_get(values, key)
 }
 
 fn key_columns(value: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
@@ -218,7 +229,19 @@ fn model_node(model: &Bound<'_, PyAny>, critical_tags: &[String]) -> PyResult<Re
         },
         unique_key: key_columns(&config_value(&values, "unique_key")?)?,
         has_cursor: !config_value(&values, "cursor")?.is_none(),
+        has_hooks: HOOK_KEYS
+            .iter()
+            .map(|key| config_value(&values, key))
+            .collect::<PyResult<Vec<_>>>()?
+            .iter()
+            .any(|hooks| !hooks.is_none() && hooks.is_truthy().unwrap_or(false)),
+        ..ReviewNode::default()
     })
+}
+
+/// The database a model's or seed's compiled destination names, if any.
+fn destination_database(destination: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
+    optional_text(&native_field(destination, "database")?)
 }
 
 /// Dependency order over `nodes`, ties broken by name.
@@ -254,22 +277,116 @@ fn topological(
     order
 }
 
-/// The buildable graph with each node's direct reads of sources and functions.
+/// The review graph with each node's definition key and direct reads of sources and functions.
 struct ProjectGraph {
     graph: ReviewGraph,
+    keys: BTreeMap<String, String>,
     reads: BTreeMap<String, Vec<String>>,
     stateful: BTreeSet<String>,
+    databases: BTreeMap<String, String>,
 }
 
-/// The buildable graph, each node's direct reads of sources and functions, and stateful models.
-fn review_graph(project: &Bound<'_, PyAny>, critical_tags: &[String]) -> PyResult<ProjectGraph> {
-    let mut nodes: BTreeMap<String, ReviewNode> = BTreeMap::new();
-    let mut downstream: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    let mut reads: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    let mut stateful: BTreeSet<String> = BTreeSet::new();
+/// A Python node's name, kind, and `(kind, name)` of the SQL resources it depends on.
+type PythonNode = (String, String, Vec<(String, String)>);
+
+/// `graph` with Python nodes as `kind:name`, each loader feeding the readers of its source.
+fn with_python_nodes(
+    discovered: &Bound<'_, PyAny>,
+    project_graph: ProjectGraph,
+    sources: &BTreeMap<String, Vec<String>>,
+) -> PyResult<ProjectGraph> {
+    let mut project_graph: ProjectGraph = project_graph;
+    let python_graph: Bound<'_, PyAny> = python_node_graph(discovered)?;
+    let mut names: BTreeMap<String, String> = BTreeMap::new();
+    let mut nodes: Vec<PythonNode> = Vec::new();
+    for node in native_field(&python_graph, "nodes")?.try_iter()? {
+        let node: Bound<'_, PyAny> = node?;
+        let name: String = native_field(&node, "name")?.extract()?;
+        let kind: String = native_field(&native_field(&node, "kind")?, "value")?.extract()?;
+        let mut sql_deps: Vec<(String, String)> = Vec::new();
+        for dependency in native_field(&node, "sql_deps")?.try_iter()? {
+            let dependency: Bound<'_, PyAny> = dependency?;
+            sql_deps.push((
+                native_field(&native_field(&dependency, "kind")?, "value")?.extract()?,
+                native_field(&dependency, "name")?.extract()?,
+            ));
+        }
+        names.insert(name.clone(), format!("{kind}:{name}"));
+        nodes.push((name, kind, sql_deps));
+    }
+    let upstream: Bound<'_, PyAny> = native_field(&python_graph, "upstream_deps")?;
+    let upstream: &Bound<'_, PyDict> = upstream.cast()?;
+    let graph: &mut ReviewGraph = &mut project_graph.graph;
+    for (name, kind, sql_deps) in nodes {
+        let node_name: String = names[&name].clone();
+        let mut parents: Vec<String> = Vec::new();
+        for (dependency_kind, dependency) in sql_deps {
+            if dependency_kind == SOURCE_KIND {
+                parents.extend(names.get(&dependency).cloned());
+            } else if graph.nodes.contains_key(&dependency) {
+                parents.push(dependency);
+            }
+        }
+        if let Some(names_upstream) = upstream.get_item(&name)? {
+            for parent in names_upstream.try_iter()? {
+                let parent: String = parent?.extract()?;
+                parents.extend(names.get(&parent).cloned());
+            }
+        }
+        for parent in parents {
+            graph
+                .downstream
+                .entry(parent)
+                .or_default()
+                .push(node_name.clone());
+        }
+        if kind == LOADER_KIND {
+            for reader in sources.get(&name).into_iter().flatten() {
+                graph
+                    .downstream
+                    .entry(node_name.clone())
+                    .or_default()
+                    .push(reader.clone());
+            }
+        }
+        project_graph
+            .keys
+            .insert(node_name.clone(), node_key(&kind, &name));
+        graph.nodes.insert(
+            node_name.clone(),
+            ReviewNode {
+                name: node_name,
+                kind,
+                python: true,
+                ..ReviewNode::default()
+            },
+        );
+    }
+    Ok(project_graph)
+}
+
+/// The graph of models, seeds and Python nodes, with reads, stateful models and own databases.
+fn review_graph(
+    (project, discovered): (&Bound<'_, PyAny>, &Bound<'_, PyAny>),
+    critical_tags: &[String],
+) -> PyResult<ProjectGraph> {
+    let mut project_graph = ProjectGraph {
+        graph: ReviewGraph::default(),
+        keys: BTreeMap::new(),
+        reads: BTreeMap::new(),
+        stateful: BTreeSet::new(),
+        databases: BTreeMap::new(),
+    };
     for seed in project_reads::seeds(project)?.try_iter()? {
-        let name: String = seed_reads::name(&seed?)?.extract()?;
-        nodes.insert(
+        let seed: Bound<'_, PyAny> = seed?;
+        let name: String = seed_reads::name(&seed)?.extract()?;
+        if let Some(database) = destination_database(&seed_reads::destination(&seed)?)? {
+            project_graph.databases.insert(name.clone(), database);
+        }
+        project_graph
+            .keys
+            .insert(name.clone(), node_key(SEED_KIND, &name));
+        project_graph.graph.nodes.insert(
             name.clone(),
             ReviewNode {
                 name,
@@ -286,37 +403,51 @@ fn review_graph(project: &Bound<'_, PyAny>, critical_tags: &[String]) -> PyResul
         if node.materialized == INCREMENTAL_MATERIALIZATION
             || node.materialized == SNAPSHOT_MATERIALIZATION
         {
-            stateful.insert(node.name.clone());
+            project_graph.stateful.insert(node.name.clone());
         }
+        if let Some(database) = destination_database(&model_reads::destination(&model)?)? {
+            project_graph.databases.insert(node.name.clone(), database);
+        }
+        project_graph
+            .keys
+            .insert(node.name.clone(), node_key(MODEL_KIND, &node.name));
         dependencies.push((node.name.clone(), model_reads::dep_rows(&model)?));
-        nodes.insert(node.name.clone(), node);
+        project_graph.graph.nodes.insert(node.name.clone(), node);
     }
+    let mut sources: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for (name, rows) in dependencies {
         let mut read: Vec<String> = Vec::new();
         for (kind, upstream) in rows {
-            if (kind == MODEL_KIND || kind == SEED_KIND) && nodes.contains_key(&upstream) {
-                downstream.entry(upstream).or_default().push(name.clone());
+            if (kind == MODEL_KIND || kind == SEED_KIND)
+                && project_graph.graph.nodes.contains_key(&upstream)
+            {
+                project_graph
+                    .graph
+                    .downstream
+                    .entry(upstream)
+                    .or_default()
+                    .push(name.clone());
             } else if kind == SOURCE_KIND || kind == UDF_KIND || kind == TABLE_FUNCTION_KIND {
+                if kind == SOURCE_KIND {
+                    sources
+                        .entry(upstream.clone())
+                        .or_default()
+                        .push(name.clone());
+                }
                 read.push(node_key(&kind, &upstream));
             }
         }
-        reads.insert(name, read);
+        project_graph.reads.insert(name, read);
     }
-    for children in downstream.values_mut() {
+    let mut project_graph: ProjectGraph = with_python_nodes(discovered, project_graph, &sources)?;
+    let graph: &mut ReviewGraph = &mut project_graph.graph;
+    for children in graph.downstream.values_mut() {
         children.sort();
         children.dedup();
     }
-    let names: BTreeSet<String> = nodes.keys().cloned().collect();
-    let order: Vec<String> = topological(&names, &downstream);
-    Ok(ProjectGraph {
-        graph: ReviewGraph {
-            nodes,
-            downstream,
-            order,
-        },
-        reads,
-        stateful,
-    })
+    let names: BTreeSet<String> = graph.nodes.keys().cloned().collect();
+    graph.order = topological(&names, &graph.downstream);
+    Ok(project_graph)
 }
 
 /// Discover, compare with the base revision, compile, and find the changed models and seeds.
@@ -325,7 +456,7 @@ pub(crate) fn review_project<'py>(
     (project_dir, discovered): (Bound<'py, PyAny>, Bound<'py, PyAny>),
     settings: &ReviewSettings,
     stream: &Bound<'py, PyAny>,
-) -> PyResult<ReviewProject<'py>> {
+) -> PyResult<(ReviewProject, Compiled<'py>)> {
     let py: Python<'py> = request.py();
     let base = base_comparison(
         (stream, &project_dir),
@@ -362,17 +493,19 @@ pub(crate) fn review_project<'py>(
     let changed: ChangedProject = changed_project((&project, &discovered), &directory, base)?;
     let ProjectGraph {
         graph: review_graph,
+        keys,
         reads,
         stateful,
-    } = review_graph(&project, &settings.critical_tags)?;
+        databases,
+    } = review_graph((&project, &discovered), &settings.critical_tags)?;
     let project_wide: Vec<String> = project_wide_keys();
     let mut changed_nodes: Vec<ChangedNode> = Vec::new();
     for name in &review_graph.order {
         let node: &ReviewNode = &review_graph.nodes[name];
-        let key: String = node_key(&node.kind, name);
+        let key: &str = &keys[name];
         let node_reads: &[String] = reads.get(name).map_or(&[], Vec::as_slice);
         let reasons: Vec<String> = node_change_reasons(
-            &key,
+            key,
             (node_reads, &project_wide),
             (&changed.current, &changed.changes),
         );
@@ -381,12 +514,20 @@ pub(crate) fn review_project<'py>(
                 name: name.clone(),
                 kind: node.kind.clone(),
                 reasons,
+                added: changed
+                    .changes
+                    .changed
+                    .get(key)
+                    .is_some_and(|change| change.added),
             });
         }
     }
     let changes_json: Value = serde_json::from_str(&changed.json((0, &[])))
         .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
-    Ok(ReviewProject {
+    let target_database: Option<String> =
+        optional_text(&native_field(&project, "effective_target_database")?)?
+            .filter(|database| !database.eq_ignore_ascii_case(PRESERVE_DATABASE));
+    let review = ReviewProject {
         changed_declarations: changed_declarations(&changed.changes),
         reference: changed.reference.clone(),
         merge_base: changes_json
@@ -395,15 +536,15 @@ pub(crate) fn review_project<'py>(
             .unwrap_or_default()
             .to_owned(),
         changes_json: Some(changes_json),
-        project_dir,
-        discovered,
-        adapter,
-        graph,
-        project,
+        project_dir: directory,
         review_graph,
         changed: changed_nodes,
         stateful,
-    })
+        databases,
+        target_database,
+        target_schema: optional_text(&native_field(&project, "effective_target_schema")?)?,
+    };
+    Ok((review, (discovered, adapter, graph)))
 }
 
 /// Each `--select` token and the model and seed names it resolves to.

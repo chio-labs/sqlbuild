@@ -19,12 +19,8 @@ pub(crate) fn descendants(graph: &ReviewGraph, roots: &BTreeSet<String>) -> BTre
     reached
 }
 
-/// The nodes of `within` from which some node of `targets` is reachable, including the targets.
-pub(crate) fn ancestors_within(
-    graph: &ReviewGraph,
-    targets: &BTreeSet<String>,
-    within: &BTreeSet<String>,
-) -> BTreeSet<String> {
+/// Each node's direct upstream nodes.
+pub(crate) fn upstream_of(graph: &ReviewGraph) -> BTreeMap<&str, Vec<&str>> {
     let mut upstream: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     for (name, children) in &graph.downstream {
         for child in children {
@@ -34,6 +30,16 @@ pub(crate) fn ancestors_within(
                 .push(name.as_str());
         }
     }
+    upstream
+}
+
+/// The nodes of `within` from which some node of `targets` is reachable, including the targets.
+pub(crate) fn ancestors_within(
+    graph: &ReviewGraph,
+    targets: &BTreeSet<String>,
+    within: &BTreeSet<String>,
+) -> BTreeSet<String> {
+    let upstream: BTreeMap<&str, Vec<&str>> = upstream_of(graph);
     let mut reached: BTreeSet<String> = BTreeSet::new();
     let mut pending: Vec<&str> = targets.iter().map(String::as_str).collect();
     while let Some(name) = pending.pop() {

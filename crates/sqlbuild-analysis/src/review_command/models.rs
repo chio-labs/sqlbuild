@@ -14,19 +14,23 @@ pub enum DownstreamPolicy {
     None,
 }
 
-/// One buildable project node: a model or a seed.
+/// One project node: a model or seed a review can build, or a Python node it cannot.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ReviewNode {
     pub name: String,
-    /// `model` or `seed`.
+    /// `model` or `seed`, or the Python node kind: `loader`, `task`, `asset` or `check`.
     pub kind: String,
     pub critical: bool,
     pub materialized: String,
     pub unique_key: Vec<String>,
     pub has_cursor: bool,
+    /// Whether the node is a Python node, which a review never runs.
+    pub python: bool,
+    /// Whether the node declares pre- or post-hooks.
+    pub has_hooks: bool,
 }
 
-/// The buildable project graph a review plans over.
+/// The project graph a review plans over: models, seeds and Python nodes.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ReviewGraph {
     pub nodes: BTreeMap<String, ReviewNode>,
@@ -42,6 +46,8 @@ pub struct ChangedNode {
     pub name: String,
     pub kind: String,
     pub reasons: Vec<String>,
+    /// Whether the node is new since the base revision.
+    pub added: bool,
 }
 
 /// One `--select` token and the node names it resolved to.
@@ -58,6 +64,13 @@ pub struct NotValidated {
     pub reason: String,
 }
 
+/// A node built only because a validated node reads it, and the first such node.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AddedNode {
+    pub name: String,
+    pub required_by: String,
+}
+
 /// What a review builds and compares, and what it leaves out.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ReviewPlan {
@@ -69,6 +82,10 @@ pub struct ReviewPlan {
     pub not_validated: Vec<NotValidated>,
     /// Critical nodes the changed set reaches.
     pub critical: Vec<String>,
+    /// Nodes outside the selection or policy built because a validated node depends on them.
+    pub added: Vec<AddedNode>,
+    /// Validated nodes whose hooks run against the review schema.
+    pub hooks: Vec<String>,
 }
 
 /// One named key or cell value shown as an example.

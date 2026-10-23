@@ -6,13 +6,19 @@ use pyo3::types::{
     PyBool, PyBoolMethods, PyDict, PyDictMethods, PyInt, PyList, PyListMethods, PyString,
 };
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
+use sqlbuild_analysis::review_command::constants::{JSON_OPTION, REVIEW_PROG, USAGE_ERROR_CODE};
+use sqlbuild_analysis::review_command::main::render_review_json::render_review_json;
+use sqlbuild_analysis::review_command::models::{ReviewFailure, ReviewReport};
 use sqlbuild_cli::argv::main::parse_cli_arguments::parse_cli_arguments as parse_arguments;
-use sqlbuild_cli::argv::models::{ArgvOutcome, ArgvSettings, Stream, TypeFailure, Value};
+use sqlbuild_cli::argv::models::{
+    ArgvOutcome, ArgvSettings, Stream, TypeFailure, UsageFailure, Value,
+};
 use sqlbuild_cli::argv::types::ArgvHost;
 use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 
 use crate::bindings::_helpers::cli::namespace::new_cli_namespace;
 use crate::bindings::_helpers::cli::surrogates::{python_text, rust_text, uses_placeholders};
+use crate::bindings::_helpers::recall::console::write_stdout_bytes;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
@@ -176,6 +182,23 @@ fn object_of(py: Python<'_>, host: &PythonHost<'_>, value: Value) -> PyResult<Py
     })
 }
 
+/// The `sqb review --json` document of a review usage error.
+fn review_usage_document(arguments: &[String], outcome: &ArgvOutcome) -> Option<String> {
+    let UsageFailure { prog, message } = outcome.usage_failure.as_ref()?;
+    if prog != REVIEW_PROG || !arguments.iter().any(|arg| arg == JSON_OPTION) {
+        return None;
+    }
+    Some(render_review_json(&ReviewReport {
+        version: env!("CARGO_PKG_VERSION").to_owned(),
+        error: Some(ReviewFailure {
+            code: USAGE_ERROR_CODE.to_owned(),
+            message: message.clone(),
+            help: Some("run sqb review --help for the accepted options".to_owned()),
+        }),
+        ..ReviewReport::default()
+    }))
+}
+
 /// Parse `argv` onto `defaults`, printing help, version and errors; the attributes or exit status.
 fn parse_cli_arguments(
     argv: &[Bound<'_, PyString>],
@@ -208,6 +231,7 @@ fn parse_cli_arguments(
         values.push((name, host.value_of(&object)?));
     }
     let outcome: ArgvOutcome = parse_arguments(&arguments, values, settings, &mut host);
+    let review_usage: Option<String> = review_usage_document(&arguments, &outcome);
     let sys: Bound<'_, PyModule> = py.import("sys")?;
     for (stream, text) in outcome.writes {
         let name: &str = match stream {
@@ -224,6 +248,9 @@ fn parse_cli_arguments(
         {
             return Err(error);
         }
+    }
+    if let Some(document) = review_usage {
+        write_stdout_bytes(py, document.as_bytes())?;
     }
     match outcome.parsed {
         Err(code) => Ok((None, Some(code))),

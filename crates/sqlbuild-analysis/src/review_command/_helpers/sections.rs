@@ -153,7 +153,10 @@ fn node_status(node: &NodeReport) -> String {
             "not validated: {}",
             node.reason.as_deref().unwrap_or("left out")
         ),
-        other => other.to_owned(),
+        other => match &node.reason {
+            Some(reason) => format!("{other}: {reason}"),
+            None => other.to_owned(),
+        },
     };
     if node.critical {
         status.push_str(", critical");
@@ -402,6 +405,25 @@ pub(crate) fn run_lines(report: &ReviewReport, style: Style) -> Vec<String> {
         policy.push_str(&format!(" (critical: {})", critical.join(", ")));
     }
     lines.push(policy);
+    for added in &report.plan.added {
+        lines.push(format!(
+            "Also built: {}, because {} depends on it",
+            style.code(&added.name),
+            style.code(&added.required_by)
+        ));
+    }
+    if !report.plan.hooks.is_empty() {
+        let hooked: Vec<String> = report
+            .plan
+            .hooks
+            .iter()
+            .map(|name| style.code(name))
+            .collect();
+        lines.push(format!(
+            "Hooks run against the review schema: {}",
+            hooked.join(", ")
+        ));
+    }
     if let Some(id) = &report.invocation_id {
         lines.push(format!(
             "Recall: {}",

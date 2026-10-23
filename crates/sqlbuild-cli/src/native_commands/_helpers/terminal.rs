@@ -135,6 +135,16 @@ pub(crate) fn write_output(writes: &[(Stream, &str)]) -> Option<LostStdout> {
     lost
 }
 
+/// Print a rejected parse's writes; the exit status, as `finish_lost_stdout` settles it.
+pub(crate) fn finish_rejected_parse(writes: &[(Stream, String)], code: i64) -> i32 {
+    let writes: Vec<(Stream, &str)> = writes
+        .iter()
+        .map(|(stream, text)| (*stream, text.as_str()))
+        .collect();
+    let lost: Option<LostStdout> = write_output(&writes);
+    finish_lost_stdout(lost.as_ref(), i32::try_from(code).unwrap_or(1))
+}
+
 /// Report lost stdout as Python does and return the exit status that results.
 pub(crate) fn finish_lost_stdout(lost: Option<&LostStdout>, exit_code: i32) -> i32 {
     match lost {

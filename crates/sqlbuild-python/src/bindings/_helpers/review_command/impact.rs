@@ -4,14 +4,15 @@ use sqlbuild_analysis::review_command::constants::NO_COMPARISON_MODE;
 use std::collections::{BTreeMap, BTreeSet};
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet};
+use pyo3::types::{PyFrozenSet, PyString};
 use sqlbuild_analysis::review_command::models::NodeComparison;
 
 use crate::bindings::_helpers::compiled_views::{model_reads, project_reads};
+use crate::bindings::_helpers::lineage::column_lineage_graph::ProjectColumnLineage;
+use crate::bindings::_helpers::lineage::project_lineage::build_project_column_lineage;
 use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 
 /// The columns of a changed model a comparison proved changed, or `None` when every column may.
 fn changed_columns(comparison: Option<&NodeComparison>) -> Option<Vec<String>> {
@@ -51,19 +52,19 @@ pub(crate) fn affected_columns(
         }
     }
     let names: Vec<&String> = models.keys().collect();
-    let lineage: PyResult<Bound<'_, PyAny>> =
-        registry::native(py, NativeAttr::BuildProjectColumnLineage)?.call1((
-            project,
-            py.None(),
-            enum_member(py, RecordId::ColumnLineageMode, "FAST")?,
-            PyFrozenSet::new(py, &names)?,
-        ));
-    let Ok(lineage) = lineage else {
+    let lineage = build_project_column_lineage(
+        project,
+        None,
+        &enum_member(py, RecordId::ColumnLineageMode, "FAST")?,
+        Some(PyFrozenSet::new(py, &names)?.as_any()),
+    );
+    let Ok(Some(lineage)) = lineage else {
         return Ok(BTreeMap::new());
     };
-    if lineage.is_none() {
+    let lineage: Bound<'_, PyAny> = lineage.into_bound(py);
+    let Ok(lineage) = lineage.cast::<ProjectColumnLineage>() else {
         return Ok(BTreeMap::new());
-    }
+    };
     let mut pending: Vec<(String, String)> = Vec::new();
     for name in changed {
         let Some(model) = models.get(name) else {
@@ -81,10 +82,9 @@ pub(crate) fn affected_columns(
         if !seen.insert((resource.clone(), column.clone())) {
             continue;
         }
-        let options: Bound<'_, PyDict> = PyDict::new(py);
-        options.set_item("resource_name", &resource)?;
-        options.set_item("column_name", &column)?;
-        let Ok(edges) = lineage.call_method("column_consumers", (), Some(&options)) else {
+        let column_name: Bound<'_, PyAny> = PyString::new(py, &column).into_any();
+        let Ok(edges) = ProjectColumnLineage::column_consumers(lineage, &resource, &column_name)
+        else {
             continue;
         };
         for edge in edges.try_iter()? {

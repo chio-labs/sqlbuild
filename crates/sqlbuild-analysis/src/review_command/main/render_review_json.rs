@@ -47,6 +47,11 @@ pub fn render_review_json(report: &ReviewReport) -> String {
             "name": node.name,
             "reason": node.reason,
         })).collect::<Vec<Value>>(),
+        "added": report.plan.added.iter().map(|node| json!({
+            "name": node.name,
+            "required_by": node.required_by,
+        })).collect::<Vec<Value>>(),
+        "hooks": report.plan.hooks,
         "nodes": report.nodes.iter().map(node_json).collect::<Vec<Value>>(),
         "impact_edges": report.impact_edges.iter().map(|(upstream, downstream)| json!({
             "upstream": upstream,

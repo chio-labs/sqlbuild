@@ -4,16 +4,16 @@ use std::ffi::OsString;
 use std::path::Path;
 
 use crate::argv::main::parse_cli_arguments::parse_cli_arguments;
-use crate::argv::models::{ArgvOutcome, ArgvSettings, Namespace, Stream};
+use crate::argv::models::{ArgvOutcome, ArgvSettings, Namespace};
 use crate::native_commands::_helpers::argv_host::{NativeArgvHost, namespace_defaults};
-use crate::native_commands::_helpers::decision::native_invocation;
+use crate::native_commands::_helpers::decision::{native_invocation, review_json_failure};
 use crate::native_commands::_helpers::execution::run_command;
 use crate::native_commands::_helpers::terminal::{
-    finish_lost_stdout, stdout_supports_color, terminal_columns, write_output,
+    finish_rejected_parse, stdout_supports_color, terminal_columns,
 };
 use crate::native_commands::constants::NO_COLOR_OPTION;
 use crate::native_commands::errors::PythonNeeded;
-use crate::native_commands::models::{LostStdout, NativeInvocation};
+use crate::native_commands::models::NativeInvocation;
 
 /// The exit status of an invocation `sqb` served, or why the same arguments go to Python.
 pub fn run_native_invocation(
@@ -38,18 +38,10 @@ pub fn run_native_invocation(
         return Err(PythonNeeded::Arguments);
     }
     let namespace: Namespace = match outcome.parsed {
-        Err(code) => {
-            let writes: Vec<(Stream, &str)> = outcome
-                .writes
-                .iter()
-                .map(|(stream, text)| (*stream, text.as_str()))
-                .collect();
-            let lost: Option<LostStdout> = write_output(&writes);
-            return Ok(finish_lost_stdout(
-                lost.as_ref(),
-                i32::try_from(code).unwrap_or(1),
-            ));
+        Err(_) if review_json_failure(&arguments, &outcome) => {
+            return Err(PythonNeeded::Arguments);
         }
+        Err(code) => return Ok(finish_rejected_parse(&outcome.writes, code)),
         Ok(namespace) if outcome.writes.is_empty() => namespace,
         Ok(_) => return Err(PythonNeeded::Arguments),
     };

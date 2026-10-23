@@ -9,12 +9,10 @@ use sqlbuild_analysis::janitor_planning::constants::OLD_NAME_VIEW_REASON;
 use sqlbuild_analysis::janitor_planning::main::build_archive_name::build_archive_name;
 use sqlbuild_analysis::janitor_planning::main::query_diff_artifact_name::query_diff_artifact_name;
 use sqlbuild_analysis::janitor_planning::main::query_diff_artifact_parts::query_diff_artifact_parts;
-use sqlbuild_analysis::review_command::constants::LEFTOVER_REVIEW_SCHEMA_AGE_SECONDS;
+use sqlbuild_analysis::review_command::constants::LEFTOVER_REVIEW_SCHEMA_AGE_DAYS;
 use sqlbuild_host::entries::models::ExecutorHost;
 
-use crate::bindings::_helpers::boundary::python_calls::{
-    KeywordArguments, call_with, imported, within,
-};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, within};
 use crate::bindings::_helpers::janitor::janitor_classification::{
     Candidate, Policy, Protection, SchemaClassification, classify_target_schemas, plan_archives,
 };
@@ -23,7 +21,7 @@ use crate::bindings::_helpers::janitor::janitor_facts::{
     gather_warehouse_facts, query_diff_artifact_candidates,
 };
 use crate::bindings::_helpers::janitor::janitor_keys::{
-    Folded, Key, SchemaKey, archive_timestamp, dedupe_schema_keys, integer, now_utc, record,
+    Folded, Key, SchemaKey, archive_timestamp, days, dedupe_schema_keys, integer, now_utc, record,
     sorted_schemas, timestamp_fields, tuple, union_exact,
 };
 use crate::bindings::_helpers::janitor::janitor_old_names::{
@@ -134,10 +132,7 @@ fn review_schema_candidates<'py>(
     if schema.is_none() {
         return Ok(Vec::new());
     }
-    let max_age: Bound<'py, PyAny> = call_with(
-        &imported(py, "datetime", "timedelta")?,
-        &[("seconds", integer(py, LEFTOVER_REVIEW_SCHEMA_AGE_SECONDS)?)],
-    )?;
+    let max_age: Bound<'py, PyAny> = days(py, LEFTOVER_REVIEW_SCHEMA_AGE_DAYS)?;
     let leftovers: Bound<'py, PyAny> = call_with(
         &host::entry(py, ExecutorHost::LeftoverReviewSchemas)?,
         &[
