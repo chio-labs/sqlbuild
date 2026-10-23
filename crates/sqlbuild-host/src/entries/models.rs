@@ -367,6 +367,8 @@ pub enum ExecutorHost {
     CommandOutputStream,
     OutputRecordPriority,
     SqlValueRenderingError,
+    ReviewSchemaLifecycle,
+    ReviewSchemaMarker,
 }
 
 impl ExecutorHost {

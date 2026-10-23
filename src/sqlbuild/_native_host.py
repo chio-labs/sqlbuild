@@ -360,6 +360,11 @@ _TARGETS: dict[str, tuple[str, str]] = {
         "sqlbuild.executor.diff.classes.query_artifact_lifecycle",
         "QueryDiffArtifactLifecycle",
     ),
+    "ReviewSchemaLifecycle": (
+        "sqlbuild.executor.review.classes.review_schema_lifecycle",
+        "ReviewSchemaLifecycle",
+    ),
+    "ReviewSchemaMarker": ("sqlbuild.executor.review.models", "ReviewSchemaMarker"),
     "FullDiffSizeGuardError": ("sqlbuild.executor.diff.exceptions", "FullDiffSizeGuardError"),
     "execute_query_diff": ("sqlbuild.executor.diff.main._execute_query", "execute_query_diff"),
     "execute_diff": ("sqlbuild.executor.diff.main.execute", "execute_diff"),

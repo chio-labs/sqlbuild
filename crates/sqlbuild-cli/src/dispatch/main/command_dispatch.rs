@@ -7,7 +7,8 @@ use crate::dispatch::constants::{
     AUDIT_ROUTE, BUILD_ROUTE, CHECK_ROUTE, CLONE_ROUTE, COMPILE_ROUTE, CONTRACT_ROUTE, COST_ROUTE,
     DAG_ROUTE, DEBUG_ROUTE, DIFF_ROUTE, FORMAT_ROUTE, FRESHNESS_ROUTE, INIT_ROUTE, JANITOR_ROUTE,
     LINEAGE_ROUTE, LOAD_ROUTE, PLAN_ROUTE, PLAYGROUND_ROUTE, QUERY_ROUTE, RECALL_COMMAND_NAME,
-    RECALL_ROUTE, REFACTOR_ROUTE, RULES_ROUTE, SCOPE_ROUTE, SEED_ROUTE, SKILLS_ROUTE, TEST_ROUTE,
+    RECALL_ROUTE, REFACTOR_ROUTE, REVIEW_ROUTE, RULES_ROUTE, SCOPE_ROUTE, SEED_ROUTE, SKILLS_ROUTE,
+    TEST_ROUTE,
 };
 use crate::dispatch::models::{CommandFacts, Dispatch, DispatchFailure, Route};
 
@@ -49,6 +50,7 @@ pub fn command_dispatch(facts: &CommandFacts) -> Dispatch {
             (!facts.from_target).then(|| failure("clone requires --from", "C406", None)),
         ),
         "diff" => run(&DIFF_ROUTE),
+        "review" => run(&REVIEW_ROUTE),
         "query" => run(&QUERY_ROUTE),
         RECALL_COMMAND_NAME => run(&RECALL_ROUTE),
         "cost" => run(&COST_ROUTE),

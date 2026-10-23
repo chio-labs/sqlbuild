@@ -404,6 +404,33 @@ pub(crate) const DIFF_ROUTE: Route = routed(
     REQUEST_KEYWORD_SHAPE,
 );
 
+const REVIEW_FIELDS: [Field; 17] = [
+    PROJECT_DIR,
+    NO_COLOR,
+    NO_SQL_VALIDATION,
+    SELECTED_TARGET,
+    SELECT,
+    CLI_VARS,
+    JSON_OUTPUT,
+    same("since"),
+    attr("against", "review_against"),
+    attr("downstream", "review_downstream"),
+    same("dry_run"),
+    attr("no_clone", "review_no_clone"),
+    same("bounded"),
+    attr("markdown_path", "review_markdown"),
+    same("concurrency"),
+    same("verbose"),
+    same("debug"),
+];
+const REVIEW_ARGUMENTS: [Field; 1] = [request(class("ReviewCommandRequest"), &REVIEW_FIELDS)];
+pub(crate) const REVIEW_ROUTE: Route = routed(
+    "run_review",
+    "run_review_command",
+    &REVIEW_ARGUMENTS,
+    REQUEST_KEYWORD_SHAPE,
+);
+
 const QUERY_ARGUMENTS: [Field; 6] = [
     PROJECT_DIR,
     attr("sql", "query_sql"),

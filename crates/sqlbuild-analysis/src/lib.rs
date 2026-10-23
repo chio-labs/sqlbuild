@@ -39,6 +39,7 @@ pub mod query_analysis;
 pub mod relation_names;
 pub mod required_columns;
 pub mod resource_diagnostics;
+pub mod review_command;
 pub mod semantic_checks;
 pub mod semantic_usage;
 pub mod semantic_validation;

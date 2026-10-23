@@ -142,10 +142,15 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
     let stream: Bound<'py, PyAny> = py.import("sys")?.getattr("stdout")?;
     let progress: Bound<'py, PlanningProgressReporter> = progress_reporter(&stream, style)?;
     progress.get().start(py, "Discovering project...")?;
-    let discovered: Bound<'py, PyAny> = discover_project_inputs(
-        py,
-        Some(keywords(py, &[("project_dir", project_dir.clone())])?),
-    )?;
+    let supplied: Bound<'py, PyAny> = native_field(request, "discovered_inputs")?;
+    let discovered: Bound<'py, PyAny> = if supplied.is_none() {
+        discover_project_inputs(
+            py,
+            Some(keywords(py, &[("project_dir", project_dir.clone())])?),
+        )?
+    } else {
+        supplied
+    };
     progress.get().complete(py, "Discovered project.")?;
     reject_unit_test_selectors(
         &native_field(request, "select")?,

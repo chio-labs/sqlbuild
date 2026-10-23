@@ -3540,6 +3540,238 @@
      }
     },
     {
+     "name": "review",
+     "parser": {
+      "prog": "sqb review",
+      "groups": [
+       {
+        "title": "positional arguments"
+       },
+       {
+        "title": "options"
+       }
+      ],
+      "actions": [
+       {
+        "kind": "help",
+        "options": [
+         "-h",
+         "--help"
+        ],
+        "dest": "help",
+        "nargs": 0,
+        "default": {
+         "suppress": true
+        },
+        "help": "show this help message and exit",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-sql-analysis",
+         "--no-sql-validation"
+        ],
+        "dest": "no_sql_validation",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "disable SQL syntax, binding, type inference, and semantic validation",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--since"
+        ],
+        "dest": "since",
+        "metavar": "REF",
+        "help": "git ref whose merge base with HEAD is the code baseline; @base reads [git] base_ref (default: [git] base_ref)",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--against"
+        ],
+        "dest": "review_against",
+        "metavar": "TARGET",
+        "help": "target whose tables the review compares with and reads unchanged upstream from (default: [review] against)",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--downstream"
+        ],
+        "dest": "review_downstream",
+        "choices": [
+         "critical",
+         "all",
+         "none"
+        ],
+        "help": "downstream nodes to build and compare: critical (paths to critical models), all, or none (default: [review] downstream, else critical)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--dry-run"
+        ],
+        "dest": "dry_run",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "print the review plan without touching the warehouse",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-clone"
+        ],
+        "dest": "review_no_clone",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "build changed incremental models with a full refresh instead of cloning them from the target",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--bounded"
+        ],
+        "dest": "bounded",
+        "metavar": "WINDOW",
+        "help": "compare models too large for an exact comparison within a recent cursor window, such as 14d",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--markdown"
+        ],
+        "dest": "review_markdown",
+        "type": "Path",
+        "metavar": "PATH",
+        "help": "also write the review as Markdown to PATH",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--json"
+        ],
+        "dest": "json",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--target"
+        ],
+        "dest": "target",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--concurrency"
+        ],
+        "dest": "concurrency",
+        "type": "int",
+        "group": 1
+       },
+       {
+        "kind": "extend",
+        "options": [
+         "--select",
+         "-s"
+        ],
+        "dest": "select",
+        "nargs": "+",
+        "default": [],
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "dest": "positional_select",
+        "nargs": "*",
+        "default": [],
+        "help": "selectors to include, the same as --select; combined with any --select values",
+        "metavar": "SELECTOR",
+        "group": 0
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--vars"
+        ],
+        "dest": "vars",
+        "default": {
+         "dict": {}
+        },
+        "type": "parse_cli_vars",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--warehouse"
+        ],
+        "dest": "warehouse",
+        "help": "warehouse for this invocation; overrides the target's command-group warehouse and the connection warehouse",
+        "group": 1
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--project-dir",
+         "--sqb-project-dir"
+        ],
+        "dest": "project_dir",
+        "default": {
+         "suppress": true
+        },
+        "help": "SQLBuild project directory (default: the current directory)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--no-color"
+        ],
+        "dest": "no_color",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "disable colored output",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
+         "--debug"
+        ],
+        "dest": "debug",
+        "nargs": 0,
+        "const": true,
+        "default": {
+         "suppress": true
+        },
+        "help": "enable verbose output and mirror internal diagnostics to stderr",
+        "group": 1
+       }
+      ]
+     }
+    },
+    {
      "name": "scope",
      "parser": {
       "prog": "sqb scope",
@@ -7357,6 +7589,11 @@
      "dest": "recall",
      "metavar": "recall",
      "help": "query the recorded history of past invocations"
+    },
+    {
+     "dest": "review",
+     "metavar": "review",
+     "help": "build what a branch changed in a temporary schema, test it, compare it with a target and report"
     }
    ]
   }

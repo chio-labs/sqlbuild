@@ -1,7 +1,12 @@
+use crate::project::errors::LoadFailure;
 use crate::project::main::load_git_base_ref::load_git_base_ref;
+use crate::project::main::load_review_config::load_review_config;
 use crate::project::models::ConfigFile;
+use crate::project::models::ReviewConfig;
 use crate::project::tests::helpers::{failure_at, first_failure, project_directory};
-use crate::project::tests::test_types::{GitBaseRefTestCase, ProjectFailureTestCase};
+use crate::project::tests::test_types::{
+    GitBaseRefTestCase, ProjectFailureTestCase, ReviewConfigTestCase,
+};
 
 const PROJECT: &str = "name = 'orders'\nadapter = 'duckdb'\n";
 
@@ -170,5 +175,58 @@ fn given_git_section_when_reading_base_ref_then_returns_configured_ref() {
             "{}",
             test_case.description
         );
+    }
+}
+
+#[test]
+fn given_review_section_when_reading_then_returns_defaults_or_rejects() {
+    let test_cases = [
+        ReviewConfigTestCase {
+            description: "every review key",
+            project: "name = 'orders'\nadapter = 'duckdb'\n[review]\nagainst = 'prod'\n\
+                      downstream = 'all'\nschema_prefix = 'CI_REVIEW'\ncritical_tags = ['finance']\n",
+            expected: Ok(ReviewConfig {
+                against: Some("prod".to_owned()),
+                downstream: Some("all".to_owned()),
+                schema_prefix: Some("CI_REVIEW".to_owned()),
+                critical_tags: Some(vec!["finance".to_owned()]),
+            }),
+        },
+        ReviewConfigTestCase {
+            description: "no review section",
+            project: PROJECT,
+            expected: Ok(ReviewConfig::default()),
+        },
+        ReviewConfigTestCase {
+            description: "an unknown downstream policy",
+            project: "name = 'orders'\nadapter = 'duckdb'\n[review]\ndownstream = 'some'\n",
+            expected: Err("review.downstream must be one of: critical, all, none"),
+        },
+        ReviewConfigTestCase {
+            description: "a schema prefix that is not an identifier",
+            project: "name = 'orders'\nadapter = 'duckdb'\n[review]\nschema_prefix = 'review-ci'\n",
+            expected: Err("review.schema_prefix must start with a letter"),
+        },
+        ReviewConfigTestCase {
+            description: "a misspelt review key",
+            project: "name = 'orders'\nadapter = 'duckdb'\n[review]\nagaints = 'prod'\n",
+            expected: Err("review contains unknown key(s): againts"),
+        },
+    ];
+    for test_case in test_cases {
+        let (_directory, paths) = project_directory(test_case.project, "");
+
+        let loaded = load_review_config(&paths);
+
+        match (loaded, test_case.expected) {
+            (Ok(config), Ok(expected)) => {
+                assert_eq!(config, expected, "{}", test_case.description);
+            }
+            (Err(LoadFailure::Config(failure)), Err(fragment)) => {
+                let text: String = format!("{failure:?}");
+                assert!(text.contains(fragment), "{}: {text}", test_case.description);
+            }
+            (other, _) => panic!("{}: unexpected {other:?}", test_case.description),
+        }
     }
 }

@@ -22,6 +22,7 @@ which accepts any keys.
 |-------|-------------|
 | `materialized` | `view`, `table`, `incremental`, `snapshot`, or a custom materialization name |
 | `tags` | Tags used by selectors |
+| `critical` | `true` marks the model as critical, so [`sqb review`](/docs/cli/review) builds and compares it whenever something upstream of it changes (default `false`) |
 | `description` | Required human-readable model description; see [Descriptions](#descriptions) |
 | `columns` | Model-local column declarations, inherited-column audit augmentation, or column renames with `migrate_from` (incremental and snapshot models; see [Column migrations](/docs/concepts/models/column-migrations)). On a table or view model that declares its own `migrate_from`, a column `migrate_from` only names the old column in the [compatibility view](/docs/concepts/models/migrations#old-names) |
 | `model_schema` | Reusable column schema name |

@@ -220,7 +220,7 @@ fn run_query_diff(
     }
 }
 
-fn target_max_full_rows<'py>(
+pub(crate) fn target_max_full_rows<'py>(
     discovered: &Bound<'py, PyAny>,
     target: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {

@@ -3087,6 +3087,10 @@ class CliNamespace:
     warehouse: str | None
     case: str | None
     inspect: bool
+    review_against: str | None
+    review_downstream: str | None
+    review_no_clone: bool
+    review_markdown: Path | None
     target_range: str | None
     from_target: str | None
     to_target: str | None
@@ -4779,6 +4783,7 @@ def write_check_results(
 def format_check_json(*, results: tuple[PythonCheckExecutionResult, ...]) -> str: ...
 def run_test_command(*, request: TestCommandRequest) -> int: ...
 def run_build_command(*, request: BuildCommandRequest) -> int: ...
+def run_review_command(*, request: ReviewCommandRequest) -> int: ...
 def enforce_plan_safety_policies(
     *,
     plan: PlanOutput,
@@ -5159,6 +5164,7 @@ def build_janitor_archive_name(
 ) -> str: ...
 def build_query_diff_artifact_name(*, run_id: str, side: str) -> str: ...
 def parse_query_diff_artifact_name(name: str, /) -> tuple[str, str] | None: ...
+def parse_review_schema_name(name: str, /) -> datetime | None: ...
 def render_janitor_completion(
     *,
     result: JanitorExecutionResult,
@@ -6407,6 +6413,7 @@ class BuildCommandRequest(NativeRecord):
     selection_diagnostics: bool
     selector_files: tuple[SelectorFileSummary, ...]
     test_timeout: str | None
+    discovered_inputs: DiscoveredProjectInputs | None
     def __init__(
         self,
         project_dir: Path | None = None,
@@ -6444,6 +6451,7 @@ class BuildCommandRequest(NativeRecord):
         selection_diagnostics: bool = False,
         selector_files: tuple[SelectorFileSummary, ...] = (),
         test_timeout: str | None = None,
+        discovered_inputs: DiscoveredProjectInputs | None = None,
     ) -> None: ...
 
 class CloneCommandRequest(NativeRecord):
@@ -6461,6 +6469,7 @@ class CloneCommandRequest(NativeRecord):
     cli_vars: dict[str, object] | None
     json_output_path: Path | None
     event_output_path: Path | None
+    discovered_inputs: DiscoveredProjectInputs | None
     def __init__(
         self,
         project_dir: Path | None,
@@ -6475,6 +6484,7 @@ class CloneCommandRequest(NativeRecord):
         cli_vars: dict[str, object] | None = None,
         json_output_path: Path | None = None,
         event_output_path: Path | None = None,
+        discovered_inputs: DiscoveredProjectInputs | None = None,
     ) -> None: ...
 
 class PlanSafetyGates(NativeRecord):
@@ -6602,6 +6612,47 @@ class DiffCommandRequest(NativeRecord):
         max_value_length: int | None = None,
         suppress_example_values: bool = False,
         full_example_values: bool = False,
+    ) -> None: ...
+
+class ReviewCommandRequest(NativeRecord):
+    """CLI inputs for one `sqb review` invocation."""
+
+    project_dir: Path | None
+    no_color: bool
+    no_sql_validation: bool
+    selected_target: str | None
+    select: tuple[str, ...]
+    cli_vars: dict[str, object] | None
+    json_output: bool
+    since: str | None
+    against: str | None
+    downstream: str | None
+    dry_run: bool
+    no_clone: bool
+    bounded: str | None
+    markdown_path: Path | None
+    concurrency: int | None
+    verbose: bool
+    debug: bool
+    def __init__(
+        self,
+        project_dir: Path | None = None,
+        no_color: bool = False,
+        no_sql_validation: bool = False,
+        selected_target: str | None = None,
+        select: tuple[str, ...] = (),
+        cli_vars: dict[str, object] | None = None,
+        json_output: bool = False,
+        since: str | None = None,
+        against: str | None = None,
+        downstream: str | None = None,
+        dry_run: bool = False,
+        no_clone: bool = False,
+        bounded: str | None = None,
+        markdown_path: Path | None = None,
+        concurrency: int | None = None,
+        verbose: bool = False,
+        debug: bool = False,
     ) -> None: ...
 
 class QueryDiffPreparation(NativeRecord):
@@ -7216,6 +7267,7 @@ class CliEntrypointHandlers(NativeRecord):
     run_contract: Callable[..., int] | None
     run_refactor: Callable[..., int] | None
     run_recall: Callable[..., int] | None
+    run_review: Callable[..., int] | None
     def __init__(
         self,
         run_compile: Callable[[CompileCommandRequest], int],
@@ -7251,6 +7303,7 @@ class CliEntrypointHandlers(NativeRecord):
         run_contract: Callable[..., int] | None = None,
         run_refactor: Callable[..., int] | None = None,
         run_recall: Callable[..., int] | None = None,
+        run_review: Callable[..., int] | None = None,
     ) -> None: ...
 
 class CommandWarehouseScope(NativeRecord):
@@ -7960,6 +8013,7 @@ class CliCommand(StrEnum):
     SEED = "seed"
     CLONE = "clone"
     DIFF = "diff"
+    REVIEW = "review"
     DEBUG = "debug"
     LINEAGE = "lineage"
     QUERY = "query"

@@ -34,6 +34,20 @@ fn given_effective_configs_when_validating_natively_then_python_outcomes_result(
             expected_outcome: "Model file models/marts/orders_daily.sql references table function 'order_lines' with __udf(); use __table_fn() in SQL contexts that support table-valued functions",
         },
         ValidateTestCase {
+            description: "a model marked critical for review",
+            config: vec![("critical", Value::Bool(true))],
+            references: &[],
+            query_sql: "select 1",
+            expected_outcome: "accepted",
+        },
+        ValidateTestCase {
+            description: "a critical marker that is not a boolean",
+            config: vec![("critical", Value::Str("yes"))],
+            references: &[],
+            query_sql: "select 1",
+            expected_outcome: "model 'orders_daily': critical must be a boolean",
+        },
+        ValidateTestCase {
             description: "a dbt reference its resolver accepts",
             config: vec![],
             references: &["dbt_ref:orders"],

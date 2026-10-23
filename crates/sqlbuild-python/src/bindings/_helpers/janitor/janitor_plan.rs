@@ -231,6 +231,10 @@ pub(crate) fn janitor_plan_text(plan: &Bound<'_, PyAny>) -> PyResult<JanitorPlan
         old_name_live: old_name_views(&native_field(&views, "live")?)?,
         old_name_missing: old_name_views(&native_field(&views, "missing")?)?,
         query_artifacts: names(&native_field(plan, "query_diff_artifact_candidates")?)?,
+        review_schemas: native_field(plan, "review_schema_candidates")?
+            .try_iter()?
+            .map(|item| item?.call_method0("display_name")?.extract())
+            .collect::<PyResult<Vec<String>>>()?,
         state_prunes,
         skipped_relations,
         skipped_schemas: source_schemas(&native_field(plan, "skipped_schemas")?, false)?,
@@ -249,6 +253,7 @@ pub(crate) fn janitor_result_counts(result: &Bound<'_, PyAny>) -> PyResult<Janit
         deleted_archives: count("deleted_archives")?,
         deleted_query_artifacts: count("deleted_query_diff_artifacts")?,
         dropped_old_name_views: count("dropped_old_name_views")?,
+        dropped_review_schemas: count("dropped_review_schemas")?,
         pruned_direct_state: count("pruned_direct_state")?,
     })
 }

@@ -30,6 +30,7 @@ use crate::bindings::_helpers::query_command::query::run_query_command;
 use crate::bindings::_helpers::recall::command::run_recall_command;
 use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::refactor::refactor_command::run_refactor_command;
+use crate::bindings::_helpers::review_command::command::run_review_command;
 use crate::bindings::_helpers::scenario_command::capture_command::run_scenario_capture_command;
 use crate::bindings::_helpers::scenario_command::test_command::run_scenario_test_command;
 use crate::bindings::_helpers::scopes::scope_command::run_scope_command;
@@ -397,6 +398,7 @@ fn run_implementation<'py>(
         "run_query_command" => run_query_command(py, options())?,
         "run_recall_command" => run_recall_command(py, options())?,
         "run_refactor_command" => run_refactor_command(py, &request()?)?,
+        "run_review_command" => run_review_command(py, &request()?)?,
         "run_rules_command" => run_rules_command(&request()?)?,
         "run_scenario_capture_command" => run_scenario_capture_command(py, &request()?)?,
         "run_scenario_test_command" => run_scenario_test_command(py, &request()?)?,
