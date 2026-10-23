@@ -70,6 +70,7 @@ pub(crate) struct CustomRuleCache {
     results: SubjectResults,
     hits: usize,
     misses: usize,
+    counts_by_code: BTreeMap<String, (usize, usize)>,
 }
 
 impl CustomRuleCache {
@@ -112,6 +113,7 @@ impl CustomRuleCache {
             results: SubjectResults::new(),
             hits: 0,
             misses: 0,
+            counts_by_code: BTreeMap::new(),
         }
     }
 
@@ -137,6 +139,11 @@ impl CustomRuleCache {
     ) -> BTreeMap<String, Option<Vec<String>>> {
         if self.path.is_none() {
             self.misses = self.rules.len();
+            self.counts_by_code = self
+                .rules
+                .iter()
+                .map(|rule| (rule.code.clone(), (0, rule.subjects.len())))
+                .collect();
             return self
                 .rules
                 .iter()
@@ -154,6 +161,7 @@ impl CustomRuleCache {
         self.results.extend(lookup.hits);
         self.hits = lookup.hit_count;
         self.misses = lookup.miss_count;
+        self.counts_by_code = lookup.counts_by_code;
         lookup.plan
     }
 
@@ -204,6 +212,11 @@ impl CustomRuleCache {
 
     pub(crate) fn misses(&self) -> usize {
         self.misses
+    }
+
+    /// Each rule's reused and evaluated subject counts; every subject misses with caching off.
+    pub(crate) fn counts_by_code(&self) -> &BTreeMap<String, (usize, usize)> {
+        &self.counts_by_code
     }
 
     fn extend_results(&mut self, evaluations: Vec<CustomEvaluation>) {

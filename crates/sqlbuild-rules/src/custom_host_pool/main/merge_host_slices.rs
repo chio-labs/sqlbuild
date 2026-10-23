@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::custom_host_pool::_helpers::merging::{
     collected_untracked_reads, demoted, merged_observations, ordered_evaluations,
 };
-use crate::custom_host_pool::models::{HostEvaluation, HostRun, HostSlice};
+use crate::custom_host_pool::models::{HostEvaluation, HostRun, HostSlice, HostTimings};
 use crate::custom_host_pool::types::{FactKey, HostInvocation};
 
 /// Merge slices in single-host invocation `order`, demoting tracking that grew too large.
@@ -17,6 +17,10 @@ pub fn merge_host_slices(slices: Vec<HostSlice>, order: &[HostInvocation]) -> Ho
         collected_untracked_reads(&slices, &untracked);
     let (evaluated, untracked_reads): (Vec<HostEvaluation>, BTreeMap<String, BTreeSet<FactKey>>) =
         demoted(evaluations, &untracked, untracked_reads);
+    let mut timings: HostTimings = HostTimings::default();
+    for slice in &slices {
+        timings.add(&slice.timings);
+    }
     HostRun {
         evaluated,
         untracked_reads: untracked_reads
@@ -28,5 +32,6 @@ pub fn merge_host_slices(slices: Vec<HostSlice>, order: &[HostInvocation]) -> Ho
             .flat_map(|slice| slice.uncacheable.iter().cloned())
             .collect(),
         observed: merged_observations(&slices),
+        timings,
     }
 }

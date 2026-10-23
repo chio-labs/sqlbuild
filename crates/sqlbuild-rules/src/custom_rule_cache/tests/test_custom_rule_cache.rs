@@ -122,5 +122,11 @@ fn given_stored_results_when_looking_up_then_unchanged_subjects_and_reads_hit() 
             "{}",
             test_case.description
         );
+        assert_eq!(
+            lookup.counts_by_code.values().copied().collect::<Vec<_>>(),
+            vec![(lookup.hit_count, lookup.miss_count)],
+            "{}",
+            test_case.description
+        );
     }
 }

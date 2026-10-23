@@ -1,4 +1,4 @@
-use crate::custom_host_pool::models::HostSlice;
+use crate::custom_host_pool::models::{HostSlice, HostTimings};
 use crate::custom_host_pool::types::{HostInvocation, HostPlan};
 
 pub(super) struct HostCapacityTestCase {
@@ -37,4 +37,5 @@ pub(super) struct MergeTestCase {
     pub(super) expected_order: Vec<HostInvocation>,
     pub(super) expected_untracked: Vec<String>,
     pub(super) expected_observed: Vec<(Vec<String>, Option<String>)>,
+    pub(super) expected_timings: HostTimings,
 }

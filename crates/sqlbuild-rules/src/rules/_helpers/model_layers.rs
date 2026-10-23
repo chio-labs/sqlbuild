@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::Value;
 
 use crate::constants::{
-    ALLOWED_QUALIFIERS_OPTION, DEFAULT_PUBLISHED_LAYERS, INTERMEDIATE_LAYER_DIRECTORY,
+    ALLOWED_PATHS_KEY, ALLOWED_QUALIFIERS_OPTION, DEFAULT_PUBLISHED_LAYERS, INTERMEDIATE_LAYER_DIRECTORY,
     MART_LAYER_DIRECTORY, MODEL_SCHEMA_CONFIG_KEY, PUBLISHED_LAYERS_OPTION, REFERENCE_KIND,
     STAGING_LAYER_DIRECTORY,
 };
@@ -11,6 +11,7 @@ use crate::models::{EvaluateRequest, Fault, Model, RuleMetadata, RulesConfig};
 use crate::rules::_helpers::evaluation::{parse_name, path_fault};
 use crate::rules::models::{FaultCollector, ProjectEvaluationRequest};
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
+use sqlbuild_core::text::main::glob_match::glob_match;
 
 const NO_CANONICAL_LAYER_FOLDER: &str = "no canonical layer folder";
 /// Where an intermediate model that replaces a published one lives.
@@ -350,10 +351,33 @@ fn intermediate_move(model: &Published<'_>) -> Option<String> {
     ))
 }
 
-/// One literal qualifier that does not count towards a domain's name shape.
+/// One `allowed_qualifiers` entry: the published models it leaves out of the name-shape check.
+///
+/// `qualifier` and `paths` are case-sensitive globs; a model must match every part it sets.
 struct AllowedQualifier {
     domain: Option<String>,
-    qualifier: String,
+    qualifier: Option<String>,
+    paths: Vec<String>,
+}
+
+impl AllowedQualifier {
+    fn matches(&self, entry: &Published<'_>) -> bool {
+        self.domain
+            .as_ref()
+            .is_none_or(|domain| *domain == entry.name.domain)
+            && self.qualifier.as_ref().is_none_or(|pattern| {
+                entry
+                    .name
+                    .source
+                    .as_ref()
+                    .is_some_and(|qualifier| glob_match(qualifier, pattern))
+            })
+            && (self.paths.is_empty()
+                || self
+                    .paths
+                    .iter()
+                    .any(|pattern| glob_match(&entry.model.relative_path, pattern)))
+    }
 }
 
 fn allowed_qualifiers(config: &RulesConfig, code: &str) -> Vec<AllowedQualifier> {
@@ -369,27 +393,29 @@ fn allowed_qualifiers(config: &RulesConfig, code: &str) -> Vec<AllowedQualifier>
         .iter()
         .filter_map(Value::as_object)
         .filter_map(|entry| {
-            Some(AllowedQualifier {
-                domain: entry
-                    .get("domain")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned),
-                qualifier: entry.get("qualifier")?.as_str()?.to_owned(),
-            })
+            let text = |key: &str| entry.get(key).and_then(Value::as_str).map(str::to_owned);
+            let allowed = AllowedQualifier {
+                domain: text("domain"),
+                qualifier: text("qualifier"),
+                paths: entry
+                    .get(ALLOWED_PATHS_KEY)
+                    .and_then(Value::as_array)
+                    .map(|paths| {
+                        paths
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .map(str::to_owned)
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            };
+            (allowed.qualifier.is_some() || !allowed.paths.is_empty()).then_some(allowed)
         })
         .collect()
 }
 
-fn allowlisted(allowed: &[AllowedQualifier], name: &PublishedName) -> bool {
-    name.source.as_ref().is_some_and(|qualifier| {
-        allowed.iter().any(|entry| {
-            entry.qualifier == *qualifier
-                && entry
-                    .domain
-                    .as_ref()
-                    .is_none_or(|domain| *domain == name.domain)
-        })
-    })
+fn allowlisted(allowed: &[AllowedQualifier], entry: &Published<'_>) -> bool {
+    allowed.iter().any(|allowed| allowed.matches(entry))
 }
 
 /// Flag published models whose name shape differs from their domain's majority shape.
@@ -405,7 +431,7 @@ pub(crate) fn published_name_shapes(
         let Some(entry) = published(model, &layers) else {
             continue;
         };
-        if allowlisted(&allowed, &entry.name) {
+        if allowlisted(&allowed, &entry) {
             continue;
         }
         domains

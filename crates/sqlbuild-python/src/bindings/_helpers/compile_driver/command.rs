@@ -9,6 +9,9 @@ use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_host::compile_context::main::collect_compile_timings::collect_compile_timings;
 use sqlbuild_host::compile_context::main::timing_milliseconds::timing_milliseconds;
 use sqlbuild_host::compile_context::types::CompileTimingsHandle;
+use sqlbuild_rules::custom_host_pool::constants::{
+    CUSTOM_RULES_GUARD_KEY, CUSTOM_RULES_INVOCATIONS_KEY, CUSTOM_RULES_MONITOR_KEY,
+};
 use std::rc::Rc;
 
 use crate::bindings::_helpers::boundary::python_calls::{
@@ -486,6 +489,17 @@ fn timings_ms<'py>(
         ("rule_cache_misses", "rule_cache_misses"),
     ] {
         timings.set_item(key, native_field(analysis, attribute)?)?;
+    }
+    for key in [
+        CUSTOM_RULES_INVOCATIONS_KEY,
+        CUSTOM_RULES_MONITOR_KEY,
+        CUSTOM_RULES_GUARD_KEY,
+    ] {
+        timings.set_item(key, 0)?;
+    }
+    for entry in native_field(analysis, "custom_rule_timings")?.try_iter()? {
+        let (key, value): (String, u64) = entry?.extract()?;
+        timings.set_item(key, value)?;
     }
     timings.set_item("write_ms", write_ms)?;
     for (key, value) in timing_milliseconds(detailed_timings) {

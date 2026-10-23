@@ -449,7 +449,7 @@ fn evaluate_native<'py>(
     cancel_on_interrupt(py, &evaluated, &run.cancel);
     let custom: PyResult<Bound<'py, PyAny>> = match custom {
         Some(handle) => joined(py, handle, &run.cancel),
-        None => outcome(py, (Vec::new(), 0, 0), (0, 0)),
+        None => outcome(py, (Vec::new(), 0, 0), (0, 0), &[]),
     };
     rules_result(run, defer_suppressions, evaluated, custom)
 }
@@ -469,7 +469,7 @@ fn selectionless_result<'py>(
         run,
         true,
         evaluated,
-        outcome(py, (Vec::new(), 0, 0), (0, 0)),
+        outcome(py, (Vec::new(), 0, 0), (0, 0), &[]),
     )
 }
 
@@ -538,6 +538,10 @@ fn rules_result<'py>(
             ),
             ("custom_ms", field(&custom, "custom_ms")?),
             ("custom_cpu_ms", field(&custom, "custom_cpu_ms")?),
+            (
+                "custom_rule_timings",
+                field(&custom, "custom_rule_timings")?,
+            ),
         ],
     )
 }

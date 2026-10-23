@@ -46,9 +46,9 @@ not fit the domain's majority shape are reported, with the remediation:
    example `sqb rename sales__mart__customers sales__mart__customers__core`.
 3. If the qualifier is intentional and structural, allowlist it with a reason.
 
-Allowlisted qualifiers are literal and do not count towards the shape: models that use them are left
-out of the check. Each entry needs a reason, and an entry with a `domain` applies to that domain
-only:
+Allowlisted qualifiers do not count towards the shape: models that use them are left out of the
+check and out of their domain's counts. Each entry needs a reason, and an entry with a `domain`
+applies to that domain only:
 
 ```toml
 [rules.rule_options.SQBRPROJECT107]
@@ -57,6 +57,33 @@ allowed_qualifiers = [
   { domain = "sales", qualifier = "fra", reason = "Published once per country." },
 ]
 ```
+
+`qualifier` is a case-sensitive glob with the same grammar as selectors: `*` matches any run of
+characters, `?` one character, and `[...]` one character from a set, with `[!...]` negating it. A
+qualifier without wildcards matches only itself. One entry can cover a whole family of
+qualifiers, such as a domain published once per country:
+
+```toml
+[rules.rule_options.SQBRPROJECT107]
+allowed_qualifiers = [
+  { domain = "sales", qualifier = "[a-z][a-z][a-z]", reason = "Published once per country." },
+  { domain = "sales", qualifier = "[a-z][a-z][a-z]_snapshots", reason = "Daily snapshots per country." },
+]
+```
+
+An entry with `paths` instead leaves out the published models whose file path, relative to the
+project, matches any of its globs. A family published once per qualifier usually lives in one
+folder:
+
+```toml
+[rules.rule_options.SQBRPROJECT107]
+allowed_qualifiers = [
+  { paths = ["models/sales/mart/regional/*"], reason = "Published once per region." },
+]
+```
+
+An entry with both `qualifier` and `paths` leaves out only the models that match both. Published
+models that match no entry are checked as before.
 
 ## Published layers
 

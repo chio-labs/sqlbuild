@@ -8,7 +8,7 @@ use crate::custom_host_pool::_helpers::payload_values::{fact_key, python_text, r
 use crate::custom_host_pool::constants::{
     CUSTOM_RULE_PROJECT_SUBJECT, INVALID_EVALUATION, INVALID_FINDINGS, INVALID_PAYLOAD,
 };
-use crate::custom_host_pool::models::{HostEvaluation, HostSlice};
+use crate::custom_host_pool::models::{HostEvaluation, HostSlice, HostTimings, RuleTiming};
 use crate::custom_host_pool::types::FactKey;
 
 /// The slice a host response describes, or the `RulesError` message of a malformed one.
@@ -51,7 +51,34 @@ pub(crate) fn decoded_slice(response: &Value) -> Result<HostSlice, String> {
             Some(_) | None => BTreeSet::new(),
         },
         untracked_reads,
+        timings: payload.get("timings").map(timings).unwrap_or_default(),
     })
+}
+
+/// The host's reported timings; anything malformed counts as zero.
+fn timings(value: &Value) -> HostTimings {
+    let count = |key: &str| value.get(key).and_then(Value::as_u64).unwrap_or(0);
+    let rules = match value.get("rules") {
+        Some(Value::Object(rules)) => rules
+            .iter()
+            .map(|(code, timing)| {
+                let part = |index: usize| timing.get(index).and_then(Value::as_u64).unwrap_or(0);
+                (
+                    code.clone(),
+                    RuleTiming {
+                        invocations: part(0),
+                        cpu_ns: part(1),
+                    },
+                )
+            })
+            .collect(),
+        Some(_) | None => BTreeMap::new(),
+    };
+    HostTimings {
+        rules,
+        monitor_ns: count("monitor_ns"),
+        guard_ns: count("guard_ns"),
+    }
 }
 
 fn evaluation(

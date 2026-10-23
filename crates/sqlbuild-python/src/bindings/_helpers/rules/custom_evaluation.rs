@@ -10,7 +10,8 @@ use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_cache::digest::main::sha256_hex::sha256_hex;
 use sqlbuild_core::json::main::dumps::dumps;
 use sqlbuild_core::json::models::{JsonDialect, JsonValue, OrjsonOptions};
-use sqlbuild_rules::custom_host_pool::models::{HostRuleSubject, HostRun};
+use sqlbuild_rules::custom_host_pool::main::custom_rule_timings::custom_rule_timings;
+use sqlbuild_rules::custom_host_pool::models::{HostRuleSubject, HostRun, HostTimings};
 use sqlbuild_rules::custom_host_pool::types::{FactKey, HostPlan};
 use sqlbuild_rules::custom_rule_cache::models::CustomEvaluation;
 use sqlbuild_rules::custom_rule_cache::types::ReadSet;
@@ -84,7 +85,7 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
         .collect::<PyResult<_>>()?;
     custom.sort_by(|left, right| left.0.cmp(&right.0));
     if custom.is_empty() {
-        return outcome(py, (Vec::new(), 0, 0), (0, 0));
+        return outcome(py, (Vec::new(), 0, 0), (0, 0), &[]);
     }
     let enabled: bool =
         native_field(&native_field(run.config, "cache")?, "enabled")?.is_truthy()?;
@@ -152,6 +153,7 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
         readset_digests.push(reproducible(digests.combined(readset))?);
     }
     let plan: HostPlan = cache.plan(readset_digests);
+    let mut host_timings: HostTimings = HostTimings::default();
     let delta: Option<std::sync::Arc<DeltaInjection>> = injection();
     if let Some(injection) = &delta
         && let Some(reason) = delta_plan_refusal(&plan, &cache, injection)
@@ -163,7 +165,7 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
             .iter()
             .map(|(code, rule)| Ok((code.clone(), host_subject(rule)?)))
             .collect::<PyResult<_>>()?;
-        let host_run: HostRun = run_custom_hosts(
+        let mut host_run: HostRun = run_custom_hosts(
             py,
             &HostRequest {
                 project: run.project,
@@ -178,6 +180,7 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
             },
             &plan,
         )?;
+        host_timings = std::mem::take(&mut host_run.timings);
         let evaluations: Vec<CustomEvaluation> = evaluations(host_run, &mut digests, enabled)?;
         if let Some(injection) = &delta
             && !evaluations
@@ -203,6 +206,7 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
         py,
         (cache.findings(py)?, cache.hits(), cache.misses()),
         (elapsed_ms, cpu_ms),
+        &custom_rule_timings(&host_timings, cache.counts_by_code()),
     )
 }
 
@@ -285,6 +289,7 @@ pub(crate) fn outcome<'py>(
     py: Python<'py>,
     (findings, hits, misses): (Vec<Bound<'py, PyAny>>, usize, usize),
     (custom_ms, custom_cpu_ms): (i64, i64),
+    timings: &[(String, u64)],
 ) -> PyResult<Bound<'py, PyAny>> {
     new_record_with(
         py,
@@ -295,6 +300,10 @@ pub(crate) fn outcome<'py>(
             ("cache_misses", misses.into_bound_py_any(py)?),
             ("custom_ms", custom_ms.into_bound_py_any(py)?),
             ("custom_cpu_ms", custom_cpu_ms.into_bound_py_any(py)?),
+            (
+                "custom_rule_timings",
+                PyTuple::new(py, timings.iter().cloned())?.into_any(),
+            ),
         ],
     )
 }

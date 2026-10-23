@@ -114,6 +114,7 @@ def run_compile_cli(
     environment: tuple[tuple[str, str], ...] = (),
     working_directory: Path | None = None,
     preexec: Callable[[], None] | None = None,
+    arguments: tuple[str, ...] = (),
 ) -> subprocess.CompletedProcess[str]:
     """Run the real `sqb compile --json` command from an optional invocation directory."""
 
@@ -125,6 +126,7 @@ def run_compile_cli(
             str(project_dir),
             "compile",
             "--json",
+            *arguments,
         ],
         capture_output=True,
         text=True,
@@ -204,6 +206,37 @@ def rule_cache_hits(result: subprocess.CompletedProcess[str]) -> int:
     """Return the Rules cache hit count from one JSON compile result."""
 
     return int(json.loads(result.stdout)["compile_timings"]["rule_cache_hits"])
+
+
+def custom_rule_timings(
+    result: subprocess.CompletedProcess[str],
+) -> dict[str, tuple[int, int, int, int]]:
+    """Map each custom Rule code to its invocations, CPU ms, cache hits and cache misses."""
+
+    timings: dict[str, int] = json.loads(result.stdout)["compile_timings"]
+    codes: set[str] = {
+        key.split(".")[1] for key in timings if key.startswith("custom_rules.")
+    }
+    return {
+        code: (
+            timings[f"custom_rules.{code}.invocations"],
+            timings[f"custom_rules.{code}.cpu_ms"],
+            timings[f"custom_rules.{code}.cache_hits"],
+            timings[f"custom_rules.{code}.cache_misses"],
+        )
+        for code in codes
+    }
+
+
+def custom_rule_cache_counts(
+    result: subprocess.CompletedProcess[str],
+) -> dict[str, tuple[int, int, int]]:
+    """Map each custom Rule code to its invocations, cache hits and cache misses."""
+
+    return {
+        code: (invocations, hits, misses)
+        for code, (invocations, _, hits, misses) in custom_rule_timings(result).items()
+    }
 
 
 def string_set_order(*, names: tuple[str, ...], hash_seed: str) -> str:
