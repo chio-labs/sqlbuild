@@ -3,9 +3,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::Value;
 
 use crate::constants::{
-    ALLOWED_PATHS_KEY, ALLOWED_QUALIFIERS_OPTION, DEFAULT_PUBLISHED_LAYERS, INTERMEDIATE_LAYER_DIRECTORY,
-    MART_LAYER_DIRECTORY, MODEL_SCHEMA_CONFIG_KEY, PUBLISHED_LAYERS_OPTION, REFERENCE_KIND,
-    STAGING_LAYER_DIRECTORY,
+    ALLOWED_PATHS_KEY, ALLOWED_QUALIFIERS_OPTION, DEFAULT_PUBLISHED_LAYERS,
+    INTERMEDIATE_LAYER_DIRECTORY, MART_LAYER_DIRECTORY, MODEL_SCHEMA_CONFIG_KEY,
+    PUBLISHED_LAYERS_OPTION, REFERENCE_KIND, STAGING_LAYER_DIRECTORY,
 };
 use crate::models::{EvaluateRequest, Fault, Model, RuleMetadata, RulesConfig};
 use crate::rules::_helpers::evaluation::{parse_name, path_fault};
@@ -352,8 +352,6 @@ fn intermediate_move(model: &Published<'_>) -> Option<String> {
 }
 
 /// One `allowed_qualifiers` entry: the published models it leaves out of the name-shape check.
-///
-/// `qualifier` and `paths` are case-sensitive globs; a model must match every part it sets.
 struct AllowedQualifier {
     domain: Option<String>,
     qualifier: Option<String>,
@@ -397,20 +395,22 @@ fn allowed_qualifiers(config: &RulesConfig, code: &str) -> Vec<AllowedQualifier>
             let allowed = AllowedQualifier {
                 domain: text("domain"),
                 qualifier: text("qualifier"),
-                paths: entry
-                    .get(ALLOWED_PATHS_KEY)
-                    .and_then(Value::as_array)
-                    .map(|paths| {
-                        paths
-                            .iter()
-                            .filter_map(Value::as_str)
-                            .map(str::to_owned)
-                            .collect()
-                    })
-                    .unwrap_or_default(),
+                paths: entry.get(ALLOWED_PATHS_KEY).map(texts).unwrap_or_default(),
             };
             (allowed.qualifier.is_some() || !allowed.paths.is_empty()).then_some(allowed)
         })
+        .collect()
+}
+
+/// The strings of a JSON list; anything else is empty.
+fn texts(value: &Value) -> Vec<String> {
+    let Some(items) = value.as_array() else {
+        return Vec::new();
+    };
+    items
+        .iter()
+        .filter_map(Value::as_str)
+        .map(str::to_owned)
         .collect()
 }
 

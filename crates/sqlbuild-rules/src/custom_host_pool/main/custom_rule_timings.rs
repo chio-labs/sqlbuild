@@ -9,9 +9,6 @@ use crate::custom_host_pool::constants::{
 use crate::custom_host_pool::models::{HostTimings, RuleTiming};
 
 /// Run-wide totals, then each rule's invocations, CPU and cache counts in code order.
-///
-/// `cache_counts` holds each rule's reused and missing subjects; rules the cache answered in
-/// full report zero invocations.
 #[must_use]
 pub fn custom_rule_timings(
     timings: &HostTimings,
@@ -42,7 +39,10 @@ pub fn custom_rule_timings(
             (key("invocations"), timing.invocations),
             (key("cpu_ms"), timing.cpu_ns / NANOSECONDS_PER_MILLISECOND),
             (key("cache_hits"), u64::try_from(hits).unwrap_or(u64::MAX)),
-            (key("cache_misses"), u64::try_from(misses).unwrap_or(u64::MAX)),
+            (
+                key("cache_misses"),
+                u64::try_from(misses).unwrap_or(u64::MAX),
+            ),
         ]);
     }
     entries

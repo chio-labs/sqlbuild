@@ -56,7 +56,11 @@ pub(super) fn evaluation(code: &str, subject: &str, reads: Option<&[&[&str]]>) -
 }
 
 /// Host timings with the given `(code, invocations, cpu_ns)` rules.
-pub(super) fn rule_timings(rules: &[(&str, u64, u64)], monitor_ns: u64, guard_ns: u64) -> HostTimings {
+pub(super) fn rule_timings(
+    rules: &[(&str, u64, u64)],
+    monitor_ns: u64,
+    guard_ns: u64,
+) -> HostTimings {
     HostTimings {
         rules: rules
             .iter()

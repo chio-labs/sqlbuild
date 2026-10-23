@@ -138,9 +138,7 @@ class RuntimeGuard:
         started: int = thread_time_ns()
         try:
             paths: tuple[object, ...] = tuple(map(_plain_path, arguments))
-            named: dict[str, object] = {
-                key: _plain_path(value) for key, value in keywords.items()
-            }
+            named: dict[str, object] = {key: _plain_path(value) for key, value in keywords.items()}
             rule_frame: FrameType | None = self._responsible_rule_frame(sys._getframe(1))
             if rule_frame is not None:
                 target: str = f" for {paths[0]!r}" if paths else ""
