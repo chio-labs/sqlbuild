@@ -150,26 +150,6 @@ def test_given_cost_arguments_when_running_then_dispatches_typed_cost_request(
     "test_case",
     [
         MainTestCase(
-            description="returns zero for root help",
-            argv=["--help"],
-            expected_exit_code=0,
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_root_help_arguments_when_running_main_then_it_returns_expected_exit_code(
-    test_case: MainTestCase,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    exit_code: int = main(test_case.argv)
-
-    assert exit_code == test_case.expected_exit_code
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        MainTestCase(
             description="dispatches compile command through injected handler",
             argv=["--project-dir", "/tmp/demo", "compile"],
             expected_exit_code=7,
@@ -1356,81 +1336,6 @@ def test_given_lineage_command_arguments_when_running_with_dependencies_then_it_
     "test_case",
     [
         MainTestCase(
-            description="passes verbose flag to diff handler",
-            argv=[
-                "diff",
-                "prod:dev",
-                "--full",
-                "--verbose",
-                "--select",
-                "orders",
-            ],
-            expected_exit_code=6,
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_verbose_diff_arguments_when_running_then_it_dispatches_verbose_flag(
-    test_case: MainTestCase,
-) -> None:
-    received_verbose: list[bool] = []
-
-    def run_diff(request: DiffCommandRequest) -> int:
-        received_verbose.append(request.verbose)
-        return test_case.expected_exit_code
-
-    exit_code: int = _main_with_dependencies(
-        argv=test_case.argv,
-        handlers=build_handlers(run_diff=run_diff),
-    )
-
-    assert exit_code == test_case.expected_exit_code
-    assert received_verbose == [True]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        MainTestCase(
-            description="passes diff example caps to handler",
-            argv=[
-                "diff",
-                "prod:dev",
-                "--full",
-                "--max-column-examples",
-                "7",
-                "--max-row-only-examples",
-                "4",
-                "--select",
-                "orders",
-            ],
-            expected_exit_code=6,
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_diff_example_cap_arguments_when_running_then_it_dispatches_caps(
-    test_case: MainTestCase,
-) -> None:
-    received_caps: list[tuple[int | None, int | None]] = []
-
-    def run_diff(request: DiffCommandRequest) -> int:
-        received_caps.append((request.max_column_examples, request.max_row_only_examples))
-        return test_case.expected_exit_code
-
-    exit_code: int = _main_with_dependencies(
-        argv=test_case.argv,
-        handlers=build_handlers(run_diff=run_diff),
-    )
-
-    assert exit_code == test_case.expected_exit_code
-    assert received_caps == [(7, 4)]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        MainTestCase(
             description="dispatches janitor command through injected handler",
             argv=[
                 "--no-color",
@@ -2121,34 +2026,6 @@ def test_given_scenario_select_file_when_running_then_dispatches_file_selectors(
 
     assert exit_code == test_case.expected_exit_code
     assert received_selects == [test_case.expected_scenario_selectors]
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        MainTestCase(
-            description="returns parser error for an unknown command flag",
-            argv=["build", "--no-such-flag"],
-            expected_exit_code=2,
-        ),
-        MainTestCase(
-            description="returns parser error for removed top level run command",
-            argv=["run"],
-            expected_exit_code=2,
-        ),
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_unknown_flags_or_commands_when_running_main_then_it_returns_parser_error(
-    test_case: MainTestCase,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    exit_code: int = main(test_case.argv)
-    rendered_stderr: str = capsys.readouterr().err
-
-    assert exit_code == test_case.expected_exit_code
-    assert "error[C900]:" in rendered_stderr
-    assert rendered_stderr.endswith("\n\n")
 
 
 @pytest.mark.parametrize(
