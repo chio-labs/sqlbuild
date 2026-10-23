@@ -394,19 +394,18 @@ def test_given_exact_contract_casts_when_formatting_then_rule_still_passes(
                 "unmatched customers."
             ),
             expected_formatted_description=(
-                "Builds canonical customer records from every\n"
-                "available source while retaining unmatched customers."
+                'description """\n'
+                "    Builds canonical customer records from every available\n"
+                "    source while retaining unmatched customers.\n"
+                '  """'
             ),
         ),
         DescriptionFormatIntegrationTestCase(
-            description="escaped description content formats and compiles without loss",
+            description="short wrapped description is joined and compiles",
             line_width=100,
-            authored_description=(
-                "Builds order summary.\\nRetains unmatched orders.\\n\\n"
-                "Source \\u2192 canonical orders."
-            ),
+            authored_description="Builds order summary.\n    Retains unmatched orders.",
             expected_formatted_description=(
-                "Builds order summary. Retains unmatched orders.\n\nSource → canonical orders."
+                'description "Builds order summary. Retains unmatched orders."'
             ),
         ),
     ],
@@ -432,9 +431,7 @@ def test_given_description_width_when_formatting_then_wrapped_model_compiles(
 
     assert format_exit == 0
     assert compile_exit == 0
-    assert f'description "{test_case.expected_formatted_description}"' in model.read_text(
-        encoding="utf-8"
-    )
+    assert test_case.expected_formatted_description in model.read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize(

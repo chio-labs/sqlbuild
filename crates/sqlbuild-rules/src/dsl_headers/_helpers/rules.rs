@@ -2,9 +2,7 @@
 
 use sqlbuild_sqltext::header_strings::main::prose_string::prose_string;
 
-use crate::dsl_headers::_helpers::prose_layout::{
-    canonical_prose, description_string_span, prose_line_count,
-};
+use crate::dsl_headers::_helpers::prose_layout::{description_string_span, prose_length};
 use crate::dsl_headers::_helpers::quoted::split_outside_quotes;
 use crate::dsl_headers::_helpers::text::{
     chars, line_count, position, rstrip, slice, string, strip,
@@ -111,10 +109,8 @@ pub(crate) fn value_violations<P: HeaderParser>(
         ));
     }
     if described && let Some(description) = description {
-        let lines: usize = match span
-            .and_then(|span| canonical_prose(&description, header_text, span, config.line_width))
-        {
-            Some(rendered) => prose_line_count(&rendered),
+        let lines: usize = match span {
+            Some(span) => prose_length(&description, header_text, span, config.line_width),
             None => line_count(&chars(&description)),
         };
         let limit: usize = config.max_description_lines;

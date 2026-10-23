@@ -4,7 +4,10 @@ use sqlbuild_sqltext::header_strings::constants::{PARAGRAPH_BREAK, TRIPLE_QUOTE}
 use sqlbuild_sqltext::header_strings::main::prose_string::prose_string;
 
 use crate::dsl_headers::_helpers::quoted::description_value_span;
-use crate::dsl_headers::_helpers::text::{chars, find, rfind_before, rstrip, slice, string};
+use crate::dsl_headers::_helpers::text::{
+    chars, find, line_count, rfind_before, rstrip, slice, string,
+};
+use crate::dsl_headers::_helpers::wrap::wrap_description;
 use crate::dsl_headers::constants::HEADER_INDENT;
 
 /// The span of the top-level `description` string, from its opening to past its closing quote.
@@ -104,11 +107,31 @@ pub(crate) fn canonical_prose(
     (stored == value).then_some(rendered)
 }
 
-/// The physical lines a canonical description takes: one, or the lines of its block.
-pub(crate) fn prose_line_count(rendered: &str) -> usize {
-    if rendered.contains('\n') {
-        rendered.lines().count().saturating_sub(2).max(1)
-    } else {
-        1
+/// The lines the description-length rule counts for `value` at `span` of `header_text`.
+///
+/// A description that stays on one line is one line. Otherwise it counts as wrapped from its
+/// field to the full line width, so the indentation of a `"""` block never makes a description
+/// longer than the same words were before.
+pub(crate) fn prose_length(
+    value: &str,
+    header_text: &[char],
+    (start, end): (usize, usize),
+    line_width: i64,
+) -> usize {
+    match canonical_prose(value, header_text, (start, end), line_width) {
+        Some(rendered) if !rendered.contains('\n') => 1,
+        _ => {
+            let line_start: usize =
+                rfind_before(header_text, '\n', start).map_or(0, |found| found + 1);
+            let line_end: usize = find(header_text, &['\n'], end).unwrap_or(header_text.len());
+            let prefix: i64 = i64::try_from(start + 1 - line_start).unwrap_or(i64::MAX);
+            let suffix: i64 = i64::try_from(rstrip(slice(header_text, end, line_end)).len() + 1)
+                .unwrap_or(i64::MAX);
+            line_count(&wrap_description(
+                &chars(value),
+                (line_width - prefix - suffix).max(1),
+                (line_width - suffix).max(1),
+            ))
+        }
     }
 }

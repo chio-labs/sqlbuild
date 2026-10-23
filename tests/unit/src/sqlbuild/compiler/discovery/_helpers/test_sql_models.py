@@ -317,11 +317,11 @@ def test_given_deferred_output_locations_when_discovering_models_then_projection
             expected_query="SELECT 1",
         ),
         ParseModelSqlHeaderTestCase(
-            description="accepts double quoted strings and escapes",
+            description="accepts double quoted strings and triple-quoted text",
             contents="""
         MODEL (
           schema "analytics mart",
-          description "Bob said \\"hello\\"",
+          description \"\"\"Bob said "hello\".\"\"\",
           post_hooks [inline_sql("grant select on @@CTX:destination.qualified to role analytics")],
         );
 
@@ -329,7 +329,7 @@ def test_given_deferred_output_locations_when_discovering_models_then_projection
         """,
             expected_header_values={
                 "schema": "analytics mart",
-                "description": 'Bob said "hello"',
+                "description": 'Bob said "hello".',
                 "post_hooks": [
                     SqlHookEntry(
                         statement="grant select on @@CTX:destination.qualified to role analytics"
