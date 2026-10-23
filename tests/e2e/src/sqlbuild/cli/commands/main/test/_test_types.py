@@ -560,3 +560,14 @@ class SinceBrokenBaseE2ETestCase:
     expected_exit_code: int
     expected_fragments: tuple[str, ...]
     unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class SinceUnwritableCacheE2ETestCase:
+    """A `--since` run whose base snapshot cache cannot be written."""
+
+    description: str
+    blocking_file: str
+    command: tuple[str, ...]
+    expected_stderr_fragments: tuple[str, ...]
+    expected_test_names: tuple[str, ...]

@@ -1,5 +1,6 @@
 //! The `--since` base snapshot: resolved from git, compiled in a child interpreter, cached per commit.
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::time::Instant;
@@ -29,6 +30,8 @@ use crate::bindings::_helpers::planner_identity::json_values::{COMPACT, sorted_d
 use crate::bindings::_helpers::scenario_command::setup::{cli_user_error, flush, write};
 
 const CACHE_DIRECTORY: [&str; 2] = ["target", "since"];
+/// Where base compiles work when the project's cache directory cannot be created.
+const TEMPORARY_WORK_ROOT: &str = "sqlbuild-since";
 const LOCAL_CONFIG_FILE: &str = "sqlbuild_local.toml";
 const PROJECT_CONFIG_FILE: &str = "sqlbuild_project.toml";
 const BASE_COMPILE_FAILED_CODE: &str = "C484";
@@ -192,6 +195,52 @@ fn read_notes(py: Python<'_>, base: &GitBase, path: &Path) -> PyResult<String> {
     }
 }
 
+/// The notes cached beside snapshot `path`; unreadable notes are skipped with a warning.
+fn cached_notes(path: &Path) -> String {
+    let notes: PathBuf = path.with_extension(NOTES_EXTENSION);
+    match std::fs::read_to_string(&notes) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => {
+            warn(&format!(
+                "Could not read the cached notes at {}: {error}",
+                notes.display()
+            ));
+            String::new()
+        }
+    }
+}
+
+/// Write one warning line to stderr, which machine-readable stdout never carries.
+fn warn(message: &str) {
+    let mut stderr: std::io::StderrLock<'_> = std::io::stderr().lock();
+    match writeln!(stderr, "warning: {message}") {
+        Ok(()) | Err(_) => {}
+    }
+}
+
+/// The cache only saves time, so a failure to write it is a warning and the run continues.
+fn warn_uncached(path: &Path, error: &std::io::Error) {
+    warn(&format!(
+        "Could not cache the base revision at {}: {error}; continuing without the cache",
+        path.display()
+    ));
+}
+
+/// A fresh work directory under `cache_dir`, or the system temporary directory without one.
+fn work_directory(cache_dir: &Path, short: &str) -> std::io::Result<PathBuf> {
+    let name: String = work_directory_name(short);
+    let work: PathBuf = cache_dir.join(&name);
+    match std::fs::create_dir_all(&work) {
+        Ok(()) => Ok(work),
+        Err(_unavailable) => {
+            let fallback: PathBuf = std::env::temp_dir().join(TEMPORARY_WORK_ROOT).join(&name);
+            std::fs::create_dir_all(&fallback)?;
+            Ok(fallback)
+        }
+    }
+}
+
 /// Cache `snapshot` at `cached` with its `notes`, staging the snapshot so readers never see half.
 fn store_snapshot(
     cached: &Path,
@@ -207,8 +256,14 @@ fn store_snapshot(
         std::fs::write(&notes_path, notes)?;
     }
     let staged: PathBuf = cached.with_extension(format!("{}.tmp", std::process::id()));
-    std::fs::write(&staged, definition_snapshot_json(snapshot))?;
-    std::fs::rename(&staged, cached)
+    let stored: std::io::Result<()> = std::fs::write(&staged, definition_snapshot_json(snapshot))
+        .and_then(|()| std::fs::rename(&staged, cached));
+    if stored.is_err() {
+        match std::fs::remove_file(&staged) {
+            Ok(()) | Err(_) => {}
+        }
+    }
+    stored
 }
 
 /// Resolve `since` to its merge base and load, or compile and cache, the base snapshot.
@@ -253,7 +308,7 @@ pub(crate) fn base_comparison<'py>(
     };
     if let Some(snapshot) = stored {
         write(stream, &format!("Using cached base revision {short}\n"))?;
-        write(stream, &read_notes(py, &base, &cached)?)?;
+        write(stream, &cached_notes(&cached))?;
         flush(stream)?;
         let snapshot: DefinitionSnapshot = with_base_dependencies(py, &base, &snapshot)?;
         return Ok(BaseComparison { base, snapshot });
@@ -261,15 +316,20 @@ pub(crate) fn base_comparison<'py>(
     write(stream, &format!("Compiling base revision {short}...\n"))?;
     flush(stream)?;
     let started: Instant = Instant::now();
-    let work: PathBuf = cache_dir.join(work_directory_name(short));
-    std::fs::create_dir_all(&work).map_err(|error| io_failed(py, &base, &error))?;
+    let work: PathBuf =
+        work_directory(&cache_dir, short).map_err(|error| io_failed(py, &base, &error))?;
     let compiled: PyResult<(DefinitionSnapshot, String)> =
         compiled_base_snapshot(py, (&base, &directory, &work), (target, vars));
     let _ = std::fs::remove_dir_all(&work);
     let (snapshot, notes) = compiled?;
     write(stream, &notes)?;
-    store_snapshot(&cached, (&snapshot, &notes)).map_err(|error| io_failed(py, &base, &error))?;
-    prune_snapshots(&cache_dir).map_err(|error| io_failed(py, &base, &error))?;
+    match store_snapshot(&cached, (&snapshot, &notes)) {
+        Ok(()) => match prune_snapshots(&cache_dir) {
+            Ok(()) => {}
+            Err(error) => warn_uncached(&cache_dir, &error),
+        },
+        Err(error) => warn_uncached(&cached, &error),
+    }
     write(
         stream,
         &format!(

@@ -12,6 +12,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import (
     SinceSelectionE2ETestCase,
     SinceShallowCloneE2ETestCase,
     SinceSharedBaseE2ETestCase,
+    SinceUnwritableCacheE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
     build_since_indirect_files,
@@ -711,3 +712,39 @@ def test_given_shallow_clone_without_merge_base_when_testing_since_then_asks_for
     assert result.returncode == test_case.expected_exit_code, output
     for fragment in test_case.expected_fragments:
         assert fragment in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SinceUnwritableCacheE2ETestCase(
+            description="a file where the cache directory belongs warns and the run continues",
+            blocking_file="target/since",
+            command=("--no-color", "test", "--since", "main", "--json"),
+            expected_stderr_fragments=(
+                "warning: Could not cache the base revision at ",
+                "; continuing without the cache",
+                "Selected 1 of 3 tests",
+            ),
+            expected_test_names=("test_stg_orders",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_unwritable_cache_when_testing_since_then_warns_and_succeeds(
+    tmp_path: Path, test_case: SinceUnwritableCacheE2ETestCase
+) -> None:
+    project: Path = prepare_since_repository(tmp_path=tmp_path, extra_files={})
+    write_project_files(
+        project_dir=project,
+        files={_STAGING: _EDITED_STAGING, test_case.blocking_file: "not a directory\n"},
+    )
+
+    result: CompletedProcess[str] = run_sqb(command=test_case.command, project_dir=project)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    for fragment in test_case.expected_stderr_fragments:
+        assert fragment in result.stderr, result.stderr
+    assert result.stderr.count("warning: Could not cache") == 1, result.stderr
+    selected: list[dict[str, str | list[str]]] = json.loads(result.stdout)["since"]["selected"]
+    assert tuple(str(item["name"]) for item in selected) == test_case.expected_test_names
