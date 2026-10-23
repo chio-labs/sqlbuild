@@ -4891,7 +4891,7 @@
        {
         "kind": "store",
         "dest": "refactor_target",
-        "required": true,
+        "nargs": "?",
         "help": "<model> or <model>.<column>; the model: and column: prefixes are optional",
         "metavar": "TARGET",
         "group": 0
@@ -4899,9 +4899,28 @@
        {
         "kind": "store",
         "dest": "refactor_new_name",
-        "required": true,
+        "nargs": "?",
         "metavar": "NEW_NAME",
         "group": 0
+       },
+       {
+        "kind": "store",
+        "dest": "refactor_more_moves",
+        "nargs": "*",
+        "default": [],
+        "help": "further model TARGET NEW_NAME pairs, renamed together with the first",
+        "metavar": "MORE",
+        "group": 0
+       },
+       {
+        "kind": "store",
+        "options": [
+         "--from-file"
+        ],
+        "dest": "refactor_from_file",
+        "help": "read model TARGET NEW_NAME pairs from FILE, one per line; # starts a comment",
+        "metavar": "FILE",
+        "group": 1
        },
        {
         "kind": "store_true",

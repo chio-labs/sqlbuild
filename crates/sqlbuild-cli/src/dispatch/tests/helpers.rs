@@ -7,7 +7,6 @@ pub(super) fn facts(command: &str, subcommand: Option<&str>) -> CommandFacts {
     CommandFacts {
         command: Some(command.to_owned()),
         subcommand: subcommand.map(str::to_owned),
-        refactor_target: true,
         from_target: true,
         contract_ready: true,
         ..CommandFacts::default()

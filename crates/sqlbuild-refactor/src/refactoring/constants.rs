@@ -2,6 +2,7 @@
 
 pub const MODEL_KIND_PREFIX: &str = "model:";
 pub const SQL_SUFFIX: &str = ".sql";
+pub const PYTHON_SUFFIX: &str = ".py";
 pub const CURRENT_DIRECTORY: &str = ".";
 pub const REF_FUNCTION: &str = "__ref";
 pub const REF_FIXTURE_PREFIX: &str = "__ref__";

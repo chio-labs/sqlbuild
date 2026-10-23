@@ -519,7 +519,6 @@ pub(crate) fn command_facts(args: &Bound<'_, PyAny>) -> PyResult<CommandFacts> {
         subcommand: optional_text(&attr(subcommand_attribute)?)?,
         command,
         json: flag("json")?,
-        refactor_target: present("refactor_target")?,
         from_target: present("from_target")?,
         contract_ready: present("contract_command")? && present("contract_from")?,
         format_diff: flag("format_diff")?,

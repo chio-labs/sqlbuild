@@ -208,7 +208,7 @@ fn write_compile_machine_error(
     print_object(&document, None, None)
 }
 
-/// With `sqb recall … --json`, `sqb plan --json` or `sqb janitor --json` (before it printed its own document), the failure as `{"error": {"code", "message", "help"}}` on stdout, so callers parsing the output read the error instead of failing to parse it.
+/// With `sqb recall … --json`, `--json` on `sqb plan`, `sqb rename` or `sqb mv`, or `sqb janitor --json` (before it printed its own document), the failure as `{"error": {"code", "message", "help"}}` on stdout, so callers parsing the output read the error instead of failing to parse it.
 fn write_machine_error(
     invocation: &Invocation<'_>,
     error: &Bound<'_, PyAny>,
@@ -224,7 +224,10 @@ fn write_machine_error(
     } else if invocation.command_is("janitor") {
         invocation.flag("json")? && !take_machine_output_written()
     } else {
-        invocation.command_is("plan") && invocation.flag("json")?
+        (invocation.command_is("plan")
+            || invocation.command_is("rename")
+            || invocation.command_is("mv"))
+            && invocation.flag("json")?
     };
     if !json_output {
         return Ok(());

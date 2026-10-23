@@ -18,9 +18,25 @@ pub(super) struct RenderTestCase {
 }
 
 /// Command-line words and a move file, and the pairs or error message they give.
-pub(super) struct MovePairsTestCase {
+pub(super) struct RefactorPairsTestCase {
     pub(super) description: &'static str,
+    pub(super) is_move: bool,
     pub(super) words: &'static [&'static str],
     pub(super) file: Option<&'static str>,
     pub(super) expected_pairs: Result<&'static [(&'static str, &'static str)], &'static str>,
+}
+
+/// One diagnostic as `(rule, code, path, message)`.
+pub(super) type DiagnosticRow = (bool, &'static str, &'static str, &'static str);
+
+/// The project's errors before and after file moves, and how they compare.
+pub(super) struct BaselineComparisonTestCase {
+    pub(super) description: &'static str,
+    pub(super) before: &'static [DiagnosticRow],
+    pub(super) after: &'static [DiagnosticRow],
+    /// `(original path, path)` of each moved file.
+    pub(super) moves: &'static [(&'static str, &'static str)],
+    pub(super) expected_remaining: &'static [&'static str],
+    pub(super) expected_resolved: &'static [&'static str],
+    pub(super) expected_blocking: &'static [&'static str],
 }

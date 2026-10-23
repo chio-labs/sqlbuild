@@ -22,6 +22,8 @@ pub enum EditKind {
     Header,
     Column,
     Migration,
+    /// A Python import of a moved module.
+    Import,
 }
 
 impl EditKind {
@@ -33,6 +35,7 @@ impl EditKind {
             Self::Header => "header",
             Self::Column => "column",
             Self::Migration => "migration",
+            Self::Import => "import",
         }
     }
 }

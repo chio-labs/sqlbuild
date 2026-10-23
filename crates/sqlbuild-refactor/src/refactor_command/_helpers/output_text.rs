@@ -9,7 +9,9 @@ use crate::refactor_command::_helpers::text::{
 use crate::refactor_command::constants::{
     BLANK_PREFIX, CONTINUE_PREFIX, FOLDER_PLACEHOLDER, KIND_WIDTH, POSITION_WIDTH,
 };
-use crate::refactor_command::models::{LayerMove, RefactorDiagnostic, RefactorStatus};
+use crate::refactor_command::models::{
+    BaselineComparison, LayerMove, RefactorDiagnostic, RefactorStatus,
+};
 use crate::refactoring::models::{
     FileChange, ManualLocation, MigrationDeclaration, RefactorOperation, RefactorPlan, TextEdit,
 };
@@ -36,7 +38,12 @@ pub(crate) fn refactor_target(plan: &RefactorPlan) -> String {
 
 pub(crate) fn heading(plan: &RefactorPlan) -> String {
     if !plan.batch.is_empty() {
-        return format!("Move {}", refactor_target(plan));
+        let verb: &str = if plan.request.operation == RefactorOperation::MoveModel {
+            "Move"
+        } else {
+            "Rename"
+        };
+        return format!("{verb} {}", refactor_target(plan));
     }
     let request = &plan.request;
     match request.operation {
@@ -60,16 +67,17 @@ pub(crate) fn heading(plan: &RefactorPlan) -> String {
     }
 }
 
-/// One `model -> destination` line per move of a batch.
+/// One `model -> destination` line per move of a batch, or `model -> new name` per rename.
 pub(crate) fn batch_lines(style: CliStyle, plan: &RefactorPlan) -> Vec<String> {
     tree_items(
         style,
         plan.batch.iter().map(|request| {
-            format!(
-                "{}  ->  {}",
-                style.object_name(&request.model_name),
+            let after: &str = if request.operation == RefactorOperation::MoveModel {
                 request.destination.as_deref().unwrap_or_default()
-            )
+            } else {
+                &request.new_name
+            };
+            format!("{}  ->  {after}", style.object_name(&request.model_name))
         }),
     )
 }
@@ -194,6 +202,42 @@ pub(crate) fn diagnostic_lines(style: CliStyle, diagnostics: &[RefactorDiagnosti
             first_line(&diagnostic.message)
         ));
     }
+    lines
+}
+
+/// The project's rule failures before the change and how many remain, are resolved or block.
+pub(crate) fn baseline_lines(style: CliStyle, baseline: &BaselineComparison) -> Vec<String> {
+    let failures = |count: usize| -> String {
+        format_count_noun(
+            i64::try_from(count).unwrap_or(i64::MAX),
+            "rule failure",
+            None,
+        )
+    };
+    let blocking: usize = baseline
+        .blocking
+        .iter()
+        .filter(|diagnostic| diagnostic.rule)
+        .count();
+    let mut lines: Vec<String> = vec![
+        style.section("Existing rule failures"),
+        format!(
+            "The project had {} before this change; {} resolved, {} still failing.",
+            failures(baseline.before.len()),
+            baseline.resolved.len(),
+            baseline.remaining.len()
+        ),
+    ];
+    lines.extend(diagnostic_lines(style, &baseline.remaining));
+    lines.push(style.muted(&if blocking == 0 {
+        "Existing rule failures do not block the change; it adds or worsens none.".to_owned()
+    } else {
+        format!(
+            "Existing rule failures do not block the change, but the {} below {} new or worse.",
+            failures(blocking),
+            if blocking == 1 { "is" } else { "are" }
+        )
+    }));
     lines
 }
 

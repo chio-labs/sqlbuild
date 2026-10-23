@@ -3,17 +3,19 @@
 use sqlbuild_core::cli_text::models::CliStyle;
 
 use crate::refactor_command::_helpers::output_text::{
-    batch_lines, change_lines, diagnostic_lines, heading, layer_move_lines, location_lines,
-    migration_lines, refactor_target, status_line, verb,
+    baseline_lines, batch_lines, change_lines, diagnostic_lines, heading, layer_move_lines,
+    location_lines, migration_lines, refactor_target, status_line, verb,
 };
-use crate::refactor_command::models::{LayerMove, RefactorDiagnostic, RefactorStatus};
+use crate::refactor_command::models::{
+    BaselineComparison, LayerMove, RefactorDiagnostic, RefactorStatus,
+};
 use crate::refactoring::models::{ManualLocation, RefactorPlan};
 
-/// The edit tree, manual locations, compile errors, and one terminal status line.
+/// The edit tree, locations, rule-failure baseline, compile errors, and one status line.
 #[must_use]
 pub fn render_refactor_text(
     plan: &RefactorPlan,
-    (status, diagnostics): (RefactorStatus, &[RefactorDiagnostic]),
+    (status, diagnostics, baseline): (RefactorStatus, &[RefactorDiagnostic], &BaselineComparison),
     layer_move: Option<&LayerMove>,
     style: CliStyle,
 ) -> String {
@@ -45,6 +47,9 @@ pub fn render_refactor_text(
         {
             lines.push(help.clone());
         }
+    }
+    if !baseline.before.is_empty() && !blocked {
+        lines.extend(baseline_lines(style, baseline));
     }
     if !diagnostics.is_empty() {
         lines.push(style.error_strong("Compile errors in the edited project"));

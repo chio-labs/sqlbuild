@@ -13,7 +13,7 @@ use crate::refactoring::_helpers::planning::model_planning::{
 };
 use crate::refactoring::_helpers::scanning::scan_context::ScanContext;
 use crate::refactoring::errors::RefactorError;
-use crate::refactoring::models::{ManualLocation, RefactorFacts};
+use crate::refactoring::models::{ManualLocation, RefactorFacts, RefactorOperation};
 use crate::refactoring::types::{DeclarationMoveHost, UnitTestScopeHost};
 
 /// Edits, blockers and file moves of every target, with declarations placed once for all.
@@ -103,17 +103,25 @@ fn batch_conflicts(targets: &[ModelTarget<'_>]) -> Vec<ManualLocation> {
         .collect();
     for target in targets {
         let model: &str = &target.model.name;
+        let is_move: bool = target.request.operation == RefactorOperation::MoveModel;
+        let (verb, participle) = if is_move {
+            ("move", "moved")
+        } else {
+            ("rename", "renamed")
+        };
         if !moved.insert(model) {
             if reported.insert(model) {
                 conflicts.push(conflict(
                     &target.source_path,
-                    format!("model:{model} is moved more than once in this batch"),
+                    format!("model:{model} is {participle} more than once in this batch"),
                 ));
             }
             continue;
         }
         let destination: String = target.destination();
-        if let Some(other) = by_destination.insert(destination.clone(), model) {
+        if let Some(other) = by_destination.insert(destination.clone(), model)
+            && is_move
+        {
             conflicts.push(conflict(
                 &destination,
                 format!("model:{other} and model:{model} both move to {destination}"),
@@ -129,7 +137,7 @@ fn batch_conflicts(targets: &[ModelTarget<'_>]) -> Vec<ManualLocation> {
                 &destination,
                 format!(
                     "model:{model} would take the name model:{other} gives up in this batch; \
-                     the old name must stay free for its history, so move them in separate runs"
+                     the old name must stay free for its history, so {verb} them in separate runs"
                 ),
             ));
         }
