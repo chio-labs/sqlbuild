@@ -4,6 +4,7 @@ use crate::dsl_headers::_helpers::formatting::{
     relocate_leading_comment, without_trailing_whitespace, wrap_audits, wrap_descriptions,
 };
 use crate::dsl_headers::_helpers::macro_header::layout_macro_headers;
+use crate::dsl_headers::constants::{PROSE_LAYOUT_HEADER_KINDS, SQL_MACRO_HEADER_KIND};
 use crate::dsl_headers::main::scan_headers::scan_headers;
 use crate::dsl_headers::models::{HeaderRulesConfig, HeaderSpan, HeaderViolation};
 use crate::dsl_headers::types::HeaderParser;
@@ -22,12 +23,23 @@ pub fn format_headers<P: HeaderParser>(
     } else {
         scan_headers(&relocated, false)
     };
-    let wrapped: Vec<char> =
-        wrap_descriptions(&relocated, &relocated_headers, config.line_width, parser)?;
+    let wrapped: Vec<char> = wrap_descriptions(
+        &relocated,
+        &relocated_headers,
+        (&PROSE_LAYOUT_HEADER_KINDS, config.line_width),
+        parser,
+    )?;
     let audited: Vec<char> = wrap_audits(&wrapped, config.line_width, parser)?;
     let macro_headers: Vec<HeaderSpan> = scan_headers(&audited, false);
+    let laid_out: Vec<char> = layout_macro_headers(&audited, &macro_headers, config.line_width);
+    let laid_out_headers: Vec<HeaderSpan> = scan_headers(&laid_out, false);
     Ok((
-        layout_macro_headers(&audited, &macro_headers, config.line_width),
+        wrap_descriptions(
+            &laid_out,
+            &laid_out_headers,
+            (&[SQL_MACRO_HEADER_KIND], config.line_width),
+            parser,
+        )?,
         faults,
     ))
 }

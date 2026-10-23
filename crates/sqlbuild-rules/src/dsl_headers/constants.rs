@@ -5,6 +5,9 @@ pub const HEADER_KINDS: [&str; 10] = [
 ];
 pub const MEASUREMENT_KINDS: [&str; 2] = ["EVIDENCE", "MEASURE"];
 pub(crate) const DESCRIPTION_HEADER_KINDS: [&str; 2] = ["MODEL", "SCENARIO"];
+/// Headers whose top-level description `sqb format` lays out; `MACRO` is laid out after its header.
+pub(crate) const PROSE_LAYOUT_HEADER_KINDS: [&str; 5] =
+    ["FUNCTION", "HOOK", "MODEL", "SCENARIO", "SCHEMA"];
 pub(crate) const DESCRIPTION_REQUIRED_HEADER_KINDS: [&str; 4] =
     ["MODEL", "SCENARIO", "FUNCTION", "HOOK"];
 pub(crate) const MODEL_KIND: &str = "MODEL";
@@ -21,4 +24,3 @@ pub(crate) const HEADER_TERMINATOR: &str = ";";
 pub(crate) const AUDITS_KEYWORD: &str = "audits";
 pub(crate) const AUDIT_WRAP_MAX_PASSES: usize = 64;
 pub(crate) const QUOTES: [char; 2] = ['\'', '"'];
-pub(crate) const ESCAPE: char = '\\';

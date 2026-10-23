@@ -1,10 +1,14 @@
 //! The header rules of one header: parseable values, a short present description, no trailing spaces.
 
-use crate::dsl_headers::_helpers::quoted::{
-    decode_description, description_value_span, split_outside_quotes,
+use sqlbuild_sqltext::header_strings::main::prose_string::prose_string;
+
+use crate::dsl_headers::_helpers::prose_layout::{
+    canonical_prose, description_string_span, prose_line_count,
 };
-use crate::dsl_headers::_helpers::text::{line_count, position, rstrip, slice, string, strip};
-use crate::dsl_headers::_helpers::wrap::wrap_header_description;
+use crate::dsl_headers::_helpers::quoted::split_outside_quotes;
+use crate::dsl_headers::_helpers::text::{
+    chars, line_count, position, rstrip, slice, string, strip,
+};
 use crate::dsl_headers::constants::{
     DESCRIPTION_HEADER_KINDS, DESCRIPTION_REQUIRED_HEADER_KINDS, RULE_DESCRIPTION_LENGTH,
     RULE_DESCRIPTION_PRESENT, RULE_HEADER_PARSE, RULE_HEADER_WHITESPACE, SQL_MACRO_HEADER_KIND,
@@ -79,19 +83,19 @@ pub(crate) fn value_violations<P: HeaderParser>(
     let mut violations: Vec<HeaderViolation> = Vec::new();
     let described: bool = DESCRIPTION_HEADER_KINDS.contains(&kind);
     let span: Option<(usize, usize)> = described
-        .then(|| description_value_span(header_text))
+        .then(|| description_string_span(header_text))
         .flatten();
-    let description: Option<Vec<char>> = match (parser.description(&values)?, span) {
-        (Some(_), Some((start, end))) => Some(decode_description(
-            slice(header_text, start, end),
-            header_text[start - 1],
-        )),
-        (description, _) => description.map(|description| description.chars().collect()),
+    let authored: Option<String> = span
+        .and_then(|(start, _)| prose_string(header_text, start).ok())
+        .map(|prose| prose.value);
+    let description: Option<String> = match parser.description(&values)? {
+        Some(_) if authored.is_some() => authored,
+        description => description,
     };
     if DESCRIPTION_REQUIRED_HEADER_KINDS.contains(&kind)
         && description
             .as_deref()
-            .is_none_or(|description| strip(description).is_empty())
+            .is_none_or(|description| strip(&chars(description)).is_empty())
     {
         violations.push(violation_at(
             starts,
@@ -107,14 +111,14 @@ pub(crate) fn value_violations<P: HeaderParser>(
         ));
     }
     if described && let Some(description) = description {
-        let formatted: Vec<char> = match span {
-            Some(span) => {
-                wrap_header_description(&description, header_text, span, config.line_width)
-            }
-            None => description,
+        let lines: usize = match span
+            .and_then(|span| canonical_prose(&description, header_text, span, config.line_width))
+        {
+            Some(rendered) => prose_line_count(&rendered),
+            None => line_count(&chars(&description)),
         };
         let limit: usize = config.max_description_lines;
-        if line_count(&formatted) > limit {
+        if lines > limit {
             violations.push(violation_at(
                 starts,
                 header.start,
