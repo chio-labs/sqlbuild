@@ -1,8 +1,8 @@
 <!-- generated-by: sqlbuild skills -->
 
-# Composition and Context
+# Python Macro Composition and Context
 
-> Compose macros through Python, use compile context, and understand scoped imports.
+> Compose Python macros through imports, and use adapter, target, constants and enums.
 
 Online: https://sqlbuild.com/docs/concepts/macros/composition-and-context/
 
@@ -14,8 +14,10 @@ Online: https://sqlbuild.com/docs/concepts/macros/composition-and-context/
 - Nested calls written in SQL
 - Macro context
 
-Macros are Python functions, so reusable macros should compose through ordinary Python calls. A
-macro returns final SQL; SQLBuild does not treat its output as another layer of macro source.
+[Python macros](python-macros.md) are Python functions, so they compose through
+ordinary Python calls. A macro returns final SQL; SQLBuild does not treat its output as another
+layer of macro source. [SQL macros](sql-macros.md#compose-macros) compose by
+calling each other in their bodies.
 
 ## Compose helpers in one file
 

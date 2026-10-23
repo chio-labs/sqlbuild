@@ -129,7 +129,7 @@ files count only by presence.
 
 Reuse assumes macros, hooks, providers, adapters, and custom rules are deterministic: the same inputs
 must produce the same output. Macro results are also reused within a compile and may be kept between
-compiles; see [Macros must be deterministic](../concepts/macros.md#macros-must-be-deterministic). A
+compiles; see [Macros must be deterministic](../concepts/macros/python-macros.md#macros-must-be-deterministic). A
 compile whose templates read `run.id` is never reused.
 
 Compile always runs in full with `--no-cache`, `--manifest`, `--debug`, or a profiling flag, when
@@ -191,7 +191,7 @@ the whole project. Every model's SQL references are scanned again too.
   lexical rules, and the SQLBuild build; a damaged or unreadable entry is scanned again.
 - Rule results are reused for unchanged inputs.
 - Macro call results are reused as described in
-  [Macros must be deterministic](../concepts/macros.md#macros-must-be-deterministic).
+  [Macros must be deterministic](../concepts/macros/python-macros.md#macros-must-be-deterministic).
 
 Either way, the output is byte-identical to `sqb compile --no-cache`. To turn compiling only the
 changed files off, set `delta_compile = false` under `[settings]` or set

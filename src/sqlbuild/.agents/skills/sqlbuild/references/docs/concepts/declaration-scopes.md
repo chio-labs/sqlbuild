@@ -140,6 +140,6 @@ top-level roles as a genuine project API instead of a neutral dumping ground.
     Ask SQLBuild what a file can use and preview how moving it would change that answer.
 
 Learn the features themselves in [Enums](enums.md), [Constants](constants.md),
-[Writing Macros](macros.md), [Audits](audits.md),
+[Macros](macros.md), [Audits](audits.md),
 [Reusable Schemas](models/schemas.md), and [Hooks](models/hooks.md). See [Interpolation](interpolation.md) for project,
 environment, and runtime context values, which are separate from declarations.

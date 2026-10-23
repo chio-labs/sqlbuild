@@ -1,266 +1,77 @@
 <!-- generated-by: sqlbuild skills -->
 
-# Writing Macros
+# Macros
 
-> Write Python functions that generate reusable SQL fragments at compile time.
+> Reuse SQL with typed SQL macros, or generate it with Python macros when it needs logic.
 
 Online: https://sqlbuild.com/docs/concepts/macros/
 
-## Contents
+A macro is a reusable piece of SQL that a model, test, hook or audit calls by name. SQLBuild
+expands each call at compile time, so the warehouse only ever sees plain SQL.
 
-- Create a macro
-- Call a macro from SQL
-- Arguments
-- Typed reference arguments
-- Keep implementation details private
-- Use macros in tests
-- Use macros in hooks
-- Macros must be deterministic
-- Where macros work
-- Next steps
+There are two kinds:
 
-Python macros are Python functions that generate SQL during compilation. They provide reusable,
-parameterized SQL without introducing a separate template language. When the SQL needs no logic,
-a typed [SQL macro](macros/sql-macros.md) is simpler and the compiler can see inside
-it.
+| | SQL macro | Python macro |
+|---|---|---|
+| Written as | A `.sql` file: a `MACRO` header and a SQL body | A Python function that returns SQL |
+| Called as | `@sql.name(...)` | `@py.name(...)` |
+| Lives in | `macros/sql/` | `macros/python/` |
+| Arguments | Typed SQL expressions, checked against the caller's column types | Python values: strings, numbers, lists, dictionaries, references |
+| Logic | None: the body is SQL | Any Python: loops, conditions, adapter and target context |
+| Checks and tools | Each macro is checked on its own; `sqb format`, Rules and lineage see inside every call | Rules and lineage see the SQL each call returns |
 
-## Create a macro
+Prefer a SQL macro whenever no logic is needed: its calls stay readable, typed and checked, and
+every tool sees the SQL it produces.
 
-Put project-wide Python macros in Python files under `macros/python/`. SQL macros live next to
-them in `macros/sql/`:
+    Typed, logic-free expressions, CTE lists and column lists.
+    Python functions that generate SQL when it needs logic.
+
+## Where macros live
+
+Each kind has its own folder:
 
 ```text
 my_project/
 ├── macros/
 │   ├── python/
-│   │   └── currency.py
+│   │   └── labels.py
 │   └── sql/
+│       └── cents_to_dollars.sql
 ├── models/
 └── sqlbuild_project.toml
 ```
 
 A file directly under a `macros/` folder fails with `D013`, which names the subfolder to move it
-to. Folder-scoped macros use the same layout, such as `models/marts/_sqlbuild/_macros/python/`.
+to. A macro used by only part of the project can live in that folder instead, as
+`_sqlbuild/macros/sql/` or `_sqlbuild/_macros/python/`, and is then visible only there. See
+[Declarations and Scopes](declaration-scopes.md).
 
-Every public function defined by a macro file becomes callable from SQL:
+## Call a macro
 
-```python
-# macros/python/currency.py
-def cents_to_dollars(expression: str) -> str:
-    """Convert a cents expression to dollars."""
-    return f"ROUND(CAST({expression} AS DOUBLE) / 100, 2)"
-```
-
-## Call a macro from SQL
-
-Use `@py.macro_name(...)` in a model query. Every macro call says its kind: `@py.` calls a Python
-macro and `@sql.` a SQL macro. A bare `@macro_name(...)` fails with `P014`, which names both
-spellings, and calling a macro with the other kind's prefix fails with `P020`.
+Every call names the kind of macro it calls:
 
 ```sql
-MODEL (
-  description "One row per order",
-  materialized table,
-  tags [marts],
-);
-
 SELECT
   order_id,
-  @py.cents_to_dollars("amount_cents") AS amount_dollars
+  @sql.cents_to_dollars(amount_cents) AS amount_dollars,
+  @py.status_label("status") AS status_label
 FROM __ref("stg_orders")
 ```
 
-During compilation, SQLBuild replaces the call with the function's returned SQL:
+A bare `@name(...)` fails with `P014`, which names both spellings. Calling a macro with the other
+kind's prefix fails with `P020`, and a SQL macro and a Python macro may not share a visible name.
+
+## Use the two kinds together
+
+A SQL macro calls only SQL macros, and a Python macro composes other Python macros through Python
+imports. To combine the two, pass one call's result to the other in the calling SQL:
 
 ```sql
-ROUND(CAST(amount_cents AS DOUBLE) / 100, 2)
+SELECT @py.bracket(@sql.cents_to_dollars(o.amount_cents)) AS amount_band
+FROM __ref("stg_orders") AS o
 ```
 
-A macro used directly in SQL must return a string.
-
-## Arguments
-
-Macro calls accept Python literal values:
-
-- Strings: `"value"` or `'value'`
-- Numbers: `42`, `3.14`, `-1`
-- Booleans: `True`, `False`
-- Lists: `[1, 2, 3]`
-- Dictionaries: `{"key": "value"}`
-- `None`
-- The result of another macro call
-- `__ref("model")`, `__source("source")`, and `__seed("seed")` references, alone or inside lists
-  and dictionaries
-
-These inputs are rejected with an error. In a model body the error names the file line and
-column; elsewhere it names the position within the macro's arguments:
-
-- bytes (`b"text"`), complex numbers (`2j`), f-strings, and `...`
-- a keyword argument passed twice, such as `@py.lit(a=1, a=2)`, which Python also rejects
-- lone surrogate escapes such as `"\ud800"`; write a character outside the Basic Multilingual
-  Plane as one escape, such as `"\U0001F600"`, rather than as a surrogate pair
-- `\N{...}` naming a multi-character named sequence; `\N` escapes name one character
-- two values with no comma between them
-
-Positional and keyword arguments are supported:
-
-```sql
-@py.mock_orders(count=5, status="completed")
-```
-
-Use quoted strings when passing SQL expressions such as column names. The macro decides how to
-place that text into its returned SQL.
-
-## Typed reference arguments
-
-Pass the models, sources, and seeds a macro reads as reference arguments:
-
-```sql
-SELECT * FROM @py.union_all([__ref("orders_eu"), __ref("orders_us")])
-```
-
-The macro receives each reference as a typed `SqlResourceRef` from `sqlbuild.refs`, the same type
-Python nodes use. It has `kind` and `name` attributes, and formatting it into SQL renders the
-relation with the adapter's quoting:
-
-```python
-# models/marts/_sqlbuild/_macros/python/unions.py
-from sqlbuild.refs import SqlResourceRef
-
-def union_all(relations: list[SqlResourceRef]) -> str:
-    return " UNION ALL ".join(f"SELECT order_id FROM {relation}" for relation in relations)
-```
-
-The dependency belongs to the model that makes the call. The graph, column lineage, and
-declaration scopes treat `@py.union_all([__ref("orders_eu"), __ref("orders_us")])` exactly like a
-model that wrote `__ref("orders_eu")` and `__ref("orders_us")` itself.
-
-### References in macro output
-
-A macro must not produce references on its own. Any `__ref()`, `__source()`, or `__seed()` in a
-macro's expanded output fails to compile with `P006`, whether the macro's Python code wrote it or
-it arrived as a quoted string argument such as `@py.wrap('__ref("stg_orders")')`:
-
-```
-error[P006]: model:order_summary depends on model:stg_orders through macro orders_base()
-  model: order_summary
-  --> models/marts/_sqlbuild/_macros/python/orders.py
-  = help: write the reference in the model, or pass it in: @py.orders_base(__ref("stg_orders"))
-  = help: the current value is [references] enforce_explicit = true (from sqlbuild_project.toml or its default); while migrating a project, to allow macro-generated references, set this in sqlbuild_project.toml:
-            [references]
-            enforce_explicit = false
-```
-
-A dependency hidden inside a macro is invisible to reviewers of the model file and bypasses
-declaration scopes. For projects migrating from other tools,
-[`[references] enforce_explicit = false`](project-configuration.md#references) allows
-macro-generated references project-wide.
-
-## Keep implementation details private
-
-Only public functions owned by the file are exported as macros. Prefix helpers, constants, classes,
-and type aliases with `_`:
-
-```python
-# macros/python/orders.py
-_DEFAULT_STATUS = "completed"
-
-def _status_filter(status: str) -> str:
-    return f"status = '{status}'"
-
-def completed_orders() -> str:
-    return _status_filter(_DEFAULT_STATUS)
-```
-
-Here, SQL may call `@py.completed_orders()`. `_status_filter` and `_DEFAULT_STATUS` remain ordinary
-Python implementation details.
-
-Imported functions are not re-exported as new macros from the importing file.
-
-## Use macros in tests
-
-Tests are SQL, so they can use macros as reusable fixture generators. A macro that only tests use
-follows the usual [placement](declaration-scopes/placement.md) rule: it must be private
-to the narrowest folder that contains its uses, so the project-wide `macros/` directory rejects it
-with `S024`. Put it in `_sqlbuild/_macros/python/` in the folder of the tests that call it, such as
-`tests/unit/orders/_sqlbuild/_macros/python/`, or, when those tests define `__expected__` output
-for a model, in that model's `_sqlbuild/_macros/python/`. The `S024` error names the folder to use.
-`tests/unit/_sqlbuild/` itself is rejected with `D013`.
-
-```python
-# tests/unit/orders/_sqlbuild/_macros/python/order_fixtures.py
-def mock_orders(count: int = 1) -> str:
-    rows = [
-        f"SELECT {i} AS id, {i * 100} AS customer_id, 'completed' AS status"
-        for i in range(1, count + 1)
-    ]
-    return " UNION ALL ".join(rows)
-```
-
-```sql
-TEST();
-
-WITH
-__source__raw__orders AS (
-  @py.mock_orders(3)
-),
-__expected__stg_orders AS (
-  SELECT 1 AS order_id, 100 AS customer_id, 'completed' AS status
-  UNION ALL
-  SELECT 2 AS order_id, 200 AS customer_id, 'completed' AS status
-  UNION ALL
-  SELECT 3 AS order_id, 300 AS customer_id, 'completed' AS status
-)
-```
-
-## Use macros in hooks
-
-Macros work inside inline and named SQL hooks:
-
-```python
-# macros/python/permissions.py
-def grant_target(target: str) -> str:
-    return f"GRANT SELECT ON {target} TO analyst_role"
-```
-
-```sql
-MODEL (
-  description "Example model",
-  post_hooks [inline_sql('@py.grant_target(@@CTX:destination.qualified)')],
-);
-
-SELECT 1 AS id
-```
-
-See [SQL Hooks](models/hooks/sql.md) for hook lifecycle and context syntax.
-
-## Macros must be deterministic
-
-A macro must return the same result whenever it is called with the same arguments and sees the same
-context. Avoid module-level state such as counters, random values, the current time, and reads of
-files or environment variables that the call does not receive.
-
-SQLBuild relies on this contract to reuse macro results:
-
-- [Compile reuse](../cli/compile.md) replays an unchanged compile without running macros again.
-- A compile may run each distinct macro call once and reuse its result for identical calls
-  elsewhere in the project.
-- A compile that fails stops at its first error. It does not run the project's macros a second
-  time to report that error.
-- Macro call results are kept between compiles under `target/cache/` by default, so editing a
-  model does not run its unchanged macro calls again. They are recomputed when
-  macro or other Python files, configuration, declarations, seeds, sources, variables, the target,
-  the adapter, the installed packages, or the SQLBuild version change. Editing only model SQL keeps
-  them, and a changed call is always run again. Only the first compile in a process uses and saves
-  them: later compiles in the same process, such as in a notebook or a long-running server, run their
-  macros again. A compile that has loaded Python code it cannot read from a plain file, such as a
-  module imported from a zip archive, neither uses nor saves them.
-
-Pass configuration through what SQLBuild compares: macro arguments (including `@@ENV:NAME` and
-`@@var` values written in the calling SQL), `ctx.vars`, `ctx.target_name`, `ctx.adapter_name`,
-and visible constants and enums. Environment variables a macro reads directly, for example with
-`os.environ`, are compared only when their names start with `SQLBUILD_` or `SQB_`, the same set
-compile reuse tracks. A macro whose result changes for any other reason may return a stale result.
+The SQL macro expands first, and the Python macro receives its SQL as a string.
 
 ## Where macros work
 
@@ -275,8 +86,21 @@ Macros are supported in:
 Macros are not accepted in ordinary `MODEL()` configuration fields. SQL hook entries are the
 exception because their contents are SQL.
 
-## Next steps
+### Macros used only by tests
 
-    Write typed, logic-free SQL fragments the compiler checks and sees inside.
-    Compose macros through Python imports and use adapter or target context.
-    Limit a macro to one folder, or to that folder and its child folders.
+A macro that only tests use follows the usual [placement](declaration-scopes/placement.md)
+rule: it must be private to the narrowest folder that contains its uses, so the project-wide
+`macros/` directory rejects it with `S024`. Put it in `_sqlbuild/_macros/python/` or
+`_sqlbuild/_macros/sql/` in the folder of the tests that call it, such as
+`tests/unit/orders/_sqlbuild/_macros/python/`, or, when those tests define `__expected__` output
+for a model, in that model's `_sqlbuild/_macros/`. The `S024` error names the folder to use.
+`tests/unit/_sqlbuild/` itself is rejected with `D013`.
+
+## Choose the right tool
+
+| Use | When |
+|---|---|
+| [SQL macro](macros/sql-macros.md) | The fragment is plain SQL with typed inputs: a calculation, a filter, a set of CTEs or columns you repeat. The compiler sees inside it. |
+| [Python macro](macros/python-macros.md) | Generating the SQL needs logic: loops, conditions on arguments, the adapter or target, or reading project context. |
+| [SQL function](functions.md) | The logic belongs in the warehouse, to be called by other tools or evaluated per row there, or it is too large to inline everywhere. |
+| [Generic audit](audits.md) | The SQL checks data quality on a model rather than producing part of its query. |

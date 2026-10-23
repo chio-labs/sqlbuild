@@ -93,8 +93,9 @@
 				"collapsed": true,
 				"items": [
 					"docs/concepts/macros",
-					"docs/concepts/macros/composition-and-context",
-					"docs/concepts/macros/sql-macros"
+					"docs/concepts/macros/sql-macros",
+					"docs/concepts/macros/python-macros",
+					"docs/concepts/macros/composition-and-context"
 				]
 			},
 			"docs/concepts/interpolation",
