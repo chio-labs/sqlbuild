@@ -72,8 +72,9 @@ allowed_qualifiers = [
 ```
 
 An entry with `paths` instead leaves out the published models whose file path, relative to the
-project, matches any of its globs. A family published once per qualifier usually lives in one
-folder:
+project and written with `/` separators, matches any of its globs. As in selectors and janitor
+`exclude_patterns`, `*` also matches `/`, so `models/sales/mart/*` covers nested folders too. A
+family published once per qualifier usually lives in one folder:
 
 ```toml
 [rules.rule_options.SQBRPROJECT107]

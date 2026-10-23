@@ -27,6 +27,7 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     CustomHostInterruptIntegrationTestCase,
     CustomHostOutcomeTestCase,
     CustomHostSplitIntegrationTestCase,
+    ProjectRuleScratchStateTestCase,
     CustomRuleCacheSequenceTestCase,
     CustomRuleSurfaceTestCase,
     DynamicPivotRulesIntegrationTestCase,
@@ -50,6 +51,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
     observe_hosts,
     write_custom_host_project,
     write_project_files,
+    write_project_scratch_rules,
 )
 
 _CACHE_RULES_TOML: str = 'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRSQL004"]\n'
@@ -1189,6 +1191,41 @@ def final_directory(*, model: Model, ctx: RuleContext) -> list[Finding]:
         f"models/orders.sql:{test_case.expected_code}",
         "tests/unit/test_orders.sql:SQBRSQL004",
     } <= cold
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ProjectRuleScratchStateTestCase(
+            description="one host runs the project rules in order",
+            hosts=1,
+            expected_findings=(("XSQBRSCR002", "models/customers.sql"),),
+            expected_launches=1,
+        ),
+        ProjectRuleScratchStateTestCase(
+            description="split project rules rerun in one host after the scratch list fills",
+            hosts=2,
+            expected_findings=(("XSQBRSCR002", "models/customers.sql"),),
+            expected_launches=3,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_project_rules_sharing_scratch_state_when_splitting_hosts_then_findings_match_one_host(
+    test_case: ProjectRuleScratchStateTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    write_project_scratch_rules(tmp_path)
+    hosts: CustomHostObserver = observe_hosts(monkeypatch=monkeypatch, cores=test_case.hosts)
+
+    findings: tuple[tuple[str, str, int | None, int | None], ...] = compile_findings(
+        project_dir=tmp_path, capsys=capsys
+    )
+
+    assert tuple((code, path) for code, path, _, _ in findings) == test_case.expected_findings
+    assert len(hosts.launches()) == test_case.expected_launches
 
 
 @pytest.mark.parametrize(

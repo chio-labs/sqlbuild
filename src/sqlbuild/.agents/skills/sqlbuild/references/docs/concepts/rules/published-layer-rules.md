@@ -6,6 +6,13 @@
 
 Online: https://sqlbuild.com/docs/concepts/rules/published-layer-rules/
 
+## Contents
+
+- SQBRGRAPH103: no published reads within a domain
+- SQBRPROJECT107: one name shape per domain
+- Published layers
+- Deviating
+
 A domain's published layer is its interface to the rest of the project. Under pressure to make
 something work, it is tempting to add a consumer-specific variant next to an existing published
 model:
@@ -75,8 +82,9 @@ allowed_qualifiers = [
 ```
 
 An entry with `paths` instead leaves out the published models whose file path, relative to the
-project, matches any of its globs. A family published once per qualifier usually lives in one
-folder:
+project and written with `/` separators, matches any of its globs. As in selectors and janitor
+`exclude_patterns`, `*` also matches `/`, so `models/sales/mart/*` covers nested folders too. A
+family published once per qualifier usually lives in one folder:
 
 ```toml
 [rules.rule_options.SQBRPROJECT107]

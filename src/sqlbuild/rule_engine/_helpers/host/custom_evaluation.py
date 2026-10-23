@@ -197,7 +197,7 @@ class _ReadTracker:
         return None if observed is None else frozenset(observed)
 
     def finish_subject(self) -> None:
-        """Mark codes whose module state changed since the previous subject finished."""
+        """Mark codes whose module state changed since the last check; project rules check each."""
 
         if self._state is None:
             return
@@ -278,7 +278,6 @@ def _evaluate_pass(
                 reads=tracker.finish(code=rule.code),
             )
         )
-    if any(item.subject is None for item in evaluations):
         tracker.finish_subject()
     for model in models:
         subject: Model = public_model(model)

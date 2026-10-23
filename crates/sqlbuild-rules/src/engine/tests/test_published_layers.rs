@@ -191,6 +191,19 @@ fn given_published_models_when_evaluating_layer_rules_then_reads_and_shapes_matc
             ],
         },
         PublishedLayerTestCase {
+            description: "a paths star matches across folder separators",
+            code: "SQBRPROJECT107",
+            models: &[
+                ("sales__mart__orders", &[]),
+                ("sales__mart__orders__fra", &[]),
+                ("sales__mart__orders__deu", &[]),
+            ],
+            options: json!({"allowed_qualifiers": [
+                {"paths": ["models/sales/*"], "reason": "Published once per country."}
+            ]}),
+            expected_faults: &[],
+        },
+        PublishedLayerTestCase {
             description: "a paths entry leaves out the published models in its folder",
             code: "SQBRPROJECT107",
             models: &[
