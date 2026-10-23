@@ -1,9 +1,13 @@
 //! MODEL header column types: rendering, matching and the authored span of a declared type.
 
+use sqlbuild_sqltext::header_strings::constants::TRIPLE_QUOTE_LENGTH;
+use sqlbuild_sqltext::header_strings::main::header_quoted_end::header_quoted_end;
+use sqlbuild_sqltext::header_strings::main::opens_triple_quote::opens_triple_quote;
+
 use crate::refactoring::_helpers::scanning::chars::slice;
 use crate::refactoring::constants::{
-    CONTRACT_CLOSERS, CONTRACT_HEADER_WORD_EXTRA, CONTRACT_MODEL_HEADER_ESCAPE, CONTRACT_OPENERS,
-    CONTRACT_QUOTES, CONTRACT_TYPE_KEY,
+    CONTRACT_CLOSERS, CONTRACT_HEADER_WORD_EXTRA, CONTRACT_OPENERS, CONTRACT_QUOTES,
+    CONTRACT_TYPE_KEY,
 };
 
 fn is_type_name_start(character: char) -> bool {
@@ -103,20 +107,9 @@ fn is_header_word_character(character: char) -> bool {
     char::is_alphanumeric(character) || CONTRACT_HEADER_WORD_EXTRA.contains(&character)
 }
 
+/// The end of the header string at `start`, by the shared header string rules, or `end`.
 fn quoted_value_end(text: &[char], start: usize, end: usize) -> usize {
-    let quote = text[start];
-    let mut index = start + 1;
-    while index < end {
-        if text[index] == CONTRACT_MODEL_HEADER_ESCAPE {
-            index += 2;
-            continue;
-        }
-        if text[index] == quote {
-            return index + 1;
-        }
-        index += 1;
-    }
-    end
+    header_quoted_end(&text[..end], start).map_or(end, |value_end| value_end.min(end))
 }
 
 fn unquoted_type_value_end(text: &[char], start: usize, end: usize) -> usize {
@@ -196,6 +189,15 @@ pub(crate) fn declared_type_span(
             value_start += 1;
         }
         let (value_end, authored) = match text.get(value_start) {
+            Some(_) if opens_triple_quote(text, value_start) => {
+                let value_end = quoted_value_end(text, value_start, metadata_end);
+                let inner = slice(
+                    text,
+                    value_start + TRIPLE_QUOTE_LENGTH,
+                    value_end.saturating_sub(TRIPLE_QUOTE_LENGTH),
+                );
+                (value_end, inner)
+            }
             Some(quote) if CONTRACT_QUOTES.contains(quote) => {
                 let value_end = quoted_value_end(text, value_start, metadata_end);
                 let inner = slice(text, value_start + 1, value_end.saturating_sub(1));

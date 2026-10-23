@@ -121,6 +121,18 @@ _CUSTOMERS_MODEL: str = (
             expected_message=_QUOTE_MESSAGE,
         ),
         HeaderQuoteErrorTestCase(
+            description="audit_header_scanned_past_a_triple_quoted_string",
+            path="audits/singular/orders_have_customers.sql",
+            contents=(
+                'AUDIT (name "orders_have_customers", '
+                'description """Rerun "sqb audit --all" after loads""");\n\n'
+                'SELECT 1 FROM __seed("raw_customers") WHERE FALSE\n'
+            ),
+            expected_code="D004",
+            expected_location="audits/singular/orders_have_customers.sql:1",
+            expected_message="has unsupported keys: description",
+        ),
+        HeaderQuoteErrorTestCase(
             description="unclosed_triple_quote",
             path="models/customers.sql",
             contents=(

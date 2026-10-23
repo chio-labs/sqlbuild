@@ -23,6 +23,18 @@ fn given_nested_type_key_when_locating_declared_type_then_returns_top_level_valu
             expected_span: Some((40, 43)),
         },
         DeclaredTypeSpanTestCase {
+            description: "a triple-quoted description with quotes and a type word is skipped",
+            contents: "amount (description \"\"\"x \"type INT\" y\"\"\", type INT)",
+            declared_type: "INT",
+            expected_span: Some((47, 50)),
+        },
+        DeclaredTypeSpanTestCase {
+            description: "a description ending in a backslash is skipped",
+            contents: "amount (description \"under C:\\\", type INT)",
+            declared_type: "INT",
+            expected_span: Some((38, 41)),
+        },
+        DeclaredTypeSpanTestCase {
             description: "a quoted type matches after unescaping",
             contents: "amount (type 'a\\'b')",
             declared_type: "a'b",
