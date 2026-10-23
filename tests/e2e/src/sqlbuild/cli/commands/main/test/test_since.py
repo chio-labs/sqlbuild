@@ -26,7 +26,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
 _FILES: dict[str, str] = build_since_project_files()
 _STAGING: str = "models/stg_orders.sql"
-_MACRO: str = "models/_macros/money.py"
+_MACRO: str = "models/_macros/python/money.py"
 _EDITED_STAGING: str = _FILES[_STAGING].replace(
     "SELECT order_id, status", "SELECT order_id, LOWER(status) AS status"
 )
@@ -415,7 +415,7 @@ def test_given_changes_since_ref_when_testing_then_runs_only_affected_tests(
         ),
         SinceSelectionE2ETestCase(
             description="a macro another project-wide macro imports changes both",
-            edits={"macros/taxes.py": _INDIRECT["macros/taxes.py"].replace("+ 0", "+ 1 - 1")},
+            edits={"macros/python/taxes.py": _INDIRECT["macros/python/taxes.py"].replace("+ 0", "+ 1 - 1")},
             command=_EXPLAINED_TESTS,
             expected_exit_code=0,
             expected_fragments=(
@@ -429,7 +429,7 @@ def test_given_changes_since_ref_when_testing_then_runs_only_affected_tests(
         SinceSelectionE2ETestCase(
             description="a scoped macro another scoped macro imports changes both",
             edits={
-                "models/_macros/currency.py": _INDIRECT["models/_macros/currency.py"].replace(
+                "models/_macros/python/currency.py": _INDIRECT["models/_macros/python/currency.py"].replace(
                     "* 1)", "* 1.0)"
                 )
             },
@@ -445,7 +445,7 @@ def test_given_changes_since_ref_when_testing_then_runs_only_affected_tests(
         SinceSelectionE2ETestCase(
             description="a macro a parameterized test's own fixture calls selects every case",
             edits={
-                "macros/fixture_values.py": _INDIRECT["macros/fixture_values.py"].replace(
+                "macros/python/fixture_values.py": _INDIRECT["macros/python/fixture_values.py"].replace(
                     "\"''\"", "\"'x'\""
                 )
             },
