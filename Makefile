@@ -191,7 +191,8 @@ E2E_DUCKDB_INSPECTION_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/clone \
 	tests/e2e/src/sqlbuild/cli/commands/main/diff \
 	tests/e2e/src/sqlbuild/cli/commands/main/janitor \
-	tests/e2e/src/sqlbuild/cli/commands/main/plan
+	tests/e2e/src/sqlbuild/cli/commands/main/plan \
+	tests/e2e/src/sqlbuild/cli/commands/main/review
 
 E2E_DUCKDB_INTEGRATIONS_PATHS := tests/e2e/src/sqlbuild/integrations
 

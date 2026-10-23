@@ -2,7 +2,8 @@
 
 use std::path::PathBuf;
 
-use crate::argv::models::{Namespace, Value};
+use crate::argv::constants::{JSON_OPTION, REVIEW_PROG};
+use crate::argv::models::{ArgvOutcome, Namespace, Value};
 use crate::dispatch::main::invocation_policy::invocation_policy;
 use crate::dispatch::models::{CommandFacts, InvocationPolicy};
 use crate::native_commands::constants::{
@@ -13,6 +14,15 @@ use crate::native_commands::errors::PythonNeeded;
 use crate::native_commands::models::{
     NativeCommand, NativeInvocation, RulesAction, RulesOptions, SkillsOptions,
 };
+
+/// Whether `sqb review --json` failed to parse, which Python reports as a JSON document.
+pub(crate) fn review_json_failure(arguments: &[String], outcome: &ArgvOutcome) -> bool {
+    arguments.iter().any(|argument| argument == JSON_OPTION)
+        && outcome
+            .usage_failure
+            .as_ref()
+            .is_some_and(|failure| failure.prog == REVIEW_PROG)
+}
 
 fn text(namespace: &Namespace, name: &str) -> Option<String> {
     match namespace.get(name) {

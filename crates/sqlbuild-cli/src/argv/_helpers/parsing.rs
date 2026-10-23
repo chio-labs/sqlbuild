@@ -9,11 +9,11 @@ use crate::argv::_helpers::patterns::match_groups;
 use crate::argv::_helpers::values::{action_name, argument_error};
 use crate::argv::constants::{
     ERROR_PREFIX, ERROR_STRONG_STYLE, HELP_EXIT, OPTIONS_TERMINATOR, PARSER_ERROR_EXIT,
-    PREFIX_CHARS, STYLE_RESET,
+    PREFIX_CHARS, STYLE_RESET, USAGE_ERROR_EXITS,
 };
 use crate::argv::models::{
     ActionKind, ActionSpec, ArgvSettings, Default, HelpText, Namespace, Nargs, ParserSpec, Stream,
-    Value,
+    UsageFailure, Value,
 };
 use crate::argv::types::ArgvHost;
 
@@ -22,6 +22,9 @@ pub(crate) struct Run<'a> {
     pub(crate) settings: &'a ArgvSettings,
     pub(crate) host: &'a mut dyn ArgvHost,
     pub(crate) writes: Vec<(Stream, String)>,
+    /// The `prog` of the deepest sub-command parser entered so far.
+    pub(crate) command_prog: Option<String>,
+    pub(crate) usage_failure: Option<UsageFailure>,
 }
 
 /// `SystemExit` with this status.
@@ -60,7 +63,7 @@ impl Run<'_> {
         }
     }
 
-    /// `SqlbuildArgumentParser.error`: usage, then the coded message, to stderr; exit 2.
+    /// `SqlbuildArgumentParser.error`: usage, then the coded message, to stderr; the usage exit.
     pub(crate) fn error(&mut self, parser: &ParserSpec, message: &str) -> Exit {
         let usage: String = format_usage(self.settings, parser);
         self.write(Stream::Stderr, usage);
@@ -73,7 +76,19 @@ impl Run<'_> {
             Stream::Stderr,
             format!("{}: {prefix} {message}\n\n", parser.prog),
         );
-        Exit(PARSER_ERROR_EXIT)
+        let command: String = self
+            .command_prog
+            .clone()
+            .unwrap_or_else(|| parser.prog.clone());
+        let status: i64 = USAGE_ERROR_EXITS
+            .iter()
+            .find(|(prog, _)| *prog == command)
+            .map_or(PARSER_ERROR_EXIT, |(_, status)| *status);
+        self.usage_failure = Some(UsageFailure {
+            prog: command,
+            message: message.to_owned(),
+        });
+        Exit(status)
     }
 
     /// `parse_known_args(args, namespace)`: the namespace and unrecognised strings, or the exit.
@@ -429,6 +444,7 @@ impl<'p, 'r, 'h> Level<'p, 'r, 'h> {
         let Some((_, subparser)) = action.parsers.iter().find(|(choice, _)| choice == name) else {
             return Ok(());
         };
+        self.run.command_prog = Some(subparser.prog.clone());
         let (subnamespace, leftover) =
             self.run
                 .parse_known_args(subparser, rest.to_vec(), Namespace::default())?;

@@ -489,6 +489,15 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         del database
         return (f"CREATE SCHEMA IF NOT EXISTS {schema}",)
 
+    def render_drop_schema(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> tuple[str, ...]:
+        del database
+        return (f"DROP SCHEMA IF EXISTS {schema} CASCADE",)
+
     def ensure_schema(
         self,
         *,

@@ -52,7 +52,7 @@ pub const LOCAL_AUDIT_ROLE_DIRECTORY: &str = "_audits";
 /// The singular audit directory below an audit role.
 pub const SINGULAR_AUDIT_DIRECTORY: &str = "singular";
 /// Header keys a `MODEL` statement accepts, sorted by code point.
-pub const SQL_MODEL_HEADER_KEYS: [&str; 73] = [
+pub const SQL_MODEL_HEADER_KEYS: [&str; 74] = [
     "alias",
     "append_cursor_inclusive",
     "audit_factories",
@@ -64,6 +64,7 @@ pub const SQL_MODEL_HEADER_KEYS: [&str; 73] = [
     "config",
     "constants",
     "contract",
+    "critical",
     "cursor",
     "cursor_end",
     "cursor_future_action",

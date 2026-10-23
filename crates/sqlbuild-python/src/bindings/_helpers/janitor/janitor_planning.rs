@@ -9,9 +9,10 @@ use sqlbuild_analysis::janitor_planning::constants::OLD_NAME_VIEW_REASON;
 use sqlbuild_analysis::janitor_planning::main::build_archive_name::build_archive_name;
 use sqlbuild_analysis::janitor_planning::main::query_diff_artifact_name::query_diff_artifact_name;
 use sqlbuild_analysis::janitor_planning::main::query_diff_artifact_parts::query_diff_artifact_parts;
+use sqlbuild_analysis::review_command::constants::LEFTOVER_REVIEW_SCHEMA_AGE_DAYS;
 use sqlbuild_host::entries::models::ExecutorHost;
 
-use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, within};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, within};
 use crate::bindings::_helpers::janitor::janitor_classification::{
     Candidate, Policy, Protection, SchemaClassification, classify_target_schemas, plan_archives,
 };
@@ -20,7 +21,7 @@ use crate::bindings::_helpers::janitor::janitor_facts::{
     gather_warehouse_facts, query_diff_artifact_candidates,
 };
 use crate::bindings::_helpers::janitor::janitor_keys::{
-    Folded, Key, SchemaKey, archive_timestamp, dedupe_schema_keys, integer, now_utc, record,
+    Folded, Key, SchemaKey, archive_timestamp, days, dedupe_schema_keys, integer, now_utc, record,
     sorted_schemas, timestamp_fields, tuple, union_exact,
 };
 use crate::bindings::_helpers::janitor::janitor_old_names::{
@@ -120,12 +121,41 @@ fn candidate_records<'py>(candidates: &[Candidate<'py>]) -> PyResult<Vec<Bound<'
     candidates.iter().map(Candidate::to_python).collect()
 }
 
+/// Review schemas whose markers the active target schema holds and that outlived any review run.
+fn review_schema_candidates<'py>(
+    project: &Bound<'py, PyAny>,
+    warehouse: &Warehouse<'py>,
+    now: &Bound<'py, PyAny>,
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    let py: Python<'py> = warehouse.py();
+    let schema: Bound<'py, PyAny> = native_field(project, "effective_target_schema")?;
+    if schema.is_none() {
+        return Ok(Vec::new());
+    }
+    let max_age: Bound<'py, PyAny> = days(py, LEFTOVER_REVIEW_SCHEMA_AGE_DAYS)?;
+    let leftovers: Bound<'py, PyAny> = call_with(
+        &host::entry(py, ExecutorHost::LeftoverReviewSchemas)?,
+        &[
+            ("adapter", warehouse.adapter.clone()),
+            ("connection", warehouse.connection.clone()),
+            (
+                "database",
+                native_field(project, "effective_target_database")?,
+            ),
+            ("schema", schema),
+            ("now", now.clone()),
+            ("max_age", max_age),
+        ],
+    )?;
+    leftovers.try_iter()?.collect()
+}
+
 /// The plan for a project whose target schemas list nothing beyond query-diff artifacts.
 fn artifact_only_plan<'py>(
     (project, warehouse): (&Bound<'py, PyAny>, &Warehouse<'py>),
     settings: &JanitorSettings,
     (artifacts, artifact_skips, scanned): (Vec<Bound<'py, PyAny>>, Vec<Bound<'py, PyAny>>, usize),
-    now: &Bound<'py, PyAny>,
+    (review_schemas, now): (Vec<Bound<'py, PyAny>>, &Bound<'py, PyAny>),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = warehouse.py();
     record(
@@ -144,6 +174,7 @@ fn artifact_only_plan<'py>(
             ),
             ("query_diff_artifact_candidates", tuple(py, artifacts)?),
             ("direct_state_prune_candidates", tuple(py, [])?),
+            ("review_schema_candidates", tuple(py, review_schemas)?),
             ("skipped_relations", tuple(py, artifact_skips)?),
             ("scanned_schema_count", int_field(py, scanned)?),
             (
@@ -186,13 +217,15 @@ pub(crate) fn build_plan<'py>(
     let now: Bound<'py, PyAny> = now_utc(py)?;
     let (artifacts, artifact_skips) =
         query_diff_artifact_candidates(warehouse, &artifact_schemas, &now)?;
+    let review_schemas: Vec<Bound<'py, PyAny>> =
+        review_schema_candidates(project, warehouse, &now)?;
     if target_schemas.is_empty() {
         let scanned: usize = artifact_schemas.len();
         return artifact_only_plan(
             (project, warehouse),
             settings,
             (artifacts, artifact_skips, scanned),
-            &now,
+            (review_schemas, &now),
         );
     }
     let lifecycle: Bound<'py, PyAny> = host::entry(py, LIFECYCLE)?;
@@ -296,6 +329,7 @@ pub(crate) fn build_plan<'py>(
             ("retained_archives", tuple(py, archives.retained)?),
             ("query_diff_artifact_candidates", tuple(py, artifacts)?),
             ("direct_state_prune_candidates", tuple(py, state_prunes)?),
+            ("review_schema_candidates", tuple(py, review_schemas)?),
             ("skipped_relations", tuple(py, skipped)?),
             ("skipped_schemas", tuple(py, schemas.skipped_schemas)?),
             ("blocked_schemas", tuple(py, archives.blocked_schemas)?),

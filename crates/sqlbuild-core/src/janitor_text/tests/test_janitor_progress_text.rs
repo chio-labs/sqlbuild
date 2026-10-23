@@ -233,6 +233,7 @@ fn given_finished_actions_when_counting_then_only_successes_count_by_kind() {
             deleted_query_artifacts: 1,
             dropped_old_name_views: 1,
             pruned_direct_state: 1,
+            dropped_review_schemas: 0,
         },
         expected_archive_flow_width: 72,
     }];

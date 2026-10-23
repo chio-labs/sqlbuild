@@ -194,6 +194,9 @@ pub(crate) const TARGET_KEYS: [&str; 20] = [
     "recall",
     "concurrency",
 ];
+pub(crate) const REVIEW_KEYS: [&str; 4] =
+    ["against", "critical_tags", "downstream", "schema_prefix"];
+pub(crate) const REVIEW_DOWNSTREAM_POLICIES: [&str; 3] = ["critical", "all", "none"];
 pub(crate) const CLONE_KEYS: [&str; 2] = ["allow_as_clone_origin", "allow_as_clone_destination"];
 pub(crate) const EXECUTION_LIMIT_KEYS: [&str; 5] = [
     "max_models",

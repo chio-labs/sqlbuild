@@ -55,3 +55,12 @@ pub struct SettingSite<'a> {
     pub section: &'a str,
     pub key: &'a str,
 }
+
+/// `[review]` of `sqlbuild_project.toml`: the defaults `sqb review` uses when flags are omitted.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ReviewConfig {
+    pub against: Option<String>,
+    pub downstream: Option<String>,
+    pub schema_prefix: Option<String>,
+    pub critical_tags: Option<Vec<String>>,
+}

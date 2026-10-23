@@ -57,6 +57,7 @@ audit results and everything it printed. Agents and people query that history wi
 | Plan | [`sqb plan`](cli/plan.md) | Shows what will run, why, and how much it will rebuild |
 | Build | [`sqb build`](cli/build.md) | Runs tests, builds models in dependency order, and blocks bad data with audits |
 | Compare | [`sqb diff`](cli/diff.md) | Compares schemas and rows between two targets |
+| Review | [`sqb review`](cli/review.md) | Builds a branch's changes in a temporary schema, tests them and compares them with a target |
 | Investigate | [`sqb recall`](cli/recall.md) | Queries the history of past runs, then live warehouse state |
 
 SQLBuild works with DuckDB, MotherDuck, Snowflake, BigQuery, Databricks, PostgreSQL, SQL Server,

@@ -26,6 +26,7 @@ def janitor_worker_count(*, plan: JanitorPlan, adapter: BaseAdapter, concurrency
         len(plan.old_name_views.drops) + len(plan.old_name_views.missing),
         len(plan.query_diff_artifact_candidates),
         len(plan.direct_state_prune_candidates),
+        len(plan.review_schema_candidates),
     )
     return max(1, min(concurrency, int(adapter.concurrent_ddl_limit), largest_phase))
 

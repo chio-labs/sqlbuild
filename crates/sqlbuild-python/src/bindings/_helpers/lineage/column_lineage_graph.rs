@@ -245,7 +245,7 @@ impl ProjectColumnLineage {
 
     /// Return direct downstream consumers of `resource_name.column_name`.
     #[pyo3(signature = (*, resource_name, column_name))]
-    fn column_consumers<'py>(
+    pub(crate) fn column_consumers<'py>(
         slf: &Bound<'py, Self>,
         resource_name: &str,
         column_name: &Bound<'py, PyAny>,

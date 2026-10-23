@@ -15,6 +15,7 @@ class JanitorPhase(StrEnum):
     DELETE_ARCHIVES = "delete_archives"
     DROP_OLD_NAME_VIEWS = "drop_old_name_views"
     DROP_QUERY_ARTIFACTS = "drop_query_artifacts"
+    DROP_REVIEW_SCHEMAS = "drop_review_schemas"
     PRUNE_DIRECT_STATE = "prune_direct_state"
 
 

@@ -142,4 +142,5 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 
 ## Other pages
 
+- [sqb review](cli/review.md) (`cli/review`) - Build what a branch changed in a temporary schema, test it, compare it with a target and report.
 - [Enums and Constants Have Moved](concepts/enums-and-constants.md) (`concepts/enums-and-constants`) - Find the new focused guides for enums, constants, collections, contracts, and private values.

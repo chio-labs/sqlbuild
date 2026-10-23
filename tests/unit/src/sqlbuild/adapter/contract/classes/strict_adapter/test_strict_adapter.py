@@ -90,6 +90,7 @@ def test_given_first_class_adapters_when_checking_contract_then_no_method_comes_
                     "create_sql_test_output",
                     "drop_sql_test_output",
                     "render_create_temporary_function",
+                    "render_drop_schema",
                 }
             ),
             expected_output_relation=None,
@@ -115,10 +116,14 @@ def test_given_strict_adapter_when_reading_optional_methods_then_defaults_keep_i
         ),
     )
 
+    with pytest.raises(AdapterUserError) as drop_error:
+        _ = adapter.render_drop_schema(database=None, schema="review_orders")
+
     assert test_case.expected_optional_methods.isdisjoint(abstract_methods)
     assert test_case.expected_optional_methods <= frozenset(StrictAdapter.__dict__)
     assert relation is test_case.expected_output_relation
     assert temporary is test_case.expected_temporary_function
+    assert drop_error.value.code == "A714"
 
 
 @pytest.mark.parametrize(

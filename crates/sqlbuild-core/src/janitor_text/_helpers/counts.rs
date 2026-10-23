@@ -15,7 +15,7 @@ pub(crate) fn physical_deletion_count(plan: &JanitorPlanText) -> usize {
     } else {
         plan.candidates.len()
     };
-    relations + plan.query_artifacts.len() + plan.old_name_drops.len()
+    relations + plan.query_artifacts.len() + plan.review_schemas.len() + plan.old_name_drops.len()
 }
 
 /// `archive N and ` when the plan archives relations.

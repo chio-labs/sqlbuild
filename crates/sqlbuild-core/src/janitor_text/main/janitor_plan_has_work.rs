@@ -9,6 +9,7 @@ pub fn janitor_plan_has_work(plan: &JanitorPlanText) -> bool {
         || !plan.archive_candidates.is_empty()
         || !plan.archive_deletions.is_empty()
         || !plan.query_artifacts.is_empty()
+        || !plan.review_schemas.is_empty()
         || !plan.state_prunes.is_empty()
         || !plan.old_name_drops.is_empty()
         || !plan.old_name_missing.is_empty()

@@ -39,6 +39,8 @@ from sqlbuild.executor.old_name_views.main._drop_old_name_views import drop_old_
 from sqlbuild.executor.pipeline.main._close_worker_connection_pool import (
     close_worker_connection_pool,
 )
+from sqlbuild.executor.review.classes.review_schema_lifecycle import ReviewSchemaLifecycle
+from sqlbuild.executor.review.models import LeftoverReviewSchema
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 
@@ -157,6 +159,23 @@ def _execute_janitor_plan(
         apply=drop_query_artifact,
         workers=workers,
     )
+
+    def drop_review_schema(*, item: LeftoverReviewSchema, connection: Any) -> None:
+        with OperationLifecycle(operation_kind="janitor", operation_name="janitor_cleanup_action"):
+            ReviewSchemaLifecycle.drop(
+                adapter=adapter, connection=connection, database=item.database, schema=item.schema
+            )
+
+    _ = run_janitor_phase(
+        progress=progress,
+        phase=JanitorPhase.DROP_REVIEW_SCHEMAS,
+        items=plan.review_schema_candidates,
+        describe=lambda candidate: JanitorProgressItem(
+            action=JanitorAction.DROPPED, name=candidate.display_name()
+        ),
+        apply=drop_review_schema,
+        workers=workers,
+    )
     pruned_direct_state: tuple[JanitorDirectStatePruneCandidate, ...] = apply_janitor_deletions(
         candidates=plan.direct_state_prune_candidates,
         delete=lambda *, candidate, connection: adapter.execute(
@@ -172,12 +191,13 @@ def _execute_janitor_plan(
         deleted_query_diff_artifacts=plan.query_diff_artifact_candidates,
         pruned_direct_state=pruned_direct_state,
         dropped_old_name_views=dropped_old_name_views,
+        dropped_review_schemas=plan.review_schema_candidates,
     )
 
 
 def _janitor_action_count(plan: JanitorPlan) -> int:
     relation_count: int = 0 if plan.direct_mode else len(plan.candidates)
-    relation_count += len(plan.query_diff_artifact_candidates)
+    relation_count += len(plan.query_diff_artifact_candidates) + len(plan.review_schema_candidates)
     if plan.direct_mode:
         relation_count += len(plan.archive_candidates) + len(plan.archive_deletion_candidates)
     return (

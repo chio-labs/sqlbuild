@@ -17,6 +17,8 @@ pub fn parse_cli_arguments(
         settings: &settings,
         host,
         writes: Vec::new(),
+        command_prog: None,
+        usage_failure: None,
     };
     let namespace: Namespace = Namespace {
         entries: defaults,
@@ -29,5 +31,6 @@ pub fn parse_cli_arguments(
     ArgvOutcome {
         writes: run.writes,
         parsed,
+        usage_failure: run.usage_failure,
     }
 }

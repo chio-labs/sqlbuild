@@ -12,6 +12,7 @@ pub(crate) fn phase_words(phase: JanitorPhase) -> (&'static str, &'static str, &
         JanitorPhase::DeleteArchives => ("Deleting", "Deleted", "expired archive"),
         JanitorPhase::DropOldNameViews => ("Dropping", "Dropped", "old-name view"),
         JanitorPhase::DropQueryArtifacts => ("Dropping", "Dropped", "query artifact"),
+        JanitorPhase::DropReviewSchemas => ("Dropping", "Dropped", "review schema"),
         JanitorPhase::PruneDirectState => ("Pruning", "Pruned", "direct state table"),
     }
 }

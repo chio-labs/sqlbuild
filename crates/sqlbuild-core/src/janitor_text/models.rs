@@ -95,6 +95,8 @@ pub struct JanitorPlanText {
     pub old_name_live: Vec<OldNameViewText>,
     pub old_name_missing: Vec<OldNameViewText>,
     pub query_artifacts: Vec<String>,
+    /// Leftover review schemas to drop.
+    pub review_schemas: Vec<String>,
     /// Direct state tables to prune and the versions each keeps.
     pub state_prunes: Vec<(String, i64)>,
     /// Skipped relations and why.
@@ -114,6 +116,7 @@ pub struct JanitorResultCounts {
     pub deleted: usize,
     pub deleted_archives: usize,
     pub deleted_query_artifacts: usize,
+    pub dropped_review_schemas: usize,
     pub dropped_old_name_views: usize,
     pub pruned_direct_state: usize,
 }
@@ -126,6 +129,7 @@ pub enum JanitorPhase {
     DeleteArchives,
     DropOldNameViews,
     DropQueryArtifacts,
+    DropReviewSchemas,
     PruneDirectState,
 }
 
@@ -139,6 +143,7 @@ impl JanitorPhase {
             "delete_archives" => Some(Self::DeleteArchives),
             "drop_old_name_views" => Some(Self::DropOldNameViews),
             "drop_query_artifacts" => Some(Self::DropQueryArtifacts),
+            "drop_review_schemas" => Some(Self::DropReviewSchemas),
             "prune_direct_state" => Some(Self::PruneDirectState),
             _ => None,
         }
@@ -153,6 +158,7 @@ impl JanitorPhase {
             Self::DeleteArchives => "delete_archives",
             Self::DropOldNameViews => "drop_old_name_views",
             Self::DropQueryArtifacts => "drop_query_artifacts",
+            Self::DropReviewSchemas => "drop_review_schemas",
             Self::PruneDirectState => "prune_direct_state",
         }
     }

@@ -156,11 +156,20 @@ pub enum TypeFailure {
     Invalid,
 }
 
+/// The `prog` of the parser that rejected the arguments, and its message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UsageFailure {
+    pub prog: String,
+    pub message: String,
+}
+
 /// The writes of the parse, then either the namespace or the exit status.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArgvOutcome {
     pub writes: Vec<(Stream, String)>,
     pub parsed: Result<Namespace, i64>,
+    /// The usage failure that ended the parse, if one did.
+    pub usage_failure: Option<UsageFailure>,
 }
 
 /// Why a `sqb dbt` execution parse stopped before producing flags.

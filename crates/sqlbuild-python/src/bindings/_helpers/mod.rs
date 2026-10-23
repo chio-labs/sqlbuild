@@ -93,6 +93,7 @@ pub(crate) mod references;
 pub(crate) mod relation_naming;
 pub(crate) mod render;
 pub(crate) mod result_output;
+pub(crate) mod review_command;
 pub(crate) mod rule_records;
 pub(crate) mod rules;
 pub(crate) mod scenario_command;

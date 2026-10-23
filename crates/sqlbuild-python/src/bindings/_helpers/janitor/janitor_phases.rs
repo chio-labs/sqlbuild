@@ -33,11 +33,12 @@ use crate::bindings::_helpers::records::ids::ErrorId;
 const UNKNOWN_VIEW_CODE: &str = "C503";
 const UNKNOWN_VIEW_HELP: &str =
     "Run sqb janitor without --drop-old-name-view to list compatibility views.";
-const CANDIDATE_FIELDS: [&str; 4] = [
+const CANDIDATE_FIELDS: [&str; 5] = [
     "candidates",
     "archive_deletion_candidates",
     "query_diff_artifact_candidates",
     "direct_state_prune_candidates",
+    "review_schema_candidates",
 ];
 
 /// The compiled project, its adapter and the active target connection settings.
