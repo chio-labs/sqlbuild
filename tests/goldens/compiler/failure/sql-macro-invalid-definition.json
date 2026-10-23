@@ -1,0 +1,19 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P015",
+     "message": "expression macro x() needs returns <type> in its MACRO header\n  --> models/staging/_sqlbuild/_macros/sql/x.sql:1:1",
+     "help": "declare the type the expression returns, such as returns DECIMAL(18, 2)"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

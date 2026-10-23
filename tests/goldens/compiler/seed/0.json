@@ -3450,8 +3450,8 @@
     "name": "adjust_0",
     "resource_type": "macro",
     "package_name": "generated_0",
-    "path": "macros/adjust_0.py",
-    "original_file_path": "macros/adjust_0.py",
+    "path": "macros/python/adjust_0.py",
+    "original_file_path": "macros/python/adjust_0.py",
     "unique_id": "macro.generated_0.adjust_0",
     "macro_sql": "def adjust_0_round(expression: str) -> str:\n    \"\"\"Round an amount to two places.\"\"\"\n    return f\"ROUND({expression}, 2)\"\n\n\ndef adjust_0(expression: str) -> str:\n    \"\"\"Double and round an amount.\"\"\"\n    return adjust_0_round(f\"({expression} * 2)\")\n",
     "depends_on": {
@@ -3476,8 +3476,8 @@
     "name": "adjust_0_round",
     "resource_type": "macro",
     "package_name": "generated_0",
-    "path": "macros/adjust_0.py",
-    "original_file_path": "macros/adjust_0.py",
+    "path": "macros/python/adjust_0.py",
+    "original_file_path": "macros/python/adjust_0.py",
     "unique_id": "macro.generated_0.adjust_0_round",
     "macro_sql": "def adjust_0_round(expression: str) -> str:\n    \"\"\"Round an amount to two places.\"\"\"\n    return f\"ROUND({expression}, 2)\"\n\n\ndef adjust_0(expression: str) -> str:\n    \"\"\"Double and round an amount.\"\"\"\n    return adjust_0_round(f\"({expression} * 2)\")\n",
     "depends_on": {
@@ -3500,8 +3500,8 @@
     "name": "adjust_2",
     "resource_type": "macro",
     "package_name": "generated_0",
-    "path": "macros/adjust_2.py",
-    "original_file_path": "macros/adjust_2.py",
+    "path": "macros/python/adjust_2.py",
+    "original_file_path": "macros/python/adjust_2.py",
     "unique_id": "macro.generated_0.adjust_2",
     "macro_sql": "def adjust_2(ctx, expression: str) -> str:\n    \"\"\"Scale an amount by the configured discount.\"\"\"\n    rate = ctx.vars[\"discount_rate\"]\n    return f\"({expression} * (1 - {rate}))\"\n",
     "depends_on": {
@@ -3524,8 +3524,8 @@
     "name": "tidy_label",
     "resource_type": "macro",
     "package_name": "generated_0",
-    "path": "macros/labels.py",
-    "original_file_path": "macros/labels.py",
+    "path": "macros/python/labels.py",
+    "original_file_path": "macros/python/labels.py",
     "unique_id": "macro.generated_0.tidy_label",
     "macro_sql": "def tidy_label(expression: str) -> str:\n    \"\"\"Trim and lower-case a label.\"\"\"\n    return f\"LOWER(TRIM({expression}))\"\n",
     "depends_on": {
@@ -3548,8 +3548,8 @@
     "name": "round_amount",
     "resource_type": "macro",
     "package_name": "generated_0",
-    "path": "macros/rounding.py",
-    "original_file_path": "macros/rounding.py",
+    "path": "macros/python/rounding.py",
+    "original_file_path": "macros/python/rounding.py",
     "unique_id": "macro.generated_0.round_amount",
     "macro_sql": "def round_amount(expression: str, places: int = 2) -> str:\n    \"\"\"Round an amount.\"\"\"\n    return f\"ROUND({expression}, {places})\"\n",
     "depends_on": {
@@ -3572,10 +3572,10 @@
     "name": "taxed",
     "resource_type": "macro",
     "package_name": "generated_0",
-    "path": "macros/tax.py",
-    "original_file_path": "macros/tax.py",
+    "path": "macros/python/tax.py",
+    "original_file_path": "macros/python/tax.py",
     "unique_id": "macro.generated_0.taxed",
-    "macro_sql": "from macros.rounding import round_amount\n\n\ndef taxed(expression: str) -> str:\n    \"\"\"Add tax to an amount, rounded.\"\"\"\n    return round_amount(f\"{expression} * 1.2\")\n",
+    "macro_sql": "from macros.python.rounding import round_amount\n\n\ndef taxed(expression: str) -> str:\n    \"\"\"Add tax to an amount, rounded.\"\"\"\n    return round_amount(f\"{expression} * 1.2\")\n",
     "depends_on": {
      "macros": [
       "macro.generated_0.round_amount"
@@ -3598,8 +3598,8 @@
     "name": "analysis_region",
     "resource_type": "macro",
     "package_name": "generated_0",
-    "path": "models/analysis/_sqlbuild/_macros/regions.py",
-    "original_file_path": "models/analysis/_sqlbuild/_macros/regions.py",
+    "path": "models/analysis/_sqlbuild/_macros/python/regions.py",
+    "original_file_path": "models/analysis/_sqlbuild/_macros/python/regions.py",
     "unique_id": "macro.generated_0.analysis_region",
     "macro_sql": "def analysis_region() -> str:\n    \"\"\"Return the region rows are assigned to.\"\"\"\n    return \"'east'\"\n",
     "depends_on": {
@@ -3622,8 +3622,8 @@
     "name": "adjust_1",
     "resource_type": "macro",
     "package_name": "generated_0",
-    "path": "models/fulfillment/staging/_sqlbuild/_macros/adjust_1.py",
-    "original_file_path": "models/fulfillment/staging/_sqlbuild/_macros/adjust_1.py",
+    "path": "models/fulfillment/staging/_sqlbuild/_macros/python/adjust_1.py",
+    "original_file_path": "models/fulfillment/staging/_sqlbuild/_macros/python/adjust_1.py",
     "unique_id": "macro.generated_0.adjust_1",
     "macro_sql": "import os\n\n\ndef adjust_1(expression: str) -> str:\n    \"\"\"Tag an amount with the deployment region.\"\"\"\n    region = os.environ.get(\"SQB_DIFFERENTIAL_REGION\", \"east\")\n    return f\"({expression} + LENGTH('{region}'))\"\n",
     "depends_on": {
@@ -3646,8 +3646,8 @@
     "name": "latest_rows",
     "resource_type": "macro",
     "package_name": "generated_0",
-    "path": "models/rendering/_sqlbuild/_macros/relations.py",
-    "original_file_path": "models/rendering/_sqlbuild/_macros/relations.py",
+    "path": "models/rendering/_sqlbuild/_macros/python/relations.py",
+    "original_file_path": "models/rendering/_sqlbuild/_macros/python/relations.py",
     "unique_id": "macro.generated_0.latest_rows",
     "macro_sql": "from sqlbuild.refs import SqlResourceRef\n\n\ndef union_ids(relations: list[SqlResourceRef]) -> str:\n    \"\"\"Union the ids of several relations.\"\"\"\n    selects = [f\"SELECT id FROM {relation}\" for relation in relations]\n    return \" UNION ALL \".join(selects)\n\n\ndef latest_rows(relation: SqlResourceRef, limit: int = 2) -> str:\n    \"\"\"Return the newest rows of one relation.\"\"\"\n    return f\"(SELECT id, amount FROM {relation} ORDER BY id DESC LIMIT {limit})\"\n",
     "depends_on": {
@@ -3670,8 +3670,8 @@
     "name": "union_ids",
     "resource_type": "macro",
     "package_name": "generated_0",
-    "path": "models/rendering/_sqlbuild/_macros/relations.py",
-    "original_file_path": "models/rendering/_sqlbuild/_macros/relations.py",
+    "path": "models/rendering/_sqlbuild/_macros/python/relations.py",
+    "original_file_path": "models/rendering/_sqlbuild/_macros/python/relations.py",
     "unique_id": "macro.generated_0.union_ids",
     "macro_sql": "from sqlbuild.refs import SqlResourceRef\n\n\ndef union_ids(relations: list[SqlResourceRef]) -> str:\n    \"\"\"Union the ids of several relations.\"\"\"\n    selects = [f\"SELECT id FROM {relation}\" for relation in relations]\n    return \" UNION ALL \".join(selects)\n\n\ndef latest_rows(relation: SqlResourceRef, limit: int = 2) -> str:\n    \"\"\"Return the newest rows of one relation.\"\"\"\n    return f\"(SELECT id, amount FROM {relation} ORDER BY id DESC LIMIT {limit})\"\n",
     "depends_on": {
@@ -3694,8 +3694,8 @@
     "name": "event_rows",
     "resource_type": "macro",
     "package_name": "generated_0",
-    "path": "tests/unit/rendering/_sqlbuild/_macros/fixtures.py",
-    "original_file_path": "tests/unit/rendering/_sqlbuild/_macros/fixtures.py",
+    "path": "tests/unit/rendering/_sqlbuild/_macros/python/fixtures.py",
+    "original_file_path": "tests/unit/rendering/_sqlbuild/_macros/python/fixtures.py",
     "unique_id": "macro.generated_0.event_rows",
     "macro_sql": "def event_rows(count: int = 2) -> str:\n    \"\"\"Return fixture event rows.\"\"\"\n    return \" UNION ALL \".join(\n        f\"SELECT {index} AS id, CAST({index} AS DOUBLE) AS amount, \"\n        f\"'placed' AS status, \"\n        f\"TIMESTAMP '2026-01-0{index} 00:00:00' AS created_at\"\n        for index in range(1, count + 1)\n    )\n",
     "depends_on": {

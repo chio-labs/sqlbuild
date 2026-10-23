@@ -1,0 +1,19 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P022",
+     "message": "@w in the body of macro x() names no parameter of the macro\n  --> models/staging/_sqlbuild/_macros/sql/x.sql:3:6",
+     "help": "its parameters are @v; declare it in arguments (...) or fix the name"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

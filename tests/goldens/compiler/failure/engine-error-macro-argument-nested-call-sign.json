@@ -8,14 +8,14 @@
      "phase": "compile",
      "severity": "error",
      "code": "P001",
-     "message": "Macro arguments of '@cents' in '<project>/models/marts/customer_totals.sql' apply unary - to the value of a nested macro call, which is a str and not a number at line 5, column 29",
+     "message": "Macro arguments of '@py.cents' in '<project>/models/marts/customer_totals.sql' apply unary - to the value of a nested macro call, which is a str and not a number at line 5, column 32",
      "path": "models/marts/customer_totals.sql",
      "line": 5,
-     "column": 29,
+     "column": 32,
      "location": {
       "path": "models/marts/customer_totals.sql",
       "line": 5,
-      "column": 29
+      "column": 32
      },
      "help": "Return a number from the nested macro, or apply the sign inside the macro"
     }

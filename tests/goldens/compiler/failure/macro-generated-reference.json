@@ -11,8 +11,8 @@
      "message": "model:customer_totals depends on model:stg_orders through macro staged_orders()",
      "resource_type": "model",
      "resource_name": "customer_totals",
-     "path": "models/marts/_sqlbuild/_macros/orders.py",
-     "help": "write the reference in the model, or pass it in: @staged_orders(__ref(\"stg_orders\"))\n  = help: the current value is [references] enforce_explicit = true (from sqlbuild_project.toml or its default); while migrating a project, to allow macro-generated references, set this in sqlbuild_project.toml:\n            [references]\n            enforce_explicit = false"
+     "path": "models/marts/_sqlbuild/_macros/python/orders.py",
+     "help": "write the reference in the model, or pass it in: @py.staged_orders(__ref(\"stg_orders\"))\n  = help: the current value is [references] enforce_explicit = true (from sqlbuild_project.toml or its default); while migrating a project, to allow macro-generated references, set this in sqlbuild_project.toml:\n            [references]\n            enforce_explicit = false"
     }
    ]
   }
@@ -246,8 +246,8 @@
     "name": "staged_orders",
     "resource_type": "macro",
     "package_name": "failure_corpus",
-    "path": "models/marts/_sqlbuild/_macros/orders.py",
-    "original_file_path": "models/marts/_sqlbuild/_macros/orders.py",
+    "path": "models/marts/_sqlbuild/_macros/python/orders.py",
+    "original_file_path": "models/marts/_sqlbuild/_macros/python/orders.py",
     "unique_id": "macro.failure_corpus.staged_orders",
     "macro_sql": "def staged_orders() -> str:\n    \"\"\"Return the staged orders relation.\"\"\"\n    return '__ref(\"stg_orders\")'\n",
     "depends_on": {

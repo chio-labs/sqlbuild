@@ -2976,8 +2976,8 @@
     "name": "adjust_0",
     "resource_type": "macro",
     "package_name": "generated_9",
-    "path": "macros/adjust_0.py",
-    "original_file_path": "macros/adjust_0.py",
+    "path": "macros/python/adjust_0.py",
+    "original_file_path": "macros/python/adjust_0.py",
     "unique_id": "macro.generated_9.adjust_0",
     "macro_sql": "def adjust_0(expression: str) -> str:\n    \"\"\"Offset an amount.\"\"\"\n    return f\"({expression} + 0 + 1)\"\n",
     "depends_on": {
@@ -3000,8 +3000,8 @@
     "name": "tidy_label",
     "resource_type": "macro",
     "package_name": "generated_9",
-    "path": "macros/labels.py",
-    "original_file_path": "macros/labels.py",
+    "path": "macros/python/labels.py",
+    "original_file_path": "macros/python/labels.py",
     "unique_id": "macro.generated_9.tidy_label",
     "macro_sql": "def tidy_label(expression: str) -> str:\n    \"\"\"Trim and lower-case a label.\"\"\"\n    return f\"LOWER(TRIM({expression}))\"\n",
     "depends_on": {
@@ -3024,8 +3024,8 @@
     "name": "legacy_events",
     "resource_type": "macro",
     "package_name": "generated_9",
-    "path": "models/rendering/_sqlbuild/_macros/legacy.py",
-    "original_file_path": "models/rendering/_sqlbuild/_macros/legacy.py",
+    "path": "models/rendering/_sqlbuild/_macros/python/legacy.py",
+    "original_file_path": "models/rendering/_sqlbuild/_macros/python/legacy.py",
     "unique_id": "macro.generated_9.legacy_events",
     "macro_sql": "def legacy_events() -> str:\n    \"\"\"Return a staged relation the way a migrated project wrote it.\"\"\"\n    return '__ref(\"stg_support_0\")'\n",
     "depends_on": {
@@ -3048,8 +3048,8 @@
     "name": "event_rows",
     "resource_type": "macro",
     "package_name": "generated_9",
-    "path": "tests/unit/rendering/_sqlbuild/_macros/fixtures.py",
-    "original_file_path": "tests/unit/rendering/_sqlbuild/_macros/fixtures.py",
+    "path": "tests/unit/rendering/_sqlbuild/_macros/python/fixtures.py",
+    "original_file_path": "tests/unit/rendering/_sqlbuild/_macros/python/fixtures.py",
     "unique_id": "macro.generated_9.event_rows",
     "macro_sql": "def event_rows(count: int = 2) -> str:\n    \"\"\"Return fixture event rows.\"\"\"\n    return \" UNION ALL \".join(\n        f\"SELECT {index} AS id, CAST({index} AS DOUBLE) AS amount, \"\n        f\"'placed' AS status, \"\n        f\"TIMESTAMP '2026-01-0{index} 00:00:00' AS created_at\"\n        for index in range(1, count + 1)\n    )\n",
     "depends_on": {

@@ -1,0 +1,19 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P020",
+     "message": "cents() is a SQL macro, called as a Python macro with @py.cents()",
+     "help": "call it as @sql.cents(...)"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}
