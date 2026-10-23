@@ -486,7 +486,7 @@ pub(crate) const DEBUG_ROUTE: Route = routed(
     },
 );
 
-const JANITOR_FIELDS: [Field; 10] = [
+const JANITOR_FIELDS: [Field; 11] = [
     PROJECT_DIR,
     NO_COLOR,
     same("auto_approve"),
@@ -496,6 +496,7 @@ const JANITOR_FIELDS: [Field; 10] = [
         "drop_old_name_views",
         Source::TupleOf("drop_old_name_views"),
     ),
+    same("keep_in_use"),
     SELECTED_TARGET,
     same("as_target"),
     same("verbose"),

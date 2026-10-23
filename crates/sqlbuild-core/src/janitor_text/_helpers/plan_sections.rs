@@ -1,11 +1,14 @@
 //! Sections of the janitor plan preview.
 
 use crate::cli_text::models::CliStyle;
+use crate::janitor_text::_helpers::usage::{
+    checked_usage, in_use_candidates, usage_detail, usage_notices,
+};
 use crate::janitor_text::constants::{
     DROP_EARLY, DROP_EXPIRED, DROP_MISSING, LABEL_WIDTH, TREE_BLANK, TREE_BRANCH_GLYPH,
     TREE_CONTINUATION, TREE_LAST_GLYPH, VERBOSE_FLAG,
 };
-use crate::janitor_text::models::{JanitorPlanText, OldNameViewText};
+use crate::janitor_text::models::{ArchiveCandidateText, JanitorPlanText, OldNameViewText};
 
 /// The first `limit` items, or all of them, and how many are hidden.
 fn visible<T>(items: &[T], limit: Option<usize>) -> (&[T], usize) {
@@ -91,6 +94,13 @@ pub(crate) fn summary(plan: &JanitorPlanText, style: CliStyle) -> String {
             "relations to archive",
             &plan.archive_candidates,
         ));
+        if let Some(check) = checked_usage(plan) {
+            if check.keep_in_use {
+                text.push_str(&count_row(style, "kept (in use)", &plan.kept_in_use));
+            } else {
+                text.push_str(&count_row(style, "in use", &in_use_candidates(plan)));
+            }
+        }
         text.push_str(&count_row(
             style,
             "archives to delete",
@@ -118,7 +128,36 @@ pub(crate) fn summary(plan: &JanitorPlanText, style: CliStyle) -> String {
         "objects skipped",
         &style.accent(&plan.skipped_relations.len().to_string()),
     ));
+    let notices: Vec<String> = usage_notices(plan);
+    if !notices.is_empty() {
+        text.push('\n');
+        for notice in notices {
+            text.push_str(&format!("  {}\n", style.warning(&notice)));
+        }
+    }
     text
+}
+
+/// In-use archive candidates with their readers, or the in-use relations kept instead.
+fn in_use(plan: &JanitorPlanText, limit: Option<usize>, style: CliStyle) -> String {
+    let Some(check) = checked_usage(plan) else {
+        return String::new();
+    };
+    let (title, candidates): (&str, Vec<&ArchiveCandidateText>) = if check.keep_in_use {
+        ("Kept (in use)", plan.kept_in_use.iter().collect())
+    } else {
+        ("In use", in_use_candidates(plan))
+    };
+    let lines: Vec<(String, Option<String>)> = candidates
+        .into_iter()
+        .map(|candidate| {
+            (
+                candidate.name.clone(),
+                usage_detail(candidate, &check.window),
+            )
+        })
+        .collect();
+    listing((style, limit), title, &lines)
 }
 
 /// Schemas whose active sources block every janitor action.
@@ -190,6 +229,7 @@ pub(crate) fn archives(plan: &JanitorPlanText, limit: Option<usize>, style: CliS
         }
         text.push_str(&overflow(style, hidden, "  "));
     }
+    text.push_str(&in_use(plan, limit, style));
     if !plan.archive_deletions.is_empty() {
         text.push_str(&format!("\n{}\n", style.success("Archives to delete")));
         let (deletions, hidden) = visible(&plan.archive_deletions, limit);

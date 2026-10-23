@@ -8,11 +8,13 @@ use sqlbuild_core::janitor_text::main::render_janitor_completion::render_janitor
 use sqlbuild_core::janitor_text::main::render_janitor_plan::render_janitor_plan;
 use sqlbuild_core::janitor_text::models::{
     ArchiveCandidateText, ArchivedRelationText, JanitorPlanText, JanitorResultCounts,
-    OldNameViewText, SourceSchemaText,
+    OldNameViewText, RelationUsageText, SourceSchemaText, UsageCheckText,
 };
 
 const TIMESTAMP_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 const DATE_FORMAT: &str = "%Y-%m-%d";
+/// Relation types containing this are views, whose reads stay live.
+const VIEW_TYPE_FRAGMENT: &str = "view";
 
 fn display_name(item: &Bound<'_, PyAny>) -> PyResult<String> {
     item.call_method0("display_name")?.extract()
@@ -121,21 +123,73 @@ fn source_schemas(schemas: &Bound<'_, PyAny>, blocked: bool) -> PyResult<Vec<Sou
     Ok(read)
 }
 
+fn optional_formatted(value: &Bound<'_, PyAny>, pattern: &str) -> PyResult<Option<String>> {
+    if value.is_none() {
+        return Ok(None);
+    }
+    Ok(Some(formatted(value, pattern)?))
+}
+
+fn relation_usage(usage: &Bound<'_, PyAny>) -> PyResult<Option<RelationUsageText>> {
+    if usage.is_none() {
+        return Ok(None);
+    }
+    Ok(Some(RelationUsageText {
+        last_read_at: formatted(&native_field(usage, "last_read_at")?, TIMESTAMP_FORMAT)?,
+        readers: native_field(usage, "readers")?.extract()?,
+        query_count: native_field(usage, "query_count")?.extract()?,
+    }))
+}
+
+fn archive_candidate(
+    candidate: &Bound<'_, PyAny>,
+    planned_at: &Bound<'_, PyAny>,
+) -> PyResult<ArchiveCandidateText> {
+    let expires_at: Bound<'_, PyAny> = native_field(candidate, "expires_at")?;
+    let age_timestamp: Bound<'_, PyAny> = native_field(candidate, "age_timestamp")?;
+    let relation_type: String =
+        native_field(&native_field(candidate, "relation")?, "relation_type")?
+            .str()?
+            .extract()?;
+    Ok(ArchiveCandidateText {
+        name: key_name(candidate)?,
+        archive_name: display_name(&native_field(candidate, "archive_key")?)?,
+        age_days: age_days(&age_timestamp, planned_at)?,
+        expires_now: expires_at.le(native_field(candidate, "archived_at")?)?,
+        expires_at: formatted(&expires_at, TIMESTAMP_FORMAT)?,
+        is_table: !relation_type.to_lowercase().contains(VIEW_TYPE_FRAGMENT),
+        changed_on: optional_formatted(&age_timestamp, DATE_FORMAT)?,
+        usage: relation_usage(&native_field(candidate, "usage")?)?,
+    })
+}
+
+fn candidate_texts(
+    items: &Bound<'_, PyAny>,
+    planned_at: &Bound<'_, PyAny>,
+) -> PyResult<Vec<ArchiveCandidateText>> {
+    items
+        .try_iter()?
+        .map(|item| archive_candidate(&item?, planned_at))
+        .collect()
+}
+
+fn usage_check(check: &Bound<'_, PyAny>) -> PyResult<Option<UsageCheckText>> {
+    if check.is_none() {
+        return Ok(None);
+    }
+    Ok(Some(UsageCheckText {
+        checked: native_field(check, "checked")?.is_truthy()?,
+        reason: native_field(check, "reason")?.extract()?,
+        window: native_field(check, "window")?.extract()?,
+        keep_in_use: native_field(check, "keep_in_use")?.is_truthy()?,
+    }))
+}
+
 /// The display facts of one executor `JanitorPlan`.
 pub(crate) fn janitor_plan_text(plan: &Bound<'_, PyAny>) -> PyResult<JanitorPlanText> {
     let planned_at: Bound<'_, PyAny> = native_field(plan, "planned_at")?;
-    let mut archive_candidates: Vec<ArchiveCandidateText> = Vec::new();
-    for candidate in native_field(plan, "archive_candidates")?.try_iter()? {
-        let candidate: Bound<'_, PyAny> = candidate?;
-        let expires_at: Bound<'_, PyAny> = native_field(&candidate, "expires_at")?;
-        archive_candidates.push(ArchiveCandidateText {
-            name: key_name(&candidate)?,
-            archive_name: display_name(&native_field(&candidate, "archive_key")?)?,
-            age_days: age_days(&native_field(&candidate, "age_timestamp")?, &planned_at)?,
-            expires_now: expires_at.le(native_field(&candidate, "archived_at")?)?,
-            expires_at: formatted(&expires_at, TIMESTAMP_FORMAT)?,
-        });
-    }
+    let archive_candidates: Vec<ArchiveCandidateText> =
+        candidate_texts(&native_field(plan, "archive_candidates")?, &planned_at)?;
     let mut state_prunes: Vec<(String, i64)> = Vec::new();
     for candidate in native_field(plan, "direct_state_prune_candidates")?.try_iter()? {
         let candidate: Bound<'_, PyAny> = candidate?;
@@ -175,6 +229,8 @@ pub(crate) fn janitor_plan_text(plan: &Bound<'_, PyAny>) -> PyResult<JanitorPlan
         skipped_relations,
         skipped_schemas: source_schemas(&native_field(plan, "skipped_schemas")?, false)?,
         blocked_schemas: source_schemas(&native_field(plan, "blocked_schemas")?, true)?,
+        usage_check: usage_check(&native_field(plan, "usage_check")?)?,
+        kept_in_use: candidate_texts(&native_field(plan, "kept_in_use")?, &planned_at)?,
     })
 }
 

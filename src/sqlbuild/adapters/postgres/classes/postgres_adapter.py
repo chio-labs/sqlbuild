@@ -51,6 +51,7 @@ from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.main.normalize_seed_csv_value import normalize_seed_csv_value
 from sqlbuild.adapter.contract.main.run_relation_read_probe import run_relation_read_probe
 from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
+from sqlbuild.adapter.contract.main.unsupported_relation_usage import unsupported_relation_usage
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
@@ -63,6 +64,7 @@ from sqlbuild.adapter.contract.models import (
     RelationInfo,
     RelationReadProbe,
     RelationRowCountEstimate,
+    RelationUsageReport,
     RowDiffColumnResult,
     RowDiffCoverage,
     RowDiffPreparedRelations,
@@ -227,6 +229,16 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         raise AdapterUserError(
             message=f"adapter '{self.adapter_name}' does not support table freshness metadata"
         )
+
+    def relation_usage(
+        self,
+        *,
+        connection: Any,
+        relations: tuple[RelationInfo, ...],
+        window_seconds: int,
+    ) -> RelationUsageReport:
+        del connection, relations, window_seconds
+        return unsupported_relation_usage()
 
     def get_tables_freshness_metadata(
         self,

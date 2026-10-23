@@ -698,3 +698,170 @@ def janitor_end_state(*, db_path: Path, schemas: tuple[str, ...]) -> tuple[tuple
             )
         )
     return (*relations, *events)
+
+
+USAGE_JANITOR_ADAPTER_NAME: str = "usage_janitor_duckdb"
+USAGE_JANITOR_SETTINGS_FILENAME: str = "janitor_usage_settings.json"
+USAGE_JANITOR_CALLS_FILENAME: str = "janitor_usage_calls.json"
+USAGE_JANITOR_ADAPTER_SOURCE: str = """
+import json
+from dataclasses import replace
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+from sqlbuild.adapter.contract.models import RelationInfo, RelationUsage, RelationUsageReport
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+
+_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _settings() -> dict[str, Any]:
+    return json.loads((_ROOT / "janitor_usage_settings.json").read_text(encoding="utf-8"))
+
+
+class UsageJanitorDuckDbAdapter(DuckDbAdapter):
+    adapter_name = "usage_janitor_duckdb"
+
+    def supports_relation_age_metadata(self) -> bool:
+        return True
+
+    def list_relations(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schemas: tuple[str, ...] | None,
+        names: tuple[str, ...] | None = None,
+    ) -> tuple[RelationInfo, ...]:
+        changed_at: datetime = datetime.fromisoformat(_settings()["changed_at"])
+        return tuple(
+            replace(relation, created_at=changed_at)
+            if relation.name.startswith("old_")
+            else relation
+            for relation in super().list_relations(
+                connection=connection, database=database, schemas=schemas, names=names
+            )
+        )
+
+    def relation_usage(
+        self,
+        *,
+        connection: Any,
+        relations: tuple[RelationInfo, ...],
+        window_seconds: int,
+    ) -> RelationUsageReport:
+        (_ROOT / "janitor_usage_calls.json").write_text(
+            json.dumps(
+                {
+                    "relations": sorted(relation.name for relation in relations),
+                    "window_seconds": window_seconds,
+                }
+            ),
+            encoding="utf-8",
+        )
+        settings: dict[str, Any] = _settings()
+        if settings["unavailable"] is not None:
+            return RelationUsageReport(checked=False, reason=settings["unavailable"])
+        reads: dict[str, dict[str, Any]] = settings["reads"]
+        return RelationUsageReport(
+            checked=True,
+            usages=tuple(
+                RelationUsage(
+                    database=relation.database,
+                    schema=relation.schema,
+                    name=relation.name,
+                    last_read_at=datetime.fromisoformat(reads[relation.name]["last_read_at"]),
+                    readers=tuple(reads[relation.name]["readers"]),
+                    query_count=int(reads[relation.name]["query_count"]),
+                )
+                for relation in relations
+                if relation.name in reads
+            ),
+        )
+"""
+
+
+def prepare_usage_janitor_project(
+    *,
+    tmp_path: Path,
+    project_name: str,
+    stale_tables: int,
+    stale_views: tuple[str, ...] = (),
+    janitor_config: str = "",
+) -> Path:
+    """A built DuckDB project with stale tables and views, an expired archive, and a usage adapter.
+
+    Every stale `old_*` relation last changed on 2026-09-01, so it is older than the retention.
+    """
+
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=project_name,
+        repo_files={
+            "sqlbuild_project.toml": (
+                f'name = "{project_name}"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                f'database = "{(tmp_path / project_name / "janitor.duckdb").as_posix()}"\n\n'
+                "[janitor]\n"
+                "enabled = true\n"
+                "retention_days = 14\n"
+                "archive_retention_days = 14\n"
+                "delete_tracked_only = false\n"
+                f"{dedent(janitor_config).strip()}\n\n"
+                "[defaults]\n"
+                'materialized = "table"\n'
+            ),
+            "models/orders.sql": "MODEL (description 'Test model.');\n\nSELECT 1 AS order_id\n",
+            f"adapters/{USAGE_JANITOR_ADAPTER_NAME}.py": USAGE_JANITOR_ADAPTER_SOURCE,
+        },
+    )
+    _build(project_dir)
+    tables: str = "; ".join(
+        f"CREATE TABLE main.old_orders_{index:03d} AS SELECT {index} AS id"
+        for index in range(stale_tables)
+    )
+    views: str = "".join(f"; CREATE VIEW main.{name} AS SELECT 1 AS id" for name in stale_views)
+    execute_duckdb(
+        db_path=project_dir / "janitor.duckdb",
+        sql=f'{tables}{views}; CREATE TABLE main."{EXPIRED_ARCHIVE_NAME}" AS SELECT 1 AS id',
+    )
+    write_usage_settings(project_dir=project_dir)
+    return project_dir
+
+
+def write_usage_settings(
+    *,
+    project_dir: Path,
+    reads: Mapping[str, tuple[tuple[str, ...], int]] = MappingProxyType({}),
+    unavailable: str | None = None,
+) -> None:
+    """Run janitor on the usage adapter: who read which relation, or why usage is unavailable."""
+
+    (project_dir / "sqlbuild_local.toml").write_text(
+        f'adapter = "{USAGE_JANITOR_ADAPTER_NAME}"\n', encoding="utf-8"
+    )
+    (project_dir / USAGE_JANITOR_SETTINGS_FILENAME).write_text(
+        json.dumps(
+            {
+                "changed_at": "2026-09-01T08:00:00+00:00",
+                "reads": {
+                    name: {
+                        "readers": list(readers),
+                        "query_count": count,
+                        "last_read_at": "2026-10-21T09:30:00+00:00",
+                    }
+                    for name, (readers, count) in reads.items()
+                },
+                "unavailable": unavailable,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def read_usage_calls(*, project_dir: Path) -> dict[str, object]:
+    """The relations and window of the usage adapter's last `relation_usage` call."""
+
+    return json.loads((project_dir / USAGE_JANITOR_CALLS_FILENAME).read_text(encoding="utf-8"))

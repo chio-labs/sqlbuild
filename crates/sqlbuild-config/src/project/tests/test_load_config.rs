@@ -41,6 +41,33 @@ fn given_project_files_when_loading_then_rejections_match_python_loader() {
             ),
         },
         ProjectFailureTestCase {
+            description: "a janitor usage window and keep_in_use load",
+            project: "name = 'orders'\nadapter = 'duckdb'\n[janitor]\nenabled = true\n\
+                      in_use_window = '36h'\nkeep_in_use = true\n",
+            local: "",
+            expected_failure: None,
+        },
+        ProjectFailureTestCase {
+            description: "a calendar janitor usage window is rejected",
+            project: "name = 'orders'\nadapter = 'duckdb'\n[janitor]\nin_use_window = '1mo'\n",
+            local: "",
+            expected_failure: failure_at(
+                ConfigFile::Project,
+                "janitor.in_use_window must be a positive fixed duration such as '7d'",
+                None,
+            ),
+        },
+        ProjectFailureTestCase {
+            description: "a janitor usage window that is not a duration is rejected",
+            project: "name = 'orders'\nadapter = 'duckdb'\n[janitor]\nin_use_window = 7\n",
+            local: "",
+            expected_failure: failure_at(
+                ConfigFile::Project,
+                "janitor.in_use_window must be a positive fixed duration such as '7d'",
+                None,
+            ),
+        },
+        ProjectFailureTestCase {
             description: "a git base ref loads",
             project: "name = 'orders'\nadapter = 'duckdb'\n[git]\nbase_ref = 'origin/main'\n",
             local: "",

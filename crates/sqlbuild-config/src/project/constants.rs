@@ -27,6 +27,7 @@ pub(crate) const MODELS_DIRECTORY_NAME: &str = "models";
 pub(crate) const UNLIMITED_DIFF_FULL_ROWS: &str = "unlimited";
 pub(crate) const ZERO_FIXED_DURATION: &str = "0s";
 pub(crate) const DEFAULT_QUERY_ARTIFACT_TTL: &str = "24h";
+pub(crate) const DEFAULT_IN_USE_WINDOW: &str = "7d";
 pub(crate) const BOUNDED_REPLAY_PREFIX: &str = "bounded-";
 pub(crate) const ZERO_FLOAT: f64 = 0.0;
 pub(crate) const SHUTDOWN_TIMEOUT_MAX_SECONDS: u64 = 600;

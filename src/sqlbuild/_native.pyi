@@ -3130,6 +3130,7 @@ class CliNamespace:
     retention_days: int | None
     direct_state_history_versions: int | None
     drop_old_name_views: list[str]
+    keep_in_use: bool
     bounded: str | None
     max_column_examples: int | None
     max_row_only_examples: int | None
@@ -6673,6 +6674,7 @@ class JanitorCommandRequest(NativeRecord):
     retention_days: int | None
     direct_state_history_versions: int | None
     drop_old_name_views: tuple[str, ...]
+    keep_in_use: bool
     selected_target: str | None
     as_target: str | None
     verbose: bool
@@ -6685,6 +6687,7 @@ class JanitorCommandRequest(NativeRecord):
         retention_days: int | None = None,
         direct_state_history_versions: int | None = None,
         drop_old_name_views: tuple[str, ...] = (),
+        keep_in_use: bool = False,
         selected_target: str | None = None,
         as_target: str | None = None,
         verbose: bool = False,
@@ -11979,6 +11982,8 @@ class JanitorConfig(NativeRecord):
     direct_state_history_versions: int
     delete_tracked_only: bool
     exclude_patterns: tuple[str, ...]
+    in_use_window: str
+    keep_in_use: bool
     def __init__(
         self,
         enabled: bool = ...,
@@ -11987,6 +11992,8 @@ class JanitorConfig(NativeRecord):
         direct_state_history_versions: int = ...,
         delete_tracked_only: bool = ...,
         exclude_patterns: tuple[str, ...] = ...,
+        in_use_window: str = ...,
+        keep_in_use: bool = ...,
     ) -> None: ...
 
 class MigrationsConfig(NativeRecord):

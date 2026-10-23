@@ -183,7 +183,7 @@ pub const OPERATION_KINDS: [&str; 10] = [
     "subprocess",
     "warehouse",
 ];
-pub const OPERATION_NAMES: [&str; 56] = [
+pub const OPERATION_NAMES: [&str; 57] = [
     "adbc_driver_install",
     "audit_evaluation",
     "clone_execution",
@@ -208,6 +208,7 @@ pub const OPERATION_NAMES: [&str; 56] = [
     "janitor_execution",
     "janitor_state_inspection",
     "janitor_target_connection",
+    "janitor_usage_check",
     "janitor_warehouse_inspection",
     "managed_source_load",
     "project_compile",

@@ -5276,6 +5276,18 @@
        {
         "kind": "store_true",
         "options": [
+         "--keep-in-use"
+        ],
+        "dest": "keep_in_use",
+        "nargs": 0,
+        "const": true,
+        "default": false,
+        "help": "keep relations other queries read within janitor.in_use_window instead of archiving them (overrides janitor.keep_in_use)",
+        "group": 1
+       },
+       {
+        "kind": "store_true",
+        "options": [
          "--verbose",
          "-v"
         ],

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from sqlbuild._native import OldNameViewDropReason, OldNameViewHistory
-from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
+from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup, RelationUsage
 from sqlbuild.executor.janitor.types import JanitorAction
 from sqlbuild.executor.janitor_events.models import JanitorEventRecord
 
@@ -63,6 +63,7 @@ class JanitorArchiveCandidate:
     archive_key: JanitorRelationKey
     archived_at: datetime
     expires_at: datetime
+    usage: RelationUsage | None = None
 
 
 @dataclass(frozen=True)
@@ -190,6 +191,16 @@ class JanitorBlockedSchema:
 
 
 @dataclass(frozen=True)
+class JanitorUsageCheck:
+    """Whether recent reads of the archive candidates were checked, and how in-use ones fare."""
+
+    checked: bool
+    window: str
+    keep_in_use: bool = False
+    reason: str | None = None
+
+
+@dataclass(frozen=True)
 class JanitorPlan:
     """Complete janitor preview and execution plan."""
 
@@ -214,6 +225,8 @@ class JanitorPlan:
     scanned_schema_count: int = 0
     age_metadata_supported: bool = False
     planned_at: datetime | None = None
+    usage_check: JanitorUsageCheck | None = None
+    kept_in_use: tuple[JanitorArchiveCandidate, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

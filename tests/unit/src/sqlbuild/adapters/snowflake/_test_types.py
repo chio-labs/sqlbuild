@@ -294,3 +294,27 @@ class SnowflakeViewDefinitionsTestCase:
     read_names: tuple[str, ...]
     expected_definitions: tuple[str | None, ...]
     expected_query_count: int
+
+
+@dataclass(frozen=True)
+class SnowflakeRelationUsageTestCase:
+    description: str
+    relations: tuple[tuple[str | None, str, str], ...]
+    current_database: str | None
+    access_rows: tuple[tuple[object, ...], ...]
+    expected_object_names: tuple[str, ...]
+    expected_usages: tuple[tuple[str, tuple[str, ...], int, datetime], ...]
+
+
+@dataclass(frozen=True)
+class SnowflakeRelationUsageChunkTestCase:
+    description: str
+    relation_count: int
+    expected_query_names: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class SnowflakeRelationUsageErrorTestCase:
+    description: str
+    errno: int | None
+    message: str
