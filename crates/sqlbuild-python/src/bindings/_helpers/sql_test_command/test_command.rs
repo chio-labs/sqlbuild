@@ -1,12 +1,14 @@
 //! `sqb test`: compile the selected SQL unit tests, inspect or run them, and report.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
+use std::path::PathBuf;
 
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyInt, PyString, PyTuple};
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
+use sqlbuild_analysis::definition_changes::models::{ExecutedItem, SelectedItem};
 use sqlbuild_core::cli_text::models::CliStyle;
 use sqlbuild_core::test_command::main::render_test_completion::render_test_completion;
 use sqlbuild_core::test_command::main::render_test_inspection::render_test_inspection;
@@ -28,6 +30,12 @@ use crate::bindings::_helpers::build_progress::progress_text::{
 };
 use crate::bindings::_helpers::build_progress::result_text::test_label;
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
+use crate::bindings::_helpers::change_selection::base_snapshot::{
+    BaseComparison, base_comparison, base_variant,
+};
+use crate::bindings::_helpers::change_selection::selection::{
+    ChangedProject, changed_project, tests_and_models, with_since_section,
+};
 use crate::bindings::_helpers::command_runtime::concurrency::resolve_concurrency;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_reported_command_invocation;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::build_static_pipeline_result;
@@ -39,6 +47,7 @@ use crate::bindings::_helpers::planner_entries::command_plans::build_test_comman
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::result_output::documents::format_test_execution_json;
 use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
@@ -49,6 +58,11 @@ use crate::bindings::_helpers::sql_test_command::timeouts::{
 };
 
 const PASS_OUTCOME: &str = "pass";
+
+/// Why `--since` selected each test, by inspection label.
+type SelectionReasons = HashMap<String, Vec<String>>;
+/// What a `--since` selection kept: the narrowed pipeline, reasons by label, and its JSON section.
+type ChangedSelection<'py> = (Bound<'py, PyAny>, SelectionReasons, String);
 const EXPECT_LABEL: &str = "expect";
 const UNKNOWN_GROUP: &str = "(unknown)";
 const EXECUTION_COMMAND: &str = "sqb test";
@@ -385,14 +399,23 @@ fn inspection_entry(entry: &Bound<'_, PyAny>) -> PyResult<TestInspectionEntry> {
         mocked_table_functions: strings(entry.getattr("mock_table_function_names")?)?,
         real_models,
         expected_models,
+        selection_reasons: Vec::new(),
     })
 }
 
 /// Write the resolved plan without executing it; returns the exit code.
-fn inspect(stream: &Bound<'_, PyAny>, plan_output: &Bound<'_, PyAny>) -> PyResult<i32> {
+fn inspect(
+    stream: &Bound<'_, PyAny>,
+    plan_output: &Bound<'_, PyAny>,
+    reasons: &HashMap<String, Vec<String>>,
+) -> PyResult<i32> {
     let entries: Vec<TestInspectionEntry> = native_field(plan_output, "test_entries")?
         .try_iter()?
-        .map(|entry| inspection_entry(&entry?))
+        .map(|entry| {
+            let mut entry: TestInspectionEntry = inspection_entry(&entry?)?;
+            entry.selection_reasons = reasons.get(&entry.label).cloned().unwrap_or_default();
+            Ok(entry)
+        })
         .collect::<PyResult<_>>()?;
     let warnings: Vec<TestPlanWarning> = native_field(plan_output, "warnings")?
         .try_iter()?
@@ -408,6 +431,50 @@ fn inspect(stream: &Bound<'_, PyAny>, plan_output: &Bound<'_, PyAny>) -> PyResul
     stream.call_method1("write", (rendered,))?;
     stream.call_method0("flush")?;
     Ok(code)
+}
+
+/// Keep the planned tests that execute something changed, with each one's reasons by label.
+fn select_changed<'py>(
+    (pipeline, stream, discovered): (&Bound<'py, PyAny>, &Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    project_dir: &std::path::Path,
+    base: BaseComparison,
+    explain: bool,
+) -> PyResult<ChangedSelection<'py>> {
+    let py: Python<'py> = pipeline.py();
+    let project: Bound<'py, PyAny> = native_field(pipeline, "project")?;
+    let changed: ChangedProject = changed_project((&project, discovered), project_dir, base)?;
+    let (tests, models) = tests_and_models(&project)?;
+    let plan_output: Bound<'py, PyAny> = native_field(pipeline, "plan_output")?;
+    let mut kept: Vec<Bound<'py, PyAny>> = Vec::new();
+    let mut selected: Vec<SelectedItem> = Vec::new();
+    let mut reasons: HashMap<String, Vec<String>> = HashMap::new();
+    let mut total: usize = 0;
+    for entry in native_field(&plan_output, "test_entries")?.try_iter()? {
+        let entry: Bound<'py, PyAny> = entry?;
+        total += 1;
+        let item: ExecutedItem = changed.test_item(&entry, (&tests, &models))?;
+        let entry_reasons: Vec<String> = changed.reasons(&item);
+        if entry_reasons.is_empty() {
+            continue;
+        }
+        let label: String = inspection_entry(&entry)?.label;
+        reasons.insert(label.clone(), entry_reasons.clone());
+        selected.push(SelectedItem {
+            label,
+            reasons: entry_reasons,
+        });
+        kept.push(entry);
+    }
+    changed.report(stream, ("test", "tests"), (total, &selected, explain))?;
+    let plan_output: Bound<'py, PyAny> = replaced(
+        &plan_output,
+        &[("test_entries", PyTuple::new(py, kept)?.into_any())],
+    )?;
+    Ok((
+        replaced(pipeline, &[("plan_output", plan_output)])?,
+        reasons,
+        changed.json((total, &selected)),
+    ))
 }
 
 /// Write the ready header and run the tests with nested progress; returns the results.
@@ -551,7 +618,7 @@ pub(crate) fn timeout_record<'py>(
 fn complete(
     request: &Bound<'_, PyAny>,
     invocation: &Bound<'_, PyAny>,
-    results: &[Bound<'_, PyAny>],
+    (results, since_json): (&[Bound<'_, PyAny>], Option<&str>),
 ) -> PyResult<i32> {
     let py: Python<'_> = request.py();
     let mut failures: Vec<TestFailure> = Vec::new();
@@ -583,8 +650,11 @@ fn complete(
     )?;
     stream.call_method0("flush")?;
     let tuple: Bound<'_, PyAny> = PyTuple::new(py, results)?.into_any();
-    let payload: Bound<'_, PyAny> =
-        PyString::new(py, &format_test_execution_json(py, tuple)?).into_any();
+    let payload: Bound<'_, PyAny> = PyString::new(
+        py,
+        &with_since_section(format_test_execution_json(py, tuple)?, since_json)?,
+    )
+    .into_any();
     write_execution_json_output(
         py,
         payload,
@@ -604,10 +674,39 @@ pub(crate) fn run_test_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> Py
         &record_class(py, RecordId::TestInvocation)?,
         !inspect_only,
     )?;
-    let pipeline: Bound<'_, PyAny> = compile_tests(request, &invocation)?;
     let stream: Bound<'_, PyAny> = invocation.getattr("progress_stream")?;
+    let project_dir: Bound<'_, PyAny> = native_field(&invocation, "effective_project_dir")?;
+    let since: Option<String> = native_field(request, "since")?.extract()?;
+    let base: Option<BaseComparison> = match since.as_deref() {
+        Some(since) => Some(base_comparison(
+            (&stream, &project_dir),
+            since,
+            &base_variant(
+                native_field(request, "selected_target")?.extract()?,
+                &native_field(request, "cli_vars")?,
+            )?,
+        )?),
+        None => None,
+    };
+    let mut pipeline: Bound<'_, PyAny> = compile_tests(request, &invocation)?;
+    let mut reasons: HashMap<String, Vec<String>> = HashMap::new();
+    let mut since_json: Option<String> = None;
+    if let Some(base) = base {
+        let json: String;
+        (pipeline, reasons, json) = select_changed(
+            (
+                &pipeline,
+                &stream,
+                &native_field(&invocation, "discovered_inputs")?,
+            ),
+            &project_dir.extract::<PathBuf>()?,
+            base,
+            native_field(request, "explain")?.is_truthy()?,
+        )?;
+        since_json = Some(json);
+    }
     if inspect_only {
-        return inspect(&stream, &pipeline.getattr("plan_output")?);
+        return inspect(&stream, &pipeline.getattr("plan_output")?, &reasons);
     }
     let concurrency: i64 = resolve_concurrency(
         &request.getattr("concurrency")?,
@@ -642,7 +741,7 @@ pub(crate) fn run_test_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> Py
         &pipeline.getattr("plan_output")?,
         &PyTuple::new(py, &results)?.into_any(),
     )?;
-    complete(request, &invocation, &results)
+    complete(request, &invocation, (&results, since_json.as_deref()))
 }
 
 /// Add source and safe typed values only for parameterized test rows.

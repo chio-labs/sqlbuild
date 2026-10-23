@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -2150,3 +2153,291 @@ def build_shared_partial_fixture_project_files(
             "SELECT 1\n"
         ),
     }
+
+
+def build_since_project_files() -> dict[str, str]:
+    """Build a DuckDB orders project whose tests and scenarios execute different nodes."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "since_orders"\nadapter = "duckdb"\n\n'
+            '[connection]\ndatabase = "since_orders.duckdb"\n\n'
+            '[defaults]\nmaterialized = "table"\n'
+        ),
+        ".gitignore": "target/\n*.duckdb\n*.duckdb.wal\n",
+        "models/_macros/money.py": (
+            "def cents_to_dollars(expression: str) -> str:\n"
+            '    return f"CAST({expression} AS DOUBLE) / 100"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n    description: Raw orders.\n"
+            "    schema: main\n    table: raw_orders\n"
+            "    columns:\n"
+            "      - name: order_id\n        type: INTEGER\n"
+            "      - name: status\n        type: VARCHAR\n"
+            "      - name: amount_cents\n        type: INTEGER\n"
+        ),
+        "models/stg_orders.sql": (
+            "MODEL (description 'Cleaned orders.');\n\n"
+            'SELECT order_id, status, amount_cents FROM __source("raw_orders")\n'
+        ),
+        "models/order_totals.sql": (
+            "MODEL (description 'Order totals in dollars.');\n\n"
+            'SELECT order_id, @cents_to_dollars("amount_cents") AS amount\n'
+            'FROM __ref("stg_orders")\n'
+        ),
+        "models/open_orders.sql": (
+            "MODEL (description 'Open orders.');\n\n"
+            "SELECT order_id FROM __ref(\"stg_orders\") WHERE status = 'open'\n"
+        ),
+        "tests/unit/test_stg_orders.sql": (
+            "TEST ();\n\nWITH\n"
+            "__source__raw_orders AS (\n"
+            "  SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents\n"
+            "),\n"
+            "__expected__stg_orders AS (SELECT 1 AS order_id, 'open' AS status)\nSELECT 1\n"
+        ),
+        "tests/unit/test_order_totals.sql": (
+            "TEST ();\n\nWITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents),\n"
+            "__expected__order_totals AS (SELECT 1 AS order_id, 2.5 AS amount)\nSELECT 1\n"
+        ),
+        "tests/unit/test_open_orders.sql": (
+            "TEST ();\n\nWITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents),\n"
+            "__expected__open_orders AS (SELECT 1 AS order_id)\nSELECT 1\n"
+        ),
+        "tests/scenarios/order_totals_end_to_end.sql": (
+            "SCENARIO (description 'Order totals from raw orders');\n\nWITH\n"
+            "__source__raw_orders AS (\n"
+            "  SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents\n"
+            "),\n"
+            "__expected__order_totals AS (SELECT 1 AS order_id, 2.5 AS amount)\nSELECT 1\n"
+        ),
+        "tests/scenarios/open_orders_from_fixture.sql": (
+            "SCENARIO (description 'Open orders from a staged fixture');\n\nWITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents),\n"
+            "__expected__open_orders AS (SELECT 1 AS order_id)\nSELECT 1\n"
+        ),
+    }
+
+
+def build_since_indirect_files() -> dict[str, str]:
+    """Build files that reach tests indirectly: variables, defaults, helpers, seeds, functions."""
+
+    base: dict[str, str] = build_since_project_files()
+    return {
+        "sqlbuild_project.toml": (
+            base["sqlbuild_project.toml"]
+            + '\n[vars]\nmin_amount = "100"\n\n[scopes]\nenforce_placement = false\n'
+        ),
+        "python/_rates.py": 'DIVISOR = "100"\n',
+        "models/_macros/currency.py": (
+            'def whole_cents(expression: str) -> str:\n    return f"({expression} * 1)"\n'
+        ),
+        "models/_macros/money.py": (
+            "from models._macros.currency import whole_cents\n"
+            "from python._rates import DIVISOR\n\n\n"
+            "def cents_to_dollars(expression: str) -> str:\n"
+            '    return f"CAST({whole_cents(expression)} AS DOUBLE) / {DIVISOR}"\n'
+        ),
+        "macros/taxes.py": (
+            'def with_tax(expression: str) -> str:\n    return f"({expression} + 0)"\n'
+        ),
+        "macros/pricing.py": (
+            "from macros.taxes import with_tax\n\n\n"
+            "def gross(expression: str) -> str:\n    return with_tax(expression)\n"
+        ),
+        "macros/fixture_values.py": "def suffix() -> str:\n    return \"''\"\n",
+        "models/stg_orders.sql": (
+            "MODEL (\n  description 'Cleaned orders.',\n"
+            "  columns (order_id (type INTEGER), status (type VARCHAR), "
+            "amount_cents (type INTEGER)),\n);\n\n"
+            'SELECT order_id, status, amount_cents FROM __source("raw_orders")\n'
+        ),
+        "models/order_gross.sql": (
+            "MODEL (description 'Gross order amounts.');\n\n"
+            'SELECT order_id, @gross("amount_cents") AS gross_cents FROM __ref("stg_orders")\n'
+        ),
+        "models/order_day.sql": (
+            "MODEL (description 'The UTC day of a fixed timestamp.');\n\n"
+            "SELECT order_id, CAST(TIMESTAMPTZ '2024-01-01 23:30:00+00' AS DATE) AS day\n"
+            'FROM __ref("stg_orders")\n'
+        ),
+        "tests/unit/test_order_gross.sql": (
+            "TEST ();\n\nWITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents),\n"
+            "__expected__order_gross AS (SELECT 1 AS order_id, 250 AS gross_cents)\nSELECT 1\n"
+        ),
+        "tests/unit/test_order_day.sql": (
+            "TEST ();\n\nWITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents),\n"
+            "__expected__order_day AS (SELECT 1 AS order_id, DATE '2024-01-01' AS day)\nSELECT 1\n"
+        ),
+        "tests/unit/test_status_cases.sql": (
+            'TEST (name "status_cases", parameters (status string), '
+            'cases (open_case (status "open"), closed_case (status "closed")));\n\n'
+            "WITH\n__source__raw_orders AS (\n"
+            '  SELECT 1 AS order_id, @param("status") || @suffix() AS status, '
+            "250 AS amount_cents\n),\n"
+            "__expected__stg_orders AS (\n"
+            '  SELECT 1 AS order_id, @param("status") || @suffix() AS status\n)\nSELECT 1\n'
+        ),
+        "audits/generic/at_least.sql": (
+            'AUDIT ();\n\nSELECT *\nFROM __ref("@model")\nWHERE @column < @minimum\n'
+        ),
+        "models/order_totals.sql": (
+            "MODEL (\n  description 'Order totals in dollars.',\n"
+            "  audits [at_least (column amount, minimum 0)],\n);\n\n"
+            'SELECT order_id, @cents_to_dollars("amount_cents") AS amount\n'
+            'FROM __ref("stg_orders")\n'
+        ),
+        "models/big_orders.sql": (
+            "MODEL (description 'Large orders.');\n\n"
+            'SELECT order_id FROM __ref("stg_orders") WHERE amount_cents >= @@min_amount\n'
+        ),
+        "models/marts/order_counts.sql": (
+            "MODEL (description 'Order counts.');\n\n"
+            'SELECT COUNT(*) AS order_count FROM __ref("stg_orders")\n'
+        ),
+        "seeds/regions.csv": "region_id,region_name\n1,north\n",
+        "seeds/regions.yml": (
+            "seeds:\n  - name: regions\n    description: Sales regions.\n    columns:\n"
+            "      - name: region_id\n        type: INTEGER\n"
+            "      - name: region_name\n        type: VARCHAR\n"
+        ),
+        "functions/sql/is_open.sql": (
+            "FUNCTION (\n  description 'Whether an order is open.',\n"
+            "  arguments (order_status VARCHAR),\n  returns BOOLEAN,\n);\n\n"
+            "order_status = 'open'\n"
+        ),
+        "models/regional_orders.sql": (
+            "MODEL (description 'Orders with their region.');\n\n"
+            "SELECT o.order_id, r.region_id\n"
+            'FROM __ref("stg_orders") o CROSS JOIN __seed("regions") r\n'
+        ),
+        "models/order_flags.sql": (
+            "MODEL (description 'Whether each order is open.');\n\n"
+            'SELECT order_id, __udf("is_open")(status) AS is_open FROM __ref("stg_orders")\n'
+        ),
+        "models/order_archive.sql": (
+            "MODEL (description 'Archived orders.');\n\n"
+            'SELECT order_id FROM __ref("stg_orders")\n'
+        ),
+        "models/archive_counts.sql": (
+            "MODEL (description 'Archived order count.');\n\n"
+            'SELECT COUNT(*) AS archived FROM __ref("order_archive")\n'
+        ),
+        "tests/unit/test_archive_counts.sql": (
+            "TEST ();\n\nWITH\n"
+            "__source__raw_orders AS (\n"
+            "  SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents\n"
+            "),\n"
+            "__expected__archive_counts AS (SELECT 1 AS archived)\nSELECT 1\n"
+        ),
+        "python/tasks/report.py": (
+            "from sqlbuild.tasks import task\n\n\n"
+            "@task()\ndef report_orders(ctx):\n"
+            '    """Report orders."""\n\n'
+            "    return ctx.result(payload={})\n"
+        ),
+        "tests/unit/test_big_orders.sql": (
+            "TEST ();\n\nWITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents),\n"
+            "__expected__big_orders AS (SELECT 1 AS order_id)\nSELECT 1\n"
+        ),
+        "tests/unit/test_order_counts.sql": (
+            "TEST ();\n\nWITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents),\n"
+            "__expected__order_counts AS (SELECT 1 AS order_count)\nSELECT 1\n"
+        ),
+        "tests/unit/test_regional_orders.sql": (
+            "TEST ();\n\nWITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents),\n"
+            "__seed__regions AS (SELECT 1 AS region_id, 'north' AS region_name),\n"
+            "__expected__regional_orders AS (SELECT 1 AS order_id, 1 AS region_id)\nSELECT 1\n"
+        ),
+        "tests/unit/test_order_flags.sql": (
+            "TEST ();\n\nWITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents),\n"
+            "__expected__order_flags AS (SELECT 1 AS order_id, TRUE AS is_open)\nSELECT 1\n"
+        ),
+        "tests/scenarios/regional_orders_end_to_end.sql": (
+            "SCENARIO (description 'Regional orders from raw orders and the region seed');\n\n"
+            "WITH\n__source__raw_orders AS (\n"
+            "  SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents\n"
+            "),\n"
+            "__expected__regional_orders AS (SELECT 1 AS order_id, 1 AS region_id)\nSELECT 1\n"
+        ),
+        "tests/unit/test_order_totals_from_source.sql": (
+            "TEST ();\n\nWITH\n"
+            "__source__raw_orders AS (\n"
+            "  SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents\n"
+            "),\n"
+            "__expected__order_totals AS (SELECT 1 AS order_id, 2.5 AS amount)\nSELECT 1\n"
+        ),
+    }
+
+
+_GIT_IDENTITY: dict[str, str] = {
+    "GIT_AUTHOR_NAME": "Example",
+    "GIT_AUTHOR_EMAIL": "dev@example.com",
+    "GIT_COMMITTER_NAME": "Example",
+    "GIT_COMMITTER_EMAIL": "dev@example.com",
+}
+
+
+def run_git(*, repository: Path, arguments: tuple[str, ...]) -> str:
+    """Run git in `repository` with a fixed identity and return its stdout."""
+
+    result: subprocess.CompletedProcess[str] = subprocess.run(
+        ("git", "-c", "commit.gpgsign=false", *arguments),
+        cwd=repository,
+        env={**os.environ, **_GIT_IDENTITY},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return result.stdout.strip()
+
+
+def commit_project_on_main(*, repository: Path) -> None:
+    """Commit everything on `main`, then continue on a `feature` branch."""
+
+    run_git(repository=repository, arguments=("init", "--quiet", "--initial-branch", "main"))
+    run_git(repository=repository, arguments=("add", "--all"))
+    run_git(repository=repository, arguments=("commit", "--quiet", "-m", "orders"))
+    run_git(repository=repository, arguments=("checkout", "--quiet", "-b", "feature"))
+
+
+def write_project_files(*, project_dir: Path, files: Mapping[str, str]) -> None:
+    """Write each file below `project_dir`, creating parent directories."""
+
+    relative_path: str
+    contents: str
+    for relative_path, contents in files.items():
+        path: Path = project_dir / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents, encoding="utf-8")
+
+
+def delete_project_files(*, project_dir: Path, relative_paths: tuple[str, ...]) -> None:
+    """Delete each file below `project_dir`."""
+
+    relative_path: str
+    for relative_path in relative_paths:
+        (project_dir / relative_path).unlink()
+
+
+def prepare_since_repository(*, tmp_path: Path, extra_files: Mapping[str, str]) -> Path:
+    """Write the since project with `extra_files`, commit it on `main` and branch to `feature`."""
+
+    project: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="since_orders",
+        repo_files={**build_since_project_files(), **extra_files},
+    )
+    commit_project_on_main(repository=project)
+    return project

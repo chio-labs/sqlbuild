@@ -6,6 +6,7 @@ use std::time::Instant;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple, PyTupleMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_analysis::definition_changes::models::{ExecutedItem, SelectedItem};
 use sqlbuild_core::cli_text::main::format_summary_footer::format_summary_footer;
 use sqlbuild_core::cli_text::models::{CliStyle, SummaryCount};
 use sqlbuild_core::scenario_command::main::render_scenario_failures::render_scenario_failures;
@@ -17,6 +18,12 @@ use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::change_selection::base_snapshot::{
+    BaseComparison, base_comparison, base_variant,
+};
+use crate::bindings::_helpers::change_selection::selection::{
+    ChangedProject, changed_project, tests_and_models, with_since_section,
+};
 use crate::bindings::_helpers::command_runtime::concurrency::resolve_concurrency;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -53,6 +60,8 @@ pub(crate) struct TestRun<'py> {
     pub(crate) stream: Bound<'py, PyAny>,
     pub(crate) style: CliStyle,
     pub(crate) concurrency: i64,
+    /// The `since` JSON section of a `--since` run.
+    pub(crate) since_json: Option<String>,
 }
 
 fn flag(request: &Bound<'_, PyAny>, name: &str) -> PyResult<bool> {
@@ -123,6 +132,7 @@ fn prepare<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<TestRu
         stream,
         style,
         concurrency: concurrency.max(1),
+        since_json: None,
     })
 }
 
@@ -156,24 +166,27 @@ fn finish(
     let namespace: &ScenarioNamespace = &run.project.namespace;
     let payload: Bound<'_, PyAny> = PyString::new(
         py,
-        &format_scenario_execution_json(
-            py,
-            Some(keywords(
+        &with_since_section(
+            format_scenario_execution_json(
                 py,
-                &[
-                    ("results", results.clone().into_any()),
-                    ("local", boolean(py, run.local)),
-                    (
-                        "run_namespace",
-                        optional_text(py, namespace.value.as_deref()),
-                    ),
-                    ("namespace_source", text(py, &namespace.source)),
-                    (
-                        "duration_ms",
-                        pyo3::types::PyFloat::new(py, elapsed_seconds * 1000.0).into_any(),
-                    ),
-                ],
-            )?),
+                Some(keywords(
+                    py,
+                    &[
+                        ("results", results.clone().into_any()),
+                        ("local", boolean(py, run.local)),
+                        (
+                            "run_namespace",
+                            optional_text(py, namespace.value.as_deref()),
+                        ),
+                        ("namespace_source", text(py, &namespace.source)),
+                        (
+                            "duration_ms",
+                            pyo3::types::PyFloat::new(py, elapsed_seconds * 1000.0).into_any(),
+                        ),
+                    ],
+                )?),
+            )?,
+            run.since_json.as_deref(),
         )?,
     )
     .into_any();
@@ -335,6 +348,46 @@ fn run_scenarios(
     Ok(if ok { 0 } else { 1 })
 }
 
+/// Keep only the scenarios that execute something changed since the base revision.
+fn select_changed<'py>(
+    run: &TestRun<'py>,
+    (pipeline, scenarios): (&Bound<'py, PyAny>, Bound<'py, PyTuple>),
+    base: BaseComparison,
+    explain: bool,
+) -> PyResult<(Bound<'py, PyTuple>, String)> {
+    let py: Python<'py> = pipeline.py();
+    let project: Bound<'py, PyAny> = native_field(pipeline, "project")?;
+    let changed: ChangedProject = changed_project(
+        (&project, &run.project.discovered),
+        &run.project.project_dir.extract::<PathBuf>()?,
+        base,
+    )?;
+    let (_, models) = tests_and_models(&project)?;
+    let mut kept: Vec<Bound<'py, PyAny>> = Vec::new();
+    let mut selected: Vec<SelectedItem> = Vec::new();
+    for scenario in scenarios.iter() {
+        let item: ExecutedItem = changed.scenario_item(&scenario, (&project, &models))?;
+        let reasons: Vec<String> = changed.reasons(&item);
+        if reasons.is_empty() {
+            continue;
+        }
+        selected.push(SelectedItem {
+            label: native_field(&scenario, "name")?.extract()?,
+            reasons,
+        });
+        kept.push(scenario);
+    }
+    changed.report(
+        &run.stream,
+        ("scenario", "scenarios"),
+        (scenarios.len(), &selected, explain),
+    )?;
+    Ok((
+        PyTuple::new(py, kept)?,
+        changed.json((scenarios.len(), &selected)),
+    ))
+}
+
 /// Run one `sqb scenario test` request.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
@@ -342,7 +395,7 @@ pub(crate) fn run_scenario_test_command(
     py: Python<'_>,
     request: &Bound<'_, PyAny>,
 ) -> PyResult<i32> {
-    let run: TestRun<'_> = prepare(py, request)?;
+    let mut run: TestRun<'_> = prepare(py, request)?;
     let planning: Bound<'_, PyAny> = write_headers(
         &run.stream,
         &run.project,
@@ -356,6 +409,15 @@ pub(crate) fn run_scenario_test_command(
             run.style,
         ),
     )?;
+    let since: Option<String> = native_field(request, "since")?.extract()?;
+    let base: Option<BaseComparison> = match since.as_deref() {
+        Some(since) => Some(base_comparison(
+            (&run.stream, &run.project.project_dir),
+            since,
+            &base_variant(None, &py.None().into_bound(py))?,
+        )?),
+        None => None,
+    };
     let no_sql_validation: bool = run.local || flag(request, "no_sql_validation")?;
     let compiled: PyResult<Bound<'_, PyAny>> = compile(
         &run.project,
@@ -374,8 +436,18 @@ pub(crate) fn run_scenario_test_command(
     finished?;
     let selectors: Vec<String> = run.project.selectors.extract()?;
     let exclude: Vec<String> = run.project.exclude.extract()?;
-    let scenarios: Bound<'_, PyTuple> =
+    let mut scenarios: Bound<'_, PyTuple> =
         selected_scenarios(&pipeline, (&selectors, &exclude, &run.project.project_dir))?;
+    if let Some(base) = base {
+        let since_json: String;
+        (scenarios, since_json) = select_changed(
+            &run,
+            (&pipeline, scenarios),
+            base,
+            flag(request, "explain")?,
+        )?;
+        run.since_json = Some(since_json);
+    }
     if run.local && (flag(request, "sync_snapshots")? || flag(request, "refresh")?) {
         let synced: LocalSync<'_> = sync_local_snapshots(request, &run, (&pipeline, &scenarios))?;
         if synced.exit_code != 0 {

@@ -1,9 +1,10 @@
 use std::path::{Path, PathBuf};
 
 use crate::rule_evidence::main::import_closure::import_closure;
+use crate::rule_evidence::main::project_import_closure::project_import_closure;
 use crate::rule_evidence::main::test_evidence::test_evidence;
-use crate::rule_evidence::tests::helpers::rule_project;
-use crate::rule_evidence::tests::test_types::EvidenceTestCase;
+use crate::rule_evidence::tests::helpers::{project_with, rule_project};
+use crate::rule_evidence::tests::test_types::{EvidenceTestCase, ProjectClosureTestCase};
 
 const PYTHON: (u8, u8) = (3, 12);
 
@@ -69,6 +70,57 @@ fn given_rule_project_when_reading_evidence_then_matches_python_closure_and_case
                 .iter()
                 .map(|(line, column, owner)| (*line, *column, (*owner).to_owned()))
                 .collect::<Vec<_>>(),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_project_module_when_reading_project_closure_then_lists_imported_project_files() {
+    let test_cases = [
+        ProjectClosureTestCase {
+            description: "helper modules across directories, transitively",
+            files: vec![
+                (
+                    "macros/money.py",
+                    "import os\nfrom macros._rates import RATE\n\ndef cents(x):\n    return x\n",
+                ),
+                (
+                    "macros/_rates.py",
+                    "from python import shared\nRATE = 100\n",
+                ),
+                ("python/__init__.py", ""),
+                ("python/shared.py", "VALUE = 1\n"),
+                ("python/unused.py", "VALUE = 2\n"),
+            ],
+            source: "macros/money.py",
+            expected_closure: vec!["macros/_rates.py", "python/__init__.py", "python/shared.py"],
+        },
+        ProjectClosureTestCase {
+            description: "a module importing nothing local has an empty closure",
+            files: vec![("macros/plain.py", "import json\n")],
+            source: "macros/plain.py",
+            expected_closure: vec![],
+        },
+    ];
+
+    for test_case in test_cases {
+        let root: PathBuf = project_with(test_case.description, &test_case.files);
+        let closure: Vec<PathBuf> =
+            project_import_closure(&root.join(test_case.source), &root, PYTHON);
+        let relative: Vec<&Path> = closure
+            .iter()
+            .map(|path| path.strip_prefix(&root).unwrap_or(path))
+            .collect();
+
+        assert_eq!(
+            relative,
+            test_case
+                .expected_closure
+                .iter()
+                .map(Path::new)
+                .collect::<Vec<&Path>>(),
             "{}",
             test_case.description
         );

@@ -8,6 +8,8 @@ mod failure_cause;
 mod helpers;
 #[path = "tests/test_image.rs"]
 mod image;
+#[path = "tests/test_since_cache.rs"]
+mod since_cache;
 #[path = "tests/test_splice.rs"]
 mod splice;
 #[path = "tests/test_types.rs"]

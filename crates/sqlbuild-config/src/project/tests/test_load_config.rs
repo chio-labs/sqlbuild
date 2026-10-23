@@ -1,6 +1,7 @@
+use crate::project::main::load_git_base_ref::load_git_base_ref;
 use crate::project::models::ConfigFile;
 use crate::project::tests::helpers::{failure_at, first_failure, project_directory};
-use crate::project::tests::test_types::ProjectFailureTestCase;
+use crate::project::tests::test_types::{GitBaseRefTestCase, ProjectFailureTestCase};
 
 const PROJECT: &str = "name = 'orders'\nadapter = 'duckdb'\n";
 
@@ -37,6 +38,32 @@ fn given_project_files_when_loading_then_rejections_match_python_loader() {
                     "to track which relations SQLBuild created, set this in sqlbuild_project.toml:\n\
                      \x20           [settings]\n            query_change_tracking = true",
                 ),
+            ),
+        },
+        ProjectFailureTestCase {
+            description: "a git base ref loads",
+            project: "name = 'orders'\nadapter = 'duckdb'\n[git]\nbase_ref = 'origin/main'\n",
+            local: "",
+            expected_failure: None,
+        },
+        ProjectFailureTestCase {
+            description: "an empty git base ref is rejected",
+            project: "name = 'orders'\nadapter = 'duckdb'\n[git]\nbase_ref = ''\n",
+            local: "",
+            expected_failure: failure_at(
+                ConfigFile::Project,
+                "git.base_ref must be a non-empty git ref such as 'origin/main'",
+                None,
+            ),
+        },
+        ProjectFailureTestCase {
+            description: "a misspelt git key suggests base_ref",
+            project: "name = 'orders'\nadapter = 'duckdb'\n[git]\nbase_rf = 'origin/main'\n",
+            local: "",
+            expected_failure: failure_at(
+                ConfigFile::Project,
+                "git contains unknown key(s): base_rf. Allowed keys: base_ref",
+                Some("did you mean 'base_ref'?"),
             ),
         },
         ProjectFailureTestCase {
@@ -85,6 +112,34 @@ fn given_project_files_when_loading_then_rejections_match_python_loader() {
 
         assert_eq!(
             failure, test_case.expected_failure,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_git_section_when_reading_base_ref_then_returns_configured_ref() {
+    let test_cases = [
+        GitBaseRefTestCase {
+            description: "a configured base ref",
+            project: "name = 'orders'\nadapter = 'duckdb'\n[git]\nbase_ref = 'origin/main'\n",
+            expected_base_ref: Some("origin/main"),
+        },
+        GitBaseRefTestCase {
+            description: "no git section",
+            project: PROJECT,
+            expected_base_ref: None,
+        },
+    ];
+    for test_case in test_cases {
+        let (_directory, paths) = project_directory(test_case.project, "");
+
+        let base_ref = load_git_base_ref(&paths).expect(test_case.description);
+
+        assert_eq!(
+            base_ref.as_deref(),
+            test_case.expected_base_ref,
             "{}",
             test_case.description
         );

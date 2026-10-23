@@ -493,3 +493,81 @@ class SharedPartialFixtureE2ETestCase:
     enriched_column: str
     report_column: str
     expected_padding_count: int
+
+
+@dataclass(frozen=True)
+class SinceSelectionE2ETestCase:
+    """Edits made after the base commit and what `--since` must select and say."""
+
+    description: str
+    edits: Mapping[str, str]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
+    deletions: tuple[str, ...] = field(default_factory=tuple)
+    # The git command run after the edits; `commit --all` makes them part of HEAD.
+    git_after_edits: tuple[str, ...] = ("status", "--short")
+
+
+@dataclass(frozen=True)
+class SinceSharedBaseE2ETestCase:
+    """A test run, then a scenario run, against the same base ref."""
+
+    description: str
+    edits: Mapping[str, str]
+    test_command: tuple[str, ...]
+    scenario_command: tuple[str, ...]
+    expected_test_fragments: tuple[str, ...]
+    expected_scenario_fragments: tuple[str, ...]
+    unexpected_scenario_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SinceJsonOutputE2ETestCase:
+    """A machine-output `--since` run and where its parts must go."""
+
+    description: str
+    edits: Mapping[str, str]
+    command: tuple[str, ...]
+    expected_stderr_fragments: tuple[str, ...]
+    expected_test_names: tuple[str, ...]
+    unexpected_stdout_fragments: tuple[str, ...]
+    # The `since` section's selected items and their reasons, by name.
+    expected_selected: Mapping[str, tuple[str, ...]]
+
+
+@dataclass(frozen=True)
+class SinceShallowCloneE2ETestCase:
+    """A shallow clone that lacks the merge base of the compared ref."""
+
+    description: str
+    clone_arguments: tuple[str, ...]
+    fetch_arguments: tuple[str, ...]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SinceBrokenBaseE2ETestCase:
+    """A base revision that does not compile, and the error `--since` must report."""
+
+    description: str
+    base_files: Mapping[str, str]
+    deletions: tuple[str, ...]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class SinceUnwritableCacheE2ETestCase:
+    """A `--since` run whose base snapshot cache cannot be written."""
+
+    description: str
+    blocking_file: str
+    command: tuple[str, ...]
+    expected_stderr_fragments: tuple[str, ...]
+    expected_test_names: tuple[str, ...]

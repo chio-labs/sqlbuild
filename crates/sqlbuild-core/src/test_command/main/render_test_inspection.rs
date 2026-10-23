@@ -37,6 +37,9 @@ pub fn render_test_inspection(
                 "  boundary: {mock} is replaced by __ref__{mock}\n"
             ));
         }
+        for reason in &entry.selection_reasons {
+            text.push_str(&format!("  selected: {reason}\n"));
+        }
         text.push('\n');
     }
     let errors: usize = warnings

@@ -6,9 +6,7 @@ use std::path::{Component, Path, PathBuf};
 use ruff_python_ast::Stmt;
 
 use crate::cpython_tree::models::CpythonNode;
-use crate::rule_evidence::constants::{
-    INIT_FILE_NAME, PYTHON_SUFFIX, RULES_DIRECTORY_NAME, STAR_IMPORT_NAME,
-};
+use crate::rule_evidence::constants::{INIT_FILE_NAME, PYTHON_SUFFIX, STAR_IMPORT_NAME};
 use sqlbuild_core::constants::PYTHON_INIT_MODULE_STEM as INIT_MODULE_NAME;
 
 /// `Path.resolve()`: symlinks resolved through the existing prefix, the rest kept lexically.
@@ -67,22 +65,21 @@ pub(crate) fn package_inits(path: &Path, rules_root: &Path) -> Vec<PathBuf> {
     inits
 }
 
-/// Every repository-owned rules module one import statement can execute.
+/// Modules under `rules_root` one import executes, from `project` and only `package` when set.
 pub(crate) fn local_import_paths(
     node: &CpythonNode<'_>,
     source_path: &Path,
-    rules_root: &Path,
+    (project, rules_root): (&Path, &Path),
+    package: Option<&str>,
 ) -> Vec<PathBuf> {
-    let project: PathBuf = rules_root
-        .parent()
-        .map_or(PathBuf::new(), Path::to_path_buf);
+    let project: PathBuf = project.to_path_buf();
     let mut targets: Vec<(PathBuf, Vec<String>)> = Vec::new();
     match node {
         CpythonNode::Stmt(Stmt::Import(import)) => {
             for alias in &import.names {
                 let parts: Vec<String> =
                     alias.name.as_str().split('.').map(str::to_owned).collect();
-                if parts[0] == RULES_DIRECTORY_NAME {
+                if package.is_none_or(|package| parts[0] == package) {
                     targets.push((project.clone(), parts));
                 }
             }
@@ -100,7 +97,9 @@ pub(crate) fn local_import_paths(
                 for _ in 1..import.level {
                     base = base.parent().map_or(base.clone(), Path::to_path_buf);
                 }
-            } else if module_parts.first().map(String::as_str) != Some(RULES_DIRECTORY_NAME) {
+            } else if package
+                .is_some_and(|package| module_parts.first().map(String::as_str) != Some(package))
+            {
                 return Vec::new();
             }
             targets.push((base.clone(), module_parts.clone()));

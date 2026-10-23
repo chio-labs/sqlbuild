@@ -21,6 +21,8 @@ pub struct TestInspectionEntry {
     pub mocked_table_functions: Vec<String>,
     pub real_models: Vec<String>,
     pub expected_models: Vec<String>,
+    /// Why `--since` selected the test; empty without `--since`.
+    pub selection_reasons: Vec<String>,
 }
 
 /// One plan warning: its severity value and message.

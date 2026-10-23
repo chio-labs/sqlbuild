@@ -1,4 +1,5 @@
 pub mod explicit_references_help;
+pub mod load_git_base_ref;
 pub mod load_local_config;
 pub mod load_project_config;
 pub mod local_sql_analysis_failure;

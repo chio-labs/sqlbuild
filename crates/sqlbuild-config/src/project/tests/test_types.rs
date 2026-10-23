@@ -13,3 +13,9 @@ pub(super) struct GuidanceTestCase {
     pub(super) expected_note: &'static str,
     pub(super) expected_help: &'static str,
 }
+
+pub(crate) struct GitBaseRefTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) project: &'static str,
+    pub(crate) expected_base_ref: Option<&'static str>,
+}

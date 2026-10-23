@@ -9,6 +9,7 @@ use pyo3::prelude::{
 use pyo3::types::{PyBytes, PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_config::project::errors::{ConfigFailure, FailureClass, LoadFailure};
+use sqlbuild_config::project::main::load_git_base_ref::load_git_base_ref;
 use sqlbuild_config::project::main::load_local_config::load_local_config;
 use sqlbuild_config::project::main::load_project_config::load_project_config;
 use sqlbuild_config::project::main::local_sql_analysis_failure::local_sql_analysis_failure;
@@ -171,6 +172,13 @@ pub(crate) fn load_project_config_file(
         Ok(config) => built(py, config),
         Err(failure) => Err(load_error(py, &failure, &files)?),
     }
+}
+
+/// `[git] base_ref` of the project at `project_dir`, which `--since @base` names.
+pub(crate) fn configured_git_base_ref(project_dir: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
+    let files = files(project_dir)?;
+    load_git_base_ref(&files.native)
+        .or_else(|failure| Err(load_error(project_dir.py(), &failure, &files)?))
 }
 
 /// `load_local_config`: the validated `LocalConfig` of `project_dir`, or the default.

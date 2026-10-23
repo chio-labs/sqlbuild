@@ -42,6 +42,31 @@ sqb scenario test [flags]
 | `--max-snapshot-bytes` | Override per-relation byte limit for capture |
 | `--max-snapshot-total-bytes` | Override total byte limit for capture |
 | `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `query` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
+| `--since <ref>` | Run only the scenarios affected by changes since the merge base of `<ref>` and `HEAD`; `@base` reads `[git] base_ref` |
+| `--explain` | With `--since`, print why each selected scenario was selected |
+
+### Affected scenarios
+
+`--since <ref>` applies the rules of [`sqb test --since`](test.md#run-only-affected-tests)
+to scenarios. A scenario is selected when its own file (its definition and fixtures) or its
+captured local snapshots changed, or when any node it actually executes changed: the models it
+builds, the seeds and sources it reads, the functions they call, the audits attached to its models,
+and the macros, enums and constants they and the scenario use. A model the scenario replaces with a
+`__ref__` fixture, a source it replaces with a `__source__` fixture, or a seed it replaces with a
+`__seed__` fixture, is not executed, so only changes to its declared columns, which shape the
+fixture, select the scenario. [Project-wide inputs](test.md#project-wide-inputs) such as
+the connection, targets and Python dependency files select every scenario.
+
+`--select` and `--exclude` narrow the affected scenarios further. With `--json`, the document gains
+the same `since` section as `sqb test`, listing each selected scenario with its reasons. Both
+commands share the cached base compile when `sqb test` uses the default target and no `--vars`, so
+`sqb test --since origin/main` and `sqb scenario test --since origin/main` in one CI job compile
+the base once and resolve the same changed set:
+
+```bash
+sqb test --since "origin/$TARGET_BRANCH"
+sqb scenario test --since "origin/$TARGET_BRANCH" --explain
+```
 
 ### Selectors
 

@@ -2061,6 +2061,13 @@ def build_lint_expansion_context(
     declaration_scope: DeclarationScopeBuild | None = None,
     static_declaration_scope: DeclarationScopeBuild | None = None,
 ) -> SqlExpansionContext: ...
+def write_base_definition_snapshot(
+    *,
+    project_dir: str | Path,
+    output_path: str | Path,
+    selected_target: str | None = None,
+    cli_vars: dict[str, object] | None = None,
+) -> None: ...
 def build_dag_json(
     *, graph: ProjectGraph, project_name: str, python_graph: PythonNodeGraph | None = None
 ) -> str: ...
@@ -6807,6 +6814,8 @@ class ScenarioTestCommandRequest(NativeRecord):
     json_output: bool
     json_output_path: Path | None
     scenario_timeout: str | None
+    since: str | None
+    explain: bool
     def __init__(
         self,
         project_dir: Path | None = None,
@@ -6825,6 +6834,8 @@ class ScenarioTestCommandRequest(NativeRecord):
         json_output: bool = False,
         json_output_path: Path | None = None,
         scenario_timeout: str | None = None,
+        since: str | None = None,
+        explain: bool = False,
     ) -> None: ...
 
 class ScenarioCaptureCommandRequest(NativeRecord):
@@ -6866,6 +6877,8 @@ class TestCommandRequest(NativeRecord):
     case_name: str | None
     inspect: bool
     test_timeout: str | None
+    since: str | None
+    explain: bool
     def __init__(
         self,
         project_dir: Path | None = None,
@@ -6881,6 +6894,8 @@ class TestCommandRequest(NativeRecord):
         case_name: str | None = None,
         inspect: bool = False,
         test_timeout: str | None = None,
+        since: str | None = None,
+        explain: bool = False,
     ) -> None: ...
 
 class RefactorCommandRequest(NativeRecord):

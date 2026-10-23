@@ -10,6 +10,7 @@ pub(crate) mod authored_values;
 pub(crate) mod build_command;
 pub(crate) mod build_progress;
 pub(crate) mod cache;
+pub(crate) mod change_selection;
 pub(crate) mod check;
 pub(crate) mod cli;
 pub(crate) mod clone;

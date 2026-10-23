@@ -536,6 +536,18 @@ pub(crate) fn load_diff(payload: Option<&ConfigValue>, file: ConfigFile) -> Load
     ))
 }
 
+/// `[git]`: the `base_ref` that `--since @base` compares against, when set.
+pub(crate) fn load_git(payload: Option<&ConfigValue>, file: ConfigFile) -> Loaded<Option<String>> {
+    let mapping = coerce_mapping(payload, place(file, "git"))?;
+    validate_allowed_keys(mapping, &["base_ref"], place(file, "git"))?;
+    optional_str(mapping, "base_ref").map_err(|_| {
+        ConfigFailure::at(
+            file,
+            "git.base_ref must be a non-empty git ref such as 'origin/main'",
+        )
+    })
+}
+
 fn janitor_count(mapping: &Entries, key: &str, default: i64) -> Loaded<ConfigValue> {
     optional_int(mapping, key, default)
 }
