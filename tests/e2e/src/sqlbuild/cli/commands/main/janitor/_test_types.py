@@ -288,3 +288,38 @@ class JanitorJsonFailedRunE2ETestCase:
     expected_status: str
     expected_error_fragment: str
     expected_failed_items: int
+
+
+@dataclass(frozen=True)
+class JanitorUsageUncheckedE2ETestCase:
+    """Test case for janitor runs on an adapter with no usage source."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_ordered_lines: tuple[str, ...]
+    expected_archived: int
+
+
+@dataclass(frozen=True)
+class JanitorUsageE2ETestCase:
+    """Test case for janitor runs whose adapter reports which candidates are read."""
+
+    description: str
+    janitor_config: str
+    janitor_command: tuple[str, ...]
+    reads: dict[str, tuple[tuple[str, ...], int]]
+    expected_ordered_lines: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...]
+    expected_remaining: tuple[str, ...]
+    expected_archived: int
+
+
+@dataclass(frozen=True)
+class JanitorUsagePromptE2ETestCase:
+    """Test case for the confirmation prompt's usage line."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    reads: dict[str, tuple[tuple[str, ...], int]]
+    unavailable: str | None
+    expected_fragments: tuple[str, ...]

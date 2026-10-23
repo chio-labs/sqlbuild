@@ -1,9 +1,10 @@
 //! The JSON payload of `sqb janitor --json`.
 
+use crate::janitor_text::_helpers::usage::checked_usage;
 use crate::janitor_text::constants::{DROP_EARLY, DROP_EXPIRED};
 use crate::janitor_text::models::{
-    JanitorItemText, JanitorPlanText, JanitorResultCounts, JanitorRunText, OldNameViewText,
-    SourceSchemaText,
+    ArchiveCandidateText, JanitorItemText, JanitorPlanText, JanitorResultCounts, JanitorRunText,
+    OldNameViewText, SourceSchemaText,
 };
 use crate::json::models::{JsonInteger, JsonValue};
 
@@ -61,6 +62,54 @@ fn old_name_view(view: &OldNameViewText, planned: &str) -> JsonValue {
     ])
 }
 
+/// `null` when usage was not checked, `false` when unread, else the reads.
+fn in_use(candidate: &ArchiveCandidateText, checked: bool) -> JsonValue {
+    if !checked {
+        return JsonValue::Null;
+    }
+    candidate
+        .usage
+        .as_ref()
+        .map_or(JsonValue::Bool(false), |usage| {
+            object(vec![
+                ("last_read", utc_timestamp(&usage.last_read_at)),
+                ("readers", texts(&usage.readers)),
+                ("query_count", integer(usage.query_count)),
+            ])
+        })
+}
+
+fn archive_candidate(candidate: &ArchiveCandidateText, checked: bool) -> JsonValue {
+    object(vec![
+        ("name", text(&candidate.name)),
+        ("archive_name", text(&candidate.archive_name)),
+        ("age_days", optional_integer(candidate.age_days)),
+        ("expires_at", utc_timestamp(&candidate.expires_at)),
+        ("deleted_in_run", JsonValue::Bool(candidate.expires_now)),
+        ("in_use", in_use(candidate, checked)),
+    ])
+}
+
+/// The top-level `usage_check`: its status and reason, or `null` when it did not run.
+pub(crate) fn usage_check_payload(plan: Option<&JanitorPlanText>) -> JsonValue {
+    let Some(check) = plan.and_then(|plan| plan.usage_check.as_ref()) else {
+        return JsonValue::Null;
+    };
+    object(vec![
+        (
+            "status",
+            text(if check.checked {
+                "checked"
+            } else {
+                "not_checked"
+            }),
+        ),
+        ("reason", optional_text(check.reason.as_deref())),
+        ("window", text(&check.window)),
+        ("keep_in_use", JsonValue::Bool(check.keep_in_use)),
+    ])
+}
+
 fn source_schema(schema: &SourceSchemaText, blocked: bool) -> JsonValue {
     let mut fields: Vec<(&str, JsonValue)> = vec![
         ("name", text(&schema.name)),
@@ -96,6 +145,7 @@ pub(crate) fn plan_payload(plan: &JanitorPlanText) -> JsonValue {
                 .map(|view| old_name_view(view, "missing")),
         )
         .collect();
+    let checked: bool = checked_usage(plan).is_some();
     object(vec![
         ("direct_mode", JsonValue::Bool(plan.direct_mode)),
         ("retention_days", integer(plan.retention_days)),
@@ -114,15 +164,16 @@ pub(crate) fn plan_payload(plan: &JanitorPlanText) -> JsonValue {
             JsonValue::Array(
                 plan.archive_candidates
                     .iter()
-                    .map(|candidate| {
-                        object(vec![
-                            ("name", text(&candidate.name)),
-                            ("archive_name", text(&candidate.archive_name)),
-                            ("age_days", optional_integer(candidate.age_days)),
-                            ("expires_at", utc_timestamp(&candidate.expires_at)),
-                            ("deleted_in_run", JsonValue::Bool(candidate.expires_now)),
-                        ])
-                    })
+                    .map(|candidate| archive_candidate(candidate, checked))
+                    .collect(),
+            ),
+        ),
+        (
+            "kept_in_use",
+            JsonValue::Array(
+                plan.kept_in_use
+                    .iter()
+                    .map(|candidate| archive_candidate(candidate, checked))
                     .collect(),
             ),
         ),

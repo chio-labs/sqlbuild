@@ -1,6 +1,6 @@
 //! `sqb janitor --json`.
 
-use crate::janitor_text::_helpers::plan_json::{plan_payload, run_payload};
+use crate::janitor_text::_helpers::plan_json::{plan_payload, run_payload, usage_check_payload};
 use crate::janitor_text::models::{JanitorOutcome, JanitorPlanText, JanitorRunText};
 use crate::json::main::dumps::dumps;
 use crate::json::models::{JsonDialect, JsonValue, StdlibJsonOptions};
@@ -27,6 +27,7 @@ pub fn format_janitor_json(
             "plan".to_owned(),
             plan.map_or(JsonValue::Null, plan_payload),
         ),
+        ("usage_check".to_owned(), usage_check_payload(plan)),
         (
             "result".to_owned(),
             run.map_or(JsonValue::Null, run_payload),

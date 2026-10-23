@@ -40,6 +40,7 @@ from sqlbuild.adapter.contract.exceptions import (
 )
 from sqlbuild.adapter.contract.main.run_relation_read_probe import run_relation_read_probe
 from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
+from sqlbuild.adapter.contract.main.unsupported_relation_usage import unsupported_relation_usage
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
@@ -52,6 +53,7 @@ from sqlbuild.adapter.contract.models import (
     RelationInfo,
     RelationReadProbe,
     RelationRowCountEstimate,
+    RelationUsageReport,
     RowDiffCoverage,
     RowDiffPreparedRelations,
     RowDiffResult,
@@ -365,6 +367,18 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
             except AdapterUserError as error:
                 results[request] = TableFreshnessMetadata.unavailable(message=error.message)
         return results
+
+    def relation_usage(
+        self,
+        *,
+        connection: Any,
+        relations: tuple[RelationInfo, ...],
+        window_seconds: int,
+    ) -> RelationUsageReport:
+        """Report that usage is not checked; adapters with a usage source override this."""
+
+        del connection, relations, window_seconds
+        return unsupported_relation_usage()
 
     def query_column_names(self, *, connection: Any, sql: str) -> tuple[str, ...]:
         """Return column names produced by a SQL query without materializing full rows."""

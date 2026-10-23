@@ -461,6 +461,7 @@ const JANITOR_COMMAND_REQUEST: RecordSpec = RecordSpec {
         FieldSpec::new("retention_days", FieldDefault::None),
         FieldSpec::new("direct_state_history_versions", FieldDefault::None),
         FieldSpec::new("drop_old_name_views", FieldDefault::EmptyTuple),
+        FieldSpec::new("keep_in_use", FieldDefault::False),
         FieldSpec::new("selected_target", FieldDefault::None),
         FieldSpec::new("as_target", FieldDefault::None),
         FieldSpec::new("verbose", FieldDefault::False),
@@ -488,6 +489,8 @@ const JANITOR_SETTINGS: RecordSpec = RecordSpec {
         FieldSpec::required("direct_state_history_versions"),
         FieldSpec::new("archive_retention_days", FieldDefault::Int(14)),
         FieldSpec::new("drop_old_name_views", FieldDefault::EmptyTuple),
+        FieldSpec::new("in_use_window", FieldDefault::Text("7d")),
+        FieldSpec::new("keep_in_use", FieldDefault::False),
     ],
 };
 const LOAD_COMMAND_REQUEST: RecordSpec = RecordSpec {

@@ -22,6 +22,7 @@ use crate::bindings::_helpers::janitor::janitor_facts::Warehouse;
 use crate::bindings::_helpers::janitor::janitor_planning::{
     JanitorSettings, RelationScope, build_plan,
 };
+use crate::bindings::_helpers::janitor::janitor_usage::{UsageSettings, check_janitor_usage};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -284,6 +285,7 @@ pub(crate) fn build_janitor_execution_plan<'py>(
             Ok(plan)
         },
     )?;
+    let has_candidates: bool = native_field(&plan, "archive_candidates")?.is_truthy()?;
     let options: Bound<'py, PyDict> = PyDict::new(py);
     options.set_item(
         "message",
@@ -292,14 +294,27 @@ pub(crate) fn build_janitor_execution_plan<'py>(
             started.elapsed().as_secs_f64()
         ),
     )?;
-    options.set_item("blank_line_after", true)?;
+    options.set_item("blank_line_after", !has_candidates)?;
     status.call_method("complete", (), Some(&options))?;
     let unknown: Bound<'py, PyAny> =
         native_field(&plan, "old_name_views")?.getattr("unknown_requests")?;
     if unknown.is_truthy()? {
         return Err(unknown_view_error(py, &unknown)?);
     }
-    Ok(plan)
+    if !has_candidates {
+        return Ok(plan);
+    }
+    check_janitor_usage(
+        (&compiled.adapter, connection),
+        (
+            &plan,
+            &status_reporter(&output_stream(invocation)?, use_color(invocation)?)?,
+        ),
+        &UsageSettings {
+            window: native_field(settings, "in_use_window")?.extract()?,
+            keep_in_use: native_field(settings, "keep_in_use")?.is_truthy()?,
+        },
+    )
 }
 
 /// Execute the cleanup plan on up to the command's concurrency, reporting to `progress`.

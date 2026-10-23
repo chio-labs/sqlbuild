@@ -19,7 +19,9 @@ from sqlbuild.adapter.contract.models import (
     FunctionDefinition,
     MigrationStagePlan,
     RelationGrant,
+    RelationInfo,
     RelationReadProbe,
+    RelationUsageReport,
     RowDiffTolerance,
     RowDiffTolerances,
     SnapshotChangeTarget,
@@ -209,6 +211,22 @@ class StrictAdapter(
         requests: tuple[TableFreshnessRequest, ...],
     ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
         """Return one freshness outcome per requested table without failing the whole batch."""
+        ...
+
+    @abstractmethod
+    def relation_usage(
+        self,
+        *,
+        connection: Any,
+        relations: tuple[RelationInfo, ...],
+        window_seconds: int,
+    ) -> RelationUsageReport:
+        """Report which relations other queries read in the last `window_seconds`.
+
+        Each usage names the relation, its latest read, its readers (most queries first) and how
+        many queries read it. SQLBuild's own queries and zero-copy clones do not count. A
+        warehouse that cannot report reads returns an unchecked report with a short reason.
+        """
         ...
 
     @abstractmethod

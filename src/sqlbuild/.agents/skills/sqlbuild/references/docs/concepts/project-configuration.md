@@ -824,6 +824,8 @@ retention_days = 14
 archive_retention_days = 14
 delete_tracked_only = true
 exclude_patterns = ["audit_*", "tmp_*"]
+in_use_window = "7d"
+keep_in_use = false
 ```
 
 | Field | Default | Description |
@@ -834,6 +836,8 @@ exclude_patterns = ["audit_*", "tmp_*"]
 | `delete_tracked_only` | `true` | Only clean relations that appear in fingerprint tracking |
 | `exclude_patterns` | `[]` | Glob patterns for relations to skip |
 | `direct_state_history_versions` | `20` | How many state-history rows to keep per identity in `_sqlbuild_fingerprints` and `_sqlbuild_source_freshness` |
+| `in_use_window` | `"7d"` | How far back the janitor looks for reads of each relation it would archive. A fixed duration such as `"7d"` or `"36h"`. See [Relations in use](../cli/janitor.md#relations-in-use) |
+| `keep_in_use` | `false` | Keep relations read within `in_use_window` instead of archiving them. `--keep-in-use` turns it on for one run |
 
 See [janitor](../cli/janitor.md) for the archive and delete lifecycle.
 

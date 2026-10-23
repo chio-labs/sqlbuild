@@ -62,6 +62,7 @@ from sqlbuild.adapter.contract.models import (
     RelationInfo,
     RelationReadProbe,
     RelationRowCountEstimate,
+    RelationUsageReport,
     RenderedRetentionChange,
     RetentionRequest,
     RetentionState,
@@ -130,6 +131,7 @@ from sqlbuild.adapters.snowflake._helpers.metadata_types import (
     information_schema_type,
     show_columns_type,
 )
+from sqlbuild.adapters.snowflake._helpers.relation_usage import read_relation_usage
 from sqlbuild.adapters.snowflake._helpers.show_metadata import (
     is_missing_object_error,
     listed_relation_from_show_table,
@@ -876,6 +878,22 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             data_version=row[1],
             value_kind="timestamp",
             observed_at=row[1] if isinstance(row[1], datetime) else None,
+        )
+
+    def relation_usage(
+        self,
+        *,
+        connection: Any,
+        relations: tuple[RelationInfo, ...],
+        window_seconds: int,
+    ) -> RelationUsageReport:
+        """Read candidate reads from ACCOUNT_USAGE.ACCESS_HISTORY, which lags up to 3 hours."""
+
+        return read_relation_usage(
+            connection=connection,
+            relations=relations,
+            window_seconds=window_seconds,
+            current_database=lambda: self._current_database(connection=connection),
         )
 
     def get_tables_freshness_metadata(
