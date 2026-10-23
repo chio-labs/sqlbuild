@@ -17,7 +17,8 @@ UNDEFINED_TABLE_SQLSTATE: str = "42P01"
 DETAILED_TABLE_INFORMATION_MARKER: str = "# detailed table information"
 DESCRIBE_DETAIL_ROW_WIDTH: int = 2
 TEMPORARY_FUNCTION_PREFIX: str = "__sqb_test__"
-USAGE_NAME_CHUNK_SIZE: int = 1_000
+MAX_PARAMETER_MARKERS: int = 255
+USAGE_NAME_CHUNK_SIZE: int = MAX_PARAMETER_MARKERS - 5
 USAGE_UNAVAILABLE_REASON: str = (
     "cannot read system.access.table_lineage (needs Unity Catalog with the access system "
     "schema enabled, and USE CATALOG, USE SCHEMA and SELECT on it)"

@@ -128,3 +128,10 @@ class ClickHouseRelationUsageFailureTestCase:
     description: str
     error: Exception
     expected_error_match: str
+
+
+@dataclass(frozen=True)
+class ClickHouseRelationUsageReplicaTestCase:
+    description: str
+    replicas: int
+    expected_notices: tuple[str, ...]

@@ -25,9 +25,10 @@ INVALID_PARAMETER_VALUE_ERRNO: int = 1008
 TEMPORARY_FUNCTION_PREFIX: str = "__sqb_test__"
 USAGE_NAME_CHUNK_SIZE: int = 1_000
 USAGE_UNAVAILABLE_REASON: str = (
-    "cannot read SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY "
-    "(needs Enterprise edition and the GOVERNANCE_VIEWER database role)"
+    "cannot read SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY (needs Enterprise edition and the "
+    "SNOWFLAKE.GOVERNANCE_VIEWER database role; view chains also need SNOWFLAKE.OBJECT_VIEWER)"
 )
+CHAINS_NOT_FOLLOWED_NOTICE: str = "view chains not followed: grant SNOWFLAKE.OBJECT_VIEWER"
 SQLBUILD_QUERY_TAG_FRAGMENT: str = f'"app":"{SQLBUILD_QUERY_TAG_APP}"'
 _CLONE_IDENTIFIER: str = r'("[^"]*"|[A-Za-z_][A-Za-z0-9_$]*)'
 _CLONE_NAME: str = _CLONE_IDENTIFIER + r"(\s*\.\s*" + _CLONE_IDENTIFIER + r"){0,2}"
@@ -43,5 +44,5 @@ CLONE_STATEMENT_PATTERN: str = (
     + r'([^A-Za-z0-9_$"].*)?$'
 )
 DEPENDENCY_VIEW_DOMAINS: tuple[str, ...] = ("VIEW", "MATERIALIZED VIEW", "SECURE VIEW")
-VIEW_RELATION_TYPE: str = "view"
 QUOTED_IDENTIFIER_MARK: str = '"'
+NAME_SEPARATOR: str = "."

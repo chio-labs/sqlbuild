@@ -118,6 +118,8 @@ fn usage_candidates() -> [ArchiveCandidateText; 3] {
     ]
 }
 
+const CHAINS_NOT_FOLLOWED: &str = "view chains not followed: grant SNOWFLAKE.OBJECT_VIEWER";
+
 /// A plan for `dev` whose usage was checked over `7d`.
 fn checked_plan(keep_in_use: bool) -> JanitorPlanText {
     JanitorPlanText {
@@ -130,6 +132,7 @@ fn checked_plan(keep_in_use: bool) -> JanitorPlanText {
             reason: None,
             window: "7d".to_owned(),
             keep_in_use,
+            ..UsageCheckText::default()
         }),
         ..JanitorPlanText::default()
     }
@@ -174,6 +177,20 @@ pub(super) fn via_usage_plan() -> JanitorPlanText {
     }
 }
 
+/// A checked plan whose usage source could not follow view chains.
+pub(super) fn chains_unfollowed_plan() -> JanitorPlanText {
+    JanitorPlanText {
+        archive_candidates: usage_candidates().to_vec(),
+        usage_check: Some(UsageCheckText {
+            checked: true,
+            window: "7d".to_owned(),
+            notices: vec![CHAINS_NOT_FOLLOWED.to_owned()],
+            ..UsageCheckText::default()
+        }),
+        ..checked_plan(false)
+    }
+}
+
 /// A checked plan keeping the two in-use candidates and archiving the unread one.
 pub(super) fn kept_usage_plan() -> JanitorPlanText {
     let [view, table, unread] = usage_candidates();
@@ -192,6 +209,7 @@ pub(super) fn unchecked_plan(keep_in_use: bool) -> JanitorPlanText {
             reason: Some("unsupported adapter".to_owned()),
             window: "7d".to_owned(),
             keep_in_use,
+            ..UsageCheckText::default()
         }),
         ..direct_archive_plan()
     }

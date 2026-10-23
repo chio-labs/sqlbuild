@@ -12,6 +12,8 @@ from sqlbuild.adapters.clickhouse._helpers.type_text import quote_string
 from sqlbuild.adapters.clickhouse.constants import (
     LOGGING_OFF_VALUES,
     LOGGING_SETTING_SQL,
+    OTHER_REPLICAS_NOTICE,
+    REPLICA_COUNT_SQL,
     USAGE_ERROR_CODE_PATTERN,
     USAGE_LOGGING_OFF_REASON,
     USAGE_NAME_CHUNK_SIZE,
@@ -112,4 +114,18 @@ def read_relation_usage(
         usages=aggregate_relation_usage(
             reads=usage_reads(rows), relations_by_name=relations_by_name
         ),
+        notices=replica_notices(run_query=run_query) if relations_by_name else (),
     )
+
+
+def replica_notices(*, run_query: Callable[[str], list[tuple[object, ...]]]) -> tuple[str, ...]:
+    """A notice when this server's shard has other replicas, whose query logs are not read."""
+
+    try:
+        rows: list[tuple[object, ...]] = run_query(REPLICA_COUNT_SQL)
+    except Exception as error:
+        if not is_usage_unavailable_error(error):
+            raise
+        return ()
+    replicas: int = int(str(rows[0][0] or 0)) if rows else 0
+    return (OTHER_REPLICAS_NOTICE,) if replicas > 1 else ()

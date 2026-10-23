@@ -99,6 +99,7 @@ def test_given_duckdb_when_running_janitor_then_usage_is_reported_not_checked(
                 "reason": "unsupported adapter",
                 "window": "7d",
                 "keep_in_use": False,
+                "notices": [],
             },
             expected_archive_in_use=(("main.old_orders_000", None), ("main.old_orders_001", None)),
             expected_kept_in_use=(),
@@ -264,6 +265,7 @@ def test_given_usage_source_when_running_janitor_then_in_use_relations_are_shown
                 "reason": None,
                 "window": "7d",
                 "keep_in_use": True,
+                "notices": [],
             },
             expected_archive_in_use=(("main.old_orders_001", False),),
             expected_kept_in_use=(

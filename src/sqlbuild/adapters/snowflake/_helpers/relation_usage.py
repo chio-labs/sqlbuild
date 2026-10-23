@@ -8,19 +8,20 @@ from typing import Any
 
 from sqlbuild.adapter.contract.main.aggregate_relation_usage import aggregate_relation_usage
 from sqlbuild.adapter.contract.main.relation_reads import relation_reads
-from sqlbuild.adapter.contract.models import RelationInfo, RelationUsageReport
+from sqlbuild.adapter.contract.models import RelationInfo, RelationUsage, RelationUsageReport
 from sqlbuild.adapters.snowflake._helpers.view_dependencies import (
     chained_usages,
     dependency_name,
     dependency_queries,
     display_name,
+    walk_seeds,
 )
 from sqlbuild.adapters.snowflake.constants import (
+    CHAINS_NOT_FOLLOWED_NOTICE,
     CLONE_STATEMENT_PATTERN,
     SQLBUILD_QUERY_TAG_FRAGMENT,
     USAGE_NAME_CHUNK_SIZE,
     USAGE_UNAVAILABLE_REASON,
-    VIEW_RELATION_TYPE,
 )
 from sqlbuild.adapters.snowflake.models import UsageQuery
 
@@ -176,31 +177,47 @@ def read_relation_usage(
             connection=connection,
             queries=usage_queries(object_names=relations_by_name, window_seconds=window_seconds),
         )
+    except Exception as error:
+        if not is_usage_unavailable_error(error):
+            raise
+        return RelationUsageReport(checked=False, reason=USAGE_UNAVAILABLE_REASON)
+    usages: tuple[RelationUsage, ...] = aggregate_relation_usage(
+        reads=relation_reads(rows=rows, via_name=display_name),
+        relations_by_name=relations_by_name,
+    )
+    seeds: dict[str, tuple[str, RelationUsage]] = walk_seeds(
+        usages=usages, relations_by_dependency_name=by_dependency_name
+    )
+    try:
         dependencies: list[tuple[object, ...]] = _fetch(
             connection=connection,
             queries=dependency_queries(
-                view_names=(
-                    name
-                    for name, relation in by_dependency_name.items()
-                    if VIEW_RELATION_TYPE in relation.relation_type.lower()
-                )
+                databases=dependency_databases(seeds=seeds, candidates=by_dependency_name)
             ),
         )
     except Exception as error:
         if not is_usage_unavailable_error(error):
             raise
-        return RelationUsageReport(checked=False, reason=USAGE_UNAVAILABLE_REASON)
+        return RelationUsageReport(
+            checked=True, usages=usages, notices=(CHAINS_NOT_FOLLOWED_NOTICE,)
+        )
     return RelationUsageReport(
         checked=True,
         usages=chained_usages(
-            usages=aggregate_relation_usage(
-                reads=relation_reads(rows=rows, via_name=display_name),
-                relations_by_name=relations_by_name,
-            ),
+            usages=usages,
             dependencies=((str(row[0]), str(row[1])) for row in dependencies),
             relations_by_dependency_name=by_dependency_name,
         ),
     )
+
+
+def dependency_databases(*, seeds: Iterable[str], candidates: Iterable[str]) -> frozenset[str]:
+    """The databases of the walk's start objects and the candidates; none without a start."""
+
+    starts: tuple[str, ...] = tuple(seeds)
+    if not starts:
+        return frozenset()
+    return frozenset(name.split(".", 1)[0] for name in (*starts, *candidates))
 
 
 def _fetch(*, connection: Any, queries: tuple[UsageQuery, ...]) -> list[tuple[object, ...]]:

@@ -177,6 +177,7 @@ pub(crate) fn check_janitor_usage<'py>(
             ("window", text(py, &settings.window)),
             ("keep_in_use", flag(py, settings.keep_in_use)),
             ("reason", reason),
+            ("notices", native_field(&report, "notices")?),
         ],
     )?;
     call_with(

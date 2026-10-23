@@ -10,9 +10,12 @@ from sqlbuild.adapter.contract.main.relation_reads import relation_reads
 from sqlbuild.adapter.contract.models import RelationInfo, RelationUsageReport
 from sqlbuild.adapters.bigquery.constants import (
     CLONE_STATEMENT_PATTERN,
+    FORBIDDEN_ERROR_CLASS_NAMES,
+    FORBIDDEN_STATUS,
+    NOT_FOUND_ERROR_CLASS_NAMES,
+    NOT_FOUND_STATUS,
     USAGE_NAME_CHUNK_SIZE,
-    USAGE_UNAVAILABLE_ERROR_CLASS_NAMES,
-    USAGE_UNAVAILABLE_ERROR_CODES,
+    USAGE_UNAVAILABLE_ERROR_REASONS,
     USAGE_UNAVAILABLE_MESSAGES,
     USAGE_UNAVAILABLE_REASON,
 )
@@ -124,12 +127,34 @@ def query_parameters(query: UsageQuery) -> list[Any]:
 def is_usage_unavailable_error(error: Exception) -> bool:
     """Whether reading JOBS failed because the view or the permission to list jobs is missing."""
 
+    reasons: frozenset[str] = error_reasons(error)
+    if reasons:
+        return reasons <= USAGE_UNAVAILABLE_ERROR_REASONS
+    code: object = getattr(error, "code", None)
+    name: str = type(error).__name__
+    if code == NOT_FOUND_STATUS or name in NOT_FOUND_ERROR_CLASS_NAMES:
+        return True
     message: str = str(error).lower()
-    return (
-        getattr(error, "code", None) in USAGE_UNAVAILABLE_ERROR_CODES
-        or type(error).__name__ in USAGE_UNAVAILABLE_ERROR_CLASS_NAMES
-        or any(marker in message for marker in USAGE_UNAVAILABLE_MESSAGES)
+    return (code == FORBIDDEN_STATUS or name in FORBIDDEN_ERROR_CLASS_NAMES) and any(
+        marker in message for marker in USAGE_UNAVAILABLE_MESSAGES
     )
+
+
+def error_reasons(error: Exception) -> frozenset[str]:
+    """The `reason` of each error detail Google reports, such as `accessDenied`."""
+
+    details: object = getattr(error, "errors", None)
+    reasons: set[str] = set()
+    if isinstance(details, list):
+        reasons.update(
+            str(detail["reason"])
+            for detail in details
+            if isinstance(detail, dict) and detail.get("reason")
+        )
+    reason: object = getattr(error, "reason", None)
+    if isinstance(reason, str) and reason:
+        reasons.add(reason)
+    return frozenset(reasons)
 
 
 def relation_project(*, relation: RelationInfo, default_project: str) -> str:

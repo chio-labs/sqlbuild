@@ -206,8 +206,13 @@ def test_given_many_candidates_when_reading_usage_then_names_are_chunked(
             expected_report=RelationUsageReport(checked=False, reason=USAGE_UNAVAILABLE_REASON),
         ),
         BigQueryRelationUsageErrorTestCase(
-            description="a Forbidden error is not checked",
-            error=Forbidden("403 GET jobs"),
+            description="a Forbidden access denial is not checked",
+            error=Forbidden("403 Access Denied: Project shop-analytics"),
+            expected_report=RelationUsageReport(checked=False, reason=USAGE_UNAVAILABLE_REASON),
+        ),
+        BigQueryRelationUsageErrorTestCase(
+            description="an accessDenied reason is not checked",
+            error=FakeBigQueryError("403 GET jobs", 403, ("accessDenied",)),
             expected_report=RelationUsageReport(checked=False, reason=USAGE_UNAVAILABLE_REASON),
         ),
     ),
@@ -234,6 +239,29 @@ def test_given_no_jobs_access_when_reading_usage_then_usage_is_not_checked(
             description="a quota failure is a real error",
             error=FakeBigQueryError("Quota exceeded: too many concurrent queries", 400),
             expected_error_match="Quota exceeded",
+        ),
+        BigQueryRelationUsageFailureTestCase(
+            description="a 403 rate limit is a real error",
+            error=FakeBigQueryError(
+                "403 Exceeded rate limits: too many table metadata read operations",
+                403,
+                ("rateLimitExceeded",),
+            ),
+            expected_error_match="Exceeded rate limits",
+        ),
+        BigQueryRelationUsageFailureTestCase(
+            description="a 403 quota denial naming a permission is a real error",
+            error=FakeBigQueryError(
+                "403 Quota exceeded: Access Denied for the project's permission budget",
+                403,
+                ("quotaExceeded",),
+            ),
+            expected_error_match="Quota exceeded",
+        ),
+        BigQueryRelationUsageFailureTestCase(
+            description="a 403 without a reason or an access denial is a real error",
+            error=FakeBigQueryError("403 Billing has not been enabled for this project", 403),
+            expected_error_match="Billing",
         ),
     ),
     ids=lambda case: case.description,

@@ -264,9 +264,10 @@ def run_bigquery_job(
 class FakeBigQueryError(Exception):
     """A Google API error with an HTTP status code."""
 
-    def __init__(self, message: str, code: int) -> None:
+    def __init__(self, message: str, code: int, reasons: tuple[str, ...] = ()) -> None:
         super().__init__(message)
         self.code: int = code
+        self.errors: list[dict[str, str]] = [{"reason": reason} for reason in reasons]
 
 
 class Forbidden(Exception):

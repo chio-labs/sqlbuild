@@ -36,18 +36,21 @@ class FakeQueryLogConnection:
         rows: tuple[tuple[object, ...], ...] = (),
         log_queries: object = True,
         errors: tuple[Exception, ...] = (),
+        replicas: int = 1,
     ) -> None:
         self.rows: tuple[tuple[object, ...], ...] = rows
         self.log_queries: object = log_queries
         self.errors: tuple[Exception, ...] = errors
+        self.replicas: int = replicas
         self.queries: list[str] = []
 
     def execute(self, sql: str) -> FakeQueryLogCursor:
-        reads: dict[bool, Callable[[], FakeQueryLogCursor]] = {
-            True: lambda: FakeQueryLogCursor([(self.log_queries,)]),
-            False: lambda: self.query_log_rows(sql),
+        reads: dict[tuple[bool, bool], Callable[[], FakeQueryLogCursor]] = {
+            (True, False): lambda: FakeQueryLogCursor([(self.log_queries,)]),
+            (False, True): lambda: FakeQueryLogCursor([(self.replicas,)]),
+            (False, False): lambda: self.query_log_rows(sql),
         }
-        return reads[sql == "SELECT getSetting('log_queries')"]()
+        return reads[(sql == "SELECT getSetting('log_queries')", "system.clusters" in sql)]()
 
     def query_log_rows(self, sql: str) -> FakeQueryLogCursor:
         self.queries.append(sql)

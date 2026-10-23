@@ -187,6 +187,7 @@ fn usage_check(check: &Bound<'_, PyAny>) -> PyResult<Option<UsageCheckText>> {
         reason: native_field(check, "reason")?.extract()?,
         window: native_field(check, "window")?.extract()?,
         keep_in_use: native_field(check, "keep_in_use")?.is_truthy()?,
+        notices: native_field(check, "notices")?.extract()?,
     }))
 }
 

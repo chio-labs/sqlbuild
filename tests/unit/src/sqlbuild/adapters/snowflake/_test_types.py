@@ -360,3 +360,12 @@ class SnowflakeCloneStatementTestCase:
     description: str
     statement: str
     expected_clone: bool
+
+
+@dataclass(frozen=True)
+class SnowflakeRelationUsageChainsUnfollowedTestCase:
+    description: str
+    errno: int | None
+    message: str
+    expected_usages: tuple[tuple[str, tuple[str, ...], int], ...]
+    expected_notices: tuple[str, ...]

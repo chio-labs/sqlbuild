@@ -416,11 +416,13 @@ class FakeUsageWarehouse:
         access_rows: tuple[tuple[object, ...], ...] = (),
         dependency_rows: tuple[tuple[str, str], ...] = (),
         errors: tuple[Exception, ...] = (),
+        dependency_errors: tuple[Exception, ...] = (),
     ) -> None:
         self.current_database: str | None = current_database
         self.access_rows: tuple[tuple[object, ...], ...] = access_rows
         self.dependency_rows: tuple[tuple[str, str], ...] = dependency_rows
         self.errors: tuple[Exception, ...] = errors
+        self.dependency_errors: tuple[Exception, ...] = dependency_errors
         self.queries: list[tuple[str, tuple[object, ...]]] = []
         self.dependency_queries: list[tuple[str, tuple[object, ...]]] = []
 
@@ -439,8 +441,11 @@ class FakeUsageWarehouse:
         self, sql: str, params: tuple[object, ...]
     ) -> list[tuple[object, ...]]:
         self.dependency_queries.append((sql, params))
-        names: frozenset[object] = frozenset(params)
-        return list(filter(lambda row: row[0] in names, self.dependency_rows))
+        error: Exception
+        for error in self.dependency_errors:
+            raise error
+        databases: frozenset[object] = frozenset(params)
+        return list(filter(lambda row: row[0].split(".")[0] in databases, self.dependency_rows))
 
 
 class FakeUsageCursor:

@@ -1,4 +1,4 @@
-"""Follow Snowflake view dependencies from in-use candidates to the candidates behind them."""
+"""Follow Snowflake view dependencies from directly read objects to the candidates behind them."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from datetime import datetime
 from sqlbuild.adapter.contract.models import RelationInfo, RelationUsage
 from sqlbuild.adapters.snowflake.constants import (
     DEPENDENCY_VIEW_DOMAINS,
+    NAME_SEPARATOR,
     QUOTED_IDENTIFIER_MARK,
     USAGE_NAME_CHUNK_SIZE,
 )
@@ -29,34 +30,60 @@ def display_name(object_name: str) -> str:
     return object_name if QUOTED_IDENTIFIER_MARK in object_name else object_name.lower()
 
 
-def dependency_queries(*, view_names: Iterable[str]) -> tuple[UsageQuery, ...]:
-    """One OBJECT_DEPENDENCIES read per chunk of candidate views."""
+def dependency_key(object_name: str) -> str:
+    """An access-history or printed object name as OBJECT_DEPENDENCIES spells it."""
 
-    names: tuple[str, ...] = tuple(sorted(view_names))
+    parts: list[str] = []
+    current: list[str] = []
+    quoted: bool = False
+    was_quoted: bool = False
+    index: int = 0
+    while index < len(object_name):
+        character: str = object_name[index]
+        doubled: bool = object_name[index : index + 2] == QUOTED_IDENTIFIER_MARK * 2
+        if quoted and doubled:
+            current.append(QUOTED_IDENTIFIER_MARK)
+            index += 2
+            continue
+        if character == QUOTED_IDENTIFIER_MARK:
+            quoted = not quoted
+            was_quoted = True
+        elif character == NAME_SEPARATOR and not quoted:
+            parts.append("".join(current) if was_quoted else "".join(current).upper())
+            current, was_quoted = [], False
+        else:
+            current.append(character)
+        index += 1
+    parts.append("".join(current) if was_quoted else "".join(current).upper())
+    return ".".join(parts)
+
+
+def dependency_queries(*, databases: Iterable[str]) -> tuple[UsageQuery, ...]:
+    """One OBJECT_DEPENDENCIES read of the view links in the given databases."""
+
+    names: tuple[str, ...] = tuple(sorted(set(databases)))
     return tuple(
-        dependency_query(view_names=names[start : start + USAGE_NAME_CHUNK_SIZE])
+        dependency_query(databases=names[start : start + USAGE_NAME_CHUNK_SIZE])
         for start in range(0, len(names), USAGE_NAME_CHUNK_SIZE)
     )
 
 
-def dependency_query(*, view_names: tuple[str, ...]) -> UsageQuery:
-    """What each named view references, as `(referencing, referenced)` dotted names."""
+def dependency_query(*, databases: tuple[str, ...]) -> UsageQuery:
+    """What each view in the databases references, as `(referencing, referenced)` names."""
 
-    placeholders: str = ", ".join(["%s"] * len(view_names))
+    placeholders: str = ", ".join(["%s"] * len(databases))
     domains: str = ", ".join(["%s"] * len(DEPENDENCY_VIEW_DOMAINS))
-    referencing: str = (
-        "referencing_database || '.' || referencing_schema || '.' || referencing_object_name"
-    )
     sql: str = (
-        f"SELECT {referencing} AS referencing_name, "
+        "SELECT referencing_database || '.' || referencing_schema || '.' "
+        "|| referencing_object_name AS referencing_name, "
         "referenced_database || '.' || referenced_schema || '.' || referenced_object_name "
         "AS referenced_name "
         "FROM SNOWFLAKE.ACCOUNT_USAGE.OBJECT_DEPENDENCIES "
         f"WHERE referencing_object_domain IN ({domains}) "
-        f"AND {referencing} IN ({placeholders}) "
+        f"AND referencing_database IN ({placeholders}) "
         "ORDER BY 1, 2"
     )
-    return UsageQuery(sql=sql, params=(*DEPENDENCY_VIEW_DOMAINS, *view_names))
+    return UsageQuery(sql=sql, params=(*DEPENDENCY_VIEW_DOMAINS, *databases))
 
 
 def _folded(relation: RelationInfo | RelationUsage) -> tuple[str, str, str]:
@@ -67,17 +94,33 @@ def _folded(relation: RelationInfo | RelationUsage) -> tuple[str, str, str]:
     )
 
 
-def _via_parent(
-    *,
-    relation: RelationInfo,
-    parent: str,
-    parent_usage: RelationUsage,
-    earlier: RelationUsage | None,
+def walk_seeds(
+    *, usages: Iterable[RelationUsage], relations_by_dependency_name: Mapping[str, RelationInfo]
+) -> dict[str, tuple[str, RelationUsage]]:
+    """Each directly read object to walk from, with its printed name and the usage it passes on."""
+
+    names_by_key: dict[tuple[str, str, str], str] = {
+        _folded(relation): name for name, relation in relations_by_dependency_name.items()
+    }
+    seeds: dict[str, tuple[str, RelationUsage]] = {}
+    usage: RelationUsage
+    for usage in usages:
+        own: str | None = names_by_key.get(_folded(usage))
+        if own is not None:
+            seeds.setdefault(own, (display_name(own), usage))
+        via: str
+        for via in usage.via:
+            seeds.setdefault(dependency_key(via), (via, usage))
+    return seeds
+
+
+def _via_seed(
+    *, relation: RelationInfo, label: str, seed_usage: RelationUsage, earlier: RelationUsage | None
 ) -> RelationUsage:
-    via: tuple[str, ...] = (display_name(parent),)
-    readers: tuple[str, ...] = parent_usage.readers
-    last_read_at: datetime = parent_usage.last_read_at
-    query_count: int = parent_usage.query_count
+    via: tuple[str, ...] = (label,)
+    readers: tuple[str, ...] = seed_usage.readers
+    last_read_at: datetime = seed_usage.last_read_at
+    query_count: int = seed_usage.query_count
     if earlier is not None:
         via = tuple(sorted({*earlier.via, *via}))
         readers = tuple(dict.fromkeys((*earlier.readers, *readers)))
@@ -95,42 +138,56 @@ def _via_parent(
     )
 
 
+def _reachable(*, start: str, references: Mapping[str, set[str]]) -> list[str]:
+    seen: set[str] = {start}
+    pending: list[str] = [start]
+    reached: list[str] = []
+    while pending:
+        node: str = pending.pop()
+        child: str
+        for child in sorted(references.get(node, set()) - seen):
+            seen.add(child)
+            reached.append(child)
+            pending.append(child)
+    return reached
+
+
 def chained_usages(
     *,
     usages: tuple[RelationUsage, ...],
     dependencies: Iterable[tuple[str, str]],
     relations_by_dependency_name: Mapping[str, RelationInfo],
 ) -> tuple[RelationUsage, ...]:
-    """Usages plus every candidate an in-use candidate view depends on, transitively."""
+    """Usages plus every unread candidate a directly read object depends on, through any views."""
 
     references: dict[str, set[str]] = {}
     referencing: str
     referenced: str
     for referencing, referenced in dependencies:
-        if referenced in relations_by_dependency_name:
-            references.setdefault(referencing, set()).add(referenced)
-    names_by_key: dict[tuple[str, str, str], str] = {
-        _folded(relation): name for name, relation in relations_by_dependency_name.items()
-    }
-    read: dict[str, RelationUsage] = {
-        names_by_key[_folded(usage)]: usage for usage in usages if _folded(usage) in names_by_key
+        references.setdefault(referencing, set()).add(referenced)
+    seeds: dict[str, tuple[str, RelationUsage]] = walk_seeds(
+        usages=usages, relations_by_dependency_name=relations_by_dependency_name
+    )
+    read_keys: frozenset[tuple[str, str, str]] = frozenset(map(_folded, usages))
+    read: set[str] = {
+        name
+        for name, relation in relations_by_dependency_name.items()
+        if _folded(relation) in read_keys
     }
     found: dict[str, RelationUsage] = {}
-    pending: list[str] = sorted(read)
-    while pending:
-        parent: str = pending.pop(0)
-        parent_usage: RelationUsage = read.get(parent) or found[parent]
+    seed: str
+    for seed in sorted(seeds):
+        label: str
+        seed_usage: RelationUsage
+        label, seed_usage = seeds[seed]
         child: str
-        for child in sorted(references.get(parent, ())):
-            if child in read:
+        for child in _reachable(start=seed, references=references):
+            if child in read or child not in relations_by_dependency_name:
                 continue
-            earlier: RelationUsage | None = found.get(child)
-            found[child] = _via_parent(
+            found[child] = _via_seed(
                 relation=relations_by_dependency_name[child],
-                parent=parent,
-                parent_usage=parent_usage,
-                earlier=earlier,
+                label=label,
+                seed_usage=seed_usage,
+                earlier=found.get(child),
             )
-            if earlier is None:
-                pending.append(child)
     return (*usages, *(found[name] for name in sorted(found)))

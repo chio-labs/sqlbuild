@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 
 import pytest
 
 from sqlbuild.adapter.contract.models import RelationInfo, RelationUsageReport
-from sqlbuild.adapters.databricks.constants import USAGE_UNAVAILABLE_REASON
+from sqlbuild.adapters.databricks.constants import (
+    MAX_PARAMETER_MARKERS,
+    USAGE_UNAVAILABLE_REASON,
+)
 from tests.unit.src.sqlbuild.adapters.databricks._test_types import (
     DatabricksRelationUsageChunkTestCase,
     DatabricksRelationUsageErrorTestCase,
@@ -169,9 +173,9 @@ def test_given_lineage_query_when_built_then_parameters_are_named(
             expected_query_names=(),
         ),
         DatabricksRelationUsageChunkTestCase(
-            description="a large candidate set is split into IN lists of at most 1,000 names",
+            description="a large candidate set is split into IN lists of at most 250 names",
             relation_count=2_001,
-            expected_query_names=(1_000, 1_000, 1),
+            expected_query_names=(250, 250, 250, 250, 250, 250, 250, 250, 1),
         ),
     ),
     ids=lambda case: case.description,
@@ -195,6 +199,10 @@ def test_given_many_candidates_when_reading_usage_then_names_are_chunked(
         test_case.expected_query_names
     )
     assert all(sql.count(":name_") == len(params) - 1 for sql, params in connection.queries)
+    assert all(
+        len(re.findall(r"(?<!:):[A-Za-z_]\w*", sql)) <= MAX_PARAMETER_MARKERS
+        for sql, _ in connection.queries
+    )
 
 
 @pytest.mark.parametrize(

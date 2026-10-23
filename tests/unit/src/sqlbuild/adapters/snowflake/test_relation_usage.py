@@ -17,6 +17,7 @@ from sqlbuild.adapters.snowflake.constants import (
 )
 from tests.unit.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakeCloneStatementTestCase,
+    SnowflakeRelationUsageChainsUnfollowedTestCase,
     SnowflakeRelationUsageChunkTestCase,
     SnowflakeRelationUsageErrorTestCase,
     SnowflakeRelationUsageFailureTestCase,
@@ -170,13 +171,13 @@ VIEW_DOMAINS: tuple[str, ...] = ("VIEW", "MATERIALIZED VIEW", "SECURE VIEW")
                     3,
                     READ_AT,
                     False,
-                    '[\n  "ANALYTICS.MART.ORDERS_V",\n  "ANALYTICS.MART.ORDERS_W"\n]',
+                    '[\n  "ANALYTICS.MART.ORDERS_V",\n  "REPORTING.MART.ORDERS_W"\n]',
                 ),
                 ("ANALYTICS.MART.CUSTOMERS", "ALICE", 2, READ_AT, False, '["ANALYTICS.MART.C_V"]'),
                 direct_read("ANALYTICS.MART.CUSTOMERS", "BOB", 1, EARLIER_READ_AT),
             ),
             dependency_rows=(),
-            expected_dependency_params=(),
+            expected_dependency_params=((*VIEW_DOMAINS, "ANALYTICS", "REPORTING"),),
             expected_usages=(
                 ("customers", ("ALICE", "BOB"), 3, True, ()),
                 (
@@ -184,7 +185,7 @@ VIEW_DOMAINS: tuple[str, ...] = ("VIEW", "MATERIALIZED VIEW", "SECURE VIEW")
                     ("ALICE",),
                     3,
                     False,
-                    ("analytics.mart.orders_v", "analytics.mart.orders_w"),
+                    ("analytics.mart.orders_v", "reporting.mart.orders_w"),
                 ),
             ),
         ),
@@ -213,19 +214,47 @@ VIEW_DOMAINS: tuple[str, ...] = ("VIEW", "MATERIALIZED VIEW", "SECURE VIEW")
                 ("ANALYTICS.MART.UNREAD_V", "ANALYTICS.MART.ORDERS"),
                 ("ANALYTICS.MART.ORDERS_V2", "ANALYTICS.MART.NOT_A_CANDIDATE"),
             ),
-            expected_dependency_params=(
-                (
-                    *VIEW_DOMAINS,
-                    "ANALYTICS.MART.ORDERS_V",
-                    "ANALYTICS.MART.ORDERS_V2",
-                    "ANALYTICS.MART.UNREAD_V",
-                ),
-            ),
+            expected_dependency_params=((*VIEW_DOMAINS, "ANALYTICS"),),
             expected_usages=(
                 ("orders", ("ALICE",), 5, False, ("analytics.mart.orders_v",)),
                 ("orders_v", ("ALICE",), 5, True, ()),
                 ("orders_v2", ("ALICE",), 5, False, ("analytics.mart.orders_v",)),
             ),
+        ),
+        SnowflakeRelationUsageViaTestCase(
+            description="a candidate view between a read non-candidate view and a table is in use",
+            relations=(
+                ("analytics", "mart", "orders_v2", "view"),
+                ("analytics", "mart", "orders", "base table"),
+            ),
+            access_rows=(
+                (
+                    "ANALYTICS.MART.ORDERS",
+                    "ALICE",
+                    4,
+                    READ_AT,
+                    False,
+                    '["REPORTING.MART.ORDERS_W"]',
+                ),
+            ),
+            dependency_rows=(
+                ("REPORTING.MART.ORDERS_W", "REPORTING.MART.ORDERS_HELPER"),
+                ("REPORTING.MART.ORDERS_HELPER", "ANALYTICS.MART.ORDERS_V2"),
+                ("ANALYTICS.MART.ORDERS_V2", "ANALYTICS.MART.ORDERS"),
+            ),
+            expected_dependency_params=((*VIEW_DOMAINS, "ANALYTICS", "REPORTING"),),
+            expected_usages=(
+                ("orders", ("ALICE",), 4, False, ("reporting.mart.orders_w",)),
+                ("orders_v2", ("ALICE",), 4, False, ("reporting.mart.orders_w",)),
+            ),
+        ),
+        SnowflakeRelationUsageViaTestCase(
+            description="nothing read means no dependency query",
+            relations=(("analytics", "mart", "orders_v2", "view"),),
+            access_rows=(),
+            dependency_rows=(("ANALYTICS.MART.ORDERS_V2", "ANALYTICS.MART.ORDERS"),),
+            expected_dependency_params=(),
+            expected_usages=(),
         ),
     ),
     ids=lambda case: case.description,
@@ -248,7 +277,7 @@ def test_given_view_reads_when_reading_usage_then_indirect_reads_name_their_view
         test_case.expected_dependency_params
     )
     assert all(
-        "referencing_object_domain IN (%s, %s, %s)" in sql
+        "referencing_object_domain IN (%s, %s, %s) AND referencing_database IN (" in sql
         for sql, _ in warehouse.dependency_queries
     )
     assert tuple(
@@ -391,6 +420,39 @@ def test_given_no_access_history_access_when_reading_usage_then_usage_is_not_che
     )
 
     assert report == test_case.expected_report
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SnowflakeRelationUsageChainsUnfollowedTestCase(
+            description="no OBJECT_VIEWER keeps the reads and says view chains were not followed",
+            errno=3001,
+            message="Insufficient privileges to operate on view 'OBJECT_DEPENDENCIES'",
+            expected_usages=(("orders_daily", ("ALICE",), 2),),
+            expected_notices=("view chains not followed: grant SNOWFLAKE.OBJECT_VIEWER",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_no_dependency_access_when_reading_usage_then_reads_are_kept_with_notice(
+    test_case: SnowflakeRelationUsageChainsUnfollowedTestCase,
+) -> None:
+    warehouse: FakeUsageWarehouse = FakeUsageWarehouse(
+        access_rows=(direct_read("ANALYTICS.MART.ORDERS_DAILY", "ALICE", 2, READ_AT),),
+        dependency_errors=(FakeAccessHistoryError(test_case.message, test_case.errno),),
+    )
+
+    report: RelationUsageReport = read_snowflake_usage(
+        warehouse=warehouse, relations=ORDERS_DAILY, window_seconds=WINDOW_SECONDS
+    )
+
+    assert report.checked
+    assert len(warehouse.dependency_queries) == 1
+    assert tuple((usage.name, usage.readers, usage.query_count) for usage in report.usages) == (
+        test_case.expected_usages
+    )
+    assert report.notices == test_case.expected_notices
 
 
 @pytest.mark.parametrize(

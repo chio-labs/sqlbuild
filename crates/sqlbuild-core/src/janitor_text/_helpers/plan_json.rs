@@ -117,6 +117,7 @@ pub(crate) fn usage_check_payload(plan: Option<&JanitorPlanText>) -> JsonValue {
         ("reason", optional_text(check.reason.as_deref())),
         ("window", text(&check.window)),
         ("keep_in_use", JsonValue::Bool(check.keep_in_use)),
+        ("notices", texts(&check.notices)),
     ])
 }
 
