@@ -6,11 +6,9 @@ use pyo3::prelude::{
 use pyo3::types::PyBool;
 use pyo3::types::{PyList, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
-use sqlbuild_analysis::planner_selection::main::split_selector_expansion::split_selector_expansion as split;
-use sqlbuild_analysis::planner_selection::main::sqlbuild_model_selector_names::sqlbuild_model_selector_names;
-use sqlbuild_analysis::planner_selection::models::{
-    ModelSelectorNames, SelectableModel, SelectorExpansion,
-};
+use sqlbuild_project::selection::main::split_selector_expansion::split_selector_expansion as split;
+use sqlbuild_project::selection::main::sqlbuild_model_selector_names::sqlbuild_model_selector_names;
+use sqlbuild_project::selection::models::{ModelSelectorNames, SelectableModel, SelectorExpansion};
 
 use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::compiled_views::project_reads;

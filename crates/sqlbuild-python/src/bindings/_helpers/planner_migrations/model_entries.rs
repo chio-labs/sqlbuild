@@ -20,7 +20,7 @@ use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::state_rows::migration_projections::newest_move;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::PyBool;
-use sqlbuild_analysis::planner_migrations::main::model_decision::model_decision;
+use sqlbuild_plan::migrations::main::model_decision::model_decision;
 
 pub(super) fn relation<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     host::entry(location.py(), ExecutorHost::MigrationRelationForLocation)?.call1((location,))

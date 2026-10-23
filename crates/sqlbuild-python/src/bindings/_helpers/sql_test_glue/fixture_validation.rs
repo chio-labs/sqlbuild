@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
-use sqlbuild_analysis::planner_fixtures::main::{
+use sqlbuild_plan::fixtures::main::{
     collection_mismatch::collection_mismatch, fixture_line::fixture_line,
 };
 

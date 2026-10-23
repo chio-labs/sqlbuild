@@ -4,10 +4,10 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PySet, PySetMethods, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
-use sqlbuild_analysis::planner_strategy::constants::{MODEL_REFERENCE_KIND, SOURCE_REFERENCE_KIND};
-use sqlbuild_analysis::planner_strategy::main::effective_run_scope::effective_run_scope;
-use sqlbuild_analysis::planner_strategy::main::singular_attachment::singular_attachment;
-use sqlbuild_analysis::planner_strategy::models::{AuditAttachmentKind, AuditRunScope};
+use sqlbuild_plan::strategy::constants::{MODEL_REFERENCE_KIND, SOURCE_REFERENCE_KIND};
+use sqlbuild_plan::strategy::main::effective_run_scope::effective_run_scope;
+use sqlbuild_plan::strategy::main::singular_attachment::singular_attachment;
+use sqlbuild_plan::strategy::models::{AuditAttachmentKind, AuditRunScope};
 
 use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::compiled_views::audit_reads;

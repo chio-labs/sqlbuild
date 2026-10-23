@@ -5,6 +5,8 @@
 mod _helpers;
 
 pub mod models;
+pub mod plan_scope;
+pub mod selection;
 pub mod types;
 
 #[cfg(test)]

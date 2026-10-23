@@ -3,10 +3,10 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
-use sqlbuild_analysis::planner_changes::main::version_identity_payload::version_identity_payload;
-use sqlbuild_analysis::planner_changes::main::with_declared_columns_hash::with_declared_columns_hash as with_hash;
-use sqlbuild_analysis::planner_changes::main::without_declared_columns_hash::without_declared_columns_hash as without_hash;
-use sqlbuild_analysis::planner_changes::models::IdentityPayload;
+use sqlbuild_plan::changes::main::version_identity_payload::version_identity_payload;
+use sqlbuild_plan::changes::main::with_declared_columns_hash::with_declared_columns_hash as with_hash;
+use sqlbuild_plan::changes::main::without_declared_columns_hash::without_declared_columns_hash as without_hash;
+use sqlbuild_plan::changes::models::IdentityPayload;
 
 use crate::bindings::_helpers::boundary::python_calls::imported;
 

@@ -10,8 +10,8 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyFrozenSet, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
-use sqlbuild_analysis::planner_migrations::main::{query_shape, renames_explain_change as proof};
-use sqlbuild_analysis::planner_migrations::models::{QueryProjection, QueryShape};
+use sqlbuild_plan::migrations::main::{query_shape, renames_explain_change as proof};
+use sqlbuild_plan::migrations::models::{QueryProjection, QueryShape};
 
 fn read_shape(shape: &Bound<'_, PyAny>) -> PyResult<QueryShape> {
     let mut projections: Vec<QueryProjection> = Vec::new();

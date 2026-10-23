@@ -7,8 +7,8 @@ use crate::bindings::_helpers::planner_migrations::constants::HIDDEN_ORIGIN_REME
 use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::PyString;
-use sqlbuild_analysis::planner_migrations::main::model_warning::model_warning;
-use sqlbuild_analysis::planner_migrations::models::ModelWarning;
+use sqlbuild_plan::migrations::main::model_warning::model_warning;
+use sqlbuild_plan::migrations::models::ModelWarning;
 
 pub(super) fn entry_warning<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>> {
     let py = entry.py();

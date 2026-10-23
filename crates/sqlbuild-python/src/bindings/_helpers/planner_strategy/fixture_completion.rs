@@ -5,8 +5,8 @@ use std::collections::HashSet;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
-use sqlbuild_analysis::planner_fixtures::main::align_columns::align_columns;
-use sqlbuild_analysis::planner_fixtures::models::{AlignmentInput, FixtureColumn};
+use sqlbuild_plan::fixtures::main::align_columns::align_columns;
+use sqlbuild_plan::fixtures::models::{AlignmentInput, FixtureColumn};
 
 use crate::bindings::_helpers::planner_strategy::fixture_context::planning_context as project_planning_context;
 use crate::bindings::_helpers::planner_strategy::fixture_preparation::{PreparedFixtures, prepare};
@@ -62,7 +62,7 @@ fn complete_prepared<'py, 'a>(
     mut prepared: PreparedFixtures<'py>,
     (context, required): (
         &'a RelationFixturePlanningContext,
-        &sqlbuild_analysis::planner_fixtures::models::FixtureReadRequirements,
+        &sqlbuild_plan::fixtures::models::FixtureReadRequirements,
     ),
     expected: ExpectedTypes<'a>,
     adapter: &Bound<'py, PyAny>,

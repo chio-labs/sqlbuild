@@ -12,7 +12,7 @@ use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::relation_naming::fitting::fitted_logical_name;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
-use sqlbuild_analysis::planner_scenario::main::{hash_prefix, parse_artifact_name};
+use sqlbuild_plan::scenario::main::{hash_prefix, parse_artifact_name};
 
 const SCENARIO_ARTIFACT_LABEL: &str = "Scenario artifact";
 

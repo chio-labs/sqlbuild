@@ -6,10 +6,10 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
-use sqlbuild_analysis::planner_migrations::main::{
+use sqlbuild_plan::migrations::main::{
     identical_renames as native_renames, rename_hints as native_hints,
 };
-use sqlbuild_analysis::planner_migrations::models::Projection;
+use sqlbuild_plan::migrations::models::Projection;
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::records::construct::new_record_with;

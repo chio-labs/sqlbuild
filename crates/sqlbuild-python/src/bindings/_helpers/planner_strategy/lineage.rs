@@ -3,11 +3,11 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::PyDict;
 
-use sqlbuild_analysis::planner_strategy::errors::LineageFailure;
-use sqlbuild_analysis::planner_strategy::main::capped_watermark_input::capped_watermark_input;
-use sqlbuild_analysis::planner_strategy::main::lineage_reference::lineage_reference;
-use sqlbuild_analysis::planner_strategy::models::{ProducerFacts, ReferenceIdentity};
-use sqlbuild_analysis::planner_strategy::types::ReferenceGraph;
+use sqlbuild_plan::strategy::errors::LineageFailure;
+use sqlbuild_plan::strategy::main::capped_watermark_input::capped_watermark_input;
+use sqlbuild_plan::strategy::main::lineage_reference::lineage_reference;
+use sqlbuild_plan::strategy::models::{ProducerFacts, ReferenceIdentity};
+use sqlbuild_plan::strategy::types::ReferenceGraph;
 
 use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;
 use crate::bindings::_helpers::compiled_views::model_reads;

@@ -8,8 +8,8 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyDictMethods, PySet, PySetMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use sqlbuild_analysis::planner_changes::main::origin_reference_names::origin_reference_names;
-use sqlbuild_analysis::planner_changes::models::{NameSpan, RenameCandidate};
+use sqlbuild_plan::changes::main::origin_reference_names::origin_reference_names;
+use sqlbuild_plan::changes::models::{NameSpan, RenameCandidate};
 use sqlbuild_rules::lint_text::main::neutralize_interpolation::neutralize_interpolation;
 
 use crate::bindings::_helpers::boundary::panics::value_error;

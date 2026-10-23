@@ -5,7 +5,7 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
-use sqlbuild_analysis::planner_fixtures::models::FixtureColumn;
+use sqlbuild_plan::fixtures::models::FixtureColumn;
 
 pub(crate) fn folded(value: &Bound<'_, PyAny>) -> PyResult<String> {
     value.call_method0("casefold")?.extract()

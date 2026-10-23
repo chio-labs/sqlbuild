@@ -10,8 +10,8 @@ use crate::bindings::_helpers::records::fields::mapping_get;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
-use sqlbuild_analysis::planner_migrations::main::match_migrations::match_migrations;
-use sqlbuild_analysis::planner_migrations::models::MigrationCandidate;
+use sqlbuild_plan::migrations::main::match_migrations::match_migrations;
+use sqlbuild_plan::migrations::models::MigrationCandidate;
 use std::collections::{BTreeMap, BTreeSet};
 
 fn variants<'py>(
@@ -110,5 +110,9 @@ pub(super) fn stored_migration_fingerprint(
     fingerprint: &Bound<'_, PyAny>,
 ) -> PyResult<Option<String>> {
     let metadata: String = native_field(fingerprint, "metadata_json")?.extract()?;
-    Ok(sqlbuild_analysis::planner_migrations::main::stored_migration_fingerprint::stored_migration_fingerprint(&metadata))
+    Ok(
+        sqlbuild_plan::migrations::main::stored_migration_fingerprint::stored_migration_fingerprint(
+            &metadata,
+        ),
+    )
 }

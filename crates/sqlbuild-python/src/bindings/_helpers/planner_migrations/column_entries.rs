@@ -21,7 +21,7 @@ use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::state_rows::migration_projections::newest_column;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyListMethods, PyTuple};
-use sqlbuild_analysis::planner_migrations::main::column_decision::column_decision;
+use sqlbuild_plan::migrations::main::column_decision::column_decision;
 
 pub(super) fn decide<'py>(
     runtime: &Bound<'py, PyAny>,

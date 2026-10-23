@@ -12,7 +12,7 @@ use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PySet, PyTuple};
-use sqlbuild_analysis::planner_migrations::main::{
+use sqlbuild_plan::migrations::main::{
     declared_column_aliases as aliases, old_name_claim_message as claim, old_name_schemas,
     old_name_skip_reason,
 };

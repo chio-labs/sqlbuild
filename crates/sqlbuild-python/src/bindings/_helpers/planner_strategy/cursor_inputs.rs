@@ -4,8 +4,8 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::{PyBool, PyDict, PyFrozenSet, PyString, PyTuple};
 
-use sqlbuild_analysis::planner_strategy::main::cursor_input_column::cursor_input_column_failure;
-use sqlbuild_analysis::planner_strategy::models::{CursorInputColumnCheck, CursorInputColumnOwner};
+use sqlbuild_plan::strategy::main::cursor_input_column::cursor_input_column_failure;
+use sqlbuild_plan::strategy::models::{CursorInputColumnCheck, CursorInputColumnOwner};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;

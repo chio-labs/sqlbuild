@@ -4,8 +4,8 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyTuple;
 use pyo3::{IntoPyObject, PyErr};
 
-use sqlbuild_analysis::planner_changes::errors::UnknownReplayPolicy;
-use sqlbuild_analysis::planner_changes::models::{
+use sqlbuild_plan::changes::errors::UnknownReplayPolicy;
+use sqlbuild_plan::changes::models::{
     Backfill, BackfillAction, ChangeKind, SchemaChangeKind, SchemaColumnSource, SchemaFindingRow,
 };
 

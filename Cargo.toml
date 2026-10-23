@@ -19,6 +19,7 @@ members = [
     "crates/sqlbuild-rules",
     "crates/sqlbuild-refactor",
     "crates/sqlbuild-project",
+    "crates/sqlbuild-plan",
     "crates/sqlbuild-cli",
     "crates/sqlbuild-python",
 ]
@@ -48,6 +49,7 @@ order = [
     "sqlbuild-rules",
     "sqlbuild-refactor",
     "sqlbuild-project",
+    "sqlbuild-plan",
     "sqlbuild-cli",
     "sqlbuild-python",
 ]
@@ -128,6 +130,7 @@ sqlbuild-render = { path = "crates/sqlbuild-render" }
 sqlbuild-refactor = { path = "crates/sqlbuild-refactor" }
 sqlbuild-rules = { path = "crates/sqlbuild-rules" }
 sqlbuild-model-config = { path = "crates/sqlbuild-model-config" }
+sqlbuild-plan = { path = "crates/sqlbuild-plan" }
 sqlbuild-project = { path = "crates/sqlbuild-project" }
 sqlbuild-pysource = { path = "crates/sqlbuild-pysource" }
 sqlbuild-recall = { path = "crates/sqlbuild-recall" }

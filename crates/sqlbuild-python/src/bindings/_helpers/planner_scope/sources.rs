@@ -13,7 +13,7 @@ use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, pyfunction};
 use pyo3::types::{PyBool, PyDict, PyTuple};
 use pyo3::types::{PyDictMethods, PySetMethods};
-use sqlbuild_analysis::planner_scope::constants::SOURCE;
+use sqlbuild_project::plan_scope::constants::SOURCE;
 
 #[pyfunction]
 #[pyo3(signature = (*, project, selected_keys, upstream_deps = None))]

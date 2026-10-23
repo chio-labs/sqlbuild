@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use pyo3::prelude::{Bound, PyAny, PyResult};
 use pyo3::types::PyDictMethods;
-use sqlbuild_analysis::planner_fixtures::main::{
+use sqlbuild_plan::fixtures::main::{
     fixture_schema::fixture_schema, requires_analysis::requires_analysis,
     unknown_columns::unknown_columns,
 };

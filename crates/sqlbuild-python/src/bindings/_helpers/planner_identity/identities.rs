@@ -6,14 +6,14 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyDictMethods, PyString};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use sqlbuild_analysis::planner_identity::constants::{
+use sqlbuild_host::entries::models::UserCodeHost;
+use sqlbuild_plan::identity::constants::{
     MODEL_RESOURCE, SEED_RESOURCE, SOURCE_RESOURCE, TABLE_FN_RESOURCE, UDF_RESOURCE,
 };
-use sqlbuild_analysis::planner_identity::main::expected_graph_identity_hashes::expected_graph_identity_hashes;
-use sqlbuild_analysis::planner_identity::main::graph_write_identity_hashes::graph_write_identity_hashes;
-use sqlbuild_analysis::planner_identity::main::model_local_identity_hash::model_local_identity_hash;
-use sqlbuild_analysis::planner_identity::models::{GraphKey, IdentityGraph, IdentityNode};
-use sqlbuild_host::entries::models::UserCodeHost;
+use sqlbuild_plan::identity::main::expected_graph_identity_hashes::expected_graph_identity_hashes;
+use sqlbuild_plan::identity::main::graph_write_identity_hashes::graph_write_identity_hashes;
+use sqlbuild_plan::identity::main::model_local_identity_hash::model_local_identity_hash;
+use sqlbuild_plan::identity::models::{GraphKey, IdentityGraph, IdentityNode};
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compiled_views::function_reads;

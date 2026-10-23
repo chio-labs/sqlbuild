@@ -13,8 +13,8 @@ use sqlbuild_analysis::dag_artifact::main::resolve_dag_selection::resolve_dag_se
 use sqlbuild_analysis::dag_artifact::models::{
     DagSelectionCheck, DagSelectionGraph, DagSelectionNode,
 };
-use sqlbuild_analysis::planner_selection::main::unit_test_selector_rejection::unit_test_selector_rejection;
 use sqlbuild_host::entries::models::ThirdPartyHost;
+use sqlbuild_project::selection::main::unit_test_selector_rejection::unit_test_selector_rejection;
 
 use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::native_host::host;

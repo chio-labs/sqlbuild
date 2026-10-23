@@ -21,7 +21,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::PyDict as KeywordDict;
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
-use sqlbuild_analysis::planner_warehouse::main::freshness_unknown_message::freshness_unknown_message;
+use sqlbuild_plan::warehouse::main::freshness_unknown_message::freshness_unknown_message;
 use std::collections::BTreeSet;
 
 /// One warning per reason that left configured source freshness unknown.

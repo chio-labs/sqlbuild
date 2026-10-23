@@ -4,11 +4,11 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyString};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use sqlbuild_analysis::planner_strategy::errors::TypeParseFailure;
-use sqlbuild_analysis::planner_strategy::main::classify_cursor_sql_type::classify_cursor_sql_type as classify;
-use sqlbuild_analysis::planner_strategy::main::cursor_type_warning::cursor_type_warning;
-use sqlbuild_analysis::planner_strategy::models::{CursorType, CursorTypeCheck};
 use sqlbuild_host::entries::models::ExecutorHost;
+use sqlbuild_plan::strategy::errors::TypeParseFailure;
+use sqlbuild_plan::strategy::main::classify_cursor_sql_type::classify_cursor_sql_type as classify;
+use sqlbuild_plan::strategy::main::cursor_type_warning::cursor_type_warning;
+use sqlbuild_plan::strategy::models::{CursorType, CursorTypeCheck};
 
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
 use crate::bindings::_helpers::native_host::host;

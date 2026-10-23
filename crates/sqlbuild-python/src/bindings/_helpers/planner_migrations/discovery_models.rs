@@ -14,8 +14,8 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_items;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PySet, PySetMethods};
-use sqlbuild_analysis::planner_migrations::main::discovery_order::discovery_order;
 use sqlbuild_core::graph_walk::main::breadth_first_reach::breadth_first_reach;
+use sqlbuild_plan::migrations::main::discovery_order::discovery_order;
 use std::collections::BTreeMap;
 
 pub(super) fn ordered<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {

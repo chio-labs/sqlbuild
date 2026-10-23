@@ -2,8 +2,8 @@
 
 use pyo3::exceptions::PyKeyError;
 use pyo3::prelude::{Bound, PyAny, PyResult, Python};
-use sqlbuild_analysis::planner_fixtures::main::propagate_types::propagate_types;
-use sqlbuild_analysis::planner_fixtures::models::{
+use sqlbuild_plan::fixtures::main::propagate_types::propagate_types;
+use sqlbuild_plan::fixtures::models::{
     FixtureTypeModel, FixtureTypeProjection, FixtureTypeRead, FixtureTypeState,
 };
 

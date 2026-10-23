@@ -4,15 +4,15 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use sqlbuild_analysis::planner_identity::constants::{
+use sqlbuild_plan::identity::constants::{
     CONTRACT_CONFIG_KEY, CURSOR_INPUTS_CONFIG_KEY, ENFORCED_CONTRACT_POLICY,
     MODEL_CUSTOM_CONFIG_KEY, MODEL_PLACEHOLDERS_CONFIG_KEY, MODEL_POST_HOOKS_CONFIG_KEY,
     MODEL_PRE_HOOKS_CONFIG_KEY, SQL_HOOK_IDENTITY_FIELDS, TABLE_FN_RESOURCE, UDF_RESOURCE,
     VERSION_IDENTITY_CONFIG_KEYS,
 };
-use sqlbuild_analysis::planner_identity::main::function_fingerprint_sql::function_fingerprint_sql;
-use sqlbuild_analysis::planner_identity::main::stable_identity_hash::stable_identity_hash;
-use sqlbuild_analysis::planner_identity::models::FunctionFingerprintFields;
+use sqlbuild_plan::identity::main::function_fingerprint_sql::function_fingerprint_sql;
+use sqlbuild_plan::identity::main::stable_identity_hash::stable_identity_hash;
+use sqlbuild_plan::identity::models::FunctionFingerprintFields;
 
 use crate::bindings::_helpers::boundary::python_calls::{imported, keywords, within};
 use crate::bindings::_helpers::compiled_views::function_reads;

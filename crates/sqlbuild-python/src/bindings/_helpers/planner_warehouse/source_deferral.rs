@@ -24,8 +24,8 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::PyDict as KeywordDict;
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyTuple};
-use sqlbuild_analysis::planner_warehouse::main::source_call_names::source_call_names;
-use sqlbuild_analysis::planner_warehouse::main::source_deferral_field::source_deferral_field;
+use sqlbuild_plan::warehouse::main::source_call_names::source_call_names;
+use sqlbuild_plan::warehouse::main::source_deferral_field::source_deferral_field;
 use std::collections::BTreeSet;
 
 fn managed_names(project: &Bound<'_, PyAny>) -> PyResult<BTreeSet<String>> {

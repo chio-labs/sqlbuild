@@ -8,14 +8,10 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use sqlbuild_analysis::planner_identity::constants::{
-    MODEL_RESOURCE, SEED_RESOURCE, SOURCE_RESOURCE,
-};
-use sqlbuild_analysis::planner_identity::main::classify_selection_staleness::classify_selection_staleness;
-use sqlbuild_analysis::planner_identity::main::stale_upstream_warning_message::stale_upstream_warning_message;
-use sqlbuild_analysis::planner_identity::models::{
-    GraphKey, StaleWarning, StalenessGraph, StalenessNames,
-};
+use sqlbuild_plan::identity::constants::{MODEL_RESOURCE, SEED_RESOURCE, SOURCE_RESOURCE};
+use sqlbuild_plan::identity::main::classify_selection_staleness::classify_selection_staleness;
+use sqlbuild_plan::identity::main::stale_upstream_warning_message::stale_upstream_warning_message;
+use sqlbuild_plan::identity::models::{GraphKey, StaleWarning, StalenessGraph, StalenessNames};
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_changes::detect::{ModelPass, model_change};

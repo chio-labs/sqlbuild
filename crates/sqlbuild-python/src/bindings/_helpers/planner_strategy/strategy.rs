@@ -7,11 +7,11 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyBool, PyDict, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
-use sqlbuild_analysis::planner_strategy::main::materialization_type::materialization_type;
-use sqlbuild_analysis::planner_strategy::main::model_plan_action::model_plan_action;
-use sqlbuild_analysis::planner_strategy::main::model_warnings::model_warnings;
-use sqlbuild_analysis::planner_strategy::main::schema_actions::schema_actions;
-use sqlbuild_analysis::planner_strategy::models::{
+use sqlbuild_plan::strategy::main::materialization_type::materialization_type;
+use sqlbuild_plan::strategy::main::model_plan_action::model_plan_action;
+use sqlbuild_plan::strategy::main::model_warnings::model_warnings;
+use sqlbuild_plan::strategy::main::schema_actions::schema_actions;
+use sqlbuild_plan::strategy::models::{
     ModelStrategy, PlanAction, PlanReason, SchemaActionKind, WarningInputs,
 };
 
