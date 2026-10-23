@@ -71,17 +71,19 @@ pub(crate) fn quote_fixed_text(
         .then_some((fixed, lines)))
 }
 
-/// The number of authored SQL files of the project with a description that escapes quotes.
+/// The number of authored SQL files of the project with a description escaping or doubling quotes.
 pub(crate) fn quote_fixable_file_count(directory: &Path) -> Result<usize, String> {
     let files: Vec<(PathBuf, String)> =
         collect_lint_files(directory, None).map_err(|error| error.to_string())?;
     Ok(files
         .iter()
-        .filter(|(_, text)| text.contains("\\\"") && escapes_quotes(text))
+        .filter(|(_, text)| {
+            (text.contains("\\\"") || text.contains("\"\"")) && escapes_quotes(text)
+        })
         .count())
 }
 
-/// Whether a header description of `text` escapes double quotes that a fix can rewrite.
+/// Whether a header description of `text` escapes or doubles quotes that a fix can rewrite.
 fn escapes_quotes(text: &str) -> bool {
     !fix_escaped_quotes(&text.chars().collect::<Vec<char>>())
         .1

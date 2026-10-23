@@ -41,7 +41,8 @@ _MART_HEADER_START: str = 'MODEL (\n  description "Order totals per customer",\n
 
 _DESCRIPTION_QUOTE_HELP: str = (
     'write the text between triple quotes, where quotes need no escaping: description """Matches '
-    '"Miss"."""; sqb format --fix rewrites a description that escapes its quotes with \\"'
+    '"Miss"."""; sqb format --fix rewrites a description that escapes its quotes as \\" '
+    'or doubles them as ""'
 )
 
 _RULES_CONFIG: str = '\n[rules]\nselect = ["{codes}"]\n'

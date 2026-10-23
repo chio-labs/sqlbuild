@@ -121,6 +121,25 @@ _CUSTOMERS_MODEL: str = (
             expected_message=_QUOTE_MESSAGE,
         ),
         HeaderQuoteErrorTestCase(
+            description="model_description_doubling_a_quote",
+            path="models/customers.sql",
+            contents=('MODEL (\n  description "say ""hi"" now",\n);\n\nSELECT 1 AS customer_id\n'),
+            expected_code="D002",
+            expected_location="models/customers.sql:2:20",
+            expected_message=_QUOTE_MESSAGE,
+        ),
+        HeaderQuoteErrorTestCase(
+            description="macro_description_doubling_a_quote",
+            path="macros/sql/title.sql",
+            contents=(
+                'MACRO (\n  description "say ""hi"" now",\n'
+                "  arguments (value VARCHAR),\n  returns VARCHAR,\n);\n\n@value\n"
+            ),
+            expected_code="P015",
+            expected_location="macros/sql/title.sql:2:20",
+            expected_message=_QUOTE_MESSAGE,
+        ),
+        HeaderQuoteErrorTestCase(
             description="audit_header_scanned_past_a_triple_quoted_string",
             path="audits/singular/orders_have_customers.sql",
             contents=(

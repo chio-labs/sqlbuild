@@ -1,10 +1,10 @@
-//! `fix_escaped_quotes`: descriptions that escape double quotes rewritten as `"""` strings.
+//! `fix_escaped_quotes`: descriptions escaping or doubling quotes rewritten as `"""` strings.
 
 use crate::dsl_headers::_helpers::quote_fix::header_fixes;
 use crate::dsl_headers::_helpers::text::{line_starts, position};
 use crate::dsl_headers::main::scan_headers::scan_headers;
 
-/// `text` with each description escaping quotes as `\"` rewritten as `"""..."""`, and its lines.
+/// `text` with each description escaping or doubling quotes rewritten as `"""..."""`, and lines.
 pub fn fix_escaped_quotes(text: &[char]) -> (Vec<char>, Vec<usize>) {
     let starts: Vec<usize> = line_starts(text);
     let mut fixes: Vec<(usize, usize, Vec<char>)> = Vec::new();

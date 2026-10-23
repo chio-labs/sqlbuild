@@ -44,10 +44,10 @@ use crate::bindings::_helpers::rules::lint_text::{relative_parts, unsafe_fault};
 use crate::bindings::types::CompilerDetach;
 
 const DESCRIPTION_PRESENT: &str = "description-present";
-/// The fix that rewrites descriptions escaping double quotes as `"""` strings.
+/// The fix that rewrites descriptions escaping or doubling double quotes as `"""` strings.
 const DESCRIPTION_QUOTES: &str = "description-quotes";
 const DESCRIPTION_QUOTES_REASON: &str =
-    "Escaped double quotes rewritten as a \"\"\"...\"\"\" string holding real quotes";
+    "Escaped or doubled double quotes rewritten as a \"\"\"...\"\"\" string holding real quotes";
 const APPLIED: &str = "applied";
 const LINE_FEED: &str = "\n";
 const CARRIAGE_RETURN_LINE_FEED: &str = "\r\n";

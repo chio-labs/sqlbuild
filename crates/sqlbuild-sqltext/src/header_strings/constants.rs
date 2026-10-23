@@ -21,7 +21,7 @@ pub const TRIPLE_QUOTE_INSIDE: &str = "\"\"\" inside a \"\"\"...\"\"\" string";
 pub const UNCLOSED_TRIPLE_QUOTE: &str = "unclosed \"\"\" string starting";
 
 pub const DOUBLE_QUOTE_INSIDE_MESSAGE: &str = "a double quote ends this \"...\" string early; use \"\"\"…\"\"\" for text containing double quotes";
-pub const DOUBLE_QUOTE_INSIDE_HELP: &str = "write the text between triple quotes, where quotes need no escaping: description \"\"\"Matches \"Miss\".\"\"\"; sqb format --fix rewrites a description that escapes its quotes with \\\"";
+pub const DOUBLE_QUOTE_INSIDE_HELP: &str = "write the text between triple quotes, where quotes need no escaping: description \"\"\"Matches \"Miss\".\"\"\"; sqb format --fix rewrites a description that escapes its quotes as \\\" or doubles them as \"\"";
 pub const SINGLE_QUOTE_INSIDE_MESSAGE: &str =
     "a single quote ends this '...' string early; use \"...\" for text containing single quotes";
 pub const SINGLE_QUOTE_INSIDE_HELP: &str = "write the text between double quotes, description \"Matches 'Miss'.\", or double the quote: 'it''s'";
