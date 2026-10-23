@@ -152,7 +152,13 @@ def evaluate_custom_rules(
 
 
 class _ReadTracker:
-    """Attribute reads to one invocation; rules whose module state changes become untracked."""
+    """Attribute reads to one invocation; rules whose module state changes become untracked.
+
+    Module state is compared once per subject, after every Rule evaluated it, rather than after
+    each invocation. A change that persists to the end of a subject is caught and attributed to
+    the codes whose module state it changed, exactly as a per-invocation check attributes it; a
+    change undone before the subject's last Rule finishes is not.
+    """
 
     def __init__(
         self,
@@ -194,15 +200,19 @@ class _ReadTracker:
                 self.untracked_codes.add(code)
             if reads.uncacheable:
                 self.uncacheable_codes.add(code)
-        changed: tuple[str, ...] = ()
-        if self._state is not None:
-            started: int = thread_time_ns()
-            changed = self._state.changed_codes()
-            self.monitor_ns += thread_time_ns() - started
-        self.stateful_codes.update(changed)
-        if reads is not None:
-            self.untracked_codes.update(changed)
         return None if observed is None else frozenset(observed)
+
+    def finish_subject(self) -> None:
+        """Mark codes whose module state changed since the previous subject finished."""
+
+        if self._state is None:
+            return
+        started: int = thread_time_ns()
+        changed: tuple[str, ...] = self._state.changed_codes()
+        self.monitor_ns += thread_time_ns() - started
+        self.stateful_codes.update(changed)
+        if self.reads is not None:
+            self.untracked_codes.update(changed)
 
 
 def _evaluate_pass(
@@ -274,12 +284,16 @@ def _evaluate_pass(
                 reads=tracker.finish(code=rule.code),
             )
         )
+    if any(item.subject is None for item in evaluations):
+        tracker.finish_subject()
     for model in models:
         subject: Model = public_model(model)
         path: str = model.relative_path.as_posix()
+        evaluated: bool = False
         for rule, ctx, planned in model_contexts:
             if planned is not None and path not in planned:
                 continue
+            evaluated = True
             _stop_if_cancelled(inputs)
             tracker.start()
             try:
@@ -300,6 +314,8 @@ def _evaluate_pass(
                     reads=tracker.finish(code=rule.code),
                 )
             )
+        if evaluated:
+            tracker.finish_subject()
     return evaluations
 
 
