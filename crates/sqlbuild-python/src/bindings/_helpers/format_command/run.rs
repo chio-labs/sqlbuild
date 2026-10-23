@@ -29,7 +29,7 @@ use crate::bindings::_helpers::format_command::files::{
     FormatChange, PendingWrite, persist_changes,
 };
 use crate::bindings::_helpers::format_command::stages::{
-    each_file, format_header_text, lint_header_text, on_format_workers, parse_faults,
+    QuoteFix, each_file, format_header_text, lint_header_text, on_format_workers, parse_faults,
     quote_fixed_text,
 };
 use crate::bindings::_helpers::records::construct::{error_class, new_record_with};
@@ -48,7 +48,10 @@ const DESCRIPTION_PRESENT: &str = "description-present";
 const DESCRIPTION_QUOTES: &str = "description-quotes";
 const DESCRIPTION_QUOTES_REASON: &str =
     "Escaped or doubled double quotes rewritten as a \"\"\"...\"\"\" string holding real quotes";
+const DESCRIPTION_QUOTES_REFUSED_REASON: &str =
+    "Quotes left as written: the file has header syntax errors the rewrite does not fix";
 const APPLIED: &str = "applied";
+const REFUSED: &str = "refused";
 const LINE_FEED: &str = "\n";
 const CARRIAGE_RETURN_LINE_FEED: &str = "\r\n";
 
@@ -605,14 +608,19 @@ fn uncached_entries(
 fn quote_fix_reports<'py>(
     py: Python<'py>,
     entries: &[Entry],
-    fixes: &[Option<(String, Vec<usize>)>],
+    fixes: &[Option<QuoteFix>],
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let mut reports: Vec<Bound<'py, PyAny>> = Vec::new();
     for (entry, fix) in entries.iter().zip(fixes) {
-        let Some((_, lines)) = fix else {
+        let Some(fix) = fix else {
             continue;
         };
-        for line in lines {
+        let (status, reason): (&str, &str) = if fix.text.is_some() {
+            (APPLIED, DESCRIPTION_QUOTES_REASON)
+        } else {
+            (REFUSED, DESCRIPTION_QUOTES_REFUSED_REASON)
+        };
+        for line in &fix.lines {
             reports.push(new_record_with(
                 py,
                 RecordId::RuleFixResult,
@@ -623,11 +631,8 @@ fn quote_fix_reports<'py>(
                     ),
                     ("code", DESCRIPTION_QUOTES.into_pyobject(py)?.into_any()),
                     ("line", line.into_pyobject(py)?.into_any()),
-                    ("status", APPLIED.into_pyobject(py)?.into_any()),
-                    (
-                        "reason",
-                        DESCRIPTION_QUOTES_REASON.into_pyobject(py)?.into_any(),
-                    ),
+                    ("status", status.into_pyobject(py)?.into_any()),
+                    ("reason", reason.into_pyobject(py)?.into_any()),
                 ],
             )?);
         }
@@ -718,7 +723,7 @@ pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<Form
     let original_lints: Vec<Vec<HeaderViolation>> = native(py, || {
         each_file(&entries, |entry| lint_header_text(&entry.original, config))
     })?;
-    let quote_fixes: Vec<Option<(String, Vec<usize>)>> = if request.fix {
+    let quote_fixes: Vec<Option<QuoteFix>> = if request.fix {
         native(py, || {
             each_file(&entries, |entry| quote_fixed_text(&entry.original, config))
         })?
@@ -726,6 +731,7 @@ pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<Form
         vec![None; entries.len()]
     };
     let quote_reports: Vec<Bound<'py, PyAny>> = quote_fix_reports(py, &entries, &quote_fixes)?;
+    let quotes_fixed: bool = quote_fixes.iter().flatten().any(|fix| fix.text.is_some());
     let mut run: Run<'_, '_, 'py> = Run {
         request,
         py,
@@ -742,15 +748,13 @@ pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<Form
     };
     let (rule_fixes, rule_faults) = if request.fix {
         match request.discovery_error {
-            Some(error) if quote_reports.is_empty() => return Err(error.clone_ref(py)),
+            Some(error) if !quotes_fixed => return Err(error.clone_ref(py)),
             Some(_) => (quote_reports, vec![rule_fixes_skipped(py, &run.directory)?]),
             None => match run.plan_rule_fixes() {
                 Ok((verified, faults)) => {
                     (quote_reports.into_iter().chain(verified).collect(), faults)
                 }
-                Err(error)
-                    if error.is_instance_of::<PyException>(py) && !quote_reports.is_empty() =>
-                {
+                Err(error) if error.is_instance_of::<PyException>(py) && quotes_fixed => {
                     let skipped: Bound<'py, PyAny> = rule_fixes_skipped(py, &run.directory)?;
                     (quote_reports, vec![skipped])
                 }
@@ -884,14 +888,12 @@ pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<Form
     })
 }
 
-/// The indexes of files whose headers parse as written or once their quotes are fixed.
-fn safe_files(
-    quote_fixes: &[Option<(String, Vec<usize>)>],
-    lints: &[Vec<HeaderViolation>],
-) -> Vec<usize> {
+/// The indexes of files whose headers parse as written, or wholly once their quotes are fixed.
+fn safe_files(quote_fixes: &[Option<QuoteFix>], lints: &[Vec<HeaderViolation>]) -> Vec<usize> {
     let mut safe: Vec<usize> = Vec::new();
     for (index, (fix, violations)) in quote_fixes.iter().zip(lints).enumerate() {
-        if fix.is_some() || parse_faults(violations).is_empty() {
+        let fixed: bool = fix.as_ref().is_some_and(|fix| fix.text.is_some());
+        if fixed || parse_faults(violations).is_empty() {
             safe.push(index);
         }
     }
@@ -899,10 +901,10 @@ fn safe_files(
 }
 
 /// The quote-fixed text of each file a quote fix rewrote, by index.
-fn quote_fixed_texts(quote_fixes: Vec<Option<(String, Vec<usize>)>>) -> HashMap<usize, String> {
+fn quote_fixed_texts(quote_fixes: Vec<Option<QuoteFix>>) -> HashMap<usize, String> {
     let mut fixed: HashMap<usize, String> = HashMap::new();
     for (index, fix) in quote_fixes.into_iter().enumerate() {
-        if let Some((text, _)) = fix {
+        if let Some(text) = fix.and_then(|fix| fix.text) {
             fixed.insert(index, text);
         }
     }

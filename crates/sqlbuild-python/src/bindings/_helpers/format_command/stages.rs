@@ -5,6 +5,8 @@ use std::sync::OnceLock;
 
 use rayon::ThreadPool;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use sqlbuild_analysis::sql_macros::errors::SqlMacroError;
+use sqlbuild_analysis::sql_macros::main::parse_sql_macro::parse_sql_macro;
 use sqlbuild_core::format_command::main::collect_lint_files::collect_lint_files;
 use sqlbuild_rules::dsl_headers::constants::RULE_HEADER_PARSE;
 use sqlbuild_rules::dsl_headers::main::fix_escaped_quotes::fix_escaped_quotes;
@@ -14,6 +16,12 @@ use sqlbuild_rules::dsl_headers::models::{HeaderRulesConfig, HeaderViolation};
 
 use crate::bindings::_helpers::rules::dsl_headers::header_violations;
 use crate::bindings::_helpers::rules::native_header_parser::NativeHeaderParser;
+
+/// The header kind of a SQL macro file.
+const MACRO_HEADER_KIND: &str = "MACRO";
+/// The name and path a rewritten macro file is checked under; neither affects whether it parses.
+const MACRO_CHECK_NAME: &str = "rewritten";
+const MACRO_CHECK_PATH: &str = "rewritten.sql";
 
 /// Parsers recurse deeply on nested SQL, so format workers get the stack the main thread has.
 const FORMAT_WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
@@ -55,20 +63,49 @@ pub(crate) fn parse_faults(violations: &[HeaderViolation]) -> Vec<HeaderViolatio
         .collect()
 }
 
-/// `text` with escaped description quotes rewritten, and their lines, if its headers then parse.
+/// The description quote fixes of one file.
+#[derive(Clone)]
+pub(crate) struct QuoteFix {
+    /// The rewritten file, or `None` when it would still not parse, so nothing is rewritten.
+    pub(crate) text: Option<String>,
+    /// The one-based lines of the descriptions the fixes rewrite.
+    pub(crate) lines: Vec<usize>,
+}
+
+/// Whether every header of `text`, `MACRO` headers included, parses.
+fn headers_parse(text: &str, config: HeaderRulesConfig) -> Result<bool, String> {
+    if !parse_faults(&lint_header_text(text, config)?).is_empty() {
+        return Ok(false);
+    }
+    let characters: Vec<char> = text.chars().collect();
+    let defines_macro: bool = scan_headers(&characters, false)
+        .iter()
+        .any(|header| header.kind == MACRO_HEADER_KIND);
+    if !defines_macro {
+        return Ok(true);
+    }
+    match parse_sql_macro(MACRO_CHECK_NAME, MACRO_CHECK_PATH, text) {
+        Ok(_) => Ok(true),
+        Err(SqlMacroError { .. }) => Ok(false),
+    }
+}
+
+/// The description quote fixes of `text`, applied only when the whole rewritten file parses.
 pub(crate) fn quote_fixed_text(
     text: &str,
     config: HeaderRulesConfig,
-) -> Result<Option<(String, Vec<usize>)>, String> {
+) -> Result<Option<QuoteFix>, String> {
     let characters: Vec<char> = text.chars().collect();
     let (fixed, lines) = fix_escaped_quotes(&characters);
     if lines.is_empty() {
         return Ok(None);
     }
     let fixed: String = fixed.into_iter().collect();
-    Ok(parse_faults(&lint_header_text(&fixed, config)?)
-        .is_empty()
-        .then_some((fixed, lines)))
+    let parses: bool = headers_parse(&fixed, config)?;
+    Ok(Some(QuoteFix {
+        text: parses.then_some(fixed),
+        lines,
+    }))
 }
 
 /// The number of authored SQL files of the project with a description escaping or doubling quotes.

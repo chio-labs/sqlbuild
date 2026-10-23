@@ -13,6 +13,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.format._test_types import (
     DescriptionLayoutTestCase,
     MacroLayoutTestCase,
     QuoteFixTestCase,
+    RefusedQuoteFixTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.format.helpers import stored_descriptions
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
@@ -258,3 +259,55 @@ def test_given_macro_description_when_formatting_then_its_text_survives_and_it_c
     assert (project_dir / "macros/sql/lowered.sql").read_text() == test_case.expected_macro
     assert compiled.returncode == 0, compiled.stdout + compiled.stderr
 
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RefusedQuoteFixTestCase(
+            description="macro_with_another_header_error",
+            path="macros/sql/title.sql",
+            contents=(
+                'MACRO (\n  description "say \\"hi\\"",\n  arguments (value VARCHAR),\n'
+                "  returns VARCHAR,\n  unknown_key x,\n);\n\n@value\n"
+            ),
+            expected_fix=("description-quotes", "title.sql", 2, "refused"),
+        ),
+        RefusedQuoteFixTestCase(
+            description="model_with_another_header_error",
+            path="models/orders.sql",
+            contents=(
+                'MODEL (\n  description "say \\"hi\\"",\n  tags ["a" "b",\n);\n'
+                "\nSELECT 1 AS order_id\n"
+            ),
+            expected_fix=("description-quotes", "orders.sql", 2, "refused"),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_file_still_broken_after_quote_fix_when_format_fix_then_it_is_left_and_refused(
+    test_case: RefusedQuoteFixTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="shop",
+        repo_files={
+            "sqlbuild_project.toml": _PROJECT_FILE,
+            test_case.path: test_case.contents,
+            "models/customers.sql": (
+                'MODEL (\n  description "Matches \\"Miss\\".",\n);\n\nSELECT 1 AS customer_id\n'
+            ),
+        },
+    )
+
+    fixed: subprocess.CompletedProcess[str] = run_sqb(
+        project_dir=project_dir, command=("--no-color", "format", "--fix", "--json")
+    )
+
+    payload: dict[str, Any] = json.loads(fixed.stdout)
+    reported: list[tuple[str, str, int, str]] = [
+        (fix["code"], Path(fix["file"]).name, fix["line"], fix["status"])
+        for fix in payload["rule_fixes"]
+    ]
+    assert test_case.expected_fix in reported
+    assert ("description-quotes", "customers.sql", 2, "applied") in reported
+    assert (project_dir / test_case.path).read_text() == test_case.contents
