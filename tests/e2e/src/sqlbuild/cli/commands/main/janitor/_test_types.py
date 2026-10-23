@@ -323,3 +323,15 @@ class JanitorUsagePromptE2ETestCase:
     reads: dict[str, tuple[tuple[str, ...], int]]
     unavailable: str | None
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JanitorUsageJsonE2ETestCase:
+    """Test case for the usage fields of `sqb janitor --json`."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_usage_check: dict[str, object]
+    expected_archive_in_use: tuple[tuple[str, object], ...]
+    expected_kept_in_use: tuple[tuple[str, object], ...]
+    expected_archived: int

@@ -4,34 +4,24 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlbuild._native import SQLBUILD_QUERY_TAG_APP
 from sqlbuild.adapter.contract.models import RelationInfo, RelationUsage, RelationUsageReport
-
-USAGE_NAME_CHUNK_SIZE: int = 1_000
-USAGE_UNAVAILABLE_REASON: str = (
-    "cannot read SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY "
-    "(needs Enterprise edition and the GOVERNANCE_VIEWER database role)"
+from sqlbuild.adapters.snowflake.constants import (
+    CLONE_STATEMENT_PATTERN,
+    SQLBUILD_QUERY_TAG_FRAGMENT,
+    USAGE_NAME_CHUNK_SIZE,
+    USAGE_UNAVAILABLE_REASON,
 )
-SQLBUILD_QUERY_TAG_FRAGMENT: str = f'"app":"{SQLBUILD_QUERY_TAG_APP}"'
-CLONE_STATEMENT_PATTERN: str = r".*\sCLONE\s.*"
+from sqlbuild.adapters.snowflake.models import UsageQuery
+
 _UNQUOTED_IDENTIFIER: re.Pattern[str] = re.compile(r"^[A-Z_][A-Z0-9_$]*$")
 _UNAVAILABLE_ERRNOS: frozenset[int] = frozenset({2003, 3001})
 _UNAVAILABLE_MESSAGES: tuple[str, ...] = (
     "does not exist or not authorized",
     "insufficient privileges",
 )
-
-
-@dataclass(frozen=True)
-class UsageQuery:
-    """One access-history read: its SQL and bound parameters."""
-
-    sql: str
-    params: tuple[object, ...]
 
 
 def usage_object_name(*, database: str, schema: str, name: str) -> str:

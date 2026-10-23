@@ -221,12 +221,7 @@ class StrictAdapter(
         relations: tuple[RelationInfo, ...],
         window_seconds: int,
     ) -> RelationUsageReport:
-        """Report which relations other queries read in the last `window_seconds`.
-
-        Each usage names the relation, its latest read, its readers (most queries first) and how
-        many queries read it. SQLBuild's own queries and zero-copy clones do not count. A
-        warehouse that cannot report reads returns an unchecked report with a short reason.
-        """
+        """Report reads of the relations by other queries in the last `window_seconds`."""
         ...
 
     @abstractmethod

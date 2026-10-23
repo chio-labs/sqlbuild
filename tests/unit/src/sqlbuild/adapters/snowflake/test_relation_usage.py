@@ -2,87 +2,37 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 import pytest
 
 from sqlbuild.adapter.contract.models import RelationInfo, RelationUsageReport
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.adapters.snowflake._helpers.relation_usage import (
+from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
+from sqlbuild.adapters.snowflake.constants import (
     CLONE_STATEMENT_PATTERN,
     SQLBUILD_QUERY_TAG_FRAGMENT,
     USAGE_UNAVAILABLE_REASON,
 )
-from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from tests.unit.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakeRelationUsageChunkTestCase,
     SnowflakeRelationUsageErrorTestCase,
+    SnowflakeRelationUsageFailureTestCase,
+    SnowflakeRelationUsageQueryTestCase,
     SnowflakeRelationUsageTestCase,
+    UnsupportedRelationUsageTestCase,
+)
+from tests.unit.src.sqlbuild.adapters.snowflake.helpers import (
+    FakeAccessHistoryError,
+    FakeUsageWarehouse,
+    read_snowflake_usage,
+    usage_relation,
 )
 
 WINDOW_SECONDS: int = 7 * 86_400
 READ_AT: datetime = datetime(2026, 10, 21, 9, 30, tzinfo=UTC)
 EARLIER_READ_AT: datetime = datetime(2026, 10, 19, 14, 0, tzinfo=UTC)
-
-
-class _AccessHistoryError(Exception):
-    def __init__(self, message: str, errno: int | None) -> None:
-        super().__init__(message)
-        self.errno: int | None = errno
-
-
-@dataclass
-class _Warehouse:
-    """Answers CURRENT_DATABASE() and access-history reads, recording each query."""
-
-    current_database: str | None = None
-    access_rows: tuple[tuple[object, ...], ...] = ()
-    error: Exception | None = None
-    queries: list[tuple[str, tuple[object, ...]]] = field(default_factory=list)
-
-
-class _Cursor:
-    def __init__(self, warehouse: _Warehouse) -> None:
-        self.warehouse: _Warehouse = warehouse
-        self.rows: list[tuple[object, ...]] = []
-
-    def execute(self, sql: str, params: tuple[object, ...] = ()) -> None:
-        if sql == "SELECT CURRENT_DATABASE()":
-            self.rows = [(self.warehouse.current_database,)]
-            return
-        self.warehouse.queries.append((sql, params))
-        if self.warehouse.error is not None:
-            raise self.warehouse.error
-        names: set[object] = set(params)
-        self.rows = [row for row in self.warehouse.access_rows if row[0] in names]
-
-    def fetchone(self) -> tuple[object, ...] | None:
-        return self.rows[0] if self.rows else None
-
-    def fetchall(self) -> list[tuple[object, ...]]:
-        return self.rows
-
-    def close(self) -> None:
-        return None
-
-
-class _Connection:
-    def __init__(self, warehouse: _Warehouse) -> None:
-        self.warehouse: _Warehouse = warehouse
-
-    def cursor(self) -> _Cursor:
-        return _Cursor(self.warehouse)
-
-
-def _relation(database: str | None, schema: str, name: str) -> RelationInfo:
-    return RelationInfo(database=database, schema=schema, name=name, relation_type="base table")
-
-
-def _usage(*, connection: _Connection, relations: tuple[RelationInfo, ...]) -> RelationUsageReport:
-    return SnowflakeAdapter().relation_usage(
-        connection=connection, relations=relations, window_seconds=WINDOW_SECONDS
-    )
+ORDERS_DAILY: tuple[RelationInfo, ...] = (usage_relation("analytics", "mart", "orders_daily"),)
 
 
 @pytest.mark.parametrize(
@@ -130,54 +80,66 @@ def _usage(*, connection: _Connection, relations: tuple[RelationInfo, ...]) -> R
 def test_given_access_history_when_reading_usage_then_reads_match_candidates(
     test_case: SnowflakeRelationUsageTestCase,
 ) -> None:
-    warehouse: _Warehouse = _Warehouse(
+    warehouse: FakeUsageWarehouse = FakeUsageWarehouse(
         current_database=test_case.current_database, access_rows=test_case.access_rows
     )
 
-    report: RelationUsageReport = _usage(
-        connection=_Connection(warehouse),
-        relations=tuple(_relation(*relation) for relation in test_case.relations),
+    report: RelationUsageReport = read_snowflake_usage(
+        warehouse=warehouse,
+        relations=tuple(usage_relation(*relation) for relation in test_case.relations),
+        window_seconds=WINDOW_SECONDS,
     )
 
-    assert report.checked
-    assert report.reason is None
-    sql: str
     params: tuple[object, ...]
-    ((sql, params),) = warehouse.queries
+    ((_, params),) = warehouse.queries
+    assert report.checked
     assert params[1 : 1 + len(test_case.expected_object_names)] == (test_case.expected_object_names)
-    assert "SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY" in sql
-    assert "LATERAL FLATTEN(INPUT => history.direct_objects_accessed)" in sql
     assert tuple(
         (usage.name, usage.readers, usage.query_count, usage.last_read_at)
         for usage in report.usages
     ) == (test_case.expected_usages)
 
 
-def test_given_access_history_query_when_built_then_sqlbuild_queries_and_clones_are_excluded() -> (
-    None
-):
-    warehouse: _Warehouse = _Warehouse()
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SnowflakeRelationUsageQueryTestCase(
+            description="one flattened access-history read leaves out SQLBuild queries and clones",
+            window_seconds=WINDOW_SECONDS,
+            expected_params=(
+                WINDOW_SECONDS,
+                "ANALYTICS.MART.ORDERS_DAILY",
+                WINDOW_SECONDS,
+                '"app":"sqlbuild"',
+                r".*\sCLONE\s.*",
+            ),
+            expected_sql_fragments=(
+                "FROM SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY AS history, "
+                "LATERAL FLATTEN(INPUT => history.direct_objects_accessed) AS accessed",
+                "NOT EXISTS (SELECT 1 FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY AS query",
+                "CONTAINS(COALESCE(query.query_tag, ''), %s)",
+                "STARTSWITH(query.query_type, 'CREATE') AND REGEXP_LIKE(query.query_text, %s",
+                "COUNT(DISTINCT history.query_id) AS query_count",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_access_history_query_when_built_then_sqlbuild_queries_and_clones_are_excluded(
+    test_case: SnowflakeRelationUsageQueryTestCase,
+) -> None:
+    warehouse: FakeUsageWarehouse = FakeUsageWarehouse()
 
-    _usage(
-        connection=_Connection(warehouse),
-        relations=(_relation("analytics", "mart", "orders_daily"),),
+    read_snowflake_usage(
+        warehouse=warehouse, relations=ORDERS_DAILY, window_seconds=test_case.window_seconds
     )
 
     sql: str
     params: tuple[object, ...]
     ((sql, params),) = warehouse.queries
-    assert params == (
-        WINDOW_SECONDS,
-        "ANALYTICS.MART.ORDERS_DAILY",
-        WINDOW_SECONDS,
-        SQLBUILD_QUERY_TAG_FRAGMENT,
-        CLONE_STATEMENT_PATTERN,
-    )
-    assert SQLBUILD_QUERY_TAG_FRAGMENT == '"app":"sqlbuild"'
-    assert "NOT EXISTS (SELECT 1 FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY AS query" in sql
-    assert "CONTAINS(COALESCE(query.query_tag, ''), %s)" in sql
-    assert "STARTSWITH(query.query_type, 'CREATE') AND REGEXP_LIKE(query.query_text, %s" in sql
-    assert sql.count("DATEADD('second', -%s, CURRENT_TIMESTAMP())") == 2
+    assert params == test_case.expected_params
+    assert (SQLBUILD_QUERY_TAG_FRAGMENT, CLONE_STATEMENT_PATTERN) == (test_case.expected_params[3:])
+    assert all(fragment in sql for fragment in test_case.expected_sql_fragments)
 
 
 @pytest.mark.parametrize(
@@ -199,14 +161,15 @@ def test_given_access_history_query_when_built_then_sqlbuild_queries_and_clones_
 def test_given_many_candidates_when_reading_usage_then_names_are_chunked(
     test_case: SnowflakeRelationUsageChunkTestCase,
 ) -> None:
-    warehouse: _Warehouse = _Warehouse()
+    warehouse: FakeUsageWarehouse = FakeUsageWarehouse()
 
-    report: RelationUsageReport = _usage(
-        connection=_Connection(warehouse),
+    report: RelationUsageReport = read_snowflake_usage(
+        warehouse=warehouse,
         relations=tuple(
-            _relation("analytics", "mart", f"old_orders_{index:04d}")
+            usage_relation("analytics", "mart", f"old_orders_{index:04d}")
             for index in range(test_case.relation_count)
         ),
+        window_seconds=WINDOW_SECONDS,
     )
 
     assert report.checked
@@ -224,16 +187,19 @@ def test_given_many_candidates_when_reading_usage_then_names_are_chunked(
             errno=2003,
             message="Object 'SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY' does not exist or not "
             "authorized.",
+            expected_report=RelationUsageReport(checked=False, reason=USAGE_UNAVAILABLE_REASON),
         ),
         SnowflakeRelationUsageErrorTestCase(
             description="insufficient privileges are not checked",
             errno=3001,
             message="Insufficient privileges to operate on schema 'ACCOUNT_USAGE'",
+            expected_report=RelationUsageReport(checked=False, reason=USAGE_UNAVAILABLE_REASON),
         ),
         SnowflakeRelationUsageErrorTestCase(
             description="a privilege message without an error number is not checked",
             errno=None,
             message="SQL access control error: Insufficient privileges to operate on view",
+            expected_report=RelationUsageReport(checked=False, reason=USAGE_UNAVAILABLE_REASON),
         ),
     ),
     ids=lambda case: case.description,
@@ -241,36 +207,66 @@ def test_given_many_candidates_when_reading_usage_then_names_are_chunked(
 def test_given_no_access_history_access_when_reading_usage_then_usage_is_not_checked(
     test_case: SnowflakeRelationUsageErrorTestCase,
 ) -> None:
-    warehouse: _Warehouse = _Warehouse(
-        error=_AccessHistoryError(test_case.message, test_case.errno)
+    warehouse: FakeUsageWarehouse = FakeUsageWarehouse(
+        errors=(FakeAccessHistoryError(test_case.message, test_case.errno),)
     )
 
-    report: RelationUsageReport = _usage(
-        connection=_Connection(warehouse),
-        relations=(_relation("analytics", "mart", "orders_daily"),),
+    report: RelationUsageReport = read_snowflake_usage(
+        warehouse=warehouse, relations=ORDERS_DAILY, window_seconds=WINDOW_SECONDS
     )
 
-    assert report == RelationUsageReport(checked=False, reason=USAGE_UNAVAILABLE_REASON)
+    assert report == test_case.expected_report
 
 
-def test_given_other_access_history_failure_when_reading_usage_then_error_propagates() -> None:
-    warehouse: _Warehouse = _Warehouse(error=_AccessHistoryError("SQL execution canceled", 604))
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SnowflakeRelationUsageFailureTestCase(
+            description="a cancelled read is a real error",
+            errno=604,
+            message="SQL execution canceled",
+            expected_error_match="canceled",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_other_access_history_failure_when_reading_usage_then_error_propagates(
+    test_case: SnowflakeRelationUsageFailureTestCase,
+) -> None:
+    warehouse: FakeUsageWarehouse = FakeUsageWarehouse(
+        errors=(FakeAccessHistoryError(test_case.message, test_case.errno),)
+    )
 
-    with pytest.raises(_AccessHistoryError, match="canceled"):
-        _usage(
-            connection=_Connection(warehouse),
-            relations=(_relation("analytics", "mart", "orders_daily"),),
+    with pytest.raises(FakeAccessHistoryError, match=test_case.expected_error_match):
+        read_snowflake_usage(
+            warehouse=warehouse, relations=ORDERS_DAILY, window_seconds=WINDOW_SECONDS
         )
 
 
-def test_given_other_adapter_when_reading_usage_then_it_reports_unsupported() -> None:
-    report: RelationUsageReport = DuckDbAdapter().relation_usage(
-        connection=object(),
-        relations=(_relation("analytics", "mart", "orders_daily"),),
-        window_seconds=WINDOW_SECONDS,
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        UnsupportedRelationUsageTestCase(
+            description="duckdb has no usage source",
+            adapter=DuckDbAdapter(),
+            expected_report=RelationUsageReport(checked=False, reason="unsupported adapter"),
+        ),
+        UnsupportedRelationUsageTestCase(
+            description="postgres has no usage source",
+            adapter=PostgresAdapter(),
+            expected_report=RelationUsageReport(checked=False, reason="unsupported adapter"),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_other_adapter_when_reading_usage_then_it_reports_unsupported(
+    test_case: UnsupportedRelationUsageTestCase,
+) -> None:
+    report: RelationUsageReport = test_case.adapter.relation_usage(
+        connection=object(), relations=ORDERS_DAILY, window_seconds=WINDOW_SECONDS
     )
 
-    assert report == RelationUsageReport(checked=False, reason="unsupported adapter")
+    assert report == test_case.expected_report
 
 
 if __name__ == "__main__":

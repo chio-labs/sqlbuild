@@ -4,8 +4,10 @@ use crate::janitor_text::main::janitor_confirmation_phrase::janitor_confirmation
 use crate::janitor_text::main::janitor_confirmation_prompt::janitor_confirmation_prompt;
 use crate::janitor_text::main::render_janitor_plan::render_janitor_plan;
 use crate::janitor_text::models::JanitorOutcome;
-use crate::janitor_text::tests::helpers::{direct_archive_plan, unchecked_plan, usage_plan};
-use crate::janitor_text::tests::test_types::{JsonTestCase, PreviewTestCase};
+use crate::janitor_text::tests::helpers::{
+    direct_archive_plan, kept_usage_plan, unchecked_plan, usage_plan,
+};
+use crate::janitor_text::tests::test_types::{JsonTestCase, PreviewTestCase, UsagePromptTestCase};
 
 const PLAIN: CliStyle = CliStyle { use_color: false };
 
@@ -14,7 +16,7 @@ fn given_usage_check_when_rendering_preview_then_in_use_relations_show_readers()
     let test_cases = [
         PreviewTestCase {
             description: "in-use candidates are listed with capped readers and archived anyway",
-            plan: usage_plan(false),
+            plan: usage_plan(),
             verbose: false,
             expected_fragments: &[
                 "  relations to archive   3\n  in use                 2\n",
@@ -33,7 +35,7 @@ fn given_usage_check_when_rendering_preview_then_in_use_relations_show_readers()
         },
         PreviewTestCase {
             description: "keep_in_use lists in-use relations as kept and leaves them unarchived",
-            plan: usage_plan(true),
+            plan: kept_usage_plan(),
             verbose: false,
             expected_fragments: &[
                 "  relations to archive   1\n  kept (in use)          2\n",
@@ -70,63 +72,72 @@ fn given_usage_check_when_rendering_preview_then_in_use_relations_show_readers()
 
     for test_case in test_cases {
         let text: String = render_janitor_plan(&test_case.plan, test_case.verbose, PLAIN);
-        for fragment in test_case.expected_fragments {
-            assert!(
-                text.contains(fragment),
-                "{}: missing {fragment:?} in {text}",
-                test_case.description
-            );
-        }
-        for fragment in test_case.unexpected_fragments {
-            assert!(
-                !text.contains(fragment),
-                "{}: unexpected {fragment:?} in {text}",
-                test_case.description
-            );
-        }
+        assert!(
+            test_case
+                .expected_fragments
+                .iter()
+                .all(|fragment| text.contains(fragment)),
+            "{}: missing fragments in {text}",
+            test_case.description
+        );
+        assert!(
+            !test_case
+                .unexpected_fragments
+                .iter()
+                .any(|fragment| text.contains(fragment)),
+            "{}: unexpected fragments in {text}",
+            test_case.description
+        );
     }
 }
 
 #[test]
 fn given_usage_check_when_prompting_then_prompt_states_in_use_count() {
-    let test_cases: [(&str, crate::janitor_text::models::JanitorPlanText, &str); 4] = [
-        (
-            "the prompt counts in-use relations among those archived",
-            usage_plan(false),
-            "Janitor will archive 3 and delete 0 objects from dev.\n\
-             3 relations will be archived; 2 of them are in use.\nRetention: 14 days\n",
-        ),
-        (
-            "keep_in_use counts the kept relations",
-            usage_plan(true),
-            "Janitor will archive 1 and delete 0 objects from dev.\n\
-             2 relations in use are kept.\nRetention: 14 days\n",
-        ),
-        (
-            "an unchecked usage repeats the notice",
-            unchecked_plan(false),
-            "Janitor will archive 1 and delete 1 objects from dev.\n\
-             Usage not checked: unsupported adapter\nRetention: 14 days\n",
-        ),
-        (
-            "keep_in_use without a usage source repeats the warning",
-            unchecked_plan(true),
-            "Usage not checked: unsupported adapter\nNothing kept in use: no usage could be \
-             checked, so relations in use are archived too\nRetention",
-        ),
+    let test_cases = [
+        UsagePromptTestCase {
+            description: "the prompt counts in-use relations among those archived",
+            plan: usage_plan(),
+            expected_fragment: "Janitor will archive 3 and delete 0 objects from dev.\n\
+                3 relations will be archived; 2 of them are in use.\nRetention: 14 days\n",
+            expected_phrase: "archive 3 and delete 0 objects from dev",
+        },
+        UsagePromptTestCase {
+            description: "keep_in_use counts the kept relations and leaves them out of the phrase",
+            plan: kept_usage_plan(),
+            expected_fragment: "Janitor will archive 1 and delete 0 objects from dev.\n\
+                2 relations in use are kept.\nRetention: 14 days\n",
+            expected_phrase: "archive 1 and delete 0 objects from dev",
+        },
+        UsagePromptTestCase {
+            description: "an unchecked usage repeats the notice",
+            plan: unchecked_plan(false),
+            expected_fragment: "Janitor will archive 1 and delete 1 objects from dev.\n\
+                Usage not checked: unsupported adapter\nRetention: 14 days\n",
+            expected_phrase: "archive 1 and delete 1 objects from dev",
+        },
+        UsagePromptTestCase {
+            description: "keep_in_use without a usage source repeats the warning",
+            plan: unchecked_plan(true),
+            expected_fragment: "Usage not checked: unsupported adapter\nNothing kept in use: \
+                no usage could be checked, so relations in use are archived too\nRetention",
+            expected_phrase: "archive 1 and delete 1 objects from dev",
+        },
     ];
 
-    for (description, plan, expected) in test_cases {
-        let prompt: String = janitor_confirmation_prompt(&plan);
+    for test_case in test_cases {
+        let prompt: String = janitor_confirmation_prompt(&test_case.plan);
         assert!(
-            prompt.contains(expected),
-            "{description}: missing {expected:?} in {prompt}"
+            prompt.contains(test_case.expected_fragment),
+            "{}: missing fragment in {prompt}",
+            test_case.description
+        );
+        assert_eq!(
+            janitor_confirmation_phrase(&test_case.plan),
+            test_case.expected_phrase,
+            "{}",
+            test_case.description
         );
     }
-    assert_eq!(
-        janitor_confirmation_phrase(&usage_plan(true)),
-        "archive 1 and delete 0 objects from dev"
-    );
 }
 
 #[test]
@@ -134,7 +145,7 @@ fn given_usage_check_when_formatting_json_then_candidates_carry_in_use() {
     let test_cases = [
         JsonTestCase {
             description: "checked candidates carry their reads or false, with the check status",
-            plan: Some(usage_plan(false)),
+            plan: Some(usage_plan()),
             outcome: JanitorOutcome::Previewed,
             run: None,
             error: None,
@@ -150,7 +161,7 @@ fn given_usage_check_when_formatting_json_then_candidates_carry_in_use() {
         },
         JsonTestCase {
             description: "kept relations are listed apart from the relations to archive",
-            plan: Some(usage_plan(true)),
+            plan: Some(kept_usage_plan()),
             outcome: JanitorOutcome::Previewed,
             run: None,
             error: None,
@@ -187,12 +198,13 @@ fn given_usage_check_when_formatting_json_then_candidates_carry_in_use() {
             test_case.run.as_ref(),
             test_case.error,
         );
-        for fragment in test_case.expected_fragments {
-            assert!(
-                text.contains(fragment),
-                "{}: missing {fragment:?} in {text}",
-                test_case.description
-            );
-        }
+        assert!(
+            test_case
+                .expected_fragments
+                .iter()
+                .all(|fragment| text.contains(fragment)),
+            "{}: missing fragments in {text}",
+            test_case.description
+        );
     }
 }

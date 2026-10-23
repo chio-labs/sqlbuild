@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 
 from sqlbuild._native import OldNameViewDropReason, OldNameViewHistory
@@ -64,6 +64,11 @@ class JanitorArchiveCandidate:
     archived_at: datetime
     expires_at: datetime
     usage: RelationUsage | None = None
+
+    def with_usage(self, *, usage: RelationUsage) -> JanitorArchiveCandidate:
+        """Return this candidate with its reads in the usage window."""
+
+        return replace(self, usage=usage)
 
 
 @dataclass(frozen=True)
@@ -227,6 +232,24 @@ class JanitorPlan:
     planned_at: datetime | None = None
     usage_check: JanitorUsageCheck | None = None
     kept_in_use: tuple[JanitorArchiveCandidate, ...] = field(default_factory=tuple)
+
+    def with_usage(
+        self,
+        *,
+        archive_candidates: tuple[JanitorArchiveCandidate, ...],
+        archive_deletion_candidates: tuple[JanitorArchivedRelation, ...],
+        kept_in_use: tuple[JanitorArchiveCandidate, ...],
+        usage_check: JanitorUsageCheck,
+    ) -> JanitorPlan:
+        """Return this plan after its usage check, with in-use candidates kept when asked."""
+
+        return replace(
+            self,
+            archive_candidates=archive_candidates,
+            archive_deletion_candidates=archive_deletion_candidates,
+            kept_in_use=kept_in_use,
+            usage_check=usage_check,
+        )
 
 
 @dataclass(frozen=True)

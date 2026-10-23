@@ -2,7 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sqlbuild._native import InferredNullability
-from sqlbuild.adapter.contract.models import FunctionInfo, SchemaDiffResult
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import FunctionInfo, RelationUsageReport, SchemaDiffResult
 from sqlbuild.adapter.contract.types import TableFreshnessStatus
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.cost.types import CostStatus
@@ -307,6 +308,14 @@ class SnowflakeRelationUsageTestCase:
 
 
 @dataclass(frozen=True)
+class SnowflakeRelationUsageQueryTestCase:
+    description: str
+    window_seconds: int
+    expected_params: tuple[object, ...]
+    expected_sql_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class SnowflakeRelationUsageChunkTestCase:
     description: str
     relation_count: int
@@ -318,3 +327,19 @@ class SnowflakeRelationUsageErrorTestCase:
     description: str
     errno: int | None
     message: str
+    expected_report: RelationUsageReport
+
+
+@dataclass(frozen=True)
+class SnowflakeRelationUsageFailureTestCase:
+    description: str
+    errno: int | None
+    message: str
+    expected_error_match: str
+
+
+@dataclass(frozen=True)
+class UnsupportedRelationUsageTestCase:
+    description: str
+    adapter: BaseAdapter
+    expected_report: RelationUsageReport

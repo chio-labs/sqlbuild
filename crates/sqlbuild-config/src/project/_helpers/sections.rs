@@ -568,16 +568,15 @@ pub(crate) fn load_janitor(payload: Option<&ConfigValue>, file: ConfigFile) -> L
     let keep_in_use = optional_bool(mapping, "keep_in_use", false)?;
     let in_use_window = match get(mapping, "in_use_window") {
         None => DEFAULT_IN_USE_WINDOW.to_owned(),
-        Some(_) => optional_str(mapping, "in_use_window")
-            .ok()
-            .flatten()
-            .filter(|window| matches!(fixed_duration_seconds(window, false), Ok(Some(_))))
-            .ok_or_else(|| {
-                ConfigFailure::at(
-                    file,
-                    "janitor.in_use_window must be a positive fixed duration such as '7d'",
-                )
-            })?,
+        Some(ConfigValue::String(window)) if fixed_duration_seconds(window, false)?.is_some() => {
+            window.clone()
+        }
+        Some(_) => {
+            return Err(ConfigFailure::at(
+                file,
+                "janitor.in_use_window must be a positive fixed duration such as '7d'",
+            ));
+        }
     };
     let checks = [
         (retention_days.as_ref(), "retention_days"),
