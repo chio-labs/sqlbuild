@@ -35,6 +35,7 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     ExplicitContractOutputRuleIntegrationTestCase,
     ImplicitAliasRuleIntegrationTestCase,
     NumericRangeDecisionIntegrationTestCase,
+    ProjectRuleScratchStateTestCase,
     RulePassIntegrationTestCase,
     RulesIntegrationTestCase,
     SetOperationStarRuleTestCase,
@@ -50,6 +51,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
     observe_hosts,
     write_custom_host_project,
     write_project_files,
+    write_project_scratch_rules,
 )
 
 _CACHE_RULES_TOML: str = 'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRSQL004"]\n'
@@ -1054,21 +1056,23 @@ def test_given_previous_build_rule_cache_when_compiling_then_lint_overlaps_with_
     test_case: EarlyLintInputsTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("SQLBUILD_DISABLE_COMPILE_CACHE", "1")
     write_project_files(project_dir=tmp_path, files=EARLY_LINT_PROJECT_FILES)
     previous_findings: tuple[tuple[str, str, int | None, int | None], ...] = compile_findings(
-        project_dir=tmp_path, capsys=capsys
+        project_dir=tmp_path, capsys=capsys, flags=()
     )
     cache_path: Path = rules_bulk_cache_path(project_dir=tmp_path, file_name="sql.json")
     stored: dict[str, object] = json.loads(cache_path.read_text(encoding="utf-8"))
     stored["build_identity"] = "previous-build"
     cache_path.write_text(json.dumps(stored), encoding="utf-8")
     upgraded_findings: tuple[tuple[str, str, int | None, int | None], ...] = compile_findings(
-        project_dir=tmp_path, capsys=capsys
+        project_dir=tmp_path, capsys=capsys, flags=()
     )
 
     assert previous_findings == upgraded_findings == test_case.expected_findings
-    assert compile_findings(project_dir=tmp_path, capsys=capsys) == upgraded_findings
+    assert compile_findings(project_dir=tmp_path, capsys=capsys, flags=()) == (upgraded_findings)
 
 
 @pytest.mark.parametrize(
@@ -1191,6 +1195,41 @@ def final_directory(*, model: Model, ctx: RuleContext) -> list[Finding]:
 
 @pytest.mark.parametrize(
     "test_case",
+    [
+        ProjectRuleScratchStateTestCase(
+            description="one host runs the project rules in order",
+            hosts=1,
+            expected_findings=(("XSQBRSCR002", "models/customers.sql"),),
+            expected_launches=1,
+        ),
+        ProjectRuleScratchStateTestCase(
+            description="split project rules rerun in one host after the scratch list fills",
+            hosts=2,
+            expected_findings=(("XSQBRSCR002", "models/customers.sql"),),
+            expected_launches=3,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_project_rules_sharing_scratch_state_when_splitting_hosts_then_findings_match_one_host(
+    test_case: ProjectRuleScratchStateTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    write_project_scratch_rules(tmp_path)
+    hosts: CustomHostObserver = observe_hosts(monkeypatch=monkeypatch, cores=test_case.hosts)
+
+    findings: tuple[tuple[str, str, int | None, int | None], ...] = compile_findings(
+        project_dir=tmp_path, capsys=capsys
+    )
+
+    assert tuple((code, path) for code, path, _, _ in findings) == test_case.expected_findings
+    assert len(hosts.launches()) == test_case.expected_launches
+
+
+@pytest.mark.parametrize(
+    "test_case",
     [CustomHostSplitIntegrationTestCase("custom rules split across hosts", 9, 3, "XSQBRARCH001")],
     ids=lambda case: case.description,
 )
@@ -1231,10 +1270,11 @@ def final_directory(*, model: Model, ctx: RuleContext) -> list[Finding]:
     )
 
     def compile_payload() -> dict[str, Any]:
-        exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+        exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
         assert exit_code == 1
         return json.loads(capsys.readouterr().out)
 
+    monkeypatch.setenv("SQLBUILD_DISABLE_COMPILE_CACHE", "1")
     single_hosts: CustomHostObserver = observe_hosts(monkeypatch=monkeypatch, cores=1)
     single: dict[str, Any] = compile_payload()
     rules_bulk_cache_path(project_dir=tmp_path, file_name="custom-rules.json").parent.parent.rename(

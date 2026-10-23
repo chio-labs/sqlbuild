@@ -185,7 +185,13 @@ fn settings<'py>(
                 "drop_old_name_views",
                 &native_field(request, "drop_old_name_views")?,
             ),
+            ("in_use_window", &native_field(janitor, "in_use_window")?),
         ],
+    )?;
+    options.set_item(
+        "keep_in_use",
+        native_field(request, "keep_in_use")?.is_truthy()?
+            || native_field(janitor, "keep_in_use")?.is_truthy()?,
     )?;
     new_record(py, RecordId::JanitorSettings, (), Some(&options))
 }

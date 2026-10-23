@@ -3,12 +3,20 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.contract.models import ColumnInfo, RetentionRequest
+from sqlbuild.adapter.contract.models import (
+    ColumnInfo,
+    RelationInfo,
+    RelationUsageReport,
+    RetentionRequest,
+)
 from sqlbuild.adapter.contract.types import RetentionScope
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
+from sqlbuild.adapters.bigquery.classes.bigquery_connection import _BigQueryConnection
+
+USAGE_COLUMNS: tuple[str, ...] = ("object_name", "user_name", "query_count", "last_read_at")
 
 
 def build_retention_request(*, desired_days: int) -> RetentionRequest:
@@ -254,3 +262,83 @@ def run_bigquery_job(
         ),
     }
     jobs[operation]()
+
+
+class FakeBigQueryError(Exception):
+    """A Google API error with an HTTP status code."""
+
+    def __init__(self, message: str, code: int, reasons: tuple[str, ...] = ()) -> None:
+        super().__init__(message)
+        self.code: int = code
+        self.errors: list[dict[str, str]] = [{"reason": reason} for reason in reasons]
+
+
+class Forbidden(Exception):
+    """Stands in for google.api_core.exceptions.Forbidden, matched by class name."""
+
+
+class FakeUsageDataset:
+    def __init__(self, location: str) -> None:
+        self.location: str = location
+
+
+class FakeUsageClient:
+    """Answers dataset locations and JOBS reads, recording each read."""
+
+    def __init__(
+        self,
+        *,
+        project: str,
+        dataset_locations: dict[str, str],
+        rows: tuple[tuple[object, ...], ...] = (),
+        errors: tuple[Exception, ...] = (),
+    ) -> None:
+        self.project: str = project
+        self.dataset_locations: dict[str, str] = dataset_locations
+        self.rows: tuple[tuple[object, ...], ...] = rows
+        self.errors: tuple[Exception, ...] = errors
+        self.queries: list[tuple[str, str, dict[str, object]]] = []
+
+    def get_dataset(self, dataset_id: str) -> FakeUsageDataset:
+        return FakeUsageDataset(self.dataset_locations[dataset_id])
+
+    def query(self, sql: str, *, location: str, job_config: Any) -> FakeBigQueryJob:
+        params: dict[str, object] = {
+            parameter.name: getattr(parameter, "values", getattr(parameter, "value", None))
+            for parameter in job_config.query_parameters
+        }
+        self.queries.append((sql, location, params))
+        error: Exception
+        for error in self.errors:
+            raise error
+        names: frozenset[object] = frozenset(cast(list[object], params["object_names"]))
+        return FakeBigQueryJob(
+            FakeBigQueryRows(
+                columns=USAGE_COLUMNS,
+                rows=tuple(filter(lambda row: row[0] in names, self.rows)),
+            )
+        )
+
+
+def usage_relation(database: str | None, schema: str, name: str) -> RelationInfo:
+    """A table relation for usage reads."""
+
+    return RelationInfo(database=database, schema=schema, name=name, relation_type="table")
+
+
+def read_bigquery_usage(
+    *, client: FakeUsageClient, relations: tuple[RelationInfo, ...], window_seconds: int
+) -> RelationUsageReport:
+    """BigQuery's usage report for the relations from the fake client."""
+
+    return BigQueryAdapter().relation_usage(
+        connection=_BigQueryConnection(client=client, location=None),
+        relations=relations,
+        window_seconds=window_seconds,
+    )
+
+
+def queried_names(params: dict[str, object]) -> tuple[str, ...]:
+    """The table names one recorded JOBS read asked about."""
+
+    return tuple(cast(list[str], params["object_names"]))

@@ -187,6 +187,16 @@ class CustomHostSplitIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class ProjectRuleScratchStateTestCase:
+    """Project rules sharing module state that one fills, one reads and one empties."""
+
+    description: str
+    hosts: int
+    expected_findings: tuple[tuple[str, str], ...]
+    expected_launches: int
+
+
+@dataclass(frozen=True)
 class CustomHostFailureIntegrationTestCase:
     """A compile whose custom rule fails for some models while its hosts are split."""
 

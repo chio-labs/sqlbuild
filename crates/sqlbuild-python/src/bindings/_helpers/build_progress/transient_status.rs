@@ -233,7 +233,7 @@ impl TransientStatusReporter {
             .write_persistent(slf.py(), &format!("{message}\n{blank}"))
     }
 
-    fn error(slf: &Bound<'_, Self>, message: &str) -> PyResult<()> {
+    pub(crate) fn error(slf: &Bound<'_, Self>, message: &str) -> PyResult<()> {
         Self::close(slf)?;
         slf.get().write_message(slf.py(), message, false)
     }

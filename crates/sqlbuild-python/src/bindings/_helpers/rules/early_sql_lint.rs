@@ -84,7 +84,11 @@ struct EarlyLintPlan {
 }
 
 /// The plan early SQL lint runs with, when the project selects SQL rules without a warm cache.
-fn early_lint_plan(inputs: &Bound<'_, PyAny>, dialect: &str) -> PyResult<Option<EarlyLintPlan>> {
+fn early_lint_plan(
+    inputs: &Bound<'_, PyAny>,
+    dialect: &str,
+    no_cache: bool,
+) -> PyResult<Option<EarlyLintPlan>> {
     let py: Python<'_> = inputs.py();
     let project_dir: Bound<'_, PyAny> =
         record_field(&record_field(inputs, "discovered_inputs")?, "project_dir")?;
@@ -97,9 +101,10 @@ fn early_lint_plan(inputs: &Bound<'_, PyAny>, dialect: &str) -> PyResult<Option<
             return Ok(None);
         }
     }
-    let Ok(config) = rules_config_of(&project_dir)? else {
+    let Ok(mut config) = rules_config_of(&project_dir)? else {
         return Ok(None);
     };
+    config.cache.enabled &= !no_cache;
     if config.select.is_empty() {
         return Ok(None);
     }
@@ -208,11 +213,11 @@ fn same_codes(left: &[String], right: &[String]) -> bool {
 
 /// Start early SQL lint on a native thread when the project selects SQL rules without a cache.
 fn start_early_lint(
-    inputs: &Bound<'_, PyAny>,
-    dialect: &str,
+    (inputs, dialect): (&Bound<'_, PyAny>, &str),
+    no_cache: bool,
     stop: &Arc<AtomicBool>,
 ) -> PyResult<Option<PreparedSqlLint>> {
-    let Some(plan) = early_lint_plan(inputs, dialect)? else {
+    let Some(plan) = early_lint_plan(inputs, dialect, no_cache)? else {
         return Ok(None);
     };
     let mut compiled: HashMap<PathBuf, CompiledSource> = HashMap::new();
@@ -290,6 +295,8 @@ pub(crate) struct ExpansionReuse {
 pub(crate) struct EarlySqlLint {
     #[pyo3(get)]
     pub(crate) enabled: bool,
+    /// Whether `--no-cache` turned the Rules cache off, so a warm SQL rule cache is ignored.
+    no_cache: bool,
     preparation: Option<Py<PreparedSqlLint>>,
     expansion_reuse: Option<ExpansionReuse>,
     stop_requested: Arc<AtomicBool>,
@@ -297,9 +304,10 @@ pub(crate) struct EarlySqlLint {
 
 impl EarlySqlLint {
     /// A manager that starts speculative checks only when `enabled`.
-    pub(crate) fn new(enabled: bool) -> Self {
+    pub(crate) fn new(enabled: bool, no_cache: bool) -> Self {
         Self {
             enabled,
+            no_cache,
             preparation: None,
             expansion_reuse: None,
             stop_requested: Arc::new(AtomicBool::new(false)),
@@ -337,9 +345,9 @@ impl EarlySqlLint {
 #[pymethods]
 impl EarlySqlLint {
     #[new]
-    #[pyo3(signature = (*, enabled))]
-    fn py_new(enabled: bool) -> Self {
-        Self::new(enabled)
+    #[pyo3(signature = (*, enabled, no_cache=false))]
+    fn py_new(enabled: bool, no_cache: bool) -> Self {
+        Self::new(enabled, no_cache)
     }
 
     fn __enter__(slf: PyRefMut<'_, Self>) -> PyRefMut<'_, Self> {
@@ -363,7 +371,7 @@ impl EarlySqlLint {
         }
         let py: Python<'_> = inputs.py();
         let stop: Arc<AtomicBool> = Arc::clone(&slf.stop_requested);
-        slf.preparation = start_early_lint(inputs, dialect, &stop)?
+        slf.preparation = start_early_lint((inputs, dialect), slf.no_cache, &stop)?
             .map(|preparation| Py::new(py, preparation))
             .transpose()?;
         let declaration_scope: Bound<'_, PyAny> = record_field(inputs, "declaration_scope")?;

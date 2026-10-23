@@ -19,7 +19,9 @@ from sqlbuild.adapter.contract.models import (
     FunctionDefinition,
     MigrationStagePlan,
     RelationGrant,
+    RelationInfo,
     RelationReadProbe,
+    RelationUsageReport,
     RowDiffTolerance,
     RowDiffTolerances,
     SnapshotChangeTarget,
@@ -209,6 +211,17 @@ class StrictAdapter(
         requests: tuple[TableFreshnessRequest, ...],
     ) -> dict[TableFreshnessRequest, TableFreshnessMetadata]:
         """Return one freshness outcome per requested table without failing the whole batch."""
+        ...
+
+    @abstractmethod
+    def relation_usage(
+        self,
+        *,
+        connection: Any,
+        relations: tuple[RelationInfo, ...],
+        window_seconds: int,
+    ) -> RelationUsageReport:
+        """Report reads of the relations by other queries in the last `window_seconds`."""
         ...
 
     @abstractmethod

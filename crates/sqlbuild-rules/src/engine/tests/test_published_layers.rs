@@ -149,6 +149,78 @@ fn given_published_models_when_evaluating_layer_rules_then_reads_and_shapes_matc
                 "allowed_qualifiers = [{ domain = \"sales\", qualifier = \"fra\"",
             )],
         },
+        PublishedLayerTestCase {
+            description: "one qualifier glob replaces a literal entry per country",
+            code: "SQBRPROJECT107",
+            models: &[
+                ("sales__mart__orders", &[]),
+                ("sales__mart__customers", &[]),
+                ("sales__mart__orders__fra", &[]),
+                ("sales__mart__orders__deu", &[]),
+                ("sales__mart__orders__ita", &[]),
+                ("sales__mart__returns__fra_snapshots", &[]),
+            ],
+            options: json!({"allowed_qualifiers": [
+                {"domain": "sales", "qualifier": "[a-z][a-z][a-z]", "reason": "Published once per country."},
+                {"domain": "sales", "qualifier": "[a-z][a-z][a-z]_snapshots", "reason": "Daily snapshots per country."}
+            ]}),
+            expected_faults: &[],
+        },
+        PublishedLayerTestCase {
+            description: "a qualifier glob is case-sensitive and leaves other qualifiers flagged",
+            code: "SQBRPROJECT107",
+            models: &[
+                ("sales__mart__orders", &[]),
+                ("sales__mart__customers", &[]),
+                ("sales__mart__orders__fra", &[]),
+                ("sales__mart__orders__finance", &[]),
+            ],
+            options: json!({"allowed_qualifiers": [
+                {"qualifier": "[A-Z][A-Z][A-Z]", "reason": "Published once per country."},
+                {"domain": "finance", "qualifier": "[a-z][a-z][a-z]", "reason": "Per country."}
+            ]}),
+            expected_faults: &[
+                (
+                    "models/sales/mart/sales__mart__orders__finance.sql",
+                    "domain sales publishes 2 models as <domain>__<layer>__<entity> and 2 as",
+                ),
+                (
+                    "models/sales/mart/sales__mart__orders__fra.sql",
+                    "sales__mart__orders__fra does not fit the majority shape",
+                ),
+            ],
+        },
+        PublishedLayerTestCase {
+            description: "a paths star matches across folder separators",
+            code: "SQBRPROJECT107",
+            models: &[
+                ("sales__mart__orders", &[]),
+                ("sales__mart__orders__fra", &[]),
+                ("sales__mart__orders__deu", &[]),
+            ],
+            options: json!({"allowed_qualifiers": [
+                {"paths": ["models/sales/*"], "reason": "Published once per country."}
+            ]}),
+            expected_faults: &[],
+        },
+        PublishedLayerTestCase {
+            description: "a paths entry leaves out the published models in its folder",
+            code: "SQBRPROJECT107",
+            models: &[
+                ("sales__mart__orders", &[]),
+                ("sales__mart__orders__fra", &[]),
+                ("sales__mart__orders__deu", &[]),
+                ("finance__mart__revenue", &[]),
+                ("finance__mart__revenue__fra", &[]),
+            ],
+            options: json!({"allowed_qualifiers": [
+                {"paths": ["models/sales/mart/*"], "reason": "Published once per country."}
+            ]}),
+            expected_faults: &[(
+                "models/finance/mart/finance__mart__revenue__fra.sql",
+                "domain finance publishes 1 model as <domain>__<layer>__<entity> and 1 as",
+            )],
+        },
     ];
 
     for test_case in test_cases {

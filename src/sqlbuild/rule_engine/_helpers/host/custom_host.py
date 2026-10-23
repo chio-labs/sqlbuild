@@ -108,7 +108,7 @@ def main() -> int:
         "protocol": CUSTOM_HOST_PROTOCOL_VERSION,
         "runtime_version": CUSTOM_HOST_RUNTIME_VERSION,
         "error": None,
-        "payload": _run_payload(run),
+        "payload": _run_payload(run=run, guard_ns=0 if guard is None else guard.check_ns),
         "messages": messages.getvalue().splitlines(),
     }
     sys.stdout.write(json.dumps(response, sort_keys=True))
@@ -193,7 +193,7 @@ def _decode_plan(value: object) -> CustomRulePlan:
     return plan
 
 
-def _run_payload(run: CustomRuleRun) -> dict[str, object]:
+def _run_payload(*, run: CustomRuleRun, guard_ns: int) -> dict[str, object]:
     """Encode invocations with read sets deduplicated across subjects and bounded in size."""
 
     readsets: dict[frozenset[tuple[object, ...]], int] = {}
@@ -231,6 +231,11 @@ def _run_payload(run: CustomRuleRun) -> dict[str, object]:
         "observed": sorted([list(key), digest] for key, digest in run.observed),
         "bounded": bounded,
         "stateful": sorted(run.stateful_codes),
+        "timings": {
+            "rules": {code: list(timing) for code, timing in sorted(run.rule_timings.items())},
+            "monitor_ns": run.monitor_ns,
+            "guard_ns": guard_ns,
+        },
     }
 
 

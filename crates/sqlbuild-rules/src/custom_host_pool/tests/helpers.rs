@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::custom_host_pool::models::HostEvaluation;
+use crate::custom_host_pool::models::{HostEvaluation, HostTimings, RuleTiming};
 use crate::custom_host_pool::types::{HostInvocation, HostPlan};
 
 /// Write a fake `/proc/self/cgroup` and a cgroup hierarchy below `root`.
@@ -52,5 +52,29 @@ pub(super) fn evaluation(code: &str, subject: &str, reads: Option<&[&[&str]]>) -
                 .map(|key| key.iter().map(|part| (*part).to_owned()).collect())
                 .collect()
         }),
+    }
+}
+
+/// Host timings with the given `(code, invocations, cpu_ns)` rules.
+pub(super) fn rule_timings(
+    rules: &[(&str, u64, u64)],
+    monitor_ns: u64,
+    guard_ns: u64,
+) -> HostTimings {
+    HostTimings {
+        rules: rules
+            .iter()
+            .map(|(code, invocations, cpu_ns)| {
+                (
+                    (*code).to_owned(),
+                    RuleTiming {
+                        invocations: *invocations,
+                        cpu_ns: *cpu_ns,
+                    },
+                )
+            })
+            .collect(),
+        monitor_ns,
+        guard_ns,
     }
 }

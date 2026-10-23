@@ -845,11 +845,14 @@ EARLY_LINT_PROJECT_FILES: dict[str, str] = {
 
 
 def compile_findings(
-    *, project_dir: Path, capsys: pytest.CaptureFixture[str]
+    *,
+    project_dir: Path,
+    capsys: pytest.CaptureFixture[str],
+    flags: tuple[str, ...] = ("--no-cache",),
 ) -> tuple[tuple[str, str, int | None, int | None], ...]:
-    """Compile through the CLI with no cache and return each finding's code and location."""
+    """Compile through the CLI, by default with no cache, and return each finding's location."""
 
-    _ = main(["--project-dir", str(project_dir), "compile", "--json", "--no-cache"])
+    _ = main(["--project-dir", str(project_dir), "compile", "--json", *flags])
     payload: dict[str, object] = json.loads(capsys.readouterr().out)
     diagnostics: list[dict[str, Any]] = cast(list[dict[str, Any]], payload["diagnostics"])
     return tuple(
@@ -1143,3 +1146,46 @@ def rebuild_formatter(_project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> No
     """Pretend another SQLBuild build formats the project."""
 
     rebuild_identity(monkeypatch=monkeypatch)
+
+
+PROJECT_SCRATCH_RULES: str = """from sqlbuild.rules import Finding, Project, RuleContext, rule
+
+SCRATCH: list[str] = []
+
+
+@rule(code="XSQBRSCR001", message="Stage names", remediation="Keep rules pure.")
+def stage(*, project: Project, ctx: RuleContext) -> list[Finding]:
+    del project
+    SCRATCH.extend(model.name for model in ctx.project.models)
+    return []
+
+
+@rule(code="XSQBRSCR002", message="Staged names are present", remediation="Keep rules pure.")
+def read(*, project: Project, ctx: RuleContext) -> list[Finding]:
+    del project
+    return [ctx.finding(subject=ctx.project.models[0])] * int(bool(SCRATCH))
+
+
+@rule(code="XSQBRSCR003", message="Clear staged names", remediation="Keep rules pure.")
+def clear(*, project: Project, ctx: RuleContext) -> list[Finding]:
+    del project
+    SCRATCH.clear()
+    return []
+"""
+
+
+def write_project_scratch_rules(project_dir: Path) -> None:
+    """Write two order models and three project rules sharing one scratch list."""
+
+    write_project_files(
+        project_dir=project_dir,
+        files={
+            "sqlbuild_project.toml": (
+                'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["XSQBRSCR"]\n\n'
+                "[rules.thresholds]\nmin_custom_rule_test_cases = 0\n"
+            ),
+            "models/orders.sql": 'MODEL (description "Orders");\nSELECT 1 AS order_id\n',
+            "models/customers.sql": ('MODEL (description "Customers");\nSELECT 1 AS customer_id\n'),
+            "rules/scratch.py": PROJECT_SCRATCH_RULES,
+        },
+    )

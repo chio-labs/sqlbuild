@@ -288,3 +288,60 @@ class JanitorJsonFailedRunE2ETestCase:
     expected_status: str
     expected_error_fragment: str
     expected_failed_items: int
+
+
+@dataclass(frozen=True)
+class JanitorUsageUncheckedE2ETestCase:
+    """Test case for janitor runs on an adapter with no usage source."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_ordered_lines: tuple[str, ...]
+    expected_archived: int
+
+
+@dataclass(frozen=True)
+class JanitorUsageE2ETestCase:
+    """Test case for janitor runs whose adapter reports which candidates are read."""
+
+    description: str
+    janitor_config: str
+    janitor_command: tuple[str, ...]
+    reads: dict[str, tuple[tuple[str, ...], int]]
+    expected_ordered_lines: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...]
+    expected_remaining: tuple[str, ...]
+    expected_archived: int
+    via: dict[str, tuple[str, ...]] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class JanitorUsagePromptE2ETestCase:
+    """Test case for the confirmation prompt's usage line."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    reads: dict[str, tuple[tuple[str, ...], int]]
+    unavailable: str | None
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JanitorUsageJsonE2ETestCase:
+    """Test case for the usage fields of `sqb janitor --json`."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_usage_check: dict[str, object]
+    expected_archive_in_use: tuple[tuple[str, object], ...]
+    expected_kept_in_use: tuple[tuple[str, object], ...]
+    expected_archived: int
+
+
+@dataclass(frozen=True)
+class JanitorUsageFailureE2ETestCase:
+    """Test case for janitor runs whose usage source fails outright."""
+
+    description: str
+    failure: str
+    expected_ordered_lines: tuple[str, ...]

@@ -195,6 +195,74 @@ _IGNORE_ENTRY: str = (
             expected_error_pattern="allowed_qualifiers entries must be",
         ),
         RulesConfigErrorTestCase(
+            description="allowed qualifier entry with neither qualifier nor paths",
+            source=(
+                "[rules.rule_options.SQBRPROJECT107]\n"
+                'allowed_qualifiers = [{ domain = "sales", reason = "Regional exports." }]\n'
+            ),
+            expected_error_pattern="allowed_qualifiers entries must be",
+        ),
+        RulesConfigErrorTestCase(
+            description="allowed qualifier paths that are not a list",
+            source=(
+                "[rules.rule_options.SQBRPROJECT107]\n"
+                'allowed_qualifiers = [{ paths = "models/sales/*", reason = "Exports." }]\n'
+            ),
+            expected_error_pattern="allowed_qualifiers entries must be",
+        ),
+        RulesConfigErrorTestCase(
+            description="allowed qualifier with an empty paths list",
+            source=(
+                "[rules.rule_options.SQBRPROJECT107]\n"
+                'allowed_qualifiers = [{ paths = [], reason = "Exports." }]\n'
+            ),
+            expected_error_pattern="need a non-empty list of non-empty paths",
+        ),
+        RulesConfigErrorTestCase(
+            description="allowed paths entry with an empty reason",
+            source=(
+                "[rules.rule_options.SQBRPROJECT107]\n"
+                'allowed_qualifiers = [{ paths = ["models/sales/*"], reason = " " }]\n'
+            ),
+            expected_error_pattern=r"allowed_qualifiers entries need a non-empty reason$",
+        ),
+        RulesConfigErrorTestCase(
+            description="allowed qualifier that is empty",
+            source=(
+                "[rules.rule_options.SQBRPROJECT107]\n"
+                'allowed_qualifiers = [{ qualifier = "", reason = "Exports." }]\n'
+            ),
+            expected_error_pattern=r"allowed_qualifiers entries need a non-empty qualifier$",
+        ),
+        RulesConfigErrorTestCase(
+            description="allowed path with backslash separators",
+            source=(
+                "[rules.rule_options.SQBRPROJECT107]\n"
+                "allowed_qualifiers = [{ paths = ['models\\sales\\*'], reason = \"Exports.\" }]\n"
+            ),
+            expected_error_pattern=r"paths must be project-relative globs with / separators",
+        ),
+        RulesConfigErrorTestCase(
+            description="allowed path listed twice in one entry",
+            source=(
+                "[rules.rule_options.SQBRPROJECT107]\n"
+                'allowed_qualifiers = [{ paths = ["models/sales/*", "models/sales/*"], '
+                'reason = "Exports." }]\n'
+            ),
+            expected_error_pattern=r"allowed_qualifiers entry lists path models/sales/\* twice",
+        ),
+        RulesConfigErrorTestCase(
+            description="duplicate allowed qualifier glob",
+            source=(
+                "[rules.rule_options.SQBRPROJECT107]\n"
+                "allowed_qualifiers = [\n"
+                '  { qualifier = "[a-z][a-z][a-z]", reason = "Per country." },\n'
+                '  { qualifier = "[a-z][a-z][a-z]", reason = "Per region." },\n'
+                "]\n"
+            ),
+            expected_error_pattern=r"duplicate .*allowed_qualifiers entry: \[a-z\]\[a-z\]\[a-z\]",
+        ),
+        RulesConfigErrorTestCase(
             description="unknown SQL test rules key",
             source='[rules.sql_tests]\npipeline_directory = "pipelines"\nroot = "tests"\n',
             expected_error_pattern="unknown field `root`",

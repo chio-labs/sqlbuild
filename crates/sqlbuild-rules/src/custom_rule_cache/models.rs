@@ -76,6 +76,8 @@ pub struct CustomCacheLookup {
     pub plan: BTreeMap<String, Option<Vec<String>>>,
     pub hit_count: usize,
     pub miss_count: usize,
+    /// Each rule's reused and missing subject counts.
+    pub counts_by_code: BTreeMap<String, (usize, usize)>,
 }
 
 /// One evaluated invocation, with its read set and digest when its result may be cached.

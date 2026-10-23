@@ -7,4 +7,5 @@ pub(crate) mod janitor_phases;
 pub(crate) mod janitor_plan;
 pub(crate) mod janitor_planning;
 pub(crate) mod janitor_progress;
+pub(crate) mod janitor_usage;
 pub(crate) mod registration;

@@ -17,3 +17,20 @@ UNDEFINED_TABLE_SQLSTATE: str = "42P01"
 DETAILED_TABLE_INFORMATION_MARKER: str = "# detailed table information"
 DESCRIBE_DETAIL_ROW_WIDTH: int = 2
 TEMPORARY_FUNCTION_PREFIX: str = "__sqb_test__"
+MAX_PARAMETER_MARKERS: int = 255
+USAGE_NAME_CHUNK_SIZE: int = MAX_PARAMETER_MARKERS - 5
+USAGE_UNAVAILABLE_REASON: str = (
+    "cannot read system.access.table_lineage (needs Unity Catalog with the access system "
+    "schema enabled, and USE CATALOG, USE SCHEMA and SELECT on it)"
+)
+USAGE_UNAVAILABLE_ERROR_CLASSES: tuple[str, ...] = (
+    "INSUFFICIENT_PERMISSIONS",
+    "PERMISSION_DENIED",
+    "TABLE_OR_VIEW_NOT_FOUND",
+    "SCHEMA_NOT_FOUND",
+    "CATALOG_NOT_FOUND",
+    "NO_SUCH_CATALOG_EXCEPTION",
+    "UC_NOT_ENABLED",
+)
+USAGE_UNAVAILABLE_SQLSTATES: frozenset[str] = frozenset({"42501", "42P01", "42704"})
+LINEAGE_VIEW_SOURCE_TYPES: tuple[str, ...] = ("VIEW", "MATERIALIZED_VIEW", "METRIC_VIEW")

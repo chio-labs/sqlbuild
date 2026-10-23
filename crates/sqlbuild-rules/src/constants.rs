@@ -55,5 +55,7 @@ pub(crate) const PUBLISHED_SHAPE_CODE: &str = "SQBRPROJECT107";
 pub(crate) const PUBLISHED_LAYERS_OPTION: &str = "published_layers";
 /// The option listing qualifiers that do not count towards a domain's name shape.
 pub(crate) const ALLOWED_QUALIFIERS_OPTION: &str = "allowed_qualifiers";
+/// The `allowed_qualifiers` entry key whose globs match published models by file path.
+pub(crate) const ALLOWED_PATHS_KEY: &str = "paths";
 /// The published layers when a project does not configure them.
 pub(crate) const DEFAULT_PUBLISHED_LAYERS: [&str; 2] = ["mart", "mart_v"];

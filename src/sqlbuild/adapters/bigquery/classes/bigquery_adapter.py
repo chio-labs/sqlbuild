@@ -66,6 +66,7 @@ from sqlbuild.adapter.contract.models import (
     RelationInfo,
     RelationReadProbe,
     RelationRowCountEstimate,
+    RelationUsageReport,
     RenderedRetentionChange,
     RetentionRequest,
     RetentionState,
@@ -120,6 +121,7 @@ from sqlbuild.adapters.bigquery._helpers.grants import (
     render_bigquery_view_move,
     render_bigquery_view_revokes,
 )
+from sqlbuild.adapters.bigquery._helpers.relation_usage import bigquery_relation_usage
 from sqlbuild.adapters.bigquery._helpers.statement_telemetry import affected_rows
 from sqlbuild.adapters.bigquery.classes.bigquery_connection import _BigQueryConnection
 from sqlbuild.adapters.bigquery.classes.bigquery_cursor import _BigQueryCursor
@@ -508,6 +510,19 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         if metadata.status != TableFreshnessStatus.OBSERVED:
             raise AdapterUserError(message=metadata.message or f"freshness unavailable for {name}")
         return metadata
+
+    def relation_usage(
+        self,
+        *,
+        connection: Any,
+        relations: tuple[RelationInfo, ...],
+        window_seconds: int,
+    ) -> RelationUsageReport:
+        """Read candidate reads from the region's INFORMATION_SCHEMA.JOBS (180 days kept)."""
+
+        return bigquery_relation_usage(
+            connection=connection, relations=relations, window_seconds=window_seconds
+        )
 
     def get_tables_freshness_metadata(
         self,
@@ -1483,7 +1498,7 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
 
         log_sql(logger=logging.getLogger("sqlbuild.adapter.bigquery"), sql=sql)
         with StatementLifecycle(adapter="bigquery", sql=sql, intent="query") as lifecycle:
-            job: Any = connection.query_job(sql)
+            job: Any = connection.query_job(sql=sql)
             raw_job_id: object | None = getattr(job, "job_id", None)
             job_id: str | None = raw_job_id if isinstance(raw_job_id, str) else None
             lifecycle.submitted(job_id=job_id)

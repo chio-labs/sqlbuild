@@ -114,3 +114,20 @@ NULL_IN_ORDINARY_COLUMN_SERVER_CODE: int = 349
 NULL_IN_ORDINARY_COLUMN_CODE: str = "A713"
 NULL_TARGET_COLUMN_PATTERN: re.Pattern[str] = re.compile(r"to destination column (\S+?):")
 FRESH_GENERATION_CLAUSE: str = " COMMENT ''"
+USAGE_NAME_CHUNK_SIZE: int = 1_000
+USAGE_UNAVAILABLE_REASON: str = (
+    "cannot read system.query_log (needs query logging on and SELECT on system.query_log)"
+)
+USAGE_LOGGING_OFF_REASON: str = "query logging is off for this connection (log_queries = 0)"
+USAGE_UNAVAILABLE_ERROR_CODES: frozenset[int] = frozenset({60, 497})
+USAGE_QUERY_KINDS: tuple[str, ...] = ("Select", "Insert")
+USAGE_ERROR_CODE_PATTERN: re.Pattern[str] = re.compile(r"Code: (\d+)\.")
+LOGGING_SETTING_SQL: str = "SELECT getSetting('log_queries')"
+LOGGING_OFF_VALUES: frozenset[str] = frozenset({"0", "False"})
+REPLICA_COUNT_SQL: str = (
+    "SELECT max(replicas) FROM (SELECT count() AS replicas FROM system.clusters "
+    "WHERE (cluster, shard_num) IN "
+    "(SELECT cluster, shard_num FROM system.clusters WHERE is_local) "
+    "GROUP BY cluster, shard_num)"
+)
+OTHER_REPLICAS_NOTICE: str = "usage read from this server only; other replicas not checked"

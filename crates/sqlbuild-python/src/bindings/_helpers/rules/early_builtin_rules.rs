@@ -26,7 +26,7 @@ use crate::bindings::_helpers::records::fields::field;
 use crate::bindings::_helpers::rules::catalogue::references_custom_rules;
 use crate::bindings::_helpers::rules::rule_dispatch::speculative_rules_request;
 use crate::bindings::_helpers::rules::rule_plan::rule_run_plan;
-use crate::bindings::_helpers::rules::rules_config::load_rules_config;
+use crate::bindings::_helpers::rules::rules_config::load_rules_config_with_cache;
 use crate::bindings::types::CompilerDetach;
 
 const CANCELLED: &str = "native rules evaluation was cancelled";
@@ -40,6 +40,8 @@ pub(crate) struct EarlyRulesSettings {
     pub(crate) project_dir: PathBuf,
     pub(crate) dialect: String,
     pub(crate) no_sql_analysis: bool,
+    /// Whether `--no-cache` turned the Rules cache off, as the rules phase does.
+    pub(crate) no_cache: bool,
 }
 
 /// One compile thread's early built-in rules, from arming to the rules phase taking them.
@@ -186,7 +188,8 @@ fn early_request(
 ) -> PyResult<Option<RowsRequest>> {
     let py: Python<'_> = project.py();
     let config: Bound<'_, PyAny> =
-        load_rules_config(py, settings.project_dir.clone())?.into_bound(py);
+        load_rules_config_with_cache(py, settings.project_dir.clone(), !settings.no_cache)?
+            .into_bound(py);
     if references_custom_rules(&config)? {
         return Ok(None);
     }

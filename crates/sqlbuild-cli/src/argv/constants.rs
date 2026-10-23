@@ -64,7 +64,7 @@ pub(crate) const INT_CONVERTER: &str = "int";
 pub(crate) const PATH_CONVERTER: &str = "Path";
 
 /// Every `CliNamespace` attribute with a default, in declaration order.
-pub(crate) const CLI_NAMESPACE_DEFAULTS: [(&str, NamespaceDefault); 179] = [
+pub(crate) const CLI_NAMESPACE_DEFAULTS: [(&str, NamespaceDefault); 180] = [
     ("command", NamespaceDefault::None),
     ("project_dir", NamespaceDefault::None),
     ("dbt_project_dir", NamespaceDefault::None),
@@ -139,6 +139,7 @@ pub(crate) const CLI_NAMESPACE_DEFAULTS: [(&str, NamespaceDefault); 179] = [
     ("retention_days", NamespaceDefault::None),
     ("direct_state_history_versions", NamespaceDefault::None),
     ("drop_old_name_views", NamespaceDefault::EmptyList),
+    ("keep_in_use", NamespaceDefault::Bool(false)),
     ("bounded", NamespaceDefault::None),
     ("max_column_examples", NamespaceDefault::None),
     ("max_row_only_examples", NamespaceDefault::None),

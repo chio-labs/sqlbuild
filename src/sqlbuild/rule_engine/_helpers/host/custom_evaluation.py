@@ -5,9 +5,10 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
+from time import thread_time_ns
 
 from sqlbuild._native import (
     CUSTOM_RULE_PROJECT_SUBJECT,
@@ -41,6 +42,18 @@ from sqlbuild.rule_engine.types import CustomRulePlan, RuleFactModel, RuleFactPr
 type _FindingKey = tuple[str, str, int, int, str, str]
 
 
+@dataclass
+class _RuleTimings:
+    """Invocations and CPU nanoseconds per rule code, excluding the runtime guard's checks."""
+
+    by_code: dict[str, list[int]] = field(default_factory=dict)
+
+    def record(self, *, code: str, cpu_ns: int) -> None:
+        totals: list[int] = self.by_code.setdefault(code, [0, 0])
+        totals[0] += 1
+        totals[1] += max(cpu_ns, 0)
+
+
 @dataclass(frozen=True)
 class _PassInputs:
     project: RuleFactProject
@@ -52,6 +65,7 @@ class _PassInputs:
     plan: CustomRulePlan | None
     guard: RuntimeGuard | None
     cancelled: Callable[[], bool] | None
+    timings: _RuleTimings
 
 
 def evaluate_custom_rules(
@@ -98,6 +112,7 @@ def evaluate_custom_rules(
         plan=plan,
         guard=guard,
         cancelled=None if partition is None else partition.cancelled,
+        timings=_RuleTimings(),
     )
 
     def run_pass(
@@ -108,12 +123,15 @@ def evaluate_custom_rules(
     evaluations: list[CustomRuleEvaluation] = run_pass(
         rules=custom_rules, subjects=models, active=tracker
     )
+    monitor_ns: int = tracker.monitor_ns
     if verify_determinism:
-        repeated: list[CustomRuleEvaluation] = run_pass(
-            rules=custom_rules[::-1],
-            subjects=models[::-1],
-            active=_ReadTracker(reads=None, rules=(), rules_root=project_dir / "rules"),
+        repeat_tracker: _ReadTracker = _ReadTracker(
+            reads=None, rules=(), rules_root=project_dir / "rules"
         )
+        repeated: list[CustomRuleEvaluation] = run_pass(
+            rules=custom_rules[::-1], subjects=models[::-1], active=repeat_tracker
+        )
+        monitor_ns += repeat_tracker.monitor_ns
         _verify_repeatable(
             rules=custom_rules,
             first=list(chain.from_iterable(item.findings for item in evaluations)),
@@ -125,6 +143,11 @@ def evaluate_custom_rules(
         uncacheable_codes=frozenset(tracker.uncacheable_codes),
         observed=() if reads is None else tuple(reads.observed.items()),
         stateful_codes=frozenset(tracker.stateful_codes),
+        rule_timings={
+            code: (invocations, cpu_ns)
+            for code, (invocations, cpu_ns) in inputs.timings.by_code.items()
+        },
+        monitor_ns=monitor_ns,
     )
 
 
@@ -143,6 +166,8 @@ class _ReadTracker:
         self.untracked_codes: set[str] = set()
         self.uncacheable_codes: set[str] = set()
         self.stateful_codes: set[str] = set()
+        self.monitor_ns: int = 0
+        started: int = thread_time_ns()
         self._state: ModuleStateMonitor | None = (
             ModuleStateMonitor(
                 namespaces={rule.code: rule_namespaces((rule.check,)) for rule in rules},
@@ -151,6 +176,7 @@ class _ReadTracker:
             if reads is not None or detect_state
             else None
         )
+        self.monitor_ns += thread_time_ns() - started
 
     def start(self) -> None:
         if self.reads is not None:
@@ -168,11 +194,19 @@ class _ReadTracker:
                 self.untracked_codes.add(code)
             if reads.uncacheable:
                 self.uncacheable_codes.add(code)
-        changed: tuple[str, ...] = () if self._state is None else self._state.changed_codes()
-        self.stateful_codes.update(changed)
-        if reads is not None:
-            self.untracked_codes.update(changed)
         return None if observed is None else frozenset(observed)
+
+    def finish_subject(self) -> None:
+        """Mark codes whose module state changed since the last check; project rules check each."""
+
+        if self._state is None:
+            return
+        started: int = thread_time_ns()
+        changed: tuple[str, ...] = self._state.changed_codes()
+        self.monitor_ns += thread_time_ns() - started
+        self.stateful_codes.update(changed)
+        if self.reads is not None:
+            self.untracked_codes.update(changed)
 
 
 def _evaluate_pass(
@@ -230,6 +264,7 @@ def _evaluate_pass(
                 ),
                 ctx=ctx,
                 guard=guard,
+                timings=inputs.timings,
             )
         except NonHermeticRuleError:
             raise
@@ -243,16 +278,21 @@ def _evaluate_pass(
                 reads=tracker.finish(code=rule.code),
             )
         )
+        tracker.finish_subject()
     for model in models:
         subject: Model = public_model(model)
         path: str = model.relative_path.as_posix()
+        evaluated: bool = False
         for rule, ctx, planned in model_contexts:
             if planned is not None and path not in planned:
                 continue
+            evaluated = True
             _stop_if_cancelled(inputs)
             tracker.start()
             try:
-                findings = _invoke(rule=rule, subject=subject, ctx=ctx, guard=guard)
+                findings = _invoke(
+                    rule=rule, subject=subject, ctx=ctx, guard=guard, timings=inputs.timings
+                )
             except NonHermeticRuleError:
                 raise
             except Exception as error:
@@ -267,6 +307,8 @@ def _evaluate_pass(
                     reads=tracker.finish(code=rule.code),
                 )
             )
+        if evaluated:
+            tracker.finish_subject()
     return evaluations
 
 
@@ -278,18 +320,29 @@ def _stop_if_cancelled(inputs: _PassInputs) -> None:
 
 
 def _invoke(
-    *, rule: Rule, subject: object, ctx: EvaluationRuleContext, guard: RuntimeGuard | None
+    *,
+    rule: Rule,
+    subject: object,
+    ctx: EvaluationRuleContext,
+    guard: RuntimeGuard | None,
+    timings: _RuleTimings,
 ) -> list[Finding]:
     if rule.subject_parameter is None or rule.context_parameter is None:
         raise RulesError(f"custom rule {rule.code} has no resolved typed signature")
     scope: AbstractContextManager[None] = nullcontext() if guard is None else guard.rule(rule.code)
-    with scope:
-        result: object = rule.check(
-            **{
-                rule.subject_parameter: subject,
-                rule.context_parameter: ctx,
-            }
-        )
+    guard_started: int = 0 if guard is None else guard.check_ns
+    started: int = thread_time_ns()
+    try:
+        with scope:
+            result: object = rule.check(
+                **{
+                    rule.subject_parameter: subject,
+                    rule.context_parameter: ctx,
+                }
+            )
+    finally:
+        guard_ns: int = 0 if guard is None else guard.check_ns - guard_started
+        timings.record(code=rule.code, cpu_ns=thread_time_ns() - started - guard_ns)
     if not isinstance(result, list) or any(not isinstance(finding, Finding) for finding in result):
         raise RulesError(f"custom rule {rule.code} must return list[Finding]")
     return result

@@ -1,4 +1,7 @@
 from dataclasses import dataclass
+from datetime import datetime
+
+from sqlbuild.adapter.contract.models import RelationUsageReport
 
 
 @dataclass(frozen=True)
@@ -87,3 +90,48 @@ class KeyIdentifiersTestCase:
     description: str
     key_expressions: tuple[str, ...]
     expected_identifiers: frozenset[str]
+
+
+@dataclass(frozen=True)
+class ClickHouseRelationUsageTestCase:
+    description: str
+    relations: tuple[tuple[str, str], ...]
+    rows: tuple[tuple[object, ...], ...]
+    expected_names_sql: str
+    expected_usages: tuple[tuple[str, tuple[str, ...], int, datetime], ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRelationUsageQueryTestCase:
+    description: str
+    window_seconds: int
+    expected_sql_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRelationUsageChunkTestCase:
+    description: str
+    relation_count: int
+    expected_query_names: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRelationUsageUncheckedTestCase:
+    description: str
+    log_queries: object
+    errors: tuple[Exception, ...]
+    expected_report: RelationUsageReport
+
+
+@dataclass(frozen=True)
+class ClickHouseRelationUsageFailureTestCase:
+    description: str
+    error: Exception
+    expected_error_match: str
+
+
+@dataclass(frozen=True)
+class ClickHouseRelationUsageReplicaTestCase:
+    description: str
+    replicas: int
+    expected_notices: tuple[str, ...]

@@ -107,6 +107,7 @@ const R_RULES_RUN_RESULT: RecordSpec = RecordSpec {
         FieldSpec::new("cache_hits", FieldDefault::Int(0)),
         FieldSpec::new("cache_misses", FieldDefault::Int(0)),
         FieldSpec::new("skipped_type_proof_rules", FieldDefault::EmptyTuple),
+        FieldSpec::new("custom_rule_timings", FieldDefault::EmptyTuple),
     ],
 };
 const R_NATIVE_RULES_EVALUATION: RecordSpec = RecordSpec {
@@ -131,6 +132,7 @@ const R_CUSTOM_RULES_OUTCOME: RecordSpec = RecordSpec {
         FieldSpec::required("cache_misses"),
         FieldSpec::required("custom_ms"),
         FieldSpec::new("custom_cpu_ms", FieldDefault::Int(0)),
+        FieldSpec::new("custom_rule_timings", FieldDefault::EmptyTuple),
     ],
 };
 const R_MODEL: RecordSpec = RecordSpec {
@@ -295,6 +297,7 @@ const R_RULES_RESULT: RecordSpec = RecordSpec {
         FieldSpec::new("built_in_ms", FieldDefault::Int(0)),
         FieldSpec::new("custom_ms", FieldDefault::Int(0)),
         FieldSpec::new("custom_cpu_ms", FieldDefault::Int(0)),
+        FieldSpec::new("custom_rule_timings", FieldDefault::EmptyTuple),
     ],
 };
 const R_RULE_FILE: RecordSpec = RecordSpec {
@@ -355,6 +358,8 @@ const R_CUSTOM_RULE_RUN: RecordSpec = RecordSpec {
         FieldSpec::new("uncacheable_codes", FieldDefault::EmptyFrozenset),
         FieldSpec::new("observed", FieldDefault::EmptyTuple),
         FieldSpec::new("stateful_codes", FieldDefault::EmptyFrozenset),
+        FieldSpec::new("rule_timings", FieldDefault::EmptyDict),
+        FieldSpec::new("monitor_ns", FieldDefault::Int(0)),
     ],
 };
 const R_CUSTOM_HOST_PARTITION: RecordSpec = RecordSpec {

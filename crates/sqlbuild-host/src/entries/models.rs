@@ -257,6 +257,7 @@ pub enum ExecutorHost {
     JanitorRelationKey,
     JanitorSkippedRelation,
     JanitorSkippedSchema,
+    JanitorUsageCheck,
     RunLoadPipeline,
     LoadCallbacks,
     LoadExecutionResult,

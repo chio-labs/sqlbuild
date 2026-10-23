@@ -57,6 +57,30 @@ _FINANCE_FROM_PUBLISHED: tuple[str, str] = (
     "MODEL (description 'Finance view of orders.');\n"
     'SELECT o.order_id FROM __ref("sales__mart__orders") AS o\n',
 )
+_COUNTRY_GLOB: str = (
+    "\n[rules.rule_options.SQBRPROJECT107]\n"
+    'allowed_qualifiers = [{ domain = "sales", qualifier = "[a-z][a-z][a-z]", '
+    'reason = "Published once per country." }]\n'
+)
+_REGIONAL_PATHS: str = (
+    "\n[rules.rule_options.SQBRPROJECT107]\n"
+    'allowed_qualifiers = [{ paths = ["models/sales/mart/regional/*"], '
+    'reason = "Published once per country." }]\n'
+)
+_COUNTRIES: tuple[tuple[str, str], ...] = tuple(
+    (
+        f"models/sales/mart/regional/sales__mart__orders__{country}.sql",
+        f"MODEL (description 'Orders published for {country}.');\n"
+        'SELECT o.order_id FROM __ref("sales__int_clean__orders") AS o\n',
+    )
+    for country in ("deu", "fra", "ita")
+)
+_FINANCE_FROM_INTERMEDIATE: tuple[str, str] = (
+    _FINANCE_PATH,
+    "MODEL (description 'Orders reshaped for finance.');\n"
+    'SELECT o.order_id FROM __ref("sales__int_clean__orders") AS o\n',
+)
+_PER_COUNTRY: tuple[tuple[str, str], ...] = (_INTERMEDIATE, _ORDERS, _CUSTOMERS, *_COUNTRIES)
 _ORDERS_FINANCE: tuple[tuple[str, str], ...] = (
     _INTERMEDIATE,
     _ORDERS,
@@ -81,6 +105,37 @@ _ORDERS_FINANCE: tuple[tuple[str, str], ...] = (
             files=_ORDERS_FINANCE,
             rules_toml=_ALLOWLIST,
             expected_findings=(("SQBRGRAPH103", _FINANCE_PATH),),
+            expected_exit=1,
+        ),
+        PublishedLayerCase(
+            description="a per-country family without an entry outnumbers the unqualified models",
+            files=_PER_COUNTRY,
+            rules_toml="",
+            expected_findings=(
+                ("SQBRPROJECT107", "models/sales/mart/sales__mart__customers.sql"),
+                ("SQBRPROJECT107", "models/sales/mart/sales__mart__orders.sql"),
+            ),
+            expected_exit=1,
+        ),
+        PublishedLayerCase(
+            description="one qualifier glob replaces a literal entry per country",
+            files=_PER_COUNTRY,
+            rules_toml=_COUNTRY_GLOB,
+            expected_findings=(),
+            expected_exit=0,
+        ),
+        PublishedLayerCase(
+            description="a paths entry leaves out the per-country folder",
+            files=_PER_COUNTRY,
+            rules_toml=_REGIONAL_PATHS,
+            expected_findings=(),
+            expected_exit=0,
+        ),
+        PublishedLayerCase(
+            description="a qualifier the glob does not match is still flagged",
+            files=(*_PER_COUNTRY, _FINANCE_FROM_INTERMEDIATE),
+            rules_toml=_COUNTRY_GLOB,
+            expected_findings=(("SQBRPROJECT107", _FINANCE_PATH),),
             expected_exit=1,
         ),
         PublishedLayerCase(

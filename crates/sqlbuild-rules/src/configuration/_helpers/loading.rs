@@ -1,8 +1,9 @@
 use crate::configuration::_helpers::removed_settings::removed_settings;
 use crate::configuration::errors::RulesConfigLoadError;
 use crate::constants::{
-    ALLOWED_QUALIFIERS_OPTION, MIN_CUSTOM_RULE_TEST_CASES_KEY, MODEL_NAME_LAYERS,
-    PUBLISHED_LAYERS_OPTION, PUBLISHED_READ_CODE, PUBLISHED_SHAPE_CODE, RELATION_EXCEPTION_RULES,
+    ALLOWED_PATHS_KEY, ALLOWED_QUALIFIERS_OPTION, MIN_CUSTOM_RULE_TEST_CASES_KEY,
+    MODEL_NAME_LAYERS, PUBLISHED_LAYERS_OPTION, PUBLISHED_READ_CODE, PUBLISHED_SHAPE_CODE,
+    RELATION_EXCEPTION_RULES,
 };
 use crate::models::RulesConfig;
 use fensu_policy::policy::types::RuleCodeGrammar;
@@ -307,27 +308,25 @@ fn validate_published_layer_options(config: &RulesConfig) -> Result<(), String> 
     let label: String =
         format!("rules.rule_options.{PUBLISHED_SHAPE_CODE}.{ALLOWED_QUALIFIERS_OPTION}");
     let shape: String = format!(
-        "{label} entries must be {{ qualifier = \"...\", reason = \"...\" }} tables with an \
-         optional domain"
+        "{label} entries must be {{ qualifier = \"...\", reason = \"...\" }} or \
+         {{ paths = [\"...\"], reason = \"...\" }} tables with an optional domain"
     );
     let Some(entries) = entries.as_array() else {
         return Err(shape);
     };
-    let mut seen: std::collections::BTreeSet<(Option<&str>, &str)> =
+    let mut seen: std::collections::BTreeSet<(Option<&str>, Option<&str>, Vec<&str>)> =
         std::collections::BTreeSet::new();
     for entry in entries {
         let Some(table) = entry.as_object() else {
             return Err(shape);
         };
-        if table
-            .keys()
-            .any(|key| !["domain", "qualifier", "reason"].contains(&key.as_str()))
-        {
+        if table.keys().any(|key| {
+            !["domain", "qualifier", ALLOWED_PATHS_KEY, "reason"].contains(&key.as_str())
+        }) {
             return Err(shape);
         }
         let text = |key: &str| table.get(key).map(|value| value.as_str().map(str::trim));
-        let (Some(Some(qualifier)), Some(Some(reason))) = (text("qualifier"), text("reason"))
-        else {
+        let Some(Some(reason)) = text("reason") else {
             return Err(shape);
         };
         let domain: Option<&str> = match text("domain") {
@@ -335,14 +334,66 @@ fn validate_published_layer_options(config: &RulesConfig) -> Result<(), String> 
             Some(Some(domain)) if !domain.is_empty() => Some(domain),
             Some(_) => return Err(shape),
         };
-        if qualifier.is_empty() || reason.is_empty() {
-            return Err(format!(
-                "{label} entries need a non-empty qualifier and reason"
-            ));
+        let qualifier: Option<&str> = match text("qualifier") {
+            None => None,
+            Some(Some(qualifier)) => Some(qualifier),
+            Some(None) => return Err(shape),
+        };
+        let paths: Option<Vec<&str>> = match table.get(ALLOWED_PATHS_KEY) {
+            None => None,
+            Some(paths) => {
+                let Some(paths) = paths.as_array() else {
+                    return Err(shape);
+                };
+                let paths: Option<Vec<&str>> = paths
+                    .iter()
+                    .map(|path| path.as_str().map(str::trim))
+                    .collect();
+                let Some(mut paths) = paths else {
+                    return Err(shape);
+                };
+                paths.sort_unstable();
+                Some(paths)
+            }
+        };
+        if qualifier.is_none() && paths.is_none() {
+            return Err(shape);
         }
-        if !seen.insert((domain, qualifier)) {
-            return Err(format!("duplicate {label} entry: {qualifier}"));
+        if reason.is_empty() {
+            return Err(format!("{label} entries need a non-empty reason"));
         }
+        if qualifier.is_some_and(str::is_empty) {
+            return Err(format!("{label} entries need a non-empty qualifier"));
+        }
+        if let Some(paths) = &paths {
+            validate_allowed_paths(paths, &label)?;
+        }
+        let paths: Vec<&str> = paths.unwrap_or_default();
+        let described: String = match qualifier {
+            Some(qualifier) => qualifier.to_owned(),
+            None => paths.join(", "),
+        };
+        if !seen.insert((domain, qualifier, paths)) {
+            return Err(format!("duplicate {label} entry: {described}"));
+        }
+    }
+    Ok(())
+}
+
+/// One entry's sorted `paths` globs: non-empty, `/`-separated and each listed once.
+fn validate_allowed_paths(paths: &[&str], label: &str) -> Result<(), String> {
+    if paths.is_empty() || paths.iter().any(|path| path.is_empty()) {
+        return Err(format!(
+            "{label} entries need a non-empty list of non-empty paths"
+        ));
+    }
+    if let Some(path) = paths.iter().find(|path| path.contains('\\')) {
+        return Err(format!(
+            "{label} paths must be project-relative globs with / separators: {path}"
+        ));
+    }
+    if let Some(pair) = paths.windows(2).find(|pair| pair[0] == pair[1]) {
+        return Err(format!("{label} entry lists path {} twice", pair[0]));
     }
     Ok(())
 }

@@ -2,7 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sqlbuild._native import InferredNullability
-from sqlbuild.adapter.contract.models import FunctionInfo, SchemaDiffResult
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
+from sqlbuild.adapter.contract.models import FunctionInfo, RelationUsageReport, SchemaDiffResult
 from sqlbuild.adapter.contract.types import TableFreshnessStatus
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.cost.types import CostStatus
@@ -294,3 +295,77 @@ class SnowflakeViewDefinitionsTestCase:
     read_names: tuple[str, ...]
     expected_definitions: tuple[str | None, ...]
     expected_query_count: int
+
+
+@dataclass(frozen=True)
+class SnowflakeRelationUsageTestCase:
+    description: str
+    relations: tuple[tuple[str | None, str, str], ...]
+    current_database: str | None
+    access_rows: tuple[tuple[object, ...], ...]
+    expected_object_names: tuple[str, ...]
+    expected_usages: tuple[tuple[str, tuple[str, ...], int, datetime], ...]
+
+
+@dataclass(frozen=True)
+class SnowflakeRelationUsageQueryTestCase:
+    description: str
+    window_seconds: int
+    expected_params: tuple[object, ...]
+    expected_sql_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SnowflakeRelationUsageChunkTestCase:
+    description: str
+    relation_count: int
+    expected_query_names: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class SnowflakeRelationUsageErrorTestCase:
+    description: str
+    errno: int | None
+    message: str
+    expected_report: RelationUsageReport
+
+
+@dataclass(frozen=True)
+class SnowflakeRelationUsageFailureTestCase:
+    description: str
+    errno: int | None
+    message: str
+    expected_error_match: str
+
+
+@dataclass(frozen=True)
+class UnsupportedRelationUsageTestCase:
+    description: str
+    adapter: BaseAdapter
+    expected_report: RelationUsageReport
+
+
+@dataclass(frozen=True)
+class SnowflakeRelationUsageViaTestCase:
+    description: str
+    relations: tuple[tuple[str, str, str, str], ...]
+    access_rows: tuple[tuple[object, ...], ...]
+    dependency_rows: tuple[tuple[str, str], ...]
+    expected_dependency_params: tuple[tuple[object, ...], ...]
+    expected_usages: tuple[tuple[str, tuple[str, ...], int, bool, tuple[str, ...]], ...]
+
+
+@dataclass(frozen=True)
+class SnowflakeCloneStatementTestCase:
+    description: str
+    statement: str
+    expected_clone: bool
+
+
+@dataclass(frozen=True)
+class SnowflakeRelationUsageChainsUnfollowedTestCase:
+    description: str
+    errno: int | None
+    message: str
+    expected_usages: tuple[tuple[str, tuple[str, ...], int], ...]
+    expected_notices: tuple[str, ...]

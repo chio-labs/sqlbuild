@@ -10,6 +10,7 @@ import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from time import thread_time_ns
 from types import CodeType, FrameType, FunctionType, ModuleType
 
 from sqlbuild._native import NonHermeticRuleError, allowed_custom_rule_import
@@ -82,11 +83,18 @@ class RuntimeGuard:
         self._metadata_scope: threading.local = threading.local()
         self.active_rule: str | None = None
         self.violation: NonHermeticRuleError | None = None
+        self.check_ns: int = 0
 
     def __call__(self, event: str, arguments: tuple[object, ...]) -> None:
         if event not in _GUARDED_EVENTS and not event.startswith(_GUARDED_PREFIXES):
             return
-        frame: FrameType = sys._getframe(1)
+        started: int = thread_time_ns()
+        try:
+            self._check(event=event, arguments=arguments, frame=sys._getframe(1))
+        finally:
+            self.check_ns += thread_time_ns() - started
+
+    def _check(self, *, event: str, arguments: tuple[object, ...], frame: FrameType) -> None:
         rule_frame: FrameType | None = (
             self._importing_rule_frame(frame)
             if event == _IMPORT_EVENT
@@ -127,12 +135,16 @@ class RuntimeGuard:
         function: Callable[..., object] = guarded_function
         if getattr(self._metadata_scope, "trusted", False):
             return function(*arguments, **keywords)
-        paths: tuple[object, ...] = tuple(map(_plain_path, arguments))
-        named: dict[str, object] = {key: _plain_path(value) for key, value in keywords.items()}
-        rule_frame: FrameType | None = self._responsible_rule_frame(sys._getframe(1))
-        if rule_frame is not None:
-            target: str = f" for {paths[0]!r}" if paths else ""
-            self._reject(rule_frame=rule_frame, action=f"{_METADATA_ACTION}{target}")
+        started: int = thread_time_ns()
+        try:
+            paths: tuple[object, ...] = tuple(map(_plain_path, arguments))
+            named: dict[str, object] = {key: _plain_path(value) for key, value in keywords.items()}
+            rule_frame: FrameType | None = self._responsible_rule_frame(sys._getframe(1))
+            if rule_frame is not None:
+                target: str = f" for {paths[0]!r}" if paths else ""
+                self._reject(rule_frame=rule_frame, action=f"{_METADATA_ACTION}{target}")
+        finally:
+            self.check_ns += thread_time_ns() - started
         self._metadata_scope.trusted = True
         try:
             return function(*paths, **named)

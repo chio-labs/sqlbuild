@@ -17,7 +17,7 @@ fn reusable<'a>(
     (digests.get(readset) == Some(&entry.reads_digest)).then_some(entry)
 }
 
-/// Hits per rule and subject, and each rule's missing subjects (`None` when all miss).
+/// Hits per rule and subject, each rule's missing subjects (`None` when all miss) and counts.
 #[must_use]
 pub fn lookup_custom_rule_cache(
     stored: &StoredRules,
@@ -28,16 +28,21 @@ pub fn lookup_custom_rule_cache(
     for rule in rules {
         let cached: Option<&StoredRule> = current_rule(stored, rule);
         let mut missing: Vec<String> = Vec::new();
+        let mut hits: usize = 0;
         for subject in &rule.subjects {
             match reusable(cached, (&subject.key, &subject.identity), digests) {
                 Some(entry) => {
                     let key = (rule.code.clone(), subject.key.clone());
                     lookup.hits.push((key, entry.findings.clone()));
                     lookup.hit_count += 1;
+                    hits += 1;
                 }
                 None => missing.push(subject.key.clone()),
             }
         }
+        lookup
+            .counts_by_code
+            .insert(rule.code.clone(), (hits, missing.len()));
         if missing.is_empty() {
             continue;
         }

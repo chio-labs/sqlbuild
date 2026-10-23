@@ -1,4 +1,5 @@
 pub mod available_cores;
+pub mod custom_rule_timings;
 pub mod decode_host_response;
 pub mod host_count;
 pub mod merge_host_slices;

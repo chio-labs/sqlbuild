@@ -101,6 +101,42 @@ class RelationInfo:
 
 
 @dataclass(frozen=True)
+class RelationUsage:
+    """Reads of one relation within a usage window: the latest, who read it and how often."""
+
+    database: str | None
+    schema: str | None
+    name: str
+    last_read_at: datetime
+    readers: tuple[str, ...]
+    query_count: int
+    direct: bool = True
+    via: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class RelationRead:
+    """One reader's reads of one object; indirect reads came through `via`, empty if unknown."""
+
+    object_name: str
+    reader: str | None
+    query_count: int
+    last_read_at: object
+    direct: bool = True
+    via: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class RelationUsageReport:
+    """The relations read within a usage window, or why the warehouse could not tell."""
+
+    checked: bool
+    reason: str | None = None
+    usages: tuple[RelationUsage, ...] = ()
+    notices: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class RelationLookup:
     """Existing warehouse relations gathered once and queried in memory."""
 

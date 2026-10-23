@@ -127,6 +127,10 @@ pub(crate) fn finish_rule_run<'py>(
             ),
             ("custom_ms", record_field(result, "custom_ms")?),
             ("custom_cpu_ms", record_field(result, "custom_cpu_ms")?),
+            (
+                "custom_rule_timings",
+                record_field(result, "custom_rule_timings")?,
+            ),
             ("cache_hits", total("cache_hits")?),
             ("cache_misses", total("cache_misses")?),
             (

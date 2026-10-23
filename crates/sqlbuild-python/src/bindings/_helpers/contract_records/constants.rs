@@ -360,6 +360,8 @@ const R_JANITOR_CONFIG: RecordSpec = RecordSpec {
         FieldSpec::new("direct_state_history_versions", FieldDefault::Int(20)),
         FieldSpec::new("delete_tracked_only", FieldDefault::True),
         FieldSpec::new("exclude_patterns", FieldDefault::EmptyTuple),
+        FieldSpec::new("in_use_window", FieldDefault::Text("7d")),
+        FieldSpec::new("keep_in_use", FieldDefault::False),
     ],
 };
 const R_MIGRATIONS_CONFIG: RecordSpec = RecordSpec {

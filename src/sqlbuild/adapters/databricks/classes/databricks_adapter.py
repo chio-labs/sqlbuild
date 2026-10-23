@@ -63,6 +63,7 @@ from sqlbuild.adapter.contract.models import (
     RelationInfo,
     RelationReadProbe,
     RelationRowCountEstimate,
+    RelationUsageReport,
     RenderedRetentionChange,
     RetentionRequest,
     RetentionState,
@@ -117,6 +118,7 @@ from sqlbuild.adapters.databricks._helpers.grants import (
     render_databricks_view_revokes,
     show_grants_object_kind,
 )
+from sqlbuild.adapters.databricks._helpers.relation_usage import read_relation_usage
 from sqlbuild.adapters.databricks.classes.databricks_connection import _DatabricksConnection
 from sqlbuild.adapters.databricks.constants import (
     DELTA_COLUMN_MAPPING_NAME_MODE,
@@ -607,6 +609,19 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         if metadata.status != TableFreshnessStatus.OBSERVED:
             raise AdapterUserError(message=metadata.message or f"freshness unavailable for {name}")
         return metadata
+
+    def relation_usage(
+        self,
+        *,
+        connection: Any,
+        relations: tuple[RelationInfo, ...],
+        window_seconds: int,
+    ) -> RelationUsageReport:
+        """Read candidate reads from Unity Catalog's system.access.table_lineage."""
+
+        return read_relation_usage(
+            connection=connection, relations=relations, window_seconds=window_seconds
+        )
 
     def get_tables_freshness_metadata(
         self,

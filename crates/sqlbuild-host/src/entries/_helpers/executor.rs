@@ -285,6 +285,11 @@ pub(crate) const ENTRIES: &[HostEntry] = &[
         edge: HostEdge::Executor,
     },
     HostEntry {
+        name: "JanitorUsageCheck",
+        kind: HostKind::Class,
+        edge: HostEdge::Executor,
+    },
+    HostEntry {
         name: "run_load_pipeline",
         kind: HostKind::Function,
         edge: HostEdge::Executor,

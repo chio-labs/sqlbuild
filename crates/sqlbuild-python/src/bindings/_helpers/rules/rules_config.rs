@@ -240,10 +240,20 @@ fn rules_error(py: Python<'_>, class: ErrorId, message: String, help: Option<Str
 #[pyfunction]
 #[pyo3(signature = (*, project_dir))]
 pub(crate) fn load_rules_config(py: Python<'_>, project_dir: PathBuf) -> PyResult<Py<PyAny>> {
-    let config: RulesConfig = match rules_config_of(&project_dir)? {
+    load_rules_config_with_cache(py, project_dir, true)
+}
+
+/// The project's rules configuration, with the Rules cache off when `cache` is `false`.
+pub(crate) fn load_rules_config_with_cache(
+    py: Python<'_>,
+    project_dir: PathBuf,
+    cache: bool,
+) -> PyResult<Py<PyAny>> {
+    let mut config: RulesConfig = match rules_config_of(&project_dir)? {
         Ok(config) => config,
         Err(invalid) => return Err(invalid.into_pyerr(py)),
     };
+    config.cache.enabled &= cache;
     Ok(config_object(py, &config)?.unbind())
 }
 

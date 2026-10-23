@@ -315,3 +315,24 @@ class SelectedGraphRuleCase:
     expected_compile_findings: tuple[tuple[str, str], ...]
     expected_plan_findings: tuple[tuple[str, str], ...]
     expected_plan_exit: int
+
+
+@dataclass(frozen=True)
+class CustomRuleTimingCase:
+    """Custom Rules compiled cold, warm, with `--no-cache`, and warm again."""
+
+    description: str
+    selected_rules: tuple[str, ...]
+    files: tuple[tuple[str, str], ...]
+    expected_subjects: int
+
+
+@dataclass(frozen=True)
+class ModuleStateAttributionCase:
+    """Rules whose module state changes persist or are undone within one model."""
+
+    description: str
+    selected_rules: tuple[str, ...]
+    files: tuple[tuple[str, str], ...]
+    edited_model: str
+    expected_misses_after_edit: dict[str, int]

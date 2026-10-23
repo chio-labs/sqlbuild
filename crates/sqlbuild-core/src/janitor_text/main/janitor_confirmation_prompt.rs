@@ -3,6 +3,7 @@
 use crate::janitor_text::_helpers::counts::{
     archive_prefix, environment_label, physical_deletion_count,
 };
+use crate::janitor_text::_helpers::usage::{usage_notices, usage_prompt_line};
 use crate::janitor_text::main::janitor_confirmation_phrase::janitor_confirmation_phrase;
 use crate::janitor_text::models::JanitorPlanText;
 
@@ -22,6 +23,12 @@ pub fn janitor_confirmation_prompt(plan: &JanitorPlanText) -> String {
         let items: usize = physical_deletion_count(plan) + plan.state_prunes.len();
         format!("Janitor will {prefix}delete {items} items from {environment}.\n")
     };
+    if let Some(line) = usage_prompt_line(plan) {
+        text.push_str(&format!("{line}\n"));
+    }
+    for notice in usage_notices(plan) {
+        text.push_str(&format!("{}\n", capitalized(&notice)));
+    }
     if plan.retention_days == 0 {
         text.push_str("Retention: disabled (0 days)\nAge metadata will not be checked.\n");
     } else {
@@ -38,4 +45,11 @@ pub fn janitor_confirmation_prompt(plan: &JanitorPlanText) -> String {
         janitor_confirmation_phrase(plan)
     ));
     text
+}
+
+fn capitalized(text: &str) -> String {
+    let mut characters = text.chars();
+    characters.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(characters).collect()
+    })
 }

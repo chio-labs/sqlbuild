@@ -358,3 +358,20 @@ class ClickHouseRecallDocumentedGrantsTestCase:
     expected_columns: tuple[tuple[object, ...], ...]
     expected_stale_views: tuple[tuple[object, ...], ...]
     expected_version: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseJanitorUsageE2ETestCase:
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...]
+    expected_remaining: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseJanitorUsageUncheckedE2ETestCase:
+    description: str
+    connection_settings: str
+    grants: tuple[str, ...]
+    expected_fragments: tuple[str, ...]

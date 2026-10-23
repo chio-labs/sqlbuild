@@ -5,14 +5,18 @@ use serde_json::json;
 
 use crate::custom_host_pool::constants::MIN_INVOCATIONS_PER_HOST;
 use crate::custom_host_pool::main::available_cores::available_cores;
+use crate::custom_host_pool::main::custom_rule_timings::custom_rule_timings;
 use crate::custom_host_pool::main::decode_host_response::decode_host_response;
 use crate::custom_host_pool::main::host_count::host_count;
 use crate::custom_host_pool::main::merge_host_slices::merge_host_slices;
 use crate::custom_host_pool::main::partition_host_plan::partition_host_plan;
-use crate::custom_host_pool::models::HostSlice;
-use crate::custom_host_pool::tests::helpers::{evaluation, invocations, plan, write_cgroup_files};
+use crate::custom_host_pool::models::{HostSlice, HostTimings, RuleTiming};
+use crate::custom_host_pool::tests::helpers::{
+    evaluation, invocations, plan, rule_timings, write_cgroup_files,
+};
 use crate::custom_host_pool::tests::test_types::{
     DecodeTestCase, HostCapacityTestCase, HostCountTestCase, HostPlanTestCase, MergeTestCase,
+    TimingEntriesTestCase,
 };
 
 const NODE_CPUS: usize = 64;
@@ -209,6 +213,7 @@ fn given_host_response_when_decoding_then_slice_or_rules_error_is_returned() {
                 "observed": [[["tree.paths"], "abc"], [["tree.glob", "*.sql"], null]],
                 "bounded": true,
                 "stateful": ["R1"],
+                "timings": {"rules": {"R1": [2, 500], "R2": "bad"}, "monitor_ns": 7, "guard_ns": 3},
             }),
             expected_slice: Ok(HostSlice {
                 evaluations: vec![
@@ -229,6 +234,20 @@ fn given_host_response_when_decoding_then_slice_or_rules_error_is_returned() {
                 ]),
                 bounded: true,
                 stateful: BTreeSet::from(["R1".to_owned()]),
+                timings: HostTimings {
+                    rules: BTreeMap::from([
+                        (
+                            "R1".to_owned(),
+                            RuleTiming {
+                                invocations: 2,
+                                cpu_ns: 500,
+                            },
+                        ),
+                        ("R2".to_owned(), RuleTiming::default()),
+                    ]),
+                    monitor_ns: 7,
+                    guard_ns: 3,
+                },
             }),
         },
         DecodeTestCase {
@@ -264,11 +283,13 @@ fn given_host_slices_when_merging_then_results_follow_single_host_order() {
                 HostSlice {
                     evaluations: vec![evaluation("R1", "b", Some(&[&["k"]]))],
                     observed: BTreeMap::from([(vec!["t".to_owned()], Some("1".to_owned()))]),
+                    timings: rule_timings(&[("R1", 1, 40)], 5, 1),
                     ..HostSlice::default()
                 },
                 HostSlice {
                     evaluations: vec![evaluation("R1", "a", Some(&[&["k"]]))],
                     observed: BTreeMap::from([(vec!["t".to_owned()], Some("2".to_owned()))]),
+                    timings: rule_timings(&[("R1", 1, 60), ("R2", 3, 9)], 7, 2),
                     ..HostSlice::default()
                 },
             ],
@@ -276,6 +297,7 @@ fn given_host_slices_when_merging_then_results_follow_single_host_order() {
             expected_order: invocations(&[("R1", "a"), ("R1", "b")]),
             expected_untracked: vec![],
             expected_observed: vec![(vec!["t".to_owned()], None)],
+            expected_timings: rule_timings(&[("R1", 2, 100), ("R2", 3, 9)], 12, 3),
         },
         MergeTestCase {
             description: "a bounded host untracks every tracked rule",
@@ -288,6 +310,7 @@ fn given_host_slices_when_merging_then_results_follow_single_host_order() {
             expected_order: invocations(&[("R1", "a")]),
             expected_untracked: vec!["R1".to_owned()],
             expected_observed: vec![],
+            expected_timings: HostTimings::default(),
         },
     ];
     for test_case in test_cases {
@@ -308,6 +331,65 @@ fn given_host_slices_when_merging_then_results_follow_single_host_order() {
         assert_eq!(
             run.observed.into_iter().collect::<Vec<_>>(),
             test_case.expected_observed,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            run.timings, test_case.expected_timings,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_host_timings_and_cache_counts_when_reporting_then_flat_entries_cover_every_rule() {
+    let test_cases = [
+        TimingEntriesTestCase {
+            description: "a fully cached rule reports zero invocations beside an evaluated one",
+            timings: rule_timings(&[("R2", 3, 4_500_000)], 2_900_000, 1_000_000),
+            cache_counts: &[("R1", (5, 0)), ("R2", (2, 3))],
+            expected_entries: &[
+                ("custom_rules_invocations", 3),
+                ("custom_rules_monitor_cpu_ms", 2),
+                ("custom_rules_guard_cpu_ms", 1),
+                ("custom_rules.R1.invocations", 0),
+                ("custom_rules.R1.cpu_ms", 0),
+                ("custom_rules.R1.cache_hits", 5),
+                ("custom_rules.R1.cache_misses", 0),
+                ("custom_rules.R2.invocations", 3),
+                ("custom_rules.R2.cpu_ms", 4),
+                ("custom_rules.R2.cache_hits", 2),
+                ("custom_rules.R2.cache_misses", 3),
+            ],
+        },
+        TimingEntriesTestCase {
+            description: "no custom rules report only zero totals",
+            timings: HostTimings::default(),
+            cache_counts: &[],
+            expected_entries: &[
+                ("custom_rules_invocations", 0),
+                ("custom_rules_monitor_cpu_ms", 0),
+                ("custom_rules_guard_cpu_ms", 0),
+            ],
+        },
+    ];
+    for test_case in test_cases {
+        let cache_counts: BTreeMap<String, (usize, usize)> = test_case
+            .cache_counts
+            .iter()
+            .map(|(code, counts)| ((*code).to_owned(), *counts))
+            .collect();
+
+        let entries: Vec<(String, u64)> = custom_rule_timings(&test_case.timings, &cache_counts);
+
+        assert_eq!(
+            entries,
+            test_case
+                .expected_entries
+                .iter()
+                .map(|(key, value)| ((*key).to_owned(), *value))
+                .collect::<Vec<_>>(),
             "{}",
             test_case.description
         );

@@ -1,5 +1,17 @@
 //! Display facts of a janitor plan and its execution, read from the executor's models.
 
+/// Reads of one relation within the usage window.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RelationUsageText {
+    /// The latest read as `YYYY-MM-DD HH:MM:SS` UTC.
+    pub last_read_at: String,
+    /// Reader user names, most queries first.
+    pub readers: Vec<String>,
+    pub query_count: i64,
+    /// The objects it was read through when it was never read directly; empty when unnamed.
+    pub via: Option<Vec<String>>,
+}
+
 /// A relation to archive: its name, archive name, age and expiry.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ArchiveCandidateText {
@@ -11,6 +23,26 @@ pub struct ArchiveCandidateText {
     pub expires_now: bool,
     /// The expiry as `YYYY-MM-DD HH:MM:SS`.
     pub expires_at: String,
+    /// Whether the relation is a table, whose data stops changing once it is stale.
+    pub is_table: bool,
+    /// The date it last changed as `YYYY-MM-DD`, or none when unknown.
+    pub changed_on: Option<String>,
+    /// Its reads within the usage window, or none when unread or not checked.
+    pub usage: Option<RelationUsageText>,
+}
+
+/// Whether the janitor checked reads of its archive candidates.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct UsageCheckText {
+    pub checked: bool,
+    /// Why usage was not checked.
+    pub reason: Option<String>,
+    /// The usage window as configured, such as `7d`.
+    pub window: String,
+    /// Whether in-use relations are kept instead of archived.
+    pub keep_in_use: bool,
+    /// What a check that ran could not cover, such as view chains it could not follow.
+    pub notices: Vec<String>,
 }
 
 /// An archived relation to delete or retain.
@@ -69,6 +101,10 @@ pub struct JanitorPlanText {
     pub skipped_relations: Vec<(String, String)>,
     pub skipped_schemas: Vec<SourceSchemaText>,
     pub blocked_schemas: Vec<SourceSchemaText>,
+    /// The usage check of the archive candidates, or none when it did not run.
+    pub usage_check: Option<UsageCheckText>,
+    /// In-use relations kept instead of archived.
+    pub kept_in_use: Vec<ArchiveCandidateText>,
 }
 
 /// How many items one janitor run changed.

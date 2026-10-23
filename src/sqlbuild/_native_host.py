@@ -389,6 +389,7 @@ _TARGETS: dict[str, tuple[str, str]] = {
     "JanitorRelationKey": ("sqlbuild.executor.janitor.models", "JanitorRelationKey"),
     "JanitorSkippedRelation": ("sqlbuild.executor.janitor.models", "JanitorSkippedRelation"),
     "JanitorSkippedSchema": ("sqlbuild.executor.janitor.models", "JanitorSkippedSchema"),
+    "JanitorUsageCheck": ("sqlbuild.executor.janitor.models", "JanitorUsageCheck"),
     "run_load_pipeline": ("sqlbuild.executor.load.main.run", "run_load_pipeline"),
     "LoadCallbacks": ("sqlbuild.executor.load.models", "LoadCallbacks"),
     "LoadExecutionResult": ("sqlbuild.executor.load.models", "LoadExecutionResult"),

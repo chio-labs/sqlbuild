@@ -31,7 +31,7 @@ use crate::bindings::_helpers::rules::early_builtin_rules::{EarlyRulesScope, Ear
 use crate::bindings::_helpers::rules::early_sql_lint::EarlySqlLint;
 use crate::bindings::_helpers::rules::results::rules_progress;
 use crate::bindings::_helpers::rules::rule_dispatch::evaluate_rules;
-use crate::bindings::_helpers::rules::rules_config::load_rules_config;
+use crate::bindings::_helpers::rules::rules_config::load_rules_config_with_cache;
 
 const RICH_LINEAGE: &str = "rich";
 const FAST_LINEAGE: &str = "fast";
@@ -114,6 +114,11 @@ impl<'py> AnalysisOptions<'py> {
                 .unwrap_or_else(|| py.None().into_bound(py)),
         })
     }
+
+    /// Whether `--no-cache` asked this compile to bypass its caches, the Rules cache included.
+    fn no_cache(&self) -> PyResult<bool> {
+        native_field(&self.analysis_selection, "no_cache")?.is_truthy()
+    }
 }
 
 /// `{seconds:.2f}`, as Python formats elapsed milliseconds over a thousand.
@@ -151,7 +156,8 @@ pub(crate) fn analyze<'py>(
     let enabled: bool = !(native_field(selection, "select")?.is_truthy()?
         || native_field(selection, "exclude")?.is_truthy()?)
         && crate::bindings::_helpers::compile_context::delta::injection().is_none();
-    let early_lint: Bound<'py, EarlySqlLint> = Bound::new(py, EarlySqlLint::new(enabled))?;
+    let early_lint: Bound<'py, EarlySqlLint> =
+        Bound::new(py, EarlySqlLint::new(enabled, options.no_cache()?))?;
     let early_rules: EarlyRulesScope = EarlyRulesScope::new();
     let analysis: PyResult<Bound<'py, PyAny>> =
         analyzed(py, &options, (&early_lint, enabled.then_some(&early_rules)));
@@ -204,6 +210,7 @@ fn analyzed<'py>(
             project_dir: options.project_dir.extract()?,
             dialect: lint_dialect.extract()?,
             no_sql_analysis: options.no_sql_validation.is_truthy()?,
+            no_cache: options.no_cache()?,
         });
     }
     let (graph, graph_ms): (Bound<'py, PyAny>, u64) =
@@ -288,6 +295,10 @@ fn analyzed<'py>(
             (
                 "skipped_type_proof_rules",
                 native_field(&rules_result, "skipped_type_proof_rules")?,
+            ),
+            (
+                "custom_rule_timings",
+                native_field(&rules_result, "custom_rule_timings")?,
             ),
         ],
     )
@@ -481,7 +492,8 @@ impl<'py> Driver<'_, 'py> {
         let options: &AnalysisOptions<'py> = self.options;
         let project_dir: &Bound<'py, PyAny> = &options.project_dir;
         let rules_config: Bound<'py, PyAny> =
-            load_rules_config(py, project_dir.extract()?)?.into_bound(py);
+            load_rules_config_with_cache(py, project_dir.extract()?, !options.no_cache()?)?
+                .into_bound(py);
         if !options.prepared_artifacts.is_none() && !any_error(core_diagnostics.as_any())? {
             let target_dir: Bound<'py, PyAny> =
                 project_dir.call_method1("__truediv__", (TARGET_DIRECTORY,))?;

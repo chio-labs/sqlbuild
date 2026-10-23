@@ -12,13 +12,13 @@ use crate::project::_helpers::targets::seconds_value;
 use crate::project::_helpers::values::{int_below, python_equal};
 use crate::project::constants::{
     AUDIT_SEVERITIES, COLLECTION_RENDERINGS, COLUMN_CONTRACT_MODES, CONCURRENCY_KEY,
-    DBT_DEFER_CLONE_KEY, DBT_KEYS, DBT_REMOVED_KEYS, DBT_REUSE_KEYS, DEFAULT_QUERY_ARTIFACT_TTL,
-    FUTURE_CURSOR_ACTIONS, LEGACY_CONCURRENCY_KEY, LEGACY_SQL_VALIDATION_KEY, LOCAL_DBT_KEYS,
-    MAX_BATCHES_KEY, MICROBATCH_LIMIT_ACTIONS, OLD_NAME_VIEWS_KEY, QUERY_CHANGE_TRACKING_KEY,
-    REQUIRE_SQL_ANALYSIS_KEY, RUN_NAMESPACE_KEY, RUN_NAMESPACE_MAX_LENGTH, SCENARIO_KEYS,
-    SETTINGS_KEYS, SNAPSHOT_FULL_REFRESH_POLICIES, SNAPSHOT_KEYS, SNAPSHOT_LIMIT_KEYS,
-    SNAPSHOT_SCHEMA_CHANGE_POLICIES, SQL_ANALYSIS_KEY, UNACCOUNTED_PARTITION_POLICIES,
-    USD_PER_CREDIT_KEY, ZERO_FIXED_DURATION, ZERO_FLOAT,
+    DBT_DEFER_CLONE_KEY, DBT_KEYS, DBT_REMOVED_KEYS, DBT_REUSE_KEYS, DEFAULT_IN_USE_WINDOW,
+    DEFAULT_QUERY_ARTIFACT_TTL, FUTURE_CURSOR_ACTIONS, LEGACY_CONCURRENCY_KEY,
+    LEGACY_SQL_VALIDATION_KEY, LOCAL_DBT_KEYS, MAX_BATCHES_KEY, MICROBATCH_LIMIT_ACTIONS,
+    OLD_NAME_VIEWS_KEY, QUERY_CHANGE_TRACKING_KEY, REQUIRE_SQL_ANALYSIS_KEY, RUN_NAMESPACE_KEY,
+    RUN_NAMESPACE_MAX_LENGTH, SCENARIO_KEYS, SETTINGS_KEYS, SNAPSHOT_FULL_REFRESH_POLICIES,
+    SNAPSHOT_KEYS, SNAPSHOT_LIMIT_KEYS, SNAPSHOT_SCHEMA_CHANGE_POLICIES, SQL_ANALYSIS_KEY,
+    UNACCOUNTED_PARTITION_POLICIES, USD_PER_CREDIT_KEY, ZERO_FIXED_DURATION, ZERO_FLOAT,
 };
 use crate::project::constants::{
     DEFAULT_TEST_TIMEOUT, DEFAULT_UNIT_TEST_MAX_REAL_MODELS, DELTA_COMPILE_KEY, DISABLED_VALUE,
@@ -565,6 +565,19 @@ pub(crate) fn load_janitor(payload: Option<&ConfigValue>, file: ConfigFile) -> L
         get(mapping, "exclude_patterns"),
         place(file, "janitor.exclude_patterns"),
     )?;
+    let keep_in_use = optional_bool(mapping, "keep_in_use", false)?;
+    let in_use_window = match get(mapping, "in_use_window") {
+        None => DEFAULT_IN_USE_WINDOW.to_owned(),
+        Some(ConfigValue::String(window)) if fixed_duration_seconds(window, false)?.is_some() => {
+            window.clone()
+        }
+        Some(_) => {
+            return Err(ConfigFailure::at(
+                file,
+                "janitor.in_use_window must be a positive fixed duration such as '7d'",
+            ));
+        }
+    };
     let checks = [
         (retention_days.as_ref(), "retention_days"),
         (Some(&archive), "archive_retention_days"),
@@ -591,6 +604,11 @@ pub(crate) fn load_janitor(payload: Option<&ConfigValue>, file: ConfigFile) -> L
                 Built::Value(ConfigValue::Bool(delete_tracked_only)),
             ),
             ("exclude_patterns", Built::Tuple(exclude)),
+            (
+                "in_use_window",
+                Built::Value(ConfigValue::String(in_use_window)),
+            ),
+            ("keep_in_use", Built::Value(ConfigValue::Bool(keep_in_use))),
         ],
     ))
 }
