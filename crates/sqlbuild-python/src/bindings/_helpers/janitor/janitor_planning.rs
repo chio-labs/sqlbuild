@@ -63,7 +63,8 @@ fn int_field(py: Python<'_>, value: usize) -> PyResult<Bound<'_, PyAny>> {
     integer(py, i64::try_from(value).unwrap_or(i64::MAX))
 }
 
-fn completed(lifecycle: &Bound<'_, PyAny>, item_count: usize) -> PyResult<()> {
+/// Mark an operation lifecycle completed with its item count.
+pub(crate) fn completed(lifecycle: &Bound<'_, PyAny>, item_count: usize) -> PyResult<()> {
     let py: Python<'_> = lifecycle.py();
     let metadata: Bound<'_, PyDict> = PyDict::new(py);
     metadata.set_item("item_count", item_count)?;

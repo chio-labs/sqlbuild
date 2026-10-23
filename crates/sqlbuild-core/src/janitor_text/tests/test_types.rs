@@ -81,3 +81,10 @@ pub(super) struct EventsUnwrittenTestCase {
     pub(super) error: &'static str,
     pub(super) expected_text: &'static str,
 }
+
+pub(super) struct UsagePromptTestCase {
+    pub(super) description: &'static str,
+    pub(super) plan: JanitorPlanText,
+    pub(super) expected_fragment: &'static str,
+    pub(super) expected_phrase: &'static str,
+}

@@ -11,11 +11,14 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.janitor._test_types import (
     JanitorUsageE2ETestCase,
+    JanitorUsageJsonE2ETestCase,
     JanitorUsagePromptE2ETestCase,
     JanitorUsageUncheckedE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.janitor.helpers import (
     assert_in_order,
+    count_stale_archives,
+    in_use_entries,
     list_archive_names,
     prepare_probe_janitor_project,
     prepare_usage_janitor_project,
@@ -79,36 +82,49 @@ def test_given_duckdb_when_running_janitor_then_usage_is_reported_not_checked(
     assert_in_order(output=result.stdout, lines=test_case.expected_ordered_lines)
     assert result.stdout.count("usage not checked: unsupported adapter\n") == 1
     assert "In use" not in result.stdout
-    archives: tuple[str, ...] = list_archive_names(db_path=project_dir / "janitor.duckdb")
-    assert len([name for name in archives if "__old_orders_" in name]) == (
+    assert count_stale_archives(db_path=project_dir / "janitor.duckdb") == (
         test_case.expected_archived
     )
 
 
-def test_given_duckdb_when_previewing_janitor_json_then_usage_check_is_not_checked(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorUsageJsonE2ETestCase(
+            description="duckdb reports usage as not checked and every candidate's in_use null",
+            janitor_command=("janitor", "--auto-approve", "--json"),
+            expected_usage_check={
+                "status": "not_checked",
+                "reason": "unsupported adapter",
+                "window": "7d",
+                "keep_in_use": False,
+            },
+            expected_archive_in_use=(("main.old_orders_000", None), ("main.old_orders_001", None)),
+            expected_kept_in_use=(),
+            expected_archived=2,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_duckdb_when_running_janitor_json_then_usage_check_is_not_checked(
+    test_case: JanitorUsageJsonE2ETestCase, tmp_path: Path
 ) -> None:
     project_dir: Path = prepare_probe_janitor_project(
         tmp_path=tmp_path, project_name="janitor_usage_json", stale_tables={"main": 2}
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("janitor", "--auto-approve", "--json"), project_dir=project_dir
+        command=test_case.janitor_command, project_dir=project_dir
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
     payload: dict[str, Any] = json.loads(result.stdout)
-    assert payload["usage_check"] == {
-        "status": "not_checked",
-        "reason": "unsupported adapter",
-        "window": "7d",
-        "keep_in_use": False,
-    }
-    assert [candidate["in_use"] for candidate in payload["plan"]["relations_to_archive"]] == [
-        None,
-        None,
-    ]
-    assert payload["plan"]["kept_in_use"] == []
+    assert payload["usage_check"] == test_case.expected_usage_check
+    assert in_use_entries(payload["plan"]["relations_to_archive"]) == (
+        test_case.expected_archive_in_use
+    )
+    assert in_use_entries(payload["plan"]["kept_in_use"]) == test_case.expected_kept_in_use
+    assert payload["result"]["counts"]["archived"] == test_case.expected_archived
     assert "usage not checked: unsupported adapter" in result.stderr
 
 
@@ -210,9 +226,7 @@ def test_given_usage_source_when_running_janitor_then_in_use_relations_are_shown
     name: str
     for name in test_case.expected_remaining:
         assert table_exists(db_path=db_path, table_name=name)
-    assert len(
-        [name for name in list_archive_names(db_path=db_path) if "__old_orders" in name]
-    ) == (test_case.expected_archived)
+    assert count_stale_archives(db_path=db_path) == test_case.expected_archived
     calls: dict[str, object] = read_usage_calls(project_dir=project_dir)
     assert calls["relations"] == [
         "old_orders_000",
@@ -222,8 +236,40 @@ def test_given_usage_source_when_running_janitor_then_in_use_relations_are_shown
     ]
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorUsageJsonE2ETestCase(
+            description="kept and archived candidates carry their reads, or false when unread",
+            janitor_command=("janitor", "--auto-approve", "--json", "--keep-in-use"),
+            expected_usage_check={
+                "status": "checked",
+                "reason": None,
+                "window": "7d",
+                "keep_in_use": True,
+            },
+            expected_archive_in_use=(("main.old_orders_001", False),),
+            expected_kept_in_use=(
+                (
+                    "main.old_orders_000",
+                    {
+                        "last_read": "2026-10-21T09:30:00Z",
+                        "readers": list(FIVE_READERS),
+                        "query_count": 40,
+                    },
+                ),
+                (
+                    "main.old_orders_002",
+                    {"last_read": "2026-10-21T09:30:00Z", "readers": ["alice"], "query_count": 2},
+                ),
+            ),
+            expected_archived=1,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_usage_source_when_janitor_prints_json_then_candidates_carry_in_use(
-    tmp_path: Path,
+    test_case: JanitorUsageJsonE2ETestCase, tmp_path: Path
 ) -> None:
     project_dir: Path = prepare_usage_janitor_project(
         tmp_path=tmp_path, project_name="janitor_usage_json_shape", stale_tables=3
@@ -234,38 +280,17 @@ def test_given_usage_source_when_janitor_prints_json_then_candidates_carry_in_us
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("janitor", "--auto-approve", "--json", "--keep-in-use"), project_dir=project_dir
+        command=test_case.janitor_command, project_dir=project_dir
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
     payload: dict[str, Any] = json.loads(result.stdout)
-    assert payload["usage_check"] == {
-        "status": "checked",
-        "reason": None,
-        "window": "7d",
-        "keep_in_use": True,
-    }
-    assert [
-        (candidate["name"], candidate["in_use"])
-        for candidate in payload["plan"]["relations_to_archive"]
-    ] == [("main.old_orders_001", False)]
-    assert [
-        (candidate["name"], candidate["in_use"]) for candidate in payload["plan"]["kept_in_use"]
-    ] == [
-        (
-            "main.old_orders_000",
-            {
-                "last_read": "2026-10-21T09:30:00Z",
-                "readers": list(FIVE_READERS),
-                "query_count": 40,
-            },
-        ),
-        (
-            "main.old_orders_002",
-            {"last_read": "2026-10-21T09:30:00Z", "readers": ["alice"], "query_count": 2},
-        ),
-    ]
-    assert payload["result"]["counts"]["archived"] == 1
+    assert payload["usage_check"] == test_case.expected_usage_check
+    assert in_use_entries(payload["plan"]["relations_to_archive"]) == (
+        test_case.expected_archive_in_use
+    )
+    assert in_use_entries(payload["plan"]["kept_in_use"]) == test_case.expected_kept_in_use
+    assert payload["result"]["counts"]["archived"] == test_case.expected_archived
     assert read_usage_calls(project_dir=project_dir)["window_seconds"] == 7 * 86_400
 
 

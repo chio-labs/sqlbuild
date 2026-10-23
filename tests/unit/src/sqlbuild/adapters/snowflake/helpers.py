@@ -11,7 +11,7 @@ from types import ModuleType
 from typing import Any
 
 from sqlbuild._native import NativeProgressProjector
-from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo
+from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RelationUsageReport
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_connection import _SnowflakeConnection
 from sqlbuild.observability import (
@@ -396,3 +396,90 @@ class CustomInitSnowflakeAdapter(SnowflakeAdapter):
 
     def __init__(self) -> None:
         self.custom_label: str = "orders"
+
+
+class FakeAccessHistoryError(Exception):
+    """A Snowflake driver error with an error number."""
+
+    def __init__(self, message: str, errno: int | None) -> None:
+        super().__init__(message)
+        self.errno: int | None = errno
+
+
+class FakeUsageWarehouse:
+    """Answers CURRENT_DATABASE() and access-history reads, recording each access-history read."""
+
+    def __init__(
+        self,
+        *,
+        current_database: str | None = None,
+        access_rows: tuple[tuple[object, ...], ...] = (),
+        errors: tuple[Exception, ...] = (),
+    ) -> None:
+        self.current_database: str | None = current_database
+        self.access_rows: tuple[tuple[object, ...], ...] = access_rows
+        self.errors: tuple[Exception, ...] = errors
+        self.queries: list[tuple[str, tuple[object, ...]]] = []
+
+    def current_database_rows(self) -> list[tuple[object, ...]]:
+        return [(self.current_database,)]
+
+    def access_history_rows(self, sql: str, params: tuple[object, ...]) -> list[tuple[object, ...]]:
+        self.queries.append((sql, params))
+        error: Exception
+        for error in self.errors:
+            raise error
+        names: frozenset[object] = frozenset(params)
+        return list(filter(lambda row: row[0] in names, self.access_rows))
+
+
+class FakeUsageCursor:
+    """Cursor double routing each statement to the fake usage warehouse."""
+
+    def __init__(self, warehouse: FakeUsageWarehouse) -> None:
+        self.warehouse: FakeUsageWarehouse = warehouse
+        self.rows: list[tuple[object, ...]] = []
+
+    def execute(self, sql: str, params: tuple[object, ...] = ()) -> None:
+        reads: dict[bool, Callable[[], list[tuple[object, ...]]]] = {
+            True: self.warehouse.current_database_rows,
+            False: lambda: self.warehouse.access_history_rows(sql, params),
+        }
+        self.rows = reads[sql == "SELECT CURRENT_DATABASE()"]()
+
+    def fetchone(self) -> tuple[object, ...] | None:
+        return next(iter(self.rows), None)
+
+    def fetchall(self) -> list[tuple[object, ...]]:
+        return self.rows
+
+    def close(self) -> None:
+        return None
+
+
+class FakeUsageConnection:
+    """Connection double handing out cursors over one fake usage warehouse."""
+
+    def __init__(self, warehouse: FakeUsageWarehouse) -> None:
+        self.warehouse: FakeUsageWarehouse = warehouse
+
+    def cursor(self) -> FakeUsageCursor:
+        return FakeUsageCursor(self.warehouse)
+
+
+def usage_relation(database: str | None, schema: str, name: str) -> RelationInfo:
+    """A base table relation for usage reads."""
+
+    return RelationInfo(database=database, schema=schema, name=name, relation_type="base table")
+
+
+def read_snowflake_usage(
+    *, warehouse: FakeUsageWarehouse, relations: tuple[RelationInfo, ...], window_seconds: int
+) -> RelationUsageReport:
+    """Snowflake's usage report for the relations from the fake warehouse."""
+
+    return SnowflakeAdapter().relation_usage(
+        connection=FakeUsageConnection(warehouse),
+        relations=relations,
+        window_seconds=window_seconds,
+    )

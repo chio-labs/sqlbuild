@@ -15,7 +15,9 @@ use crate::bindings::_helpers::boundary::python_calls::{call_with, within};
 use crate::bindings::_helpers::build_progress::progress_reporters::{
     ConnectionProgressReporter, PlanningProgressReporter,
 };
-use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
+use crate::bindings::_helpers::build_progress::transient_status::{
+    TransientStatusReporter, status_reporter,
+};
 use crate::bindings::_helpers::command_runtime::concurrency::resolve_concurrency;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_connection_context;
 use crate::bindings::_helpers::janitor::janitor_facts::Warehouse;
@@ -308,7 +310,15 @@ pub(crate) fn build_janitor_execution_plan<'py>(
         (&compiled.adapter, connection),
         (
             &plan,
-            &status_reporter(&output_stream(invocation)?, use_color(invocation)?)?,
+            &Bound::new(
+                py,
+                TransientStatusReporter::new(
+                    py,
+                    &output_stream(invocation)?,
+                    use_color(invocation)?,
+                    true,
+                )?,
+            )?,
         ),
         &UsageSettings {
             window: native_field(settings, "in_use_window")?.extract()?,

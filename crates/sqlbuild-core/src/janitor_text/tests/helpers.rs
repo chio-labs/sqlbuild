@@ -79,7 +79,7 @@ pub(super) fn old_name_plan(count: usize) -> JanitorPlanText {
     }
 }
 
-/// Reads by `readers` of `count` queries, last on 2026-10-21.
+/// Reads by `readers` of `query_count` queries, last on 2026-10-21.
 fn usage(readers: &[&str], query_count: i64) -> RelationUsageText {
     RelationUsageText {
         last_read_at: "2026-10-21 09:30:00".to_owned(),
@@ -88,44 +88,42 @@ fn usage(readers: &[&str], query_count: i64) -> RelationUsageText {
     }
 }
 
-/// Three candidates checked over `7d`: an in-use view, an in-use table read by five users,
-/// and an unread table; `keep_in_use` moves the in-use two to `kept_in_use`.
-pub(super) fn usage_plan(keep_in_use: bool) -> JanitorPlanText {
-    let view: ArchiveCandidateText = ArchiveCandidateText {
-        name: "dev.orders_daily".to_owned(),
-        archive_name: "dev._sqb_archive__20261022t101500z__orders_daily".to_owned(),
-        usage: Some(usage(&["svc_reporting"], 14)),
-        ..ArchiveCandidateText::default()
-    };
-    let table: ArchiveCandidateText = ArchiveCandidateText {
-        name: "dev.old_orders".to_owned(),
-        archive_name: "dev._sqb_archive__20261022t101500z__old_orders".to_owned(),
-        is_table: true,
-        changed_on: Some("2026-09-01".to_owned()),
-        usage: Some(usage(
-            &["svc_reporting", "alice", "bob", "carol", "dave"],
-            40,
-        )),
-        ..ArchiveCandidateText::default()
-    };
-    let unread: ArchiveCandidateText = ArchiveCandidateText {
-        name: "dev.old_customers".to_owned(),
-        archive_name: "dev._sqb_archive__20261022t101500z__old_customers".to_owned(),
-        is_table: true,
-        ..ArchiveCandidateText::default()
-    };
-    let (archive_candidates, kept_in_use) = if keep_in_use {
-        (vec![unread], vec![view, table])
-    } else {
-        (vec![view, table, unread], Vec::new())
-    };
+/// An in-use view, an in-use table read by five users, and an unread table.
+fn usage_candidates() -> [ArchiveCandidateText; 3] {
+    [
+        ArchiveCandidateText {
+            name: "dev.orders_daily".to_owned(),
+            archive_name: "dev._sqb_archive__20261022t101500z__orders_daily".to_owned(),
+            usage: Some(usage(&["svc_reporting"], 14)),
+            ..ArchiveCandidateText::default()
+        },
+        ArchiveCandidateText {
+            name: "dev.old_orders".to_owned(),
+            archive_name: "dev._sqb_archive__20261022t101500z__old_orders".to_owned(),
+            is_table: true,
+            changed_on: Some("2026-09-01".to_owned()),
+            usage: Some(usage(
+                &["svc_reporting", "alice", "bob", "carol", "dave"],
+                40,
+            )),
+            ..ArchiveCandidateText::default()
+        },
+        ArchiveCandidateText {
+            name: "dev.old_customers".to_owned(),
+            archive_name: "dev._sqb_archive__20261022t101500z__old_customers".to_owned(),
+            is_table: true,
+            ..ArchiveCandidateText::default()
+        },
+    ]
+}
+
+/// A plan for `dev` whose usage was checked over `7d`.
+fn checked_plan(keep_in_use: bool) -> JanitorPlanText {
     JanitorPlanText {
         target_name: Some("dev".to_owned()),
         retention_days: 14,
         direct_mode: true,
         archive_retention_days: 14,
-        archive_candidates,
-        kept_in_use,
         usage_check: Some(UsageCheckText {
             checked: true,
             reason: None,
@@ -136,7 +134,25 @@ pub(super) fn usage_plan(keep_in_use: bool) -> JanitorPlanText {
     }
 }
 
-/// A plan whose usage could not be checked, for `reason`.
+/// A checked plan archiving every usage candidate, in use or not.
+pub(super) fn usage_plan() -> JanitorPlanText {
+    JanitorPlanText {
+        archive_candidates: usage_candidates().to_vec(),
+        ..checked_plan(false)
+    }
+}
+
+/// A checked plan keeping the two in-use candidates and archiving the unread one.
+pub(super) fn kept_usage_plan() -> JanitorPlanText {
+    let [view, table, unread] = usage_candidates();
+    JanitorPlanText {
+        archive_candidates: vec![unread],
+        kept_in_use: vec![view, table],
+        ..checked_plan(true)
+    }
+}
+
+/// A plan whose usage was not checked because the adapter has no usage source.
 pub(super) fn unchecked_plan(keep_in_use: bool) -> JanitorPlanText {
     JanitorPlanText {
         usage_check: Some(UsageCheckText {

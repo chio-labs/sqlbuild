@@ -865,3 +865,15 @@ def read_usage_calls(*, project_dir: Path) -> dict[str, object]:
     """The relations and window of the usage adapter's last `relation_usage` call."""
 
     return json.loads((project_dir / USAGE_JANITOR_CALLS_FILENAME).read_text(encoding="utf-8"))
+
+
+def count_stale_archives(*, db_path: Path) -> int:
+    """How many archives in `main` hold a stale `old_orders` relation."""
+
+    return sum("__old_orders" in name for name in list_archive_names(db_path=db_path))
+
+
+def in_use_entries(candidates: list[dict[str, object]]) -> tuple[tuple[object, object], ...]:
+    """Each `--json` candidate's name and `in_use`."""
+
+    return tuple((candidate["name"], candidate["in_use"]) for candidate in candidates)

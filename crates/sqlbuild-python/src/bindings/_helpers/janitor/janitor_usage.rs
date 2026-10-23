@@ -5,12 +5,14 @@ use std::time::Instant;
 
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyDict, PyDictMethods};
+use pyo3::types::{PyBool, PyString};
 use sqlbuild_host::entries::models::ExecutorHost;
 use sqlbuild_model_config::model_validation::main::fixed_duration_seconds::fixed_duration_seconds;
 
-use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::boundary::python_calls::{call_with, within};
+use crate::bindings::_helpers::build_progress::transient_status::TransientStatusReporter;
 use crate::bindings::_helpers::janitor::janitor_keys::{Folded, Key, record, tuple};
+use crate::bindings::_helpers::janitor::janitor_planning::completed;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
@@ -22,83 +24,82 @@ pub(crate) struct UsageSettings {
     pub(crate) keep_in_use: bool,
 }
 
-/// The adapter's usage report and its usages by relation.
-struct UsageOutcome<'py> {
-    report: Bound<'py, PyAny>,
-    usages: HashMap<Folded, Bound<'py, PyAny>>,
+fn text<'py>(py: Python<'py>, value: &str) -> Bound<'py, PyAny> {
+    PyString::new(py, value).into_any()
+}
+
+fn flag(py: Python<'_>, value: bool) -> Bound<'_, PyAny> {
+    PyBool::new(py, value).to_owned().into_any()
 }
 
 fn lifecycle(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    let options: Bound<'_, PyDict> = PyDict::new(py);
-    options.set_item("operation_kind", "janitor")?;
-    options.set_item("operation_name", "janitor_usage_check")?;
-    host::entry(py, ExecutorHost::OperationLifecycle)?.call((), Some(&options))
+    call_with(
+        &host::entry(py, ExecutorHost::OperationLifecycle)?,
+        &[
+            ("operation_kind", text(py, "janitor")),
+            ("operation_name", text(py, "janitor_usage_check")),
+        ],
+    )
 }
 
-fn replaced<'py>(
-    value: &Bound<'py, PyAny>,
-    fields: &[(&str, Bound<'py, PyAny>)],
-) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = value.py();
-    let options: Bound<'py, PyDict> = PyDict::new(py);
-    for (name, field) in fields {
-        options.set_item(*name, field)?;
-    }
-    imported(py, "dataclasses", "replace")?.call((value,), Some(&options))
-}
-
+/// The adapter's usage report for the candidates' relations.
 fn read_usage<'py>(
     (adapter, connection): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
     candidates: &[Bound<'py, PyAny>],
     window_seconds: i64,
-) -> PyResult<UsageOutcome<'py>> {
+) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = adapter.py();
     let relations: Vec<Bound<'py, PyAny>> = candidates
         .iter()
         .map(|candidate| native_field(candidate, "relation"))
         .collect::<PyResult<_>>()?;
-    let report: Bound<'py, PyAny> = call_with(
-        &native_field(adapter, "relation_usage")?,
-        &[
-            ("connection", connection.clone()),
-            ("relations", tuple(py, relations)?),
-            (
-                "window_seconds",
-                window_seconds.into_pyobject(py)?.into_any(),
-            ),
-        ],
-    )?;
+    within(&lifecycle(py)?, |lifecycle| {
+        let report: Bound<'py, PyAny> = call_with(
+            &native_field(adapter, "relation_usage")?,
+            &[
+                ("connection", connection.clone()),
+                ("relations", tuple(py, relations)?),
+                (
+                    "window_seconds",
+                    window_seconds.into_pyobject(py)?.into_any(),
+                ),
+            ],
+        )?;
+        completed(lifecycle, native_field(&report, "usages")?.len()?)?;
+        Ok(report)
+    })
+}
+
+/// Each reported usage by its relation's case-insensitive identity.
+fn usages_by_relation<'py>(
+    report: &Bound<'py, PyAny>,
+) -> PyResult<HashMap<Folded, Bound<'py, PyAny>>> {
     let mut usages: HashMap<Folded, Bound<'py, PyAny>> = HashMap::new();
-    if native_field(&report, "checked")?.is_truthy()? {
-        for usage in native_field(&report, "usages")?.try_iter()? {
-            let usage: Bound<'py, PyAny> = usage?;
-            usages.insert(Key::of(&usage)?.folded(), usage);
-        }
+    for usage in native_field(report, "usages")?.try_iter()? {
+        let usage: Bound<'py, PyAny> = usage?;
+        usages.insert(Key::of(&usage)?.folded(), usage);
     }
-    Ok(UsageOutcome { report, usages })
+    Ok(usages)
 }
 
 fn completion_message(
-    report: &Bound<'_, PyAny>,
+    (checked, reason): (bool, Option<String>),
     (in_use, total): (usize, usize),
     elapsed_seconds: f64,
-) -> PyResult<String> {
-    if !native_field(report, "checked")?.is_truthy()? {
-        let reason: Option<String> = native_field(report, "reason")?.extract()?;
-        return Ok(format!(
+) -> String {
+    if !checked {
+        return format!(
             "Relation usage not checked: {}. ({elapsed_seconds:.2}s)",
             reason.unwrap_or_default()
-        ));
+        );
     }
-    Ok(format!(
-        "Checked relation usage: {in_use} of {total} in use. ({elapsed_seconds:.2}s)"
-    ))
+    format!("Checked relation usage: {in_use} of {total} in use. ({elapsed_seconds:.2}s)")
 }
 
 /// The plan with each candidate's reads, the usage check, and in-use candidates kept when asked.
 pub(crate) fn check_janitor_usage<'py>(
     (adapter, connection): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
-    (plan, status): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    (plan, status): (&Bound<'py, PyAny>, &Bound<'py, TransientStatusReporter>),
     settings: &UsageSettings,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = plan.py();
@@ -106,21 +107,14 @@ pub(crate) fn check_janitor_usage<'py>(
         .try_iter()?
         .collect::<PyResult<_>>()?;
     let window_seconds: i64 = fixed_duration_seconds(&settings.window)
-        .and_then(|seconds| i64::try_from(seconds).ok())
-        .unwrap_or(i64::MAX);
+        .map_or(i64::MAX, |seconds| {
+            i64::try_from(seconds).unwrap_or(i64::MAX)
+        });
     let started: Instant = Instant::now();
-    status.call_method1("start", (START_MESSAGE,))?;
-    let outcome: UsageOutcome<'py> = within(&lifecycle(py)?, |lifecycle| {
-        let outcome: UsageOutcome<'py> =
-            read_usage((adapter, connection), &candidates, window_seconds)?;
-        let metadata: Bound<'py, PyDict> = PyDict::new(py);
-        metadata.set_item("item_count", outcome.usages.len())?;
-        let options: Bound<'py, PyDict> = PyDict::new(py);
-        options.set_item("metadata", metadata)?;
-        lifecycle.call_method("completed", (), Some(&options))?;
-        Ok(outcome)
-    })?;
-    let checked: bool = native_field(&outcome.report, "checked")?.is_truthy()?;
+    TransientStatusReporter::start(status, START_MESSAGE.to_owned())?;
+    let report: Bound<'py, PyAny> = read_usage((adapter, connection), &candidates, window_seconds)?;
+    let checked: bool = native_field(&report, "checked")?.is_truthy()?;
+    let usages: HashMap<Folded, Bound<'py, PyAny>> = usages_by_relation(&report)?;
     let keep: bool = checked && settings.keep_in_use;
     let mut archived: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut kept: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -128,12 +122,15 @@ pub(crate) fn check_janitor_usage<'py>(
     let mut in_use: usize = 0;
     for candidate in &candidates {
         let key: Folded = Key::of(&native_field(candidate, "relation")?)?.folded();
-        let Some(usage) = outcome.usages.get(&key) else {
+        let Some(usage) = usages.get(&key) else {
             archived.push(candidate.clone());
             continue;
         };
         in_use += 1;
-        let read: Bound<'py, PyAny> = replaced(candidate, &[("usage", usage.clone())])?;
+        let read: Bound<'py, PyAny> = call_with(
+            &native_field(candidate, "with_usage")?,
+            &[("usage", usage.clone())],
+        )?;
         if keep {
             kept_keys.insert(Key::of(&native_field(candidate, "key")?)?.folded());
             kept.push(read);
@@ -149,35 +146,28 @@ pub(crate) fn check_janitor_usage<'py>(
             deletions.push(deletion);
         }
     }
-    let options: Bound<'py, PyDict> = PyDict::new(py);
-    options.set_item(
-        "message",
-        completion_message(
-            &outcome.report,
+    let reason: Bound<'py, PyAny> = native_field(&report, "reason")?;
+    TransientStatusReporter::complete(
+        status,
+        &completion_message(
+            (checked, reason.extract()?),
             (in_use, candidates.len()),
             started.elapsed().as_secs_f64(),
-        )?,
+        ),
+        true,
     )?;
-    options.set_item("blank_line_after", true)?;
-    status.call_method("complete", (), Some(&options))?;
     let check: Bound<'py, PyAny> = record(
         py,
         ExecutorHost::JanitorUsageCheck,
         &[
-            ("checked", PyBool::new(py, checked).to_owned().into_any()),
-            (
-                "window",
-                settings.window.as_str().into_pyobject(py)?.into_any(),
-            ),
-            (
-                "keep_in_use",
-                PyBool::new(py, settings.keep_in_use).to_owned().into_any(),
-            ),
-            ("reason", native_field(&outcome.report, "reason")?),
+            ("checked", flag(py, checked)),
+            ("window", text(py, &settings.window)),
+            ("keep_in_use", flag(py, settings.keep_in_use)),
+            ("reason", reason),
         ],
     )?;
-    replaced(
-        plan,
+    call_with(
+        &native_field(plan, "with_usage")?,
         &[
             ("archive_candidates", tuple(py, archived)?),
             ("archive_deletion_candidates", tuple(py, deletions)?),
