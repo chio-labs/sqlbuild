@@ -13,6 +13,7 @@ from textwrap import dedent
 from typing import Any, cast
 
 from sqlbuild.adapters.clickhouse.classes.clickhouse_adapter import ClickHouseAdapter
+from tests.e2e.src.sqlbuild.cli.commands.main.warehouses.harness import WarehouseHarness
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_waffle_shop
 from tests.integration.src.sqlbuild.cli.recall.helpers import (
     killed_build,
@@ -1042,4 +1043,35 @@ def stale_views(*, config: dict[str, object], database: str) -> tuple[tuple[obje
         config=config,
         sql="SELECT countIf(position(create_table_query, 'join_use_nulls') > 0) "
         f"FROM system.tables WHERE database = '{database}' AND engine = 'View'",
+    )
+
+
+def clickhouse_harness(config: dict[str, object]) -> WarehouseHarness:
+    """Return the shared real-warehouse scenario hooks for one ClickHouse server."""
+
+    return WarehouseHarness(
+        name="clickhouse",
+        unique_schema=lambda prefix: build_unique_schema_name(prefix=prefix),
+        project_toml=lambda project_name, schema_name: build_clickhouse_project_toml(
+            project_name=project_name, schema_name=schema_name, config=config
+        ),
+        ensure_schema=lambda schema_name: create_clickhouse_schema(
+            config=config, schema_name=schema_name
+        ),
+        cleanup_schema=lambda schema_name: cleanup_clickhouse_schema(
+            config=config, schema_name=schema_name
+        ),
+        fetch_rows=lambda schema_name, sql: fetch_clickhouse_rows(config=config, sql=sql),
+        execute_sql=lambda schema_name, sql: execute_clickhouse_sql(
+            config=config, statements=(sql,)
+        ),
+        relation=lambda schema_name, name: f"{schema_name}.{name}",
+        date_sql=lambda expression: f"toDate({expression})",
+        true_text="1",
+        false_text="0",
+        snapshot_leftovers=lambda schema_name: fetch_clickhouse_rows(
+            config=config,
+            sql=f"SELECT name FROM system.tables WHERE database = '{schema_name}' "
+            "AND name LIKE '%__sqb_snap%'",
+        ),
     )

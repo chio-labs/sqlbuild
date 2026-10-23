@@ -6,10 +6,10 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
+from tests.e2e.src.sqlbuild.cli.commands.main.warehouses.harness import WarehouseHarness
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_source_loader_strategies,
     prepare_waffle_shop,
-    stringify_warehouse_rows,
 )
 
 
@@ -74,10 +74,6 @@ def build_sqlserver_source_deferral_project_toml(
 
 def relation_name(*, schema_name: str, name: str) -> str:
     return f"[{schema_name}].[{name}]"
-
-
-def adapt_sqlserver_project_files(repo_files: dict[str, str]) -> dict[str, str]:
-    return {path: adapt_sqlserver_sql(contents) for path, contents in repo_files.items()}
 
 
 def adapt_sqlserver_sql(sql: str) -> str:
@@ -159,117 +155,6 @@ def fetch_sqlserver_rows(*, sql: str, config: dict[str, object]) -> tuple[tuple[
         return tuple(tuple(row) for row in cursor.fetchall())
     finally:
         adapter.close(connection)
-
-
-def assert_current_sqlserver_snapshot_rows_from_case(
-    *,
-    schema_name: str,
-    config: dict[str, object],
-    expected_rows: tuple[tuple[object, ...], ...],
-) -> None:
-    assert_current_sqlserver_snapshot_rows(
-        schema_name=schema_name,
-        config=config,
-        expected_rows=expected_rows,
-    )
-
-
-def assert_current_sqlserver_snapshot_rows(
-    *,
-    schema_name: str,
-    config: dict[str, object],
-    expected_rows: tuple[tuple[object, ...], ...],
-) -> None:
-    rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
-        sql=(
-            "SELECT customer_id, region_id, plan_name, "
-            "CAST(effective_from AS DATE), CAST(effective_to AS DATE) "
-            f"FROM {relation_name(schema_name=schema_name, name='current_customer_snapshot')} "
-            "ORDER BY customer_id, region_id, effective_from"
-        ),
-        config=config,
-    )
-    assert stringify_warehouse_rows(rows) == expected_rows
-
-
-def assert_sqlserver_snapshot_matrix_rows(
-    *,
-    schema_name: str,
-    config: dict[str, object],
-    expected_current_rows: tuple[tuple[object, ...], ...],
-    expected_historical_timestamp_rows: tuple[tuple[object, ...], ...],
-    expected_historical_check_rows: tuple[tuple[object, ...], ...],
-) -> None:
-    assert_current_sqlserver_snapshot_rows(
-        schema_name=schema_name,
-        config=config,
-        expected_rows=expected_current_rows,
-    )
-    historical_timestamp_rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
-        sql=(
-            "SELECT customer_id, plan_name, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
-            f"FROM {relation_name(schema_name=schema_name, name='historical_customer_snapshot')} "
-            "ORDER BY customer_id, valid_from"
-        ),
-        config=config,
-    )
-    historical_check_rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
-        sql=(
-            "SELECT customer_id, status, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
-            f"FROM {relation_name(schema_name=schema_name, name='historical_membership_snapshot')} "
-            "ORDER BY customer_id, valid_from"
-        ),
-        config=config,
-    )
-    assert stringify_warehouse_rows(historical_timestamp_rows) == expected_historical_timestamp_rows
-    assert stringify_warehouse_rows(historical_check_rows) == expected_historical_check_rows
-
-
-def assert_sqlserver_snapshot_apply_rows(
-    *,
-    schema_name: str,
-    config: dict[str, object],
-    expected_current_check_rows: tuple[tuple[object, ...], ...],
-    expected_current_delete_rows: tuple[tuple[object, ...], ...],
-    expected_historical_timestamp_rows: tuple[tuple[object, ...], ...],
-    expected_historical_check_rows: tuple[tuple[object, ...], ...],
-) -> None:
-    current_check_rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
-        sql=(
-            "SELECT customer_id, status, CASE WHEN valid_to IS NULL THEN 1 ELSE 0 END "
-            f"FROM {relation_name(schema_name=schema_name, name='current_check_snapshot')} "
-            "ORDER BY customer_id, status, CASE WHEN valid_to IS NULL THEN 1 ELSE 0 END"
-        ),
-        config=config,
-    )
-    current_delete_rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
-        sql=(
-            "SELECT customer_id, plan_name, CASE WHEN valid_to IS NULL THEN 1 ELSE 0 END "
-            f"FROM {relation_name(schema_name=schema_name, name='current_delete_snapshot')} "
-            "ORDER BY customer_id, plan_name, CASE WHEN valid_to IS NULL THEN 1 ELSE 0 END"
-        ),
-        config=config,
-    )
-    historical_timestamp_rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
-        sql=(
-            "SELECT customer_id, plan_name, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
-            f"FROM {relation_name(schema_name=schema_name, name='historical_timestamp_snapshot')} "
-            "ORDER BY customer_id, valid_from"
-        ),
-        config=config,
-    )
-    historical_check_rows: tuple[tuple[object, ...], ...] = fetch_sqlserver_rows(
-        sql=(
-            "SELECT customer_id, status, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
-            f"FROM {relation_name(schema_name=schema_name, name='historical_check_snapshot')} "
-            "ORDER BY customer_id, valid_from"
-        ),
-        config=config,
-    )
-    assert stringify_warehouse_rows(current_check_rows) == expected_current_check_rows
-    assert stringify_warehouse_rows(current_delete_rows) == expected_current_delete_rows
-    assert stringify_warehouse_rows(historical_timestamp_rows) == expected_historical_timestamp_rows
-    assert stringify_warehouse_rows(historical_check_rows) == expected_historical_check_rows
 
 
 def prepare_sqlserver_waffle_shop(*, tmp_path: Path, config: dict[str, object]) -> tuple[Path, str]:
@@ -386,3 +271,42 @@ def prepare_sqlserver_source_loader_strategies(
         encoding="utf-8",
     )
     return project_dir, schema_name
+
+
+def sqlserver_harness() -> WarehouseHarness:
+    """Return the shared real-warehouse scenario hooks for SQL Server."""
+
+    config: dict[str, object] = build_sqlserver_config()
+    return WarehouseHarness(
+        name="sqlserver",
+        unique_schema=lambda prefix: build_unique_schema_name(prefix=prefix),
+        project_toml=lambda project_name, schema_name: build_sqlserver_project_toml(
+            project_name=project_name, schema_name=schema_name, config=config
+        ),
+        source_deferral_project_toml=lambda project_name, dev, prod: (
+            build_sqlserver_source_deferral_project_toml(
+                project_name=project_name,
+                dev_schema_name=dev,
+                prod_schema_name=prod,
+                config=config,
+            )
+        ),
+        ensure_schema=lambda schema_name: ensure_sqlserver_schema_ready(
+            schema_name=schema_name, config=config
+        ),
+        cleanup_schema=lambda schema_name: cleanup_sqlserver_schema(
+            schema_name=schema_name, config=config
+        ),
+        fetch_rows=lambda schema_name, sql: fetch_sqlserver_rows(sql=sql, config=config),
+        execute_sql=lambda schema_name, sql: execute_sqlserver_sql(sql=sql, config=config),
+        relation=lambda schema_name, name: relation_name(schema_name=schema_name, name=name),
+        prepare_source_loader_strategies=lambda tmp_path: (
+            prepare_sqlserver_source_loader_strategies(tmp_path=tmp_path, config=config)
+        ),
+        adapt_sql=adapt_sqlserver_sql,
+        null_flag_sql=lambda expression: f"CASE WHEN {expression} IS NULL THEN 1 ELSE 0 END",
+        true_text="1",
+        false_text="0",
+        text_type="NVARCHAR(100)",
+        deferral_text_type="NVARCHAR(100)",
+    )

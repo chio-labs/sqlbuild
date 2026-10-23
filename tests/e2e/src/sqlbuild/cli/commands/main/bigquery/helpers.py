@@ -7,10 +7,10 @@ from shutil import copytree
 from typing import Any
 
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
+from tests.e2e.src.sqlbuild.cli.commands.main.warehouses.harness import WarehouseHarness
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     WAFFLE_SHOP_DIR,
     prepare_source_loader_strategies,
-    stringify_warehouse_rows,
 )
 from tests.integration.src.sqlbuild.adapters.bigquery.helpers import (
     build_bigquery_connection_config,
@@ -188,16 +188,6 @@ def list_bigquery_scenario_relation_names(*, dataset_name: str) -> tuple[str, ..
     return tuple(str(row[0]) for row in rows)
 
 
-def bigquery_relation_row_count(*, dataset_name: str, relation: str) -> int:
-    """Return row count for one BigQuery relation."""
-
-    rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
-        dataset_name=dataset_name,
-        sql=f"SELECT COUNT(*) FROM {relation_name(dataset_name=dataset_name, name=relation)}",
-    )
-    return int(str(rows[0][0]))
-
-
 def relation_name(*, dataset_name: str, name: str) -> str:
     """Return a fully qualified relation name for a BigQuery e2e dataset."""
 
@@ -286,116 +276,6 @@ def execute_bigquery_sql(*, dataset_name: str, sql: str) -> None:
         adapter.close(connection)
 
 
-def assert_current_bigquery_snapshot_rows(
-    *, dataset_name: str, expected_rows: tuple[tuple[object, ...], ...]
-) -> None:
-    """Assert current snapshot rows for BigQuery real-warehouse e2e tests."""
-
-    rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
-        dataset_name=dataset_name,
-        sql=(
-            "SELECT customer_id, region_id, plan, CAST(effective_from AS DATE), "
-            "CAST(effective_to AS DATE) "
-            f"FROM {relation_name(dataset_name=dataset_name, name='current_customer_snapshot')} "
-            "ORDER BY customer_id, region_id, effective_from"
-        ),
-    )
-    assert stringify_warehouse_rows(rows) == expected_rows
-
-
-def assert_bigquery_snapshot_matrix_rows(
-    *,
-    dataset_name: str,
-    expected_current_rows: tuple[tuple[object, ...], ...],
-    expected_historical_timestamp_rows: tuple[tuple[object, ...], ...],
-    expected_historical_check_rows: tuple[tuple[object, ...], ...],
-) -> None:
-    """Assert all compact snapshot matrix rows for BigQuery."""
-
-    assert_current_bigquery_snapshot_rows(
-        dataset_name=dataset_name,
-        expected_rows=expected_current_rows,
-    )
-    historical_timestamp_rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
-        dataset_name=dataset_name,
-        sql=(
-            "SELECT customer_id, plan, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
-            f"FROM {relation_name(dataset_name=dataset_name, name='historical_customer_snapshot')} "
-            "ORDER BY customer_id, valid_from"
-        ),
-    )
-    historical_check_rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
-        dataset_name=dataset_name,
-        sql=(
-            "SELECT customer_id, status, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
-            "FROM "
-            f"{relation_name(dataset_name=dataset_name, name='historical_membership_snapshot')} "
-            "ORDER BY customer_id, valid_from"
-        ),
-    )
-    actual_historical_timestamp_rows: tuple[tuple[object, ...], ...] = stringify_warehouse_rows(
-        historical_timestamp_rows
-    )
-    actual_historical_check_rows: tuple[tuple[object, ...], ...] = stringify_warehouse_rows(
-        historical_check_rows
-    )
-    assert actual_historical_timestamp_rows == expected_historical_timestamp_rows, (
-        actual_historical_timestamp_rows
-    )
-    assert actual_historical_check_rows == expected_historical_check_rows, (
-        actual_historical_check_rows
-    )
-
-
-def assert_bigquery_snapshot_apply_rows(
-    *,
-    dataset_name: str,
-    expected_current_check_rows: tuple[tuple[object, ...], ...],
-    expected_current_delete_rows: tuple[tuple[object, ...], ...],
-    expected_historical_timestamp_rows: tuple[tuple[object, ...], ...],
-    expected_historical_check_rows: tuple[tuple[object, ...], ...],
-) -> None:
-    """Assert existing-target snapshot apply rows for BigQuery."""
-
-    current_check_rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
-        dataset_name=dataset_name,
-        sql=(
-            "SELECT customer_id, status, valid_to IS NULL "
-            f"FROM {relation_name(dataset_name=dataset_name, name='current_check_snapshot')} "
-            "ORDER BY customer_id, status, valid_to IS NULL"
-        ),
-    )
-    current_delete_rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
-        dataset_name=dataset_name,
-        sql=(
-            "SELECT customer_id, plan, valid_to IS NULL "
-            f"FROM {relation_name(dataset_name=dataset_name, name='current_delete_snapshot')} "
-            "ORDER BY customer_id, plan, valid_to IS NULL"
-        ),
-    )
-    historical_timestamp_rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
-        dataset_name=dataset_name,
-        sql=(
-            "SELECT customer_id, plan, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
-            "FROM "
-            f"{relation_name(dataset_name=dataset_name, name='historical_timestamp_snapshot')} "
-            "ORDER BY customer_id, valid_from"
-        ),
-    )
-    historical_check_rows: tuple[tuple[object, ...], ...] = fetch_bigquery_rows(
-        dataset_name=dataset_name,
-        sql=(
-            "SELECT customer_id, status, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
-            f"FROM {relation_name(dataset_name=dataset_name, name='historical_check_snapshot')} "
-            "ORDER BY customer_id, valid_from"
-        ),
-    )
-    assert stringify_warehouse_rows(current_check_rows) == expected_current_check_rows
-    assert stringify_warehouse_rows(current_delete_rows) == expected_current_delete_rows
-    assert stringify_warehouse_rows(historical_timestamp_rows) == expected_historical_timestamp_rows
-    assert stringify_warehouse_rows(historical_check_rows) == expected_historical_check_rows
-
-
 def write_local_environment_override(*, project_dir: Path, environment: str) -> None:
     """Write a local environment override for BigQuery CLI e2e commands."""
 
@@ -403,4 +283,40 @@ def write_local_environment_override(*, project_dir: Path, environment: str) -> 
     (project_dir / "sqlbuild_local.toml").write_text(
         build_bigquery_local_config(environment=environment, location=location),
         encoding="utf-8",
+    )
+
+
+def bigquery_harness() -> WarehouseHarness:
+    """Return the shared real-warehouse scenario hooks for BigQuery."""
+
+    location: str = str(build_bigquery_connection_config()["location"])
+    return WarehouseHarness(
+        name="bigquery",
+        unique_schema=lambda prefix: build_unique_dataset_name(prefix=prefix),
+        project_toml=lambda project_name, schema_name: build_bigquery_project_toml(
+            project_name=project_name, dataset_name=schema_name
+        ),
+        source_deferral_project_toml=lambda project_name, dev, prod: (
+            build_bigquery_source_deferral_project_toml(
+                project_name=project_name, dev_dataset_name=dev, prod_dataset_name=prod
+            )
+        ),
+        ensure_schema=lambda schema_name: ensure_bigquery_dataset_ready(dataset_name=schema_name),
+        cleanup_schema=lambda schema_name: cleanup_bigquery_dataset(dataset_name=schema_name),
+        fetch_rows=lambda schema_name, sql: fetch_bigquery_rows(dataset_name=schema_name, sql=sql),
+        execute_sql=lambda schema_name, sql: execute_bigquery_sql(
+            dataset_name=schema_name, sql=sql
+        ),
+        relation=lambda schema_name, name: relation_name(dataset_name=schema_name, name=name),
+        prepare_source_loader_strategies=lambda tmp_path: prepare_bigquery_source_loader_strategies(
+            tmp_path=tmp_path
+        ),
+        deferral_text_type="STRING",
+        seeds_with_ctas=True,
+        local_files=lambda schema_name: {
+            "sqlbuild_local.toml": build_bigquery_local_config(location=location)
+        },
+        scenario_relation_names=lambda schema_name: list_bigquery_scenario_relation_names(
+            dataset_name=schema_name
+        ),
     )

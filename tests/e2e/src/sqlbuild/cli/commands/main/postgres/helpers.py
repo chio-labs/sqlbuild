@@ -12,12 +12,12 @@ from typing import Any
 import pytest
 
 from sqlbuild.adapters.postgres.classes.postgres_adapter import PostgresAdapter
+from tests.e2e.src.sqlbuild.cli.commands.main.warehouses.harness import WarehouseHarness
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
     prepare_source_loader_strategies,
     prepare_waffle_shop,
     run_sqb,
-    stringify_warehouse_rows,
 )
 
 
@@ -176,117 +176,6 @@ def execute_postgres_sql(*, sql: str, config: dict[str, object]) -> None:
 
 def relation_name(*, schema_name: str, name: str) -> str:
     return f"{schema_name}.{name}"
-
-
-def assert_current_postgres_snapshot_rows_from_case(
-    *,
-    schema_name: str,
-    config: dict[str, object],
-    expected_rows: tuple[tuple[object, ...], ...],
-) -> None:
-    assert_current_postgres_snapshot_rows(
-        schema_name=schema_name,
-        config=config,
-        expected_rows=expected_rows,
-    )
-
-
-def assert_current_postgres_snapshot_rows(
-    *,
-    schema_name: str,
-    config: dict[str, object],
-    expected_rows: tuple[tuple[object, ...], ...],
-) -> None:
-    rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
-        sql=(
-            "SELECT customer_id, region_id, plan, "
-            "CAST(effective_from AS DATE), CAST(effective_to AS DATE) "
-            f"FROM {relation_name(schema_name=schema_name, name='current_customer_snapshot')} "
-            "ORDER BY customer_id, region_id, effective_from"
-        ),
-        config=config,
-    )
-    assert stringify_warehouse_rows(rows) == expected_rows
-
-
-def assert_postgres_snapshot_matrix_rows(
-    *,
-    schema_name: str,
-    config: dict[str, object],
-    expected_current_rows: tuple[tuple[object, ...], ...],
-    expected_historical_timestamp_rows: tuple[tuple[object, ...], ...],
-    expected_historical_check_rows: tuple[tuple[object, ...], ...],
-) -> None:
-    assert_current_postgres_snapshot_rows(
-        schema_name=schema_name,
-        config=config,
-        expected_rows=expected_current_rows,
-    )
-    historical_timestamp_rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
-        sql=(
-            "SELECT customer_id, plan, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
-            f"FROM {relation_name(schema_name=schema_name, name='historical_customer_snapshot')} "
-            "ORDER BY customer_id, valid_from"
-        ),
-        config=config,
-    )
-    historical_check_rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
-        sql=(
-            "SELECT customer_id, status, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
-            f"FROM {relation_name(schema_name=schema_name, name='historical_membership_snapshot')} "
-            "ORDER BY customer_id, valid_from"
-        ),
-        config=config,
-    )
-    assert stringify_warehouse_rows(historical_timestamp_rows) == expected_historical_timestamp_rows
-    assert stringify_warehouse_rows(historical_check_rows) == expected_historical_check_rows
-
-
-def assert_postgres_snapshot_apply_rows(
-    *,
-    schema_name: str,
-    config: dict[str, object],
-    expected_current_check_rows: tuple[tuple[object, ...], ...],
-    expected_current_delete_rows: tuple[tuple[object, ...], ...],
-    expected_historical_timestamp_rows: tuple[tuple[object, ...], ...],
-    expected_historical_check_rows: tuple[tuple[object, ...], ...],
-) -> None:
-    current_check_rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
-        sql=(
-            "SELECT customer_id, status, valid_to IS NULL "
-            f"FROM {relation_name(schema_name=schema_name, name='current_check_snapshot')} "
-            "ORDER BY customer_id, status, valid_to IS NULL"
-        ),
-        config=config,
-    )
-    current_delete_rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
-        sql=(
-            "SELECT customer_id, plan, valid_to IS NULL "
-            f"FROM {relation_name(schema_name=schema_name, name='current_delete_snapshot')} "
-            "ORDER BY customer_id, plan, valid_to IS NULL"
-        ),
-        config=config,
-    )
-    historical_timestamp_rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
-        sql=(
-            "SELECT customer_id, plan, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
-            f"FROM {relation_name(schema_name=schema_name, name='historical_timestamp_snapshot')} "
-            "ORDER BY customer_id, valid_from"
-        ),
-        config=config,
-    )
-    historical_check_rows: tuple[tuple[object, ...], ...] = fetch_postgres_rows(
-        sql=(
-            "SELECT customer_id, status, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
-            f"FROM {relation_name(schema_name=schema_name, name='historical_check_snapshot')} "
-            "ORDER BY customer_id, valid_from"
-        ),
-        config=config,
-    )
-    assert stringify_warehouse_rows(current_check_rows) == expected_current_check_rows
-    assert stringify_warehouse_rows(current_delete_rows) == expected_current_delete_rows
-    assert stringify_warehouse_rows(historical_timestamp_rows) == expected_historical_timestamp_rows
-    assert stringify_warehouse_rows(historical_check_rows) == expected_historical_check_rows
 
 
 def prepare_postgres_waffle_shop(*, tmp_path: Path, config: dict[str, object]) -> tuple[Path, str]:
@@ -938,4 +827,36 @@ def postgres_relation_names(
             ),
             config=config,
         )
+    )
+
+
+def postgres_harness(config: dict[str, object]) -> WarehouseHarness:
+    """Return the shared real-warehouse scenario hooks for one Postgres server."""
+
+    return WarehouseHarness(
+        name="postgres",
+        unique_schema=lambda prefix: build_unique_schema_name(prefix=prefix),
+        project_toml=lambda project_name, schema_name: build_postgres_project_toml(
+            project_name=project_name, schema_name=schema_name, config=config
+        ),
+        source_deferral_project_toml=lambda project_name, dev, prod: (
+            build_postgres_source_deferral_project_toml(
+                project_name=project_name,
+                dev_schema_name=dev,
+                prod_schema_name=prod,
+                config=config,
+            )
+        ),
+        ensure_schema=lambda schema_name: ensure_postgres_schema_ready(
+            schema_name=schema_name, config=config
+        ),
+        cleanup_schema=lambda schema_name: cleanup_postgres_schema(
+            schema_name=schema_name, config=config
+        ),
+        fetch_rows=lambda schema_name, sql: fetch_postgres_rows(sql=sql, config=config),
+        execute_sql=lambda schema_name, sql: execute_postgres_sql(sql=sql, config=config),
+        relation=lambda schema_name, name: relation_name(schema_name=schema_name, name=name),
+        prepare_source_loader_strategies=lambda tmp_path: prepare_postgres_source_loader_strategies(
+            tmp_path=tmp_path, config=config
+        ),
     )

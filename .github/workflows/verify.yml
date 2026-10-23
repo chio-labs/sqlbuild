@@ -182,6 +182,12 @@ jobs:
                 duckdb=true
                 format_performance=true
                 ;;
+              tests/e2e/src/sqlbuild/cli/commands/main/warehouses/*|tests/e2e/src/sqlbuild/cli/commands/main/conftest.py)
+                # Scenarios and server fixtures shared by the PostgreSQL and ClickHouse suites.
+                duckdb=true
+                postgres=true
+                clickhouse=true
+                ;;
               tests/e2e/src/sqlbuild/cli/commands/main/postgres/*|tests/integration/src/sqlbuild/adapters/postgres/*|tests/integration/src/sqlbuild/runtime/execution_history/*)
                 postgres=true
                 ;;

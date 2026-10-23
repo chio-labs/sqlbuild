@@ -6,10 +6,10 @@ from pathlib import Path
 from typing import Any
 
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
+from tests.e2e.src.sqlbuild.cli.commands.main.warehouses.harness import WarehouseHarness
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_source_loader_strategies,
     prepare_waffle_shop,
-    stringify_warehouse_rows,
 )
 from tests.integration.src.sqlbuild.adapters.snowflake.helpers import (
     build_snowflake_connection_config,
@@ -188,16 +188,6 @@ def list_snowflake_scenario_relation_names(*, schema_name: str) -> tuple[str, ..
     return tuple(str(row[0]) for row in rows)
 
 
-def snowflake_relation_row_count(*, schema_name: str, relation: str) -> int:
-    """Return row count for one Snowflake relation."""
-
-    rows: tuple[tuple[object, ...], ...] = fetch_snowflake_rows(
-        schema_name=schema_name,
-        sql=f"SELECT COUNT(*) FROM {relation_name(schema_name=schema_name, name=relation)}",
-    )
-    return int(str(rows[0][0]))
-
-
 def relation_name(*, schema_name: str, name: str) -> str:
     """Return a fully qualified relation name for a Snowflake e2e schema."""
 
@@ -284,114 +274,6 @@ def write_local_environment_override(*, project_dir: Path, environment: str) -> 
     )
 
 
-def assert_current_snowflake_snapshot_rows(
-    *, schema_name: str, expected_rows: tuple[tuple[object, ...], ...]
-) -> None:
-    """Assert current snapshot rows for Snowflake real-warehouse e2e tests."""
-
-    rows: tuple[tuple[object, ...], ...] = fetch_snowflake_rows(
-        schema_name=schema_name,
-        sql=(
-            "SELECT customer_id, region_id, plan, CAST(effective_from AS DATE), "
-            "CAST(effective_to AS DATE) "
-            f"FROM {relation_name(schema_name=schema_name, name='current_customer_snapshot')} "
-            "ORDER BY customer_id, region_id, effective_from"
-        ),
-    )
-    assert stringify_warehouse_rows(rows) == expected_rows
-
-
-def assert_snowflake_snapshot_matrix_rows(
-    *,
-    schema_name: str,
-    expected_current_rows: tuple[tuple[object, ...], ...],
-    expected_historical_timestamp_rows: tuple[tuple[object, ...], ...],
-    expected_historical_check_rows: tuple[tuple[object, ...], ...],
-) -> None:
-    """Assert all compact snapshot matrix rows for Snowflake."""
-
-    assert_current_snowflake_snapshot_rows(
-        schema_name=schema_name,
-        expected_rows=expected_current_rows,
-    )
-    historical_timestamp_rows: tuple[tuple[object, ...], ...] = fetch_snowflake_rows(
-        schema_name=schema_name,
-        sql=(
-            "SELECT customer_id, plan, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
-            f"FROM {relation_name(schema_name=schema_name, name='historical_customer_snapshot')} "
-            "ORDER BY customer_id, valid_from"
-        ),
-    )
-    historical_check_rows: tuple[tuple[object, ...], ...] = fetch_snowflake_rows(
-        schema_name=schema_name,
-        sql=(
-            "SELECT customer_id, status, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
-            f"FROM {relation_name(schema_name=schema_name, name='historical_membership_snapshot')} "
-            "ORDER BY customer_id, valid_from"
-        ),
-    )
-    actual_historical_timestamp_rows: tuple[tuple[object, ...], ...] = stringify_warehouse_rows(
-        historical_timestamp_rows
-    )
-    actual_historical_check_rows: tuple[tuple[object, ...], ...] = stringify_warehouse_rows(
-        historical_check_rows
-    )
-    assert actual_historical_timestamp_rows == expected_historical_timestamp_rows, (
-        actual_historical_timestamp_rows
-    )
-    assert actual_historical_check_rows == expected_historical_check_rows, (
-        actual_historical_check_rows
-    )
-
-
-def assert_snowflake_snapshot_apply_rows(
-    *,
-    schema_name: str,
-    expected_current_check_rows: tuple[tuple[object, ...], ...],
-    expected_current_delete_rows: tuple[tuple[object, ...], ...],
-    expected_historical_timestamp_rows: tuple[tuple[object, ...], ...],
-    expected_historical_check_rows: tuple[tuple[object, ...], ...],
-) -> None:
-    """Assert existing-target snapshot apply rows for Snowflake."""
-
-    current_check_rows: tuple[tuple[object, ...], ...] = fetch_snowflake_rows(
-        schema_name=schema_name,
-        sql=(
-            "SELECT customer_id, status, valid_to IS NULL "
-            f"FROM {relation_name(schema_name=schema_name, name='current_check_snapshot')} "
-            "ORDER BY customer_id, status, valid_to IS NULL"
-        ),
-    )
-    current_delete_rows: tuple[tuple[object, ...], ...] = fetch_snowflake_rows(
-        schema_name=schema_name,
-        sql=(
-            "SELECT customer_id, plan, valid_to IS NULL "
-            f"FROM {relation_name(schema_name=schema_name, name='current_delete_snapshot')} "
-            "ORDER BY customer_id, plan, valid_to IS NULL"
-        ),
-    )
-    historical_timestamp_rows: tuple[tuple[object, ...], ...] = fetch_snowflake_rows(
-        schema_name=schema_name,
-        sql=(
-            "SELECT customer_id, plan, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
-            f"FROM {relation_name(schema_name=schema_name, name='historical_timestamp_snapshot')} "
-            "ORDER BY customer_id, valid_from"
-        ),
-    )
-    historical_check_rows: tuple[tuple[object, ...], ...] = fetch_snowflake_rows(
-        schema_name=schema_name,
-        sql=(
-            "SELECT customer_id, status, CAST(valid_from AS DATE), CAST(valid_to AS DATE) "
-            f"FROM {relation_name(schema_name=schema_name, name='historical_check_snapshot')} "
-            "ORDER BY customer_id, valid_from"
-        ),
-    )
-    assert stringify_warehouse_rows(current_check_rows) == expected_current_check_rows
-    assert stringify_warehouse_rows(current_delete_rows) == expected_current_delete_rows
-    assert stringify_warehouse_rows(historical_timestamp_rows) == expected_historical_timestamp_rows
-    assert stringify_warehouse_rows(historical_check_rows) == expected_historical_check_rows
-
-
 def build_snowflake_dbt_profiles_yml(*, schema_name: str, config: dict[str, object]) -> str:
     """Build a dbt profiles.yml pointing analytics/dev at the Snowflake warehouse."""
 
@@ -448,4 +330,39 @@ def write_snowflake_dbt_scenario_date_trunc_model(*, sqlbuild_project_dir: Path)
         ")\n"
         "SELECT 1\n",
         encoding="utf-8",
+    )
+
+
+def snowflake_harness() -> WarehouseHarness:
+    """Return the shared real-warehouse scenario hooks for Snowflake."""
+
+    return WarehouseHarness(
+        name="snowflake",
+        unique_schema=lambda prefix: build_unique_schema_name(prefix=prefix),
+        project_toml=lambda project_name, schema_name: build_snowflake_project_toml(
+            project_name=project_name, schema_name=schema_name
+        ),
+        source_deferral_project_toml=lambda project_name, dev, prod: (
+            build_snowflake_source_deferral_project_toml(
+                project_name=project_name, dev_schema_name=dev, prod_schema_name=prod
+            )
+        ),
+        ensure_schema=lambda schema_name: ensure_query_schema_ready(schema_name=schema_name),
+        cleanup_schema=lambda schema_name: cleanup_snowflake_schema(schema_name=schema_name),
+        fetch_rows=lambda schema_name, sql: fetch_snowflake_rows(schema_name=schema_name, sql=sql),
+        execute_sql=lambda schema_name, sql: execute_snowflake_sql(
+            schema_name=schema_name, sql=sql
+        ),
+        relation=lambda schema_name, name: relation_name(schema_name=schema_name, name=name),
+        prepare_source_loader_strategies=lambda tmp_path: (
+            prepare_snowflake_source_loader_strategies(tmp_path=tmp_path)
+        ),
+        local_files=lambda schema_name: {
+            "sqlbuild_local.toml": build_snowflake_local_config(schema_name=schema_name)
+        },
+        seeds_with_ctas=True,
+        dlt_schemas=lambda schema_base: (f"{schema_base}_MODELS", f"{schema_base}_raw".lower()),
+        scenario_relation_names=lambda schema_name: list_snowflake_scenario_relation_names(
+            schema_name=schema_name
+        ),
     )
