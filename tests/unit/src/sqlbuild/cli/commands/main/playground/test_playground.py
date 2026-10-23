@@ -38,9 +38,9 @@ from tests.unit.src.sqlbuild.presentation.helpers import use_color_terminal
                 Path("functions/sql/udf__is_completed_order.sql"),
                 Path("functions/sql/table_fn__customer_orders.sql"),
                 Path("python/loaders/waffle_sources.py"),
-                Path("macros/currency.py"),
-                Path("models/marts/_sqlbuild/_macros/currency.py"),
-                Path("models/marts/_sqlbuild/_macros/datetime.py"),
+                Path("macros/python/currency.py"),
+                Path("models/marts/_sqlbuild/_macros/python/currency.py"),
+                Path("models/marts/_sqlbuild/_macros/python/datetime.py"),
                 Path("materializations/partition_tracked.py"),
             ),
             unexpected_paths=(

@@ -89,7 +89,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.rules.helpers import (
         RulesCacheEditCase(
             "macro_edit",
             lambda root: replace_project_text(
-                root, "models/marts/_sqlbuild/_macros/amounts.py", "* 0.9", "* 0.8"
+                root, "models/marts/_sqlbuild/_macros/python/amounts.py", "* 0.9", "* 0.8"
             ),
         ),
         RulesCacheEditCase(

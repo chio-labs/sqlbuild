@@ -23,7 +23,7 @@ _OPTIONAL_CEREMONY_PROJECT_FILES: dict[str, str] = {
         '[connection]\ndatabase = "optional_ceremony.duckdb"\n\n'
         '[defaults]\nmaterialized = "table"\n'
     ),
-    "macros/status.py": (
+    "macros/python/status.py": (
         'def normalize_status(value: str) -> str:\n    return f"LOWER(TRIM({value}))"\n'
     ),
     "sources/raw_orders.yml": (
@@ -37,7 +37,7 @@ _OPTIONAL_CEREMONY_PROJECT_FILES: dict[str, str] = {
     ),
     "models/orders.sql": (
         "MODEL (description 'Test model orders.');\n\n"
-        'SELECT order_id, @normalize_status("status") AS status FROM __source("raw_orders")\n'
+        'SELECT order_id, @py.normalize_status("status") AS status FROM __source("raw_orders")\n'
     ),
 }
 
@@ -128,10 +128,10 @@ def build_chain_test_project_files(*, sql_analysis_enabled: bool) -> dict[str, s
             "MODEL (description 'Test model stg_orders.', materialized table);\n\n"
             "SELECT\n"
             "  id,\n"
-            "  @mocked_amount() AS amount,\n"
-            "  @mocked_country() AS country,\n"
-            "  @mocked_literal_text() AS literal_text,\n"
-            "  @real_status() AS status\n"
+            "  @py.mocked_amount() AS amount,\n"
+            "  @py.mocked_country() AS country,\n"
+            "  @py.mocked_literal_text() AS literal_text,\n"
+            "  @py.real_status() AS status\n"
             'FROM __source("raw")'
         ),
         "models/fact_orders.sql": (
@@ -144,7 +144,7 @@ def build_chain_test_project_files(*, sql_analysis_enabled: bool) -> dict[str, s
             "  status\n"
             'FROM __ref("stg_orders")'
         ),
-        "models/_macros/test_macros.py": (
+        "models/_macros/python/test_macros.py": (
             "def mocked_amount() -> str:\n"
             '    return "0"\n\n'
             "def mocked_country() -> str:\n"
@@ -1181,19 +1181,19 @@ def build_macro_test_project_files() -> dict[str, str]:
             "[defaults]\n"
             'materialized = "table"\n'
         ),
-        "macros/status.py": (
+        "macros/python/status.py": (
             'def normalize_status(value: str) -> str:\n    return f"LOWER(TRIM({value}))"\n'
         ),
         "models/orders.sql": (
             "MODEL (description 'Test model orders.', "
-            "materialized table);\n\nSELECT @normalize_status(\"'  PAID  '\") AS status\n"
+            "materialized table);\n\nSELECT @py.normalize_status(\"'  PAID  '\") AS status\n"
         ),
         "tests/unit/test_normalize_status.sql": (
             'TEST (mode macro, name "normalizes_status");\n\n'
             "WITH\n"
             "input_values AS (SELECT '  PAID  ' AS raw_status),\n"
             "__macro_actual__ AS (\n"
-            '  SELECT @normalize_status("raw_status") AS status FROM input_values\n'
+            '  SELECT @py.normalize_status("raw_status") AS status FROM input_values\n'
             "),\n"
             "__macro_expected__ AS (SELECT 'paid' AS status)\n"
             "SELECT 1\n"
@@ -2165,7 +2165,7 @@ def build_since_project_files() -> dict[str, str]:
             '[defaults]\nmaterialized = "table"\n'
         ),
         ".gitignore": "target/\n*.duckdb\n*.duckdb.wal\n",
-        "models/_macros/money.py": (
+        "models/_macros/python/money.py": (
             "def cents_to_dollars(expression: str) -> str:\n"
             '    return f"CAST({expression} AS DOUBLE) / 100"\n'
         ),
@@ -2184,7 +2184,7 @@ def build_since_project_files() -> dict[str, str]:
         ),
         "models/order_totals.sql": (
             "MODEL (description 'Order totals in dollars.');\n\n"
-            'SELECT order_id, @cents_to_dollars("amount_cents") AS amount\n'
+            'SELECT order_id, @py.cents_to_dollars("amount_cents") AS amount\n'
             'FROM __ref("stg_orders")\n'
         ),
         "models/open_orders.sql": (
@@ -2223,6 +2223,33 @@ def build_since_project_files() -> dict[str, str]:
     }
 
 
+def build_since_sql_macro_files() -> dict[str, str]:
+    """Build a model whose scoped SQL macro calls another scoped SQL macro, and its test."""
+
+    return {
+        "models/_macros/sql/round_cents.sql": (
+            "MACRO (\n  description 'Cents rounded to whole dollars.',\n"
+            "  arguments (cents INTEGER),\n  returns DOUBLE,\n);\n\n"
+            "ROUND(CAST(@cents AS DOUBLE) / 100, 0)\n"
+        ),
+        "models/_macros/sql/net_dollars.sql": (
+            "MACRO (\n  description 'Net dollars after a fixed fee.',\n"
+            "  arguments (cents INTEGER),\n  returns DOUBLE,\n);\n\n"
+            "@sql.round_cents(@cents) - 1\n"
+        ),
+        "models/order_net.sql": (
+            "MODEL (description 'Net order amounts.');\n\n"
+            "SELECT order_id, @sql.net_dollars(amount_cents) AS net\n"
+            'FROM __ref("stg_orders")\n'
+        ),
+        "tests/unit/test_order_net.sql": (
+            "TEST ();\n\nWITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents),\n"
+            "__expected__order_net AS (SELECT 1 AS order_id, 2.0 AS net)\nSELECT 1\n"
+        ),
+    }
+
+
 def build_since_indirect_files() -> dict[str, str]:
     """Build files that reach tests indirectly: variables, defaults, helpers, seeds, functions."""
 
@@ -2233,23 +2260,23 @@ def build_since_indirect_files() -> dict[str, str]:
             + '\n[vars]\nmin_amount = "100"\n\n[scopes]\nenforce_placement = false\n'
         ),
         "python/_rates.py": 'DIVISOR = "100"\n',
-        "models/_macros/currency.py": (
+        "models/_macros/python/currency.py": (
             'def whole_cents(expression: str) -> str:\n    return f"({expression} * 1)"\n'
         ),
-        "models/_macros/money.py": (
-            "from models._macros.currency import whole_cents\n"
+        "models/_macros/python/money.py": (
+            "from models._macros.python.currency import whole_cents\n"
             "from python._rates import DIVISOR\n\n\n"
             "def cents_to_dollars(expression: str) -> str:\n"
             '    return f"CAST({whole_cents(expression)} AS DOUBLE) / {DIVISOR}"\n'
         ),
-        "macros/taxes.py": (
+        "macros/python/taxes.py": (
             'def with_tax(expression: str) -> str:\n    return f"({expression} + 0)"\n'
         ),
-        "macros/pricing.py": (
-            "from macros.taxes import with_tax\n\n\n"
+        "macros/python/pricing.py": (
+            "from macros.python.taxes import with_tax\n\n\n"
             "def gross(expression: str) -> str:\n    return with_tax(expression)\n"
         ),
-        "macros/fixture_values.py": "def suffix() -> str:\n    return \"''\"\n",
+        "macros/python/fixture_values.py": "def suffix() -> str:\n    return \"''\"\n",
         "models/stg_orders.sql": (
             "MODEL (\n  description 'Cleaned orders.',\n"
             "  columns (order_id (type INTEGER), status (type VARCHAR), "
@@ -2258,7 +2285,7 @@ def build_since_indirect_files() -> dict[str, str]:
         ),
         "models/order_gross.sql": (
             "MODEL (description 'Gross order amounts.');\n\n"
-            'SELECT order_id, @gross("amount_cents") AS gross_cents FROM __ref("stg_orders")\n'
+            'SELECT order_id, @py.gross("amount_cents") AS gross_cents FROM __ref("stg_orders")\n'
         ),
         "models/order_day.sql": (
             "MODEL (description 'The UTC day of a fixed timestamp.');\n\n"
@@ -2279,10 +2306,10 @@ def build_since_indirect_files() -> dict[str, str]:
             'TEST (name "status_cases", parameters (status string), '
             'cases (open_case (status "open"), closed_case (status "closed")));\n\n'
             "WITH\n__source__raw_orders AS (\n"
-            '  SELECT 1 AS order_id, @param("status") || @suffix() AS status, '
+            '  SELECT 1 AS order_id, @param("status") || @py.suffix() AS status, '
             "250 AS amount_cents\n),\n"
             "__expected__stg_orders AS (\n"
-            '  SELECT 1 AS order_id, @param("status") || @suffix() AS status\n)\nSELECT 1\n'
+            '  SELECT 1 AS order_id, @param("status") || @py.suffix() AS status\n)\nSELECT 1\n'
         ),
         "audits/generic/at_least.sql": (
             'AUDIT ();\n\nSELECT *\nFROM __ref("@model")\nWHERE @column < @minimum\n'
@@ -2290,7 +2317,7 @@ def build_since_indirect_files() -> dict[str, str]:
         "models/order_totals.sql": (
             "MODEL (\n  description 'Order totals in dollars.',\n"
             "  audits [at_least (column amount, minimum 0)],\n);\n\n"
-            'SELECT order_id, @cents_to_dollars("amount_cents") AS amount\n'
+            'SELECT order_id, @py.cents_to_dollars("amount_cents") AS amount\n'
             'FROM __ref("stg_orders")\n'
         ),
         "models/big_orders.sql": (

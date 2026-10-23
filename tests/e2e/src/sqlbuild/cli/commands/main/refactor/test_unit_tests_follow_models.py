@@ -43,7 +43,7 @@ _SHARED_FILES: dict[str, str] = {
 }
 
 _SAMPLE_AMOUNT_MACRO: str = 'def sample_amount() -> str:\n    return "{amount}"\n'
-_MARTS_MACRO: str = "tests/unit/marts/_sqlbuild/_macros/sample_amount.py"
+_MARTS_MACRO: str = "tests/unit/marts/_sqlbuild/_macros/python/sample_amount.py"
 _KEPT_NOTE: str = (
     "└── tests/unit/marts/test_order_facts__keeps_orders.sql  kept in its folder: {declaration} "
     "would not resolve to the same declaration from tests/unit/reporting"
@@ -149,7 +149,7 @@ def test_given_dry_run_when_renaming_model_with_unit_test_then_reports_move_and_
         ScopedUnitTestMoveE2ETestCase(
             description="a folder-scoped test macro keeps the test in its folder",
             extra_files={_MARTS_MACRO: _SAMPLE_AMOUNT_MACRO.format(amount=25)},
-            amount_sql="@sample_amount()",
+            amount_sql="@py.sample_amount()",
             expected_path="tests/unit/marts/test_order_facts__keeps_orders.sql",
             expected_notes=(_KEPT_NOTE.format(declaration="macro:sample_amount"),),
         ),

@@ -32,7 +32,7 @@ The same three placements apply to every kind of reusable declaration used by na
 
 | Kind | Project-wide role | Owner and below | Owner folder only |
 |------|-------------------|-----------------|-------------------|
-| Macros | `macros/` | `_sqlbuild/macros/` | `_sqlbuild/_macros/` |
+| Macros | `macros/python/`, `macros/sql/` | `_sqlbuild/macros/python/`, `_sqlbuild/macros/sql/` | `_sqlbuild/_macros/python/`, `_sqlbuild/_macros/sql/` |
 | Enums | `enums/` | `_sqlbuild/enums/` | `_sqlbuild/_enums/` |
 | Constants | `constants/` | `_sqlbuild/constants/` | `_sqlbuild/_constants/` |
 | Generic audits | `audits/generic/` | `_sqlbuild/audits/generic/` | `_sqlbuild/_audits/generic/` |

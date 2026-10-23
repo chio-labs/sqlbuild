@@ -30,8 +30,8 @@ fn given_argument_text_when_parsing_then_values_match_python_literals() {
         },
         ParseMacroArgumentsTestCase {
             description: "nested calls fill their spans, even under unary minus",
-            text: "@m(1), -@n()",
-            nested: &[(0, 5), (8, 12)],
+            text: "@py.m(1), -@py.n()",
+            nested: &[(0, 8), (11, 18)],
             expected_plan: "Ok(MacroArguments { positional: [NestedCall(0), Negative(NestedCall(1))], keywords: [], typed_references: [] })",
         },
         ParseMacroArgumentsTestCase {
@@ -158,19 +158,19 @@ fn given_argument_text_when_parsing_then_values_match_python_literals() {
             description: "a missing comma between numbers",
             text: "1 2",
             nested: &[],
-            expected_plan: "Err(ArgumentError { detail: \"could not be parsed: a comma is missing between arguments\", help: \"Separate arguments, and the items of lists, tuples and dicts, with commas, for example @cents(\'amount\', 2)\", line: 1, column: 3 })",
+            expected_plan: "Err(ArgumentError { detail: \"could not be parsed: a comma is missing between arguments\", help: \"Separate arguments, and the items of lists, tuples and dicts, with commas, for example @py.cents(\'amount\', 2)\", line: 1, column: 3 })",
         },
         ParseMacroArgumentsTestCase {
             description: "a missing comma between list items",
             text: "[1 'a']",
             nested: &[],
-            expected_plan: "Err(ArgumentError { detail: \"could not be parsed: a comma is missing between arguments\", help: \"Separate arguments, and the items of lists, tuples and dicts, with commas, for example @cents(\'amount\', 2)\", line: 1, column: 4 })",
+            expected_plan: "Err(ArgumentError { detail: \"could not be parsed: a comma is missing between arguments\", help: \"Separate arguments, and the items of lists, tuples and dicts, with commas, for example @py.cents(\'amount\', 2)\", line: 1, column: 4 })",
         },
         ParseMacroArgumentsTestCase {
             description: "a missing comma between nested calls",
-            text: "@inner(1) @inner(2)",
-            nested: &[(0, 9), (10, 19)],
-            expected_plan: "Err(ArgumentError { detail: \"could not be parsed: a comma is missing between arguments\", help: \"Separate arguments, and the items of lists, tuples and dicts, with commas, for example @cents(\'amount\', 2)\", line: 1, column: 11 })",
+            text: "@py.inner(1) @py.inner(2)",
+            nested: &[(0, 12), (13, 25)],
+            expected_plan: "Err(ArgumentError { detail: \"could not be parsed: a comma is missing between arguments\", help: \"Separate arguments, and the items of lists, tuples and dicts, with commas, for example @py.cents(\'amount\', 2)\", line: 1, column: 14 })",
         },
         ParseMacroArgumentsTestCase {
             description: "a doubled comma",

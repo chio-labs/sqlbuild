@@ -30,6 +30,7 @@ from scripts.compiler_differential.constants import (
     GENERATOR_MISSING_ENV_VAR,
     GENERATOR_NON_ASCII_DESCRIPTION_SHARE,
     GENERATOR_NON_ASCII_LABELS,
+    GENERATOR_PYTHON_MACRO_FOLDER,
     GENERATOR_RARE_FEATURE_BLOCKS,
     GENERATOR_REGION_ENV_VAR,
     GENERATOR_ROLES,
@@ -430,7 +431,7 @@ class ProjectBuilder:
             '    """Scale an amount by the configured discount."""\n'
             '    rate = ctx.vars["discount_rate"]\n'
             '    return f"({expression} * (1 - {rate}))"\n',
-            f'@{name}("amount") AS {name}_amount',
+            f'@py.{name}("amount") AS {name}_amount',
         )
 
     def _environment_macro(self, name: str) -> tuple[str, str]:
@@ -441,7 +442,7 @@ class ProjectBuilder:
             '    """Tag an amount with the deployment region."""\n'
             f'    region = os.environ.get("{GENERATOR_REGION_ENV_VAR}", "east")\n'
             "    return f\"({expression} + LENGTH('{region}'))\"\n",
-            f'@{name}("amount") AS {name}_amount',
+            f'@py.{name}("amount") AS {name}_amount',
         )
 
     def _nested_macro(self, name: str) -> tuple[str, str]:
@@ -453,7 +454,7 @@ class ProjectBuilder:
             f"def {name}(expression: str) -> str:\n"
             '    """Double and round an amount."""\n'
             f'    return {name}_round(f"({{expression}} * 2)")\n',
-            f'@{name}_round(@{name}("amount")) AS {name}_amount',
+            f'@py.{name}_round(@py.{name}("amount")) AS {name}_amount',
         )
 
     def _plain_macro(self, name: str) -> tuple[str, str]:
@@ -462,7 +463,7 @@ class ProjectBuilder:
             f"def {name}(expression: str) -> str:\n"
             '    """Offset an amount."""\n'
             f'    return f"({{expression}} + {offset} + 1)"\n',
-            f'@{name}("amount") AS {name}_amount',
+            f'@py.{name}("amount") AS {name}_amount',
         )
 
     def _write_declarations(self) -> None:
@@ -470,6 +471,8 @@ class ProjectBuilder:
             if declaration.private:
                 continue
             directory: str = self._placement(declaration)
+            if declaration.kind == GENERATOR_MACRO_KIND:
+                directory = f"{directory}/{GENERATOR_PYTHON_MACRO_FOLDER}"
             suffix: str = GENERATOR_SUFFIXES[declaration.kind]
             self._files[f"{directory}/{declaration.name}{suffix}"] = declaration.body
 
@@ -630,7 +633,7 @@ class ProjectBuilder:
         path: str = f"{model.folder}/{model.name}.sql"
         injections: dict[str, Callable[[ModelPlan], str]] = {
             "unknown_ref": lambda _: '(SELECT 1 FROM __ref("missing_model")) AS missing',
-            "unknown_macro": lambda _: '@not_a_macro("id") AS bogus',
+            "unknown_macro": lambda _: '@py.not_a_macro("id") AS bogus',
             "failing_macro": self._failing_macro_column,
             "unknown_enum_member": lambda _: '@enum("event_status").MISSING AS bogus',
             "unknown_constant": lambda _: '@const("no_such_value") AS bogus',
@@ -644,12 +647,12 @@ class ProjectBuilder:
             self._files[path] = self._files[path].replace("SELECT\n", f"SELECT\n  {column},\n", 1)
 
     def _failing_macro_column(self, model: ModelPlan) -> str:
-        self._files[f"{model.folder}/_sqlbuild/_macros/explode.py"] = (
+        self._files[f"{model.folder}/_sqlbuild/_macros/python/explode.py"] = (
             "def explode(expression: str) -> str:\n"
             '    """Refuse every input."""\n'
             '    raise ValueError(f"cannot adjust {expression}")\n'
         )
-        return '@explode("id") AS bogus'
+        return '@py.explode("id") AS bogus'
 
     def _drop_description(self, model: ModelPlan) -> str:
         path: str = f"{model.folder}/{model.name}.sql"
@@ -659,7 +662,7 @@ class ProjectBuilder:
 
     def _duplicate_macro(self, model: ModelPlan) -> str:
         _ = model
-        self._files["macros/duplicate_adjust_0.py"] = (
+        self._files["macros/python/duplicate_adjust_0.py"] = (
             "def adjust_0(expression: str) -> str:\n"
             '    """Duplicate a macro name."""\n'
             "    return expression\n"

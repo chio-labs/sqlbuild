@@ -1365,7 +1365,7 @@ schema = "preserve"
             description="expands macros in model query and sql interpolation in hook strings",
             repo_files=base_repo_files()
             | {
-                "macros/common.py": """
+                "macros/python/common.py": """
 def project_columns(ctx) -> str:
     optional_suffix = "" if ctx.vars["optional_suffix"] is None else ctx.vars["optional_suffix"]
     return (
@@ -1401,10 +1401,10 @@ database = "analytics"
                 "models/staging/orders.sql": """
 MODEL (description "Test model orders.",
   alias orders_dev,
-  post_hooks [inline_sql('@grant_select("@@CTX:destination.qualified")')],
+  post_hooks [inline_sql('@py.grant_select("@@CTX:destination.qualified")')],
 );
 
-select @project_columns() from __source("raw_orders")
+select @py.project_columns() from __source("raw_orders")
 """.strip()
                 + "\n",
                 "tests/unit/orders_test.sql": """
@@ -1412,11 +1412,11 @@ TEST ();
 
 WITH
 __source__raw_orders AS (
-  SELECT @project_columns()
+  SELECT @py.project_columns()
   FROM raw_orders
 ),
 __expected__orders AS (
-  SELECT @project_columns()
+  SELECT @py.project_columns()
 )
 SELECT 1
 """.strip()
@@ -1424,7 +1424,7 @@ SELECT 1
                 "audits/singular/orders.sql": """
 AUDIT ();
 
-SELECT @project_columns() FROM __source("raw_orders") JOIN __ref("orders") USING (order_id)
+SELECT @py.project_columns() FROM __source("raw_orders") JOIN __ref("orders") USING (order_id)
 """.strip()
                 + "\n",
                 "sources/raw.yml": """
@@ -1580,7 +1580,7 @@ SELECT 1
             description="applies sql interpolation across all authored sql text fields",
             repo_files=base_repo_files()
             | {
-                "macros/common.py": """
+                "macros/python/common.py": """
 def source_columns() -> str:
     return "1 AS id"
 """.strip()
@@ -1656,7 +1656,7 @@ sources:
   - name: raw_orders
     description: Test source raw_orders.
     expression: |
-      SELECT @source_columns(), '@@ENV:USER_NAME' AS loaded_by
+      SELECT @py.source_columns(), '@@ENV:USER_NAME' AS loaded_by
       FROM @@raw_schema.raw_orders
   - name: raw_table
     description: Test source raw_table.
@@ -1966,7 +1966,7 @@ def optional_positional_only(ctx, channel="alerts", /):
                 "models/orders.sql": """
 MODEL (description "Test model orders.",
   post_hooks [
-    python("notify", message: "@@CTX:destination.qualified", macro_text: "@format_message()"),
+    python("notify", message: "@@CTX:destination.qualified", macro_text: "@py.format_message()"),
   ],
 );
 
@@ -1995,7 +1995,7 @@ def notify(ctx, message, macro_text):
                             name="notify",
                             kwargs={
                                 "message": "@@CTX:destination.qualified",
-                                "macro_text": "@format_message()",
+                                "macro_text": "@py.format_message()",
                             },
                         ),
                     ],
@@ -2014,7 +2014,7 @@ def notify(ctx, message, macro_text):
             description="expands vars and macros in sql function bodies and headers",
             repo_files=base_repo_files()
             | {
-                "macros/common.py": """
+                "macros/python/common.py": """
 def status_match(column_name: str, status: str) -> str:
     return f"{column_name} = '{status}'"
 """.strip()
@@ -2047,7 +2047,7 @@ FUNCTION (description "Test function is_completed_order.",
   returns ${return_type},
 );
 
-@status_match("order_status", "completed") AND order_status <> @@cancelled_status
+@py.status_match("order_status", "completed") AND order_status <> @@cancelled_status
 """.strip()
                 + "\n",
             },
@@ -2210,7 +2210,7 @@ FROM (VALUES (1, 'open')) AS orders(order_id, status)
             description="expands macros across multi block tests and audits",
             repo_files=base_repo_files()
             | {
-                "macros/common.py": """
+                "macros/python/common.py": """
 def project_columns() -> str:
     return "order_id"
 """.strip()
@@ -2221,10 +2221,10 @@ TEST (name "first");
 
 WITH
 __ref__orders AS (
-  SELECT @project_columns() FROM raw_orders
+  SELECT @py.project_columns() FROM raw_orders
 ),
 __expected__orders AS (
-  SELECT @project_columns()
+  SELECT @py.project_columns()
 )
 SELECT 1;
 
@@ -2232,10 +2232,10 @@ TEST (name "second");
 
 WITH
 __ref__orders AS (
-  SELECT @project_columns() FROM raw_customers
+  SELECT @py.project_columns() FROM raw_customers
 ),
 __expected__orders AS (
-  SELECT @project_columns()
+  SELECT @py.project_columns()
 )
 SELECT 1
 """.strip()
@@ -2243,11 +2243,11 @@ SELECT 1
                 "audits/singular/orders.sql": """
 AUDIT (name "first");
 
-SELECT @project_columns() FROM __ref("orders") JOIN __source("raw_orders") USING (order_id);
+SELECT @py.project_columns() FROM __ref("orders") JOIN __source("raw_orders") USING (order_id);
 
 AUDIT (name "second");
 
-SELECT @project_columns() FROM __ref("orders") JOIN __source("raw_customers") USING (order_id)
+SELECT @py.project_columns() FROM __ref("orders") JOIN __source("raw_customers") USING (order_id)
 """.strip()
                 + "\n",
                 "sources/raw.yml": """
@@ -3679,13 +3679,13 @@ sources:
                 "tests/unit/orders_test.sql": """
 TEST ();
 
-SELECT @missing_macro()
+SELECT @py.missing_macro()
 """.strip()
                 + "\n",
             },
             selected_target=None,
             run_id=None,
-            expected_error_fragment="Unknown macro '@missing_macro'",
+            expected_error_fragment="Unknown macro '@py.missing_macro'",
         ),
         BuildCompileInputsErrorTestCase(
             description="raises when a compiled test body lacks top level test ctes",
@@ -3974,24 +3974,24 @@ SELECT 1
                 "audits/singular/orders.sql": """
 AUDIT ();
 
-SELECT @missing_macro()
+SELECT @py.missing_macro()
 """.strip()
                 + "\n",
             },
             selected_target=None,
             run_id=None,
-            expected_error_fragment="Unknown macro '@missing_macro'",
+            expected_error_fragment="Unknown macro '@py.missing_macro'",
         ),
         BuildCompileInputsErrorTestCase(
             description="raises when macro files collide during compile",
             repo_files=base_repo_files()
             | {
-                "macros/common.py": """
+                "macros/python/common.py": """
 def project_columns() -> str:
     return "order_id"
 """.strip()
                 + "\n",
-                "macros/nested/common.py": """
+                "macros/python/nested/common.py": """
 def project_columns() -> str:
     return "customer_id"
 """.strip()
@@ -4006,8 +4006,8 @@ def project_columns() -> str:
             description="raises when a macro identity is noncanonical",
             repo_files=base_repo_files()
             | {
-                "macros/orders.py": "def DailyOrders():\n    return 'order_id'\n",
-                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect @DailyOrders()\n",
+                "macros/python/orders.py": "def DailyOrders():\n    return 'order_id'\n",
+                "models/staging/orders.sql": "MODEL (description 'Test model orders.');\n\nselect @py.DailyOrders()\n",
             },
             selected_target=None,
             run_id=None,
@@ -4020,14 +4020,14 @@ def project_columns() -> str:
             description="raises when model config field contains a macro call",
             repo_files=base_repo_files()
             | {
-                "macros/common.py": """
+                "macros/python/common.py": """
 def dynamic_schema() -> str:
     return "marts"
 """.strip()
                 + "\n",
                 "models/staging/orders.sql": """
 MODEL (description "Test model orders.",
-  schema '@dynamic_schema()',
+  schema '@py.dynamic_schema()',
 );
 
 select 1

@@ -147,7 +147,7 @@ pub(super) fn analysis_lines(sql: &str) -> (String, Vec<String>) {
     (analysis.sql, tables)
 }
 
-/// A body at offset 10 whose one expansion turns `@m(x)` into a five-character call.
+/// A body at offset 10 whose one expansion turns `@py.m(x)` into a five-character call.
 pub(super) fn expansion_body() -> ModelBody {
     ModelBody {
         body_start: 10,

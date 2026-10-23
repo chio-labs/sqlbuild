@@ -12,6 +12,7 @@ use crate::assembly::analysis_session::_helpers::catalog_state::SessionCatalog;
 use crate::assembly::analysis_session::_helpers::mappings::ShapeTable;
 use crate::assembly::analysis_session::types::{NullabilityRuleFn, OutputSources, Pairs, Shapes};
 use crate::semantic_validation::models::DiagnosticRow;
+use crate::sql_macros::models::{SqlMacroCheck, SqlMacroFinding};
 
 /// One `ref`, `source`, `seed`, `table_fn` or `udf` call a model's SQL makes.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +43,8 @@ pub struct ModelRequest {
     /// The SQL Python's dynamic pivot proof parses: placeholders replaced by their defaults.
     pub pivot_sql: String,
     pub dynamic_families: Vec<DynamicFamily>,
+    /// What the model's analysed SQL must show for its SQL macro calls' arguments to fit.
+    pub sql_macro_checks: Vec<SqlMacroCheck>,
 }
 
 /// The reference-derived fields of a `ModelRequest`.
@@ -258,6 +261,8 @@ pub struct ModelOutcome {
     pub deferred_cleaning: Option<DeferredCleaning>,
     pub validated_schema: Shapes,
     pub fused_binding_validated: bool,
+    /// The SQL macro call arguments the analysed SQL shows do not fit; never cached.
+    pub sql_macro_findings: Vec<SqlMacroFinding>,
 }
 
 /// The finished run of the session: what Python records from it.

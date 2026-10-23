@@ -81,21 +81,21 @@ def test_given_unicode_before_intrinsics_when_preparing_then_lint_preserves_sema
         ),
         NeutralizeInterpolationTestCase(
             description="macro call including arguments becomes one sentinel",
-            body="SELECT @cents_to_dollars(amount_cents) AS amount",
+            body="SELECT @py.cents_to_dollars(amount_cents) AS amount",
             expected_neutralized="SELECT __sqb_lint_0__ AS amount",
-            expected_original_texts=("@cents_to_dollars(amount_cents)",),
+            expected_original_texts=("@py.cents_to_dollars(amount_cents)",),
         ),
         NeutralizeInterpolationTestCase(
             description="macro call with python valued arguments becomes one sentinel",
-            body="SELECT @pick(columns=['a', 'b']) AS chosen",
+            body="SELECT @py.pick(columns=['a', 'b']) AS chosen",
             expected_neutralized="SELECT __sqb_lint_0__ AS chosen",
-            expected_original_texts=("@pick(columns=['a', 'b'])",),
+            expected_original_texts=("@py.pick(columns=['a', 'b'])",),
         ),
         NeutralizeInterpolationTestCase(
             description="nested macro parentheses are matched",
-            body="SELECT @outer(@inner(x), y) AS v",
+            body="SELECT @py.outer(@py.inner(x), y) AS v",
             expected_neutralized="SELECT __sqb_lint_0__ AS v",
-            expected_original_texts=("@outer(@inner(x), y)",),
+            expected_original_texts=("@py.outer(@py.inner(x), y)",),
         ),
         NeutralizeInterpolationTestCase(
             description="quoted audit parameter becomes a sentinel",
@@ -233,30 +233,30 @@ def test_given_body_when_neutralizing_then_sentinels_replace_interpolation(
         DialectNeutralizeInterpolationTestCase(
             description="databricks backtick keeps a close paren inside a macro call",
             dialect="databricks",
-            body="SELECT @m(`a)b` x) AS y",
+            body="SELECT @py.m(`a)b` x) AS y",
             expected_neutralized="SELECT __sqb_lint_0__ AS y",
-            expected_original_texts=("@m(`a)b` x)",),
+            expected_original_texts=("@py.m(`a)b` x)",),
         ),
         DialectNeutralizeInterpolationTestCase(
             description="bigquery backtick apostrophe does not hide a later macro",
             dialect="bigquery",
-            body='SELECT `customer\'s id` AS customer_id, @label("order_id") AS order_id',
+            body='SELECT `customer\'s id` AS customer_id, @py.label("order_id") AS order_id',
             expected_neutralized="SELECT `customer's id` AS customer_id, __sqb_lint_0__ AS order_id",
-            expected_original_texts=('@label("order_id")',),
+            expected_original_texts=('@py.label("order_id")',),
         ),
         DialectNeutralizeInterpolationTestCase(
             description="postgres backtick remains ordinary code",
             dialect="postgres",
-            body="SELECT @m(`a)b` x) AS y",
+            body="SELECT @py.m(`a)b` x) AS y",
             expected_neutralized="SELECT __sqb_lint_0__b` x) AS y",
-            expected_original_texts=("@m(`a)",),
+            expected_original_texts=("@py.m(`a)",),
         ),
         DialectNeutralizeInterpolationTestCase(
             description="sqlserver backtick remains ordinary code",
             dialect="tsql",
-            body="SELECT @m(`a)b` x) AS y",
+            body="SELECT @py.m(`a)b` x) AS y",
             expected_neutralized="SELECT __sqb_lint_0__b` x) AS y",
-            expected_original_texts=("@m(`a)",),
+            expected_original_texts=("@py.m(`a)",),
         ),
     ],
     ids=lambda case: case.description,
@@ -314,9 +314,9 @@ def test_given_many_sites_when_neutralizing_then_every_sentinel_is_distinct(
     [
         RestoreInterpolationTestCase(
             description="unchanged neutralized text round-trips to the original body",
-            body="SELECT @cents_to_dollars(amount) AS a FROM t",
+            body="SELECT @py.cents_to_dollars(amount) AS a FROM t",
             fixed_neutralized="SELECT __sqb_lint_0__ AS a FROM t",
-            expected_restored="SELECT @cents_to_dollars(amount) AS a FROM t",
+            expected_restored="SELECT @py.cents_to_dollars(amount) AS a FROM t",
         ),
         RestoreInterpolationTestCase(
             description="reformatted layout keeps interpolation intact",
@@ -405,25 +405,25 @@ def test_given_mangled_sentinels_when_restoring_then_failure_is_reported(
             "untagged apostrophe",
             "duckdb",
             "$$Customer's order$$",
-            ("@label($$Customer's order$$)", '__ref("orders")'),
+            ("@py.label($$Customer's order$$)", '__ref("orders")'),
         ),
         DollarQuotePreparationTestCase(
             "tagged apostrophe",
             "postgres",
             "$note$it's$note$",
-            ("@label($note$it's$note$)", '__ref("orders")'),
+            ("@py.label($note$it's$note$)", '__ref("orders")'),
         ),
         DollarQuotePreparationTestCase(
             "hidden intrinsic",
             "snowflake",
             "$$__ref('items')$$",
-            ("@label($$__ref('items')$$)", '__ref("orders")'),
+            ("@py.label($$__ref('items')$$)", '__ref("orders")'),
         ),
         DollarQuotePreparationTestCase(
             "hidden macro paren",
             "duckdb",
-            "$$@m( ')$$",
-            ("@label($$@m( ')$$)", '__ref("orders")'),
+            "$$@py.m( ')$$",
+            ("@py.label($$@py.m( ')$$)", '__ref("orders")'),
         ),
     ],
     ids=lambda case: case.description,
@@ -432,7 +432,7 @@ def test_given_dollar_quoted_text_when_neutralizing_then_python_and_native_sites
     test_case: DollarQuotePreparationTestCase,
 ) -> None:
     sql: str = (
-        f"SELECT {test_case.literal} AS note, @label({test_case.literal}) AS label "
+        f"SELECT {test_case.literal} AS note, @py.label({test_case.literal}) AS label "
         'FROM __ref("orders") o'
     )
     lint_sql, lint_sites = neutralize_interpolation(body=sql, dialect=test_case.dialect)

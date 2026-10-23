@@ -8,13 +8,13 @@ fn given_sql_when_listing_macro_call_names_then_python_scan_agrees() {
     let test_cases = [
         MacroCallNamesTestCase {
             description: "declaration calls are listed",
-            sql: "@enum(x) @a(1)",
+            sql: "@enum(x) @py.a(1)",
             expected_top_level: Ok(&["enum", "a"]),
             expected_nested: Ok(&["enum", "a"]),
         },
         MacroCallNamesTestCase {
             description: "a name without its parenthesis fails only the top-level scan",
-            sql: "@ab c(1)",
+            sql: "@py.ab c(1)",
             expected_top_level: Err(ScanError::MissingParenthesis),
             expected_nested: Ok(&["ab"]),
         },
@@ -26,25 +26,37 @@ fn given_sql_when_listing_macro_call_names_then_python_scan_agrees() {
         },
         MacroCallNamesTestCase {
             description: "an unclosed call fails only the top-level scan",
-            sql: "@\u{e9}(1) @b(",
+            sql: "@py.\u{e9}(1) @py.b(",
             expected_top_level: Err(ScanError::UnclosedParenthesis),
             expected_nested: Ok(&["\u{e9}", "b"]),
         },
         MacroCallNamesTestCase {
             description: "quoted, commented and doubled at signs start no call",
-            sql: "'@q()' /* @c() */ @d ( 1 ) @@v",
+            sql: "'@py.q()' /* @py.c() */ @py.d ( 1 ) @@v",
             expected_top_level: Ok(&[]),
             expected_nested: Ok(&[]),
         },
         MacroCallNamesTestCase {
             description: "nested calls are listed only when nested",
-            sql: "@a(@b(@c()))",
+            sql: "@py.a(@py.b(@py.c()))",
             expected_top_level: Ok(&["a"]),
             expected_nested: Ok(&["a", "b", "c"]),
         },
         MacroCallNamesTestCase {
+            description: "SQL macro calls are listed with Python ones",
+            sql: "@sql.a(1) @py.b(@sql.c())",
+            expected_top_level: Ok(&["a", "b"]),
+            expected_nested: Ok(&["a", "b", "c"]),
+        },
+        MacroCallNamesTestCase {
+            description: "a call without a kind fails both scans",
+            sql: "@py.a(1) @b(2)",
+            expected_top_level: Err(ScanError::BareCall),
+            expected_nested: Err(ScanError::BareCall),
+        },
+        MacroCallNamesTestCase {
             description: "an unclosed quote fails both scans",
-            sql: "@a(\"x\") 'oops",
+            sql: "@py.a(\"x\") 'oops",
             expected_top_level: Err(ScanError::UnclosedQuote),
             expected_nested: Err(ScanError::UnclosedQuote),
         },

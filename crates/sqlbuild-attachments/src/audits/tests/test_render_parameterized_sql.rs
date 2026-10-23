@@ -21,8 +21,8 @@ fn given_parameterized_sql_when_rendering_then_python_text_is_returned() {
         },
         ParameterizedSqlTestCase {
             description: "macro calls, doubled @ and runtime placeholders are left alone",
-            sql: "@column (x) @@column @@@column @column(y)",
-            expected_sql: Ok("@column (x) @@column @@@column @column(y)"),
+            sql: "@py.column (x) @@column @@@column @py.column(y)",
+            expected_sql: Ok("@py.column (x) @@column @@@column @py.column(y)"),
         },
         ParameterizedSqlTestCase {
             description: "the first missing argument stops rendering with its name",

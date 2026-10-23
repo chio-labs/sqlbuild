@@ -59,7 +59,7 @@ _MACRO_REFERENCE_CALL_RUNS: int = 2
 _MACRO_REFERENCE_CALL_MESSAGE: str = (
     "__ref(customers) is not a valid __ref() call, returned by macro customer_relation()"
 )
-_MACRO_REFERENCE_CALL_PATH: str = "models/marts/_sqlbuild/_macros/customer_relation.py"
+_MACRO_REFERENCE_CALL_PATH: str = "models/marts/_sqlbuild/_macros/python/customer_relation.py"
 _EDIT_STEPS: tuple[MacroCallStoreEditStep, ...] = (
     MacroCallStoreEditStep(
         description="no_change",
@@ -74,7 +74,7 @@ _EDIT_STEPS: tuple[MacroCallStoreEditStep, ...] = (
     MacroCallStoreEditStep(
         description="model_adds_a_call",
         edit=lambda root: edit_south_model(
-            root, "  @target_label()", '  @logged("tax") AS logged_tax,\n  @target_label()'
+            root, "  @py.target_label()", '  @py.logged("tax") AS logged_tax,\n  @py.target_label()'
         ),
         expected_logged_calls=1,
     ),
@@ -99,8 +99,8 @@ _EDIT_STEPS: tuple[MacroCallStoreEditStep, ...] = (
         description="model_adds_env_interpolated_argument",
         edit=lambda root: edit_south_model(
             root,
-            "  @target_label()",
-            f'  @logged("@@ENV:{STORE_ARGUMENT_ENV_VAR}") AS logged_env,\n  @target_label()',
+            "  @py.target_label()",
+            f'  @py.logged("@@ENV:{STORE_ARGUMENT_ENV_VAR}") AS logged_env,\n  @py.target_label()',
         ),
         expected_logged_calls=1,
     ),
@@ -140,7 +140,7 @@ _EDIT_STEPS: tuple[MacroCallStoreEditStep, ...] = (
     MacroCallStoreEditStep(
         description="macro_body_edit",
         edit=lambda root: replace_project_text(
-            root, "macros/common.py", 'return f"{column} * 100"', 'return f"{column} * 1000"'
+            root, "macros/python/common.py", 'return f"{column} * 100"', 'return f"{column} * 1000"'
         ),
         expected_logged_calls=3,
     ),
@@ -154,18 +154,18 @@ _EDIT_STEPS: tuple[MacroCallStoreEditStep, ...] = (
         edit=lambda root: (
             write_project_file(
                 root,
-                "macros/badges.py",
+                "macros/python/badges.py",
                 'def badge() -> str:\n    """Return a badge literal."""\n    return "\'gold\'"\n',
             ),
-            edit_south_model(root, "  @label() AS label,\n", "  @badge() AS badge,\n"),
+            edit_south_model(root, "  @py.label() AS label,\n", "  @py.badge() AS badge,\n"),
         ),
         expected_logged_calls=3,
     ),
     MacroCallStoreEditStep(
         description="macro_file_removed",
         edit=lambda root: (
-            edit_south_model(root, "  @badge() AS badge,\n", ""),
-            (root / "macros/badges.py").unlink(),
+            edit_south_model(root, "  @py.badge() AS badge,\n", ""),
+            (root / "macros/python/badges.py").unlink(),
         ),
         expected_logged_calls=3,
     ),
@@ -183,12 +183,12 @@ _EDIT_STEPS: tuple[MacroCallStoreEditStep, ...] = (
 
 
 _TAGGED_STAGING: dict[str, str] = {
-    "models/staging/_sqlbuild/_macros/tags.py": (
+    "models/staging/_sqlbuild/_macros/python/tags.py": (
         'def tagged(ctx, expr: str) -> str:\n    """Tag."""\n    return expr\n'
     ),
     "models/staging/stg_orders.sql": (
         'MODEL (\n  description "Staged orders",\n);\n\n'
-        "SELECT order_id, customer_id, @tagged('amount') AS amount, status\n"
+        "SELECT order_id, customer_id, @py.tagged('amount') AS amount, status\n"
         'FROM __source("raw_orders")\n'
     ),
 }

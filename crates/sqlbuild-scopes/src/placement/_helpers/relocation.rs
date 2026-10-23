@@ -5,7 +5,9 @@ use std::collections::{HashMap, HashSet};
 use crate::placement::_helpers::anchors::{
     AnchorSets, UsagesByDeclaration, anchor_sets, usages_by_declaration,
 };
-use crate::placement::_helpers::declaration_directory::declaration_directory;
+use crate::placement::_helpers::declaration_directory::{
+    declaration_directory, declaration_file_directory,
+};
 use crate::placement::_helpers::required::required_placement;
 use crate::placement::_helpers::role_layout::carried_path;
 use crate::placement::models::{PlacementIndex, Relocation, RequiredPlacement};
@@ -82,7 +84,9 @@ fn relocated_record(
             resource_kind: None,
         },
     };
-    let (carried, requires_group): (String, bool) = carried_path(current, record, &directory);
+    let file_directory: String =
+        declaration_file_directory(record.identity.kind, scope, path.as_deref(), &record.path);
+    let (carried, requires_group): (String, bool) = carried_path(current, record, &file_directory);
     let moved = DeclarationRecord {
         path: carried,
         scope,

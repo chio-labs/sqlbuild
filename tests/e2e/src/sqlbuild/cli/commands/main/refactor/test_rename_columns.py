@@ -229,7 +229,7 @@ def test_given_column_rename_when_applied_then_project_tests_and_builds(
             extra_files=SPLIT_CENTS_MACROS,
             expected_status="refused",
             expected_reason="would take macro:to_dollars along, which must stay in",
-            expected_paths=("models/staging/_sqlbuild/_macros/cents.py",),
+            expected_paths=("models/staging/_sqlbuild/_macros/python/cents.py",),
         ),
         RefusedRefactorE2ETestCase(
             description="column named in Python SQL text needs a manual check",

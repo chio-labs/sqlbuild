@@ -29,7 +29,7 @@ _LAYOUT_FILES: dict[str, str] = {
     "models/é.sql": "SELECT 'café' AS label\n",
     "seeds/customers.csv": "customer_id\n1\n",
     "sources/raw.YML": "sources: []\n",
-    "macros/helpers.py": "def total():\n    return 1\n",
+    "macros/python/helpers.py": "def total():\n    return 1\n",
     ".hidden/notes.yaml": "a: 1\n",
     ".gitignore": "target/\n",
     "nested/.sqlbuildignore": "*.tmp\n",
@@ -49,7 +49,7 @@ _LAYOUT_LINKS: dict[str, str] = {
 _LAYOUT_UNLINKED_HASHED_FILES: tuple[str, ...] = (
     ".gitignore",
     ".hidden/notes.yaml",
-    "macros/helpers.py",
+    "macros/python/helpers.py",
     "models/Z.SQL",
     "models/a/b.sql",
     "models/a-c.sql",
@@ -245,7 +245,7 @@ def test_given_authored_files_when_fingerprinting_then_hashes_exactly_the_expect
         ),
         UncacheableFingerprintTestCase(
             description="dynamic context in Python source",
-            files={"macros/run.py": "RUN = 'CTX:run_id'\n", "models/a.sql": "SELECT 1\n"},
+            files={"macros/python/run.py": "RUN = 'CTX:run_id'\n", "models/a.sql": "SELECT 1\n"},
             expected_fingerprint=None,
         ),
         UncacheableFingerprintTestCase(

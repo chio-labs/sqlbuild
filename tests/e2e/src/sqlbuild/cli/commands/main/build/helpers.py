@@ -743,7 +743,7 @@ def prepare_audit_read_plan_project(*, tmp_path: Path) -> Path:
 
 
 EXPLICIT_REFERENCE_MODELS: str = "models/sales"
-EXPLICIT_REFERENCE_MACRO_PATH: str = "models/sales/_sqlbuild/_macros/unions.py"
+EXPLICIT_REFERENCE_MACRO_PATH: str = "models/sales/_sqlbuild/_macros/python/unions.py"
 EXPLICIT_REFERENCE_HOOK_PATH: str = "models/sales/_sqlbuild/_hooks/python/lookups.py"
 EXPLICIT_REFERENCE_MACROS: str = (
     "def union_all(relations):\n"
@@ -788,7 +788,7 @@ def explicit_reference_project_files(
         ),
         f"{EXPLICIT_REFERENCE_MODELS}/all_orders.sql": (
             "MODEL (description 'Test model all_orders.', materialized table);\n"
-            '@union_all([__ref("stg_orders_eu"), __ref("stg_orders_us")])\n'
+            '@py.union_all([__ref("stg_orders_eu"), __ref("stg_orders_us")])\n'
         ),
         f"{EXPLICIT_REFERENCE_MODELS}/orders_summary.sql": (
             'MODEL (description "Test model orders_summary.", '

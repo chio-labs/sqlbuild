@@ -8,14 +8,14 @@
      "phase": "compile",
      "severity": "error",
      "code": "P001",
-     "message": "Macro arguments of '@cents' in '<project>/models/staging/stg_orders.sql' could not be parsed: a value is missing here at line 5, column 63",
+     "message": "Macro arguments of '@py.cents' in '<project>/models/staging/stg_orders.sql' could not be parsed: a value is missing here at line 5, column 66",
      "path": "models/staging/stg_orders.sql",
      "line": 5,
-     "column": 63,
+     "column": 66,
      "location": {
       "path": "models/staging/stg_orders.sql",
       "line": 5,
-      "column": 63
+      "column": 66
      },
      "help": "Macro arguments are Python literals (strings, numbers, True, False, None, lists, tuples and dicts), nested macro calls, and __ref(), __source() or __seed() references; compute anything else inside the macro"
     }

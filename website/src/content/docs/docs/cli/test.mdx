@@ -81,7 +81,9 @@ count; `meta` does.
 
 A macro counts as changed when the Python file that defines it changes, or any project module it
 imports, such as a helper under `python/`; when that code reads `ctx.vars`, a change to any project
-variable counts too. An enum, constant or audit counts as changed when its declaration file
+variable counts too. A [SQL macro](/docs/concepts/macros/sql-macros) counts as changed when its
+arguments, result type or body change, or a project variable it reads; formatting, comments and its
+description do not count. A node that calls a SQL macro also uses every SQL macro that macro calls. An enum, constant or audit counts as changed when its declaration file
 changes other than in formatting and comments. A seed counts as changed with its data or column
 types, a source with its declaration or inline expression, and a function with its definition.
 Loaders, tasks, assets and checks are compared by their Python modules and the project modules

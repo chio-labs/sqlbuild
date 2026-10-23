@@ -9,6 +9,7 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{FromPyObject, IntoPyObject, pyclass, pymethods};
 use sqlbuild_analysis::compiled_project::models::SchemaColumnFact;
+use sqlbuild_analysis::sql_macros::models::SqlMacroCheck;
 
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::compiled_project::rows::{ReferenceTuple, reference_row_tuple};
@@ -555,6 +556,18 @@ pub(crate) fn input_query_sql(model_input: &Bound<'_, PyAny>) -> PyResult<String
         });
     }
     native_field(model_input, "query_sql")?.extract()
+}
+
+/// What the analysed SQL of a native model input must show for its SQL macro calls to fit.
+pub(crate) fn input_sql_macro_checks(
+    model_input: &Bound<'_, PyAny>,
+) -> PyResult<Vec<SqlMacroCheck>> {
+    if let Ok(native) = model_input.cast::<NativeModelInput>() {
+        return native.get().read(model_input.py(), |record, _| {
+            Ok(record.sql_macro_checks.clone())
+        });
+    }
+    Ok(Vec::new())
 }
 
 /// Each reference of `model_input` as `(kind, name, package, call argument count)`.

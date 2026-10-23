@@ -1,3 +1,4 @@
+use crate::lint_text::_helpers::format_bodies::unwrapped_expression;
 use crate::lint_text::_helpers::sites::site_pattern;
 use crate::lint_text::_helpers::sql_diagnostics::interpolation_text_at;
 use crate::lint_text::constants::SITE_START_BYTES;
@@ -14,6 +15,7 @@ use crate::lint_text::tests::helpers::directive_finding;
 use crate::lint_text::tests::test_types::{
     Finding, FormatBodiesTestCase, LintBodiesTestCase, NeutralizeTestCase, ParameterTestCase,
     RestoreTestCase, SitePatternTestCase, SuppressionTestCase, TokenAtTestCase,
+    UnwrappedExpressionTestCase,
 };
 
 const SUPPRESSED_FILE: &str =
@@ -60,13 +62,13 @@ fn given_authored_sql_when_neutralizing_then_sites_use_character_offsets()
     let test_cases = [
         NeutralizeTestCase {
             description: "reference, macro call and template",
-            body: "select @m(a, ')') from __ref('o') where x > ${v}",
+            body: "select @py.m(a, ')') from __ref('o') where x > ${v}",
             formatting: false,
             expected_text: "select __sqb_lint_0__ from __sqb_lint_1__ where x > __sqb_lint_2__",
             expected_sites: vec![
-                ("@m(a, ')')", 7, 17),
-                ("__ref('o')", 23, 33),
-                ("${v}", 44, 48),
+                ("@py.m(a, ')')", 7, 20),
+                ("__ref('o')", 26, 36),
+                ("${v}", 47, 51),
             ],
         },
         NeutralizeTestCase {
@@ -132,9 +134,9 @@ fn given_generated_parameters_when_neutralizing_then_only_bare_parameters_are_re
     let test_cases = [
         ParameterTestCase {
             description: "quoted and raw audit parameters, but not calls or doubled at-signs",
-            body: "select * from @this where @column < 0 and @'kind' = @f(1) and @@x",
+            body: "select * from @this where @column < 0 and @'kind' = @py.f(1) and @@x",
             neutralize: neutralize_audit_parameters,
-            expected_text: "select * from __sqlbuild_audit_parameter_0__ where __sqlbuild_audit_parameter_1__ < 0 and '__sqlbuild_audit_parameter_2__' = @f(1) and @@x",
+            expected_text: "select * from __sqlbuild_audit_parameter_0__ where __sqlbuild_audit_parameter_1__ < 0 and '__sqlbuild_audit_parameter_2__' = @py.f(1) and @@x",
         },
         ParameterTestCase {
             description: "context interpolation in hooks",
@@ -193,13 +195,13 @@ fn given_character_offset_when_reading_token_then_only_site_starts_have_tokens()
     let test_cases = [
         TokenAtTestCase {
             description: "a macro call after a multibyte character",
-            body: "é @m(x) y",
+            body: "é @py.m(x) y",
             start: 2,
-            expected_token: Some("@m(x)"),
+            expected_token: Some("@py.m(x)"),
         },
         TokenAtTestCase {
             description: "a plain character",
-            body: "é @m(x) y",
+            body: "é @py.m(x) y",
             start: 0,
             expected_token: None,
         },
@@ -323,10 +325,10 @@ fn given_sql_files_when_formatting_bodies_then_sites_and_fixture_ceremony_surviv
         FormatBodiesTestCase {
             description: "a model body with a reference and a macro",
             relative_parts: Some(vec!["models".to_string(), "orders.sql".to_string()]),
-            contents: "MODEL (description \"d\");\nselect a, @m('x') as m from __ref('o')\n",
+            contents: "MODEL (description \"d\");\nselect a, @py.m('x') as m from __ref('o')\n",
             expected_formatted: vec![(
                 0,
-                "MODEL (description \"d\");\nSELECT\n  a,\n  @m('x') AS m\nFROM __ref('o')\n"
+                "MODEL (description \"d\");\nSELECT\n  a,\n  @py.m('x') AS m\nFROM __ref('o')\n"
                     .to_string(),
             )],
             expected_fault_lines: vec![],
@@ -404,18 +406,18 @@ fn given_expanded_bodies_when_linting_then_findings_map_to_authored_lines() {
         },
         LintBodiesTestCase {
             description: "a finding inside generated SQL points at the interpolation token",
-            contents: "select a from t where @isnull()\n",
+            contents: "select a from t where @py.isnull()\n",
             body: LintSqlBody {
                 lint_text: "select a from t where a = null".to_string(),
                 passes: vec![vec![ExpansionSpan {
                     source_start: 22,
-                    source_end: 31,
+                    source_end: 34,
                     output_start: 22,
                     output_end: 30,
                 }]],
                 ..LintSqlBody::default()
             },
-            expected_findings: vec![("SQBRSQL001", 1, 23, Some((1, 32)))],
+            expected_findings: vec![("SQBRSQL001", 1, 23, Some((1, 35)))],
         },
     ];
 
@@ -443,6 +445,38 @@ fn given_expanded_bodies_when_linting_then_findings_map_to_authored_lines() {
 
         assert_eq!(
             findings, test_case.expected_findings,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_a_formatted_expression_select_when_unwrapping_then_strings_keep_their_lines() {
+    let test_cases = [
+        UnwrappedExpressionTestCase {
+            description: "the expression is dedented one level",
+            formatted: "SELECT\n  ROUND(\n    @v,\n    2\n  )",
+            expected_expression: Some("ROUND(\n  @v,\n  2\n)"),
+        },
+        UnwrappedExpressionTestCase {
+            description: "lines inside a multi-line string literal are not dedented",
+            formatted: "SELECT\n  CONCAT(\n    'first\n    second',\n    @v\n  )",
+            expected_expression: Some("CONCAT(\n  'first\n    second',\n  @v\n)"),
+        },
+        UnwrappedExpressionTestCase {
+            description: "text that is not a select is not an expression",
+            formatted: "WITH a AS (SELECT 1)",
+            expected_expression: None,
+        },
+    ];
+
+    for test_case in test_cases {
+        let unwrapped: Option<String> = unwrapped_expression(test_case.formatted);
+
+        assert_eq!(
+            unwrapped.as_deref(),
+            test_case.expected_expression,
             "{}",
             test_case.description
         );

@@ -24,6 +24,7 @@ use sqlbuild_analysis::assembly::analysis_session::models::{
 };
 use sqlbuild_analysis::assembly::analysis_session::types::{Pairs, Shapes};
 use sqlbuild_analysis::semantic_validation::models::DiagnosticRow;
+use sqlbuild_analysis::sql_macros::models::SqlMacroCheck;
 use sqlbuild_sqltext::compiler::main::placeholder_defaults::placeholder_defaults;
 
 use sqlbuild_cache::store::models::NativeStore;
@@ -78,6 +79,7 @@ pub(crate) struct ModelRow {
     pub(crate) recover_cte_facts: bool,
     pub(crate) snapshot_columns: Option<(String, String)>,
     pub(crate) dynamic_families: Vec<FamilyRow>,
+    pub(crate) sql_macro_checks: Vec<SqlMacroCheck>,
 }
 
 /// The profile settings, relation shapes and models one session analyses.
@@ -465,6 +467,7 @@ fn model_request(row: ModelRow) -> ModelRequest {
         recover_cte_facts,
         snapshot_columns,
         dynamic_families,
+        sql_macro_checks,
     } = row;
     let has_set_operation = names_set_operation(&query_sql);
     let facts = model_reference_facts(&reference_rows);
@@ -485,6 +488,7 @@ fn model_request(row: ModelRow) -> ModelRequest {
         snapshot_columns,
         pivot_sql,
         dynamic_families: dynamic_families.into_iter().map(dynamic_family).collect(),
+        sql_macro_checks,
     }
 }
 

@@ -504,7 +504,7 @@ def test_given_invalid_sql_test_file_contents_when_parsing_then_it_raises_clear_
             description="infers macro mode under an empty header",
             contents=(
                 "TEST();\n"
-                "WITH __macro_actual__ AS (SELECT @double(1) AS value),\n"
+                "WITH __macro_actual__ AS (SELECT @py.double(1) AS value),\n"
                 "__macro_expected__ AS (SELECT 2 AS value)"
             ),
             expected_modes=("macro",),

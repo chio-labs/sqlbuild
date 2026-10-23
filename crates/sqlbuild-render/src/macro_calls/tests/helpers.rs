@@ -5,7 +5,7 @@ use crate::macro_calls::errors::ScanError;
 use crate::macro_calls::models::{MacroCallEntry, MacroCallEvent, MacroCallMemo};
 use crate::macro_calls::tests::test_types::ExpectedNames;
 
-/// A memo holding one recorded `@cents(amount)` call in class 1, and that call's entry.
+/// A memo holding one recorded `@py.cents(amount)` call in class 1, and that call's entry.
 pub(crate) fn recorded_memo() -> (MacroCallMemo, MacroCallEntry) {
     let mut memo = MacroCallMemo::default();
     let entry = MacroCallEntry {
@@ -21,11 +21,11 @@ pub(crate) fn recorded_memo() -> (MacroCallMemo, MacroCallEntry) {
             },
         ],
     };
-    memo.record(1, "@cents(amount)".to_owned(), entry.clone());
+    memo.record(1, "@py.cents(amount)".to_owned(), entry.clone());
     (memo, entry)
 }
 
-/// Record `entry` for `@cents(amount)` into a fresh store at `path`, persistent per `class_texts`.
+/// Record `entry` for `@py.cents(amount)` into a fresh store at `path`, persistent per `class_texts`.
 pub(crate) fn saved_memo_store(path: &Path, class_texts: &[&str], entry: &MacroCallEntry) {
     let mut memo = MacroCallMemo::default();
     memo.attach_store(
@@ -34,7 +34,7 @@ pub(crate) fn saved_memo_store(path: &Path, class_texts: &[&str], entry: &MacroC
     for class_text in class_texts {
         memo.set_persistent_class(1, class_text);
     }
-    memo.record(1, "@cents(amount)".to_owned(), entry.clone());
+    memo.record(1, "@py.cents(amount)".to_owned(), entry.clone());
     let _ = memo
         .store_mut()
         .expect("attached store")

@@ -90,3 +90,9 @@ pub(crate) struct SitePatternTestCase {
     pub(crate) formatting: bool,
     pub(crate) expected_other_start_bytes: Vec<u8>,
 }
+
+pub(crate) struct UnwrappedExpressionTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) formatted: &'static str,
+    pub(crate) expected_expression: Option<&'static str>,
+}

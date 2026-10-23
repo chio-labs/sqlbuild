@@ -20,8 +20,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
 )
 
 _DUPLICATE_MACROS: dict[str, str] = {
-    "macros/cents.py": 'def to_cents(expression: str) -> str:\n    return f"({expression}) * 100"\n',
-    "macros/money.py": 'def to_cents(expression: str) -> str:\n    return f"({expression}) * 100"\n',
+    "macros/python/cents.py": 'def to_cents(expression: str) -> str:\n    return f"({expression}) * 100"\n',
+    "macros/python/money.py": 'def to_cents(expression: str) -> str:\n    return f"({expression}) * 100"\n',
 }
 _UNKNOWN_REFERENCE: dict[str, str] = {
     "models/marts/order_gaps.sql": (

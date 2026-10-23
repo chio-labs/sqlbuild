@@ -107,10 +107,10 @@ _BASE_MODELS: dict[str, str] = {
         'SELECT order_id, customer_id, amount, status, ordered_at\nFROM __source("raw_orders")'
     ),
     "stg_customers": (
-        'SELECT customer_id, region\nFROM __source("raw_customers")\nWHERE @known_region()'
+        'SELECT customer_id, region\nFROM __source("raw_customers")\nWHERE @py.known_region()'
     ),
     "int_orders": (
-        'SELECT o.order_id, o.customer_id, c.region, @cents("o.amount") AS amount_cents,\n'
+        'SELECT o.order_id, o.customer_id, c.region, @py.cents("o.amount") AS amount_cents,\n'
         '  __udf("udf__is_big")(o.amount) AS is_big\n'
         'FROM __ref("stg_orders") o\nJOIN __ref("stg_customers") c ON o.customer_id = c.customer_id'
     ),
@@ -160,7 +160,7 @@ _UPSTREAM: dict[str, tuple[str, ...]] = {
 _DIRECT_TESTS: tuple[str, ...] = (
     'TEST (mode macro, name "doubles_cents");\n\nWITH\n'
     "amounts AS (SELECT 2 AS amount),\n"
-    '__macro_actual__ AS (SELECT @cents("amount") AS cents FROM amounts),\n'
+    '__macro_actual__ AS (SELECT @py.cents("amount") AS cents FROM amounts),\n'
     "__macro_expected__ AS (SELECT 200 AS cents)\nSELECT 1\n",
     'TEST (mode udf, name "flags_big_amounts");\n\nWITH\n'
     '__udf_actual__ AS (SELECT __udf("udf__is_big")(150) AS is_big),\n'
@@ -208,7 +208,7 @@ def _project_files() -> dict[str, str]:
         "sources/raw.yml": _SOURCES,
         "seeds/regions.yml": _SEEDS,
         "seeds/regions.csv": "region,label\neast,East\n",
-        "macros/amounts.py": _MACROS,
+        "macros/python/amounts.py": _MACROS,
         "functions/sql/udf__is_big.sql": _UDF,
         "functions/sql/table_fn__customer_orders.sql": _TABLE_FUNCTION,
         "models/daily_orders.sql": _DAILY_ORDERS,

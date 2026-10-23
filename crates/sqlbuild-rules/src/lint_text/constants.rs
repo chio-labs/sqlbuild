@@ -59,6 +59,8 @@ pub(crate) const MAX_FUNCTION_CALL_DEPTH: usize = 512;
 pub(crate) const OMITTED_CEREMONIAL_SELECT_SQL: &str = "\nSELECT 1";
 pub(crate) const OMITTED_SELECT_SUFFIX_PATTERN: &str = r"(?i)\s*\bSELECT\s+1\s*\z";
 pub(crate) const FIXTURE_HEADER_KINDS: [&str; 2] = ["TEST", "SCENARIO"];
+/// The header of a SQL macro file, whose body is an expression, a CTE list or a column list.
+pub(crate) const MACRO_HEADER_KIND: &str = "MACRO";
 pub(crate) const LINE_COMMENT_PREFIX: &str = "--";
 pub(crate) const DECLINED_WITHOUT_REASON: &str = "native formatter declined without a reason";
 pub(crate) const MOVED_OMITTED_SELECT: &str =
@@ -166,3 +168,7 @@ pub(crate) const GROUPED_NAMED_ROLE_KINDS: [(&[&str], &str); 9] = [
 ];
 /// The keyword whose presence makes a lint request carry relation names.
 pub(crate) const CROSS_KEYWORD: &[u8] = b"cross";
+/// What a SQL macro expression body is formatted after, and removed from again.
+pub(crate) const EXPRESSION_SELECT_PREFIX: &str = "SELECT ";
+/// The characters that open a quoted string or identifier in formatted SQL.
+pub(crate) const STRING_QUOTES: [char; 3] = ['\'', '"', '`'];

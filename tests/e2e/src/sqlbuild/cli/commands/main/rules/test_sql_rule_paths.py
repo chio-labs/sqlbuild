@@ -26,14 +26,14 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_pr
                     'MODEL (description "Orders");\n'
                     "WITH unused_orders AS (SELECT 1 AS order_id), "
                     "kept AS (SELECT 2 AS order_id)\n"
-                    'SELECT kept.order_id FROM kept WHERE @order_filter("kept.order_id")\n'
+                    'SELECT kept.order_id FROM kept WHERE @py.order_filter("kept.order_id")\n'
                 ),
                 "models/staging/customers.sql": (
                     'MODEL (description "Customers");\r\n'
                     "WITH spare AS (SELECT 1 AS customer_id)\r\n"
                     "SELECT 1 AS customer_id\r\n"
                 ),
-                "models/staging/_sqlbuild/_macros/order_filter.py": (
+                "models/staging/_sqlbuild/_macros/python/order_filter.py": (
                     'def order_filter(column: str) -> str:\n    return f"{column} > 0"\n'
                 ),
                 "tests/unit/test_orders.sql": (

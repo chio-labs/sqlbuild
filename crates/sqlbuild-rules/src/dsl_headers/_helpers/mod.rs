@@ -1,5 +1,6 @@
 pub(crate) mod audits;
 pub(crate) mod formatting;
+pub(crate) mod macro_header;
 pub(crate) mod quoted;
 pub(crate) mod rules;
 pub(crate) mod scan;

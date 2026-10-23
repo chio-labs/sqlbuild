@@ -580,7 +580,7 @@ fn given_compiled_sql_test_inputs_when_assembling_then_facts_match_python() {
             model(
                 "order_dollars",
                 &[],
-                Some("SELECT '@cents(x)', @dollars (amount)"),
+                Some("SELECT '@py.cents(x)', @py.dollars (amount)"),
                 &[],
             ),
         ]

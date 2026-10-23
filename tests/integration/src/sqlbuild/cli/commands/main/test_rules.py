@@ -186,7 +186,7 @@ _EARLY_LINT_SLOW_HOOKS: int = 8
 _EARLY_LINT_SLOW_EXPANSION_S: float = 0.5
 _EARLY_LINT_EXPANSION_DELAYS_S: dict[str, float] = {"orders": 0.0}
 _EARLY_LINT_FINDINGS: tuple[tuple[str, str, int | None, int | None], ...] = (
-    ("SQBRSQL005", "models/order_cents.sql", 2, 116),
+    ("SQBRSQL005", "models/order_cents.sql", 2, 119),
 )
 
 
@@ -867,7 +867,7 @@ def test_given_cached_sql_test_rules_when_test_or_macro_changes_then_findings_ar
     model.parent.mkdir()
     model.write_text('MODEL (description "Orders");\nSELECT 1 AS order_id\n', encoding="utf-8")
     tests_dir: Path = tmp_path / "tests" / "unit"
-    macro: Path = tests_dir / "_macros" / "row_limit.py"
+    macro: Path = tests_dir / "_macros" / "python" / "row_limit.py"
     macro.parent.mkdir(parents=True)
     macro.write_text('def row_limit() -> str:\n    return "LIMIT 1"\n', encoding="utf-8")
     plain: Path = tests_dir / "test_plain_orders.sql"
@@ -878,7 +878,7 @@ def test_given_cached_sql_test_rules_when_test_or_macro_changes_then_findings_ar
     )
     plain.write_text(plain_body.format(limit="LIMIT 1"), encoding="utf-8")
     (tests_dir / "test_macro_orders.sql").write_text(
-        plain_body.format(limit="@row_limit()"), encoding="utf-8"
+        plain_body.format(limit="@py.row_limit()"), encoding="utf-8"
     )
     plain_finding: str = f"tests/unit/test_plain_orders.sql:{test_case.expected_code}"
     macro_finding: str = f"tests/unit/test_macro_orders.sql:{test_case.expected_code}"
@@ -918,12 +918,12 @@ def test_given_warm_scoped_macro_sql_test_when_compiling_then_rules_reuse_compil
     model.parent.mkdir()
     model.write_text('MODEL (description "Orders");\nSELECT 1 AS order_id\n', encoding="utf-8")
     tests_dir: Path = tmp_path / "tests" / "unit"
-    macro: Path = tests_dir / "_macros" / "row_limit.py"
+    macro: Path = tests_dir / "_macros" / "python" / "row_limit.py"
     macro.parent.mkdir(parents=True)
     macro.write_text('def row_limit() -> str:\n    return "LIMIT 1"\n', encoding="utf-8")
     (tests_dir / "test_macro_orders.sql").write_text(
         "TEST ();\nWITH\n__ref__orders AS (SELECT 1 AS order_id),\n"
-        "__expected__orders AS (SELECT order_id FROM __ref__orders @row_limit())\n"
+        "__expected__orders AS (SELECT order_id FROM __ref__orders @py.row_limit())\n"
         "SELECT 1\n",
         encoding="utf-8",
     )
@@ -957,12 +957,12 @@ def test_given_cold_scoped_macro_sql_test_when_compiling_then_early_lint_uses_pr
     model.parent.mkdir()
     model.write_text('MODEL (description "Orders");\nSELECT 1 AS order_id\n', encoding="utf-8")
     tests_dir: Path = tmp_path / "tests" / "unit"
-    macro: Path = tests_dir / "_macros" / "row_limit.py"
+    macro: Path = tests_dir / "_macros" / "python" / "row_limit.py"
     macro.parent.mkdir(parents=True)
     macro.write_text('def row_limit() -> str:\n    return "LIMIT 1"\n', encoding="utf-8")
     (tests_dir / "test_macro_orders.sql").write_text(
         "TEST ();\nWITH\n__ref__orders AS (SELECT 1 AS order_id),\n"
-        "__expected__orders AS (SELECT order_id FROM __ref__orders @row_limit())\n"
+        "__expected__orders AS (SELECT order_id FROM __ref__orders @py.row_limit())\n"
         "SELECT 1\n",
         encoding="utf-8",
     )
@@ -1089,7 +1089,7 @@ def test_given_graph_error_when_compiling_then_early_lint_is_stopped_instead_of_
     models_dir: Path = tmp_path / "models"
     models_dir.mkdir()
     (models_dir / "orders.sql").write_text(
-        'MODEL (description "Orders");\nSELECT @slow_total("orders") AS order_id\n',
+        'MODEL (description "Orders");\nSELECT @py.slow_total("orders") AS order_id\n',
         encoding="utf-8",
     )
     (models_dir / "order_totals.sql").write_text(
@@ -1098,8 +1098,8 @@ def test_given_graph_error_when_compiling_then_early_lint_is_stopped_instead_of_
         'SELECT order_id, missing_column FROM __ref("orders")\n',
         encoding="utf-8",
     )
-    macros_dir: Path = tmp_path / "macros"
-    macros_dir.mkdir()
+    macros_dir: Path = tmp_path / "macros" / "python"
+    macros_dir.mkdir(parents=True)
     (tmp_path / "hooks").mkdir()
     (macros_dir / "slow_total.py").write_text(
         "import orders_lint_probe\n\n\n"
@@ -1110,7 +1110,7 @@ def test_given_graph_error_when_compiling_then_early_lint_is_stopped_instead_of_
     )
     for index in range(_EARLY_LINT_SLOW_HOOKS):
         (tmp_path / "hooks" / f"total_{index:02d}.sql").write_text(
-            f'SELECT @slow_total("total_{index:02d}") AS order_total\n', encoding="utf-8"
+            f'SELECT @py.slow_total("total_{index:02d}") AS order_total\n', encoding="utf-8"
         )
     expanded: list[str] = []
 

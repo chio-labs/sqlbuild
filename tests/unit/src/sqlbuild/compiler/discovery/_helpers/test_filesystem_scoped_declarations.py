@@ -37,6 +37,7 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
 )
 from tests.unit.src.sqlbuild.compiler.discovery._helpers.helpers import (
     declaration_contents,
+    declaration_kind_folder,
     discover_declarations,
 )
 from tests.unit.src.sqlbuild.compiler.discovery.helpers import discover_all_model_files
@@ -69,7 +70,13 @@ def test_given_declaration_below_authored_root_when_discovering_then_records_bou
                 "local": f"_{declaration_kind}s",
             }[scope_kind]
             relative_root: Path = Path(test_case.authored_root) / "domain" / directory_name
-            file_path: Path = tmp_path / relative_root / "organization" / f"z_value{suffix}"
+            file_path: Path = (
+                tmp_path
+                / relative_root
+                / declaration_kind_folder(kind=declaration_kind)
+                / "organization"
+                / f"z_value{suffix}"
+            )
             file_path.parent.mkdir(parents=True)
             file_path.write_text(contents, encoding="utf-8")
 
@@ -81,7 +88,12 @@ def test_given_declaration_below_authored_root_when_discovering_then_records_bou
             discovered: DiscoveredMacroFile | DiscoveredEnumFile | DiscoveredConstantFile = result[
                 0
             ]
-            assert discovered.relative_path == (relative_root / "organization" / f"z_value{suffix}")
+            assert discovered.relative_path == (
+                relative_root
+                / declaration_kind_folder(kind=declaration_kind)
+                / "organization"
+                / f"z_value{suffix}"
+            )
             assert discovered.scope_kind.value == scope_kind
             assert discovered.ownership_root == Path(test_case.expected_ownership_root)
             assert discovered.owning_path == Path(test_case.authored_root) / "domain"
@@ -119,7 +131,8 @@ def test_given_grouped_declaration_when_discovering_then_owner_is_above_sqlbuild
 ) -> None:
     suffix, contents = declaration_contents(kind=test_case.declaration_kind)
     declaration_root: Path = Path("models/orders/_sqlbuild") / test_case.directory_name
-    file_path: Path = tmp_path / declaration_root / f"policy{suffix}"
+    file_name: Path = declaration_kind_folder(kind=test_case.declaration_kind) / f"policy{suffix}"
+    file_path: Path = tmp_path / declaration_root / file_name
     file_path.parent.mkdir(parents=True)
     file_path.write_text(contents, encoding="utf-8")
 
@@ -128,7 +141,7 @@ def test_given_grouped_declaration_when_discovering_then_owner_is_above_sqlbuild
     )
 
     assert len(discovered) == 1
-    assert discovered[0].relative_path == declaration_root / f"policy{suffix}"
+    assert discovered[0].relative_path == declaration_root / file_name
     assert discovered[0].scope_kind.value == test_case.expected_scope_kind
     assert discovered[0].owning_path == Path(test_case.expected_owning_path)
     assert discovered[0].declaration_root == declaration_root
@@ -148,7 +161,13 @@ def test_given_top_level_public_declarations_when_discovering_then_scope_remains
     tmp_path: Path,
 ) -> None:
     suffix, contents = declaration_contents(kind=test_case.declaration_kind)
-    file_path: Path = tmp_path / test_case.directory_name / "organization" / f"value{suffix}"
+    file_path: Path = (
+        tmp_path
+        / test_case.directory_name
+        / declaration_kind_folder(kind=test_case.declaration_kind)
+        / "organization"
+        / f"value{suffix}"
+    )
     file_path.parent.mkdir(parents=True)
     file_path.write_text(contents, encoding="utf-8")
 
@@ -166,7 +185,9 @@ def test_given_top_level_public_declarations_when_discovering_then_scope_remains
     "test_case",
     (
         InvalidScopedDeclarationRootTestCase(
-            "top_level_inherited", "_macros/value.py", "must be below a canonical authored root"
+            "top_level_inherited",
+            "_macros/python/value.py",
+            "must be below a canonical authored root",
         ),
         InvalidScopedDeclarationRootTestCase(
             "nested_scoped_roots",
@@ -175,7 +196,7 @@ def test_given_top_level_public_declarations_when_discovering_then_scope_remains
         ),
         InvalidScopedDeclarationRootTestCase(
             "scoped_root_below_global_tree",
-            "macros/organization/_macros/value.py",
+            "macros/organization/_macros/python/value.py",
             "nested inside another declaration tree",
         ),
         InvalidScopedDeclarationRootTestCase(
@@ -190,17 +211,17 @@ def test_given_top_level_public_declarations_when_discovering_then_scope_remains
         ),
         InvalidScopedDeclarationRootTestCase(
             "grouped_root_with_intermediate_folder",
-            "models/orders/_sqlbuild/organization/macros/value.py",
+            "models/orders/_sqlbuild/organization/macros/python/value.py",
             "contains unsupported entries",
         ),
         InvalidScopedDeclarationRootTestCase(
             "top_level_grouped_root",
-            "_sqlbuild/_macros/value.py",
+            "_sqlbuild/_macros/python/value.py",
             "must be below a canonical authored root",
         ),
         InvalidScopedDeclarationRootTestCase(
             "authored_root_grouped_root",
-            "models/_sqlbuild/macros/value.py",
+            "models/_sqlbuild/macros/python/value.py",
             "must be below a concrete owner directory",
         ),
         InvalidScopedDeclarationRootTestCase(
@@ -344,14 +365,14 @@ def test_given_invalid_scoped_root_when_discovering_project_inputs_then_strict_d
         ),
         OrdinaryDiscoveryExclusionTestCase(
             "python_function",
-            "functions/sql/domain/_macros/value.py",
+            "functions/sql/domain/_macros/python/value.py",
             "raise RuntimeError('must not import')\n",
             "python_function",
             (),
         ),
         OrdinaryDiscoveryExclusionTestCase(
             "python_hook",
-            "models/domain/_sqlbuild/_macros/value.py",
+            "models/domain/_sqlbuild/_macros/python/value.py",
             "raise RuntimeError('must not import')\n",
             "python_hook",
             (),
@@ -433,15 +454,15 @@ def test_given_similarly_prefixed_directory_when_discovering_then_treats_it_as_o
         DiscoveryPathInventoryTestCase(
             "unsorted_scoped_macros",
             (
-                "models/z/_macros/z.py",
-                "models/a/_macros/z.py",
-                "models/a/_macros/a.py",
-                "models/a/_macros/__init__.py",
+                "models/z/_macros/python/z.py",
+                "models/a/_macros/python/z.py",
+                "models/a/_macros/python/a.py",
+                "models/a/_macros/python/__init__.py",
             ),
             (
-                "models/a/_macros/a.py",
-                "models/a/_macros/z.py",
-                "models/z/_macros/z.py",
+                "models/a/_macros/python/a.py",
+                "models/a/_macros/python/z.py",
+                "models/z/_macros/python/z.py",
             ),
         ),
     ),

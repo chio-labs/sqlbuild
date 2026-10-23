@@ -16,9 +16,10 @@ use crate::dsl_headers::main::sql_body_ranges::sql_body_ranges;
 use crate::dsl_headers::models::HeaderSpan;
 use crate::lint_text::_helpers::sites::compiled;
 use crate::lint_text::constants::{
-    DECLARATION_GROUP_DIRECTORY, DECLINED_WITHOUT_REASON, FIXTURE_HEADER_KINDS, FORMAT_API_VERSION,
-    GLOBAL_NAMED_ROOTS, GROUPED_NAMED_ROLES, LINE_COMMENT_PREFIX, MAX_FUNCTION_CALL_DEPTH,
-    MOVED_OMITTED_SELECT, OMITTED_CEREMONIAL_SELECT_SQL, OMITTED_SELECT_SUFFIX_PATTERN,
+    DECLARATION_GROUP_DIRECTORY, DECLINED_WITHOUT_REASON, EXPRESSION_SELECT_PREFIX,
+    FIXTURE_HEADER_KINDS, FORMAT_API_VERSION, GLOBAL_NAMED_ROOTS, GROUPED_NAMED_ROLES,
+    LINE_COMMENT_PREFIX, MACRO_HEADER_KIND, MAX_FUNCTION_CALL_DEPTH, MOVED_OMITTED_SELECT,
+    OMITTED_CEREMONIAL_SELECT_SQL, OMITTED_SELECT_SUFFIX_PATTERN, STRING_QUOTES,
 };
 use crate::lint_text::errors::LintTextError;
 use crate::lint_text::main::neutralize_interpolation::neutralize_interpolation;
@@ -115,6 +116,9 @@ pub(crate) fn prepare_file(
     let omits: bool = headers
         .iter()
         .any(|header| FIXTURE_HEADER_KINDS.contains(&header.kind.as_str()));
+    let sql_macro: bool = headers
+        .iter()
+        .any(|header| header.kind == MACRO_HEADER_KIND);
     let syntax: LexicalSyntax = LexicalSyntax {
         line_comment_prefixes: vec![LINE_COMMENT_PREFIX.to_string()],
         ..LexicalSyntax::default()
@@ -128,7 +132,14 @@ pub(crate) fn prepare_file(
             .map_or(0, |index| index + 1);
         let mut core: String = body[..core_end].iter().collect();
         let mut trailing: String = body[core_end..].iter().collect();
-        let omitted: Option<usize> = if omits {
+        let form: Option<MacroBodyForm> = sql_macro.then(|| macro_body_form(&core));
+        let wraps_expression: bool = matches!(form, Some(MacroBodyForm::Expression));
+        let omitted: Option<usize> = if let Some(form) = &form {
+            match form {
+                MacroBodyForm::CteList => Some(core.chars().count()),
+                MacroBodyForm::ColumnList | MacroBodyForm::Expression => None,
+            }
+        } else if omits {
             match omitted_select_offset(&core, &syntax) {
                 OmittedSelect::At(offset) => Some(offset),
                 OmittedSelect::Absent => None,
@@ -142,7 +153,11 @@ pub(crate) fn prepare_file(
             core = characters[..offset].iter().collect();
         }
         let neutralized = neutralize_interpolation(&core, dialect, true)?;
-        let mut sql: String = neutralized.text;
+        let mut sql: String = if wraps_expression {
+            format!("{EXPRESSION_SELECT_PREFIX}{}", neutralized.text)
+        } else {
+            neutralized.text
+        };
         if omitted.is_some() {
             sql.push_str(OMITTED_CEREMONIAL_SELECT_SQL);
         }
@@ -154,10 +169,46 @@ pub(crate) fn prepare_file(
             request: 0,
             sites: neutralized.sites,
             omits_select: omitted.is_some(),
+            wraps_expression,
         };
         prepared.push((body, sql, widths));
     }
     Ok(prepared)
+}
+
+/// How a SQL macro body starts, which decides how it is formatted.
+enum MacroBodyForm {
+    /// A `WITH` list, formatted with a final query added and removed again.
+    CteList,
+    /// A `SELECT` list, formatted as it stands.
+    ColumnList,
+    /// An expression, formatted as the one item of a `SELECT` that is removed again.
+    Expression,
+}
+
+/// The form of a SQL macro body, read from its first word after comments.
+fn macro_body_form(body: &str) -> MacroBodyForm {
+    let mut rest: &str = body;
+    loop {
+        rest = rest.trim_start();
+        if let Some(comment) = rest.strip_prefix(LINE_COMMENT_PREFIX) {
+            rest = comment.split_once('\n').map_or("", |(_, after)| after);
+        } else if let Some(comment) = rest.strip_prefix("/*") {
+            rest = comment.split_once("*/").map_or("", |(_, after)| after);
+        } else {
+            break;
+        }
+    }
+    let word: String = rest
+        .chars()
+        .take_while(|character| character.is_ascii_alphabetic())
+        .collect::<String>()
+        .to_ascii_uppercase();
+    match word.as_str() {
+        "WITH" => MacroBodyForm::CteList,
+        "SELECT" => MacroBodyForm::ColumnList,
+        _ => MacroBodyForm::Expression,
+    }
 }
 
 /// The printed width of the SQLBuild syntax each sentinel stands in for, where it differs.
@@ -210,6 +261,11 @@ pub(crate) fn formatted_body(
         sql = &sql[..suffix.start()];
         changed = true;
     }
+    let unwrapped: String;
+    if prepared.wraps_expression {
+        unwrapped = unwrapped_expression(sql).ok_or_else(|| MOVED_OMITTED_SELECT.to_string())?;
+        sql = &unwrapped;
+    }
     if !changed {
         return Ok(None);
     }
@@ -247,4 +303,58 @@ pub(crate) fn splice_file(
     }
     let formatted: Option<String> = (updated != original).then(|| updated.into_iter().collect());
     (formatted, faults)
+}
+
+/// The expression of a formatted one-item `SELECT`, dedented, or `None` if it is not one.
+pub(crate) fn unwrapped_expression(formatted: &str) -> Option<String> {
+    let trimmed: &str = formatted.trim_start();
+    let keyword: &str = trimmed.get(..EXPRESSION_SELECT_PREFIX.trim_end().len())?;
+    if !keyword.eq_ignore_ascii_case(EXPRESSION_SELECT_PREFIX.trim_end()) {
+        return None;
+    }
+    let rest: &str = &trimmed[keyword.len()..];
+    let lines: Vec<&str> = rest.trim_start_matches([' ', '\t']).lines().collect();
+    let first: &str = lines.first().copied().unwrap_or_default();
+    let (first, rest_lines): (&str, &[&str]) = if first.trim().is_empty() {
+        (
+            lines.get(1).copied().unwrap_or_default(),
+            lines.get(2..).unwrap_or_default(),
+        )
+    } else {
+        (first, lines.get(1..).unwrap_or_default())
+    };
+    let indent: usize = first.len() - first.trim_start().len();
+    let mut dedented: Vec<&str> = vec![first.trim_start()];
+    let mut quote: Option<char> = open_quote(None, first);
+    for line in rest_lines {
+        if quote.is_some() {
+            dedented.push(line);
+        } else {
+            let leading: usize = line.len() - line.trim_start().len();
+            dedented.push(&line[leading.min(indent)..]);
+        }
+        quote = open_quote(quote, line);
+    }
+    Some(dedented.join("\n").trim_end().to_owned())
+}
+
+/// The quote still open after `line`, given the one open before it; a doubled quote escapes.
+fn open_quote(mut quote: Option<char>, line: &str) -> Option<char> {
+    let mut characters = line.chars().peekable();
+    while let Some(character) = characters.next() {
+        match quote {
+            Some(open) if character == open => {
+                if characters.peek() == Some(&open) {
+                    let _ = characters.next();
+                } else {
+                    quote = None;
+                }
+            }
+            Some(_) => {}
+            None if STRING_QUOTES.contains(&character) => quote = Some(character),
+            None if character == '-' && characters.peek() == Some(&'-') => return None,
+            None => {}
+        }
+    }
+    quote
 }

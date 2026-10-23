@@ -134,7 +134,7 @@ impl<'py> Reporter<'_, 'py> {
             .any(|(kind, _, _)| *kind == invalid_call.kind)
         {
             format!(
-                "write {corrected} in {} and pass it in: @{name}({corrected})\n  = help: ",
+                "write {corrected} in {} and pass it in: @py.{name}({corrected})\n  = help: ",
                 self.location_label()
             )
         } else {
@@ -187,7 +187,7 @@ impl<'py> Reporter<'_, 'py> {
                 MACRO_GENERATED_REFERENCE_CODE,
                 &format!("{consumer_label} depends on {kind}:{reference} through macro {name}()"),
                 &format!(
-                    "write the reference in {}, or pass it in: @{name}({function}(\"{reference}\"))\n  = help: {}",
+                    "write the reference in {}, or pass it in: @py.{name}({function}(\"{reference}\"))\n  = help: {}",
                     self.location_label(),
                     self.classes.generated_help
                 ),

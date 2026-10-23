@@ -8,14 +8,18 @@ use pyo3::prelude::{
 };
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyString, PyStringMethods, PyTuple};
 use pyo3::{FromPyObject, pyclass, pymethods};
+use sqlbuild_analysis::sql_macros::constants::{BARE_MACRO_CALL_CODE, MIXED_KIND_CODE};
 use sqlbuild_core::text::main::is_decimal_digit::is_decimal_digit;
+use sqlbuild_render::macro_calls::errors::ScanError;
 use sqlbuild_render::macro_calls::main::scan_macro_call_sites::scan_macro_call_sites as scan_sites;
 use sqlbuild_render::macro_calls::main::splice_macro_calls::splice_macro_calls as splice_calls;
 use sqlbuild_render::macro_calls::models::{
     MacroCallEntry, MacroCallEvent, MacroCallScan, MacroCallSite, MacroScanFailure, MacroSpliceSpan,
 };
 
-use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::construct::new_helped_error;
+use crate::bindings::_helpers::records::fields::{field as native_field, field_text};
+use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::render::declaration_expansion::usage_visibility;
 use crate::bindings::_helpers::render::macro_call_classes::{CallClass, ClassInputs};
 use crate::bindings::_helpers::render::macro_call_memo::{MacroCallMemo, poisoned};
@@ -32,6 +36,7 @@ const OBSERVE_MODULES_METHOD: &str = "observe_modules";
 const RELATION_SUFFIX: &str = "__";
 const CONSTANT_KIND: &str = "constant";
 const RELATIONSHIP_CONSUMER_KINDS: [&str; 2] = ["test", "scenario"];
+const SQL_LANGUAGE: &str = "sql";
 
 positional_record! {
     into;
@@ -320,6 +325,35 @@ impl NativeMacroExpansion {
         failure: &MacroScanFailure,
         py: Python<'_>,
     ) -> PyErr {
+        let name: &str = failure.call_name.as_deref().unwrap_or_default();
+        match failure.error {
+            ScanError::BareCall => {
+                return coded(
+                    &classes.compile_error,
+                    &format!("macro call @{name}() does not say which kind of macro it calls"),
+                    (
+                        BARE_MACRO_CALL_CODE,
+                        &format!(
+                            "write @sql.{name}(...) to call a SQL macro or @py.{name}(...) to call a Python macro"
+                        ),
+                    ),
+                );
+            }
+            ScanError::SqlCall => {
+                return coded(
+                    &classes.compile_error,
+                    &format!(
+                        "SQL macro call @sql.{name}() is not expanded in '{}'",
+                        self.file_label
+                    ),
+                    (
+                        MIXED_KIND_CODE,
+                        "SQL macro calls are expanded in authored SQL, not in Python macro output",
+                    ),
+                );
+            }
+            _ => {}
+        }
         if let Some(name) = &failure.call_name
             && let Err(error) = self.resolved_macro(classes, name, py)
         {
@@ -353,7 +387,7 @@ impl NativeMacroExpansion {
                     "global".to_owned()
                 };
                 let message: String = format!(
-                    "Macro '@{name}' in '{}' is inaccessible. Defined at '{}:{}:{}' with scope \
+                    "Macro '@py.{name}' in '{}' is inaccessible. Defined at '{}:{}:{}' with scope \
                      owner '{owner}'; consumer/definition path is '{}'. Visible macros: {}",
                     self.file_label,
                     native_field(&record, "path")?.str()?,
@@ -366,10 +400,18 @@ impl NativeMacroExpansion {
             }
         }
         if macros.contains(name)? {
-            return macros.get_item(name);
+            let found: Bound<'py, PyAny> = macros.get_item(name)?;
+            if field_text(&found, "language")? == SQL_LANGUAGE {
+                return Err(coded(
+                    &classes.compile_error,
+                    &format!("{name}() is a SQL macro, called as a Python macro with @py.{name}()"),
+                    (MIXED_KIND_CODE, &format!("call it as @sql.{name}(...)")),
+                ));
+            }
+            return Ok(found);
         }
         let message: String = format!(
-            "Unknown macro '@{name}' in '{}'. Available macros: {}",
+            "Unknown macro '@py.{name}' in '{}'. Available macros: {}",
             self.file_label,
             sorted_names(&macros)?
         );
@@ -755,6 +797,16 @@ fn sorted_names(names: &Bound<'_, PyAny>) -> PyResult<String> {
     } else {
         sorted.join(", ")
     })
+}
+
+/// The `CompileInputError(message, code=code, help=help)` the classes' compile error builds.
+fn coded(class: &Bound<'_, PyAny>, message: &str, (code, help): (&str, &str)) -> PyErr {
+    new_helped_error(
+        class.py(),
+        ErrorId::CompileInput,
+        (message.to_owned(), code),
+        Some(help),
+    )
 }
 
 /// The exception `class(message)` builds.

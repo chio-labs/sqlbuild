@@ -3,18 +3,22 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-use pyo3::IntoPyObject;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
+use pyo3::{IntoPyObject, IntoPyObjectExt};
 use sqlbuild_analysis::assembly::analysis_session::main::resolved_cleaned_sql::resolved_cleaned_sql;
 use sqlbuild_analysis::assembly::analysis_session::models::{
     ColumnFact, ContractProof, LineageFacts, LineageRow, ModelOutcome, PivotOutcome,
 };
 use sqlbuild_analysis::binding_locations::main::locate_binding_diagnostics::locate_binding_diagnostics;
-use sqlbuild_analysis::binding_locations::models::{BindingSource, LocatedDiagnostic};
+use sqlbuild_analysis::binding_locations::models::{
+    AuthoredSpan, BindingSource, LocatedDiagnostic, RelatedSpot,
+};
 use sqlbuild_analysis::semantic_validation::models::{DiagnosticRow, Expansion};
+use sqlbuild_analysis::sql_macros::constants::{ARGUMENT_CODE, SUPERSEDED_ANALYSIS_CODE};
+use sqlbuild_analysis::sql_macros::models::SqlMacroFinding;
 
 use sqlbuild_project::models as project_models;
 use sqlbuild_project::types::InferredRow;
@@ -26,9 +30,13 @@ use crate::bindings::_helpers::compiled_views::model_input_view::ModelInputRecor
 use crate::bindings::_helpers::compiled_views::project_host::PyProjectHost;
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::lineage::lineage_facts::{confidence_member, transform_kind_member};
+use crate::bindings::_helpers::records::construct::new_record_with;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::render::macro_call_rows::span_expansion;
 
 const COMPILE_PHASE: &str = "compile";
+const ERROR_SEVERITY: &str = "error";
+const PARAMETER_LABEL: &str = "parameter declared here";
 const MODEL_RESOURCE: &str = "model";
 
 positional_record! {
@@ -136,7 +144,7 @@ pub(crate) fn analysis_record(
         if let PivotOutcome::Proof(proof) = contract {
             record.proof = Some(proof.clone());
         }
-        record.binding = located(input, outcome)?;
+        record.binding = with_sql_macro_findings(located(input, outcome)?, outcome);
         record.binding_validated = analysed.binding_validated;
     }
     if let Some(proof) = record.proof.as_ref().filter(|proof| proof.output_proven) {
@@ -180,6 +188,55 @@ fn located(input: &ModelInputRecord, outcome: &ModelOutcome) -> PyResult<Vec<Loc
             .then_some((&*expansion.expanded_sql, passes.as_slice())),
     };
     locate_binding_diagnostics(rows, &source).map_err(PyValueError::new_err)
+}
+
+/// The SQL macro findings, then the binding diagnostics without unknown columns inside a call.
+fn with_sql_macro_findings(
+    binding: Vec<LocatedDiagnostic>,
+    outcome: &ModelOutcome,
+) -> Vec<LocatedDiagnostic> {
+    let findings: &[SqlMacroFinding] = &outcome.sql_macro_findings;
+    if findings.is_empty() {
+        return binding;
+    }
+    let inside_call = |diagnostic: &LocatedDiagnostic| {
+        let (Some(line), Some(column)) = (diagnostic.line, diagnostic.column) else {
+            return false;
+        };
+        findings.iter().any(|finding| {
+            (finding.call.line, finding.call.column) <= (line, column)
+                && (line, column) <= finding.call_end
+        })
+    };
+    let mut kept: Vec<LocatedDiagnostic> = findings.iter().map(finding_diagnostic).collect();
+    kept.extend(binding.into_iter().filter(|diagnostic| {
+        diagnostic.code != SUPERSEDED_ANALYSIS_CODE || !inside_call(diagnostic)
+    }));
+    kept
+}
+
+/// One SQL macro finding as a located compile error at the call, noting the parameter.
+fn finding_diagnostic(finding: &SqlMacroFinding) -> LocatedDiagnostic {
+    LocatedDiagnostic {
+        code: ARGUMENT_CODE.to_owned(),
+        message: finding.message.clone(),
+        severity: ERROR_SEVERITY.to_owned(),
+        line: Some(finding.call.line),
+        column: Some(finding.call.column),
+        location: Some(AuthoredSpan {
+            line: finding.call.line,
+            column: finding.call.column,
+            end_line: Some(finding.call_end.0),
+            end_column: Some(finding.call_end.1),
+        }),
+        help: finding.help.clone(),
+        related: Some(RelatedSpot {
+            label: PARAMETER_LABEL.to_owned(),
+            path: finding.declared_at.path.clone(),
+            line: finding.declared_at.line,
+            column: finding.declared_at.column,
+        }),
+    }
 }
 
 /// The Python objects a model analysis record projects, each built once.
@@ -378,6 +435,38 @@ fn compiler_diagnostic(
     fields.set_item("line", diagnostic.line)?;
     fields.set_item("column", diagnostic.column)?;
     fields.set_item("location", location)?;
+    if let Some(help) = &diagnostic.help {
+        fields.set_item("help", help)?;
+    }
+    if let Some(RelatedSpot {
+        label,
+        path: related_path,
+        line,
+        column,
+    }) = &diagnostic.related
+    {
+        let place: Bound<'_, PyAny> = new_record_with(
+            py,
+            RecordId::SourceLocation,
+            &[
+                (
+                    "path",
+                    std::path::PathBuf::from(related_path).into_bound_py_any(py)?,
+                ),
+                ("line", line.into_bound_py_any(py)?),
+                ("column", column.into_bound_py_any(py)?),
+            ],
+        )?;
+        let related: Bound<'_, PyAny> = new_record_with(
+            py,
+            RecordId::RelatedLocation,
+            &[
+                ("label", PyString::new(py, label).into_any()),
+                ("location", place),
+            ],
+        )?;
+        fields.set_item("related_locations", PyTuple::new(py, [related])?)?;
+    }
     Ok(classes
         .compiler_diagnostic
         .call((), Some(&fields))?

@@ -1991,8 +1991,8 @@
     "name": "line_total_cents",
     "resource_type": "macro",
     "package_name": "waffle_shop",
-    "path": "macros/currency.py",
-    "original_file_path": "macros/currency.py",
+    "path": "macros/python/currency.py",
+    "original_file_path": "macros/python/currency.py",
     "unique_id": "macro.waffle_shop.line_total_cents",
     "macro_sql": "\"\"\"Currency formatting macros.\"\"\"\n\n\ndef line_total_cents(price_cents: str, quantity: str) -> str:\n    \"\"\"Calculate line total cents from a unit price and quantity.\"\"\"\n    return f\"{price_cents} * {quantity}\"\n",
     "depends_on": {
@@ -2015,8 +2015,8 @@
     "name": "timestamp_trunc",
     "resource_type": "macro",
     "package_name": "waffle_shop",
-    "path": "models/marts/_macros/time.py",
-    "original_file_path": "models/marts/_macros/time.py",
+    "path": "models/marts/_macros/python/time.py",
+    "original_file_path": "models/marts/_macros/python/time.py",
     "unique_id": "macro.waffle_shop.timestamp_trunc",
     "macro_sql": "\"\"\"Time expression macros.\"\"\"\n\nfrom sqlbuild.compiler.compile.models import MacroContext\n\n\ndef timestamp_trunc(ctx: MacroContext, grain: str, expression: str) -> str:\n    \"\"\"Render timestamp truncation for the active adapter.\"\"\"\n\n    if ctx.adapter_name == \"bigquery\":\n        return f\"TIMESTAMP_TRUNC({expression}, {grain.upper()})\"\n    return f\"DATE_TRUNC('{grain}', {expression})\"\n",
     "depends_on": {

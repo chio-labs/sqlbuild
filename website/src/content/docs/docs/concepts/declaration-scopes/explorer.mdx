@@ -24,12 +24,12 @@ project/
 │   ├── commerce/
 │   │   ├── constants/limits.sql        minimum_order_value
 │   │   ├── enums/status.sql            order_status
-│   │   ├── macros/orders.py            formatted_order_total
+│   │   ├── macros/python/orders.py            formatted_order_total
 │   │   ├── orders.sql
 │   │   └── returns/returns.sql
 │   └── finance/
 │       ├── enums/status.sql            finance_status
-│       ├── macros/margin.py            calculate_margin
+│       ├── macros/python/margin.py            calculate_margin
 │       ├── finance_summary.sql
 │       └── reports/margin_report.sql
 └── tests/
@@ -39,7 +39,7 @@ project/
 `formatted_order_total` composes the project-wide functions through ordinary Python calls:
 
 ```python
-from macros.currency import add_tax, round_money
+from macros.python.currency import add_tax, round_money
 
 
 def formatted_order_total(expression: str) -> str:
@@ -65,7 +65,7 @@ Scope
 
 Used (2)
   ├─ ● constant:minimum_order_value  models/commerce/constants/limits.sql:1
-  └─ ● macro:formatted_order_total  models/commerce/macros/orders.py:4
+  └─ ● macro:formatted_order_total  models/commerce/macros/python/orders.py:4
 
 Scope chain
   ├─ exact-owner-private models/commerce (3)
@@ -75,7 +75,7 @@ Scope chain
 Available (3 of 5, 2 collapsed)
   ├─ ● constant:minimum_order_value  models/commerce/constants/limits.sql:1
   ├─ ○ enum:order_status  models/commerce/enums/status.sql:1
-  └─ ● macro:formatted_order_total  models/commerce/macros/orders.py:4
+  └─ ● macro:formatted_order_total  models/commerce/macros/python/orders.py:4
   … 2 globals collapsed; run sqb scope model:orders --globals all
 
 ● used by this resource   ○ not used by this resource   --verbose for scope details
@@ -114,9 +114,9 @@ declarations. The expanded `Used` section is:
 $ sqb scope model:orders --used-only --dependency-depth 1
 Used (4)
   ├─ ● constant:minimum_order_value  models/commerce/constants/limits.sql:1
-  ├─ ● macro:add_tax  macros/currency.py:1
-  ├─ ● macro:formatted_order_total  models/commerce/macros/orders.py:4
-  └─ ● macro:round_money  macros/currency.py:5
+  ├─ ● macro:add_tax  macros/python/currency.py:1
+  ├─ ● macro:formatted_order_total  models/commerce/macros/python/orders.py:4
+  └─ ● macro:round_money  macros/python/currency.py:5
 ```
 
 SQLBuild derives these edges from actual Python calls, including nested calls and calls reached
@@ -129,7 +129,7 @@ ordinary report appears first; its `Explanation` section is:
 ```console
 $ sqb scope model:orders --explain macro:formatted_order_total
 Explanation
-  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/orders.py:4:1
+  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/python/orders.py:4:1
      Owner: (none)
      Owning path: models/commerce
      Consumers: model:orders, model:returns
@@ -147,7 +147,7 @@ explanation would then show that descendant-public placement is broader than nec
 
 ```console
 Explanation
-  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/orders.py:4:1
+  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/python/orders.py:4:1
      Owner: (none)
      Owning path: models/commerce
      Consumers: model:orders
@@ -160,7 +160,7 @@ Explanation
 ● used by this resource   ○ not used by this resource   --verbose for scope details
 
 Diagnostics (1)
-  ERROR S008 models/commerce/macros/orders.py: Declaration 'macro:formatted_order_total' is currently descendant-public at 'models/commerce' (models/commerce/macros/orders.py); required exact-owner-private at 'models/commerce'. Consumers: model:orders. Move it to 'models/commerce/_sqlbuild/_macros/'
+  ERROR S008 models/commerce/macros/python/orders.py: Declaration 'macro:formatted_order_total' is currently descendant-public at 'models/commerce' (models/commerce/macros/python/orders.py); required exact-owner-private at 'models/commerce'. Consumers: model:orders. Move it to 'models/commerce/_sqlbuild/_macros/'
 Completeness: complete
 ```
 
@@ -175,7 +175,7 @@ cannot use it. The relevant section is:
 $ sqb scope model:orders --include-nearby
 Nearby unavailable (2 of 2)
   ├─ ○ enum:finance_status  models/finance/enums/status.sql:1
-  └─ ○ macro:calculate_margin  models/finance/macros/margin.py:4
+  └─ ○ macro:calculate_margin  models/finance/macros/python/margin.py:4
 ```
 
 The declarations are known, but they belong to a different folder branch. Here, the inspected
@@ -186,7 +186,7 @@ when you know a declaration's identity. After the ordinary report, the command a
 ```console
 $ sqb scope model:orders --explain macro:calculate_margin
 Explanation
-  └─ ○ macro:calculate_margin  [macro; descendant-public; sibling_scope; params 2; role models/finance/macros]  models/finance/macros/margin.py:4:1
+  └─ ○ macro:calculate_margin  [macro; descendant-public; sibling_scope; params 2; role models/finance/macros]  models/finance/macros/python/margin.py:4:1
      Owner: (none)
      Owning path: models/finance
      Consumers: model:finance_summary, model:margin_report
@@ -237,15 +237,15 @@ Move preview
   Destination: models/finance/orders.sql
   Ownership root: models
   Retained (2)
-    ├─ ○ macro:add_tax  macros/currency.py:1
-    └─ ○ macro:round_money  macros/currency.py:5
+    ├─ ○ macro:add_tax  macros/python/currency.py:1
+    └─ ○ macro:round_money  macros/python/currency.py:5
   Gained (2)
     ├─ ○ enum:finance_status  models/finance/enums/status.sql:1
-    └─ ○ macro:calculate_margin  models/finance/macros/margin.py:4
+    └─ ○ macro:calculate_margin  models/finance/macros/python/margin.py:4
   Lost (3)
     ├─ ● constant:minimum_order_value  models/commerce/constants/limits.sql:1
     ├─ ○ enum:order_status  models/commerce/enums/status.sql:1
-    └─ ● macro:formatted_order_total  models/commerce/macros/orders.py:4
+    └─ ● macro:formatted_order_total  models/commerce/macros/python/orders.py:4
   Invalidated usages (2)
     - constant:minimum_order_value
     - macro:formatted_order_total
@@ -278,7 +278,7 @@ Scope chain
 Available (3 of 5, 2 collapsed)
   ├─ ○ constant:minimum_order_value  models/commerce/constants/limits.sql:1
   ├─ ○ enum:order_status  models/commerce/enums/status.sql:1
-  └─ ○ macro:formatted_order_total  models/commerce/macros/orders.py:4
+  └─ ○ macro:formatted_order_total  models/commerce/macros/python/orders.py:4
   … 2 globals collapsed; run sqb scope --at models/commerce/returns/new_return.sql --globals all
 
 ● used by this resource   ○ not used by this resource   --verbose for scope details

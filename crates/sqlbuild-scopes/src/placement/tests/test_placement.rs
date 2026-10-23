@@ -24,16 +24,16 @@ fn given_usages_when_validating_placement_then_unused_and_misplaced_declarations
                 (
                     1,
                     "S010",
-                    "Unused global declaration 'macro:unused' at macros/unused.py; remove it or \
+                    "Unused global declaration 'macro:unused' at macros/python/unused.py; remove it or \
                      add a genuine runtime use",
                 ),
                 (
                     2,
                     "S007",
                     "Declaration 'macro:shared' is currently exact-owner-private at \
-                     'models/sales' (models/sales/_macros/shared.py); required descendant-public \
+                     'models/sales' (models/sales/_macros/python/shared.py); required descendant-public \
                      at 'models/sales'. Consumers: model:customers, model:orders. Move it to \
-                     'models/sales/_sqlbuild/macros/'",
+                     'models/sales/_sqlbuild/macros/python/'",
                 ),
             ],
         },
@@ -114,12 +114,12 @@ fn given_resource_move_when_relocating_then_chained_local_declarations_follow() 
             expected_relocations: Some(&[
                 (
                     0,
-                    "models/finance/_sqlbuild/_macros/cents.py",
+                    "models/finance/_sqlbuild/_macros/python/cents.py",
                     Some("models/finance"),
                 ),
                 (
                     1,
-                    "models/finance/_sqlbuild/_macros/round.py",
+                    "models/finance/_sqlbuild/_macros/python/round.py",
                     Some("models/finance"),
                 ),
             ]),
@@ -158,25 +158,33 @@ fn given_destination_role_layout_when_carrying_declaration_then_its_shape_is_mat
             description: "an empty destination role keeps the source group",
             index: grouped_cents_empty_role,
             moves: &[("orders", "models/sales/eu/orders.sql")],
-            expected_relocations: &[(0, "models/sales/_sqlbuild/macros/money/cents.py", false)],
+            expected_relocations: &[(
+                0,
+                "models/sales/_sqlbuild/macros/python/money/cents.py",
+                false,
+            )],
         },
         CarriedLayoutTestCase {
             description: "a grouped destination role keeps the source group",
             index: grouped_cents_grouped_role,
             moves: &[("orders", "models/sales/eu/orders.sql")],
-            expected_relocations: &[(0, "models/sales/_sqlbuild/macros/money/cents.py", false)],
+            expected_relocations: &[(
+                0,
+                "models/sales/_sqlbuild/macros/python/money/cents.py",
+                false,
+            )],
         },
         CarriedLayoutTestCase {
             description: "a direct source in a grouped destination role needs a group",
             index: direct_cents_grouped_role,
             moves: &[("orders", "models/sales/eu/orders.sql")],
-            expected_relocations: &[(0, "models/sales/_sqlbuild/macros/cents.py", true)],
+            expected_relocations: &[(0, "models/sales/_sqlbuild/macros/python/cents.py", true)],
         },
         CarriedLayoutTestCase {
             description: "a direct destination role drops the source group",
             index: grouped_cents_direct_role,
             moves: &[("orders", "models/sales/eu/orders.sql")],
-            expected_relocations: &[(0, "models/sales/_sqlbuild/macros/cents.py", false)],
+            expected_relocations: &[(0, "models/sales/_sqlbuild/macros/python/cents.py", false)],
         },
         CarriedLayoutTestCase {
             description: "moving every user together places the macro once at their new folder",
@@ -185,7 +193,11 @@ fn given_destination_role_layout_when_carrying_declaration_then_its_shape_is_mat
                 ("orders", "models/sales/eu/orders.sql"),
                 ("refunds", "models/sales/eu/refunds.sql"),
             ],
-            expected_relocations: &[(0, "models/sales/eu/_sqlbuild/_macros/money/cents.py", false)],
+            expected_relocations: &[(
+                0,
+                "models/sales/eu/_sqlbuild/_macros/python/money/cents.py",
+                false,
+            )],
         },
     ];
     for test_case in test_cases {

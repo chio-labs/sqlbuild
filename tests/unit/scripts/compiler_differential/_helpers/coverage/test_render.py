@@ -64,9 +64,9 @@ _TYPED_MACRO_FILE: str = (
                 model_inputs=[
                     {
                         "macro_source_sql": (
-                            'SELECT @round_it(@double("amount")) AS amount\n'
-                            'FROM @union_ids([__ref("orders"), __ref("returns")])\n'
-                            "JOIN @legacy_customers() c ON TRUE"
+                            'SELECT @py.round_it(@py.double("amount")) AS amount\n'
+                            'FROM @py.union_ids([__ref("orders"), __ref("returns")])\n'
+                            "JOIN @py.legacy_customers() c ON TRUE"
                         ),
                         "query_sql": (
                             "SELECT ROUND(amount * 2) AS amount\n"
@@ -123,7 +123,7 @@ _TYPED_MACRO_FILE: str = (
             capture=empty_render_capture(
                 model_inputs=[
                     {
-                        "macro_source_sql": 'SELECT * FROM @round_it(__ref("orders"))',
+                        "macro_source_sql": 'SELECT * FROM @py.round_it(__ref("orders"))',
                         "query_sql": 'SELECT * FROM ROUND(__ref("orders"))',
                         "references": [reference(kind="REF", name="orders")],
                     }
@@ -151,8 +151,8 @@ _TYPED_MACRO_FILE: str = (
             capture=empty_render_capture(
                 model_inputs=[
                     {
-                        "macro_source_sql": 'SELECT @round_it(@double("amount")) FROM t',
-                        "query_sql": 'SELECT @round_it(@double("amount")) FROM t',
+                        "macro_source_sql": 'SELECT @py.round_it(@py.double("amount")) FROM t',
+                        "query_sql": 'SELECT @py.round_it(@py.double("amount")) FROM t',
                     }
                 ]
             ),
@@ -282,7 +282,7 @@ _TYPED_MACRO_FILE: str = (
                                 "post_hooks": [
                                     {
                                         "__type__": f"{_HOOK}:SqlHookEntry",
-                                        "statement": "SELECT @note('@@CTX:destination.qualified')",
+                                        "statement": "SELECT @py.note('@@CTX:destination.qualified')",
                                     },
                                     {
                                         "__type__": f"{_HOOK}:NamedSqlHookEntry",

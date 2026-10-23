@@ -23,8 +23,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
     write_orders_project,
 )
 
-_CENTS: str = "models/staging/_sqlbuild/_macros/cents.py"
-_GROUPED_CENTS: str = "models/staging/_sqlbuild/_macros/money/cents.py"
+_CENTS: str = "models/staging/_sqlbuild/_macros/python/cents.py"
+_GROUPED_CENTS: str = "models/staging/_sqlbuild/_macros/python/money/cents.py"
 _PRIORITY_ENUM: dict[str, str] = {
     "models/marts/_sqlbuild/_enums/priority.sql": (
         "ENUM (\n  name priority,\n  members (LOW 1, HIGH 3),\n);\n"
@@ -57,34 +57,36 @@ _PRIORITY_ENUM: dict[str, str] = {
             model="stg_order_cents",
             extra_files={**CENTS_MACRO, **ORDER_REFUNDS},
             destination="models/staging/eu/",
-            expected_moved={_CENTS: "models/staging/_sqlbuild/macros/cents.py"},
+            expected_moved={_CENTS: "models/staging/_sqlbuild/macros/python/cents.py"},
         ),
         DeclarationMoveE2ETestCase(
             description="a macro shared across the models root moves to the top-level role",
             model="stg_order_cents",
             extra_files={**CENTS_MACRO, **ORDER_REFUNDS},
             destination="models/marts/",
-            expected_moved={_CENTS: "macros/cents.py"},
+            expected_moved={_CENTS: "macros/python/cents.py"},
         ),
         DeclarationMoveE2ETestCase(
             description="a grouped macro keeps its group in a grouped destination role",
             model="stg_order_cents",
             extra_files=grouped_role_files(
                 cents_path=_GROUPED_CENTS,
-                labels_path="models/staging/_sqlbuild/macros/text/labels.py",
+                labels_path="models/staging/_sqlbuild/macros/python/text/labels.py",
             ),
             destination="models/staging/eu/",
-            expected_moved={_GROUPED_CENTS: "models/staging/_sqlbuild/macros/money/cents.py"},
+            expected_moved={
+                _GROUPED_CENTS: "models/staging/_sqlbuild/macros/python/money/cents.py"
+            },
         ),
         DeclarationMoveE2ETestCase(
             description="a grouped macro drops its group in a direct destination role",
             model="stg_order_cents",
             extra_files=grouped_role_files(
                 cents_path=_GROUPED_CENTS,
-                labels_path="models/staging/_sqlbuild/macros/labels.py",
+                labels_path="models/staging/_sqlbuild/macros/python/labels.py",
             ),
             destination="models/staging/eu/",
-            expected_moved={_GROUPED_CENTS: "models/staging/_sqlbuild/macros/cents.py"},
+            expected_moved={_GROUPED_CENTS: "models/staging/_sqlbuild/macros/python/cents.py"},
         ),
     ],
     ids=lambda case: case.description,
@@ -119,11 +121,12 @@ def test_given_scoped_declarations_when_moving_model_then_they_follow_placement_
             description="a direct macro cannot join a grouped destination role",
             model="stg_order_cents",
             extra_files=grouped_role_files(
-                cents_path=_CENTS, labels_path="models/staging/_sqlbuild/macros/text/labels.py"
+                cents_path=_CENTS,
+                labels_path="models/staging/_sqlbuild/macros/python/text/labels.py",
             ),
             destination="models/staging/eu/",
             expected_message=(
-                "macro:to_cents must move to models/staging/_sqlbuild/macros/, which keeps its "
+                "macro:to_cents must move to models/staging/_sqlbuild/macros/python/, which keeps its "
                 f"files in group folders, but {_CENTS} is not in a group; move it into a group "
                 "folder of its current role first"
             ),

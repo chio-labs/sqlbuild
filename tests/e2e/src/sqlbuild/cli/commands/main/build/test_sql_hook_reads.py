@@ -40,13 +40,13 @@ _PROJECT_FILES: dict[str, str] = {
     f"{_MODELS}/z_orders.sql": (
         "MODEL (description 'Test model z_orders.', materialized table);\nSELECT 1 AS order_id UNION ALL SELECT 2\n"
     ),
-    f"{_MODELS}/_sqlbuild/_macros/counts.py": (
+    f"{_MODELS}/_sqlbuild/_macros/python/counts.py": (
         "def count_orders(relation):\n"
         '    return f"CREATE OR REPLACE TABLE main.macro_counts AS '
         'SELECT count(*) AS n FROM {relation}"\n'
     ),
     f"{_MODELS}/_sqlbuild/_hooks/sql/record_counts.sql": (
-        'HOOK (description "Test hook record_counts.");\n@count_orders(__ref("z_orders"))\n'
+        'HOOK (description "Test hook record_counts.");\n@py.count_orders(__ref("z_orders"))\n'
     ),
     f"{_MODELS}/a_report.sql": (
         "MODEL (description 'Test model a_report.',\n  materialized table,\n"

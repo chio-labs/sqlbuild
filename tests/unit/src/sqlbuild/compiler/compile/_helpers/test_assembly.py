@@ -304,11 +304,11 @@ seeds:
             repo_files=base_repo_files()
             | {
                 "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
-                "macros/status.py": (
+                "macros/python/status.py": (
                     'def normalize_status(value):\n    return f"LOWER(TRIM({value}))"\n'
                 ),
                 "models/orders.sql": (
-                    "MODEL (description 'Test model orders.');\n\nSELECT @normalize_status(\"'  PAID  '\") AS status\n"
+                    "MODEL (description 'Test model orders.');\n\nSELECT @py.normalize_status(\"'  PAID  '\") AS status\n"
                 ),
                 "models/customers.sql": "MODEL (description 'Test model customers.');\n\nSELECT 'active' AS status\n",
                 "tests/unit/test_normalize_status.sql": """
@@ -317,7 +317,7 @@ TEST (mode macro, name "normalizes_status");
 WITH
 input_values AS (SELECT '  PAID  ' AS raw_status),
 __macro_actual__ AS (
-  SELECT @normalize_status("raw_status") AS status FROM input_values
+  SELECT @py.normalize_status("raw_status") AS status FROM input_values
 ),
 __macro_expected__ AS (SELECT 'paid' AS status)
 SELECT 1

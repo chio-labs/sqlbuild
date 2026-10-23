@@ -401,7 +401,7 @@ def test_given_sql_analysis_disabled_when_formatting_then_fixture_null_is_preser
 
 @pytest.mark.parametrize(
     "test_case",
-    [FormatCliTestCase("macro-expanded fixture", (), 0, "@mock_rows()")],
+    [FormatCliTestCase("macro-expanded fixture", (), 0, "@py.mock_rows()")],
     ids=lambda case: case.description,
 )
 def test_given_macro_expanded_fixture_when_formatting_then_authored_source_is_not_rewritten(
@@ -410,10 +410,10 @@ def test_given_macro_expanded_fixture_when_formatting_then_authored_source_is_no
 ) -> None:
     test_file: Path = write_fixture_format_project(
         tmp_path=tmp_path,
-        fixture_sql="@mock_rows()",
+        fixture_sql="@py.mock_rows()",
     )
-    macro_file: Path = tmp_path / "macros" / "rows.py"
-    macro_file.parent.mkdir()
+    macro_file: Path = tmp_path / "macros" / "python" / "rows.py"
+    macro_file.parent.mkdir(parents=True)
     macro_file.write_text(
         "def mock_rows() -> str:\n"
         "    return (\n"

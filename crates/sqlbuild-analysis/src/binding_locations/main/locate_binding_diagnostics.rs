@@ -67,6 +67,8 @@ pub fn locate_binding_diagnostics(
             line,
             column,
             location,
+            help: None,
+            related: None,
         });
     }
     Ok(located)

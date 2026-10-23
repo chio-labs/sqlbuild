@@ -20,12 +20,12 @@ fn given_tests_and_scenarios_when_reading_relationship_facts_then_python_order_a
                 &[
                     (
                         "orders_test",
-                        "WITH __ref__a AS (SELECT @outer(@inner(1))), __expected__orders AS (SELECT @enum('s').A) SELECT 1",
+                        "WITH __ref__a AS (SELECT @py.outer(@py.inner(1))), __expected__orders AS (SELECT @enum('s').A) SELECT 1",
                         "model",
                     ),
                     (
                         "macro_test",
-                        "WITH __macro_actual__ AS (SELECT @cents(1), @const('c')), __macro_expected__ AS (SELECT 100)",
+                        "WITH __macro_actual__ AS (SELECT @py.cents(1), @const('c')), __macro_expected__ AS (SELECT 100)",
                         "macro",
                     ),
                     (
@@ -79,7 +79,7 @@ fn given_tests_and_scenarios_when_reading_relationship_facts_then_python_order_a
                     ),
                     (
                         "bad_call",
-                        "WITH __macro_actual__ AS (SELECT @m(1, $$x) ), __macro_expected__ AS (SELECT 1)",
+                        "WITH __macro_actual__ AS (SELECT @py.m(1, $$x) ), __macro_expected__ AS (SELECT 1)",
                         "macro",
                     ),
                 ],

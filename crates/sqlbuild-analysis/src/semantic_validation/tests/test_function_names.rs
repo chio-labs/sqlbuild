@@ -128,7 +128,7 @@ fn given_supported_or_non_builtin_call_when_scanning_then_reports_nothing() {
             description: "methods, qualified functions, sentinels and macros are not checked",
             dialect: DialectType::Snowflake,
             sql: "SELECT tools.starts_with(a, 'x'), analytics.helpers.lcase(a), \
-                  __sqlbuild_udf_starts_with(a, 'x'), @starts_with(a), payload:lcase(a) \
+                  __sqlbuild_udf_starts_with(a, 'x'), @py.starts_with(a), payload:lcase(a) \
                   FROM __ref(\"products\")",
             expected_calls: &[],
         },

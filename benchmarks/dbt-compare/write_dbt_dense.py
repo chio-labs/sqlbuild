@@ -43,7 +43,7 @@ ERROR_REF = "sales000__int_clean__orders_missing"
 COLUMN_RE = re.compile(
     r'^\s+(\w+) \(type (\w+), nullable (true|false), description "([^"]*)"(, audits \[not_null\])?\)'
 )
-MACRO_CALL_RE = re.compile(r'@(macro_\d{3}_\d{5})\("([^"]*)"\)')
+MACRO_CALL_RE = re.compile(r'@py\.(macro_\d{3}_\d{5})\("([^"]*)"\)')
 CAST_RE = re.compile(r"CAST\(([^ ]+) AS (\w+)\) AS (\w+)")
 
 
@@ -201,7 +201,7 @@ def write_dbt(sqb: Path, out: Path, n: int) -> Path:
     base_re = re.compile(
         r'def (base_offset_\d{3})\(expression: str\) -> str:\n    return f"\(\{expression\} \+ 1\)"'
     )
-    for macro in sorted(sqb.glob("models/*/intermediate/clean/_sqlbuild/macros/*/*.py")):
+    for macro in sorted(sqb.glob("models/*/intermediate/clean/_sqlbuild/macros/python/*/*.py")):
         text = macro.read_text()
         name, ret = macro_def_re.search(text).groups()
         offset = offset_re.search(text)[1]

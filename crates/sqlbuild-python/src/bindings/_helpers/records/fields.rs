@@ -585,6 +585,11 @@ pub(crate) fn store_cached(
     Ok(())
 }
 
+/// The text of a record's string field `name`.
+pub(crate) fn field_text(value: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
+    field(value, name)?.extract()
+}
+
 /// `path.as_posix()` of a `pathlib` path, spelled natively from its text.
 pub(crate) fn path_posix(path: &Bound<'_, PyAny>) -> PyResult<String> {
     let text: String = path.str()?.to_string_lossy().into_owned();

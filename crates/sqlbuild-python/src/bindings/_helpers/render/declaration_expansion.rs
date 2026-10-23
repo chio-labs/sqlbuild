@@ -11,8 +11,12 @@ use sqlbuild_analysis::compiled_project::main::splice_declarations::splice_decla
 use sqlbuild_analysis::compiled_project::models::{
     DeclarationSplice, InaccessibleDeclaration, SplicedSql,
 };
+use sqlbuild_analysis::sql_macros::models::SqlMacroCheck;
 
 use crate::bindings::_helpers::render::declaration_values::ConstantRendering;
+use crate::bindings::_helpers::render::sql_macro_host::{
+    SqlMacroSource, expanded_sql_macro_calls, is_sql_macro_reference, reject_bare_macro_calls,
+};
 use crate::bindings::_helpers::sqltext::declaration_references::ScannedReference;
 
 const ENUM_REFERENCE_KIND: u8 = 0;
@@ -50,6 +54,7 @@ pub(crate) struct ExpansionClasses<'py> {
 }
 
 /// Who reads the declarations, whether it prefers relationship visibility, and its error path.
+#[derive(Clone)]
 pub(crate) struct ExpansionConsumer<'a, 'py> {
     pub(crate) identity: Option<Bound<'py, PyAny>>,
     pub(crate) relationship_visibility: bool,
@@ -65,20 +70,40 @@ pub(crate) struct DeclarationExpansion<'a, 'py> {
     pub(crate) consumer: ExpansionConsumer<'a, 'py>,
     pub(crate) rendering: &'a ConstantRendering,
     pub(crate) classes: &'a ExpansionClasses<'py>,
+    /// What SQL macro calls read beyond the context; `None` where SQL macros are not expanded.
+    pub(crate) sql_macros: Option<SqlMacroSource<'a, 'py>>,
 }
 
 /// The expanded SQL with its spans, and the usage records it adds in reference order.
 pub(crate) struct ExpandedDeclarations<'py> {
     pub(crate) spliced: SplicedSql,
     pub(crate) usages: Vec<Bound<'py, PyAny>>,
+    /// The SQL macros the SQL called, top-level and nested, once each.
+    pub(crate) sql_macros: Vec<String>,
+    /// What the analysed SQL must show for each top-level call's arguments to fit.
+    pub(crate) sql_macro_checks: Vec<SqlMacroCheck>,
 }
 
 /// Splice each reference in order, raising the attachment's error for the first bad one.
 pub(crate) fn expand_declarations<'py>(
     request: &DeclarationExpansion<'_, 'py>,
 ) -> PyResult<ExpandedDeclarations<'py>> {
+    reject_bare_macro_calls(request)?;
     let mut splices: Vec<DeclarationSplice> = Vec::with_capacity(request.references.len());
     let mut usages: Vec<Bound<'py, PyAny>> = Vec::new();
+    let call_starts: Vec<usize> = request
+        .references
+        .iter()
+        .filter(|reference| is_sql_macro_reference(reference.kind))
+        .map(|reference| reference.start)
+        .collect();
+    let (mut call_texts, sql_macros, sql_macro_checks) = if call_starts.is_empty() {
+        (Vec::new().into_iter(), Vec::new(), Vec::new())
+    } else {
+        let (texts, facts) = expanded_sql_macro_calls(request, &call_starts)?;
+        usages.extend(facts.usages);
+        (texts.into_iter(), facts.names, facts.checks)
+    };
     for ScannedReference {
         kind,
         name,
@@ -87,6 +112,14 @@ pub(crate) fn expand_declarations<'py>(
         end,
     } in request.references
     {
+        if is_sql_macro_reference(*kind) {
+            splices.push(DeclarationSplice {
+                start: *start,
+                end: *end,
+                replacement: call_texts.next().unwrap_or_default(),
+            });
+            continue;
+        }
         let (replacement, visibility) = if *kind == ENUM_REFERENCE_KIND {
             enum_text(request, name, member.as_deref())?
         } else {
@@ -114,6 +147,8 @@ pub(crate) fn expand_declarations<'py>(
     Ok(ExpandedDeclarations {
         spliced: splice_declarations(request.sql, &splices),
         usages,
+        sql_macros,
+        sql_macro_checks,
     })
 }
 

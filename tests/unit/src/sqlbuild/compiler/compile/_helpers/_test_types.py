@@ -103,6 +103,14 @@ class LoadProjectMacrosErrorTestCase:
 
 
 @dataclass(frozen=True)
+class SqlMacroInventoryTestCase:
+    description: str
+    macro_files: dict[str, str]
+    expected_exports: tuple[str, ...]
+    expected_fault_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class MacroDependencyTestCase:
     description: str
     macro_files: dict[str, str]

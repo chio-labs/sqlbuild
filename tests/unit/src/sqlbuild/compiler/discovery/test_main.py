@@ -68,7 +68,7 @@ __expected__daily_revenue AS (
 SELECT 1
 """,
                 "audits/generic/not_null.sql": "AUDIT ();\nSELECT 1\n",
-                "macros/name_helpers.py": "def slug() -> str:\n    return 'slug'\n",
+                "macros/python/name_helpers.py": "def slug() -> str:\n    return 'slug'\n",
                 "python/loaders/raw_orders.py": """
 from sqlbuild.loaders import loader
 
@@ -140,7 +140,7 @@ class SlackProvider(Provider):
             expected_audit_block_indexes=(1,),
             expected_audit_block_names=(None,),
             expected_audit_block_sql_bodies=("SELECT 1",),
-            expected_macro_paths=("macros/name_helpers.py",),
+            expected_macro_paths=("macros/python/name_helpers.py",),
             expected_loader_names=("raw_orders",),
             expected_adapter_path="adapter.py",
             expected_task_names=("fetch_window",),

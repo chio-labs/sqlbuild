@@ -142,8 +142,8 @@ project/
 ```
 
 ```python
-# models/commerce/macros/orders.py
-from macros.currency import add_tax, round_money
+# models/commerce/macros/python/orders.py
+from macros.python.currency import add_tax, round_money
 
 def formatted_order_total(expression: str) -> str:
     return round_money(add_tax(expression))
@@ -153,7 +153,7 @@ def formatted_order_total(expression: str) -> str:
 -- models/commerce/orders.sql
 MODEL(description "Orders");
 
-SELECT @formatted_order_total("subtotal") AS total
+SELECT @py.formatted_order_total("subtotal") AS total
 ```
 
 `returns/returns.sql` calls the same macro, so the declaration must remain available throughout
@@ -170,7 +170,7 @@ Scope
   Path: models/commerce/orders.sql
 
 Used (1)
-  └─ ● macro:formatted_order_total  models/commerce/macros/orders.py:5
+  └─ ● macro:formatted_order_total  models/commerce/macros/python/orders.py:5
 
 Scope chain
   ├─ exact-owner-private models/commerce (1)
@@ -178,7 +178,7 @@ Scope chain
   └─ project global (2)
 
 Available (1 of 3, 2 collapsed)
-  └─ ● macro:formatted_order_total  models/commerce/macros/orders.py:5
+  └─ ● macro:formatted_order_total  models/commerce/macros/python/orders.py:5
   … 2 globals collapsed; run sqb scope model:orders --globals all
 
 ● used by this resource   ○ not used by this resource   --verbose for scope details
@@ -191,7 +191,7 @@ With `--verbose`, the same `Used` section shows why each declaration is visible:
 ```console
 $ sqb scope model:orders --verbose
 Used (1)
-  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/orders.py:5:1
+  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/python/orders.py:5:1
 ```
 
 This answers several questions without opening declaration files: what the model actually uses,
@@ -214,9 +214,9 @@ Scope
   Path: models/commerce/orders.sql
 
 Used (3)
-  ├─ ● macro:add_tax  macros/currency.py:1
-  ├─ ● macro:formatted_order_total  models/commerce/macros/orders.py:5
-  └─ ● macro:round_money  macros/currency.py:5
+  ├─ ● macro:add_tax  macros/python/currency.py:1
+  ├─ ● macro:formatted_order_total  models/commerce/macros/python/orders.py:5
+  └─ ● macro:round_money  macros/python/currency.py:5
 ```
 
 The remaining report sections follow the `Used` section as usual. The dependency graph comes from
@@ -228,7 +228,7 @@ Explain the composed macro to inspect its direct graph and placement facts:
 ```console
 $ sqb scope model:orders --explain macro:formatted_order_total
 Explanation
-  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/orders.py:5:1
+  └─ ● macro:formatted_order_total  [macro; descendant-public; inherited_ancestor; params 1; role models/commerce/macros]  models/commerce/macros/python/orders.py:5:1
      Owner: (none)
      Owning path: models/commerce
      Consumers: model:orders, model:returns

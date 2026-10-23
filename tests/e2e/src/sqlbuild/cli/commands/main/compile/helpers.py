@@ -429,7 +429,7 @@ def run_layered_production_compile_benchmark(
         project_dir=project_dir,
         expected_max_seconds=expected_edit_max_seconds,
     )
-    macro_path: Path = project_dir / "macros" / "macro_00000.py"
+    macro_path: Path = project_dir / "macros" / "python" / "macro_00000.py"
     _replace_benchmark_text(
         path=macro_path,
         old='return f"({expression} + 0)"',
@@ -1491,7 +1491,7 @@ _REPRESENTATIVE_AUDIT_COUNT: int = 700
 _TOP_LEVEL_WITH_INTERVAL: int = 20
 _NESTED_QUERY_INTERVAL: int = 15
 _MACRO_INTERVAL: int = 13
-_BENCHMARK_MACRO_CALL: re.Pattern[str] = re.compile(r"@(macro_\d{5})\(")
+_BENCHMARK_MACRO_CALL: re.Pattern[str] = re.compile(r"@py\.(macro_\d{5})\(")
 _FUNCTION_INTERVAL: int = 43
 _SEED_INTERVAL: int = 67
 _SEED_REFERENCE_START_INDEX: int = 300
@@ -1704,7 +1704,7 @@ input_value + 1
 
 
 def _layered_write_macros(*, project_dir: Path, macro_count: int) -> None:
-    macros_dir: Path = project_dir / "macros"
+    macros_dir: Path = project_dir / "macros" / "python"
     macros_dir.mkdir(parents=True)
     for index in range(macro_count):
         composed_dependency: str = {
@@ -1741,14 +1741,14 @@ def _scope_single_folder_macros(*, project_dir: Path) -> None:
     for model_path in sorted((project_dir / "models").rglob("*.sql")):
         for call in _BENCHMARK_MACRO_CALL.findall(model_path.read_text(encoding="utf-8")):
             consumer_folders.setdefault(call, set()).add(model_path.parent.name)
-    macros_dir: Path = project_dir / "macros"
+    macros_dir: Path = project_dir / "macros" / "python"
     generated: set[str] = {path.stem for path in macros_dir.glob("macro_*.py")}
     for unused_stem in sorted(generated - set(consumer_folders)):
         (macros_dir / f"{unused_stem}.py").unlink()
     assert all(len(folders) == 1 for folders in consumer_folders.values())
     for stem, folders in sorted(consumer_folders.items()):
         (folder,) = folders
-        scoped_dir: Path = project_dir / "models" / folder / "_sqlbuild" / "_macros"
+        scoped_dir: Path = project_dir / "models" / folder / "_sqlbuild" / "_macros" / "python"
         scoped_dir.mkdir(parents=True, exist_ok=True)
         (macros_dir / f"{stem}.py").rename(scoped_dir / f"{stem}.py")
 
@@ -1903,7 +1903,7 @@ def _layered_dependent_model_sql(
     previous_name: str = f"model_{index - 1:05d}"
     macro_index: int = (index // _MACRO_INTERVAL) % macro_count
     id_expression: str = {
-        True: f'@macro_{macro_index:05d}("previous.id")',
+        True: f'@py.macro_{macro_index:05d}("previous.id")',
         False: f"previous.id + {index % 7}",
     }[index % _MACRO_INTERVAL == 0]
     generated_amount_expression: str = (
@@ -2082,7 +2082,7 @@ def _semantic_regular_model_sql(
     }[index % _FUNCTION_INTERVAL == 0]
     macro_index: int = (index // macro_call_interval) % macro_count
     id_expression: str = {
-        True: f'@macro_{macro_index:05d}("input.id")',
+        True: f'@py.macro_{macro_index:05d}("input.id")',
         False: "input.id",
     }[index % macro_call_interval == 0]
     status_expression: str = (
@@ -3194,12 +3194,12 @@ _PHASE_DURATION: re.Pattern[str] = re.compile(r"  \(\d+\.\d+s\)")
 _PROGRESS_LINE: re.Pattern[str] = re.compile(r".+  (START|OK  \(\d+\.\d+s\))")
 _COMPILE_TIMINGS_PATTERN: re.Pattern[str] = re.compile(r'\n  "compile_timings": \{[^{}]*\n  \}')
 _COMPILE_REUSE_EXTRA_PROJECT_FILES: dict[str, str] = {
-    "macros/_rounding.py": (
+    "macros/python/_rounding.py": (
         "_SCALE: int = 2\n\n\ndef scale() -> int:\n"
         '    """Return the rounding scale."""\n    return _SCALE\n'
     ),
-    "macros/currency.py": (
-        '"""Project-wide currency macros."""\n\nfrom macros._rounding import scale\n\n\n'
+    "macros/python/currency.py": (
+        '"""Project-wide currency macros."""\n\nfrom macros.python._rounding import scale\n\n\n'
         "def line_total_cents(price_cents: str, quantity: str) -> str:\n"
         '    """Calculate line total cents from a unit price and quantity."""\n'
         '    return f"ROUND({price_cents} * {quantity}, {scale()})"\n'
@@ -3209,7 +3209,7 @@ _COMPILE_REUSE_EXTRA_PROJECT_FILES: dict[str, str] = {
         f"SELECT order_id, '@@ENV:{COMPILE_REUSE_REGION_ENV_VAR}' AS region "
         'FROM __ref("stg_orders")\n'
     ),
-    "models/marts/_sqlbuild/_macros/order_source.py": (
+    "models/marts/_sqlbuild/_macros/python/order_source.py": (
         '"""Mart relation macros."""\n\n\n'
         "def order_source() -> str:\n"
         '    """Return the relation orders are read from."""\n'
@@ -3221,7 +3221,7 @@ _COMPILE_REUSE_EXTRA_PROJECT_FILES: dict[str, str] = {
     ),
     "models/marts/macro_sourced_orders.sql": (
         "MODEL (description 'Orders read through a macro-built reference.');\n\n"
-        "SELECT order_id FROM @order_source()\n"
+        "SELECT order_id FROM @py.order_source()\n"
     ),
     "models/marts/var_sourced_orders.sql": (
         "MODEL (description 'Orders read through a variable reference.');\n\n"
@@ -3409,7 +3409,7 @@ def touch_model_without_change(project_dir: Path) -> None:
 def rewrite_macro_without_change(project_dir: Path) -> None:
     """Rewrite a macro file with identical bytes."""
 
-    path: Path = project_dir / "macros/currency.py"
+    path: Path = project_dir / "macros/python/currency.py"
     path.write_bytes(path.read_bytes())
 
 
@@ -3970,7 +3970,7 @@ class RandomEditChain:
     def _macro_edit(self, _model: Path) -> None:
         scale: str = f"_SCALE: int = {2 + self._random.randrange(3)}"
         self._rewrite(
-            self._project_dir / "macros" / "_rounding.py",
+            self._project_dir / "macros" / "python" / "_rounding.py",
             lambda contents: re.sub(r"_SCALE: int = \d+", scale, contents),
         )
 
@@ -4523,7 +4523,7 @@ def add_external_flavor_macro(*, project_dir: Path, extlib: Path, value: str) ->
     write_external_flavor(extlib, value)
     write_project_file(
         project_dir,
-        "models/marts/_sqlbuild/_macros/flavor.py",
+        "models/marts/_sqlbuild/_macros/python/flavor.py",
         '"""Flavor macros backed by an outside module."""\n\n\n'
         "def flavor() -> str:\n"
         '    """Return the configured flavor literal."""\n'
@@ -4531,7 +4531,10 @@ def add_external_flavor_macro(*, project_dir: Path, extlib: Path, value: str) ->
         f"    return {EXTERNAL_FLAVOR_MODULE}.VALUE\n",
     )
     replace_project_text(
-        project_dir, FACT_ORDERS_MODEL, "  o.quantity,\n", "  o.quantity,\n  @flavor() AS flavor,\n"
+        project_dir,
+        FACT_ORDERS_MODEL,
+        "  o.quantity,\n",
+        "  o.quantity,\n  @py.flavor() AS flavor,\n",
     )
     return {"PYTHONPATH": str(extlib), "PYTHONDONTWRITEBYTECODE": "1"}
 
@@ -4555,7 +4558,7 @@ def add_stored_flavor_macro(
 
     write_project_file(
         project_dir,
-        "models/marts/_sqlbuild/_macros/flavor.py",
+        "models/marts/_sqlbuild/_macros/python/flavor.py",
         '"""Flavor macros backed by an outside module."""\n\n\n'
         "def flavor() -> str:\n"
         '    """Return the configured flavor literal and log the call."""\n'
@@ -4566,7 +4569,10 @@ def add_stored_flavor_macro(
         "    return source.VALUE\n",
     )
     replace_project_text(
-        project_dir, FACT_ORDERS_MODEL, "  o.quantity,\n", "  o.quantity,\n  @flavor() AS flavor,\n"
+        project_dir,
+        FACT_ORDERS_MODEL,
+        "  o.quantity,\n",
+        "  o.quantity,\n  @py.flavor() AS flavor,\n",
     )
     log_path.write_text("", encoding="utf-8")
     return {
@@ -4689,7 +4695,7 @@ def prepare_macro_reference_call_project(*, tmp_path: Path) -> Path:
                 'MODEL (description "Customers.", materialized view);\n\n'
                 'SELECT order_id AS customer_id FROM __source("raw_orders")\n'
             ),
-            "models/marts/_sqlbuild/_macros/customer_relation.py": (
+            "models/marts/_sqlbuild/_macros/python/customer_relation.py": (
                 '"""A macro that returns an unquoted reference call."""\n\n'
                 "import os\n\n\n"
                 "def customer_relation() -> str:\n"
@@ -4703,7 +4709,7 @@ def prepare_macro_reference_call_project(*, tmp_path: Path) -> Path:
             **{
                 f"models/marts/{name}.sql": (
                     f'MODEL (description "{name}.", materialized view);\n\n'
-                    "SELECT customer_id FROM @customer_relation()\n"
+                    "SELECT customer_id FROM @py.customer_relation()\n"
                 )
                 for name in _MACRO_REFERENCE_CALL_MODELS
             },
@@ -4759,7 +4765,7 @@ _STORE_IMPORTED_MODULES: tuple[str, ...] = (
     "macros._label_values",
 )
 _STORE_PROJECT_EXTRA_FILES: dict[str, str] = {
-    "macros/context_labels.py": (
+    "macros/python/context_labels.py": (
         '"""Macros that read the target, the environment and an outside module."""\n\n'
         "import os\n\n\n"
         "def env_region() -> str:\n"
@@ -4773,11 +4779,11 @@ _STORE_PROJECT_EXTRA_FILES: dict[str, str] = {
         f"    import {_STORE_EXTERNAL_MODULE}\n\n"
         f"    return repr({_STORE_EXTERNAL_MODULE}.VALUE)\n"
     ),
-    "macros/_label_values.py": (
+    "macros/python/_label_values.py": (
         'def label_value() -> str:\n    """Return the label literal."""\n    return "\'first\'"\n'
     ),
-    "macros/labels.py": (
-        "from macros._label_values import label_value\n\n\n"
+    "macros/python/labels.py": (
+        "from macros.python._label_values import label_value\n\n\n"
         'def label() -> str:\n    """Return the label from a helper module."""\n'
         "    return label_value()\n"
     ),
@@ -4803,7 +4809,7 @@ def prepare_macro_call_store_project(*, project_dir: Path, extlib: Path) -> None
 
     for relative_path, content in MACRO_BRIDGE_PROJECT_FILES.items():
         write_project_file(
-            project_dir, relative_path, content.replace("WHERE id IN @generated_join()\n", "")
+            project_dir, relative_path, content.replace("WHERE id IN @py.generated_join()\n", "")
         )
     for relative_path, content in _STORE_PROJECT_EXTRA_FILES.items():
         write_project_file(project_dir, relative_path, content)
@@ -4822,10 +4828,11 @@ def prepare_macro_call_store_project(*, project_dir: Path, extlib: Path) -> None
     replace_project_text(
         project_dir,
         _SOUTH_MODEL,
-        "  'quoted @cents(1)' AS quoted",
-        "  @target_label() AS target_label,\n  @flavor() AS flavor,\n  @label() AS label,\n"
-        "  @env_region() AS env_region,\n"
-        "  'quoted @cents(1)' AS quoted",
+        "  'quoted @py.cents(1)' AS quoted",
+        "  @py.target_label() AS target_label,\n  @py.flavor() AS flavor,\n  @py.label() AS "
+        "label,\n"
+        "  @py.env_region() AS env_region,\n"
+        "  'quoted @py.cents(1)' AS quoted",
     )
     write_store_flavor(extlib=extlib, value="sweet")
 
@@ -4840,7 +4847,7 @@ def write_store_flavor(*, extlib: Path, value: str) -> None:
 def edit_label_helper(project_dir: Path, value: str) -> None:
     """Change the literal the helper module behind the label macro returns."""
 
-    replace_project_text(project_dir, "macros/_label_values.py", "'first'", f"'{value}'")
+    replace_project_text(project_dir, "macros/python/_label_values.py", "'first'", f"'{value}'")
 
 
 def edit_south_model(project_dir: Path, old: str, new: str) -> None:
@@ -5235,14 +5242,14 @@ def slow_lint_model_files(*, model_count: int) -> dict[str, str]:
     """A macro used by a model, a function, and macro tests that pause when linted."""
 
     return {
-        "macros/slow.py": _SLOW_LINT_MACRO,
+        "macros/python/slow.py": _SLOW_LINT_MACRO,
         "functions/sql/slow_amount.sql": (
             'FUNCTION (description "Slow amount", arguments (p_amount INTEGER), returns INTEGER);\n'
-            'SELECT @slow_total("p_amount")\n'
+            'SELECT @py.slow_total("p_amount")\n'
         ),
         "models/slow_total.sql": (
             'MODEL (description "Slow total");\n'
-            'SELECT @slow_total("model_amount") AS amount\n'
+            'SELECT @py.slow_total("model_amount") AS amount\n'
             "FROM (SELECT 5 AS model_amount) AS input_values\n"
         ),
         **{
@@ -5251,7 +5258,7 @@ def slow_lint_model_files(*, model_count: int) -> dict[str, str]:
                 "WITH\n"
                 "input_values AS (SELECT 5 AS slow_amount),\n"
                 "__macro_actual__ AS (\n"
-                '  SELECT @slow_total("slow_amount") AS amount FROM input_values\n'
+                '  SELECT @py.slow_total("slow_amount") AS amount FROM input_values\n'
                 "),\n"
                 "__macro_expected__ AS (SELECT 5 AS amount)\n"
                 "SELECT 1\n"

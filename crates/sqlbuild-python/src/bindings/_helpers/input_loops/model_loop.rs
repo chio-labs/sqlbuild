@@ -95,6 +95,7 @@ use crate::bindings::_helpers::render::declaration_expansion::{
 use crate::bindings::_helpers::render::declaration_values::ConstantRendering;
 use crate::bindings::_helpers::render::macro_call_rows::SpanRow;
 use crate::bindings::_helpers::render::macro_call_rows::span_row;
+use crate::bindings::_helpers::render::sql_macro_host::{SqlCallOrigin, SqlMacroSource};
 use crate::bindings::_helpers::sqltext::declaration_references::declaration_scan;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 use crate::bindings::_helpers::sqltext::static_sql::{
@@ -619,19 +620,29 @@ impl NativeModelLoop {
             usage_record: context.classes.usage_record.clone(),
             compile_error: context.classes.compile_error.clone(),
         };
-        let declarations: ExpandedDeclarations<'py> = expand_declarations(&DeclarationExpansion {
-            sql: &interpolated,
-            references: &references,
-            stop,
-            context: &visible.declarations,
-            consumer: ExpansionConsumer {
-                identity: Some(visible.consumer.clone()),
-                relationship_visibility: false,
-                path: file_path,
-            },
-            rendering: context.host.get(),
-            classes: &expansion_classes,
-        })?;
+        let mut declarations: ExpandedDeclarations<'py> =
+            expand_declarations(&DeclarationExpansion {
+                sql: &interpolated,
+                references: &references,
+                stop,
+                context: &visible.declarations,
+                consumer: ExpansionConsumer {
+                    identity: Some(visible.consumer.clone()),
+                    relationship_visibility: false,
+                    path: file_path,
+                },
+                rendering: context.host.get(),
+                classes: &expansion_classes,
+                sql_macros: Some(SqlMacroSource {
+                    loaded_macros: Some(context.classes.macros.loaded_macros.bind(py).as_any()),
+                    origin: Some(SqlCallOrigin {
+                        relative_path,
+                        contents,
+                        query: authored_query,
+                    }),
+                    scopes: Some(&context.classes.visibility),
+                }),
+            })?;
         let macros: Option<ExpandedMacros> = if calls_macros(&declarations.spliced.sql) {
             let model: MacroModel<'_> = MacroModel {
                 file_path,
@@ -740,6 +751,11 @@ impl NativeModelLoop {
                 visibility,
             };
             let hooks: ExpandedHooks<'py> = expanded_hooks(self, context, &values, &hook_model)?;
+            for name in hooks.sql_macros {
+                if !declarations.sql_macros.contains(&name) {
+                    declarations.sql_macros.push(name);
+                }
+            }
             (hooks.values, hooks.usages)
         } else {
             (values, Vec::new())

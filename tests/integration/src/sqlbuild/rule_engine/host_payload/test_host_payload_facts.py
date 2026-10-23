@@ -43,7 +43,7 @@ _PROJECT_FILES: dict[str, str] = {
     ),
     "constants/policy.sql": "CONSTANT (name minimum_amount, value 7);\n",
     "enums/order_status.sql": "ENUM (name order_status, members [PAID, OPEN]);\n",
-    "models/marts/_sqlbuild/_macros/amounts.py": (
+    "models/marts/_sqlbuild/_macros/python/amounts.py": (
         'def doubled(amount: str) -> str:\n    return f"({amount}) * 2"\n'
     ),
     "models/staging/stg_orders.sql": (
@@ -57,7 +57,7 @@ _PROJECT_FILES: dict[str, str] = {
     ),
     "models/marts/order_totals.sql": (
         'MODEL (description "Order totals", materialized table);\n\n'
-        'SELECT o.order_id, @doubled("o.amount") AS doubled_amount, o.status\n'
+        'SELECT o.order_id, @py.doubled("o.amount") AS doubled_amount, o.status\n'
         'FROM __ref("stg_orders") AS o WHERE o.amount > 7\n'
     ),
     "models/marts/order_flags.sql": (

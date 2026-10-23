@@ -11,7 +11,7 @@ macro returns final SQL; SQLBuild does not treat its output as another layer of 
 Use underscore-prefixed helpers for implementation details that should not be callable from SQL:
 
 ```python
-# macros/currency.py
+# macros/python/currency.py
 def _divide_by_100(expression: str) -> str:
     return f"({expression} / 100.0)"
 
@@ -42,8 +42,8 @@ def formatted_total(expression: str) -> str:
 Import another project macro when it is visible from the importing macro file:
 
 ```python
-# macros/orders.py
-from macros.currency import add_tax, round_money
+# macros/python/orders.py
+from macros.python.currency import add_tax, round_money
 
 
 def formatted_order_total(expression: str) -> str:
@@ -69,18 +69,18 @@ or `_macros/`.
 
 ## Macro output is final SQL
 
-Do not return SQL containing another `@macro()` call:
+Do not return SQL containing another `@py.name()` call:
 
 ```python
 # Invalid: creates another macro-expansion layer.
 def formatted_order_total(expression: str) -> str:
-    return f"@round_money(@add_tax({expression!r}))"
+    return f"@py.round_money(@py.add_tax({expression!r}))"
 ```
 
 SQLBuild rejects this output. Import and call the Python functions instead:
 
 ```python
-from macros.currency import add_tax, round_money
+from macros.python.currency import add_tax, round_money
 
 
 def formatted_order_total(expression: str) -> str:
@@ -94,7 +94,7 @@ This keeps macro behavior readable in Python and ensures one expansion produces 
 The SQL author may explicitly pass one macro's result to another:
 
 ```sql
-SELECT @round_money(@add_tax("subtotal")) AS order_total
+SELECT @py.round_money(@py.add_tax("subtotal")) AS order_total
 ```
 
 SQLBuild evaluates `add_tax` first and passes its returned string to `round_money`. This is not a
@@ -109,7 +109,7 @@ When the first parameter is named `ctx`, SQLBuild passes a `MacroContext` with a
 project-variable information:
 
 ```python
-# macros/datetime.py
+# macros/python/datetime.py
 def timestamp_trunc(ctx, grain: str, expression: str) -> str:
     if ctx.adapter_name == "bigquery":
         return f"TIMESTAMP_TRUNC({expression}, {grain.upper()})"

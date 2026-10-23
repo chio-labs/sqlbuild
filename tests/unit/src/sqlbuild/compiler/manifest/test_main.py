@@ -702,7 +702,7 @@ def test_given_deps_when_building_manifest_then_parent_map_correct(
             expected_name="my_macro",
             expected_resource_type="macro",
             expected_macro_sql="def my_macro(): return 'SELECT 1'",
-            expected_path="macros/helpers.py",
+            expected_path="macros/python/helpers.py",
         ),
         ManifestMacroNodeTestCase(
             description="scoped macro exposes visibility metadata",
@@ -711,7 +711,7 @@ def test_given_deps_when_building_manifest_then_parent_map_correct(
             expected_name="my_macro",
             expected_resource_type="macro",
             expected_macro_sql="def my_macro(): return 'SELECT 1'",
-            expected_path="models/sales/macros/helpers.py",
+            expected_path="models/sales/macros/python/helpers.py",
             expected_visibility="inherited",
             expected_scope_path="models/sales",
             expected_dependencies=("base_macro",),
@@ -1023,8 +1023,8 @@ def test_given_full_project_when_building_manifest_then_validates_against_dbt_sc
 
     macro: LoadedMacro = LoadedMacro(
         name="my_macro",
-        file_path=Path("/project/macros/helpers.py"),
-        relative_path=Path("macros/helpers.py"),
+        file_path=Path("/project/macros/python/helpers.py"),
+        relative_path=Path("macros/python/helpers.py"),
         raw_source="def my_macro(): return 'SELECT 1'",
         function=lambda: "SELECT 1",
     )

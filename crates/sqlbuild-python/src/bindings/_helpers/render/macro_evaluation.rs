@@ -96,7 +96,7 @@ pub(crate) fn evaluate_call<'py>(
     let Ok(sql) = result.downcast::<PyString>() else {
         if top_level {
             let message: String = format!(
-                "Macro '@{name}' in '{}' must return a SQL string when used directly in SQL",
+                "Macro '@py.{name}' in '{}' must return a SQL string when used directly in SQL",
                 expansion.file_label
             );
             return Err(raised(&classes.compile_error, &message));
@@ -162,7 +162,7 @@ fn invoke<'py>(
     }
     if kwargs.contains(CONTEXT_PARAMETER)? {
         let message: String = format!(
-            "Macro '@{name}' must not be called with keyword argument 'ctx'; 'ctx' is reserved \
+            "Macro '@py.{name}' must not be called with keyword argument 'ctx'; 'ctx' is reserved \
              for injected macro context"
         );
         return Err(raised(&classes.compile_error, &message));
@@ -196,7 +196,7 @@ fn macro_failure(
     };
     let wrapped: PyErr = raised(
         &classes.compile_error,
-        &format!("Macro '@{name}' in '{file_label}' {reason}: {detail}"),
+        &format!("Macro '@py.{name}' in '{file_label}' {reason}: {detail}"),
     );
     wrapped.set_cause(py, Some(error));
     wrapped
@@ -213,7 +213,7 @@ fn final_sql(run: &Evaluation<'_, '_>, name: &str, value: &Bound<'_, PyAny>) -> 
         let start: Bound<'_, PyAny> = native_field(error.value(py), "start")?;
         let surrogate: String = value.get_item(start)?.repr()?.to_string();
         let message: String = format!(
-            "Macro '@{name}' in '{}' returned text with the lone surrogate {surrogate}, which is \
+            "Macro '@py.{name}' in '{}' returned text with the lone surrogate {surrogate}, which is \
              not valid Unicode",
             expansion.file_label
         );
@@ -232,13 +232,13 @@ fn final_sql(run: &Evaluation<'_, '_>, name: &str, value: &Bound<'_, PyAny>) -> 
     }
     let calls: String = names
         .iter()
-        .map(|call| format!("@{call}()"))
+        .map(|call| format!("@py.{call}()"))
         .collect::<Vec<String>>()
         .join(", ");
     let message: String = format!(
-        "Macro '@{name}' in '{}' returned SQLBuild call(s) {calls}. Macro output must be final \
+        "Macro '@py.{name}' in '{}' returned SQLBuild call(s) {calls}. Macro output must be final \
          SQL. Compose macros with ordinary Python imports and function calls instead; nested \
-         @macro() calls are supported only when explicitly authored in SQL",
+         @py.macro() calls are supported only when explicitly authored in SQL",
         expansion.file_label
     );
     Err(raised(&classes.compile_error, &message))

@@ -1,12 +1,17 @@
 //! `@enum`/`@const` reference offsets scanned natively for the model loop.
 
+use sqlbuild_analysis::sql_macros::constants::SQL_CALL_PREFIX;
+use sqlbuild_analysis::sql_macros::main::sql_macro_calls::sql_macro_calls;
 use sqlbuild_sqltext::compiler::main::declaration_references::scan_declaration_references;
 use sqlbuild_sqltext::compiler::models::{
     DeclarationReference, DeclarationReferenceKind, DeclarationReferenceScan,
     DeclarationReferenceStop,
 };
 
-/// One natively scanned reference: kind 0 is an enum member, 1 a constant.
+/// The reference kind of an outer SQL macro call.
+const SQL_MACRO_REFERENCE_KIND: u8 = 2;
+
+/// One natively scanned reference: kind 0 is an enum member, 1 a constant, 2 a SQL macro call.
 #[derive(Clone)]
 pub(crate) struct ScannedReference {
     pub(crate) kind: u8,
@@ -22,7 +27,50 @@ type ScanRow = (Vec<ScannedReference>, Option<u8>);
 pub(crate) fn declaration_scan(sql: &str) -> ScanRow {
     let scanned: Vec<DeclarationReferenceScan> =
         scan_declaration_references(&[sql.to_owned()], false);
-    scanned.into_iter().next().map(scan_row).unwrap_or_default()
+    let row: ScanRow = scanned.into_iter().next().map(scan_row).unwrap_or_default();
+    if !sql.contains(SQL_CALL_PREFIX) {
+        return row;
+    }
+    with_sql_macro_calls(sql, row)
+}
+
+/// The scan with each outer SQL macro call as one kind-2 reference, replacing those inside it.
+fn with_sql_macro_calls(sql: &str, row: ScanRow) -> ScanRow {
+    let (references, stop) = row;
+    let Ok(calls) = sql_macro_calls(sql) else {
+        return (references, stop);
+    };
+    if calls.is_empty() {
+        return (references, stop);
+    }
+    let spans: Vec<(usize, usize, String)> = calls
+        .iter()
+        .map(|call| {
+            let start: usize = sql[..call.start].chars().count();
+            (
+                start,
+                start + sql[call.start..call.replaced_end].chars().count(),
+                call.name.clone(),
+            )
+        })
+        .collect();
+    let mut merged: Vec<ScannedReference> = references
+        .into_iter()
+        .filter(|reference| !inside_call(reference, &spans))
+        .collect();
+    merged.extend(
+        spans
+            .into_iter()
+            .map(|(start, end, name)| ScannedReference {
+                kind: SQL_MACRO_REFERENCE_KIND,
+                name,
+                member: None,
+                start,
+                end,
+            }),
+    );
+    merged.sort_by_key(|reference| reference.start);
+    (merged, stop)
 }
 
 fn scan_row(scan: DeclarationReferenceScan) -> ScanRow {
@@ -49,4 +97,11 @@ fn reference_row(reference: DeclarationReference) -> ScannedReference {
         start: reference.start,
         end: reference.end,
     }
+}
+
+/// Whether a declaration reference stands inside one of the SQL macro call spans.
+fn inside_call(reference: &ScannedReference, spans: &[(usize, usize, String)]) -> bool {
+    spans
+        .iter()
+        .any(|(start, end, _)| reference.start >= *start && reference.end <= *end)
 }

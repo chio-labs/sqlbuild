@@ -130,7 +130,7 @@ def test_given_model_macro_when_compiling_with_sql_rules_then_expands_once_and_p
     (tmp_path / "sqlbuild_project.toml").write_text(
         'name = "orders"\nadapter = "duckdb"\n[rules]\nselect = ["SQBRSQL001"]\n'
     )
-    macro_dir: Path = tmp_path / "models" / "orders" / "_sqlbuild" / "_macros"
+    macro_dir: Path = tmp_path / "models" / "orders" / "_sqlbuild" / "_macros" / "python"
     macro_dir.mkdir(parents=True)
     (macro_dir / "missing_value.py").write_text(
         "from pathlib import Path\n"
@@ -141,7 +141,7 @@ def test_given_model_macro_when_compiling_with_sql_rules_then_expands_once_and_p
         "    return 'NULL'\n"
     )
     (tmp_path / "models" / "orders" / "orders.sql").write_text(
-        "MODEL (description 'Test model orders.', materialized table);\n\nSELECT 1 AS order_id WHERE 1 = @missing_value()\n"
+        "MODEL (description 'Test model orders.', materialized table);\n\nSELECT 1 AS order_id WHERE 1 = @py.missing_value()\n"
     )
     exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
     result: dict[str, object] = json.loads(capsys.readouterr().out)
@@ -311,15 +311,15 @@ def test_given_relative_project_directory_when_compiling_then_private_macro_is_v
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     project_dir: Path = tmp_path / "project"
-    (project_dir / "models" / "orders" / "_sqlbuild" / "_macros").mkdir(parents=True)
+    (project_dir / "models" / "orders" / "_sqlbuild" / "_macros" / "python").mkdir(parents=True)
     (project_dir / "sqlbuild_project.toml").write_text(
         'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
     )
-    (project_dir / "models" / "orders" / "_sqlbuild" / "_macros" / "order_id.py").write_text(
-        'def order_id() -> str:\n    return "CAST(1 AS INTEGER)"\n', encoding="utf-8"
-    )
+    (
+        project_dir / "models" / "orders" / "_sqlbuild" / "_macros" / "python" / "order_id.py"
+    ).write_text('def order_id() -> str:\n    return "CAST(1 AS INTEGER)"\n', encoding="utf-8")
     (project_dir / "models" / "orders" / "orders.sql").write_text(
-        "MODEL (description 'Test model orders.', materialized table);\nSELECT @order_id() AS order_id\n",
+        "MODEL (description 'Test model orders.', materialized table);\nSELECT @py.order_id() AS order_id\n",
         encoding="utf-8",
     )
     monkeypatch.chdir(tmp_path)

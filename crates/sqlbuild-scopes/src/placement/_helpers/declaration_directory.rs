@@ -25,3 +25,23 @@ pub(crate) fn declaration_directory(
     }
     format!("{path}/{DECLARATION_GROUP_DIRECTORY}/{role}")
 }
+
+/// A macro file's kind folder, `python/` or `sql/` by its suffix; nothing for other kinds.
+#[must_use]
+pub(crate) fn declaration_file_directory(
+    kind: DeclarationKind,
+    scope: ScopeKind,
+    path: Option<&str>,
+    file_path: &str,
+) -> String {
+    let directory: String = declaration_directory(kind, scope, path);
+    if kind != DeclarationKind::Macro {
+        return directory;
+    }
+    let folder: &str = if file_path.ends_with(".py") {
+        "python"
+    } else {
+        "sql"
+    };
+    format!("{directory}/{folder}")
+}

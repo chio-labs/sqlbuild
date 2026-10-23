@@ -126,7 +126,7 @@ from tests.unit.src.sqlbuild.executor.testing.main.helpers import build_comparis
                 "orders": "SELECT 1 AS id, 'real' AS country FROM __source(\"raw\")",
             },
             model_macro_source_queries={
-                "orders": 'SELECT 1 AS id, @country() AS country FROM __source("raw")',
+                "orders": 'SELECT 1 AS id, @py.country() AS country FROM __source("raw")',
             },
             loaded_macro_outputs={"country": "'real'"},
             macro_mocks={"country": "'mocked'"},
@@ -144,7 +144,7 @@ from tests.unit.src.sqlbuild.executor.testing.main.helpers import build_comparis
                 "orders": "SELECT 1 AS id, 'real' AS country FROM __source(\"raw\")",
             },
             model_macro_source_queries={
-                "orders": 'SELECT 1 AS id, @country() AS country FROM __source("raw")',
+                "orders": 'SELECT 1 AS id, @py.country() AS country FROM __source("raw")',
             },
             loaded_macro_outputs={"country": "'real'"},
             mock_ref_ctes={},

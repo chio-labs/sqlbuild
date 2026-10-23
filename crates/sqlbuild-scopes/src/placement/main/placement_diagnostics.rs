@@ -3,7 +3,7 @@
 use crate::placement::_helpers::anchors::{
     AnchorSets, UsagesByDeclaration, anchor_sets, usages_by_declaration,
 };
-use crate::placement::_helpers::declaration_directory::declaration_directory;
+use crate::placement::_helpers::declaration_directory::declaration_file_directory;
 use crate::placement::_helpers::required::{owner_uses_directly, required_placement};
 use crate::placement::_helpers::roles::scope_label;
 use crate::placement::models::{
@@ -78,10 +78,11 @@ fn placement_message(record: &DeclarationRecord, required: &RequiredPlacement) -
         .as_deref()
         .filter(|path| !path.is_empty())
         .unwrap_or(&record.ownership_root.path);
-    let directory: String = declaration_directory(
+    let directory: String = declaration_file_directory(
         record.identity.kind,
         required.scope,
         required.path.as_deref(),
+        &record.path,
     );
     let target: String = if required.scope == ScopeKind::Global {
         format!("top-level {directory}/")

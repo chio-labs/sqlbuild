@@ -21,12 +21,12 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
         DiscoverMacroFilesTestCase(
             description="discovers Python macro modules but skips package initializers",
             files={
-                "macros/__init__.py": "raise RuntimeError('must not load')\n",
-                "macros/orders.py": "def order_columns(): return 'order_id'\n",
-                "macros/nested/__init__.py": "raise RuntimeError('must not load')\n",
-                "macros/nested/dates.py": "def current_date(): return 'CURRENT_DATE'\n",
+                "macros/python/__init__.py": "raise RuntimeError('must not load')\n",
+                "macros/python/orders.py": "def order_columns(): return 'order_id'\n",
+                "macros/python/nested/__init__.py": "raise RuntimeError('must not load')\n",
+                "macros/python/nested/dates.py": "def current_date(): return 'CURRENT_DATE'\n",
             },
-            expected_relative_paths=("macros/nested/dates.py", "macros/orders.py"),
+            expected_relative_paths=("macros/python/nested/dates.py", "macros/python/orders.py"),
         ),
     ],
     ids=lambda case: case.description,

@@ -40,6 +40,7 @@ use crate::bindings::_helpers::render::declaration_expansion::{
     DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer,
     expand_declarations,
 };
+use crate::bindings::_helpers::render::sql_macro_host::SqlMacroSource;
 use crate::bindings::_helpers::sqltext::declaration_references::declaration_scan;
 use crate::bindings::_helpers::sqltext::static_sql::{InterpolationSources, interpolated};
 use sqlbuild_project::models::ReferenceRow;
@@ -100,6 +101,8 @@ pub(crate) struct HookModel<'a, 'py> {
 pub(crate) struct ExpandedHooks<'py> {
     pub(crate) values: Bound<'py, PyDict>,
     pub(crate) usages: Vec<Bound<'py, PyAny>>,
+    /// The SQL macros the hook SQL called, top-level and nested, once each.
+    pub(crate) sql_macros: Vec<String>,
 }
 
 /// `expand_model_hook_macros_result`, then the hooks' reference and intrinsic checks.
@@ -123,6 +126,7 @@ pub(crate) fn expanded_hooks<'py>(
         context_values,
         usages: RefCell::new(Vec::new()),
         references: RefCell::new(Vec::new()),
+        sql_macros: RefCell::new(Vec::new()),
     };
     let expanded: Bound<'py, PyDict> = values.copy()?;
     let model_scope: Scope<'_, 'py> = Scope {
@@ -158,6 +162,7 @@ pub(crate) fn expanded_hooks<'py>(
     Ok(ExpandedHooks {
         values: expanded,
         usages: run.usages.take(),
+        sql_macros: run.sql_macros.take(),
     })
 }
 
@@ -177,6 +182,8 @@ struct HookRun<'a, 'b, 'py> {
     model: &'a HookModel<'a, 'py>,
     context_values: Bound<'py, PyDict>,
     usages: RefCell<Vec<Bound<'py, PyAny>>>,
+    /// The SQL macros hook SQL called so far, once each.
+    sql_macros: RefCell<Vec<String>>,
     references: RefCell<Vec<ReferenceRow>>,
 }
 
@@ -412,6 +419,14 @@ impl<'py> HookRun<'_, '_, 'py> {
         };
         let expanded: ExpandedDeclarations<'py> =
             self.declarations(&interpolated_sql, &declarations, scope)?;
+        {
+            let mut called = self.sql_macros.borrow_mut();
+            for name in &expanded.sql_macros {
+                if !called.contains(name) {
+                    called.push(name.clone());
+                }
+            }
+        }
         let mut sql: String = expanded.spliced.sql;
         let mut usages: Vec<Bound<'py, PyAny>> = expanded.usages;
         let mut argument_rows: Vec<ReferenceRow> = Vec::new();
@@ -489,6 +504,18 @@ impl<'py> HookRun<'_, '_, 'py> {
             },
             rendering: self.context.host.get(),
             classes: &classes,
+            sql_macros: Some(SqlMacroSource {
+                loaded_macros: Some(
+                    self.context
+                        .classes
+                        .macros
+                        .loaded_macros
+                        .bind(declarations.py())
+                        .as_any(),
+                ),
+                origin: None,
+                scopes: Some(&self.context.classes.visibility),
+            }),
         })
     }
 

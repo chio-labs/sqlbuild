@@ -30,6 +30,7 @@ use crate::bindings::_helpers::render::declaration_expansion::{
     DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer,
     expand_declarations,
 };
+use crate::bindings::_helpers::render::sql_macro_host::SqlMacroSource;
 use crate::bindings::_helpers::scopes::declaration_contexts::NativeDeclarationContexts;
 use crate::bindings::_helpers::sqltext::declaration_references::declaration_scan;
 use crate::bindings::_helpers::sqltext::static_sql::{InterpolationSources, interpolated};
@@ -247,6 +248,11 @@ pub(crate) fn expanded_authored_sql<'py>(
             },
             rendering: context.host.get(),
             classes: &classes,
+            sql_macros: Some(SqlMacroSource {
+                loaded_macros: Some(context.classes.macros.loaded_macros.bind(py).as_any()),
+                origin: None,
+                scopes: Some(&context.classes.visibility),
+            }),
         })?;
         expanded_sql = expanded.spliced.sql;
         usages.extend(expanded.usages);

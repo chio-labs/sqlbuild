@@ -290,7 +290,7 @@ def prepare_clickhouse_waffle_shop(
         ),
         encoding="utf-8",
     )
-    time_macros_path: Path = project_dir / "models" / "marts" / "_macros" / "time.py"
+    time_macros_path: Path = project_dir / "models" / "marts" / "_macros" / "python" / "time.py"
     time_macros_path.write_text(
         time_macros_path.read_text(encoding="utf-8").replace(
             "return f\"DATE_TRUNC('{grain}', {expression})\"",

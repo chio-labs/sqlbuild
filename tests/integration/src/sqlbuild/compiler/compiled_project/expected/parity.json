@@ -98,15 +98,15 @@
       "declaration_usages": "()",
       "enum_columns": "{}",
       "enum_declarations": "()",
-      "lint_expansion": "CompiledSqlExpansion(authored_sql='SELECT @cents(\\'3\\') AS cents, order_id FROM __ref(\"stg_orders\")', expanded_sql='SELECT 3 * 100 AS cents, order_id FROM __ref(\"stg_orders\")', passes=((), (), (ExpansionSpan(source_start=7, source_end=18, output_start=7, output_end=14),)))",
+      "lint_expansion": "CompiledSqlExpansion(authored_sql='SELECT @py.cents(\\'3\\') AS cents, order_id FROM __ref(\"stg_orders\")', expanded_sql='SELECT 3 * 100 AS cents, order_id FROM __ref(\"stg_orders\")', passes=((), (), (ExpansionSpan(source_start=7, source_end=21, output_start=7, output_end=14),)))",
       "macro_deps": "('cents',)",
-      "macro_source_sql": "'SELECT @cents(\\'3\\') AS cents, order_id FROM __ref(\"stg_orders\")'",
+      "macro_source_sql": "'SELECT @py.cents(\\'3\\') AS cents, order_id FROM __ref(\"stg_orders\")'",
       "macro_usages": "(UsageRecord(consumer=ResourceIdentity(kind=<ResourceKind.MODEL: 'model'>, name='priced'), declaration=DeclarationIdentity(kind=<DeclarationKind.MACRO: 'macro'>, name='cents', owner=None), kind=<UsageKind.RUNTIME: 'runtime'>, through=None, enum_member=None),)",
       "query_sql": "'SELECT 3 * 100 AS cents, order_id FROM __ref(\"stg_orders\")'",
       "references": "(CompileSqlReference(ref_kind=<SqlReferenceKind.REF: 'ref'>, ref_name='stg_orders', ref_package=None, call_argument_count=None),)",
       "rejected_sql_analysis_opt_out": "None",
       "schema_entry": "SchemaModelEntry(name='priced', model_schema=None, description='Priced orders.', type_enforcement=None, meta={}, columns=(), dynamic_columns=(), audits=(), tags=())",
-      "sql_expansion": "CompiledSqlExpansion(authored_sql='SELECT @cents(\\'3\\') AS cents, order_id FROM __ref(\"stg_orders\")', expanded_sql='SELECT 3 * 100 AS cents, order_id FROM __ref(\"stg_orders\")', passes=((), (ExpansionSpan(source_start=7, source_end=18, output_start=7, output_end=14),)))",
+      "sql_expansion": "CompiledSqlExpansion(authored_sql='SELECT @py.cents(\\'3\\') AS cents, order_id FROM __ref(\"stg_orders\")', expanded_sql='SELECT 3 * 100 AS cents, order_id FROM __ref(\"stg_orders\")', passes=((), (ExpansionSpan(source_start=7, source_end=21, output_start=7, output_end=14),)))",
       "sql_validation_enabled": "True"
     },
     "models/marts/statuses.sql": {

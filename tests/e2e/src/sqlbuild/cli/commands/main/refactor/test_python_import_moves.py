@@ -20,7 +20,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
     write_orders_project,
 )
 
-_MOVED: str = "models.finance._sqlbuild._macros.cents"
+_MOVED: str = "models.finance._sqlbuild._macros.python.cents"
 
 
 @pytest.mark.parametrize(
@@ -30,9 +30,9 @@ _MOVED: str = "models.finance._sqlbuild._macros.cents"
             description="direct, aliased and grouped imports of a carried macro module",
             files={
                 **cents_check(
-                    "from models.staging._sqlbuild._macros.cents import to_cents\n"
-                    "import models.staging._sqlbuild._macros.cents as cents_module\n"
-                    "from models.staging._sqlbuild._macros.cents import (\n    to_cents as cents,\n)",
+                    "from models.staging._sqlbuild._macros.python.cents import to_cents\n"
+                    "import models.staging._sqlbuild._macros.python.cents as cents_module\n"
+                    "from models.staging._sqlbuild._macros.python.cents import (\n    to_cents as cents,\n)",
                     body='    assert to_cents("1") == cents_module.to_cents("1") == cents("1")\n',
                 ),
             },
@@ -48,23 +48,23 @@ _MOVED: str = "models.finance._sqlbuild._macros.cents"
             description="a relative import from a macro module that stays",
             files={
                 **cents_check(
-                    "from models.staging._sqlbuild._macros import cents as cents_module",
+                    "from models.staging._sqlbuild._macros.python import cents as cents_module",
                     body='    assert cents_module.to_cents("1")\n',
                 ),
-                "models/staging/_sqlbuild/_macros/totals.py": (
+                "models/staging/_sqlbuild/_macros/python/totals.py": (
                     "from .cents import to_cents\n\n\n"
                     "def order_total(expression: str) -> str:\n"
                     '    return f"SUM({to_cents(expression)})"\n'
                 ),
                 "models/staging/stg_order_totals.sql": (
                     "MODEL (description 'Test model stg_order_totals.',\n  materialized view,\n);\n\n"
-                    'SELECT\n  @order_total("amount") AS total_cents\nFROM __ref("stg_orders")\n'
+                    'SELECT\n  @py.order_total("amount") AS total_cents\nFROM __ref("stg_orders")\n'
                 ),
             },
             expected_fragments={
-                CENTS_CHECK: ("from macros import cents as cents_module",),
-                "models/staging/_sqlbuild/_macros/totals.py": (
-                    "from macros.cents import to_cents\n",
+                CENTS_CHECK: ("from macros.python import cents as cents_module",),
+                "models/staging/_sqlbuild/_macros/python/totals.py": (
+                    "from macros.python.cents import to_cents\n",
                 ),
             },
         ),
@@ -102,38 +102,38 @@ def test_given_python_imports_of_a_moved_macro_when_moving_then_imports_follow_a
             description="a dynamic import naming the macro module",
             files=cents_check(
                 "import importlib\n\n"
-                'CENTS = importlib.import_module("models.staging._sqlbuild._macros.cents")',
+                'CENTS = importlib.import_module("models.staging._sqlbuild._macros.python.cents")',
                 body='    assert CENTS.to_cents("1")\n',
             ),
             expected_location=f"{CENTS_CHECK}:6:9",
             expected_reason=(
-                "imports models.staging._sqlbuild._macros.cents dynamically by name, which "
+                "imports models.staging._sqlbuild._macros.python.cents dynamically by name, which "
                 "cannot be rewritten safely"
             ),
         ),
         PythonImportRefusalE2ETestCase(
             description="a star import from the macro module's package",
             files=cents_check(
-                "from models.staging._sqlbuild._macros.cents import *\n"
-                "from models.staging._sqlbuild._macros import *"
+                "from models.staging._sqlbuild._macros.python.cents import *\n"
+                "from models.staging._sqlbuild._macros.python import *"
             ),
             expected_location=f"{CENTS_CHECK}:5:1",
             expected_reason=(
-                "star-imports the package of models.staging._sqlbuild._macros.cents, which moves"
+                "star-imports the package of models.staging._sqlbuild._macros.python.cents, which moves"
             ),
         ),
         PythonImportRefusalE2ETestCase(
             description="an import without an alias",
             files=cents_check(
-                "import models.staging._sqlbuild._macros.cents",
-                body='    assert models.staging._sqlbuild._macros.cents.to_cents("1")\n',
+                "import models.staging._sqlbuild._macros.python.cents",
+                body='    assert models.staging._sqlbuild._macros.python.cents.to_cents("1")\n',
             ),
             expected_location=f"{CENTS_CHECK}:4:8",
-            expected_reason="imports models.staging._sqlbuild._macros.cents without an alias",
+            expected_reason="imports models.staging._sqlbuild._macros.python.cents without an alias",
         ),
         PythonImportRefusalE2ETestCase(
             description="a project Python file that is not UTF-8",
-            files=cents_check("from models.staging._sqlbuild._macros.cents import to_cents"),
+            files=cents_check("from models.staging._sqlbuild._macros.python.cents import to_cents"),
             binary_files={"rules/legacy.py": b"LABEL = '\xe9'\n"},
             expected_location="rules/legacy.py",
             expected_reason="this Python file cannot be read as UTF-8",

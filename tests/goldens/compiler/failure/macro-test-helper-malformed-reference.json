@@ -261,8 +261,8 @@
     "name": "cents",
     "resource_type": "macro",
     "package_name": "failure_corpus",
-    "path": "tests/unit/_macros/orders.py",
-    "original_file_path": "tests/unit/_macros/orders.py",
+    "path": "tests/unit/_macros/python/orders.py",
+    "original_file_path": "tests/unit/_macros/python/orders.py",
     "unique_id": "macro.failure_corpus.cents",
     "macro_sql": "def cents(expression: str) -> str:\n    \"\"\"Convert to cents.\"\"\"\n    return f\"({expression} * 100)\"\n",
     "depends_on": {

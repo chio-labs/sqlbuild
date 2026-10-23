@@ -16,7 +16,7 @@ The rule is simple: if it's any SQL that will be executed, it uses `@`. If it's 
 |--------|-------|----------|
 | `@enum("name").MEMBER` | Executable SQL | Compile time - expands to the validated enum member value |
 | `@const("name")` | Executable SQL | Compile time - expands to the named typed scalar, value list, native array, or object expression |
-| `@macro(args)` | Model SQL, SQL hooks, tests, audits, inline source expressions | Compile time - expands to macro return value |
+| `@sql.name(args)`, `@py.name(args)` | Model SQL, SQL hooks, tests, audits, inline source expressions | Compile time - expands to the macro's SQL |
 | `@@name` | Model SQL, SQL hooks, tests, audits, inline source expressions | Compile time - project variable substitution |
 | `@@ENV:NAME` | Model SQL, SQL hooks, tests, audits, inline source expressions | Compile time - environment variable |
 | `@@CTX:name` | SQL hooks only | Compile time - destination relation, target, run ID |
@@ -170,7 +170,7 @@ Use the quoted form for values rather than SQL identifiers or expressions:
 WHERE status = @'expected_status'
 ```
 
-This is distinct from `@@name` (project variables) and `@macro()` (macro calls), so there is no ambiguity. See [Audits](/docs/concepts/audits) for details on generic audit parameters.
+This is distinct from `@@name` (project variables) and `@sql.name()` or `@py.name()` (macro calls), so there is no ambiguity. See [Audits](/docs/concepts/audits) for details on generic audit parameters.
 
 ## Named SQL hook parameters
 
@@ -183,8 +183,8 @@ SQLBuild processes authored SQL in this order:
 1. **Config templates** (`${CTX:...}`, `${ENV:...}`) in TOML/YAML config values are resolved during config compilation
 2. **Named SQL hook arguments** (`@name` and `@'name'`) are substituted into reusable hook bodies
 3. **Project variables** (`@@name`), **environment variables** (`@@ENV:NAME`), and **context variables** (`@@CTX:name` in SQL hooks) are substituted
-4. **Enum and constant references** are validated, normalized, and expanded through the active adapter
-5. **Macro calls** (`@name(args)`) are expanded
+4. **Enum and constant references** are validated, normalized, and expanded through the active adapter, and **SQL macro calls** (`@sql.name(args)`) are expanded
+5. **Python macro calls** (`@py.name(args)`) are expanded
 6. **SQL analysis validation** runs against the fully expanded SQL
 
 This means:

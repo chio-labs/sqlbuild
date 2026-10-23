@@ -9,6 +9,7 @@ use crate::definition_changes::main::selection_json::selection_json;
 use crate::definition_changes::main::selection_reasons::selection_reasons;
 use crate::definition_changes::main::selection_report::selection_report;
 use crate::definition_changes::main::sql_definition_digest::sql_definition_digest;
+use crate::definition_changes::main::sql_macro_definition_digest::sql_macro_definition_digest;
 use crate::definition_changes::models::{DefinitionChanges, SelectedItem};
 use crate::definition_changes::tests::helpers::{
     base_orders, current_orders, item, keys, mocking, node, renamed, snapshot, with_node,
@@ -419,6 +420,53 @@ fn given_changes_and_selection_when_writing_json_then_lists_nodes_and_reasons() 
 
         assert_eq!(
             document, test_case.expected_json,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_a_sql_macro_when_fingerprinting_definition_then_ignores_layout_comments_and_description() {
+    let path: &str = "macros/sql/net.sql";
+    let original: String = sql_macro_definition_digest(
+        "net",
+        path,
+        "MACRO (\n  description 'Net.',\n  arguments (cents INTEGER),\n  returns DOUBLE,\n);\n\n\
+         @cents / 100 - 1\n",
+    );
+    let test_cases = [
+        SqlDigestTestCase {
+            description: "header layout, a trailing comma, comments and the description are ignored",
+            sql: "MACRO (description 'Net after the fee.', arguments (cents integer), \
+                  returns double);\n\n-- one dollar fee\n@cents/100   -   1\n",
+            expected_same_as_original: true,
+        },
+        SqlDigestTestCase {
+            description: "a body change is a change",
+            sql: "MACRO (description 'Net.', arguments (cents INTEGER), returns DOUBLE);\n\n\
+                  @cents / 100 - 2\n",
+            expected_same_as_original: false,
+        },
+        SqlDigestTestCase {
+            description: "a parameter type change is a change",
+            sql: "MACRO (description 'Net.', arguments (cents BIGINT), returns DOUBLE);\n\n\
+                  @cents / 100 - 1\n",
+            expected_same_as_original: false,
+        },
+        SqlDigestTestCase {
+            description: "a result type change is a change",
+            sql: "MACRO (description 'Net.', arguments (cents INTEGER), returns DECIMAL(18, 2));\n\n\
+                  @cents / 100 - 1\n",
+            expected_same_as_original: false,
+        },
+    ];
+    for test_case in test_cases {
+        let digest: String = sql_macro_definition_digest("net", path, test_case.sql);
+
+        assert_eq!(
+            digest == original,
+            test_case.expected_same_as_original,
             "{}",
             test_case.description
         );

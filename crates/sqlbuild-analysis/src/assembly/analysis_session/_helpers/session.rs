@@ -30,6 +30,7 @@ use crate::assembly::analysis_session::_helpers::mappings::{
 };
 use crate::assembly::analysis_session::_helpers::mappings::{producers, waves};
 use crate::assembly::analysis_session::constants::{UNKNOWN_NULLABILITY, UNKNOWN_TYPE};
+use crate::assembly::analysis_session::main::resolved_cleaned_sql::resolved_cleaned_sql;
 use crate::assembly::analysis_session::models::{
     AnalysisSession, ColumnFact, ContractProof, DeferredCleaning, FinishedSession, LineageFacts,
     LineageRow, ModelAnalysis, ModelOutcome, ModelRequest, Phase, PivotOutcome, PivotTables,
@@ -38,6 +39,9 @@ use crate::assembly::analysis_session::models::{
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::models::DiagnosticRow;
 use crate::semantic_validation::models::ProjectCatalog;
+use crate::sql_macros::main::check_sql_macro_arguments::check_sql_macro_arguments;
+use crate::sql_macros::models::SqlMacroFinding;
+use crate::sql_macros::types::ArgumentCheckInput;
 
 /// What an internal native failure of the session names.
 const SESSION_CONTEXT: &str = "native model analysis";
@@ -279,12 +283,55 @@ impl AnalysisSession {
                 }
             };
             self.outcomes[*model] = Some(ModelOutcome {
+                sql_macro_findings: Vec::new(),
                 analysis,
                 cleaned_sql: result.cleaned_sql,
                 deferred_cleaning: None,
                 validated_schema: schema,
                 fused_binding_validated: true,
             });
+        }
+        self.check_sql_macros(models)
+    }
+
+    /// Each model's SQL macro call arguments checked against its analysed types, cache hits too.
+    fn check_sql_macros(&mut self, models: &[usize]) -> Result<(), String> {
+        let checked: Vec<usize> = models
+            .iter()
+            .copied()
+            .filter(|model| {
+                let request: &ModelRequest = &self.request.models[*model];
+                !request.sql_macro_checks.is_empty() && request.placeholders.is_empty()
+            })
+            .collect();
+        self.ensure_cleaned(&checked)?;
+        let mut inputs: Vec<(usize, String, Shapes)> = Vec::with_capacity(checked.len());
+        for model in checked {
+            let Some(outcome) = self.outcomes[model].as_ref() else {
+                continue;
+            };
+            let Ok(cleaned) = resolved_cleaned_sql(outcome) else {
+                continue;
+            };
+            let schema: Shapes = self.binding_schema(&self.request.models[model]);
+            inputs.push((model, cleaned.into_owned(), schema));
+        }
+        let batch: Vec<ArgumentCheckInput<'_>> = inputs
+            .iter()
+            .map(|(model, cleaned, schema)| {
+                (
+                    cleaned.as_str(),
+                    schema.as_slice(),
+                    self.request.models[*model].sql_macro_checks.as_slice(),
+                )
+            })
+            .collect();
+        let findings: Vec<Vec<SqlMacroFinding>> =
+            check_sql_macro_arguments(&self.request.dialect, &batch);
+        for ((model, _, _), found) in inputs.iter().zip(findings) {
+            if let Some(outcome) = self.outcomes[*model].as_mut() {
+                outcome.sql_macro_findings = found;
+            }
         }
         Ok(())
     }

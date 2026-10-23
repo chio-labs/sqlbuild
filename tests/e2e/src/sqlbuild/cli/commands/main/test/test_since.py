@@ -17,6 +17,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
     build_since_indirect_files,
     build_since_project_files,
+    build_since_sql_macro_files,
     delete_project_files,
     prepare_since_repository,
     run_git,
@@ -26,7 +27,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
 _FILES: dict[str, str] = build_since_project_files()
 _STAGING: str = "models/stg_orders.sql"
-_MACRO: str = "models/_macros/money.py"
+_MACRO: str = "models/_macros/python/money.py"
 _EDITED_STAGING: str = _FILES[_STAGING].replace(
     "SELECT order_id, status", "SELECT order_id, LOWER(status) AS status"
 )
@@ -47,6 +48,9 @@ _PROJECT_CONFIG: str = "sqlbuild_project.toml"
 _SCENARIO_COMMAND: tuple[str, ...] = ("--no-color", "scenario", "test", "--since", "main")
 _EXPLAINED_TESTS: tuple[str, ...] = (*_TEST_COMMAND, "--explain")
 _EXPLAINED_SCENARIOS: tuple[str, ...] = (*_SCENARIO_COMMAND, "--explain")
+_SQL_MACROS: dict[str, str] = build_since_sql_macro_files()
+_INNER_SQL_MACRO: str = "models/_macros/sql/round_cents.sql"
+_OUTER_SQL_MACRO: str = "models/_macros/sql/net_dollars.sql"
 
 
 @pytest.mark.parametrize(
@@ -415,7 +419,11 @@ def test_given_changes_since_ref_when_testing_then_runs_only_affected_tests(
         ),
         SinceSelectionE2ETestCase(
             description="a macro another project-wide macro imports changes both",
-            edits={"macros/taxes.py": _INDIRECT["macros/taxes.py"].replace("+ 0", "+ 1 - 1")},
+            edits={
+                "macros/python/taxes.py": _INDIRECT["macros/python/taxes.py"].replace(
+                    "+ 0", "+ 1 - 1"
+                )
+            },
             command=_EXPLAINED_TESTS,
             expected_exit_code=0,
             expected_fragments=(
@@ -429,9 +437,9 @@ def test_given_changes_since_ref_when_testing_then_runs_only_affected_tests(
         SinceSelectionE2ETestCase(
             description="a scoped macro another scoped macro imports changes both",
             edits={
-                "models/_macros/currency.py": _INDIRECT["models/_macros/currency.py"].replace(
-                    "* 1)", "* 1.0)"
-                )
+                "models/_macros/python/currency.py": _INDIRECT[
+                    "models/_macros/python/currency.py"
+                ].replace("* 1)", "* 1.0)")
             },
             command=_EXPLAINED_TESTS,
             expected_exit_code=0,
@@ -445,9 +453,9 @@ def test_given_changes_since_ref_when_testing_then_runs_only_affected_tests(
         SinceSelectionE2ETestCase(
             description="a macro a parameterized test's own fixture calls selects every case",
             edits={
-                "macros/fixture_values.py": _INDIRECT["macros/fixture_values.py"].replace(
-                    "\"''\"", "\"'x'\""
-                )
+                "macros/python/fixture_values.py": _INDIRECT[
+                    "macros/python/fixture_values.py"
+                ].replace("\"''\"", "\"'x'\"")
             },
             command=_EXPLAINED_TESTS,
             expected_exit_code=0,
@@ -748,3 +756,70 @@ def test_given_unwritable_cache_when_testing_since_then_warns_and_succeeds(
     assert result.stderr.count("warning: Could not cache") == 1, result.stderr
     selected: list[dict[str, str | list[str]]] = json.loads(result.stdout)["since"]["selected"]
     assert tuple(str(item["name"]) for item in selected) == test_case.expected_test_names
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SinceSelectionE2ETestCase(
+            description="a sql macro edit selects the test whose model calls the macro",
+            edits={_OUTER_SQL_MACRO: _SQL_MACROS[_OUTER_SQL_MACRO].replace("- 1", "- 2")},
+            command=_EXPLAINED_TESTS,
+            expected_exit_code=1,
+            expected_fragments=(
+                "Changed since main: 1 macro changed",
+                "Selected 1 of 4 tests",
+                "test_order_net\n    executes macro net_dollars (changed)",
+                "FAIL=1",
+            ),
+            unexpected_fragments=("test_stg_orders", "test_order_totals", "test_open_orders"),
+        ),
+        SinceSelectionE2ETestCase(
+            description="a sql macro called inside another sql macro selects the outer caller's test",
+            edits={_INNER_SQL_MACRO: _SQL_MACROS[_INNER_SQL_MACRO].replace("/ 100,", "/ 100.0,")},
+            command=_EXPLAINED_TESTS,
+            expected_exit_code=0,
+            expected_fragments=(
+                "Changed since main: 1 macro changed",
+                "Selected 1 of 4 tests",
+                "test_order_net\n    executes macro round_cents (changed)",
+                "PASS=1  FAIL=0  TOTAL=1",
+            ),
+            unexpected_fragments=("test_stg_orders", "test_order_totals", "test_open_orders"),
+            git_after_edits=("commit", "--quiet", "--all", "-m", "edit"),
+        ),
+        SinceSelectionE2ETestCase(
+            description="reformatting, commenting and redescribing a sql macro changes nothing",
+            edits={
+                _OUTER_SQL_MACRO: (
+                    "MACRO (description 'Net dollars after the one-dollar fee.', "
+                    "arguments (cents INTEGER), returns DOUBLE);\n\n"
+                    "-- the fee is one dollar\n@sql.round_cents(@cents)   -   1\n"
+                )
+            },
+            command=_TEST_COMMAND,
+            expected_exit_code=0,
+            expected_fragments=(
+                "Changed since main: no definition changes",
+                "No tests are affected by the changes since main",
+            ),
+            unexpected_fragments=("test_order_net",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_sql_macro_changes_since_ref_when_testing_then_selects_tests_of_their_callers(
+    tmp_path: Path, test_case: SinceSelectionE2ETestCase
+) -> None:
+    project: Path = prepare_since_repository(tmp_path=tmp_path, extra_files=_SQL_MACROS)
+    write_project_files(project_dir=project, files=test_case.edits)
+    run_git(repository=project, arguments=test_case.git_after_edits)
+
+    result: CompletedProcess[str] = run_sqb(command=test_case.command, project_dir=project)
+
+    output: str = result.stdout + result.stderr
+    assert result.returncode == test_case.expected_exit_code, output
+    for fragment in test_case.expected_fragments:
+        assert fragment in output, output
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in output, output

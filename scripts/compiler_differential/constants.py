@@ -194,6 +194,7 @@ FAILURE_SOURCES_PATH: str = "sources/raw.yml"
 GENERATOR_ENUM_KIND: str = "enum"
 GENERATOR_CONSTANT_KIND: str = "constant"
 GENERATOR_MACRO_KIND: str = "macro"
+GENERATOR_PYTHON_MACRO_FOLDER: str = "python"
 GENERATOR_HOOK_KIND: str = "hook"
 GENERATOR_ROLES: dict[str, str] = {
     GENERATOR_ENUM_KIND: "enums",
@@ -544,7 +545,27 @@ RENDER_INDIRECT_KINDS: dict[str, str] = {
 RENDER_CONFIG_ONLY_KINDS: dict[str, str] = {}
 DIAGNOSTIC_CODE_PATTERN: re.Pattern[str] = re.compile(r"[A-Z][0-9]{3}")
 RENDER_RAISED_CODES: frozenset[str] = frozenset(
-    {"C214", "C216", "K012", "P004", "P010", "P011", "P012", "P013"}
+    {
+        "C214",
+        "C216",
+        "K012",
+        "P004",
+        "P010",
+        "P011",
+        "P012",
+        "P013",
+        "P014",
+        "P015",
+        "P016",
+        "P017",
+        "P018",
+        "P019",
+        "P020",
+        "P021",
+        "P022",
+        "P023",
+        "S026",
+    }
 )
 RENDER_CODE_SCAN_EXCLUDED: dict[str, str] = {
     "_helpers/analysis": "SQL analysis of rendered SQL, after the CompileProjectInputs frontier",

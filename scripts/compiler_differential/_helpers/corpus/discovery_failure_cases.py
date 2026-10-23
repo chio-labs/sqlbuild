@@ -211,7 +211,11 @@ def _layout_cases() -> tuple[FailureCase, ...]:
         failure_case(name=name, expected_code="D013", files={path: contents})
         for name, path, contents in (
             ("scoped-root-at-project-root", "_enums/order_status.sql", ""),
-            ("declaration-group-below-root", "models/_sqlbuild/macros/money.py", _MACRO_MODULE),
+            (
+                "declaration-group-below-root",
+                "models/_sqlbuild/macros/python/money.py",
+                _MACRO_MODULE,
+            ),
             ("declaration-root-nested", "models/marts/_enums/_constants/limits.sql", ""),
             ("declaration-group-unsupported-entry", "models/marts/_sqlbuild/notes.txt", ""),
             ("named-role-nested-declaration", "schemas/enums/order_status.sql", ""),

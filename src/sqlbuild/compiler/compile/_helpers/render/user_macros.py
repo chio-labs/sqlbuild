@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import inspect
 import sys
 import threading
@@ -37,6 +38,8 @@ from sqlbuild.compiler.compile.exceptions import (
 from sqlbuild.compiler.compile.models import MacroContext
 
 _OBJECT_ENTRY_LENGTH: int = 2
+_SQL_SUFFIX: str = ".sql"
+_SQL_LANGUAGE: str = "sql"
 _MACRO_MODULE_LOAD_LOCK: threading.RLock = threading.RLock()
 
 
@@ -129,8 +132,79 @@ class _MacroEnumMembers(Mapping[str, str | int]):
 def load_project_macros(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[str, LoadedMacro]:
     """Load discovered project macro functions into a collision-checked registry."""
 
-    if not macro_files:
-        return {}
+    python_files: tuple[DiscoveredMacroFile, ...] = tuple(
+        macro_file for macro_file in macro_files if macro_file.relative_path.suffix != _SQL_SUFFIX
+    )
+    loaded_macros: dict[str, LoadedMacro] = (
+        _load_python_macros(python_files) if python_files else {}
+    )
+    sql_file: DiscoveredMacroFile
+    for sql_file, (name, parameters, calls) in _sql_macro_rows(macro_files):
+        validate_resource_identity(name=name, kind="macro", path=sql_file.relative_path)
+        existing_macro: LoadedMacro | None = loaded_macros.get(name)
+        if existing_macro is not None:
+            raise CompileInputError(
+                f"Macro name collision for '{name}': "
+                f"{existing_macro.file_path} and {sql_file.file_path}"
+            )
+        loaded_macros[name] = LoadedMacro(
+            name=name,
+            file_path=sql_file.file_path,
+            relative_path=sql_file.relative_path,
+            raw_source=sql_file.contents,
+            function=_sql_macro_function(name=name, parameters=parameters),
+            dependencies=tuple(
+                DeclarationIdentity(DeclarationKind.MACRO, called) for called in calls
+            ),
+            language=_SQL_LANGUAGE,
+        )
+    return loaded_macros
+
+
+def _sql_macro_rows(
+    macro_files: tuple[DiscoveredMacroFile, ...],
+) -> tuple[tuple[DiscoveredMacroFile, tuple[str, list[str], list[str]]], ...]:
+    """Each SQL macro file with its parsed `(name, parameters, calls)`, checked natively."""
+
+    sql_files: tuple[DiscoveredMacroFile, ...] = tuple(
+        macro_file for macro_file in macro_files if macro_file.relative_path.suffix == _SQL_SUFFIX
+    )
+    if not sql_files:
+        return ()
+    rows: list[tuple[str, list[str], list[str]]] = _native.inventory_sql_macros(
+        [
+            (sql_file.relative_path.stem, sql_file.relative_path.as_posix(), sql_file.contents)
+            for sql_file in sql_files
+        ]
+    )
+    return tuple(zip(sql_files, (tuple(row) for row in rows), strict=True))  # type: ignore[arg-type]
+
+
+def _raise_sql_macro_call(*_arguments: object, sql_macro_name: str, **_keywords: object) -> str:
+    name: str = sql_macro_name
+    raise CompileInputError(
+        f"{name}() is a SQL macro, called as a Python macro with @py.{name}()",
+        code="P020",
+        help=f"call it as @sql.{name}(...)",
+    )
+
+
+def _sql_macro_function(*, name: str, parameters: list[str]) -> Callable[..., object]:
+    """A stand-in callable for a SQL macro whose signature names its parameters."""
+
+    function: partial[str] = partial(_raise_sql_macro_call, sql_macro_name=name)
+    function.__dict__["__signature__"] = inspect.Signature(
+        [
+            inspect.Parameter(parameter, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+            for parameter in parameters
+        ]
+    )
+    return function
+
+
+def _load_python_macros(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[str, LoadedMacro]:
+    """Load the Python macro modules' public functions into a collision-checked registry."""
+
     trees: tuple[ast.Module | str, ...] = tuple(
         _parse_macro_module(macro_file=macro_file) for macro_file in macro_files
     )
@@ -349,12 +423,52 @@ def inventory_project_macros(
 ) -> StaticMacroInventory:
     """Validate and inventory project macro exports without executing authored code."""
 
+    python_files: tuple[DiscoveredMacroFile, ...] = tuple(
+        macro_file for macro_file in macro_files if macro_file.relative_path.suffix != _SQL_SUFFIX
+    )
     inventory: StaticMacroInventory
     inventory, _loads = _native_macro_inventory(
-        macro_files=macro_files,
-        trees=tuple(_parse_macro_module(macro_file=macro_file) for macro_file in macro_files),
+        macro_files=python_files,
+        trees=tuple(_parse_macro_module(macro_file=macro_file) for macro_file in python_files),
     )
-    return inventory
+    exports: list[StaticMacroExport] = []
+    faults: list[StaticMacroFault] = []
+    for sql_file in macro_files:
+        if sql_file.relative_path.suffix != _SQL_SUFFIX:
+            continue
+        try:
+            exports.extend(
+                _sql_macro_export(sql_file=parsed_file, row=row)
+                for parsed_file, row in _sql_macro_rows((sql_file,))
+            )
+        except CompileInputError as error:
+            faults.append(
+                StaticMacroFault(relative_path=sql_file.relative_path, message=str(error))
+            )
+    return replace(
+        inventory,
+        exports=(*inventory.exports, *exports),
+        faults=(*inventory.faults, *faults),
+    )
+
+
+def _sql_macro_export(
+    *, sql_file: DiscoveredMacroFile, row: tuple[str, list[str], list[str]]
+) -> StaticMacroExport:
+    """The static export of one parsed SQL macro file."""
+
+    name, parameters, calls = row
+    dependencies: tuple[DeclarationIdentity, ...] = tuple(
+        DeclarationIdentity(DeclarationKind.MACRO, called) for called in calls
+    )
+    return StaticMacroExport(
+        name=name,
+        relative_path=sql_file.relative_path,
+        parameters=tuple(parameters),
+        line=1,
+        source_digest=hashlib.sha256(sql_file.contents.encode()).hexdigest(),
+        dependencies=dependencies,
+    )
 
 
 def macro_invocation_context(

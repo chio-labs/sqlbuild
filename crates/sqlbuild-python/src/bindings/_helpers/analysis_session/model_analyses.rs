@@ -25,7 +25,7 @@ use crate::bindings::_helpers::compile_driver::analysis_cache::{
 };
 use crate::bindings::_helpers::compiled_views::model_input_view::{
     AttachedSchema, NativeModelInput, attached_schema, input_model_name, input_query_sql,
-    input_reference_rows,
+    input_reference_rows, input_sql_macro_checks,
 };
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::enum_member;
@@ -366,6 +366,7 @@ fn model_rows<'py>(py: Python<'py>, model_inputs: &[Bound<'py, PyAny>]) -> PyRes
             recover_cte_facts: recovers,
             snapshot_columns,
             dynamic_families: families,
+            sql_macro_checks: input_sql_macro_checks(model_input)?,
         });
     }
     Ok(rows)

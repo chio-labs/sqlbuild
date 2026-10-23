@@ -54,6 +54,7 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [Model-Private Values](concepts/model-private-values.md) (`concepts/model-private-values`) - Keep enums and constants inside one model when no other resource should use them.
 - [Writing Macros](concepts/macros.md) (`concepts/macros`) - Write Python functions that generate reusable SQL fragments at compile time.
 - [Composition and Context](concepts/macros/composition-and-context.md) (`concepts/macros/composition-and-context`) - Compose macros through Python, use compile context, and understand scoped imports.
+- [SQL Macros](concepts/macros/sql-macros.md) (`concepts/macros/sql-macros`) - Write typed, logic-free SQL fragments that the compiler checks and sees inside.
 - [Interpolation](concepts/interpolation.md) (`concepts/interpolation`) - How SQLBuild processes variables, context, and dynamic content in SQL and config.
 - [Functions](concepts/functions.md) (`concepts/functions`) - User-defined functions and table functions managed as part of your project.
 - [Incremental Models](concepts/incremental.md) (`concepts/incremental`) - Cursor-based incremental strategies, microbatch execution, and backfill policies.

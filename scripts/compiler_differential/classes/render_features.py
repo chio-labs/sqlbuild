@@ -79,7 +79,7 @@ class RenderFeatureWriter:
         self._files[self._owned(role="enums", name="render_channel.sql")] = (
             'ENUM (\n  name render_channel,\n  members (WEB "web", STORE "store"),\n);\n'
         )
-        self._files[self._owned(role="macros", name="policy.py")] = (
+        self._files[self._owned(role="macros", name="python/policy.py")] = (
             "import os\n\n\n"
             "def minimum_amount_filter(ctx, column: str) -> str:\n"
             '    """Keep rows at or above the configured minimum amount."""\n'
@@ -101,11 +101,11 @@ class RenderFeatureWriter:
             description=f"Policy-filtered copy of {base.name}",
             header="",
             body=(
-                "SELECT id, amount, @with_deployment(@channel_label()) AS channel,\n"
+                "SELECT id, amount, @py.with_deployment(@py.channel_label()) AS channel,\n"
                 '  @const("minimum_render_amount") AS minimum_amount,\n'
                 '  @enum("render_channel").STORE AS fallback_channel\n'
                 f'FROM __ref("{base.name}")\n'
-                'WHERE @minimum_amount_filter("amount")\n'
+                'WHERE @py.minimum_amount_filter("amount")\n'
             ),
         )
 
@@ -117,7 +117,7 @@ class RenderFeatureWriter:
             else (self._staging * 2)
         )
         source: str = self._random.choice(self._sources)
-        self._files[self._owned(role="macros", name="relations.py")] = (
+        self._files[self._owned(role="macros", name="python/relations.py")] = (
             "from sqlbuild.refs import SqlResourceRef\n\n\n"
             "def union_ids(relations: list[SqlResourceRef]) -> str:\n"
             '    """Union the ids of several relations."""\n'
@@ -134,21 +134,25 @@ class RenderFeatureWriter:
             header="",
             body=(
                 "SELECT id\n"
-                f'FROM (@union_ids([__ref("{first.name}"), __ref("{second.name}")])) AS unioned\n'
+                f'FROM (@py.union_ids([__ref("{first.name}"), __ref("{second.name}")])) AS '
+                "unioned\n"
             ),
         )
         self._model(
             name=f"latest_{source}",
             description=f"Newest rows of {source}",
             header="",
-            body=f'SELECT id, amount\nFROM @latest_rows(__source("{source}"), limit=2) AS latest\n',
+            body=(
+                f'SELECT id, amount\nFROM @py.latest_rows(__source("{source}"), limit=2) AS '
+                "latest\n"
+            ),
         )
 
     def _macro_generated_reference(self) -> None:
         self._features.add("macro_generated_reference")
         base: ModelPlan = self._base()
         self.config_lines.extend(["", "[references]", "enforce_explicit = false"])
-        self._files[self._owned(role="macros", name="legacy.py")] = (
+        self._files[self._owned(role="macros", name="python/legacy.py")] = (
             "def legacy_events() -> str:\n"
             '    """Return a staged relation the way a migrated project wrote it."""\n'
             f"    return '__ref(\"{base.name}\")'\n"
@@ -157,7 +161,7 @@ class RenderFeatureWriter:
             name="legacy_event_ids",
             description="Ids read through a macro-generated reference",
             header="",
-            body="SELECT id\nFROM @legacy_events() AS legacy\n",
+            body="SELECT id\nFROM @py.legacy_events() AS legacy\n",
         )
 
     def _table_function(self) -> None:
@@ -187,7 +191,7 @@ class RenderFeatureWriter:
             'HOOK (\n  description "Announce one refreshed relation"\n);\n\n'
             "SELECT @'relation' AS refreshed_relation, @'label' AS refresh_label\n"
         )
-        self._files[self._owned(role="macros", name="notes.py")] = (
+        self._files[self._owned(role="macros", name="python/notes.py")] = (
             "def refresh_note(relation: str) -> str:\n"
             '    """Describe one refreshed relation."""\n'
             "    return f\"'refreshed ' || '{relation}'\"\n"
@@ -200,7 +204,8 @@ class RenderFeatureWriter:
                 "  post_hooks [\n"
                 '    sql("announce_refresh", relation: "@@CTX:destination.qualified", '
                 f'label: "{self._label()}"),\n'
-                "    inline_sql(\"SELECT @refresh_note('@@CTX:destination.qualified') AS note\"),\n"
+                "    inline_sql(\"SELECT @py.refresh_note('@@CTX:destination.qualified') AS "
+                'note"),\n'
                 "    inline_sql(\"SELECT '@@CTX:run.target' AS target, "
                 "'@@CTX:model.name' AS model\"),\n"
                 "  ],\n"
@@ -267,27 +272,28 @@ class RenderFeatureWriter:
         self._features.add("macros_across_resources")
         base: ModelPlan = self._base()
         source: str = base.inputs[0].split(":", 1)[1]
-        self._files["macros/labels.py"] = (
+        self._files["macros/python/labels.py"] = (
             "def tidy_label(expression: str) -> str:\n"
             '    """Trim and lower-case a label."""\n'
             '    return f"LOWER(TRIM({expression}))"\n'
         )
         self._files[self._owned(role="audits/generic", name="tidy_status.sql")] = (
-            'AUDIT ();\n\nSELECT *\nFROM __ref("@model")\nWHERE @column <> @tidy_label("@column")\n'
+            'AUDIT ();\n\nSELECT *\nFROM __ref("@model")\nWHERE @column <> '
+            '@py.tidy_label("@column")\n'
         )
         self._files["functions/sql/tidy_status.sql"] = (
             "FUNCTION (\n"
             '  description "Normalise a status label.",\n'
             "  arguments (raw_status STRING),\n"
             "  returns STRING,\n);\n\n"
-            '@tidy_label("raw_status")\n'
+            '@py.tidy_label("raw_status")\n'
         )
         self._model(
             name=f"labelled_{base.name}",
             description=f"Labelled copy of {base.name}",
             header="  columns (\n    status (audits [tidy_status]),\n  ),\n",
             body=(
-                'SELECT id, @tidy_label("status") AS status,\n'
+                'SELECT id, @py.tidy_label("status") AS status,\n'
                 '  __udf("tidy_status")(status) AS tidied\n'
                 f'FROM __ref("{base.name}")\n'
             ),
@@ -296,7 +302,7 @@ class RenderFeatureWriter:
             "sources:\n"
             "  - name: labelled_channels\n"
             "    description: Channel labels normalised in the source expression.\n"
-            '    expression: "(SELECT 1 AS id, @tidy_label(\\"\' Web \'\\") AS channel)"\n'
+            '    expression: "(SELECT 1 AS id, @py.tidy_label(\\"\' Web \'\\") AS channel)"\n'
             "    columns:\n"
             "      - name: id\n        type: INTEGER\n"
             "      - name: channel\n        type: VARCHAR\n"
@@ -322,10 +328,10 @@ class RenderFeatureWriter:
             "    TIMESTAMP '2026-01-03 00:00:00' AS created_at\n"
             "),\n"
             f"__expected__labelled_{base.name} AS (\n"
-            "  SELECT 3 AS id, @tidy_label(\"' Placed '\") AS status\n"
+            "  SELECT 3 AS id, @py.tidy_label(\"' Placed '\") AS status\n"
             ")\nSELECT 1\n"
         )
-        self._files[f"{GENERATOR_RENDER_TEST_FOLDER}/_sqlbuild/_macros/fixtures.py"] = (
+        self._files[f"{GENERATOR_RENDER_TEST_FOLDER}/_sqlbuild/_macros/python/fixtures.py"] = (
             "def event_rows(count: int = 2) -> str:\n"
             '    """Return fixture event rows."""\n'
             '    return " UNION ALL ".join(\n'
@@ -337,9 +343,9 @@ class RenderFeatureWriter:
         )
         self._files[f"{GENERATOR_RENDER_TEST_FOLDER}/test_labelled_{base.name}.sql"] = (
             "TEST();\n\nWITH\n"
-            f"__source__{source} AS (\n  @event_rows(2)\n),\n"
+            f"__source__{source} AS (\n  @py.event_rows(2)\n),\n"
             f"__expected__labelled_{base.name} AS (\n"
-            "  SELECT 1 AS id, @tidy_label(\"'placed'\") AS status\n"
+            "  SELECT 1 AS id, @py.tidy_label(\"'placed'\") AS status\n"
             "  UNION ALL\n"
             "  SELECT 2 AS id, 'placed' AS status\n"
             ")\nSELECT 1\n"

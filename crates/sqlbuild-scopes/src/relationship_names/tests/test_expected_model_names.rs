@@ -229,11 +229,11 @@ fn given_sql_text_when_scanning_top_level_ctes_then_bodies_and_errors_match_pyth
     let test_cases = [
         TopLevelCtesTestCase {
             description: "stripped bodies in authored order",
-            sql: "WITH helper AS (\n  SELECT 1 AS id\n), __macro_actual__ AS ( SELECT @tidy(id) FROM \
+            sql: "WITH helper AS (\n  SELECT 1 AS id\n), __macro_actual__ AS ( SELECT @py.tidy(id) FROM \
                   helper ) SELECT 1",
             expected_outcome: scanned_ctes(&[
                 ("helper", "SELECT 1 AS id"),
-                ("__macro_actual__", "SELECT @tidy(id) FROM helper"),
+                ("__macro_actual__", "SELECT @py.tidy(id) FROM helper"),
             ]),
         },
         TopLevelCtesTestCase {

@@ -26,6 +26,7 @@ use crate::bindings::_helpers::render::declaration_values::resolved_declaration_
 use crate::bindings::_helpers::render::macro_call_rows::SpanRow;
 use crate::bindings::_helpers::render::macro_call_rows::{span_row, span_tuple};
 use crate::bindings::_helpers::render::macro_expansion_result::{ExpansionRequest, macro_output};
+use crate::bindings::_helpers::render::sql_macro_host::SqlMacroSource;
 use crate::bindings::_helpers::sqltext::declaration_references::declaration_scan;
 use crate::bindings::_helpers::sqltext::static_sql::{
     InterpolationRow, InterpolationSources, interpolation_batch,
@@ -116,7 +117,7 @@ fn declaration_context<'py>(
 /// `sql` with natively scanned enum and constant references spliced, and their spans.
 fn declarations_expanded<'py>(
     sql: &str,
-    file_path: &Bound<'py, PyAny>,
+    (file_path, loaded_macros): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
     (declarations, value_renderer, collection_rendering): (
         &Bound<'py, PyAny>,
         &Bound<'py, PyAny>,
@@ -150,6 +151,11 @@ fn declarations_expanded<'py>(
         },
         rendering: &rendering,
         classes: &classes,
+        sql_macros: Some(SqlMacroSource {
+            loaded_macros: Some(loaded_macros),
+            origin: None,
+            scopes: None,
+        }),
     })?;
     let spans: Vec<SpanRow> = span_rows(&expanded.spliced);
     Ok((expanded.spliced.sql, spans))
@@ -185,7 +191,7 @@ fn authored_expansion(sources: AuthoredSources<'_, '_>) -> PyResult<AuthoredExpa
     )?;
     let (declared, declaration_spans) = declarations_expanded(
         &interpolated,
-        sources.file_path,
+        (sources.file_path, sources.loaded_macros),
         (
             sources.declarations,
             sources.value_renderer,

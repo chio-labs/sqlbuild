@@ -11,30 +11,58 @@
 
 ## Macros
 
-Macros are plain Python functions that return final SQL strings. Every public function in a macro
-file is callable from SQL as `@name(...)`; prefix helpers, constants and classes with `_`.
+Every macro call names its kind: `@sql.name(...)` for a SQL macro, `@py.name(...)` for a Python
+macro. A bare `@name(...)` fails with `P014`, and a macro file directly under a `macros/` folder
+fails with `D013`.
+
+**SQL macros** live in `macros/sql/`, one per file named after the macro. A `MACRO (...)` header
+declares typed arguments; the body is an expression, a `WITH` list of CTEs or a `SELECT` list of
+columns. Prefer them whenever no logic is needed: the compiler checks every call's arguments
+against the caller's column types.
+
+```sql
+-- macros/sql/cents_to_dollars.sql
+MACRO (
+  description "Cents to dollars",
+  arguments (amount_cents BIGINT, places INT CONST DEFAULT 2),
+  returns DECIMAL(18, 2),
+);
+
+ROUND(CAST(@amount_cents AS DECIMAL(18, 4)) / 100, @places)
+```
+
+```sql
+SELECT order_id, @sql.cents_to_dollars(amount_cents) AS amount_dollars
+FROM __ref("stg_orders")
+```
+
+Full reference: [docs/concepts/macros/sql-macros.md](docs/concepts/macros/sql-macros.md).
+
+**Python macros** live in `macros/python/` and are plain Python functions that return final SQL
+strings. Every public function in a macro file is callable from SQL as `@py.name(...)`; prefix
+helpers, constants and classes with `_`.
 
 ```python
-# macros/currency.py
+# macros/python/currency.py
 def cents_to_dollars(expression: str) -> str:
     return f"ROUND(CAST({expression} AS DOUBLE) / 100, 2)"
 ```
 
 ```sql
-SELECT order_id, @cents_to_dollars("amount_cents") AS amount_dollars
+SELECT order_id, @py.cents_to_dollars("amount_cents") AS amount_dollars
 FROM __ref("stg_orders")
 ```
 
 - Arguments are Python literals: strings, numbers, `True`/`False`, lists, dicts, `None`, or another
   macro call. Pass SQL expressions and column names as quoted strings. Keyword arguments work:
-  `@mock_orders(count=5, status="completed")`.
+  `@py.mock_orders(count=5, status="completed")`.
 - Pass the models, sources and seeds a macro reads as typed arguments:
-  `@union_all([__ref("orders_eu"), __ref("orders_us")])`. The macro receives `SqlResourceRef`
+  `@py.union_all([__ref("orders_eu"), __ref("orders_us")])`. The macro receives `SqlResourceRef`
   values (`sqlbuild.refs`); formatting one into SQL renders the relation, and the dependency
   belongs to the calling model.
 - A macro used in SQL must return a string, and its output is final SQL. Never return text
-  containing another `@macro()` call; compose by calling the Python functions directly, including
-  functions imported from other visible macro files (`from macros.currency import add_tax`).
+  containing another `@py.macro()` call; compose by calling the Python functions directly, including
+  functions imported from other visible macro files (`from macros.python.currency import add_tax`).
 - Never return `__ref()`, `__source()` or `__seed()` from a macro, including through a quoted
   string argument: it fails compile with `P006`. Only `[references] enforce_explicit = false` in
   `sqlbuild_project.toml` allows it, as a project-wide migration switch.
@@ -102,7 +130,7 @@ other models or named hooks.
 
 | Location | Visible to |
 |---|---|
-| Top-level `macros/`, `enums/`, `constants/` | The whole project |
+| Top-level `macros/python/`, `macros/sql/`, `enums/`, `constants/` | The whole project |
 | `<folder>/_sqlbuild/macros/` (also `enums/`, `constants/`) | That folder and all folders below |
 | `<folder>/_sqlbuild/_macros/` (also `_enums/`, `_constants/`) | Files directly in that folder |
 | Underscored value in `MODEL()` | That model only |

@@ -40,7 +40,7 @@ _EMITTING_MACROS: str = (
     EXPLICIT_REFERENCE_MACROS
     + "\n\ndef orders_base():\n    return 'SELECT * FROM __ref(\"stg_orders_eu\")'\n"
 )
-_EMITTING_MODEL: str = "MODEL (description 'Test model.', materialized table);\n@orders_base()\n"
+_EMITTING_MODEL: str = "MODEL (description 'Test model.', materialized table);\n@py.orders_base()\n"
 _SECOND_EMITTING_MACROS: str = (
     "def customers_base():\n    return 'SELECT * FROM __ref(\"stg_customers\")'\n"
 )
@@ -208,7 +208,7 @@ def test_given_python_seed_and_model_dependencies_when_building_then_graph_selec
             description="unchosen dictionary entry is a dependency the build selects",
             model_sql=(
                 "MODEL (description 'Test model.', materialized table);\n"
-                '@pick({"eu": __ref("stg_orders_eu"), "us": __ref("stg_orders_us")}, key="eu")\n'
+                '@py.pick({"eu": __ref("stg_orders_eu"), "us": __ref("stg_orders_us")}, key="eu")\n'
             ),
             expected_dag_edges=(
                 ("model:stg_orders_eu", "model:order_pick"),
@@ -366,8 +366,8 @@ def test_given_typed_macro_references_and_hook_reads_when_building_then_graph_an
             expected_output_fragments=(
                 "error[P006]: model:hidden depends on model:stg_orders_eu through macro "
                 "orders_base()",
-                "--> models/sales/_sqlbuild/_macros/unions.py",
-                '@orders_base(__ref("stg_orders_eu"))',
+                "--> models/sales/_sqlbuild/_macros/python/unions.py",
+                '@py.orders_base(__ref("stg_orders_eu"))',
                 "[references]\n            enforce_explicit = false",
             ),
         ),
@@ -569,10 +569,10 @@ def test_given_check_runtime_hard_coded_relation_when_building_then_it_warns_wit
             description="two ref-emitting macros and a hard-coded task name all report at once",
             overrides={
                 EXPLICIT_REFERENCE_MACRO_PATH: _EMITTING_MACROS,
-                "models/sales/_sqlbuild/_macros/customers.py": _SECOND_EMITTING_MACROS,
+                "models/sales/_sqlbuild/_macros/python/customers.py": _SECOND_EMITTING_MACROS,
                 f"{EXPLICIT_REFERENCE_MODELS}/hidden.sql": _EMITTING_MODEL,
                 f"{EXPLICIT_REFERENCE_MODELS}/hidden_customers.sql": (
-                    "MODEL (description 'Test model hidden_customers.', materialized table);\n@customers_base()\n"
+                    "MODEL (description 'Test model hidden_customers.', materialized table);\n@py.customers_base()\n"
                 ),
                 "python/tasks/export.py": _LITERAL_TASK,
             },

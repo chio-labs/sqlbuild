@@ -929,7 +929,7 @@ Code that extends SQLBuild itself keeps its own root:
 | `sinks/` | Lifecycle event and command output sinks |
 | `hooks/python/` | Python model lifecycle hooks |
 | `functions/python/` | Python UDFs |
-| `macros/`, `enums/`, `constants/` and scoped `_macros/`, `_enums/`, `_constants/` | Python macros and declarations |
+| `macros/python/`, `enums/`, `constants/` and scoped `_macros/python/`, `_enums/`, `_constants/` | Python macros and declarations |
 
 Compilation rejects Python anywhere else with `D016`, so indirectly importable modules cannot create
 an unofficial project structure.

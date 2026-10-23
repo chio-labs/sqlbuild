@@ -3244,8 +3244,8 @@
     "name": "adjust_0",
     "resource_type": "macro",
     "package_name": "generated_6",
-    "path": "macros/adjust_0.py",
-    "original_file_path": "macros/adjust_0.py",
+    "path": "macros/python/adjust_0.py",
+    "original_file_path": "macros/python/adjust_0.py",
     "unique_id": "macro.generated_6.adjust_0",
     "macro_sql": "def adjust_0_round(expression: str) -> str:\n    \"\"\"Round an amount to two places.\"\"\"\n    return f\"ROUND({expression}, 2)\"\n\n\ndef adjust_0(expression: str) -> str:\n    \"\"\"Double and round an amount.\"\"\"\n    return adjust_0_round(f\"({expression} * 2)\")\n",
     "depends_on": {
@@ -3270,8 +3270,8 @@
     "name": "adjust_0_round",
     "resource_type": "macro",
     "package_name": "generated_6",
-    "path": "macros/adjust_0.py",
-    "original_file_path": "macros/adjust_0.py",
+    "path": "macros/python/adjust_0.py",
+    "original_file_path": "macros/python/adjust_0.py",
     "unique_id": "macro.generated_6.adjust_0_round",
     "macro_sql": "def adjust_0_round(expression: str) -> str:\n    \"\"\"Round an amount to two places.\"\"\"\n    return f\"ROUND({expression}, 2)\"\n\n\ndef adjust_0(expression: str) -> str:\n    \"\"\"Double and round an amount.\"\"\"\n    return adjust_0_round(f\"({expression} * 2)\")\n",
     "depends_on": {
@@ -3294,8 +3294,8 @@
     "name": "round_amount",
     "resource_type": "macro",
     "package_name": "generated_6",
-    "path": "macros/rounding.py",
-    "original_file_path": "macros/rounding.py",
+    "path": "macros/python/rounding.py",
+    "original_file_path": "macros/python/rounding.py",
     "unique_id": "macro.generated_6.round_amount",
     "macro_sql": "def round_amount(expression: str, places: int = 2) -> str:\n    \"\"\"Round an amount.\"\"\"\n    return f\"ROUND({expression}, {places})\"\n",
     "depends_on": {
@@ -3318,10 +3318,10 @@
     "name": "taxed",
     "resource_type": "macro",
     "package_name": "generated_6",
-    "path": "macros/tax.py",
-    "original_file_path": "macros/tax.py",
+    "path": "macros/python/tax.py",
+    "original_file_path": "macros/python/tax.py",
     "unique_id": "macro.generated_6.taxed",
-    "macro_sql": "from macros.rounding import round_amount\n\n\ndef taxed(expression: str) -> str:\n    \"\"\"Add tax to an amount, rounded.\"\"\"\n    return round_amount(f\"{expression} * 1.2\")\n",
+    "macro_sql": "from macros.python.rounding import round_amount\n\n\ndef taxed(expression: str) -> str:\n    \"\"\"Add tax to an amount, rounded.\"\"\"\n    return round_amount(f\"{expression} * 1.2\")\n",
     "depends_on": {
      "macros": [
       "macro.generated_6.round_amount"
@@ -3344,8 +3344,8 @@
     "name": "analysis_region",
     "resource_type": "macro",
     "package_name": "generated_6",
-    "path": "models/analysis/_sqlbuild/_macros/regions.py",
-    "original_file_path": "models/analysis/_sqlbuild/_macros/regions.py",
+    "path": "models/analysis/_sqlbuild/_macros/python/regions.py",
+    "original_file_path": "models/analysis/_sqlbuild/_macros/python/regions.py",
     "unique_id": "macro.generated_6.analysis_region",
     "macro_sql": "def analysis_region() -> str:\n    \"\"\"Return the region rows are assigned to.\"\"\"\n    return \"'north'\"\n",
     "depends_on": {
@@ -3368,8 +3368,8 @@
     "name": "adjust_1",
     "resource_type": "macro",
     "package_name": "generated_6",
-    "path": "models/fulfillment/marts/_sqlbuild/_macros/adjust_1.py",
-    "original_file_path": "models/fulfillment/marts/_sqlbuild/_macros/adjust_1.py",
+    "path": "models/fulfillment/marts/_sqlbuild/_macros/python/adjust_1.py",
+    "original_file_path": "models/fulfillment/marts/_sqlbuild/_macros/python/adjust_1.py",
     "unique_id": "macro.generated_6.adjust_1",
     "macro_sql": "import os\n\n\ndef adjust_1(expression: str) -> str:\n    \"\"\"Tag an amount with the deployment region.\"\"\"\n    region = os.environ.get(\"SQB_DIFFERENTIAL_REGION\", \"east\")\n    return f\"({expression} + LENGTH('{region}'))\"\n",
     "depends_on": {
@@ -3392,8 +3392,8 @@
     "name": "doubled",
     "resource_type": "macro",
     "package_name": "generated_6",
-    "path": "tests/unit/_macros/scaling.py",
-    "original_file_path": "tests/unit/_macros/scaling.py",
+    "path": "tests/unit/_macros/python/scaling.py",
+    "original_file_path": "tests/unit/_macros/python/scaling.py",
     "unique_id": "macro.generated_6.doubled",
     "macro_sql": "def doubled(expression: str) -> str:\n    \"\"\"Double an amount.\"\"\"\n    return f\"({expression} * 2)\"\n",
     "depends_on": {

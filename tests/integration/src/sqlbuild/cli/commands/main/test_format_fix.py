@@ -269,8 +269,8 @@ def test_given_existing_errors_and_unexpandable_file_when_fixing_then_other_file
     (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
     models: Path = tmp_path / "models"
     models.mkdir()
-    (tmp_path / "macros").mkdir()
-    (tmp_path / "macros" / "relations.py").write_text(
+    (tmp_path / "macros" / "python").mkdir(parents=True)
+    (tmp_path / "macros" / "python" / "relations.py").write_text(
         "def orders_relation() -> str:\n    return '__ref(\"orders\")'\n"
     )
     fixable: Path = models / "orders.sql"
@@ -280,7 +280,7 @@ def test_given_existing_errors_and_unexpandable_file_when_fixing_then_other_file
     unexpandable: Path = models / "customers.sql"
     unexpandable_sql: str = (
         'MODEL (description "Customers");\n'
-        "SELECT o.order_id AS customer_id FROM @orders_relation() AS o\n"
+        "SELECT o.order_id AS customer_id FROM @py.orders_relation() AS o\n"
     )
     unexpandable.write_text(unexpandable_sql)
     (models / "payments.sql").write_text(
@@ -433,14 +433,14 @@ def test_given_macro_and_crlf_source_when_fixing_then_previews_preserve_bytes_an
     test_case: FormatCompileIntegrationTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
-    macros: Path = tmp_path / "macros"
-    macros.mkdir()
+    macros: Path = tmp_path / "macros" / "python"
+    macros.mkdir(parents=True)
     (macros / "values.py").write_text('def order_value():\n    return "1"\n')
     model: Path = tmp_path / "models" / "orders.sql"
     model.parent.mkdir()
     original: bytes = (
         b'MODEL (description "Orders");\r\n'
-        b"SELECT @order_value() AS order_id UNION SELECT 2 AS order_id\r\n"
+        b"SELECT @py.order_value() AS order_id UNION SELECT 2 AS order_id\r\n"
     )
     model.write_bytes(original)
     model.chmod(0o640)
@@ -459,7 +459,7 @@ def test_given_macro_and_crlf_source_when_fixing_then_previews_preserve_bytes_an
         fix["code"] == "SQBRSQL008" and fix["status"] == "applied" for fix in payload["rule_fixes"]
     )
     written: bytes = model.read_bytes()
-    assert b"@order_value()" in written
+    assert b"@py.order_value()" in written
     assert test_case.expected_literal.encode() in written
     assert written.count(b"\n") == written.count(b"\r\n")
     assert model.stat().st_mode == original_mode

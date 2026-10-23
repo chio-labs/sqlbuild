@@ -2000,8 +2000,8 @@
     "name": "line_total_cents",
     "resource_type": "macro",
     "package_name": "waffle_shop",
-    "path": "macros/currency.py",
-    "original_file_path": "macros/currency.py",
+    "path": "macros/python/currency.py",
+    "original_file_path": "macros/python/currency.py",
     "unique_id": "macro.waffle_shop.line_total_cents",
     "macro_sql": "\"\"\"Project-wide currency macros.\"\"\"\n\n\ndef line_total_cents(price_cents: str, quantity: str) -> str:\n    \"\"\"Calculate line total cents from a unit price and quantity.\"\"\"\n    return f\"{price_cents} * {quantity}\"\n",
     "depends_on": {
@@ -2024,8 +2024,8 @@
     "name": "cents_to_dollars",
     "resource_type": "macro",
     "package_name": "waffle_shop",
-    "path": "models/marts/_sqlbuild/_macros/currency.py",
-    "original_file_path": "models/marts/_sqlbuild/_macros/currency.py",
+    "path": "models/marts/_sqlbuild/_macros/python/currency.py",
+    "original_file_path": "models/marts/_sqlbuild/_macros/python/currency.py",
     "unique_id": "macro.waffle_shop.cents_to_dollars",
     "macro_sql": "\"\"\"Currency formatting macros.\"\"\"\n\n\ndef cents_to_dollars(column: str) -> str:\n    \"\"\"Convert a cents integer column to a dollars decimal with two decimal places.\"\"\"\n    return f\"ROUND(({column}) / 100.0, 2)\"\n",
     "depends_on": {
@@ -2048,8 +2048,8 @@
     "name": "timestamp_trunc",
     "resource_type": "macro",
     "package_name": "waffle_shop",
-    "path": "models/marts/_sqlbuild/_macros/datetime.py",
-    "original_file_path": "models/marts/_sqlbuild/_macros/datetime.py",
+    "path": "models/marts/_sqlbuild/_macros/python/datetime.py",
+    "original_file_path": "models/marts/_sqlbuild/_macros/python/datetime.py",
     "unique_id": "macro.waffle_shop.timestamp_trunc",
     "macro_sql": "\"\"\"Datetime portability macros.\"\"\"\n\n\ndef timestamp_trunc(ctx, grain: str, expr: str) -> str:\n    if ctx.adapter_name == \"bigquery\":\n        return f\"TIMESTAMP_TRUNC({expr}, {grain.upper()})\"\n    return f\"DATE_TRUNC('{grain}', {expr})\"\n",
     "depends_on": {

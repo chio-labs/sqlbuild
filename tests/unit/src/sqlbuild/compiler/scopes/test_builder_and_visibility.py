@@ -494,7 +494,7 @@ def test_given_loaded_scoped_macro_when_building_then_metadata_is_safe_and_norma
     def normalize_status(value: object, fallback: str = "unknown") -> str:
         return str(value or fallback)
 
-    path: Path = Path("models/sales/macros/status.py")
+    path: Path = Path("models/sales/macros/python/status.py")
     source = "def normalize_status(value, fallback='unknown'):\n    return str(value or fallback)\n"
     index: ScopeIndex = build_scope_index(
         discovered_inputs=discovered_inputs(

@@ -168,7 +168,8 @@ pub(crate) fn finished_record<'py>(
     let config: Bound<'py, PyAny> = replaced_keywords(&finished.config, &replaced)?;
     let mut declaration_usages: Vec<Bound<'py, PyAny>> = unique(py, usages)?;
     declaration_usages.extend(finished.named_usages);
-    let (macro_sql, macro_spans, macro_deps, macro_usages) = match finished.macros {
+    let sql_macro_names: Vec<String> = finished.declarations.sql_macros.clone();
+    let (macro_sql, macro_spans, mut macro_deps, macro_usages) = match finished.macros {
         Some(macros) => {
             let mut names: Vec<String> = Vec::new();
             for dependency in unique(
@@ -206,6 +207,11 @@ pub(crate) fn finished_record<'py>(
             Vec::new(),
         ),
     };
+    for name in sql_macro_names {
+        if !macro_deps.contains(&name) {
+            macro_deps.push(name);
+        }
+    }
     let schema: Option<SchemaRecord> = finished.header.schema.as_ref().map(|schema| SchemaRecord {
         description: finished.header.description.clone(),
         type_enforcement: schema.type_enforcement,
@@ -228,6 +234,7 @@ pub(crate) fn finished_record<'py>(
         schema,
         sql_validation_enabled: finished.analysis.0,
         macro_deps,
+        sql_macro_checks: finished.declarations.sql_macro_checks.clone(),
         expansion: ExpansionRecord {
             authored: *interpolated_sql == *authored_query_sql,
             authored_sql: authored,

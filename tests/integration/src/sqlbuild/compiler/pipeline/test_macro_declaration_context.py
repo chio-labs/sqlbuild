@@ -62,12 +62,12 @@ def test_given_active_adapter_when_macro_renders_constant_then_uses_adapter_sql(
             "models/_constants/policy.sql": (
                 'CONSTANT (name regions, value ["north", "south"], render_as array);\n'
             ),
-            "models/_macros/policy.py": (
+            "models/_macros/python/policy.py": (
                 "def region_array(ctx) -> str:\n    return ctx.render_constant('regions')\n"
             ),
             "models/summary.sql": (
                 "MODEL (description 'Test model summary.', materialized view, database warehouse, schema analytics);\n\n"
-                "SELECT @region_array() AS regions"
+                "SELECT @py.region_array() AS regions"
             ),
         },
     )
@@ -95,7 +95,7 @@ def test_given_active_adapter_when_macro_renders_constant_then_uses_adapter_sql(
                 "models/orders/_sqlbuild/_enums/status.sql": (
                     "ENUM (name order_status, members [ACTIVE]);\n"
                 ),
-                "models/orders/_sqlbuild/_macros/policy.py": (
+                "models/orders/_sqlbuild/_macros/python/policy.py": (
                     "def order_policy(ctx) -> str:\n"
                     "    quantity = ctx.render_constant('minimum_quantity')\n"
                     "    status = ctx.render_enum_member(\n"
@@ -104,7 +104,7 @@ def test_given_active_adapter_when_macro_renders_constant_then_uses_adapter_sql(
                     '    return f"{quantity} AS minimum_quantity, {status} AS status"\n'
                 ),
                 "models/orders/summary.sql": (
-                    'MODEL (description "Order summary.");\nSELECT @order_policy()'
+                    'MODEL (description "Order summary.");\nSELECT @py.order_policy()'
                 ),
             },
             expected_sql="SELECT 2 AS minimum_quantity, 'ACTIVE' AS status",
@@ -115,12 +115,12 @@ def test_given_active_adapter_when_macro_renders_constant_then_uses_adapter_sql(
                 "sqlbuild_project.toml": (
                     'name = "orders"\nadapter = "duckdb"\n[scopes]\nenforce_placement = false\n'
                 ),
-                "models/orders/_sqlbuild/macros/policy.py": (
+                "models/orders/_sqlbuild/macros/python/policy.py": (
                     "def minimum_quantity() -> str:\n    return '2'\n"
                 ),
                 "models/orders/history/summary.sql": (
                     'MODEL (description "Historical order summary.");\n'
-                    "SELECT @minimum_quantity() AS minimum_quantity"
+                    "SELECT @py.minimum_quantity() AS minimum_quantity"
                 ),
             },
             expected_sql="SELECT 2 AS minimum_quantity",
@@ -149,14 +149,14 @@ def test_given_grouped_declarations_when_compiling_then_scope_resolves_from_owne
             description="project macro test is discovered from mirrored macro path",
             project_files={
                 "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
-                "macros/orders/policy.py": "def order_policy() -> str:\n    return '2'\n",
+                "macros/python/orders/policy.py": "def order_policy() -> str:\n    return '2'\n",
                 "models/orders/summary.sql": (
-                    'MODEL (description "Order summary.");\nSELECT @order_policy() AS quantity'
+                    'MODEL (description "Order summary.");\nSELECT @py.order_policy() AS quantity'
                 ),
                 "tests/unit/macros/orders/test_order_policy__returns_quantity.sql": (
                     'TEST (mode macro, name "order_policy__returns_quantity");\n\n'
                     "WITH\n"
-                    "__macro_actual__ AS (SELECT @order_policy() AS quantity),\n"
+                    "__macro_actual__ AS (SELECT @py.order_policy() AS quantity),\n"
                     "__macro_expected__ AS (SELECT 2 AS quantity)\n"
                     "SELECT 1\n"
                 ),
@@ -197,17 +197,17 @@ def test_given_macro_test_in_mirrored_path_when_compiling_then_test_is_attached(
                 "models/orders/_sqlbuild/_constants/policy.sql": (
                     "CONSTANT (name minimum_quantity, value 2);\n"
                 ),
-                "models/orders/_sqlbuild/_macros/policy.py": (
+                "models/orders/_sqlbuild/_macros/python/policy.py": (
                     "def order_policy(ctx) -> str:\n"
                     "    return ctx.render_constant('minimum_quantity')\n"
                 ),
                 "models/orders/summary.sql": (
-                    'MODEL (description "Order summary.");\nSELECT @order_policy() AS quantity'
+                    'MODEL (description "Order summary.");\nSELECT @py.order_policy() AS quantity'
                 ),
                 "tests/unit/macros/models/orders/test_order_policy__returns_quantity.sql": (
                     'TEST (mode macro, name "order_policy__returns_quantity");\n\n'
                     "WITH\n"
-                    "__macro_actual__ AS (SELECT @order_policy() AS quantity),\n"
+                    "__macro_actual__ AS (SELECT @py.order_policy() AS quantity),\n"
                     "__macro_expected__ AS (SELECT 2 AS quantity)\n"
                     "SELECT 1\n"
                 ),
@@ -221,17 +221,17 @@ def test_given_macro_test_in_mirrored_path_when_compiling_then_test_is_attached(
                 "sqlbuild_project.toml": (
                     'name = "orders"\nadapter = "duckdb"\n[scopes]\nenforce_placement = false\n'
                 ),
-                "models/orders/_sqlbuild/_macros/policy.py": (
+                "models/orders/_sqlbuild/_macros/python/policy.py": (
                     "def order_policy() -> str:\n    return '2'\n"
                 ),
                 "models/orders/order_summary.sql": (
                     'MODEL (description "Order summary.");\n'
-                    'SELECT @order_policy() AS quantity FROM __ref("order_input")'
+                    'SELECT @py.order_policy() AS quantity FROM __ref("order_input")'
                 ),
                 "models/order_input.sql": (
                     'MODEL (description "Order input.");\nSELECT 1 AS order_id'
                 ),
-                "tests/unit/orders/_sqlbuild/macros/fixtures.py": (
+                "tests/unit/orders/_sqlbuild/macros/python/fixtures.py": (
                     "def fixture_quantity() -> str:\n    return '2'\n"
                 ),
                 "tests/unit/orders/test_order_summary__uses_policy.sql": (
@@ -239,7 +239,7 @@ def test_given_macro_test_in_mirrored_path_when_compiling_then_test_is_attached(
                     "WITH\n"
                     "__ref__order_input AS (SELECT 1 AS order_id),\n"
                     "__expected__order_summary AS (\n"
-                    "  SELECT @order_policy() + @fixture_quantity() AS quantity\n"
+                    "  SELECT @py.order_policy() + @py.fixture_quantity() AS quantity\n"
                     ")\n"
                     "SELECT 1\n"
                 ),
@@ -253,29 +253,29 @@ def test_given_macro_test_in_mirrored_path_when_compiling_then_test_is_attached(
                 "sqlbuild_project.toml": (
                     'name = "orders"\nadapter = "duckdb"\n[scopes]\nenforce_placement = false\n'
                 ),
-                "models/orders/_sqlbuild/_macros/policy.py": (
+                "models/orders/_sqlbuild/_macros/python/policy.py": (
                     "def order_policy() -> str:\n    return '2'\n"
                 ),
                 "models/orders/order_summary.sql": (
                     'MODEL (description "Order summary.");\n'
-                    'SELECT @order_policy() AS quantity FROM __ref("order_input")'
+                    'SELECT @py.order_policy() AS quantity FROM __ref("order_input")'
                 ),
                 "models/order_input.sql": (
                     'MODEL (description "Order input.");\nSELECT 1 AS order_id'
                 ),
-                "models/products/_sqlbuild/_macros/policy.py": (
+                "models/products/_sqlbuild/_macros/python/policy.py": (
                     "def product_policy() -> str:\n    return '3'\n"
                 ),
                 "models/products/product_summary.sql": (
                     'MODEL (description "Product summary.");\n'
-                    'SELECT @product_policy() AS quantity FROM __ref("order_input")'
+                    'SELECT @py.product_policy() AS quantity FROM __ref("order_input")'
                 ),
                 "tests/unit/test_summaries__use_policies.sql": (
                     'TEST (name "summaries__use_policies");\n\n'
                     "WITH\n"
                     "__ref__order_input AS (SELECT 1 AS order_id),\n"
-                    "__expected__order_summary AS (SELECT @order_policy() AS quantity),\n"
-                    "__expected__product_summary AS (SELECT @product_policy() AS quantity)\n"
+                    "__expected__order_summary AS (SELECT @py.order_policy() AS quantity),\n"
+                    "__expected__product_summary AS (SELECT @py.product_policy() AS quantity)\n"
                     "SELECT 1\n"
                 ),
             },
@@ -325,22 +325,22 @@ def test_given_macro_context_declarations_when_compiling_resources_then_all_expa
                 'name = "demo"\nadapter = "duckdb"\n\n[settings]\nsql_analysis = false\n'
             ),
             "constants/policy.sql": "CONSTANT (name minimum_quantity, value 2);\n",
-            "macros/policy.py": (
+            "macros/python/policy.py": (
                 "def minimum_quantity(ctx) -> str:\n"
                 "    return str(ctx.constants['minimum_quantity'])\n"
             ),
             "models/summary.sql": (
                 "MODEL (description 'Test model summary.', materialized view, audits [minimum_quantity]);\n\n"
-                "SELECT @minimum_quantity() AS minimum_quantity"
+                "SELECT @py.minimum_quantity() AS minimum_quantity"
             ),
             "tests/unit/summary_test.sql": (
                 "TEST (mode macro);\n\nWITH\n__macro_actual__ AS (\n"
-                "  SELECT @minimum_quantity() AS minimum_quantity\n),\n"
+                "  SELECT @py.minimum_quantity() AS minimum_quantity\n),\n"
                 "__macro_expected__ AS (\n  SELECT 2 AS minimum_quantity\n)\nSELECT 1"
             ),
             "audits/generic/minimum_quantity.sql": (
                 'AUDIT ();\n\nSELECT * FROM __ref("@model") '
-                "WHERE minimum_quantity < @minimum_quantity()"
+                "WHERE minimum_quantity < @py.minimum_quantity()"
             ),
         },
     )
@@ -364,12 +364,12 @@ def test_given_macro_context_declarations_when_compiling_resources_then_all_expa
                 "models/orders/_constants/policy.sql": (
                     "CONSTANT (name minimum_quantity, value 2);\n"
                 ),
-                "macros/policy.py": (
+                "macros/python/policy.py": (
                     "def minimum_quantity(ctx) -> str:\n"
                     "    return str(ctx.constants['minimum_quantity'])\n"
                 ),
                 "models/products/summary.sql": (
-                    "MODEL (description 'Test model summary.', materialized view);\n\nSELECT @minimum_quantity() AS minimum_quantity"
+                    "MODEL (description 'Test model summary.', materialized view);\n\nSELECT @py.minimum_quantity() AS minimum_quantity"
                 ),
             },
             expected_error_fragment="Constant 'minimum_quantity'.*is inaccessible",
@@ -378,15 +378,15 @@ def test_given_macro_context_declarations_when_compiling_resources_then_all_expa
             description="grouped private macro remains inaccessible to descendant model",
             project_files={
                 "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
-                "models/orders/_sqlbuild/_macros/policy.py": (
+                "models/orders/_sqlbuild/_macros/python/policy.py": (
                     "def minimum_quantity() -> str:\n    return '2'\n"
                 ),
                 "models/orders/history/summary.sql": (
                     'MODEL (description "Historical order summary.");\n'
-                    "SELECT @minimum_quantity() AS minimum_quantity"
+                    "SELECT @py.minimum_quantity() AS minimum_quantity"
                 ),
             },
-            expected_error_fragment="Macro '@minimum_quantity'.*is inaccessible",
+            expected_error_fragment="Macro '@py.minimum_quantity'.*is inaccessible",
         ),
         MacroDeclarationContextErrorTestCase(
             description="mocked dependency does not grant its production macro scope",
@@ -394,7 +394,7 @@ def test_given_macro_context_declarations_when_compiling_resources_then_all_expa
                 "sqlbuild_project.toml": (
                     'name = "demo"\nadapter = "duckdb"\n[scopes]\nenforce_placement = false\n'
                 ),
-                "models/products/_sqlbuild/_macros/policy.py": (
+                "models/products/_sqlbuild/_macros/python/policy.py": (
                     "def product_policy() -> str:\n    return '3'\n"
                 ),
                 "models/products/product_input.sql": (
@@ -409,24 +409,24 @@ def test_given_macro_context_declarations_when_compiling_resources_then_all_expa
                     "WITH\n"
                     "__ref__product_input AS (SELECT 1 AS product_id),\n"
                     "__expected__order_summary AS (\n"
-                    "  SELECT @product_policy() AS product_id\n"
+                    "  SELECT @py.product_policy() AS product_id\n"
                     ")\n"
                     "SELECT 1\n"
                 ),
             },
-            expected_error_fragment="Macro '@product_policy'.*is inaccessible",
+            expected_error_fragment="Macro '@py.product_policy'.*is inaccessible",
         ),
         MacroDeclarationContextErrorTestCase(
             description="unknown constant reports visible alternatives",
             project_files={
                 "sqlbuild_project.toml": 'name = "demo"\nadapter = "duckdb"\n',
                 "models/_constants/policy.sql": ("CONSTANT (name minimum_quantity, value 2);\n"),
-                "models/_macros/policy.py": (
+                "models/_macros/python/policy.py": (
                     "def missing_quantity(ctx) -> str:\n"
                     "    return ctx.render_constant('maximum_quantity')\n"
                 ),
                 "models/summary.sql": (
-                    "MODEL (description 'Test model summary.', materialized view);\n\nSELECT @missing_quantity() AS maximum_quantity"
+                    "MODEL (description 'Test model summary.', materialized view);\n\nSELECT @py.missing_quantity() AS maximum_quantity"
                 ),
             },
             expected_error_fragment=(
@@ -440,14 +440,14 @@ def test_given_macro_context_declarations_when_compiling_resources_then_all_expa
                 "models/_enums/status.sql": (
                     "ENUM (name order_status, members [ACTIVE, PAUSED]);\n"
                 ),
-                "models/_macros/policy.py": (
+                "models/_macros/python/policy.py": (
                     "def missing_status(ctx) -> str:\n"
                     "    return ctx.render_enum_member(\n"
                     "        enum_name='order_status', member_name='CLOSED'\n"
                     "    )\n"
                 ),
                 "models/summary.sql": (
-                    "MODEL (description 'Test model summary.', materialized view);\n\nSELECT @missing_status() AS status"
+                    "MODEL (description 'Test model summary.', materialized view);\n\nSELECT @py.missing_status() AS status"
                 ),
             },
             expected_error_fragment=(
