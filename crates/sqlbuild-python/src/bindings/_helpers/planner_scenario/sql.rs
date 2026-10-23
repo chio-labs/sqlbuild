@@ -15,9 +15,7 @@ use crate::bindings::_helpers::references::source_relations::render_source_relat
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyStringMethods};
-use sqlbuild_analysis::planner_scenario::{
-    errors::MarkerError, main::replace_markers::replace_markers,
-};
+use sqlbuild_plan::scenario::{errors::MarkerError, main::replace_markers::replace_markers};
 use sqlbuild_sqltext::sql_scan::models::Unclosed;
 
 pub(super) fn resolve_sql(

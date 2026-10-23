@@ -1,9 +1,9 @@
 //! A model's fixture relation metadata from its inferred and declared columns.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
-use sqlbuild_analysis::planner_fixtures::main::merge_metadata::merge_metadata;
-use sqlbuild_analysis::planner_fixtures::models::FixtureColumn;
 use sqlbuild_core::text::main::python_casefold::python_casefold;
+use sqlbuild_plan::fixtures::main::merge_metadata::merge_metadata;
+use sqlbuild_plan::fixtures::models::FixtureColumn;
 
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::compiled_views::model_reads::{inferred_rows, star_flags};

@@ -7,9 +7,9 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet};
 use pyo3::{pyfunction, pymethods, wrap_pyfunction};
-use sqlbuild_analysis::planner_fixtures::main::fixture_schema::fixture_schema;
-use sqlbuild_analysis::planner_fixtures::models::FixtureColumn;
 use sqlbuild_core::text::main::python_casefold::python_casefold;
+use sqlbuild_plan::fixtures::main::fixture_schema::fixture_schema;
+use sqlbuild_plan::fixtures::models::FixtureColumn;
 
 use crate::bindings::_helpers::analysis_session::fixture_inferences::FixtureColumnInferences;
 use crate::bindings::_helpers::compiled_views::model_reads;

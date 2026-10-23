@@ -1320,6 +1320,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "sqlbuild-plan"
+version = "0.173.0"
+dependencies = [
+ "polyglot-sql",
+ "regex",
+ "serde_json",
+ "sha2",
+ "sqlbuild-analysis",
+ "sqlbuild-core",
+ "sqlbuild-sqltext",
+]
+
+[[package]]
 name = "sqlbuild-project"
 version = "0.173.0"
 dependencies = [
@@ -1360,6 +1373,7 @@ dependencies = [
  "sqlbuild-discovery",
  "sqlbuild-host",
  "sqlbuild-model-config",
+ "sqlbuild-plan",
  "sqlbuild-project",
  "sqlbuild-pysource",
  "sqlbuild-recall",

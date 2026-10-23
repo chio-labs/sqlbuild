@@ -1,0 +1,20 @@
+[package]
+name = "sqlbuild-plan"
+version.workspace = true
+description = "Planning as plain Rust: model change detection, identities, migrations, strategy, warehouse reconciliation, scenarios and SQL-test fixtures."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+polyglot-sql.workspace = true
+regex.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+sqlbuild-analysis.workspace = true
+sqlbuild-core.workspace = true
+sqlbuild-sqltext.workspace = true

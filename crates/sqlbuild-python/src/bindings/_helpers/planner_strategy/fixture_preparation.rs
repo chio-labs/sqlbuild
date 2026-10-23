@@ -2,7 +2,7 @@
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
-use sqlbuild_analysis::planner_fixtures::main::empty_fixture_marker::empty_fixture_marker;
+use sqlbuild_plan::fixtures::main::empty_fixture_marker::empty_fixture_marker;
 
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::planner_strategy::fixture_sql::complete_empty_fixture_sql;

@@ -9,7 +9,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::PyDict;
 use pyo3::types::PyDictMethods;
 use sqlbuild_analysis::assembly::project::types::ObjectKey;
-use sqlbuild_analysis::planner_scope::models::LoaderGraph;
+use sqlbuild_project::plan_scope::models::LoaderGraph;
 
 pub(crate) fn keys(values: &Bound<'_, PyAny>) -> PyResult<Vec<ObjectKey>> {
     values

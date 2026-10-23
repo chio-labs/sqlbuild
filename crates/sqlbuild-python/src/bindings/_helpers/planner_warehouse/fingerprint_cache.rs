@@ -13,11 +13,11 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBool, PyDict, PyFloat, PyList, PyListMethods, PyTuple};
 use pyo3::{pyclass, pyfunction, pymethods};
-use sqlbuild_analysis::planner_warehouse::main::fingerprint_cache_entry::fingerprint_cache_entry;
-use sqlbuild_analysis::planner_warehouse::main::fingerprint_cache_key::fingerprint_cache_key;
-use sqlbuild_analysis::planner_warehouse::main::fingerprint_cache_lookup::fingerprint_cache_lookup;
-use sqlbuild_analysis::planner_warehouse::main::fingerprint_cache_shared_digest::fingerprint_cache_shared_digest;
-use sqlbuild_analysis::planner_warehouse::models::FingerprintCacheKey;
+use sqlbuild_plan::warehouse::main::fingerprint_cache_entry::fingerprint_cache_entry;
+use sqlbuild_plan::warehouse::main::fingerprint_cache_key::fingerprint_cache_key;
+use sqlbuild_plan::warehouse::main::fingerprint_cache_lookup::fingerprint_cache_lookup;
+use sqlbuild_plan::warehouse::main::fingerprint_cache_shared_digest::fingerprint_cache_shared_digest;
+use sqlbuild_plan::warehouse::models::FingerprintCacheKey;
 use std::collections::{BTreeMap, HashMap};
 use std::hash::{DefaultHasher, Hash, Hasher};
 

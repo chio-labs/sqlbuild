@@ -5,16 +5,16 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction};
 
-use sqlbuild_analysis::planner_strategy::main::materialization_type::materialization_type;
-use sqlbuild_analysis::planner_strategy::main::microbatch_lookback::microbatch_lookback;
-use sqlbuild_analysis::planner_strategy::main::physical_layout_warning::physical_layout_warning;
-use sqlbuild_analysis::planner_strategy::main::table_type_ddl::table_type_ddl;
-use sqlbuild_analysis::planner_strategy::models::{CursorTypeCheck, LookbackConfig};
 use sqlbuild_host::entries::models::{AdapterHost, ExecutorHost};
 use sqlbuild_model_config::execution_limits::constants::MODEL_MAX_DURATION_KEY;
 use sqlbuild_model_config::execution_limits::main::parse_execution_limit::parse_execution_limit;
 use sqlbuild_model_config::execution_limits::models::ExecutionLimit;
 use sqlbuild_model_config::model_validation::constants::PHYSICAL_STORAGE_KEYS;
+use sqlbuild_plan::strategy::main::materialization_type::materialization_type;
+use sqlbuild_plan::strategy::main::microbatch_lookback::microbatch_lookback;
+use sqlbuild_plan::strategy::main::physical_layout_warning::physical_layout_warning;
+use sqlbuild_plan::strategy::main::table_type_ddl::table_type_ddl;
+use sqlbuild_plan::strategy::models::{CursorTypeCheck, LookbackConfig};
 
 use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::compiled_views::model_reads;

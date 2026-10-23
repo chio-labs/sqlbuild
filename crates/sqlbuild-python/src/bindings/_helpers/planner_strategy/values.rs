@@ -9,11 +9,9 @@ use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString};
 
-use sqlbuild_analysis::planner_changes::models::{
-    SchemaChangeKind, SchemaColumnSource, SchemaFindingRow,
-};
-use sqlbuild_analysis::planner_strategy::main::materialization_type::materialization_type;
-use sqlbuild_analysis::planner_strategy::models::{
+use sqlbuild_plan::changes::models::{SchemaChangeKind, SchemaColumnSource, SchemaFindingRow};
+use sqlbuild_plan::strategy::main::materialization_type::materialization_type;
+use sqlbuild_plan::strategy::models::{
     ChangeFacts, MaterializationType, PlanChangeKind, WarningRow, WarningSeverity,
 };
 

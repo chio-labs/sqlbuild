@@ -8,7 +8,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
-use sqlbuild_analysis::planner_migrations::main::{migration_fingerprint, migration_ref_names};
+use sqlbuild_plan::migrations::main::{migration_fingerprint, migration_ref_names};
 use std::collections::BTreeMap;
 
 /// Hash normalized SQL and non-storage metadata through rename identities.

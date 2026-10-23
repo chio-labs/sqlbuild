@@ -3,14 +3,14 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
 use pyo3::types::{PyDictMethods, PyFrozenSet};
 use pyo3::{pyfunction, wrap_pyfunction};
-use sqlbuild_analysis::planner_fixtures::main::required_columns::required_columns;
-use sqlbuild_analysis::planner_fixtures::main::star_keys::star_keys;
-use sqlbuild_analysis::planner_fixtures::models::{
+use sqlbuild_analysis::required_columns::models::ColumnRead;
+use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
+use sqlbuild_plan::fixtures::main::required_columns::required_columns;
+use sqlbuild_plan::fixtures::main::star_keys::star_keys;
+use sqlbuild_plan::fixtures::models::{
     FixtureReadKey, FixtureReadModel, FixtureReadReference, FixtureReadRequirements,
     FixtureReadSchemas, FixtureStarRelation,
 };
-use sqlbuild_analysis::required_columns::models::ColumnRead;
-use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 use std::collections::{HashMap, HashSet};
 
 use crate::bindings::_helpers::boundary::panics::value_error;

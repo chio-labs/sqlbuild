@@ -6,11 +6,11 @@ use pyo3::prelude::{
 use pyo3::types::PyString;
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use sqlbuild_analysis::planner_identity::constants::{FINGERPRINT_HELP, QUERY_FINGERPRINT_FAILED};
-use sqlbuild_analysis::planner_identity::models::GraphKey;
 use sqlbuild_analysis::sql_tokens::main::compiler_query_fingerprint::compiler_query_fingerprint;
 use sqlbuild_analysis::sql_tokens::main::definition_fingerprint::definition_fingerprint;
 use sqlbuild_core::panics::main::is_compiler_panic::is_compiler_panic;
+use sqlbuild_plan::identity::constants::{FINGERPRINT_HELP, QUERY_FINGERPRINT_FAILED};
+use sqlbuild_plan::identity::models::GraphKey;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::boundary::python_calls::keywords;

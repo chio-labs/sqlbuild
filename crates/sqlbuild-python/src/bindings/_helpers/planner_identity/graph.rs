@@ -11,13 +11,11 @@ use pyo3::types::{
 };
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use sqlbuild_analysis::planner_identity::constants::{
-    MODEL_RESOURCE, TABLE_FN_RESOURCE, UDF_RESOURCE,
-};
-use sqlbuild_analysis::planner_identity::main::missing_upstream_message::missing_upstream_message as message_of;
-use sqlbuild_analysis::planner_identity::main::missing_upstreams::missing_upstreams;
-use sqlbuild_analysis::planner_identity::main::topological_order::topological_order;
-use sqlbuild_analysis::planner_identity::models::{AvailableUpstreams, GraphKey, MissingUpstream};
+use sqlbuild_plan::identity::constants::{MODEL_RESOURCE, TABLE_FN_RESOURCE, UDF_RESOURCE};
+use sqlbuild_plan::identity::main::missing_upstream_message::missing_upstream_message as message_of;
+use sqlbuild_plan::identity::main::missing_upstreams::missing_upstreams;
+use sqlbuild_plan::identity::main::topological_order::topological_order;
+use sqlbuild_plan::identity::models::{AvailableUpstreams, GraphKey, MissingUpstream};
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compiled_views::project_reads;

@@ -2,13 +2,11 @@
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods};
-use sqlbuild_analysis::planner_fixtures::main::{
+use sqlbuild_plan::fixtures::main::{
     empty_fixture_error::empty_fixture_error, empty_fixture_marker::empty_fixture_marker,
     render_completed::render_completed as native_render_completed, render_empty::render_empty,
 };
-use sqlbuild_analysis::planner_fixtures::models::{
-    FixtureColumn, FixtureSqlInput, SuppliedProjection,
-};
+use sqlbuild_plan::fixtures::models::{FixtureColumn, FixtureSqlInput, SuppliedProjection};
 
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::planner_strategy::models::FixtureRelation;

@@ -22,8 +22,8 @@ use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyDictMethods;
 use pyo3::types::{PyDict, PyFrozenSet, PyTuple};
-use sqlbuild_analysis::planner_scope::constants::SOURCE;
-use sqlbuild_analysis::planner_scope::main::{
+use sqlbuild_project::plan_scope::constants::SOURCE;
+use sqlbuild_project::plan_scope::main::{
     managed_sources::managed_sources, source_selectors::source_selectors,
 };
 use std::collections::HashSet;

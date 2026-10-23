@@ -13,18 +13,16 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
-use sqlbuild_analysis::planner_changes::constants::{
-    CASE_FOLDING_DIALECT, EMPTY_FINGERPRINT_METADATA_JSON,
-};
-use sqlbuild_analysis::planner_changes::main::detect_schema_changes::detect_schema_changes;
-use sqlbuild_analysis::planner_changes::main::metadata_changes::metadata_changes;
-use sqlbuild_analysis::planner_changes::main::model_backfill::model_backfill;
-use sqlbuild_analysis::planner_changes::main::model_change_kind::model_change_kind;
-use sqlbuild_analysis::planner_changes::main::recorded_declared_columns_hash::recorded_declared_columns_hash;
-use sqlbuild_analysis::planner_changes::main::replay_policy_needed::replay_policy_needed;
-use sqlbuild_analysis::planner_changes::main::resolve_replay_on_change::resolve_replay_on_change;
-use sqlbuild_analysis::planner_changes::main::with_declared_columns_hash::with_declared_columns_hash;
-use sqlbuild_analysis::planner_changes::models::{
+use sqlbuild_plan::changes::constants::{CASE_FOLDING_DIALECT, EMPTY_FINGERPRINT_METADATA_JSON};
+use sqlbuild_plan::changes::main::detect_schema_changes::detect_schema_changes;
+use sqlbuild_plan::changes::main::metadata_changes::metadata_changes;
+use sqlbuild_plan::changes::main::model_backfill::model_backfill;
+use sqlbuild_plan::changes::main::model_change_kind::model_change_kind;
+use sqlbuild_plan::changes::main::recorded_declared_columns_hash::recorded_declared_columns_hash;
+use sqlbuild_plan::changes::main::replay_policy_needed::replay_policy_needed;
+use sqlbuild_plan::changes::main::resolve_replay_on_change::resolve_replay_on_change;
+use sqlbuild_plan::changes::main::with_declared_columns_hash::with_declared_columns_hash;
+use sqlbuild_plan::changes::models::{
     Backfill, BackfillAction, BackfillFacts, MetadataChanges, SchemaColumns, SchemaComparison,
     SchemaFindingRow,
 };

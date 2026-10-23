@@ -8,15 +8,15 @@ use pyo3::prelude::{
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyInt, PyString, PyTuple, PyTupleMethods};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
-use sqlbuild_analysis::planner_strategy::main::cap_integer_bounds::cap_integer_bounds;
-use sqlbuild_analysis::planner_strategy::main::cap_timeline_bounds::cap_timeline_bounds;
-use sqlbuild_analysis::planner_strategy::main::count_integer_batches::count_integer_batches;
-use sqlbuild_analysis::planner_strategy::main::count_timeline_batches::count_timeline_batches;
-use sqlbuild_analysis::planner_strategy::main::microbatch_limit_warning::microbatch_limit_warning as limit_warning;
-use sqlbuild_analysis::planner_strategy::models::{CapDirection, CappedBound};
-use sqlbuild_analysis::planner_strategy::types::Timeline;
 use sqlbuild_cursor::algebra::main::parse_duration::parse_duration;
 use sqlbuild_cursor::algebra::models::{DurationDigits, DurationSpan};
+use sqlbuild_plan::strategy::main::cap_integer_bounds::cap_integer_bounds;
+use sqlbuild_plan::strategy::main::cap_timeline_bounds::cap_timeline_bounds;
+use sqlbuild_plan::strategy::main::count_integer_batches::count_integer_batches;
+use sqlbuild_plan::strategy::main::count_timeline_batches::count_timeline_batches;
+use sqlbuild_plan::strategy::main::microbatch_limit_warning::microbatch_limit_warning as limit_warning;
+use sqlbuild_plan::strategy::models::{CapDirection, CappedBound};
+use sqlbuild_plan::strategy::types::Timeline;
 
 use crate::bindings::_helpers::cursor::durations::shifted_moment;
 use crate::bindings::_helpers::plan_output::display::aligned_timestamp_bounds;

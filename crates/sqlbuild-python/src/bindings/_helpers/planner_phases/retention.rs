@@ -25,9 +25,9 @@ use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
-use sqlbuild_analysis::planner_warehouse::main::retention_change::retention_change;
-use sqlbuild_analysis::planner_warehouse::main::retention_direction::retention_direction;
-use sqlbuild_analysis::planner_warehouse::main::table_type_copy_name::table_type_copy_name as copy_name;
+use sqlbuild_plan::warehouse::main::retention_change::retention_change;
+use sqlbuild_plan::warehouse::main::retention_direction::retention_direction;
+use sqlbuild_plan::warehouse::main::table_type_copy_name::table_type_copy_name as copy_name;
 use std::collections::{BTreeMap, BTreeSet};
 
 const MATERIALIZED_KEY: &str = "materialized";

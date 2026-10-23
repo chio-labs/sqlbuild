@@ -6,10 +6,8 @@ use std::sync::{Arc, Mutex};
 use pyo3::prelude::{Bound, Py};
 use pyo3::pyclass;
 use pyo3::types::{PyAny, PyDict};
-use sqlbuild_analysis::planner_fixtures::models::{
-    FixtureColumn, FixtureReadCache, FixtureTypeProjection,
-};
 use sqlbuild_analysis::required_columns::models::ColumnRead;
+use sqlbuild_plan::fixtures::models::{FixtureColumn, FixtureReadCache, FixtureTypeProjection};
 
 use crate::bindings::_helpers::planner_strategy::types::FixtureKey;
 

@@ -19,9 +19,9 @@ use pyo3::pyfunction;
 use pyo3::types::PyDict as KeywordDict;
 use pyo3::types::PyString;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
-use sqlbuild_analysis::planner_warehouse::main::missing_source_tables_help::missing_source_tables_help;
-use sqlbuild_analysis::planner_warehouse::main::missing_source_tables_message::missing_source_tables_message;
-use sqlbuild_analysis::planner_warehouse::models::MissingSourceTable;
+use sqlbuild_plan::warehouse::main::missing_source_tables_help::missing_source_tables_help;
+use sqlbuild_plan::warehouse::main::missing_source_tables_message::missing_source_tables_message;
+use sqlbuild_plan::warehouse::models::MissingSourceTable;
 use std::collections::HashMap;
 
 fn selected_source_readers(scope: &Bound<'_, PyAny>) -> PyResult<HashMap<String, Vec<String>>> {

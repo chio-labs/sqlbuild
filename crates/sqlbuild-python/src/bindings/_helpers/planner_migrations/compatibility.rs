@@ -15,8 +15,8 @@ use pyo3::IntoPyObject;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
-use sqlbuild_analysis::planner_migrations::main::compatibility_findings::compatibility_findings;
-use sqlbuild_analysis::planner_migrations::models::CompatibilityFinding;
+use sqlbuild_plan::migrations::main::compatibility_findings::compatibility_findings;
+use sqlbuild_plan::migrations::models::CompatibilityFinding;
 
 fn config(model: &Bound<'_, PyAny>, key: &str) -> PyResult<Option<String>> {
     config_value(model.py(), &model_values(model)?, key)?.extract()

@@ -18,8 +18,8 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{
     PyDict, PyDictMethods, PyFrozenSet, PyListMethods, PySet, PySetMethods, PyString, PyTuple,
 };
-use sqlbuild_analysis::planner_migrations::main::discovery_materialization::discovery_materialization;
-use sqlbuild_analysis::planner_migrations::main::stored_migration_fingerprint::stored_migration_fingerprint;
+use sqlbuild_plan::migrations::main::discovery_materialization::discovery_materialization;
+use sqlbuild_plan::migrations::main::stored_migration_fingerprint::stored_migration_fingerprint;
 use std::collections::BTreeMap;
 
 fn location<'py>(

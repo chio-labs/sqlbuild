@@ -9,8 +9,8 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
 use pyo3::types::PyBool;
-use sqlbuild_analysis::planner_warehouse::main::full_rebuild_cause::full_rebuild_cause;
-use sqlbuild_analysis::planner_warehouse::models::FullRebuildFacts;
+use sqlbuild_plan::warehouse::main::full_rebuild_cause::full_rebuild_cause;
+use sqlbuild_plan::warehouse::models::FullRebuildFacts;
 
 const FULL_REFRESH_KEY: &str = "full_refresh";
 

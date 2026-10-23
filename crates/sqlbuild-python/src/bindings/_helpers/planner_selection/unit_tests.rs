@@ -5,8 +5,8 @@ use std::collections::BTreeSet;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyFrozenSet, PyString, PyTuple};
-use sqlbuild_analysis::planner_selection::main::split_unit_test_selectors::split_unit_test_selectors as split;
-use sqlbuild_analysis::planner_selection::models::{
+use sqlbuild_project::selection::main::split_unit_test_selectors::split_unit_test_selectors as split;
+use sqlbuild_project::selection::models::{
     SelectorGroups, UnitTestSelectorNames, UnitTestSelectorSplit,
 };
 

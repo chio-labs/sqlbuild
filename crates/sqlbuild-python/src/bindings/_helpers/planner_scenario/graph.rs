@@ -12,8 +12,8 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, pyfunction};
 use pyo3::types::PyTuple;
-use sqlbuild_analysis::planner_scenario::main::graph::graph;
-use sqlbuild_analysis::planner_scenario::models::ScenarioGraphInput;
+use sqlbuild_plan::scenario::main::graph::graph;
+use sqlbuild_plan::scenario::models::ScenarioGraphInput;
 
 #[pyfunction]
 #[pyo3(signature = (*, scenario, project, sql_analysis_enabled=true, sql_analysis_dialect=None))]
