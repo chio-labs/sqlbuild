@@ -206,3 +206,86 @@ class BatchMoveDryRunE2ETestCase:
     description: str
     arguments: tuple[str, ...]
     expected_lines: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class BatchRenameE2ETestCase:
+    description: str
+    arguments: tuple[str, ...]
+    rename_file: str
+    expected_files: tuple[str, ...]
+    expected_fragments: dict[str, tuple[str, ...]]
+    expected_old_name_views: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class BatchRenameRefusalE2ETestCase:
+    description: str
+    arguments: tuple[str, ...]
+    expected_message: str
+
+
+@dataclass(frozen=True)
+class PythonImportMoveE2ETestCase:
+    description: str
+    files: dict[str, str]
+    expected_fragments: dict[str, tuple[str, ...]]
+
+
+@dataclass(frozen=True)
+class PythonImportRefusalE2ETestCase:
+    description: str
+    files: dict[str, str]
+    expected_location: str
+    expected_reason: str
+    binary_files: dict[str, bytes] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class RenameUsageErrorE2ETestCase:
+    description: str
+    arguments: tuple[str, ...]
+    expected_returncode: int
+    expected_message: str
+
+
+@dataclass(frozen=True)
+class ProjectFailureE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_codes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class InvalidRequestJsonE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_code: str
+    expected_message: str
+
+
+@dataclass(frozen=True)
+class LayoutRepairE2ETestCase:
+    description: str
+    files: dict[str, str]
+    arguments: tuple[str, ...]
+    expected_status: str
+    expected_baseline: dict[str, int]
+    expected_blocking: tuple[str, ...]
+    command: str = "mv"
+
+
+@dataclass(frozen=True)
+class RefusedBaselineE2ETestCase:
+    description: str
+    files: dict[str, str]
+    command: tuple[str, ...]
+    expected_codes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class LayoutRepairDryRunE2ETestCase:
+    description: str
+    files: dict[str, str]
+    arguments: tuple[str, ...]
+    expected_lines: tuple[str, ...]

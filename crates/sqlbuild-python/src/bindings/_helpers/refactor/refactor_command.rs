@@ -14,13 +14,16 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::lineage_command::models::LineageKey;
 use sqlbuild_core::cli_text::main::format_count_noun::format_count_noun;
 use sqlbuild_core::cli_text::models::CliStyle;
+use sqlbuild_refactor::refactor_command::main::compare_with_baseline::compare_with_baseline;
 use sqlbuild_refactor::refactor_command::main::layer_move_suggestion::layer_move_suggestion;
-use sqlbuild_refactor::refactor_command::main::move_pairs::move_pairs;
-use sqlbuild_refactor::refactor_command::main::refactor_request_for_target::refactor_request_for_target;
+use sqlbuild_refactor::refactor_command::main::refactor_pairs::refactor_pairs;
+use sqlbuild_refactor::refactor_command::main::refactor_requests::refactor_requests;
+use sqlbuild_refactor::refactor_command::main::render_project_failure_json::render_project_failure_json;
 use sqlbuild_refactor::refactor_command::main::render_refactor_json::render_refactor_json;
 use sqlbuild_refactor::refactor_command::main::render_refactor_text::render_refactor_text;
 use sqlbuild_refactor::refactor_command::models::{
-    LayerMove, MoveArguments, RefactorDiagnostic, RefactorStatus, RefactorTargetRequest,
+    BaselineComparison, LayerMove, PairArguments, RefactorDiagnostic, RefactorStatus,
+    RefactorTargetRequest,
 };
 use sqlbuild_refactor::refactoring::errors::{RefactorError, RefactorErrorKind};
 use sqlbuild_refactor::refactoring::main::commit_refactor_plan::commit_refactor_plan;
@@ -51,6 +54,8 @@ const MOVE_COMMAND: &str = "mv";
 const EDIT_ERROR_CODE: &str = "C957";
 const WRITE_ERROR_CODE: &str = "C958";
 const MOVE_FILE_ERROR_CODE: &str = "C954";
+const RULE_PHASE: &str = "rule";
+const PROJECT_FAILED_HELP: &str = "sqb compile";
 
 fn imported<'py>(py: Python<'py>, module: &str, name: &str) -> PyResult<Bound<'py, PyAny>> {
     py.import(module)?.getattr(name)
@@ -109,25 +114,29 @@ fn optional_posix(path: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
     Ok(Some(path.call_method0("as_posix")?.extract()?))
 }
 
-/// The edited project's errors, paths inside the scratch copy made relative to it.
+/// A compiled project's errors, paths inside `root` made relative to it.
 fn relative_diagnostics(
     errors: &[Bound<'_, PyAny>],
-    staging_dir: &Path,
+    root: &Path,
 ) -> PyResult<Vec<RefactorDiagnostic>> {
     let mut diagnostics: Vec<RefactorDiagnostic> = Vec::new();
     for error in errors {
         let path: Option<String> = optional_posix(&native_field(error, "path")?)?.map(|path| {
             let candidate: &Path = Path::new(&path);
-            match candidate.strip_prefix(staging_dir) {
-                Ok(relative) if candidate.is_absolute() => relative.to_string_lossy().into_owned(),
+            match candidate.strip_prefix(root) {
+                Ok(relative) if candidate.is_absolute() => {
+                    relative.to_string_lossy().replace('\\', "/")
+                }
                 _ => path,
             }
         });
+        let phase: String = native_field(error, "phase")?.str()?.extract()?;
         diagnostics.push(RefactorDiagnostic {
             code: native_field(error, "code")?.extract()?,
             message: native_field(error, "message")?.extract()?,
             path,
             line: native_field(error, "line")?.extract()?,
+            rule: phase == RULE_PHASE,
         });
     }
     Ok(diagnostics)
@@ -191,11 +200,18 @@ struct Command<'py> {
     json_output: bool,
 }
 
-/// Where a refactoring stopped: its plan, terminal status and compile errors.
+/// Where a refactoring stopped: plan, status, blocking errors and the rule-failure baseline.
 struct Outcome {
     plan: RefactorPlan,
     status: RefactorStatus,
     diagnostics: Vec<RefactorDiagnostic>,
+    baseline: BaselineComparison,
+}
+
+/// How the command ended: with a plan, or refused because the project does not compile.
+enum Finished {
+    Planned(Box<Outcome>),
+    ProjectFailed(Vec<RefactorDiagnostic>),
 }
 
 /// A plan verified in the scratch copy, with its originals and the edited project's errors.
@@ -221,57 +237,56 @@ fn move_command(request: &Bound<'_, PyAny>) -> PyResult<bool> {
         == MOVE_COMMAND)
 }
 
-/// The target of each refactoring the command asks for: every move pair, or one rename.
+/// The target of each refactoring the command asks for: every move or rename pair.
 fn target_requests(
     py: Python<'_>,
     request: &Bound<'_, PyAny>,
 ) -> PyResult<Vec<RefactorTargetRequest>> {
+    let is_move: bool = move_command(request)?;
     let target: Option<String> = native_field(request, "target")?.extract()?;
-    let destination: Option<String> = native_field(request, "destination")?.extract()?;
-    if !move_command(request)? {
-        return Ok(vec![RefactorTargetRequest {
-            is_move: false,
-            target: target.unwrap_or_default(),
-            new_name: native_field(request, "new_name")?.extract()?,
-            destination,
-            cascade: native_field(request, "cascade")?.extract()?,
-        }]);
-    }
+    let second: Option<String> =
+        native_field(request, if is_move { "destination" } else { "new_name" })?.extract()?;
+    let cascade: bool = native_field(request, "cascade")?.extract()?;
     let more: Vec<String> = native_field(request, "more_moves")?.extract()?;
     let from_file: Option<String> = native_field(request, "from_file")?.extract()?;
     let contents: Option<String> = match &from_file {
         None => None,
         Some(path) => Some(std::fs::read_to_string(path).map_err(|error| {
+            let noun: &str = if is_move { "move" } else { "rename" };
             user_error(
                 py,
                 (
-                    format!("cannot read move file {path}: {error}"),
+                    format!("cannot read {noun} file {path}: {error}"),
                     MOVE_FILE_ERROR_CODE,
                     None,
                 ),
             )
         })?),
     };
-    let mut words: Vec<&str> = target
-        .iter()
-        .chain(&destination)
-        .map(String::as_str)
-        .collect();
+    let mut words: Vec<&str> = target.iter().chain(&second).map(String::as_str).collect();
     words.extend(more.iter().map(String::as_str));
-    let arguments: MoveArguments<'_> = MoveArguments {
+    let arguments: PairArguments<'_> = PairArguments {
+        is_move,
         words,
         file: from_file.as_deref().zip(contents.as_deref()),
     };
     let pairs: Vec<(String, String)> =
-        move_pairs(&arguments).map_err(|error| refactor_error(py, error))?;
+        refactor_pairs(&arguments).map_err(|error| refactor_error(py, error))?;
     Ok(pairs
         .into_iter()
-        .map(|(target, destination)| RefactorTargetRequest {
-            is_move: true,
-            target,
-            new_name: None,
-            destination: Some(destination),
-            cascade: false,
+        .map(|(target, second)| {
+            let (new_name, destination) = if is_move {
+                (None, Some(second))
+            } else {
+                (Some(second), None)
+            };
+            RefactorTargetRequest {
+                is_move,
+                target,
+                new_name,
+                destination,
+                cascade,
+            }
         })
         .collect())
 }
@@ -330,7 +345,7 @@ fn verify(
     command: &Command<'_>,
     (before, mut plan): (&Bound<'_, PyAny>, RefactorPlan),
     (staging_dir, status): (&Path, &Status<'_>),
-) -> PyResult<Result<Verified, Outcome>> {
+) -> PyResult<Result<Verified, RefactorPlan>> {
     let project_dir: &Path = &command.project_dir;
     status.start("Verifying the edited project compiles...")?;
     let mut originals: Originals = stage(py, (project_dir, staging_dir), &plan, true)?;
@@ -342,11 +357,7 @@ fn verify(
             with_model_migration(&plan, &before_facts, after_facts.as_deref(), &originals);
         if !migrated.blocking.is_empty() {
             status.error("Refused: the renamed model's history cannot be kept.")?;
-            return Ok(Err(Outcome {
-                plan: migrated,
-                status: RefactorStatus::Refused,
-                diagnostics: Vec::new(),
-            }));
+            return Ok(Err(migrated));
         }
         if migrated.migrations != plan.migrations {
             plan = migrated;
@@ -362,40 +373,58 @@ fn verify(
     }))
 }
 
-fn run(py: Python<'_>, command: &Command<'_>, status: &Status<'_>) -> PyResult<Option<Outcome>> {
+fn finished(outcome: Outcome) -> Finished {
+    Finished::Planned(Box::new(outcome))
+}
+
+fn refused(plan: RefactorPlan, baseline: BaselineComparison) -> Finished {
+    finished(Outcome {
+        plan,
+        status: RefactorStatus::Refused,
+        diagnostics: Vec::new(),
+        baseline,
+    })
+}
+
+fn run(py: Python<'_>, command: &Command<'_>, status: &Status<'_>) -> PyResult<Finished> {
     let targets: Vec<RefactorTargetRequest> = target_requests(py, &command.request)?;
     let started: Instant = Instant::now();
     status.start("Compiling project...")?;
     let before: Compiled<'_> = compile(py, &command.project_dir, false)?;
-    if before.project.is_none() || !before.errors.is_empty() {
-        status.error("Project does not compile; fix it before renaming (sqb compile)")?;
+    let existing: Vec<RefactorDiagnostic> =
+        relative_diagnostics(&before.errors, &command.project_dir)?;
+    if before.project.is_none() || existing.iter().any(|diagnostic| !diagnostic.rule) {
+        status.error(&project_failed_message(command)?)?;
         write_errors(py, &before.errors)?;
-        return Ok(None);
+        return Ok(Finished::ProjectFailed(existing));
     }
-    status.complete(&format!(
-        "Compiled project. ({:.2}s)",
-        started.elapsed().as_secs_f64()
-    ))?;
+    let elapsed: f64 = started.elapsed().as_secs_f64();
+    status.complete(&if existing.is_empty() {
+        format!("Compiled project. ({elapsed:.2}s)")
+    } else {
+        format!(
+            "Compiled project with {}; the change may not add or worsen any. ({elapsed:.2}s)",
+            format_count_noun(
+                i64::try_from(existing.len()).unwrap_or(i64::MAX),
+                "existing rule failure",
+                None,
+            )
+        )
+    })?;
+    let unplanned: BaselineComparison = compare_with_baseline(&existing, &existing, &[]);
     let names: HashMap<String, LineageKey> = target_lookup(&native_field(
         &native_field(&before.project, "graph")?,
         "all_keys",
     )?)?;
     let lookup = |name: &str| names.get(name).cloned();
-    let requests: Vec<RefactorRequest> = targets
-        .iter()
-        .map(|target| refactor_request_for_target(target, &lookup))
-        .collect::<Result<_, _>>()
-        .map_err(|error| refactor_error(py, error))?;
+    let requests: Vec<RefactorRequest> =
+        refactor_requests(&targets, &lookup).map_err(|error| refactor_error(py, error))?;
     status.start("Planning edits...")?;
     let planned: RefactorPlan = plan(py, &before.project, &requests)?;
     status.complete(&format!("Planned edits to {}.", files(&planned)))?;
     if !planned.blocking.is_empty() || !planned.manual.is_empty() {
         status.error("Refused: some references cannot be rewritten safely.")?;
-        return Ok(Some(Outcome {
-            plan: planned,
-            status: RefactorStatus::Refused,
-            diagnostics: Vec::new(),
-        }));
+        return Ok(refused(planned, unplanned));
     }
     let options: Bound<'_, PyDict> = PyDict::new(py);
     options.set_item("prefix", STAGING_PREFIX)?;
@@ -415,39 +444,91 @@ fn run(py: Python<'_>, command: &Command<'_>, status: &Status<'_>) -> PyResult<O
         diagnostics,
     } = match verified? {
         Ok(verified) => verified,
-        Err(outcome) => return Ok(Some(outcome)),
+        Err(migrated) => return Ok(refused(migrated, unplanned)),
     };
-    if !diagnostics.is_empty() {
-        status.error("Verification failed: the edited project does not compile.")?;
-        return Ok(Some(Outcome {
+    let baseline: BaselineComparison =
+        compare_with_baseline(&existing, &diagnostics, &plan.changes);
+    if !baseline.blocking.is_empty() {
+        status.error(
+            if baseline.blocking.iter().all(|diagnostic| diagnostic.rule) {
+                "Verification failed: the change adds or worsens rule failures."
+            } else {
+                "Verification failed: the edited project does not compile."
+            },
+        )?;
+        return Ok(finished(Outcome {
             plan,
             status: RefactorStatus::CompileFailed,
-            diagnostics,
+            diagnostics: baseline.blocking.clone(),
+            baseline,
         }));
     }
-    status.complete("Verified: the edited project compiles.")?;
+    status.complete(if baseline.before.is_empty() {
+        "Verified: the edited project compiles."
+    } else {
+        "Verified: the edited project compiles and adds or worsens no rule failure."
+    })?;
     if native_field(&command.request, "dry_run")?.extract::<bool>()? {
-        return Ok(Some(Outcome {
+        return Ok(finished(Outcome {
             plan,
             status: RefactorStatus::DryRun,
             diagnostics: Vec::new(),
+            baseline,
         }));
     }
     status.start(&format!("Writing {}...", files(&plan)))?;
     commit_refactor_plan(&command.project_dir, &originals, &plan)
         .map_err(|error| refactor_error(py, error))?;
     status.complete(&format!("Wrote {}.", files(&plan)))?;
-    Ok(Some(Outcome {
+    Ok(finished(Outcome {
         plan,
         status: RefactorStatus::Applied,
         diagnostics: Vec::new(),
+        baseline,
     }))
+}
+
+/// The refusal for a project that does not compile before the change.
+fn project_failed_message(command: &Command<'_>) -> PyResult<String> {
+    let verb: &str = if move_command(&command.request)? {
+        "moving"
+    } else {
+        "renaming"
+    };
+    Ok(format!(
+        "Project does not compile; fix it before {verb} ({PROJECT_FAILED_HELP})"
+    ))
+}
+
+fn write_stdout(py: Python<'_>, output: String) -> PyResult<()> {
+    py.import("sys")?
+        .getattr("stdout")?
+        .call_method1("write", (output,))?;
+    Ok(())
+}
+
+fn finish_project_failed(
+    py: Python<'_>,
+    command: &Command<'_>,
+    diagnostics: &[RefactorDiagnostic],
+) -> PyResult<i32> {
+    if command.json_output {
+        let message: String = project_failed_message(command)?;
+        let output: String =
+            render_project_failure_json((&message, PROJECT_FAILED_HELP), diagnostics)
+                .map_err(|error| PyValueError::new_err(format!("{error:?}")))?;
+        write_stdout(py, output)?;
+    }
+    Ok(1)
 }
 
 fn finish(py: Python<'_>, command: &Command<'_>, outcome: &Outcome) -> PyResult<i32> {
     let output: String = if command.json_output {
-        render_refactor_json(&outcome.plan, outcome.status, &outcome.diagnostics)
-            .map_err(|error| PyValueError::new_err(format!("{error:?}")))?
+        render_refactor_json(
+            &outcome.plan,
+            (outcome.status, &outcome.diagnostics, &outcome.baseline),
+        )
+        .map_err(|error| PyValueError::new_err(format!("{error:?}")))?
     } else {
         let project_dir: Bound<'_, PyAny> = native_field(&command.request, "project_dir")?;
         let project_dir: Option<String> = if project_dir.is_none() {
@@ -462,16 +543,14 @@ fn finish(py: Python<'_>, command: &Command<'_>, outcome: &Outcome) -> PyResult<
         );
         render_refactor_text(
             &outcome.plan,
-            (outcome.status, &outcome.diagnostics),
+            (outcome.status, &outcome.diagnostics, &outcome.baseline),
             layer_move.as_ref(),
             CliStyle {
                 use_color: command.use_color,
             },
         )
     };
-    py.import("sys")?
-        .getattr("stdout")?
-        .call_method1("write", (output,))?;
+    write_stdout(py, output)?;
     Ok(i32::from(!matches!(
         outcome.status,
         RefactorStatus::Applied | RefactorStatus::DryRun
@@ -501,11 +580,11 @@ pub(crate) fn run_refactor_command(py: Python<'_>, request: &Bound<'_, PyAny>) -
     let status: Status<'_> = Status {
         reporter: status_reporter(&stream, use_color)?,
     };
-    let result: PyResult<Option<Outcome>> = compiler_guard(|| run(py, &command, &status));
+    let result: PyResult<Finished> = compiler_guard(|| run(py, &command, &status));
     status.close()?;
     match result? {
-        None => Ok(1),
-        Some(outcome) => finish(py, &command, &outcome),
+        Finished::ProjectFailed(diagnostics) => finish_project_failed(py, &command, &diagnostics),
+        Finished::Planned(outcome) => finish(py, &command, &outcome),
     }
 }
 

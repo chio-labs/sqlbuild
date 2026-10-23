@@ -40,6 +40,21 @@ pub struct RefactorDiagnostic {
     /// The path in POSIX form.
     pub path: Option<String>,
     pub line: Option<i64>,
+    /// Whether a project rule reported it, rather than syntax, binding or reference checks.
+    pub rule: bool,
+}
+
+/// The project's rule failures before a refactoring, and how the edited project compares.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BaselineComparison {
+    /// Rule failures of the project before any edit.
+    pub before: Vec<RefactorDiagnostic>,
+    /// Rule failures of the edited project that were already there, unchanged or reduced.
+    pub remaining: Vec<RefactorDiagnostic>,
+    /// Rule failures of the project before that the edited project no longer has.
+    pub resolved: Vec<RefactorDiagnostic>,
+    /// Edited-project errors that block the write: non-rule errors and new or worse rule failures.
+    pub blocking: Vec<RefactorDiagnostic>,
 }
 
 /// The one-step `sqb mv` for a rename refused only by the layer-folder rules.
@@ -51,9 +66,11 @@ pub struct LayerMove {
     pub command: String,
 }
 
-/// The command-line words and optional `(path, contents)` move file of one `sqb mv`.
+/// The command-line words and optional `(path, contents)` pair file of `sqb mv` or `sqb rename`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct MoveArguments<'a> {
+pub struct PairArguments<'a> {
+    /// Whether the pairs are `sqb mv` moves rather than `sqb rename` renames.
+    pub is_move: bool,
     pub words: Vec<&'a str>,
     pub file: Option<(&'a str, &'a str)>,
 }

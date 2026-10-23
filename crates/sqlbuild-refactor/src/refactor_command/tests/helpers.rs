@@ -1,4 +1,5 @@
 use crate::refactor_command::models::RefactorDiagnostic;
+use crate::refactor_command::tests::test_types::DiagnosticRow;
 use crate::refactoring::models::{FileChange, RefactorOperation, RefactorPlan, RefactorRequest};
 
 /// A model rename plan whose file keeps its folder.
@@ -37,6 +38,33 @@ pub(super) fn rule_diagnostics(codes: &[&str], path: &str) -> Vec<RefactorDiagno
             message: format!("{code} failed"),
             path: Some(path.to_owned()),
             line: Some(1),
+            rule: true,
+        })
+        .collect()
+}
+
+/// Diagnostics from `(rule, code, path, message)` rows; an empty path is none.
+pub(super) fn diagnostics(rows: &[DiagnosticRow]) -> Vec<RefactorDiagnostic> {
+    rows.iter()
+        .map(|(rule, code, path, message)| RefactorDiagnostic {
+            code: (*code).to_owned(),
+            message: (*message).to_owned(),
+            path: (!path.is_empty()).then(|| (*path).to_owned()),
+            line: None,
+            rule: *rule,
+        })
+        .collect()
+}
+
+pub(super) fn labels(diagnostics: &[RefactorDiagnostic]) -> Vec<String> {
+    diagnostics
+        .iter()
+        .map(|diagnostic| {
+            format!(
+                "{} {}",
+                diagnostic.code,
+                diagnostic.path.as_deref().unwrap_or_default()
+            )
         })
         .collect()
 }

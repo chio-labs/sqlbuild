@@ -19,6 +19,7 @@ pub fn layer_move_suggestion(
 ) -> Option<LayerMove> {
     let renamed: &FileChange = plan.changes.iter().find(|change| change.moved())?;
     if plan.request.operation != RefactorOperation::RenameModel
+        || !plan.batch.is_empty()
         || diagnostics.is_empty()
         || diagnostics.iter().any(|diagnostic| {
             !LAYER_FOLDER_RULE_CODES.contains(&diagnostic.code.as_str())

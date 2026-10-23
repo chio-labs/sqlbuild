@@ -32,18 +32,16 @@ fn matches_any_class(py: Python<'_>, error: &PyErr, classes: &[ErrorId]) -> PyRe
     Ok(false)
 }
 
-/// A compile failure as the one error diagnostic it reports.
+/// A compile failure, an exception rather than a native record, as its one error diagnostic.
 fn compile_error_diagnostic<'py>(py: Python<'py>, error: &PyErr) -> PyResult<Bound<'py, PyAny>> {
     let value: Bound<'py, PyAny> = error.value(py).clone().into_any();
-    let code: Bound<'py, PyAny> = if value.hasattr("code")? {
-        native_field(&value, "code")?.str()?.into_any()
-    } else {
-        PyString::new(py, DEFAULT_ERROR_CODE).into_any()
+    let code: Bound<'py, PyAny> = match value.getattr_opt("code")? {
+        Some(code) if !code.is_none() => code.str()?.into_any(),
+        _ => PyString::new(py, DEFAULT_ERROR_CODE).into_any(),
     };
-    let message: Bound<'py, PyAny> = if value.hasattr("message")? {
-        native_field(&value, "message")?.str()?.into_any()
-    } else {
-        value.str()?.into_any()
+    let message: Bound<'py, PyAny> = match value.getattr_opt("message")? {
+        Some(message) if !message.is_none() => message.str()?.into_any(),
+        _ => value.str()?.into_any(),
     };
     new_record_with(
         py,
@@ -63,12 +61,21 @@ fn compile_error_diagnostic<'py>(py: Python<'py>, error: &PyErr) -> PyResult<Bou
     )
 }
 
+/// An exception's attribute, or `None` when it has none.
+fn attribute<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyAny>> {
+    Ok(value
+        .getattr_opt(name)?
+        .unwrap_or_else(|| value.py().None().into_bound(value.py())))
+}
+
 /// A SQL-test planning failure as the test-phase error diagnostic it reports.
 fn planning_error_diagnostic<'py>(py: Python<'py>, error: &PyErr) -> PyResult<Bound<'py, PyAny>> {
     let value: Bound<'py, PyAny> = error.value(py).clone().into_any();
     let location: Bound<'py, PyAny> =
         if value.is_instance(&error_class(py, ErrorId::SqlTestReference)?)? {
-            native_field(&value, "location")?
+            value
+                .getattr_opt("location")?
+                .unwrap_or_else(|| py.None().into_bound(py))
         } else {
             py.None().into_bound(py)
         };
@@ -81,9 +88,9 @@ fn planning_error_diagnostic<'py>(py: Python<'py>, error: &PyErr) -> PyResult<Bo
                 "severity",
                 enum_member(py, RecordId::DiagnosticSeverity, "ERROR")?,
             ),
-            ("code", native_field(&value, "code")?),
+            ("code", attribute(&value, "code")?),
             ("message", value.str()?.into_any()),
-            ("help", native_field(&value, "help")?),
+            ("help", attribute(&value, "help")?),
             ("location", location),
         ],
     )
@@ -158,7 +165,12 @@ pub(crate) fn compile_for_refactor<'py>(
     };
     let mut errors: Vec<Bound<'py, PyAny>> =
         error_diagnostics(native_field(&analysis, "diagnostics")?)?;
-    if errors.is_empty() {
+    let rule_phase: Bound<'py, PyAny> = enum_member(py, RecordId::DiagnosticPhase, "RULE")?;
+    let mut only_rule_failures: bool = true;
+    for error in &errors {
+        only_rule_failures &= native_field(error, "phase")?.is(&rule_phase);
+    }
+    if only_rule_failures {
         let planned: PyResult<Bound<'py, PyTuple>> = static_sql_test_planning_diagnostics(
             py,
             Some(keywords(

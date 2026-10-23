@@ -3,6 +3,7 @@
 use sqlbuild_core::json::models::{JsonInteger, JsonValue};
 
 use crate::refactor_command::_helpers::output_text::sorted_edits;
+use crate::refactor_command::models::RefactorDiagnostic;
 use crate::refactoring::models::{FileChange, ManualLocation, RefactorOperation, RefactorPlan};
 
 pub(crate) fn text(value: &str) -> JsonValue {
@@ -72,16 +73,36 @@ pub(crate) fn location(item: &ManualLocation) -> JsonValue {
     ])
 }
 
-/// Every move of a batch as `{"target": "model:<name>", "destination": <path>}`.
+/// Each diagnostic as `{code, message, path, line}`.
+pub(crate) fn diagnostic_array(diagnostics: &[RefactorDiagnostic]) -> JsonValue {
+    JsonValue::Array(
+        diagnostics
+            .iter()
+            .map(|diagnostic| {
+                object(vec![
+                    ("code", text(&diagnostic.code)),
+                    ("message", text(&diagnostic.message)),
+                    ("path", optional_text(diagnostic.path.as_deref())),
+                    ("line", integer(diagnostic.line)),
+                ])
+            })
+            .collect(),
+    )
+}
+
+/// Every request of a batch as `{"target", "new_name" for renames, "destination"}`.
 pub(crate) fn batch_moves(plan: &RefactorPlan) -> JsonValue {
     JsonValue::Array(
         plan.batch
             .iter()
             .map(|request| {
-                object(vec![
-                    ("target", text(&format!("model:{}", request.model_name))),
-                    ("destination", optional_text(request.destination.as_deref())),
-                ])
+                let mut entries: Vec<(&str, JsonValue)> =
+                    vec![("target", text(&format!("model:{}", request.model_name)))];
+                if request.operation != RefactorOperation::MoveModel {
+                    entries.push(("new_name", text(&request.new_name)));
+                }
+                entries.push(("destination", optional_text(request.destination.as_deref())));
+                object(entries)
             })
             .collect(),
     )

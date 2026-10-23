@@ -89,22 +89,13 @@ fn given_parsed_command_when_dispatching_then_selects_python_dispatcher_route() 
             expected_dispatch: runs(&SCENARIO_CAPTURE_ROUTE),
         },
         CommandDispatchTestCase {
-            description: "rename without a target fails",
-            facts: CommandFacts {
-                refactor_target: false,
-                ..facts("rename", None)
-            },
-            expected_dispatch: Dispatch::Run(
-                &REFACTOR_ROUTE,
-                Some(failure("rename command handler is unavailable", "C950")),
-            ),
+            description: "rename reads its pairs itself, so they may come only from a file",
+            facts: facts("rename", None),
+            expected_dispatch: runs(&REFACTOR_ROUTE),
         },
         CommandDispatchTestCase {
-            description: "mv reads its pairs itself, so it may come only from a file",
-            facts: CommandFacts {
-                refactor_target: false,
-                ..facts("mv", None)
-            },
+            description: "mv reads its pairs itself, so they may come only from a file",
+            facts: facts("mv", None),
             expected_dispatch: runs(&REFACTOR_ROUTE),
         },
         CommandDispatchTestCase {

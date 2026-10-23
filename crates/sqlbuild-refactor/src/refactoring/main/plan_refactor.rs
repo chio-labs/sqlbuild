@@ -1,8 +1,11 @@
 //! Plan a model rename, column rename, or one or more model moves from compiler facts.
 
+use std::path::Path;
+
 use crate::refactoring::_helpers::edits::text_edits::build_plan;
 use crate::refactoring::_helpers::planning::batch_planning::batch_parts;
 use crate::refactoring::_helpers::planning::model_planning::{ModelTarget, model_target};
+use crate::refactoring::_helpers::planning::python_imports::python_import_parts;
 use crate::refactoring::_helpers::planning::single_planning::plan_single;
 use crate::refactoring::_helpers::scanning::scan_context::ScanContext;
 use crate::refactoring::constants::MODEL_MANUAL_HELP;
@@ -30,8 +33,11 @@ pub fn plan_refactor(
         .iter()
         .map(|request| model_target(facts, request))
         .collect::<Result<_, _>>()?;
-    let parts = batch_parts(facts, &targets, &context, (host, test_host))?;
+    let mut parts = batch_parts(facts, &targets, &context, (host, test_host))?;
     let moves: Vec<(String, String)> = parts.moves.clone();
+    let imports = python_import_parts(Path::new(&facts.project_dir), &moves)?;
+    parts.edits.extend(imports.edits);
+    parts.blocking.extend(imports.blocking);
     let batch: Vec<RefactorRequest> = targets.into_iter().map(|target| target.request).collect();
     let mut plan = build_plan(
         batch[0].clone(),

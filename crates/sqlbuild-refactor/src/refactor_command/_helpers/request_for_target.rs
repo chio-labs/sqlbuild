@@ -12,7 +12,7 @@ use crate::refactoring::errors::RefactorError;
 use crate::refactoring::models::{RefactorOperation, RefactorRequest};
 
 /// The planner request for a `[kind:]<model>` or `[kind:]<model>.<column>` target.
-pub fn refactor_request_for_target(
+pub(crate) fn refactor_request_for_target(
     request: &RefactorTargetRequest,
     lookup: &dyn Fn(&str) -> Option<LineageKey>,
 ) -> Result<RefactorRequest, RefactorError> {

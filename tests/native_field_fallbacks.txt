@@ -62,7 +62,6 @@ crates/sqlbuild-python/src/bindings/_helpers/cli/dispatch.rs	CliNamespace.json
 crates/sqlbuild-python/src/bindings/_helpers/cli/dispatch.rs	CliNamespace.left_query
 crates/sqlbuild-python/src/bindings/_helpers/cli/dispatch.rs	CliNamespace.left_query_file
 crates/sqlbuild-python/src/bindings/_helpers/cli/dispatch.rs	CliNamespace.project_dir
-crates/sqlbuild-python/src/bindings/_helpers/cli/dispatch.rs	CliNamespace.refactor_target
 crates/sqlbuild-python/src/bindings/_helpers/cli/dispatch.rs	CliNamespace.right_query
 crates/sqlbuild-python/src/bindings/_helpers/cli/dispatch.rs	CliNamespace.right_query_file
 crates/sqlbuild-python/src/bindings/_helpers/cli/dispatch.rs	CliNamespace.scenario_command

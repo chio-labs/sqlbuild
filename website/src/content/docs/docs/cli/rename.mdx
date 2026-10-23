@@ -10,7 +10,8 @@ Nothing is written until the edited project compiles. The command applies its ed
 ## Usage
 
 ```bash
-sqb rename <model> <new_name> [flags]
+sqb rename <model> <new_name> [<model> <new_name> ...] [flags]
+sqb rename --from-file <renames.tsv> [flags]
 sqb mv <model> <path/to/new_file.sql | folder/> [<model> <destination> ...] [flags]
 sqb mv --from-file <moves.tsv> [flags]
 sqb rename <model>.<column> <new_name> [--cascade] [flags]
@@ -60,6 +61,17 @@ The moves are planned and verified together: the project compiles once before pl
 
 A batch is refused when it moves the same model twice, moves two models to the same file, gives two models the same new name, or gives a model the name another model of the batch gives up: the old name keeps working through a compatibility view after the rename, so it must stay free. With `--dry-run`, the output lists the combined edits of every move.
 
+## Rename several models at once
+
+`sqb rename` takes several `<model> <new_name>` pairs the same way, on the command line or with `--from-file`:
+
+```bash
+sqb rename stg_orders stg_order_lines fact_orders fact_order_lines
+sqb rename --from-file renames.tsv --dry-run
+```
+
+The renames are planned and verified together, with one compile before and one of the edited project after, and each renamed model gets its own `migrate_from`, so every old name keeps working through its compatibility view after the next build. The same refusals as for batch moves apply: a model renamed twice, two models given one name, or a model taking a name another model of the batch gives up. Column renames and `--cascade` take one `<model>.<column> <new_name>` per command; a batch that names a column is refused.
+
 ## What changes
 
 Renaming or moving a model rewrites:
@@ -84,7 +96,16 @@ Moving a model to another folder also moves the macros, enums, constants, reusab
 - a declaration other resources still use moves to the lowest folder they share, for example `models/staging/_sqlbuild/macros/`;
 - when that folder would be an authored root such as `models/`, or the users span resource trees such as models and tests, it moves to the top-level role (`macros/`, `enums/`, `constants/`, `schemas/`, ...).
 
-A moved declaration file takes the shape of the role folder it lands in. In an empty role it keeps its group folder, such as `money/` in `_macros/money/cents.py`, or stays direct if it had none. In a role whose files all sit in group folders it keeps its group, and a file without a group is refused: move it into a group folder of its current role first. In a role whose files sit directly in it, the group folder is dropped. Python imports of a moved Python macro file are not rewritten; verification refuses the move when one breaks.
+A moved declaration file takes the shape of the role folder it lands in. In an empty role it keeps its group folder, such as `money/` in `_macros/money/cents.py`, or stays direct if it had none. In a role whose files all sit in group folders it keeps its group, and a file without a group is refused: move it into a group folder of its current role first. In a role whose files sit directly in it, the group folder is dropped.
+
+When a Python file moves, such as a carried macro module, every project Python file that imports it is updated: macros, Python nodes, custom rules, and helpers. `from <module> import ...`, grouped and parenthesized imports, `import <module> as <name>`, and `from <package> import <module>` point at the new module path. Relative imports keep their style when the new target is close, such as `from ..text.cents import to_cents`, and become absolute when they would climb further. The move is refused, naming the file and line, when an import cannot be rewritten safely:
+
+- `import <module>` without `as`, because code reads the dotted name itself;
+- `from <package> import *` from the moved module's package;
+- `importlib.import_module("<module>")` or `__import__("<module>")` naming the moved module;
+- `from <package> import <module>, <other>` where the other name does not move with it;
+- `from <package> import <module>` when the package's `__init__.py` also binds that name, or when the move renames the module;
+- a project Python file that cannot be read as UTF-8, because its imports cannot be checked.
 
 Declarations are moved, never copied. Folders the move leaves empty are removed.
 
@@ -108,10 +129,19 @@ A renamed column of an incremental or snapshot model gets `<new> (migrate_from <
 
 The command refuses a rename while the model, or the column, still declares `migrate_from` from an earlier rename. Build it on every target and remove the declaration first.
 
+## Existing rule failures
+
+A project that already fails some project rules, such as a folder holding more models than a layout rule allows, can still be refactored, so that a move can repair it. Only rule failures are tolerated: a project with syntax, binding, or reference errors is refused before planning, as is any project `sqb compile` cannot load.
+
+The command compiles the project as `sqb compile` does, including SQL test planning, records its rule failures before planning, and compares the edited project with them. A rule failure of the edited project is existing when the project already had one with the same code, at the same place (a moved file keeps its identity), and with the same message. It is also existing when only its numbers changed and none grew, such as a folder that now holds 41 models instead of 44. Any other change, new numbers, larger numbers, or different words, makes it new or worse, and it blocks the write, as do all errors that are not rule failures. Rules stay enabled throughout; nothing is ignored.
+
+The output, including `--dry-run`, lists the existing failures under `Existing rule failures`, with how many the change resolved and how many remain. Some rules report a failure at one sample file of a group, so moving part of the group can change the reported place or message and block the move even when it helps. Move the whole group in one batch instead: moving the direct models of a folder into a sub-folder at once, so that it turns from a leaf into a branch, is `sqb mv a models/entry/records/ b models/entry/records/ c models/entry/records/`.
+
 ## Refusals
 
 The command refuses, and writes nothing, when:
 
+- the project does not compile before the change, other than existing rule failures;
 - the new name already belongs to another model or column, or the destination file exists;
 - a moved declaration file is not in a group folder, but the role folder it must move to keeps its files in group folders;
 - a declaration a moved model uses must change folder, but its file also holds declarations that must stay, or it is not an authored project file, or a file with its name already exists at the new folder;
@@ -119,7 +149,8 @@ The command refuses, and writes nothing, when:
 - a reference is produced by a macro, or a column is read inside SQL that a macro generates;
 - a column reaches a model through `SELECT *` in a subquery, a `USING` or `NATURAL` join, or an unqualified name that could belong to several tables;
 - a downstream model's `SELECT *` would silently rename its output, without `--cascade`;
-- Python code or Python node SQL strings name the model or column.
+- Python code or Python node SQL strings name the model or column;
+- a Python import of a moved Python file cannot be rewritten safely.
 
 A rename whose new name belongs to another layer's folder, under the layer-folder rules `SQBRPROJECT102` and `SQBRPROJECT105`, fails verification because `sqb rename` keeps the file where it is. When those rules are the only failures, the output says where the model belongs and prints the one-step [`sqb mv`](#rename-or-move) command, with that layer's folder and the current sub-folders filled in:
 
@@ -142,7 +173,7 @@ References produced by a macro are only possible when a project turns off explic
 |------|-------------|
 | `--cascade` | For column renames, rename the output of every downstream model that passes the column through. |
 | `--dry-run` | Print every edit and verify the edited project compiles, without writing files. |
-| `--from-file <file>` | For `sqb mv`, read `<model> <destination>` pairs, one per line, and move them together. |
+| `--from-file <file>` | Read `<model> <destination>` pairs for `sqb mv`, or `<model> <new_name>` pairs for `sqb rename`, one per line, and apply them together. |
 | `--json` | Print the result as JSON on stdout. Progress goes to stderr. |
 
 ## Output
@@ -160,7 +191,9 @@ Migrations
 Compiled: ok, 3 files changed
 ```
 
-With `--json`, the result has `operation`, `target`, `new_name`, `destination`, `status` (`applied`, `dry_run`, `refused`, or `compile_failed`), `files` with every edit, `migrations`, `renamed_columns`, `manual`, `blocking`, `notes` (files deliberately kept in place, with the reason), and `compile.errors`. A batch move also has `moves`, every `target` and `destination` in order; `target`, `new_name`, and `destination` then describe its first move.
+With `--json`, the result has `operation`, `target`, `new_name`, `destination`, `status` (`applied`, `dry_run`, `refused`, or `compile_failed`), `files` with every edit, `migrations`, `renamed_columns`, `manual`, `blocking`, `notes` (files deliberately kept in place, with the reason), `compile.errors`, and `rule_baseline` with the project's rule failures `before` the change, those `remaining`, and those `resolved`. A batch move also has `moves`, every `target` and `destination` in order, and a batch rename has `renames`, every `target`, `new_name`, and `destination`; `target`, `new_name`, and `destination` then describe the first one.
+
+When the request is invalid or the project does not compile, `--json` prints an error document instead: `{"error": {"code", "message", "help"}}`, and for a project that does not compile also `"status": "project_failed"` and `compile.errors`.
 
 ## Exit codes
 

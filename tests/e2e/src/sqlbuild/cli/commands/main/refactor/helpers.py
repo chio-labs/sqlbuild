@@ -602,3 +602,97 @@ def run_printed_command(command: str) -> subprocess.CompletedProcess[str]:
         text=True,
         check=False,
     )
+
+
+CENTS_CHECK: str = "python/checks/order_cents.py"
+
+
+def cents_check(imports: str, body: str = '    assert to_cents("1")\n') -> dict[str, str]:
+    """Return the cents macro and its model plus a Python check importing the macro module."""
+
+    return {
+        **CENTS_MACRO,
+        CENTS_CHECK: (
+            "from sqlbuild.checks import check\nfrom sqlbuild.refs import model\n\n"
+            f"{imports}\n\n\n"
+            '@check(depends_on=model("stg_orders"))\n'
+            "def order_cents_present(ctx):\n"
+            '    """Cents come from the shared macro."""\n'
+            f"{body}"
+            "    return ctx.pass_()\n"
+        ),
+    }
+
+
+_FOLDER_LIMIT_RULE: str = """from collections import Counter
+
+from sqlbuild.rules import Finding, Project, RuleContext, rule
+
+_MAXIMUM: int = 3
+
+
+@rule(code="XSQBRLAYOUT001", message="Folders hold few models", remediation="Split the folder.")
+def folder_size(*, project: Project, ctx: RuleContext) -> list[Finding]:
+    del project
+    counts: Counter[str] = Counter(model.path.parent.as_posix() for model in ctx.project.models)
+    return [
+        ctx.finding(
+            subject=folder, message=f"{folder} holds {count} models; the maximum is {_MAXIMUM}"
+        )
+        for folder, count in sorted(counts.items())
+        if count > _MAXIMUM
+    ]
+"""
+
+
+def layout_view(name: str, source: str = '__ref("stg_orders")') -> str:
+    """Return a view model selecting order_id from `source`."""
+
+    return (
+        f"MODEL (description 'Test model {name}.',\n  materialized view,\n);\n\n"
+        f"SELECT order_id FROM {source}\n"
+    )
+
+
+OVER_FULL_STAGING: dict[str, str] = {
+    "sqlbuild_project.toml": project_toml()
+    + '\n[rules]\nselect = ["XSQBRLAYOUT001"]\n\n'
+    + "[rules.thresholds]\nmin_custom_rule_test_cases = 0\n",
+    "rules/layout.py": _FOLDER_LIMIT_RULE,
+    **{
+        f"models/staging/stg_order_{name}.sql": layout_view(f"stg_order_{name}")
+        for name in ("lines", "refunds", "returns", "notes")
+    },
+}
+_DOMAIN_RULES: str = '\n[rules]\nselect = ["SQBRPROJECT202"]\ndomains = ["orders"]\n'
+MIXED_OWNER: dict[str, str] = {
+    "sqlbuild_project.toml": project_toml() + _DOMAIN_RULES,
+    "models/orders/staging/orders__stg__lines.sql": layout_view(
+        "orders__stg__lines", '__source("raw_orders")'
+    ),
+    "models/orders/staging/orders__stg__refunds.sql": layout_view(
+        "orders__stg__refunds", '__source("raw_orders")'
+    ),
+    "models/orders/staging/web/orders__stg__web_lines.sql": layout_view(
+        "orders__stg__web_lines", '__source("raw_orders")'
+    ),
+}
+MIXED_OWNER_CHILD: str = "models/orders/staging/core/"
+
+RESERVED_CTE_FACT_ORDERS: str = (
+    "MODEL (description 'Test model.',\n  materialized table,\n);\n\n"
+    'WITH __helper__tmp AS (SELECT * FROM __ref("stg_orders"))\n'
+    "SELECT\n  o.order_id,\n  o.customer_id,\n  o.amount,\n  o.order_date\n"
+    "FROM __helper__tmp AS o\n"
+)
+SIBLING_OWNERS: dict[str, str] = {
+    "sqlbuild_project.toml": project_toml()
+    + '\n[rules]\nselect = ["SQBRPROJECT204"]\ndomains = ["orders"]\n\n'
+    + "[rules.thresholds]\nmin_shared_owner_prefix_directories = 2\n",
+    **{
+        f"models/orders/staging/{folder}/orders__stg__{name}.sql": layout_view(
+            f"orders__stg__{name}", '__source("raw_orders")'
+        )
+        for folder, name in (("fin_a", "a"), ("fin_b", "b"), ("core", "c"))
+    },
+}
