@@ -75,10 +75,7 @@ fn in_use(candidate: &ArchiveCandidateText, checked: bool) -> JsonValue {
                 ("last_read", utc_timestamp(&usage.last_read_at)),
                 ("readers", texts(&usage.readers)),
                 ("query_count", integer(usage.query_count)),
-                (
-                    "via",
-                    usage.via.as_deref().map_or(JsonValue::Null, texts),
-                ),
+                ("via", usage.via.as_deref().map_or(JsonValue::Null, texts)),
             ])
         })
 }
@@ -183,9 +180,7 @@ pub(crate) fn plan_payload(plan: &JanitorPlanText) -> JsonValue {
         ),
         (
             "kept_in_use",
-            JsonValue::Array(
-                plan.kept_in_use.iter().map(kept_candidate).collect(),
-            ),
+            JsonValue::Array(plan.kept_in_use.iter().map(kept_candidate).collect()),
         ),
         (
             "archives_to_delete",
