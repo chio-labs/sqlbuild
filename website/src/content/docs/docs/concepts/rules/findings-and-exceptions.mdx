@@ -24,6 +24,10 @@ reason = "This example intentionally demonstrates one sampled row."
 An exception refers to one exact Rule code and path. If the finding disappears, SQLBuild reports
 the stale exception so obsolete configuration does not accumulate silently.
 
+A reason is prose. One written as a multi-line TOML string (`"""..."""`) is stored folded, like a
+description: line breaks and the spaces around them become one space, and a blank line starts a
+paragraph (see [Folded descriptions](/docs/concepts/models/configuration#folded-descriptions)).
+
 ## Relation-level exceptions
 
 A file-wide exception for a deliberate cartesian product would also hide any accidental cross join

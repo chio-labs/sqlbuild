@@ -69,6 +69,11 @@ ROUND(CAST(@amount_cents AS DECIMAL(18, 4)) / 100, @places)
 
 `returns` is required for expression macros and not allowed for the other forms.
 
+The description follows the same rules as every header string: write text that contains double
+quotes as `"""..."""`, and a wrapped description is stored folded into one flowing text (see
+[Header strings](../models/configuration.md#header-strings)). Quotes in the macro body
+never change how the header is read.
+
 ## Call a SQL macro
 
 Every macro call says its kind: `@sql.name(...)` calls a SQL macro and `@py.name(...)` a Python
