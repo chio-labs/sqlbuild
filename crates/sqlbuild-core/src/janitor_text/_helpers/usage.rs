@@ -37,7 +37,7 @@ fn noun_count(count: i64, singular: &str) -> String {
     noun(usize::try_from(count).unwrap_or(usize::MAX), singular)
 }
 
-/// `alice, bob, carol +2 more`: the first readers and how many are not named.
+/// `alice, bob, carol +2 more`: the first names and how many are not shown.
 fn readers(names: &[String]) -> String {
     let shown: usize = names.len().min(READER_LIMIT);
     let mut text: String = names[..shown].join(", ");
@@ -51,8 +51,13 @@ fn readers(names: &[String]) -> String {
 pub(crate) fn usage_detail(candidate: &ArchiveCandidateText, window: &str) -> Option<String> {
     let usage = candidate.usage.as_ref()?;
     let date: &str = usage.last_read_at.split(' ').next().unwrap_or_default();
+    let via: String = match usage.via.as_deref() {
+        None => String::new(),
+        Some([]) => " through a view".to_owned(),
+        Some(names) => format!(" via {}", readers(names)),
+    };
     let mut text: String = format!(
-        "queried {date} by {} ({} in {})",
+        "queried {date} by {}{via} ({} in {})",
         readers(&usage.readers),
         format_count_noun(usage.query_count, "query", Some("queries")),
         window_label(window)

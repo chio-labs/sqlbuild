@@ -85,9 +85,10 @@ Archiving renames a relation, so anything that still reads it fails from then on
 In use
   analytics.orders_daily  queried 2026-10-21 by svc_reporting, alice (14 queries in 7 days)
   analytics.old_orders  queried 2026-10-20 by svc_reporting, alice, bob +2 more (40 queries in 7 days); frozen since 2026-09-01, still in use
+  analytics.old_customers  queried 2026-10-21 by alice via analytics.customer_report (3 queries in 7 days); frozen since 2026-09-01, still in use
 ```
 
-Each line names the latest read, up to three readers (most queries first) and how many queries read the relation. A stale table that is still read is also flagged `frozen since <date>, still in use`: its data stopped changing on that date, so its readers are getting old data. Views are not flagged, because their reads stay live. The confirmation prompt states the count, for example `14 relations will be archived; 3 of them are in use.`
+Each line names the latest read, up to three readers (most queries first) and how many queries read the relation. Reading a view also reads what it is built on, so those relations are in use too. When a relation was only read that way, the line says `via` and names the views, or says `through a view` when the warehouse doesn't record which. A stale table that is still read is also flagged `frozen since <date>, still in use`: its data stopped changing on that date, so its readers are getting old data. Views are not flagged, because their reads stay live. The confirmation prompt states the count, for example `14 relations will be archived; 3 of them are in use.`
 
 By default in-use relations are still archived, which is also how their readers find out. To keep them instead, set `keep_in_use = true` under `[janitor]` or pass `--keep-in-use`. In-use relations are then listed under `Kept (in use)` with their readers and are left out of the archive list and the counts. A later run archives them once nothing reads them within the window.
 
@@ -97,22 +98,23 @@ Usage comes from the warehouse's query history:
 
 | Adapter | Usage source |
 |---------|--------------|
-| Snowflake | `SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY` (`direct_objects_accessed`) joined with `QUERY_HISTORY` |
-| BigQuery | `` `<project>.region-<location>`.INFORMATION_SCHEMA.JOBS `` (`referenced_tables`) |
-| Databricks | `system.access.table_lineage` (`source_table_full_name`) |
+| Snowflake | `SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY` (`direct_objects_accessed`, `base_objects_accessed`) joined with `QUERY_HISTORY`, and `OBJECT_DEPENDENCIES` |
+| BigQuery | `` `<project>.region-<location>`.INFORMATION_SCHEMA.JOBS `` (`referenced_tables`, `referenced_logical_views`) |
+| Databricks | `system.access.table_lineage` (`source_table_full_name`, `direct_access`) |
+| ClickHouse | `system.query_log` (`tables`) on the connected server |
 | Other adapters | Not available |
 
-On Snowflake, one query reads the access history of all candidates (up to 1,000 names per query). Queries SQLBuild tags as its own (`QUERY_TAG` with `"app":"sqlbuild"`, which builds, audits, loads and hooks set) and `CREATE ... CLONE` statements don't count as reads. SQLBuild's own reads don't need this check: schemas holding the project's sources are skipped, so the project graph already protects what the project reads. Access history needs Enterprise edition, and the janitor's role needs `IMPORTED PRIVILEGES` on the `SNOWFLAKE` database or the `SNOWFLAKE.GOVERNANCE_VIEWER` database role:
+On Snowflake, one query reads the access history of all candidates (up to 1,000 names per query). A candidate listed in a query's base objects but not its direct objects was read through the objects the query named, which the line names after `via`. A second query reads `OBJECT_DEPENDENCIES` for the candidate views, so a candidate that an in-use candidate view is built on, directly or through other candidate views, is in use `via` that view, with its readers. Dependencies created by `CREATE TABLE ... AS SELECT` and similar statements are not recorded there. Queries SQLBuild tags as its own (`QUERY_TAG` with `"app":"sqlbuild"`, which builds, audits, loads and hooks set) and `CREATE ... CLONE` statements of tables, dynamic tables, schemas and databases don't count as reads. A statement counts as a clone only when it starts with `CREATE`, after any comments, and names its source after `CLONE`; a column, string or comment containing the word doesn't make it one. SQLBuild's own reads don't need this check: schemas holding the project's sources are skipped, so the project graph already protects what the project reads. Access history needs Enterprise edition, and the janitor's role needs `IMPORTED PRIVILEGES` on the `SNOWFLAKE` database or the `SNOWFLAKE.GOVERNANCE_VIEWER` database role:
 
 ```sql
 GRANT DATABASE ROLE SNOWFLAKE.GOVERNANCE_VIEWER TO ROLE janitor_role;
 ```
 
-Access history lags by up to about 3 hours, so reads in the last few hours may not show yet.
+Access history and object dependencies lag by up to about 3 hours, so reads in the last few hours may not show yet.
 
-On BigQuery, the janitor reads the `INFORMATION_SCHEMA.JOBS` view of each candidate's project, in the location of its dataset, and counts successful query jobs that reference the table, by `user_email`. Jobs that run in another project are not in that view, so their reads are not seen. Script parent jobs, `CREATE SNAPSHOT TABLE` and `CREATE TABLE ... CLONE` don't count. SQLBuild sets no job labels on BigQuery, so its own jobs count like any other. The janitor's role needs `bigquery.jobs.listAll` and `bigquery.jobs.create` on each project, for example through the BigQuery Resource Viewer and BigQuery User roles. The view keeps 180 days of jobs, so a longer `in_use_window` sees only the last 180 days.
+On BigQuery, the janitor reads the `INFORMATION_SCHEMA.JOBS` view of each candidate's project, in the location of its dataset, and counts successful query jobs that reference the relation, by `user_email`. A job lists the views it reads as well as the tables behind them, so both count. Whether views nested inside other views are listed is not documented, so a candidate view that is only read through another view may not show as in use. Jobs that run in another project are not in that view, so their reads are not seen. Script parent jobs, `CREATE SNAPSHOT TABLE` and `CREATE TABLE ... CLONE` don't count. SQLBuild sets no job labels on BigQuery, so its own jobs count like any other. The janitor's role needs `bigquery.jobs.listAll` and `bigquery.jobs.create` on each project, for example through the BigQuery Resource Viewer and BigQuery User roles. The view keeps 180 days of jobs, so a longer `in_use_window` sees only the last 180 days.
 
-On Databricks, the janitor counts read events in Unity Catalog's table lineage, by `created_by`; a read through a view also counts for the tables behind it. It needs Unity Catalog with the `access` system schema enabled, and `USE CATALOG` on `system`, `USE SCHEMA` on `system.access` and `SELECT` on `system.access.table_lineage`:
+On Databricks, the janitor counts read events in Unity Catalog's table lineage, by `created_by`. Lineage records the view a query reads as a direct read and the tables behind it as reads through the view, which the line names when lineage records the view for the same statement. It needs Unity Catalog with the `access` system schema enabled, and `USE CATALOG` on `system`, `USE SCHEMA` on `system.access` and `SELECT` on `system.access.table_lineage`:
 
 ```sql
 GRANT USE CATALOG ON CATALOG system TO `janitor-principal`;
@@ -120,11 +122,19 @@ GRANT USE SCHEMA ON SCHEMA system.access TO `janitor-principal`;
 GRANT SELECT ON TABLE system.access.table_lineage TO `janitor-principal`;
 ```
 
-Lineage records only reads Databricks can capture lineage for, and can arrive with a delay. Lineage has no query text, so clones and SQLBuild's own reads can't be told apart and count as reads. The table keeps one year of events.
+Lineage records only reads Databricks can infer lineage for, and can arrive with a delay, so "not in use" is a weaker signal than on Snowflake. Lineage has no query text, so clones and SQLBuild's own reads can't be told apart and count as reads. The table keeps one year of events.
+
+On ClickHouse, the janitor counts finished `SELECT` and `INSERT` queries in `system.query_log` of the server it connects to, by the user who started them. A query's `tables` lists every table and view it touched, including the views and tables a view is built on, so a whole view chain shows as in use, without `via`; queries a query starts count once, for its initial query. Queries on other replicas or shards are logged on those servers and are not seen. ClickHouse answers some queries, such as a plain `count()` of a table, from metadata without listing the table, so those reads are not seen either. SQLBuild doesn't mark its ClickHouse queries, so its own reads count. The janitor's user needs `SELECT` on `system.query_log`:
+
+```sql
+GRANT SELECT ON system.query_log TO janitor_user;
+```
+
+Queries are logged when `log_queries` is on, which is the default; when it is off for the janitor's connection, usage is not checked. The log is flushed about every 7.5 seconds, and ClickHouse keeps it until a TTL configured on the server removes it.
 
 When usage can't be checked, because the adapter has no usage source or the role can't read its query history, the preview and the prompt show one notice, such as `usage not checked: unsupported adapter`, and the janitor archives as usual. With `keep_in_use` on, a second notice, `nothing kept in use`, says that relations in use are archived too.
 
-In the `--json` plan, each entry of `relations_to_archive` and `kept_in_use` has `in_use`: `null` when usage was not checked, `false` when nothing read the relation within the window, or an object with `last_read`, `readers` and `query_count`. The top-level `usage_check` has `status` (`checked` or `not_checked`), `reason`, `window` and `keep_in_use`, or is `null` when there was nothing to check.
+In the `--json` plan, each entry of `relations_to_archive` and `kept_in_use` has `in_use`: `null` when usage was not checked, `false` when nothing read the relation within the window, or an object with `last_read`, `readers`, `query_count` and `via` (`null` when the relation was read directly, otherwise the names of the views it was read through, empty when unknown). Entries of `kept_in_use` have only `name`, `age_days` and `in_use`, since they are not archived. The top-level `usage_check` has `status` (`checked` or `not_checked`), `reason`, `window` and `keep_in_use`, or is `null` when there was nothing to check.
 
 ## Speed
 

@@ -112,7 +112,20 @@ pub(crate) fn check_janitor_usage<'py>(
         });
     let started: Instant = Instant::now();
     TransientStatusReporter::start(status, START_MESSAGE.to_owned())?;
-    let report: Bound<'py, PyAny> = read_usage((adapter, connection), &candidates, window_seconds)?;
+    let report: Bound<'py, PyAny> =
+        match read_usage((adapter, connection), &candidates, window_seconds) {
+            Ok(report) => report,
+            Err(error) => {
+                TransientStatusReporter::error(
+                    status,
+                    &format!(
+                        "Relation usage check failed. ({:.2}s)",
+                        started.elapsed().as_secs_f64()
+                    ),
+                )?;
+                return Err(error);
+            }
+        };
     let checked: bool = native_field(&report, "checked")?.is_truthy()?;
     let usages: HashMap<Folded, Bound<'py, PyAny>> = usages_by_relation(&report)?;
     let keep: bool = checked && settings.keep_in_use;

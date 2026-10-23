@@ -312,6 +312,7 @@ class JanitorUsageE2ETestCase:
     unexpected_fragments: tuple[str, ...]
     expected_remaining: tuple[str, ...]
     expected_archived: int
+    via: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -335,3 +336,12 @@ class JanitorUsageJsonE2ETestCase:
     expected_archive_in_use: tuple[tuple[str, object], ...]
     expected_kept_in_use: tuple[tuple[str, object], ...]
     expected_archived: int
+
+
+@dataclass(frozen=True)
+class JanitorUsageFailureE2ETestCase:
+    """Test case for janitor runs whose usage source fails outright."""
+
+    description: str
+    failure: str
+    expected_ordered_lines: tuple[str, ...]

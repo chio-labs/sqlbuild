@@ -6,6 +6,7 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from sqlbuild.adapter.contract.main.aggregate_relation_usage import aggregate_relation_usage
+from sqlbuild.adapter.contract.main.relation_reads import relation_reads
 from sqlbuild.adapter.contract.models import RelationInfo, RelationUsageReport
 from sqlbuild.adapters.bigquery.constants import (
     CLONE_STATEMENT_PATTERN,
@@ -72,26 +73,34 @@ def jobs_view(*, project: str, location: str) -> str:
 def usage_query(
     *, project: str, location: str, object_names: tuple[str, ...], window_seconds: int
 ) -> UsageQuery:
-    """Reads of the named tables per user by successful query jobs, leaving out clones."""
+    """Reads of the named tables and views per user by successful query jobs, minus clones."""
 
-    referenced: str = (
-        "CONCAT(referenced.project_id, '.', referenced.dataset_id, '.', referenced.table_id)"
-    )
+    def referenced(column: str) -> str:
+        return (
+            "SELECT CONCAT(referenced.project_id, '.', referenced.dataset_id, '.', "
+            "referenced.table_id) AS object_name, "
+            "jobs.user_email, jobs.job_id, jobs.creation_time "
+            f"FROM jobs, UNNEST(jobs.{column}) AS referenced"
+        )
+
     sql: str = (
-        f"SELECT {referenced} AS object_name, "
-        "jobs.user_email AS user_name, "
-        "COUNT(DISTINCT jobs.job_id) AS query_count, "
-        "MAX(jobs.creation_time) AS last_read_at "
-        f"FROM {jobs_view(project=project, location=location)} AS jobs, "
-        "UNNEST(jobs.referenced_tables) AS referenced "
-        "WHERE jobs.creation_time >= "
+        "WITH jobs AS ("
+        "SELECT job_id, user_email, creation_time, referenced_tables, referenced_logical_views "
+        f"FROM {jobs_view(project=project, location=location)} "
+        "WHERE creation_time >= "
         "TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @window_seconds SECOND) "
-        "AND jobs.job_type = 'QUERY' "
-        "AND jobs.error_result IS NULL "
-        "AND COALESCE(jobs.statement_type, '') NOT IN ('SCRIPT', 'CREATE_SNAPSHOT_TABLE') "
-        "AND NOT (STARTS_WITH(COALESCE(jobs.statement_type, ''), 'CREATE_TABLE') "
-        "AND REGEXP_CONTAINS(jobs.query, @clone_pattern)) "
-        f"AND {referenced} IN UNNEST(@object_names) "
+        "AND job_type = 'QUERY' "
+        "AND error_result IS NULL "
+        "AND COALESCE(statement_type, '') NOT IN ('SCRIPT', 'CREATE_SNAPSHOT_TABLE') "
+        "AND NOT (STARTS_WITH(COALESCE(statement_type, ''), 'CREATE_TABLE') "
+        "AND REGEXP_CONTAINS(query, @clone_pattern))), "
+        f"reads AS ({referenced('referenced_tables')} UNION ALL "
+        f"{referenced('referenced_logical_views')}) "
+        "SELECT object_name, user_email AS user_name, "
+        "COUNT(DISTINCT job_id) AS query_count, "
+        "MAX(creation_time) AS last_read_at "
+        "FROM reads "
+        "WHERE object_name IN UNNEST(@object_names) "
         "GROUP BY 1, 2 "
         "ORDER BY 1, 2"
     )
@@ -181,7 +190,11 @@ def read_relation_usage(
         rows.extend(run_usage_query(connection=connection, query=query))
         covered.update(named)
     return RelationUsageReport(
-        checked=True, usages=aggregate_relation_usage(rows=rows, relations_by_name=covered)
+        checked=True,
+        usages=aggregate_relation_usage(
+            reads=relation_reads(rows=rows),
+            relations_by_name=covered,
+        ),
     )
 
 

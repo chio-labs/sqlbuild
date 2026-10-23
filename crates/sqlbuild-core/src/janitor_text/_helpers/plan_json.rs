@@ -75,6 +75,10 @@ fn in_use(candidate: &ArchiveCandidateText, checked: bool) -> JsonValue {
                 ("last_read", utc_timestamp(&usage.last_read_at)),
                 ("readers", texts(&usage.readers)),
                 ("query_count", integer(usage.query_count)),
+                (
+                    "via",
+                    usage.via.as_deref().map_or(JsonValue::Null, texts),
+                ),
             ])
         })
 }
@@ -87,6 +91,15 @@ fn archive_candidate(candidate: &ArchiveCandidateText, checked: bool) -> JsonVal
         ("expires_at", utc_timestamp(&candidate.expires_at)),
         ("deleted_in_run", JsonValue::Bool(candidate.expires_now)),
         ("in_use", in_use(candidate, checked)),
+    ])
+}
+
+/// A candidate kept because it is in use: no archive name or expiry, since it stays put.
+fn kept_candidate(candidate: &ArchiveCandidateText) -> JsonValue {
+    object(vec![
+        ("name", text(&candidate.name)),
+        ("age_days", optional_integer(candidate.age_days)),
+        ("in_use", in_use(candidate, true)),
     ])
 }
 
@@ -171,10 +184,7 @@ pub(crate) fn plan_payload(plan: &JanitorPlanText) -> JsonValue {
         (
             "kept_in_use",
             JsonValue::Array(
-                plan.kept_in_use
-                    .iter()
-                    .map(|candidate| archive_candidate(candidate, checked))
-                    .collect(),
+                plan.kept_in_use.iter().map(kept_candidate).collect(),
             ),
         ),
         (

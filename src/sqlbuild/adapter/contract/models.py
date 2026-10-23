@@ -110,6 +110,20 @@ class RelationUsage:
     last_read_at: datetime
     readers: tuple[str, ...]
     query_count: int
+    direct: bool = True
+    via: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class RelationRead:
+    """One reader's reads of one object; indirect reads came through `via`, empty if unknown."""
+
+    object_name: str
+    reader: str | None
+    query_count: int
+    last_read_at: object
+    direct: bool = True
+    via: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

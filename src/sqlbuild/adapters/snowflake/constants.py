@@ -29,4 +29,19 @@ USAGE_UNAVAILABLE_REASON: str = (
     "(needs Enterprise edition and the GOVERNANCE_VIEWER database role)"
 )
 SQLBUILD_QUERY_TAG_FRAGMENT: str = f'"app":"{SQLBUILD_QUERY_TAG_APP}"'
-CLONE_STATEMENT_PATTERN: str = r".*\sCLONE\s.*"
+_CLONE_IDENTIFIER: str = r'("[^"]*"|[A-Za-z_][A-Za-z0-9_$]*)'
+_CLONE_NAME: str = _CLONE_IDENTIFIER + r"(\s*\.\s*" + _CLONE_IDENTIFIER + r"){0,2}"
+_LEADING_COMMENTS: str = "(\\s|--[^\n]*\n|//[^\n]*\n|/\\*([^*]|\\*+[^*/])*\\*+/)*"
+CLONE_STATEMENT_PATTERN: str = (
+    "^"
+    + _LEADING_COMMENTS
+    + r"CREATE\s+(OR\s+REPLACE\s+)?((TRANSIENT|TEMPORARY|TEMP|VOLATILE|LOCAL\s+TEMPORARY|"
+    r"GLOBAL\s+TEMPORARY)\s+)?(TABLE|DYNAMIC\s+TABLE|SCHEMA|DATABASE)\s+(IF\s+NOT\s+EXISTS\s+)?"
+    + _CLONE_NAME
+    + r"\s+CLONE\s+"
+    + _CLONE_NAME
+    + r'([^A-Za-z0-9_$"].*)?$'
+)
+DEPENDENCY_VIEW_DOMAINS: tuple[str, ...] = ("VIEW", "MATERIALIZED VIEW", "SECURE VIEW")
+VIEW_RELATION_TYPE: str = "view"
+QUOTED_IDENTIFIER_MARK: str = '"'

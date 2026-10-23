@@ -3,16 +3,24 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Iterable, Mapping
-from datetime import UTC, datetime
+from collections.abc import Callable, Iterable
 from typing import Any
 
-from sqlbuild.adapter.contract.models import RelationInfo, RelationUsage, RelationUsageReport
+from sqlbuild.adapter.contract.main.aggregate_relation_usage import aggregate_relation_usage
+from sqlbuild.adapter.contract.main.relation_reads import relation_reads
+from sqlbuild.adapter.contract.models import RelationInfo, RelationUsageReport
+from sqlbuild.adapters.snowflake._helpers.view_dependencies import (
+    chained_usages,
+    dependency_name,
+    dependency_queries,
+    display_name,
+)
 from sqlbuild.adapters.snowflake.constants import (
     CLONE_STATEMENT_PATTERN,
     SQLBUILD_QUERY_TAG_FRAGMENT,
     USAGE_NAME_CHUNK_SIZE,
     USAGE_UNAVAILABLE_REASON,
+    VIEW_RELATION_TYPE,
 )
 from sqlbuild.adapters.snowflake.models import UsageQuery
 
@@ -68,26 +76,55 @@ def usage_queries(*, object_names: Iterable[str], window_seconds: int) -> tuple[
 
 
 def usage_query(*, object_names: tuple[str, ...], window_seconds: int) -> UsageQuery:
-    """Reads of the named objects per user, excluding SQLBuild-tagged queries and clones."""
+    """Reads of the named objects per user, direct or through views, minus SQLBuild and clones."""
 
     placeholders: str = ", ".join(["%s"] * len(object_names))
+    since: str = "DATEADD('second', -%s, CURRENT_TIMESTAMP())"
+    object_name: str = 'accessed.value:"objectName"::STRING'
     sql: str = (
-        'SELECT accessed.value:"objectName"::STRING AS object_name, '
-        "history.user_name AS user_name, "
-        "COUNT(DISTINCT history.query_id) AS query_count, "
-        "MAX(history.query_start_time) AS last_read_at "
-        "FROM SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY AS history, "
-        "LATERAL FLATTEN(INPUT => history.direct_objects_accessed) AS accessed "
-        "WHERE history.query_start_time >= DATEADD('second', -%s, CURRENT_TIMESTAMP()) "
-        f'AND accessed.value:"objectName"::STRING IN ({placeholders}) '
-        "AND NOT EXISTS ("
+        "WITH history AS ("
+        "SELECT query_id, user_name, query_start_time, direct_objects_accessed, "
+        "base_objects_accessed FROM SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY "
+        f"WHERE query_start_time >= {since}), "
+        "direct_reads AS ("
+        "SELECT history.query_id, history.user_name, history.query_start_time, "
+        f"{object_name} AS object_name "
+        "FROM history, LATERAL FLATTEN(INPUT => history.direct_objects_accessed) AS accessed "
+        f"WHERE {object_name} IN ({placeholders})), "
+        "base_reads AS ("
+        "SELECT history.query_id, history.user_name, history.query_start_time, "
+        f"{object_name} AS object_name "
+        "FROM history, LATERAL FLATTEN(INPUT => history.base_objects_accessed) AS accessed "
+        f"WHERE {object_name} IN ({placeholders})), "
+        "candidate_reads AS ("
+        "SELECT query_id, user_name, query_start_time, object_name, TRUE AS direct "
+        "FROM direct_reads UNION ALL "
+        "SELECT base.query_id, base.user_name, base.query_start_time, base.object_name, FALSE "
+        "FROM base_reads AS base WHERE NOT EXISTS ("
+        "SELECT 1 FROM direct_reads AS direct_read "
+        "WHERE direct_read.query_id = base.query_id "
+        "AND direct_read.object_name = base.object_name)), "
+        "reads AS ("
+        "SELECT * FROM candidate_reads AS candidate WHERE NOT EXISTS ("
         "SELECT 1 FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY AS query "
-        "WHERE query.query_id = history.query_id "
-        "AND query.start_time >= DATEADD('second', -%s, CURRENT_TIMESTAMP()) "
+        "WHERE query.query_id = candidate.query_id "
+        f"AND query.start_time >= {since} "
         "AND (CONTAINS(COALESCE(query.query_tag, ''), %s) "
         "OR (STARTSWITH(query.query_type, 'CREATE') "
-        "AND REGEXP_LIKE(query.query_text, %s, 'is')))"
-        ") "
+        "AND REGEXP_LIKE(query.query_text, %s, 'is'))))), "
+        "via AS ("
+        f"SELECT reads.object_name, reads.user_name, ARRAY_AGG(DISTINCT {object_name}) "
+        "AS via_names "
+        "FROM reads JOIN history ON history.query_id = reads.query_id, "
+        "LATERAL FLATTEN(INPUT => history.direct_objects_accessed) AS accessed "
+        "WHERE NOT reads.direct GROUP BY 1, 2) "
+        "SELECT reads.object_name, reads.user_name, "
+        "COUNT(DISTINCT reads.query_id) AS query_count, "
+        "MAX(reads.query_start_time) AS last_read_at, "
+        "BOOLOR_AGG(reads.direct) AS direct, "
+        "ANY_VALUE(via.via_names) AS via_names "
+        "FROM reads LEFT JOIN via "
+        "ON via.object_name = reads.object_name AND via.user_name = reads.user_name "
         "GROUP BY 1, 2 "
         "ORDER BY 1, 2"
     )
@@ -96,54 +133,12 @@ def usage_query(*, object_names: tuple[str, ...], window_seconds: int) -> UsageQ
         params=(
             window_seconds,
             *object_names,
+            *object_names,
             window_seconds,
             SQLBUILD_QUERY_TAG_FRAGMENT,
             CLONE_STATEMENT_PATTERN,
         ),
     )
-
-
-def relation_usages(
-    *, rows: Iterable[tuple[object, ...]], relations_by_name: Mapping[str, RelationInfo]
-) -> tuple[RelationUsage, ...]:
-    """One usage per read relation from `(object_name, user, query_count, last_read)` rows."""
-
-    readers: dict[str, dict[str, int]] = {}
-    last_read: dict[str, datetime] = {}
-    row: tuple[object, ...]
-    for row in rows:
-        object_name: str = str(row[0])
-        if object_name not in relations_by_name:
-            continue
-        user: str = str(row[1])
-        counts: dict[str, int] = readers.setdefault(object_name, {})
-        counts[user] = counts.get(user, 0) + int(str(row[2]))
-        read_at: datetime = _utc(row[3])
-        last_read[object_name] = max(read_at, last_read.get(object_name, read_at))
-    usages: list[RelationUsage] = []
-    object_name: str
-    for object_name in sorted(readers):
-        relation: RelationInfo = relations_by_name[object_name]
-        counts = readers[object_name]
-        usages.append(
-            RelationUsage(
-                database=relation.database,
-                schema=relation.schema,
-                name=relation.name,
-                last_read_at=last_read[object_name],
-                readers=tuple(sorted(counts, key=lambda user: (-counts[user], user))),
-                query_count=sum(counts.values()),
-            )
-        )
-    return tuple(usages)
-
-
-def _utc(value: object) -> datetime:
-    if not isinstance(value, datetime):
-        return datetime.fromisoformat(str(value)).astimezone(UTC)
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value.astimezone(UTC)
 
 
 def is_usage_unavailable_error(error: Exception) -> bool:
@@ -162,7 +157,7 @@ def read_relation_usage(
     window_seconds: int,
     current_database: Callable[[], str | None],
 ) -> RelationUsageReport:
-    """Read every relation's usage in chunked queries; no access history means not checked."""
+    """Read every relation's usage and view dependencies; no access history means not checked."""
 
     database: str | None = None
     if any(relation.database is None for relation in relations):
@@ -170,20 +165,52 @@ def read_relation_usage(
     relations_by_name: dict[str, RelationInfo] = usage_object_names(
         relations=relations, current_database=database
     )
+    by_dependency_name: dict[str, RelationInfo] = {}
+    relation: RelationInfo
+    for relation in relations:
+        name: str | None = dependency_name(relation=relation, current_database=database)
+        if name is not None:
+            by_dependency_name[name] = relation
+    try:
+        rows: list[tuple[object, ...]] = _fetch(
+            connection=connection,
+            queries=usage_queries(object_names=relations_by_name, window_seconds=window_seconds),
+        )
+        dependencies: list[tuple[object, ...]] = _fetch(
+            connection=connection,
+            queries=dependency_queries(
+                view_names=(
+                    name
+                    for name, relation in by_dependency_name.items()
+                    if VIEW_RELATION_TYPE in relation.relation_type.lower()
+                )
+            ),
+        )
+    except Exception as error:
+        if not is_usage_unavailable_error(error):
+            raise
+        return RelationUsageReport(checked=False, reason=USAGE_UNAVAILABLE_REASON)
+    return RelationUsageReport(
+        checked=True,
+        usages=chained_usages(
+            usages=aggregate_relation_usage(
+                reads=relation_reads(rows=rows, via_name=display_name),
+                relations_by_name=relations_by_name,
+            ),
+            dependencies=((str(row[0]), str(row[1])) for row in dependencies),
+            relations_by_dependency_name=by_dependency_name,
+        ),
+    )
+
+
+def _fetch(*, connection: Any, queries: tuple[UsageQuery, ...]) -> list[tuple[object, ...]]:
     rows: list[tuple[object, ...]] = []
     query: UsageQuery
-    for query in usage_queries(object_names=relations_by_name, window_seconds=window_seconds):
+    for query in queries:
         cursor: Any = connection.cursor()
         try:
             cursor.execute(query.sql, query.params)
             rows.extend(tuple(row) for row in cursor.fetchall())
-        except Exception as error:
-            if not is_usage_unavailable_error(error):
-                raise
-            return RelationUsageReport(checked=False, reason=USAGE_UNAVAILABLE_REASON)
         finally:
             cursor.close()
-    return RelationUsageReport(
-        checked=True,
-        usages=relation_usages(rows=rows, relations_by_name=relations_by_name),
-    )
+    return rows

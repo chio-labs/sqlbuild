@@ -6,8 +6,10 @@ from collections.abc import Iterable
 from typing import Any
 
 from sqlbuild.adapter.contract.main.aggregate_relation_usage import aggregate_relation_usage
+from sqlbuild.adapter.contract.main.relation_reads import relation_reads
 from sqlbuild.adapter.contract.models import RelationInfo, RelationUsageReport
 from sqlbuild.adapters.databricks.constants import (
+    LINEAGE_VIEW_SOURCE_TYPES,
     USAGE_NAME_CHUNK_SIZE,
     USAGE_UNAVAILABLE_ERROR_CLASSES,
     USAGE_UNAVAILABLE_REASON,
@@ -46,19 +48,32 @@ def usage_queries(*, object_names: Iterable[str], window_seconds: int) -> tuple[
 
 
 def usage_query(*, object_names: tuple[str, ...], window_seconds: int) -> UsageQuery:
-    """Read events of the named tables per user within the window."""
+    """Read events of the named tables per user within the window, direct or through views."""
 
     placeholders: str = ", ".join(f":name_{index}" for index in range(len(object_names)))
     since: str = "TIMESTAMPADD(SECOND, -:window_seconds, current_timestamp())"
+    view_types: str = ", ".join(f"'{source_type}'" for source_type in LINEAGE_VIEW_SOURCE_TYPES)
     sql: str = (
-        "SELECT lower(source_table_full_name) AS object_name, "
-        "created_by AS user_name, "
-        "COUNT(DISTINCT COALESCE(statement_id, event_id)) AS query_count, "
-        "MAX(event_time) AS last_read_at "
+        "WITH lineage AS ("
+        "SELECT lower(source_table_full_name) AS object_name, source_type, created_by, "
+        "event_time, statement_id, event_id, COALESCE(direct_access, true) AS direct "
         "FROM system.access.table_lineage "
         f"WHERE event_date >= DATE({since}) "
         f"AND event_time >= {since} "
-        f"AND lower(source_table_full_name) IN ({placeholders}) "
+        "AND source_table_full_name IS NOT NULL), "
+        f"reads AS (SELECT * FROM lineage WHERE object_name IN ({placeholders})), "
+        "via AS ("
+        "SELECT reads.object_name, reads.created_by, collect_set(views.object_name) AS via_names "
+        "FROM reads JOIN lineage AS views ON views.statement_id = reads.statement_id "
+        f"AND views.direct AND views.source_type IN ({view_types}) "
+        "WHERE NOT reads.direct GROUP BY 1, 2) "
+        "SELECT reads.object_name, reads.created_by AS user_name, "
+        "COUNT(DISTINCT COALESCE(reads.statement_id, reads.event_id)) AS query_count, "
+        "MAX(reads.event_time) AS last_read_at, "
+        "bool_or(reads.direct) AS direct, "
+        "first(via.via_names) AS via_names "
+        "FROM reads LEFT JOIN via ON via.object_name = reads.object_name "
+        "AND via.created_by <=> reads.created_by "
         "GROUP BY 1, 2 "
         "ORDER BY 1, 2"
     )
@@ -97,5 +112,7 @@ def read_relation_usage(
             cursor.close()
     return RelationUsageReport(
         checked=True,
-        usages=aggregate_relation_usage(rows=rows, relations_by_name=relations_by_name),
+        usages=aggregate_relation_usage(
+            reads=relation_reads(rows=rows), relations_by_name=relations_by_name
+        ),
     )

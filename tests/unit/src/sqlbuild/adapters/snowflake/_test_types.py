@@ -343,3 +343,20 @@ class UnsupportedRelationUsageTestCase:
     description: str
     adapter: BaseAdapter
     expected_report: RelationUsageReport
+
+
+@dataclass(frozen=True)
+class SnowflakeRelationUsageViaTestCase:
+    description: str
+    relations: tuple[tuple[str, str, str, str], ...]
+    access_rows: tuple[tuple[object, ...], ...]
+    dependency_rows: tuple[tuple[str, str], ...]
+    expected_dependency_params: tuple[tuple[object, ...], ...]
+    expected_usages: tuple[tuple[str, tuple[str, ...], int, bool, tuple[str, ...]], ...]
+
+
+@dataclass(frozen=True)
+class SnowflakeCloneStatementTestCase:
+    description: str
+    statement: str
+    expected_clone: bool
