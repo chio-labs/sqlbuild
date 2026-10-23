@@ -80,7 +80,7 @@ Usage comes from the warehouse's query history:
 | Snowflake | `SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY` (`direct_objects_accessed`) joined with `QUERY_HISTORY` |
 | Other adapters | Not available |
 
-On Snowflake, one query reads the access history of all candidates (up to 1,000 names per query). Queries SQLBuild tags as its own (`QUERY_TAG` with `"app":"sqlbuild"`, which builds, audits, loads and hooks set) and `CREATE ... CLONE` statements don't count as reads. Access history needs Enterprise edition, and the janitor's role needs `IMPORTED PRIVILEGES` on the `SNOWFLAKE` database or the `SNOWFLAKE.GOVERNANCE_VIEWER` database role:
+On Snowflake, one query reads the access history of all candidates (up to 1,000 names per query). Queries SQLBuild tags as its own (`QUERY_TAG` with `"app":"sqlbuild"`, which builds, audits, loads and hooks set) and `CREATE ... CLONE` statements don't count as reads. SQLBuild's own reads don't need this check: schemas holding the project's sources are skipped, so the project graph already protects what the project reads. Access history needs Enterprise edition, and the janitor's role needs `IMPORTED PRIVILEGES` on the `SNOWFLAKE` database or the `SNOWFLAKE.GOVERNANCE_VIEWER` database role:
 
 ```sql
 GRANT DATABASE ROLE SNOWFLAKE.GOVERNANCE_VIEWER TO ROLE janitor_role;
