@@ -127,3 +127,12 @@ class FormatCacheEndToEndTestCase:
     edited_model: str
     expected_warm_summary: str
     expected_edited_summary: str
+
+
+@dataclass(frozen=True)
+class DescriptionLayoutTestCase:
+    """One authored model header and the header `sqb format` writes for it."""
+
+    description: str
+    header: str
+    expected_header: str

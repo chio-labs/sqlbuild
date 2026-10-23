@@ -2,6 +2,7 @@ use sqlbuild_sqltext::compiler::main::model_header_single_parsing::parse_one;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
 
 use crate::dsl_headers::_helpers::wrap::wrap_description;
+use crate::dsl_headers::main::fix_escaped_quotes::fix_escaped_quotes;
 use crate::dsl_headers::main::format_headers::format_headers;
 use crate::dsl_headers::main::inner_header_text::inner_header_text;
 use crate::dsl_headers::main::measurement_body_ranges::measurement_body_ranges;
@@ -10,7 +11,7 @@ use crate::dsl_headers::main::sql_body_ranges::sql_body_ranges;
 use crate::dsl_headers::models::HeaderRulesConfig;
 use crate::dsl_headers::tests::helpers::chars;
 use crate::dsl_headers::tests::test_types::{
-    CompactParser, FormatTestCase, NativeParser, ProseTestCase, ScanTestCase,
+    CompactParser, FormatTestCase, NativeParser, ProseTestCase, QuoteFixTestCase, ScanTestCase,
 };
 
 const MODEL_FILE: &str = "-- leading note\n-- second line\nMODEL (\n  name orders,   \n  audits [not_null(column 'order_id'), unique(column 'order_id'), accepted_values(column 'status', values ['a', 'b'])]\n);\nSELECT 1 /* MODEL ( */ , 'MODEL (x)'\n  TEST (\"a\\\")\" ) ;\nSELECT 2\n";
@@ -266,5 +267,59 @@ fn given_descriptions_when_formatting_then_layout_is_canonical_idempotent_and_te
             "stored text unchanged: {}",
             test_case.description
         );
+    }
+}
+
+#[test]
+fn given_escaped_quotes_in_descriptions_when_fixing_then_triple_quotes_hold_real_quotes() {
+    let test_cases = [
+        QuoteFixTestCase {
+            description: "a model description",
+            text: "MODEL (\n  description \"Matches a title (\\\"Miss\\\").\",\n);\nSELECT 1\n",
+            expected_text: "MODEL (\n  description \"\"\"Matches a title (\"Miss\").\"\"\",\n);\nSELECT 1\n",
+            expected_lines: vec![2],
+        },
+        QuoteFixTestCase {
+            description: "a wrapped macro description with apostrophes",
+            text: "MACRO (\n  description \"A woman's title,\nwith a dot (\\\"Mrs. C. O'Leary\\\").\",\n  returns VARCHAR,\n);\n'x'\n",
+            expected_text: "MACRO (\n  description \"\"\"A woman's title,\nwith a dot (\"Mrs. C. O'Leary\").\"\"\",\n  returns VARCHAR,\n);\n'x'\n",
+            expected_lines: vec![2],
+        },
+        QuoteFixTestCase {
+            description: "a column description, and text ending in a quote",
+            text: "MODEL (\n  description \"Orders.\",\n  columns (title (description \"Says \\\"hi\\\"\")),\n);\nSELECT 1\n",
+            expected_text: "MODEL (\n  description \"Orders.\",\n  columns (title (description \"\"\"Says \"hi\"\"\"\")),\n);\nSELECT 1\n",
+            expected_lines: vec![3],
+        },
+        QuoteFixTestCase {
+            description: "another backslash escape is not rewritten",
+            text: "MODEL (\n  description \"Path C:\\\\data \\\"x\\\"\",\n);\nSELECT 1\n",
+            expected_text: "MODEL (\n  description \"Path C:\\\\data \\\"x\\\"\",\n);\nSELECT 1\n",
+            expected_lines: vec![],
+        },
+        QuoteFixTestCase {
+            description: "text that would hold three quotes in a row is not rewritten",
+            text: "MODEL (\n  description \"a \\\"\\\"\\\" b\",\n);\nSELECT 1\n",
+            expected_text: "MODEL (\n  description \"a \\\"\\\"\\\" b\",\n);\nSELECT 1\n",
+            expected_lines: vec![],
+        },
+        QuoteFixTestCase {
+            description: "a SQL string that escapes a quote is left alone",
+            text: "MODEL (\n  description \"Orders.\",\n  audits [expression(predicate \"name <> \\\"x\\\"\")],\n);\nSELECT 1\n",
+            expected_text: "MODEL (\n  description \"Orders.\",\n  audits [expression(predicate \"name <> \\\"x\\\"\")],\n);\nSELECT 1\n",
+            expected_lines: vec![],
+        },
+    ];
+
+    for test_case in test_cases {
+        let (fixed, lines) = fix_escaped_quotes(&chars(test_case.text));
+
+        assert_eq!(
+            fixed.iter().collect::<String>(),
+            test_case.expected_text,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(lines, test_case.expected_lines, "{}", test_case.description);
     }
 }

@@ -83,3 +83,10 @@ pub(crate) struct ProseTestCase {
     pub(crate) prose: &'static str,
     pub(crate) expected_wrapped: &'static str,
 }
+
+pub(crate) struct QuoteFixTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) text: &'static str,
+    pub(crate) expected_text: &'static str,
+    pub(crate) expected_lines: Vec<usize>,
+}

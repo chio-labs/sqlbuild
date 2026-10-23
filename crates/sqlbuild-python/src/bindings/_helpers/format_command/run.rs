@@ -4,10 +4,12 @@ use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::exceptions::PyException;
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
 use pyo3::{IntoPyObject, IntoPyObjectExt};
 use sqlbuild_cache::digest::types::ContentDigest;
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 use sqlbuild_core::format_command::main::collect_lint_files::collect_lint_files;
 use sqlbuild_rules::dsl_headers::models::{HeaderRulesConfig, HeaderViolation};
 use sqlbuild_rules::lint_text::main::format_sql_bodies::format_sql_bodies;
@@ -28,10 +30,11 @@ use crate::bindings::_helpers::format_command::files::{
 };
 use crate::bindings::_helpers::format_command::stages::{
     each_file, format_header_text, lint_header_text, on_format_workers, parse_faults,
+    quote_fixed_text,
 };
-use crate::bindings::_helpers::records::construct::error_class;
+use crate::bindings::_helpers::records::construct::{error_class, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::rules::dsl_headers::rules_config;
 use crate::bindings::_helpers::rules::fixture_formatting::format_redundant_fixture_nulls;
 use crate::bindings::_helpers::rules::lint_pipeline::{
@@ -41,6 +44,11 @@ use crate::bindings::_helpers::rules::lint_text::{relative_parts, unsafe_fault};
 use crate::bindings::types::CompilerDetach;
 
 const DESCRIPTION_PRESENT: &str = "description-present";
+/// The fix that rewrites descriptions escaping double quotes as `"""` strings.
+const DESCRIPTION_QUOTES: &str = "description-quotes";
+const DESCRIPTION_QUOTES_REASON: &str =
+    "Escaped double quotes rewritten as a \"\"\"...\"\"\" string holding real quotes";
+const APPLIED: &str = "applied";
 const LINE_FEED: &str = "\n";
 const CARRIAGE_RETURN_LINE_FEED: &str = "\r\n";
 
@@ -56,6 +64,8 @@ pub(crate) struct FormatRequest<'a, 'py> {
     pub(crate) fix: bool,
     /// Whether files a previous run found clean are skipped, and clean files remembered.
     pub(crate) cache: bool,
+    /// Why `--fix` could not discover the project, which Rule fixes need.
+    pub(crate) discovery_error: Option<&'a PyErr>,
 }
 
 /// The outcome of one format run, with Python violations and Rule fix reports.
@@ -591,6 +601,79 @@ fn uncached_entries(
     Ok((entries, kept))
 }
 
+/// One applied `description-quotes` fix report per rewritten description, in file order.
+fn quote_fix_reports<'py>(
+    py: Python<'py>,
+    entries: &[Entry],
+    fixes: &[Option<(String, Vec<usize>)>],
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
+    let mut reports: Vec<Bound<'py, PyAny>> = Vec::new();
+    for (entry, fix) in entries.iter().zip(fixes) {
+        let Some((_, lines)) = fix else {
+            continue;
+        };
+        for line in lines {
+            reports.push(new_record_with(
+                py,
+                RecordId::RuleFixResult,
+                &[
+                    (
+                        "file_path",
+                        entry.path.clone().into_pyobject(py)?.into_any(),
+                    ),
+                    ("code", DESCRIPTION_QUOTES.into_pyobject(py)?.into_any()),
+                    ("line", line.into_pyobject(py)?.into_any()),
+                    ("status", APPLIED.into_pyobject(py)?.into_any()),
+                    (
+                        "reason",
+                        DESCRIPTION_QUOTES_REASON.into_pyobject(py)?.into_any(),
+                    ),
+                ],
+            )?);
+        }
+    }
+    Ok(reports)
+}
+
+/// The warning, on the project file, that compiler-verified Rule fixes waited for the
+/// description quote fixes.
+///
+/// Rule fixes compile the project as saved, which still holds the escaped quotes until the
+/// rewritten descriptions are written.
+fn rule_fixes_skipped<'py>(py: Python<'py>, directory: &Path) -> PyResult<Bound<'py, PyAny>> {
+    new_record_with(
+        py,
+        RecordId::LintViolation,
+        &[
+            (
+                "file_path",
+                directory
+                    .join(PROJECT_CONFIG_FILENAME)
+                    .into_pyobject(py)?
+                    .into_any(),
+            ),
+            ("line", 1_i64.into_pyobject(py)?.into_any()),
+            ("column", 1_i64.into_pyobject(py)?.into_any()),
+            ("code", "format-fix-skipped".into_pyobject(py)?.into_any()),
+            (
+                "message",
+                "Rule fixes were skipped: the project compiles only once the rewritten \
+                 descriptions are saved"
+                    .into_pyobject(py)?
+                    .into_any(),
+            ),
+            ("severity", "warning".into_pyobject(py)?.into_any()),
+            ("engine", "native".into_pyobject(py)?.into_any()),
+            (
+                "remediation",
+                "Rerun `sqb format --fix` to apply Rule fixes."
+                    .into_pyobject(py)?
+                    .into_any(),
+            ),
+        ],
+    )
+}
+
 /// Format the project's authored SQL files and report what remains.
 pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<FormatOutcome<'py>> {
     let py: Python<'py> = request.project_dir.py();
@@ -639,6 +722,14 @@ pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<Form
     let original_lints: Vec<Vec<HeaderViolation>> = native(py, || {
         each_file(&entries, |entry| lint_header_text(&entry.original, config))
     })?;
+    let quote_fixes: Vec<Option<(String, Vec<usize>)>> = if request.fix {
+        native(py, || {
+            each_file(&entries, |entry| quote_fixed_text(&entry.original, config))
+        })?
+    } else {
+        vec![None; entries.len()]
+    };
+    let quote_reports: Vec<Bound<'py, PyAny>> = quote_fix_reports(py, &entries, &quote_fixes)?;
     let mut run: Run<'_, '_, 'py> = Run {
         request,
         py,
@@ -650,13 +741,34 @@ pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<Form
             .map(|(index, entry)| (entry.path.clone(), index))
             .collect(),
         safe: (0..entries.len())
-            .filter(|index| parse_faults(&original_lints[*index]).is_empty())
+            .filter(|index| {
+                quote_fixes[*index].is_some() || parse_faults(&original_lints[*index]).is_empty()
+            })
             .collect(),
         entries,
-        fixed: HashMap::new(),
+        fixed: quote_fixes
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, fix)| fix.map(|(text, _)| (index, text)))
+            .collect(),
     };
     let (rule_fixes, rule_faults) = if request.fix {
-        run.plan_rule_fixes()?
+        match request.discovery_error {
+            Some(error) if quote_reports.is_empty() => return Err(error.clone_ref(py)),
+            Some(_) => (quote_reports, vec![rule_fixes_skipped(py, &run.directory)?]),
+            None => match run.plan_rule_fixes() {
+                Ok((verified, faults)) => {
+                    (quote_reports.into_iter().chain(verified).collect(), faults)
+                }
+                Err(error)
+                    if error.is_instance_of::<PyException>(py) && !quote_reports.is_empty() =>
+                {
+                    let skipped: Bound<'py, PyAny> = rule_fixes_skipped(py, &run.directory)?;
+                    (quote_reports, vec![skipped])
+                }
+                Err(error) => return Err(error),
+            },
+        }
     } else {
         (Vec::new(), Vec::new())
     };
