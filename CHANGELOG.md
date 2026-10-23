@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.169.0](https://github.com/chio-labs/sqlbuild/compare/v0.168.0...v0.169.0) (2026-10-23)
+
+
+### Features
+
+* run only affected tests and scenarios with --since ([#1228](https://github.com/chio-labs/sqlbuild/issues/1228)) ([720539c](https://github.com/chio-labs/sqlbuild/commit/720539c74d2759aec746b4badaebf7783c0a68ac))
+* show janitor progress, inspect and archive faster ([#1226](https://github.com/chio-labs/sqlbuild/issues/1226)) ([bc1245c](https://github.com/chio-labs/sqlbuild/commit/bc1245ce7bbdda1ad69a8956d43596267b743abc))
+
 ## [0.168.0](https://github.com/chio-labs/sqlbuild/compare/v0.167.2...v0.168.0) (2026-10-22)
 
 
