@@ -7,6 +7,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::{pyclass, pymethods};
 use sqlbuild_core::cli_text::models::CliStyle;
+use sqlbuild_core::janitor_text::main::janitor_events_unwritten_text::janitor_events_unwritten_text;
 use sqlbuild_core::janitor_text::main::janitor_phase_complete_text::janitor_phase_complete_text;
 use sqlbuild_core::janitor_text::main::janitor_phase_failed_text::janitor_phase_failed_text;
 use sqlbuild_core::janitor_text::main::janitor_phase_flow_width::janitor_phase_flow_width;
@@ -130,6 +131,19 @@ impl JanitorProgressPrinter {
             status.update(py, progress)?;
         }
         Ok(())
+    }
+
+    /// Warn that the audit events of `count` completed actions in `schemas` were not written.
+    #[pyo3(signature = (*, count, schemas, error))]
+    fn events_unwritten(
+        &self,
+        py: Python<'_>,
+        count: usize,
+        schemas: Vec<String>,
+        error: &str,
+    ) -> PyResult<()> {
+        let line: String = janitor_events_unwritten_text((count, &schemas), error, self.style);
+        self.status.get().write_persistent(py, &format!("{line}\n"))
     }
 
     #[pyo3(signature = (*, phase, failed))]

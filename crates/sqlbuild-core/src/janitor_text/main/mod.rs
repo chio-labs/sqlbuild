@@ -2,6 +2,7 @@ pub mod format_janitor_json;
 pub mod janitor_confirmation_phrase;
 pub mod janitor_confirmation_prompt;
 pub mod janitor_disabled_text;
+pub mod janitor_events_unwritten_text;
 pub mod janitor_item_counts;
 pub mod janitor_nothing_to_do_text;
 pub mod janitor_phase_complete_text;

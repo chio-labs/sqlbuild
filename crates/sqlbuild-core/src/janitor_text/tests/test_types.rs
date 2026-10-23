@@ -73,3 +73,11 @@ pub(super) struct JsonTestCase {
     pub(super) error: Option<&'static str>,
     pub(super) expected_fragments: &'static [&'static str],
 }
+
+pub(super) struct EventsUnwrittenTestCase {
+    pub(super) description: &'static str,
+    pub(super) count: usize,
+    pub(super) schemas: Vec<String>,
+    pub(super) error: &'static str,
+    pub(super) expected_text: &'static str,
+}

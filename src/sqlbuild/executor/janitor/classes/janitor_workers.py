@@ -7,10 +7,7 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from sqlbuild.executor.janitor._helpers.worker_runs import (
-    attempt_janitor_action,
-    submit_janitor_actions,
-)
+from sqlbuild.executor.janitor._helpers.worker_runs import attempt_janitor_action
 from sqlbuild.executor.janitor.classes.janitor_chunk_collector import JanitorChunkCollector
 from sqlbuild.executor.janitor.classes.pooled_janitor_attempt import PooledJanitorAttempt
 
@@ -47,12 +44,10 @@ class JanitorWorkers:
             max_workers=min(len(self.connections), len(items))
         )
         try:
-            collector.drain(
-                futures=submit_janitor_actions(
-                    pool=pool,
-                    items=items,
-                    attempt=PooledJanitorAttempt(action=action, connections=connections),
-                )
+            collector.collect(
+                pool=pool,
+                items=items,
+                attempt=PooledJanitorAttempt(action=action, connections=connections),
             )
         finally:
             pool.shutdown(wait=True, cancel_futures=True)

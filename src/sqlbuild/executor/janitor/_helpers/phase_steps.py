@@ -10,6 +10,7 @@ from sqlbuild.executor.janitor.models import (
     JanitorChunkOutcome,
 )
 from sqlbuild.executor.janitor.types import JanitorPhase, JanitorProgress
+from sqlbuild.executor.janitor_events.models import JanitorEventRecord
 
 
 def announce_phase(*, progress: JanitorProgress | None, phase: JanitorPhase, total: int) -> None:
@@ -61,3 +62,63 @@ def chunk_failure(chunk: JanitorChunkOutcome[JanitorActionDone | None]) -> BaseE
         (outcome.error for outcome in chunk.outcomes if outcome is not None and outcome.error),
         chunk.report_error,
     )
+
+
+def report_unwritten_events(
+    *,
+    progress: JanitorProgress | None,
+    finished: tuple[JanitorActionDone, ...],
+    error: BaseException,
+) -> None:
+    """Warn which completed actions' audit events a failed write left out, by schema."""
+
+    events: tuple[JanitorEventRecord, ...] = tuple(
+        done.event for done in finished if done.event is not None
+    )
+    if progress is None or not events:
+        return
+    schemas: tuple[str, ...] = tuple(sorted({_schema_name(event) for event in events}))
+    progress.events_unwritten(
+        count=len(events), schemas=schemas, error=str(error) or type(error).__name__
+    )
+
+
+def raise_phase_failure(
+    *,
+    progress: JanitorProgress | None,
+    phase: JanitorPhase,
+    failure: BaseException | None,
+    flush_error: BaseException | None,
+) -> None:
+    """Close the phase as failed and raise its failure; an interrupt wins, the other is chained."""
+
+    primary: BaseException | None
+    secondary: BaseException | None
+    primary, secondary = _ranked(failure=failure, flush_error=flush_error)
+    if primary is None:
+        return
+    if secondary is not None:
+        primary.__context__ = secondary
+    if flush_error is not None and primary is not flush_error:
+        primary.add_note(f"Audit events of completed actions were not written: {flush_error}")
+    try:
+        close_phase(progress=progress, phase=phase, failed=True)
+    finally:
+        raise primary
+
+
+def _ranked(
+    *, failure: BaseException | None, flush_error: BaseException | None
+) -> tuple[BaseException | None, BaseException | None]:
+    """The error to raise and the one to chain: an interrupt first, else the original failure."""
+
+    flush_interrupted: bool = flush_error is not None and not isinstance(flush_error, Exception)
+    if failure is None or (flush_interrupted and isinstance(failure, Exception)):
+        return flush_error, failure
+    return failure, flush_error
+
+
+def _schema_name(event: JanitorEventRecord) -> str:
+    if event.relation_database is None:
+        return event.relation_schema
+    return f"{event.relation_database}.{event.relation_schema}"

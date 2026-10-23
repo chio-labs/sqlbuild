@@ -1,5 +1,6 @@
 use crate::cli_text::models::CliStyle;
 use crate::janitor_text::main::format_janitor_json::format_janitor_json;
+use crate::janitor_text::main::janitor_events_unwritten_text::janitor_events_unwritten_text;
 use crate::janitor_text::main::janitor_item_counts::janitor_item_counts;
 use crate::janitor_text::main::janitor_nothing_to_do_text::janitor_nothing_to_do_text;
 use crate::janitor_text::main::janitor_phase_complete_text::janitor_phase_complete_text;
@@ -14,8 +15,8 @@ use crate::janitor_text::models::{
 };
 use crate::janitor_text::tests::helpers::{direct_archive_plan, item, large_plan, old_name_plan};
 use crate::janitor_text::tests::test_types::{
-    CompletionTestCase, ItemCountsTestCase, ItemLineTestCase, JsonTestCase, PhaseTextTestCase,
-    PreviewTestCase,
+    CompletionTestCase, EventsUnwrittenTestCase, ItemCountsTestCase, ItemLineTestCase,
+    JsonTestCase, PhaseTextTestCase, PreviewTestCase,
 };
 
 const PLAIN: CliStyle = CliStyle { use_color: false };
@@ -390,6 +391,30 @@ fn given_outcome_when_formatting_json_then_document_carries_plan_result_and_erro
                 .iter()
                 .all(|fragment| text.contains(fragment)),
             "{}: missing fragments in {text}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_failed_event_write_when_warning_then_line_counts_actions_per_schema() {
+    let test_cases = [EventsUnwrittenTestCase {
+        description: "the warning names the schemas and the first line of the error",
+        count: 5,
+        schemas: vec!["analytics".to_owned(), "staging".to_owned()],
+        error: "events table is locked\nquery id 7",
+        expected_text: "\u{2717} Audit events not written  for 5 completed actions in analytics, staging: events table is locked",
+    }];
+
+    for test_case in test_cases {
+        assert_eq!(
+            janitor_events_unwritten_text(
+                (test_case.count, &test_case.schemas),
+                test_case.error,
+                PLAIN
+            ),
+            test_case.expected_text,
+            "{}",
             test_case.description
         );
     }

@@ -179,3 +179,25 @@ class JanitorPhaseInterruptTestCase:
     item_count: int
     expected_error: type[BaseException]
     expected_minimum_completed: int
+
+
+@dataclass(frozen=True)
+class JanitorPhaseSubmitInterruptTestCase:
+    description: str
+    connection_count: int
+    item_count: int
+    failing_submit: int
+    expected_error: type[BaseException]
+    expected_maximum_completed: int
+
+
+@dataclass(frozen=True)
+class JanitorPhaseFlushFailureTestCase:
+    description: str
+    item_count: int
+    failing_item: int
+    action_error: type[BaseException]
+    flush_error: type[BaseException]
+    expected_error: type[BaseException]
+    expected_chained_error: type[BaseException]
+    expected_unwritten: tuple[tuple[int, tuple[str, ...], str], ...]

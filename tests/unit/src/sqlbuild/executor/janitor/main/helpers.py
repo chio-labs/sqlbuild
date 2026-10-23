@@ -679,6 +679,7 @@ class FailingReportProgress:
         ]
         self._calls: int = 0
         self.closed_failed: list[bool] = []
+        self.unwritten: list[tuple[int, tuple[str, ...], str]] = []
 
     def phase_started(self, *, phase: str, total: int) -> None:
         del phase, total
@@ -691,6 +692,9 @@ class FailingReportProgress:
     def phase_finished(self, *, phase: str, failed: bool) -> None:
         del phase
         self.closed_failed.append(failed)
+
+    def events_unwritten(self, *, count: int, schemas: tuple[str, ...], error: str) -> None:
+        self.unwritten.append((count, schemas, error))
 
 
 def interrupting_wait(real_wait: Callable[..., Any]) -> Callable[..., Any]:
@@ -714,3 +718,61 @@ def phase_label(item: int) -> JanitorProgressItem:
     """The progress label of the archive action at `item`."""
 
     return JanitorProgressItem(action=JanitorAction.ARCHIVED, name=f"analytics.orders_{item:04d}")
+
+
+def _raiser(error: type[BaseException], message: str) -> Callable[[], None]:
+    def fail() -> None:
+        raise error(message)
+
+    return fail
+
+
+def _quiet() -> None:
+    return None
+
+
+class FailingPhaseActions(PhaseActions):
+    """Archive actions where the `failing_item`th raises `error`, and whose event flush raises."""
+
+    def __init__(
+        self,
+        *,
+        failing_item: int,
+        error: type[BaseException],
+        flush_error: type[BaseException],
+        size: int,
+    ) -> None:
+        super().__init__()
+        self._reactions: list[Callable[[], None]] = [
+            *([_quiet] * failing_item),
+            _raiser(error, f"rename failed for analytics.orders_{failing_item:04d}"),
+            *([_quiet] * size),
+        ]
+        self._flush_error: type[BaseException] = flush_error
+
+    def apply(self, *, item: int, connection: Any) -> JanitorActionDone:
+        self._reactions[item]()
+        return super().apply(item=item, connection=connection)
+
+    def flush(self, finished: tuple[JanitorActionDone, ...]) -> None:
+        del finished
+        raise self._flush_error("events table is locked")
+
+
+def interrupting_submit(
+    real_submit: Callable[..., Any], *, failing_call: int
+) -> Callable[..., Any]:
+    """`submit_janitor_action` that raises KeyboardInterrupt on its `failing_call`th call."""
+
+    reactions: list[Callable[[], None]] = [
+        *([_quiet] * (failing_call - 1)),
+        _raiser(KeyboardInterrupt, "interrupted while submitting"),
+    ]
+    calls: list[int] = []
+
+    def submit(**kwargs: Any) -> Any:
+        calls.append(len(calls))
+        [*reactions, *([_quiet] * len(calls))][len(calls) - 1]()
+        return real_submit(**kwargs)
+
+    return submit

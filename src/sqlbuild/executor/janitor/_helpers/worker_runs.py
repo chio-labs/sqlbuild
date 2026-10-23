@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextvars import copy_context
 from time import perf_counter
@@ -24,18 +24,13 @@ def attempt_janitor_action[ResultT](
     return JanitorActionOutcome(result=result, duration_seconds=perf_counter() - started)
 
 
-def submit_janitor_actions[ItemT, ResultT](
+def submit_janitor_action[ItemT, ResultT](
     *,
     pool: ThreadPoolExecutor,
-    items: Sequence[ItemT],
+    item: ItemT,
     attempt: Callable[[ItemT], JanitorActionOutcome[ResultT]],
-) -> dict[Future[JanitorActionOutcome[ResultT]], int]:
-    """Each item's submitted attempt, keyed to the item's position."""
+) -> Future[JanitorActionOutcome[ResultT]]:
+    """The submitted attempt of one item, run in a copy of the caller's context."""
 
-    futures: dict[Future[JanitorActionOutcome[ResultT]], int] = {}
-    index: int
-    item: ItemT
-    for index, item in enumerate(items):
-        submitted: Future[Any] = pool.submit(copy_context().run, attempt, item)
-        futures[cast(Future[JanitorActionOutcome[ResultT]], submitted)] = index
-    return futures
+    submitted: Future[Any] = pool.submit(copy_context().run, attempt, item)
+    return cast(Future[JanitorActionOutcome[ResultT]], submitted)

@@ -602,6 +602,14 @@ fn observed_dispatch<'py>(
 
 /// Dispatch once and project every expected failure to its coded error and exit code.
 fn handled_dispatch<'py>(invocation: &Invocation<'py>) -> PyResult<Bound<'py, PyAny>> {
+    let _ = take_machine_output_written();
+    let handled: PyResult<Bound<'py, PyAny>> = report_dispatch(invocation);
+    let _ = take_machine_output_written();
+    handled
+}
+
+/// Dispatch the command and report its failure, writing any machine-readable error document.
+fn report_dispatch<'py>(invocation: &Invocation<'py>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = invocation.py();
     let policy: InvocationPolicy = invocation_policy(&invocation.facts);
     report_skill_freshness(invocation, policy)?;

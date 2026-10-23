@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from concurrent.futures import FIRST_COMPLETED, Future, wait
+from collections.abc import Callable, Sequence
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 
+from sqlbuild.executor.janitor._helpers.worker_runs import submit_janitor_action
 from sqlbuild.executor.janitor.models import JanitorActionOutcome, JanitorChunkOutcome
 
 
@@ -46,6 +47,27 @@ class JanitorChunkCollector[ResultT]:
 
         if self._interruption is None:
             self._interruption = error
+
+    def collect[ItemT](
+        self,
+        *,
+        pool: ThreadPoolExecutor,
+        items: Sequence[ItemT],
+        attempt: Callable[[ItemT], JanitorActionOutcome[ResultT]],
+    ) -> None:
+        """Submit items until stopped, then record every submitted action as it finishes."""
+
+        futures: dict[Future[JanitorActionOutcome[ResultT]], int] = {}
+        index: int
+        item: ItemT
+        for index, item in enumerate(items):
+            if not self.accepting:
+                break
+            try:
+                futures[submit_janitor_action(pool=pool, item=item, attempt=attempt)] = index
+            except BaseException as error:
+                self.interrupt(error)
+        self.drain(futures=futures)
 
     def drain(self, *, futures: dict[Future[JanitorActionOutcome[ResultT]], int]) -> None:
         """Record every submitted action as it finishes, cancelling unstarted ones once stopped."""

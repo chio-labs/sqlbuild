@@ -10,6 +10,8 @@ from sqlbuild.executor.janitor._helpers.phase_steps import (
     chunk_positions,
     close_phase,
     finished_actions,
+    raise_phase_failure,
+    report_unwritten_events,
 )
 from sqlbuild.executor.janitor.classes.janitor_chunk_collector import JanitorChunkCollector
 from sqlbuild.executor.janitor.classes.janitor_item_reporter import JanitorItemReporter
@@ -55,24 +57,27 @@ def run_janitor_phase[T](
                 action=apply,
                 collector=collector,
             )
-        finally:
-            chunk: JanitorChunkOutcome[JanitorActionDone | None] = collector.outcome()
-            succeeded: tuple[tuple[int, JanitorActionDone], ...] = finished_actions(
-                positions=positions, chunk=chunk
-            )
-            finished.extend(succeeded)
-            try:
-                if after_chunk is not None:
-                    _ = after_chunk(tuple(done for _, done in succeeded))
-            except BaseException:
-                _ = close_phase(progress=progress, phase=phase, failed=True)
-                raise
-        failure: BaseException | None = chunk_failure(chunk)
-        if failure is not None:
-            try:
-                _ = close_phase(progress=progress, phase=phase, failed=True)
-            finally:
-                raise failure
+        except BaseException as error:
+            _ = collector.interrupt(error)
+        chunk: JanitorChunkOutcome[JanitorActionDone | None] = collector.outcome()
+        succeeded: tuple[tuple[int, JanitorActionDone], ...] = finished_actions(
+            positions=positions, chunk=chunk
+        )
+        finished.extend(succeeded)
+        completed: tuple[JanitorActionDone, ...] = tuple(done for _, done in succeeded)
+        flush_error: BaseException | None = None
+        try:
+            if after_chunk is not None:
+                _ = after_chunk(completed)
+        except BaseException as error:
+            flush_error = error
+            _ = report_unwritten_events(progress=progress, finished=completed, error=error)
+        _ = raise_phase_failure(
+            progress=progress,
+            phase=phase,
+            failure=chunk_failure(chunk),
+            flush_error=flush_error,
+        )
     _ = close_phase(progress=progress, phase=phase, failed=False)
     return tuple((items[position], done) for position, done in sorted(finished, key=_position))
 
