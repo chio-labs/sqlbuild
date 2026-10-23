@@ -222,12 +222,14 @@ pub(crate) fn expand_call<H: SqlMacroHost>(
     );
     if matches!(context.scope, SqlMacroScope::Caller) && context.stack.is_empty() {
         let output: Option<TypedOutput> = match (definition.form, &definition.returns) {
-            (SqlMacroForm::Expression, Some(returns)) => {
-                site.whole_item_alias().map(|name| TypedOutput {
+            (SqlMacroForm::Expression, Some(returns)) => site
+                .whole_item_alias()
+                .zip(call_branch(context.text, scanned, call.start))
+                .map(|(name, branch)| TypedOutput {
                     name,
                     returns: returns.clone(),
-                })
-            }
+                    branch,
+                }),
             _ => None,
         };
         let check: SqlMacroCheck = SqlMacroCheck {
@@ -599,6 +601,11 @@ fn call_scope(text: &str, scanned: &[Token], offset: usize) -> CallScope {
         Some(parts) => parts.scope_of(offset),
         None => CallScope::Main,
     }
+}
+
+/// The branch of its scope's set operation the call at byte `offset` of `text` stands in.
+fn call_branch(text: &str, scanned: &[Token], offset: usize) -> Option<usize> {
+    top_level_parts(text, scanned)?.branch_of(text, scanned, offset)
 }
 
 /// Whether the call at byte `offset` of `text` stands in its scope's one select.

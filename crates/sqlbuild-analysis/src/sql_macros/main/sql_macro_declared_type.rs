@@ -6,12 +6,13 @@ use crate::type_system::models::NormalizedType;
 #[must_use]
 pub fn sql_macro_declared_type(
     declared: &[DeclaredOutput],
-    (cte, name): (Option<&str>, &str),
+    (cte, branch, name): (Option<&str>, usize, &str),
     inferred: Option<&str>,
     dialect: &str,
 ) -> Option<String> {
     let output: &DeclaredOutput = declared.iter().find(|output| {
         output.name.eq_ignore_ascii_case(name)
+            && output.branch == branch
             && match (&output.cte, cte) {
                 (None, None) => true,
                 (Some(declared_cte), Some(cte)) => declared_cte.eq_ignore_ascii_case(cte),

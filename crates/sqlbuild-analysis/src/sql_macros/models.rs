@@ -268,6 +268,8 @@ pub struct DeclaredOutput {
     /// The item's alias, unquoted.
     pub name: String,
     pub returns: String,
+    /// The select it stands in: 0, or its branch of a set operation, left to right.
+    pub branch: usize,
 }
 
 /// A select-list item that is one expression macro call under an alias, as `@sql.m(x) AS name`.
@@ -277,6 +279,8 @@ pub struct TypedOutput {
     pub name: String,
     /// The macro's declared `returns` type.
     pub returns: String,
+    /// The select the item stands in: 0, or its branch of a set operation, left to right.
+    pub branch: usize,
 }
 
 /// The top-level part of the caller's query a call stands in.

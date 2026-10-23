@@ -17,6 +17,8 @@ struct OutputScope<'a> {
     by_name: bool,
     /// Where SQL macro call items are read: the main query (`Some(None)`), a CTE, or nowhere.
     macro_scope: Option<Option<&'a str>>,
+    /// The first select's branch of the scope's set operation, left to right.
+    branch: usize,
 }
 
 struct OutputRule<'a> {
@@ -25,7 +27,7 @@ struct OutputRule<'a> {
     rule: &'a RuleMetadata,
     faults: &'a FaultCollector,
     /// The main query's outputs that are one SQL macro call each, read when first needed.
-    sql_macro_outputs: OnceCell<Vec<(Option<String>, String)>>,
+    sql_macro_outputs: OnceCell<Vec<(Option<String>, usize, String)>>,
 }
 
 pub(crate) fn evaluate(parsed: &ParsedModel<'_>, rule: &RuleMetadata, faults: &FaultCollector) {
@@ -63,6 +65,7 @@ pub(crate) fn evaluate(parsed: &ParsedModel<'_>, rule: &RuleMetadata, faults: &F
                 set_branch: false,
                 by_name: false,
                 macro_scope: final_cte.map(Some),
+                branch: 0,
             },
         );
         return;
@@ -75,6 +78,7 @@ pub(crate) fn evaluate(parsed: &ParsedModel<'_>, rule: &RuleMetadata, faults: &F
             set_branch: false,
             by_name: false,
             macro_scope: Some(None),
+            branch: 0,
         },
     );
 }
@@ -138,10 +142,17 @@ impl OutputRule<'_> {
                     columns: scope.columns,
                     set_branch: true,
                     by_name: *by_name,
-                    macro_scope: None,
+                    macro_scope: scope.macro_scope,
+                    branch: scope.branch,
                 };
                 self.evaluate_set(left, branch_scope);
-                self.evaluate_set(right, branch_scope);
+                self.evaluate_set(
+                    right,
+                    OutputScope {
+                        branch: scope.branch + set_branches(left),
+                        ..branch_scope
+                    },
+                );
             }
             SetFacts::Other => self.push(
                 None,
@@ -202,7 +213,7 @@ impl OutputRule<'_> {
                 || column.type_proven && direct && !scope.set_branch
                 || column.type_proven
                     && !explicit_cast
-                    && self.sql_macro_output(scope.macro_scope, output_name.as_deref());
+                    && self.sql_macro_output(scope, output_name.as_deref());
             if passes {
                 continue;
             }
@@ -230,17 +241,18 @@ impl OutputRule<'_> {
         }
     }
 
-    /// Whether output `name` at `scope` is one SQL macro call, typed by its `returns`.
-    fn sql_macro_output(&self, scope: Option<Option<&str>>, name: Option<&str>) -> bool {
-        let (Some(scope), Some(name)) = (scope, name) else {
+    /// Whether output `name` in `scope`'s select is one SQL macro call, typed by its `returns`.
+    fn sql_macro_output(&self, scope: OutputScope<'_>, name: Option<&str>) -> bool {
+        let (Some(macro_scope), Some(name)) = (scope.macro_scope, name) else {
             return false;
         };
         self.sql_macro_outputs
             .get_or_init(|| sql_macro_output_names(&self.model.authored_sql))
             .iter()
-            .any(|(cte, output)| {
+            .any(|(cte, branch, output)| {
                 output.eq_ignore_ascii_case(name)
-                    && match (cte.as_deref(), scope) {
+                    && *branch == scope.branch
+                    && match (cte.as_deref(), macro_scope) {
                         (None, None) => true,
                         (Some(cte), Some(scope)) => cte.eq_ignore_ascii_case(scope),
                         _ => false,
@@ -259,6 +271,14 @@ impl OutputRule<'_> {
             message,
             remediation,
         });
+    }
+}
+
+/// The selects of `set_expr`'s set operation, a nested query counting as one.
+fn set_branches(set_expr: &SetFacts) -> usize {
+    match set_expr {
+        SetFacts::SetOperation { left, right, .. } => set_branches(left) + set_branches(right),
+        SetFacts::Select(_) | SetFacts::Query(_) | SetFacts::Other => 1,
     }
 }
 

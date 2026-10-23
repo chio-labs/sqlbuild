@@ -346,10 +346,11 @@ impl AnalysisSession {
                     cte: None,
                     name: name.clone(),
                     returns: returns.clone(),
+                    branch: 0,
                 }];
                 if let Some(data_type) = sql_macro_declared_type(
                     &reached,
-                    (None, &column.name),
+                    (None, 0, &column.name),
                     column.data_type.as_deref(),
                     &dialect,
                 ) {

@@ -279,12 +279,16 @@ macro file.
 
 A select-list item that is one expression macro call under an alias, as in
 `@sql.cents_to_dollars(o.amount_cents) AS amount`, has the macro's `returns` type wherever the
-compiler infers no type for the expanded SQL, or exactly that type. This holds in the main query and in any top-level CTE, and the type flows on as
-an inferred type would: through `SELECT * FROM final`, pass-through columns and joins, to contract
-checks (`K002`, `K003`), `SQBRCONTRACT105` and models that read the column. Such a call needs no
-`CAST` to satisfy a matching contract column. Any other inferred type stands, even a
-close one such as `VARCHAR(100)` for `returns VARCHAR(5)`, and `K002` reports the mismatch. A call inside a larger expression, a subquery or a
-`UNION` branch is typed from the expanded SQL as before.
+compiler infers no type for the expanded SQL, or exactly that type. This holds in the main query
+and in any top-level CTE, including each branch of their `UNION`, `INTERSECT` or `EXCEPT`, and the
+type flows on as an inferred type would: through `SELECT * FROM final`, pass-through columns and
+joins, to contract checks (`K002`, `K003`), `SQBRCONTRACT105` and models that read the column. A
+set operation's column combines its branches as usual, so a sibling branch of another type still
+leaves it unproven, and a CTE holding one is read by column name, since `SELECT *` over it is not
+typed. Such a call needs no `CAST` to satisfy a matching contract column. Any other
+inferred type stands, even a close one such as `VARCHAR(100)` for `returns VARCHAR(5)`, and `K002`
+reports the mismatch. A call inside a larger expression, a subquery, a nested `WITH` or a set
+operation with a parenthesised branch is typed from the expanded SQL as before.
 
 - `sqb format` formats SQL macro files, bodies of every form and the `MACRO` header, and
   normalises the commas around CTE-list and column-list calls.

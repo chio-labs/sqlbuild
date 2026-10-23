@@ -129,17 +129,18 @@ impl sqlbuild_render::macro_arguments::types::ArgumentHost for AsciiArguments {
     }
 }
 
-/// A check recording output `label` of `shout()`, typed VARCHAR, at `scope`.
-pub(super) fn typed_check(scope: CallScope, plain_select: bool) -> SqlMacroCheck {
+/// A check recording output `label` of `shout()`, typed VARCHAR, at `scope`'s `branch`.
+pub(super) fn typed_check(scope: CallScope, branch: usize) -> SqlMacroCheck {
     SqlMacroCheck {
         macro_name: "shout".to_owned(),
         scope,
-        plain_select,
+        plain_select: true,
         arguments: Vec::new(),
         call: None,
         output: Some(TypedOutput {
             name: "label".to_owned(),
             returns: "VARCHAR".to_owned(),
+            branch,
         }),
     }
 }

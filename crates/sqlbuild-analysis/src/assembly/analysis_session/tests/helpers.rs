@@ -718,6 +718,7 @@ pub(crate) fn declared_label_request(models: &[ModelSpec]) -> SessionRequest {
         output: Some(TypedOutput {
             name: "label".to_owned(),
             returns: "VARCHAR".to_owned(),
+            branch: 0,
         }),
     });
     orders_request(requests)

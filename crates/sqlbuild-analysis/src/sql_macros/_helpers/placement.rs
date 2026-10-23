@@ -11,6 +11,8 @@ const DISTINCT_ON_TOKENS: usize = 2;
 const QUERY_OPENERS: [&str; 4] = ["SELECT", "WITH", "VALUES", "FROM"];
 /// Keywords that combine the selects of a query.
 const SET_OPERATIONS: [&str; 3] = ["UNION", "INTERSECT", "EXCEPT"];
+/// The words that may stand between a set operation and its parenthesised right branch.
+const SET_OPERATION_MODIFIERS: [&str; 3] = ["ALL", "DISTINCT", "NAME"];
 /// Tokens from `@` to a macro call's name: `@`, the kind, `.` and the name.
 const CALL_PREFIX_TOKENS: usize = 4;
 /// Keywords that open the clause a call stands in, read backwards from the call.
@@ -608,6 +610,69 @@ impl QueryParts {
             }
         }
         nested_at_call == Some(false)
+    }
+}
+
+impl QueryParts {
+    /// The set-operation branch byte `offset` stands in; `None` where it cannot be counted.
+    pub(crate) fn branch_of(&self, text: &str, scanned: &[Token], offset: usize) -> Option<usize> {
+        let range: (usize, usize) = match self.scope_of(offset) {
+            CallScope::WithList => return None,
+            CallScope::Cte(name) => self.ctes.iter().find(|cte| cte.name == name)?.body,
+            CallScope::Main => (self.main, text.len()),
+        };
+        let inside: Vec<(usize, &Token)> = scanned
+            .iter()
+            .enumerate()
+            .filter(|(_, token)| range.0 <= token.start && token.end <= range.1)
+            .collect();
+        if inside
+            .first()
+            .is_some_and(|(_, token)| token.is_word(text, WITH_KEYWORD))
+        {
+            return None;
+        }
+        let mut depth: usize = 0;
+        let mut branch: usize = 0;
+        let mut at_call: Option<usize> = None;
+        let mut previous_at_top: Option<&Token> = None;
+        for (index, token) in inside {
+            if at_call.is_none() && token.start >= offset {
+                if depth != 0 {
+                    return None;
+                }
+                at_call = Some(branch);
+            }
+            if token.kind == TokenKind::Punct {
+                match token.text(text) {
+                    "(" | "[" | "{" => {
+                        let query: bool = scanned
+                            .get(index + 1)
+                            .is_some_and(|next| opens_query(text, next));
+                        let branch_start: bool = previous_at_top.is_none_or(|previous| {
+                            let word: &str = previous.text(text);
+                            is_set_operation(word)
+                                || SET_OPERATION_MODIFIERS
+                                    .iter()
+                                    .any(|modifier| word.eq_ignore_ascii_case(modifier))
+                        });
+                        if depth == 0 && query && branch_start {
+                            return None;
+                        }
+                        depth += 1;
+                    }
+                    ")" | "]" | "}" => depth = depth.saturating_sub(1),
+                    _ => {}
+                }
+            }
+            if depth == 0 {
+                if token.kind == TokenKind::Word && is_set_operation(token.text(text)) {
+                    branch += 1;
+                }
+                previous_at_top = Some(token);
+            }
+        }
+        at_call
     }
 }
 

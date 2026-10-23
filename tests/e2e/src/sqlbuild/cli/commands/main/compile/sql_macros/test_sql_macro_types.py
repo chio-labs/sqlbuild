@@ -56,6 +56,23 @@ _TYPED_CALLS: dict[str, str] = {
     ),
 }
 
+_UNION_CALLS: dict[str, str] = {
+    **_TYPED_RULES_AND_MACROS,
+    **contract_model(
+        "orders",
+        "order_id (type BIGINT), status_bar (type VARCHAR)",
+        "WITH final AS (\n"
+        "  SELECT CAST(o.order_id AS BIGINT) AS order_id,\n"
+        "    @sql.status_bar(o.status) AS status_bar\n"
+        '  FROM __ref("stg_orders") AS o\n'
+        "  UNION ALL\n"
+        "  SELECT CAST(o.order_id AS BIGINT) AS order_id,\n"
+        "    CAST(NULL AS VARCHAR) AS status_bar\n"
+        '  FROM __ref("stg_orders") AS o\n'
+        ")\nSELECT f.order_id, f.status_bar FROM final AS f\n",
+    ),
+}
+
 
 @pytest.mark.parametrize(
     "test_case",
@@ -346,6 +363,47 @@ def test_given_an_any_argument_misused_when_compiling_then_it_fails(
             expected_fragments=("0 errors",),
         ),
         SqlMacroCompileTestCase(
+            description="a_call_in_a_union_branch_of_a_cte_types_the_union",
+            files=_UNION_CALLS,
+            expected_returncode=0,
+            expected_fragments=("0 errors, 0 warnings",),
+            unexpected_fragments=_UNPROVEN,
+        ),
+        SqlMacroCompileTestCase(
+            description="a_call_in_a_later_union_branch_of_the_main_query_types_the_union",
+            files={
+                **_TYPED_RULES_AND_MACROS,
+                **contract_model(
+                    "orders",
+                    "status_bar (type VARCHAR)",
+                    'SELECT CAST(NULL AS VARCHAR) AS status_bar FROM __ref("stg_orders") AS o\n'
+                    "UNION ALL\n"
+                    'SELECT @sql.status_bar(o.status) AS status_bar FROM __ref("stg_orders") AS o\n',
+                ),
+            },
+            expected_returncode=0,
+            expected_fragments=("0 errors, 0 warnings",),
+            unexpected_fragments=_UNPROVEN,
+        ),
+        SqlMacroCompileTestCase(
+            description="a_union_sibling_of_another_known_type_still_reports",
+            files={
+                **_TYPED_RULES_AND_MACROS,
+                **contract_model(
+                    "orders",
+                    "status_bar (type VARCHAR)",
+                    "WITH final AS (\n"
+                    '  SELECT @sql.status_bar(o.status) AS status_bar FROM __ref("stg_orders") AS o\n'
+                    "  UNION ALL\n"
+                    "  SELECT CAST(LENGTH(o.status) AS BIGINT) AS status_bar\n"
+                    '  FROM __ref("stg_orders") AS o\n'
+                    ")\nSELECT f.status_bar FROM final AS f\n",
+                ),
+            },
+            expected_returncode=1,
+            expected_fragments=('error[SQBRCONTRACT105]: output "status_bar"',),
+        ),
+        SqlMacroCompileTestCase(
             description="an_inferred_type_of_another_family_still_disagrees_through_a_cte",
             files={
                 **text_macro("shouted", "BIGINT", "UPPER(@value)"),
@@ -383,6 +441,13 @@ def test_given_a_returns_type_when_checking_contracts_then_the_call_has_that_typ
         SqlMacroCommandTestCase(
             description="a_warm_compile_types_the_call_the_same_way",
             files=_TYPED_CALLS,
+            command=("compile",),
+            expected_returncode=0,
+            expected_fragments=("0 errors, 0 warnings",),
+        ),
+        SqlMacroCommandTestCase(
+            description="a_warm_compile_types_a_union_branch_call_the_same_way",
+            files=_UNION_CALLS,
             command=("compile",),
             expected_returncode=0,
             expected_fragments=("0 errors, 0 warnings",),

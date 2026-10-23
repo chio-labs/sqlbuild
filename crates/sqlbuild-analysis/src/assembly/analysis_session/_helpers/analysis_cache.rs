@@ -183,6 +183,7 @@ impl KeyHasher {
             }
             self.text(&output.name);
             self.text(&output.returns);
+            self.count(output.branch);
         }
     }
 
