@@ -1054,21 +1054,26 @@ def test_given_previous_build_rule_cache_when_compiling_then_lint_overlaps_with_
     test_case: EarlyLintInputsTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # `--no-cache` would skip the Rules cache this test upgrades; disable only the compile cache.
+    monkeypatch.setenv("SQLBUILD_DISABLE_COMPILE_CACHE", "1")
     write_project_files(project_dir=tmp_path, files=EARLY_LINT_PROJECT_FILES)
     previous_findings: tuple[tuple[str, str, int | None, int | None], ...] = compile_findings(
-        project_dir=tmp_path, capsys=capsys
+        project_dir=tmp_path, capsys=capsys, no_cache=False
     )
     cache_path: Path = rules_bulk_cache_path(project_dir=tmp_path, file_name="sql.json")
     stored: dict[str, object] = json.loads(cache_path.read_text(encoding="utf-8"))
     stored["build_identity"] = "previous-build"
     cache_path.write_text(json.dumps(stored), encoding="utf-8")
     upgraded_findings: tuple[tuple[str, str, int | None, int | None], ...] = compile_findings(
-        project_dir=tmp_path, capsys=capsys
+        project_dir=tmp_path, capsys=capsys, no_cache=False
     )
 
     assert previous_findings == upgraded_findings == test_case.expected_findings
-    assert compile_findings(project_dir=tmp_path, capsys=capsys) == upgraded_findings
+    assert compile_findings(project_dir=tmp_path, capsys=capsys, no_cache=False) == (
+        upgraded_findings
+    )
 
 
 @pytest.mark.parametrize(
@@ -1231,10 +1236,12 @@ def final_directory(*, model: Model, ctx: RuleContext) -> list[Finding]:
     )
 
     def compile_payload() -> dict[str, Any]:
-        exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+        exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
         assert exit_code == 1
         return json.loads(capsys.readouterr().out)
 
+    # `--no-cache` would skip the Rules cache this test compares; disable only the compile cache.
+    monkeypatch.setenv("SQLBUILD_DISABLE_COMPILE_CACHE", "1")
     single_hosts: CustomHostObserver = observe_hosts(monkeypatch=monkeypatch, cores=1)
     single: dict[str, Any] = compile_payload()
     rules_bulk_cache_path(project_dir=tmp_path, file_name="custom-rules.json").parent.parent.rename(

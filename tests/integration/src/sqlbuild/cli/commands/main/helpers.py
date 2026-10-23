@@ -845,11 +845,12 @@ EARLY_LINT_PROJECT_FILES: dict[str, str] = {
 
 
 def compile_findings(
-    *, project_dir: Path, capsys: pytest.CaptureFixture[str]
+    *, project_dir: Path, capsys: pytest.CaptureFixture[str], no_cache: bool = True
 ) -> tuple[tuple[str, str, int | None, int | None], ...]:
-    """Compile through the CLI with no cache and return each finding's code and location."""
+    """Compile through the CLI, by default with no cache, and return each finding's location."""
 
-    _ = main(["--project-dir", str(project_dir), "compile", "--json", "--no-cache"])
+    flags: list[str] = ["--no-cache"] if no_cache else []
+    _ = main(["--project-dir", str(project_dir), "compile", "--json", *flags])
     payload: dict[str, object] = json.loads(capsys.readouterr().out)
     diagnostics: list[dict[str, Any]] = cast(list[dict[str, Any]], payload["diagnostics"])
     return tuple(
