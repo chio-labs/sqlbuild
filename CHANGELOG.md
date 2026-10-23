@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.173.0](https://github.com/chio-labs/sqlbuild/compare/v0.172.0...v0.173.0) (2026-10-23)
+
+
+### Features
+
+* add sqb review to build, test and compare a branch in a temporary schema ([#1238](https://github.com/chio-labs/sqlbuild/issues/1238)) ([6cfb178](https://github.com/chio-labs/sqlbuild/commit/6cfb1782f568de6860b3e2bf2c52caa58163a694))
+
 ## [0.172.0](https://github.com/chio-labs/sqlbuild/compare/v0.171.0...v0.172.0) (2026-10-23)
 
 
