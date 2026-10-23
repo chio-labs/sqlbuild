@@ -1,5 +1,9 @@
 //! The code-point scanning helpers Python's audit parser uses: comments, quotes and keywords.
 
+use sqlbuild_sqltext::header_strings::main::follows_description_key::follows_description_key;
+use sqlbuild_sqltext::header_strings::main::header_quoted_end::header_quoted_end;
+use sqlbuild_sqltext::header_strings::main::opens_triple_quote::opens_triple_quote;
+
 const SQL_QUOTES: [char; 3] = ['\'', '"', '`'];
 
 /// Audit text as code points, with the Python semantics its keyword checks use.
@@ -23,6 +27,16 @@ impl AuditText<'_> {
         (start..self.len()).find(|index| self.starts_with(*index, needle))
     }
 
+    /// The end of the `"""..."""` or `description` string at `index`, if one opens there.
+    fn header_string_end(&self, index: usize) -> Option<usize> {
+        let header_string: bool = matches!(self.chars[index], '\'' | '"')
+            && (opens_triple_quote(self.chars, index)
+                || follows_description_key(self.chars, index));
+        header_string
+            .then(|| header_quoted_end(self.chars, index))
+            .flatten()
+    }
+
     /// `_code_characters`: positions outside quotes and comments, from `start`.
     pub(crate) fn code_positions(&self, start: usize) -> Vec<usize> {
         let mut positions: Vec<usize> = Vec::new();
@@ -40,6 +54,10 @@ impl AuditText<'_> {
                 index = self
                     .find(&['*', '/'], index + 2)
                     .map_or(length, |close| close + 2);
+                continue;
+            }
+            if let Some(end) = self.header_string_end(index) {
+                index = end;
                 continue;
             }
             if SQL_QUOTES.contains(&character) {
