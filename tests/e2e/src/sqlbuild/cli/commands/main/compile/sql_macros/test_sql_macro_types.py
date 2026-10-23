@@ -271,6 +271,81 @@ def test_given_an_any_argument_misused_when_compiling_then_it_fails(
             expected_fragments=("error[K002]: column 'v' inferred as",),
         ),
         SqlMacroCompileTestCase(
+            description="an_unusual_outer_query_star_replace_still_compiles",
+            files={
+                **_TYPED_RULES_AND_MACROS,
+                **orders_model(
+                    "WITH final AS (\n"
+                    "  SELECT o.order_id, @sql.shouted(o.status) AS shouted\n"
+                    '  FROM __ref("stg_orders") AS o\n'
+                    ")\n"
+                    "SELECT * REPLACE (UPPER(shouted) AS shouted) FROM final\n"
+                ),
+            },
+            expected_returncode=0,
+            expected_fragments=("0 errors",),
+        ),
+        SqlMacroCompileTestCase(
+            description="an_unusual_outer_query_star_exclude_still_compiles",
+            files={
+                **_TYPED_RULES_AND_MACROS,
+                **orders_model(
+                    "WITH final AS (\n"
+                    "  SELECT o.order_id, @sql.shouted(o.status) AS shouted\n"
+                    '  FROM __ref("stg_orders") AS o\n'
+                    ")\n"
+                    "SELECT * EXCLUDE (order_id) FROM final\n"
+                ),
+            },
+            expected_returncode=0,
+            expected_fragments=("0 errors",),
+        ),
+        SqlMacroCompileTestCase(
+            description="an_unusual_outer_query_columns_expression_still_compiles",
+            files={
+                **_TYPED_RULES_AND_MACROS,
+                **orders_model(
+                    "WITH final AS (\n"
+                    "  SELECT o.order_id, @sql.shouted(o.status) AS shouted\n"
+                    '  FROM __ref("stg_orders") AS o\n'
+                    ")\n"
+                    "SELECT COLUMNS('shout.*') FROM final\n"
+                ),
+            },
+            expected_returncode=0,
+            expected_fragments=("0 errors",),
+        ),
+        SqlMacroCompileTestCase(
+            description="an_unusual_outer_query_star_rename_still_compiles",
+            files={
+                **_TYPED_RULES_AND_MACROS,
+                **orders_model(
+                    "WITH final AS (\n"
+                    "  SELECT o.order_id, @sql.shouted(o.status) AS shouted\n"
+                    '  FROM __ref("stg_orders") AS o\n'
+                    ")\n"
+                    "SELECT * RENAME (shouted AS loud) FROM final\n"
+                ),
+            },
+            expected_returncode=0,
+            expected_fragments=("0 errors",),
+        ),
+        SqlMacroCompileTestCase(
+            description="an_unusual_outer_query_full_join_using_still_compiles",
+            files={
+                **_TYPED_RULES_AND_MACROS,
+                **orders_model(
+                    "WITH final AS (\n"
+                    "  SELECT o.order_id, @sql.shouted(o.status) AS shouted\n"
+                    '  FROM __ref("stg_orders") AS o\n'
+                    ")\n"
+                    "SELECT f.* FROM final AS f FULL JOIN final AS g USING (order_id)\n"
+                ),
+            },
+            expected_returncode=0,
+            expected_fragments=("0 errors",),
+        ),
+        SqlMacroCompileTestCase(
             description="an_inferred_type_of_another_family_still_disagrees_through_a_cte",
             files={
                 **text_macro("shouted", "BIGINT", "UPPER(@value)"),

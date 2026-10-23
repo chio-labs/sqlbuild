@@ -318,12 +318,19 @@ impl AnalysisSession {
                 callback: self.request.nullability_callback.as_ref(),
                 declared: &declared,
             };
-            let typed: Vec<(String, String)> = catch_compiler_panic(|| {
-                declared_output_types(&cleaned, &self.available_types, &profile)
+            let propagated: Result<Vec<(String, String)>, String> = catch_compiler_panic(|| {
+                Ok(declared_output_types(
+                    &cleaned,
+                    &self.available_types,
+                    &profile,
+                ))
             })
             .map_err(|reason| {
                 native_failure(&model_context(&self.request.models[*model]), &reason)
             })?;
+            let Ok(typed) = propagated else {
+                continue;
+            };
             let dialect: String = self.request.dialect.clone();
             let Some(columns) = self.outcome_mut(*model)?.analysis.columns.as_mut() else {
                 continue;
