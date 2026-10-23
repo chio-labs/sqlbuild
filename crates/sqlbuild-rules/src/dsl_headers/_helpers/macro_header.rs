@@ -1,5 +1,7 @@
-//! The canonical layout of a SQL macro's `MACRO (...)` header.
+//! The canonical layout of a SQL macro's `MACRO (...)` header, and whether a layout kept its meaning.
 
+use sqlbuild_analysis::sql_macros::main::parse_sql_macro::parse_sql_macro;
+use sqlbuild_analysis::sql_macros::models::SqlMacroDefinition;
 use sqlbuild_core::text::main::python_isspace::python_isspace;
 
 use crate::dsl_headers::_helpers::quoted::quoted_value_end;
@@ -191,4 +193,30 @@ fn has_comment(header: &[char]) -> bool {
         index += 1;
     }
     false
+}
+
+/// The macro `text` defines with every line and column cleared, if it parses.
+fn positionless_macro(text: &[char]) -> Option<SqlMacroDefinition> {
+    let Ok(mut definition) = parse_sql_macro("formatted", "formatted.sql", &string(text)) else {
+        return None;
+    };
+    definition.body_line = 0;
+    definition.body_column = 0;
+    for parameter in &mut definition.parameters {
+        parameter.line = 0;
+        parameter.column = 0;
+    }
+    Some(definition)
+}
+
+/// Whether `before` and `after` both parse to the same macro; a parse failure equals nothing.
+pub(crate) fn same_macro(before: &[char], after: &[char]) -> bool {
+    positionless_macro(before)
+        .is_some_and(|definition| positionless_macro(after) == Some(definition))
+}
+
+/// Whether `before` defines a macro that `after` no longer defines the same.
+pub(crate) fn changes_macro(before: &[char], after: &[char]) -> bool {
+    positionless_macro(before)
+        .is_some_and(|definition| positionless_macro(after) != Some(definition))
 }

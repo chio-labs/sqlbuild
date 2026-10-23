@@ -147,3 +147,13 @@ class QuoteFixTestCase:
     expected_fixes: list[tuple[str, str, int, str]]
     expected_starts: dict[str, str]
     expected_description: str
+
+
+@dataclass(frozen=True)
+class MacroLayoutTestCase:
+    """One authored SQL macro file and the file `sqb format` writes for it."""
+
+    description: str
+    macro: str
+    expected_macro: str
+

@@ -3,6 +3,7 @@
 use crate::dsl_headers::_helpers::formatting::{
     relocate_leading_comment, without_trailing_whitespace, wrap_audits, wrap_descriptions,
 };
+use crate::dsl_headers::_helpers::macro_header::changes_macro;
 use crate::dsl_headers::_helpers::macro_header::layout_macro_headers;
 use crate::dsl_headers::constants::{PROSE_LAYOUT_HEADER_KINDS, SQL_MACRO_HEADER_KIND};
 use crate::dsl_headers::main::scan_headers::scan_headers;
@@ -31,7 +32,13 @@ pub fn format_headers<P: HeaderParser>(
     )?;
     let audited: Vec<char> = wrap_audits(&wrapped, config.line_width, parser)?;
     let macro_headers: Vec<HeaderSpan> = scan_headers(&audited, false);
-    let laid_out: Vec<char> = layout_macro_headers(&audited, &macro_headers, config.line_width);
+    let mut laid_out: Vec<char> = layout_macro_headers(&audited, &macro_headers, config.line_width);
+    let defines_macro: bool = macro_headers
+        .iter()
+        .any(|header| header.kind == SQL_MACRO_HEADER_KIND);
+    if defines_macro && changes_macro(&audited, &laid_out) {
+        laid_out = audited;
+    }
     let laid_out_headers: Vec<HeaderSpan> = scan_headers(&laid_out, false);
     Ok((
         wrap_descriptions(
