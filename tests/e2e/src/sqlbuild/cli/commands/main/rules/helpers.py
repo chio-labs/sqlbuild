@@ -209,14 +209,11 @@ def rule_cache_hits(result: subprocess.CompletedProcess[str]) -> int:
 
 
 def custom_rule_timings(
-    result: subprocess.CompletedProcess[str],
+    result: subprocess.CompletedProcess[str], codes: tuple[str, ...]
 ) -> dict[str, tuple[int, int, int, int]]:
     """Map each custom Rule code to its invocations, CPU ms, cache hits and cache misses."""
 
     timings: dict[str, int] = json.loads(result.stdout)["compile_timings"]
-    codes: set[str] = {
-        key.split(".")[1] for key in timings if key.startswith("custom_rules.")
-    }
     return {
         code: (
             timings[f"custom_rules.{code}.invocations"],
@@ -229,14 +226,24 @@ def custom_rule_timings(
 
 
 def custom_rule_cache_counts(
-    result: subprocess.CompletedProcess[str],
+    result: subprocess.CompletedProcess[str], codes: tuple[str, ...]
 ) -> dict[str, tuple[int, int, int]]:
     """Map each custom Rule code to its invocations, cache hits and cache misses."""
 
     return {
         code: (invocations, hits, misses)
-        for code, (invocations, _, hits, misses) in custom_rule_timings(result).items()
+        for code, (invocations, _, hits, misses) in custom_rule_timings(result, codes).items()
     }
+
+
+def named_custom_rule_source(
+    *, code: str, body: str, function: str, header: str = CUSTOM_RULE_HEADER
+) -> str:
+    """Return one model-subject custom Rule whose check function has the given name."""
+
+    return custom_rule_source(code=code, header=header, body=body).replace(
+        "def check(", f"def {function}(", 1
+    )
 
 
 def string_set_order(*, names: tuple[str, ...], hash_seed: str) -> str:

@@ -322,9 +322,9 @@ class CustomRuleTimingCase:
     """Custom Rules compiled cold, warm, with `--no-cache`, and warm again."""
 
     description: str
-    model_count: int
     selected_rules: tuple[str, ...]
     files: tuple[tuple[str, str], ...]
+    expected_subjects: int
 
 
 @dataclass(frozen=True)
@@ -332,7 +332,6 @@ class ModuleStateAttributionCase:
     """Rules whose module state changes persist or are undone within one model."""
 
     description: str
-    model_count: int
     selected_rules: tuple[str, ...]
     files: tuple[tuple[str, str], ...]
     edited_model: str

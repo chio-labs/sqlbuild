@@ -244,8 +244,6 @@ pub(crate) fn load_rules_config(py: Python<'_>, project_dir: PathBuf) -> PyResul
 }
 
 /// The project's rules configuration, with the Rules cache off when `cache` is `false`.
-///
-/// `--no-cache` passes `false`: the run neither reads nor writes built-in or custom rule results.
 pub(crate) fn load_rules_config_with_cache(
     py: Python<'_>,
     project_dir: PathBuf,

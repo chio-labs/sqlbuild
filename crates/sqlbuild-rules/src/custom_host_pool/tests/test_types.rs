@@ -39,3 +39,10 @@ pub(super) struct MergeTestCase {
     pub(super) expected_observed: Vec<(Vec<String>, Option<String>)>,
     pub(super) expected_timings: HostTimings,
 }
+
+pub(super) struct TimingEntriesTestCase {
+    pub(super) description: &'static str,
+    pub(super) timings: HostTimings,
+    pub(super) cache_counts: &'static [(&'static str, (usize, usize))],
+    pub(super) expected_entries: &'static [(&'static str, u64)],
+}

@@ -5,8 +5,6 @@ use std::collections::BTreeSet;
 use crate::custom_host_pool::models::HostSlice;
 
 /// The slice without evaluations, untracked reads, uncacheable or stateful marks of `codes`.
-///
-/// Timings stay: the slice's hosts spent that CPU even when a rerun replaces its results.
 #[must_use]
 pub fn without_codes(slice: HostSlice, codes: &BTreeSet<String>) -> HostSlice {
     HostSlice {

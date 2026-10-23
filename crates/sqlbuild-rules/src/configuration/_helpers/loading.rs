@@ -1,8 +1,9 @@
 use crate::configuration::_helpers::removed_settings::removed_settings;
 use crate::configuration::errors::RulesConfigLoadError;
 use crate::constants::{
-    ALLOWED_PATHS_KEY, ALLOWED_QUALIFIERS_OPTION, MIN_CUSTOM_RULE_TEST_CASES_KEY, MODEL_NAME_LAYERS,
-    PUBLISHED_LAYERS_OPTION, PUBLISHED_READ_CODE, PUBLISHED_SHAPE_CODE, RELATION_EXCEPTION_RULES,
+    ALLOWED_PATHS_KEY, ALLOWED_QUALIFIERS_OPTION, MIN_CUSTOM_RULE_TEST_CASES_KEY,
+    MODEL_NAME_LAYERS, PUBLISHED_LAYERS_OPTION, PUBLISHED_READ_CODE, PUBLISHED_SHAPE_CODE,
+    RELATION_EXCEPTION_RULES,
 };
 use crate::models::RulesConfig;
 use fensu_policy::policy::types::RuleCodeGrammar;
@@ -344,8 +345,10 @@ fn validate_published_layer_options(config: &RulesConfig) -> Result<(), String> 
                 let Some(paths) = paths.as_array() else {
                     return Err(shape);
                 };
-                let paths: Option<Vec<&str>> =
-                    paths.iter().map(|path| path.as_str().map(str::trim)).collect();
+                let paths: Option<Vec<&str>> = paths
+                    .iter()
+                    .map(|path| path.as_str().map(str::trim))
+                    .collect();
                 let Some(mut paths) = paths else {
                     return Err(shape);
                 };

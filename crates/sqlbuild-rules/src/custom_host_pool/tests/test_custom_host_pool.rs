@@ -16,6 +16,7 @@ use crate::custom_host_pool::tests::helpers::{
 };
 use crate::custom_host_pool::tests::test_types::{
     DecodeTestCase, HostCapacityTestCase, HostCountTestCase, HostPlanTestCase, MergeTestCase,
+    TimingEntriesTestCase,
 };
 
 const NODE_CPUS: usize = 64;
@@ -343,30 +344,54 @@ fn given_host_slices_when_merging_then_results_follow_single_host_order() {
 
 #[test]
 fn given_host_timings_and_cache_counts_when_reporting_then_flat_entries_cover_every_rule() {
-    let timings: HostTimings = rule_timings(&[("R2", 3, 4_500_000)], 2_900_000, 1_000_000);
-    let cache_counts: BTreeMap<String, (usize, usize)> =
-        BTreeMap::from([("R1".to_owned(), (5, 0)), ("R2".to_owned(), (2, 3))]);
-
-    let entries: Vec<(String, u64)> = custom_rule_timings(&timings, &cache_counts);
-
-    let expected: Vec<(&str, u64)> = vec![
-        ("custom_rules_invocations", 3),
-        ("custom_rules_monitor_cpu_ms", 2),
-        ("custom_rules_guard_cpu_ms", 1),
-        ("custom_rules.R1.invocations", 0),
-        ("custom_rules.R1.cpu_ms", 0),
-        ("custom_rules.R1.cache_hits", 5),
-        ("custom_rules.R1.cache_misses", 0),
-        ("custom_rules.R2.invocations", 3),
-        ("custom_rules.R2.cpu_ms", 4),
-        ("custom_rules.R2.cache_hits", 2),
-        ("custom_rules.R2.cache_misses", 3),
+    let test_cases = [
+        TimingEntriesTestCase {
+            description: "a fully cached rule reports zero invocations beside an evaluated one",
+            timings: rule_timings(&[("R2", 3, 4_500_000)], 2_900_000, 1_000_000),
+            cache_counts: &[("R1", (5, 0)), ("R2", (2, 3))],
+            expected_entries: &[
+                ("custom_rules_invocations", 3),
+                ("custom_rules_monitor_cpu_ms", 2),
+                ("custom_rules_guard_cpu_ms", 1),
+                ("custom_rules.R1.invocations", 0),
+                ("custom_rules.R1.cpu_ms", 0),
+                ("custom_rules.R1.cache_hits", 5),
+                ("custom_rules.R1.cache_misses", 0),
+                ("custom_rules.R2.invocations", 3),
+                ("custom_rules.R2.cpu_ms", 4),
+                ("custom_rules.R2.cache_hits", 2),
+                ("custom_rules.R2.cache_misses", 3),
+            ],
+        },
+        TimingEntriesTestCase {
+            description: "no custom rules report only zero totals",
+            timings: HostTimings::default(),
+            cache_counts: &[],
+            expected_entries: &[
+                ("custom_rules_invocations", 0),
+                ("custom_rules_monitor_cpu_ms", 0),
+                ("custom_rules_guard_cpu_ms", 0),
+            ],
+        },
     ];
-    assert_eq!(
-        entries,
-        expected
-            .into_iter()
-            .map(|(key, value)| (key.to_owned(), value))
-            .collect::<Vec<_>>()
-    );
+    for test_case in test_cases {
+        let cache_counts: BTreeMap<String, (usize, usize)> = test_case
+            .cache_counts
+            .iter()
+            .map(|(code, counts)| ((*code).to_owned(), *counts))
+            .collect();
+
+        let entries: Vec<(String, u64)> = custom_rule_timings(&test_case.timings, &cache_counts);
+
+        assert_eq!(
+            entries,
+            test_case
+                .expected_entries
+                .iter()
+                .map(|(key, value)| ((*key).to_owned(), *value))
+                .collect::<Vec<_>>(),
+            "{}",
+            test_case.description
+        );
+    }
 }

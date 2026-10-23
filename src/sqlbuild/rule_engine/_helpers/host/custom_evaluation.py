@@ -152,13 +152,7 @@ def evaluate_custom_rules(
 
 
 class _ReadTracker:
-    """Attribute reads to one invocation; rules whose module state changes become untracked.
-
-    Module state is compared once per subject, after every Rule evaluated it, rather than after
-    each invocation. A change that persists to the end of a subject is caught and attributed to
-    the codes whose module state it changed, exactly as a per-invocation check attributes it; a
-    change undone before the subject's last Rule finishes is not.
-    """
+    """Attribute reads to one invocation; rules whose module state changes become untracked."""
 
     def __init__(
         self,
