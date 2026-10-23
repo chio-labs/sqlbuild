@@ -41,7 +41,9 @@ pub(crate) const SET_KEYWORD: &str = "SET";
 /// Names a parameter may not take, because `@name` already means something else.
 pub(crate) const RESERVED_PARAMETER_NAMES: [&str; 5] = ["sql", "py", "const", "enum", "param"];
 /// Type names that would make a parameter raw, untyped text.
-pub(crate) const RAW_TYPE_NAMES: [&str; 4] = ["RAW", "SQL", "ANY", "EXPRESSION"];
+pub(crate) const RAW_TYPE_NAMES: [&str; 3] = ["RAW", "SQL", "EXPRESSION"];
+/// The type of a parameter that takes any scalar expression and checks no type.
+pub(crate) const ANY_KEYWORD: &str = "ANY";
 /// Reference functions a SQL macro body may not call.
 pub(crate) const REFERENCE_FUNCTIONS: [&str; 3] = ["__ref", "__source", "__seed"];
 /// The prefix of a SQL macro call.

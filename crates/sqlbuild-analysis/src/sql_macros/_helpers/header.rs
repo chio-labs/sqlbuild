@@ -2,7 +2,7 @@
 
 use crate::sql_macros::_helpers::lexing::{Token, TokenKind, closing_token, line_column, tokens};
 use crate::sql_macros::constants::{
-    ARGUMENTS_KEY, COLUMN_KEYWORD, COMMA, CONST_KEYWORD, DEFAULT_KEYWORD, DESCRIPTION_KEY,
+    ANY_KEYWORD, ARGUMENTS_KEY, COLUMN_KEYWORD, COMMA, CONST_KEYWORD, DEFAULT_KEYWORD, DESCRIPTION_KEY,
     ENUM_KEYWORD, HEADER_KEYWORD, INVALID_DEFINITION_CODE, LIST_KEYWORD, OF_KEYWORD,
     RAW_TYPE_NAMES, RELATION_COLUMN_MIN_TOKENS, RELATION_KEYWORD, RETURNS_KEY, SET_KEYWORD,
 };
@@ -259,10 +259,28 @@ impl HeaderParser<'_> {
                 )),
             };
         }
+        if first.is_word(source, ANY_KEYWORD) {
+            let Some(after) = tokens.get(1) else {
+                return Ok(ParameterKind::Any);
+            };
+            if after.is_word(source, CONST_KEYWORD) {
+                return Err(self
+                    .error(after.start, format!("argument {name} ANY CONST: a CONST argument needs a type its values are checked against"))
+                    .helped(format!("declare it with the type of its values, such as {name} VARCHAR CONST")));
+            }
+            return Err(self
+                .error(after.start, format!("argument {name} ANY takes nothing after it; ANY accepts any scalar expression"))
+                .helped(format!("declare it {name} ANY, or give it a SQL type")));
+        }
         if first.is_word(source, LIST_KEYWORD) || first.is_word(source, SET_KEYWORD) {
             let set: bool = first.is_word(source, SET_KEYWORD);
             let keyword: String = first.text(source).to_ascii_uppercase();
             let element: &[Token] = &tokens[1..];
+            if element.len() == 1 && element[0].is_word(source, ANY_KEYWORD) {
+                return Err(self
+                    .error(element[0].start, format!("argument {name} {keyword} ANY: ANY is for scalar arguments only"))
+                    .helped(format!("declare the element type, such as {name} {keyword} VARCHAR")));
+            }
             if let Some((last, element)) = element.split_last()
                 && last.is_word(source, CONST_KEYWORD)
             {

@@ -350,6 +350,11 @@ pub(crate) fn check_shape(
             Err(expects("a SQL expression"))
         }
         (ParameterKind::Expression { .. }, _) => Ok(()),
+        (ParameterKind::Any, ArgumentShape::InlineCollection | ArgumentShape::Reference { .. }) => {
+            Err(expects("a scalar SQL expression")
+                .helped("an ANY argument takes one value per row, such as a column, a literal or an expression; pass lists to LIST arguments and relations to RELATION arguments"))
+        }
+        (ParameterKind::Any, _) => Ok(()),
         (ParameterKind::Constant { .. }, ArgumentShape::ConstantReference { .. }) => Ok(()),
         (ParameterKind::Constant { .. }, _) => Err(expects("a literal, a scalar constant or an enum value")
             .helped(format!("pass a literal, such as 2, or a constant, such as @const(\"{name}\"); a CONST argument is known at compile time, so a column or expression cannot be passed"))),
@@ -386,9 +391,10 @@ pub(crate) fn check_shape(
 /// Whether an argument of kind `outer`, forwarded as `@name`, fits a parameter of kind `inner`.
 fn forwards(outer: &ParameterKind, inner: &ParameterKind) -> bool {
     match inner {
-        ParameterKind::Expression { .. } => matches!(
+        ParameterKind::Expression { .. } | ParameterKind::Any => matches!(
             outer,
             ParameterKind::Expression { .. }
+                | ParameterKind::Any
                 | ParameterKind::Constant { .. }
                 | ParameterKind::Enum { .. }
                 | ParameterKind::ColumnOf { .. }

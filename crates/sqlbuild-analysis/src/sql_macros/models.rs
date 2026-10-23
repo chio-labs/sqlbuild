@@ -29,6 +29,8 @@ impl SqlMacroForm {
 pub enum ParameterKind {
     /// Any SQL expression of a compatible type.
     Expression { data_type: String },
+    /// Any scalar SQL expression, whatever its type.
+    Any,
     /// A literal or a scalar constant.
     Constant { data_type: String },
     /// An inline list or set, or a list or set constant; `set` for `SET`.
@@ -46,6 +48,7 @@ impl ParameterKind {
     pub fn label(&self) -> String {
         match self {
             Self::Expression { data_type } => data_type.clone(),
+            Self::Any => "ANY".to_owned(),
             Self::Constant { data_type } => format!("{data_type} CONST"),
             Self::Collection { set, data_type } => {
                 format!("{} {data_type}", if *set { "SET" } else { "LIST" })

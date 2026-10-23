@@ -39,7 +39,7 @@ pub(crate) fn non_literal_use<'r>(
         let parameter = definition.parameter(&reference.name)?;
         if !matches!(
             parameter.kind,
-            ParameterKind::Expression { .. } | ParameterKind::ColumnOf { .. }
+            ParameterKind::Expression { .. } | ParameterKind::Any | ParameterKind::ColumnOf { .. }
         ) {
             return None;
         }
@@ -232,6 +232,7 @@ pub(crate) fn literal_error(
         Some(ParameterKind::Expression { data_type }) => {
             format!("declare it {name} {data_type} CONST")
         }
+        Some(ParameterKind::Any) => format!("declare it with a type and CONST, such as {name} VARCHAR CONST"),
         _ => format!("pass the value through a CONST argument, such as {name}_value VARCHAR CONST"),
     };
     SqlMacroError::new(LITERAL_REQUIRED_CODE, format!("{name} is used where a literal is required; {help}"))

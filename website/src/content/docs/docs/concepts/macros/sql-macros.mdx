@@ -139,6 +139,7 @@ Every parameter has a type, and may have a `DEFAULT`:
 | Type | Accepts |
 |---|---|
 | `BIGINT`, `VARCHAR`, `TIMESTAMP`, ... | Any SQL expression of a compatible type, evaluated per row: a column, arithmetic, a function call, a literal or a constant. |
+| `ANY` | Any scalar SQL expression, whatever its type: a column, a literal, an expression or a scalar constant. Its type is not checked. Lists and relations fail with `P017`. |
 | `<type> CONST` | Only a value known at compile time: a literal, a scalar constant, an enum value, or a `CONST` parameter of a calling macro. A column or expression fails with `P017`. Scalar types only. |
 | `LIST <type>`, `SET <type>` | An inline list or set, or a list or set constant. Always compile-time, so they take no `CONST`. They render like constants. |
 | `ENUM <name>` | A member of that enum, such as `@enum("order_status").OPEN`. |
@@ -148,6 +149,13 @@ Every parameter has a type, and may have a `DEFAULT`:
 SQL types are written as in [schema declarations](/docs/concepts/models/schemas) and checked against the
 adapter's SQL dialect the same way, including the dialect's array types such as `VARCHAR[]`. A
 runtime array value uses the array type; `LIST VARCHAR` is a list known at compile time.
+
+Use `ANY` when the body works for values of any type, typically because it casts the argument
+itself, as in `CAST(@order_ref AS VARCHAR)`, so callers can pass a number or a string. The body is
+still checked, and the argument's type counts as unknown there. `ANY` is not `VARIANT`: a
+`VARIANT` parameter says the macro takes semi-structured data, while `ANY` says it takes a plain
+value of any type. `ANY` takes a `DEFAULT` but not `CONST`, which needs a type to check values
+against, and it cannot be a `LIST` or `SET` element type.
 
 Leave `CONST` off unless the body needs a literal. `CONST` is part of the macro's contract: callers
 can no longer pass a column.

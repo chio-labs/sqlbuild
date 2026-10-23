@@ -216,7 +216,7 @@ fn substituted(
                 _ => argument.sql.clone(),
             }
         }
-        ParameterKind::Expression { .. } | ParameterKind::Constant { .. }
+        ParameterKind::Expression { .. } | ParameterKind::Any | ParameterKind::Constant { .. }
             if !is_atomic(&argument.sql) =>
         {
             format!("({})", argument.sql)

@@ -294,7 +294,10 @@ fn rendered_argument<H: SqlMacroHost>(
             }
             host.render_declarations(scope, text)?
         }
-        (ParameterKind::Constant { .. }, ArgumentShape::ConstantReference { name }) => {
+        (
+            ParameterKind::Constant { .. } | ParameterKind::Any,
+            ArgumentShape::ConstantReference { name },
+        ) => {
             if host.constant_shape(scope, name)? != ConstantShape::Scalar {
                 return Err(expects("a scalar constant"));
             }
@@ -516,7 +519,9 @@ fn check_adapter_types(
                 .iter()
                 .map(|(_, data_type)| data_type.as_str())
                 .collect(),
-            ParameterKind::Enum { .. } | ParameterKind::ColumnOf { .. } => Vec::new(),
+            ParameterKind::Any | ParameterKind::Enum { .. } | ParameterKind::ColumnOf { .. } => {
+                Vec::new()
+            }
         };
         for data_type in types {
             if let Some(error) = invalid(
