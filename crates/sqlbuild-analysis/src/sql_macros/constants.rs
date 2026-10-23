@@ -8,6 +8,8 @@ pub const INVALID_DEFINITION_CODE: &str = "P015";
 pub const BODY_REFERENCE_CODE: &str = "P016";
 /// A call whose arguments do not match the macro's parameters.
 pub const ARGUMENT_CODE: &str = "P017";
+/// The unknown-column code an argument finding supersedes inside its call's span.
+pub const SUPERSEDED_ANALYSIS_CODE: &str = crate::semantic_checks::constants::UNKNOWN_COLUMN_CODE;
 /// A CTE or column a macro inserts that clashes with the caller's.
 pub const NAME_CLASH_CODE: &str = "P018";
 /// SQL macros that call each other in a cycle.

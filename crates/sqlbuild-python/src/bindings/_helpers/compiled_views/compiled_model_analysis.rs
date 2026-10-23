@@ -17,7 +17,7 @@ use sqlbuild_analysis::binding_locations::models::{
     AuthoredSpan, BindingSource, LocatedDiagnostic, RelatedSpot,
 };
 use sqlbuild_analysis::semantic_validation::models::{DiagnosticRow, Expansion};
-use sqlbuild_analysis::sql_macros::constants::ARGUMENT_CODE;
+use sqlbuild_analysis::sql_macros::constants::{ARGUMENT_CODE, SUPERSEDED_ANALYSIS_CODE};
 use sqlbuild_analysis::sql_macros::models::SqlMacroFinding;
 
 use sqlbuild_project::models as project_models;
@@ -35,7 +35,6 @@ use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::render::macro_call_rows::span_expansion;
 
 const COMPILE_PHASE: &str = "compile";
-const UNKNOWN_COLUMN_CODE: &str = "B002";
 const ERROR_SEVERITY: &str = "error";
 const PARAMETER_LABEL: &str = "parameter declared here";
 const MODEL_RESOURCE: &str = "model";
@@ -210,11 +209,9 @@ fn with_sql_macro_findings(
         })
     };
     let mut kept: Vec<LocatedDiagnostic> = findings.iter().map(finding_diagnostic).collect();
-    kept.extend(
-        binding.into_iter().filter(|diagnostic| {
-            diagnostic.code != UNKNOWN_COLUMN_CODE || !inside_call(diagnostic)
-        }),
-    );
+    kept.extend(binding.into_iter().filter(|diagnostic| {
+        diagnostic.code != SUPERSEDED_ANALYSIS_CODE || !inside_call(diagnostic)
+    }));
     kept
 }
 
