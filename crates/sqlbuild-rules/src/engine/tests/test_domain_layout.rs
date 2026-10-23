@@ -12,7 +12,72 @@ fn given_owner_and_declaration_layouts_when_evaluating_then_returns_expected_fau
     let repeated_paths: Vec<String> = (0..11)
         .map(|_| "models/commerce/_macros/orders.py".to_owned())
         .collect();
+    let python_and_sql: Vec<String> = (0..6)
+        .map(|index| format!("models/commerce/_macros/python/normalise/item_{index}.py"))
+        .chain(
+            (0..7).map(|index| format!("models/commerce/_macros/sql/normalise/item_{index}.sql")),
+        )
+        .collect();
+    let oversized_sql: Vec<String> = (0..11)
+        .map(|index| format!("models/commerce/_macros/sql/normalise/item_{index}.sql"))
+        .collect();
     let test_cases = [
+        test_types::DomainLayoutTestCase {
+            description: "python and sql macro kind folders are counted apart",
+            code: "SQBRDECLARATION304",
+            models: json!([]),
+            thresholds: json!({}),
+            layout: json!({}),
+            scope_index: helpers::scope_with_macros(&python_and_sql),
+            expected_codes: &[],
+            expected_message_fragments: &[],
+            expected_absent_fragments: &[],
+        },
+        test_types::DomainLayoutTestCase {
+            description: "an oversized sql macro kind folder names its real folder",
+            code: "SQBRDECLARATION304",
+            models: json!([]),
+            thresholds: json!({}),
+            layout: json!({}),
+            scope_index: helpers::scope_with_macros(&oversized_sql),
+            expected_codes: &["SQBRDECLARATION304"],
+            expected_message_fragments: &[
+                "declaration container \"models/commerce/_macros/sql/normalise\" has 11 files",
+            ],
+            expected_absent_fragments: &[],
+        },
+        test_types::DomainLayoutTestCase {
+            description: "a shared prefix across kind folders is no fault",
+            code: "SQBRDECLARATION306",
+            models: json!([]),
+            thresholds: json!({}),
+            layout: json!({}),
+            scope_index: helpers::scope_with_macros(&[
+                "models/commerce/_macros/python/normalise_order.py".into(),
+                "models/commerce/_macros/sql/normalise_person.sql".into(),
+            ]),
+            expected_codes: &[],
+            expected_message_fragments: &[],
+            expected_absent_fragments: &[],
+        },
+        test_types::DomainLayoutTestCase {
+            description: "sql macro files sharing a prefix move into a subfolder of sql",
+            code: "SQBRDECLARATION306",
+            models: json!([]),
+            thresholds: json!({}),
+            layout: json!({}),
+            scope_index: helpers::scope_with_macros(&[
+                "models/commerce/_macros/sql/normalise_order.sql".into(),
+                "models/commerce/_macros/sql/normalise_person.sql".into(),
+            ]),
+            expected_codes: &["SQBRDECLARATION306"],
+            expected_message_fragments: &[
+                "2 sibling SQL macro files",
+                "Move these files into models/commerce/_macros/sql/normalise/",
+                "each macro keeps its name",
+            ],
+            expected_absent_fragments: &[],
+        },
         test_types::DomainLayoutTestCase {
             description: "leaf and branch models fault",
             code: "SQBRPROJECT202",
@@ -226,7 +291,13 @@ fn given_owner_and_declaration_layouts_when_evaluating_then_returns_expected_fau
             .collect();
         let messages = faults
             .iter()
-            .filter_map(|fault| fault["message"].as_str())
+            .map(|fault| {
+                format!(
+                    "{} {}",
+                    fault["message"].as_str().unwrap_or_default(),
+                    fault["remediation"].as_str().unwrap_or_default()
+                )
+            })
             .collect::<Vec<_>>()
             .join("\n");
 

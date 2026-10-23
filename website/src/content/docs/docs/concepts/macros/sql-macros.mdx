@@ -37,6 +37,11 @@ my_project/
 A file directly under a `macros/` folder fails with `D013`, which names the subfolder to move it
 to. Folder scopes use the same layout, such as `models/marts/_sqlbuild/_macros/sql/`.
 
+Rules that bound declaration folders, such as `SQBRDECLARATION304` (files per folder) and
+`SQBRDECLARATION306` (shared filename prefixes), count `python/` and `sql/` as separate folders. To
+split a full `sql/` folder, move files into subfolders such as `macros/sql/text/`: a SQL macro is
+named by its file, so it keeps its name and its callers stay unchanged.
+
 A SQL macro file starts with a `MACRO` header, then the body:
 
 ```sql

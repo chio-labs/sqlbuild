@@ -205,3 +205,50 @@ def check_macro(arguments: str, body: str) -> dict[str, str]:
             f"  returns BOOLEAN,\n);\n\n{body}\n"
         )
     }
+
+
+def python_normalise_macros(names: list[str]) -> dict[str, str]:
+    """One Python macro file per name in the `normalise` bucket of `macros/python/`."""
+
+    return {
+        f"macros/python/normalise/{name}.py": (
+            f"def {name}(expression: str) -> str:\n"
+            f'    """Clean a value with {name}."""\n'
+            '    return f"TRIM({expression})"\n'
+        )
+        for name in names
+    }
+
+
+def sql_text_macros(folder: str, names: list[str]) -> dict[str, str]:
+    """One lower-casing SQL macro file per name in `macros/sql/<folder>/`."""
+
+    return {
+        f"macros/sql/{folder}/{name}.sql": (
+            f'MACRO (description "Tidy {name}", arguments (value VARCHAR), returns VARCHAR);\n\n'
+            "LOWER(@value)\n"
+        )
+        for name in names
+    }
+
+
+def text_macro(name: str, returns: str, body: str) -> dict[str, str]:
+    """The SQL macro `name` taking one VARCHAR value and declaring `returns`."""
+
+    return {
+        f"macros/sql/{name}.sql": (
+            f'MACRO (\n  description "Text from a value",\n  arguments (value VARCHAR),\n'
+            f"  returns {returns},\n);\n\n{body}\n"
+        )
+    }
+
+
+def contract_model(name: str, columns: str, sql: str) -> dict[str, str]:
+    """The mart model `name` with an enforced contract over `columns`."""
+
+    return {
+        f"models/marts/{name}.sql": (
+            f'MODEL (\n  description "Typed {name}",\n  contract enforced,\n'
+            f"  columns ({columns}),\n);\n\n{sql}"
+        )
+    }

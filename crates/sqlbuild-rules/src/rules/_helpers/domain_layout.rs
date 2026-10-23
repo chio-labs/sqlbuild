@@ -10,6 +10,10 @@ const DEFAULT_MAX_ROLE_CONTAINER_DEPTH: u32 = 1;
 const DEFAULT_MAX_CONTAINER_FILES: u32 = 10;
 const MIN_MODEL_PATH_COMPONENTS: usize = 3;
 const MIN_BRANCH_OUTCOMES: usize = 2;
+/// The kind folders a macro folder holds, each counted as its own container.
+const MACRO_KIND_FOLDERS: [&str; 2] = ["python", "sql"];
+/// The kind folder of SQL macro files, whose names are their file stems.
+const SQL_MACRO_KIND_FOLDER: &str = "sql";
 const GENERIC_BUCKET_NAMES: [&str; 8] = [
     "common", "helper", "helpers", "misc", "shared", "util", "utils", "macros",
 ];
@@ -379,8 +383,8 @@ fn inspect_owner(
         faults.extend(prefix_faults(
             rule,
             &siblings,
-            inspection.min_prefixes,
-            "owner directories",
+            (inspection.min_prefixes, "owner directories"),
+            shared_prefix_remedy,
         ));
     }
     for (name, child) in &node.children {
@@ -412,7 +416,12 @@ fn inspect_prefix_owners(
         }
         faults.extend(inspect_prefix_owners(rule, child, minimum, label));
     }
-    faults.extend(prefix_faults(rule, &siblings, minimum, label));
+    faults.extend(prefix_faults(
+        rule,
+        &siblings,
+        (minimum, label),
+        shared_prefix_remedy,
+    ));
     faults
 }
 
@@ -466,6 +475,16 @@ fn container_entry(declaration: &ScopeDeclaration) -> Option<(String, ContainerE
     let stem = file
         .rsplit_once('.')
         .map_or_else(|| file.to_owned(), |(value, _)| value.into());
+    let kind_folder: Option<&str> = matches!(declaration.kind, DeclarationKind::Macro)
+        .then_some(())
+        .and(declaration.path.strip_prefix(&format!("{root}/")))
+        .and_then(|rest| rest.split_once('/'))
+        .map(|(folder, _)| folder)
+        .filter(|folder| MACRO_KIND_FOLDERS.contains(folder));
+    let root: String = match kind_folder {
+        Some(folder) => format!("{root}/{folder}"),
+        None => root,
+    };
     Some((
         root,
         ContainerEntry {
@@ -597,12 +616,39 @@ fn inspect_container(
                 .or_default()
                 .push((entry.stem.clone(), entry.path.clone()));
         }
-        for siblings in locations.values() {
+        let sql_macros: bool = inspection
+            .root
+            .rsplit('/')
+            .next()
+            .is_some_and(|folder| folder == SQL_MACRO_KIND_FOLDER)
+            && files
+                .iter()
+                .all(|entry| matches!(entry.kind, DeclarationKind::Macro));
+        for (location, siblings) in &locations {
+            let folder: String = if location.is_empty() {
+                inspection.root.to_owned()
+            } else {
+                format!("{}/{location}", inspection.root)
+            };
+            let label: &str = if sql_macros {
+                "SQL macro files"
+            } else {
+                "declaration files"
+            };
+            let remedy = |prefix: &str| {
+                if sql_macros {
+                    format!(
+                        "Move these files into {folder}/{prefix}/; a SQL macro is named by its file, so each macro keeps its name and its callers stay unchanged."
+                    )
+                } else {
+                    shared_prefix_remedy(prefix)
+                }
+            };
             faults.extend(prefix_faults(
                 rule,
                 siblings,
-                inspection.min_prefixes,
-                "declaration files",
+                (inspection.min_prefixes, label),
+                remedy,
             ));
         }
     }
@@ -623,11 +669,18 @@ fn container_limit(evaluation: &ProjectEvaluationRequest<'_>, kind: &Declaration
     threshold(evaluation, name, DEFAULT_MAX_CONTAINER_FILES)
 }
 
+/// The remedy for siblings that share a token prefix.
+fn shared_prefix_remedy(prefix: &str) -> String {
+    format!(
+        "Consolidate these siblings beneath {prefix}/, or rename them when the shared token prefix is not a real concern."
+    )
+}
+
 fn prefix_faults(
     rule: &RuleMetadata,
     siblings: &[(String, String)],
-    minimum: u32,
-    label: &str,
+    (minimum, label): (u32, &str),
+    remedy: impl Fn(&str) -> String,
 ) -> Vec<Fault> {
     let mut root = TokenNode::default();
     for (name, path) in siblings {
@@ -644,12 +697,8 @@ fn prefix_faults(
             path_fault(
                 rule,
                 &path,
-                format!(
-                    "{count} sibling {label} encode the implicit owner or bucket {prefix:?}"
-                ),
-                format!(
-                    "Consolidate these siblings beneath {prefix}/, or rename them when the shared token prefix is not a real concern."
-                ),
+                format!("{count} sibling {label} encode the implicit owner or bucket {prefix:?}"),
+                remedy(&prefix),
             )
         })
         .collect()
