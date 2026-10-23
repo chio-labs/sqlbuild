@@ -15,7 +15,7 @@ fn given_a_typed_macro_output_when_typing_the_column_then_returns_fills_unknown_
             expected_type: Some("VARCHAR"),
         },
         OutputTypeTestCase {
-            description: "same family takes returns",
+            description: "an identical type takes returns' spelling",
             check: typed_check(CallScope::Main, true),
             item: (None, "LABEL", Some("TEXT")),
             expected_type: Some("VARCHAR"),
@@ -24,6 +24,12 @@ fn given_a_typed_macro_output_when_typing_the_column_then_returns_fills_unknown_
             description: "a different known family keeps the inferred type",
             check: typed_check(CallScope::Main, true),
             item: (None, "label", Some("BIGINT")),
+            expected_type: None,
+        },
+        OutputTypeTestCase {
+            description: "a longer text type stays",
+            check: typed_check(CallScope::Main, true),
+            item: (None, "label", Some("VARCHAR(100)")),
             expected_type: None,
         },
         OutputTypeTestCase {

@@ -206,6 +206,71 @@ def test_given_an_any_argument_misused_when_compiling_then_it_fails(
             ),
         ),
         SqlMacroCompileTestCase(
+            description="a_time_body_keeps_its_inferred_type",
+            files={
+                **text_macro("m", "VARCHAR", "CAST('10:00:00' AS TIME)"),
+                **contract_model(
+                    "orders",
+                    "v (type VARCHAR)",
+                    'SELECT @sql.m(o.status) AS v FROM __ref("stg_orders") AS o\n',
+                ),
+            },
+            expected_returncode=1,
+            expected_fragments=("error[K002]: column 'v' inferred as",),
+        ),
+        SqlMacroCompileTestCase(
+            description="an_array_body_keeps_its_inferred_type",
+            files={
+                **text_macro("m", "VARCHAR", "[@value]"),
+                **contract_model(
+                    "orders",
+                    "v (type VARCHAR)",
+                    'SELECT @sql.m(o.status) AS v FROM __ref("stg_orders") AS o\n',
+                ),
+            },
+            expected_returncode=1,
+            expected_fragments=("error[K002]: column 'v' inferred as",),
+        ),
+        SqlMacroCompileTestCase(
+            description="a_longer_text_body_keeps_its_inferred_type",
+            files={
+                **text_macro("m", "VARCHAR(5)", "CAST(@value AS VARCHAR(100))"),
+                **contract_model(
+                    "orders",
+                    "v (type VARCHAR(5))",
+                    'SELECT @sql.m(o.status) AS v FROM __ref("stg_orders") AS o\n',
+                ),
+            },
+            expected_returncode=1,
+            expected_fragments=("error[K002]: column 'v' inferred as",),
+        ),
+        SqlMacroCompileTestCase(
+            description="a_wider_decimal_body_keeps_its_inferred_type",
+            files={
+                **text_macro("m", "DECIMAL(4, 1)", "CAST(LENGTH(@value) AS DECIMAL(18, 6))"),
+                **contract_model(
+                    "orders",
+                    "v (type DECIMAL(4, 1))",
+                    'SELECT @sql.m(o.status) AS v FROM __ref("stg_orders") AS o\n',
+                ),
+            },
+            expected_returncode=1,
+            expected_fragments=("error[K002]: column 'v' inferred as",),
+        ),
+        SqlMacroCompileTestCase(
+            description="a_timestamptz_body_keeps_its_inferred_type",
+            files={
+                **text_macro("m", "TIMESTAMP", "CAST(@value AS TIMESTAMPTZ)"),
+                **contract_model(
+                    "orders",
+                    "v (type TIMESTAMP)",
+                    'SELECT @sql.m(o.status) AS v FROM __ref("stg_orders") AS o\n',
+                ),
+            },
+            expected_returncode=1,
+            expected_fragments=("error[K002]: column 'v' inferred as",),
+        ),
+        SqlMacroCompileTestCase(
             description="an_inferred_type_of_another_family_still_disagrees_through_a_cte",
             files={
                 **text_macro("shouted", "BIGINT", "UPPER(@value)"),

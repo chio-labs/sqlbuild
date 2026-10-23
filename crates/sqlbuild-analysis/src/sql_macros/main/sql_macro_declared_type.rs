@@ -1,8 +1,8 @@
 use crate::sql_macros::models::DeclaredOutput;
 use crate::type_system::main::normalize_type::normalize_type;
-use crate::type_system::models::TypeFamily;
+use crate::type_system::models::NormalizedType;
 
-/// The declared `returns` type an item takes over its inferred type: unknown or same family.
+/// The declared `returns` type an item takes over its inferred type: unknown or identical.
 #[must_use]
 pub fn sql_macro_declared_type(
     declared: &[DeclaredOutput],
@@ -21,16 +21,16 @@ pub fn sql_macro_declared_type(
     let Some(inferred) = inferred.filter(|inferred| !inferred.is_empty()) else {
         return Some(output.returns.clone());
     };
-    let Some(inferred_family) = known_family(inferred, dialect) else {
+    let Some(inferred_type) = normalized(inferred, dialect) else {
         return Some(output.returns.clone());
     };
-    (known_family(&output.returns, dialect) == Some(inferred_family))
-        .then(|| output.returns.clone())
+    (normalized(&output.returns, dialect) == Some(inferred_type)).then(|| output.returns.clone())
 }
 
-/// The family of `data_type`, `Other` included; `None` where it does not normalise.
-fn known_family(data_type: &str, dialect: &str) -> Option<TypeFamily> {
-    normalize_type(data_type, dialect)
-        .ok()
-        .map(|normalization| normalization.normalized.family)
+/// `data_type` as compared, or `None` where it does not normalise.
+fn normalized(data_type: &str, dialect: &str) -> Option<NormalizedType> {
+    match normalize_type(data_type, dialect) {
+        Ok(normalization) => Some(normalization.normalized),
+        Err(_unnormalizable) => None,
+    }
 }
