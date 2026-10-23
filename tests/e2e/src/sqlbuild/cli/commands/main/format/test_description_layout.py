@@ -38,7 +38,7 @@ def _stored_descriptions(project_dir: Path) -> dict[str, str]:
                 "MODEL (\n"
                 "  description \"True when a name starts with a woman's title: Mme, Mlle, Miss, "
                 "Mrs, Ms. Any case,\n"
-                "with or without a dot ('MISS SARAH BOWEN', 'Mrs. C. O'Leary', 'Ms.Johnston').\",\n"
+                "with or without a dot ('MISS ANNA PARKER', 'Mrs. C. O'Brien', 'Ms.Robinson').\",\n"
                 ");\n"
             ),
             expected_header=(
@@ -46,7 +46,7 @@ def _stored_descriptions(project_dir: Path) -> dict[str, str]:
                 '  description """\n'
                 "    True when a name starts with a woman's title: Mme, Mlle, Miss, Mrs, Ms. Any "
                 "case, with or\n"
-                "    without a dot ('MISS SARAH BOWEN', 'Mrs. C. O'Leary', 'Ms.Johnston').\n"
+                "    without a dot ('MISS ANNA PARKER', 'Mrs. C. O'Brien', 'Ms.Robinson').\n"
                 '  """,\n'
                 ");\n"
             ),
@@ -66,15 +66,15 @@ def _stored_descriptions(project_dir: Path) -> dict[str, str]:
             header=(
                 "MODEL (\n"
                 '  description """True when a name starts with a title, with or without a dot '
-                '("MISS SARAH BOWEN", "Mrs. C. O\'Leary", "Ms.Johnston").""",\n'
+                '("MISS ANNA PARKER", "Mrs. C. O\'Brien", "Ms.Robinson").""",\n'
                 ");\n"
             ),
             expected_header=(
                 "MODEL (\n"
                 '  description """\n'
                 "    True when a name starts with a title, with or without a dot "
-                '("MISS SARAH BOWEN", "Mrs. C.\n'
-                '    O\'Leary", "Ms.Johnston").\n'
+                '("MISS ANNA PARKER", "Mrs. C.\n'
+                '    O\'Brien", "Ms.Robinson").\n'
                 '  """,\n'
                 ");\n"
             ),
@@ -126,7 +126,7 @@ def test_given_descriptions_escaping_quotes_when_format_fix_then_triple_quoted_r
                 "MACRO (\n"
                 "  description \"True when a name starts with a woman's title: Mme, Mlle, Miss, "
                 "Mrs, Ms. Any case,\n"
-                'with or without a dot (\\"MISS SARAH BOWEN\\", \\"Mrs. C. O\'Leary\\").",\n'
+                'with or without a dot (\\"MISS ANNA PARKER\\", \\"Mrs. C. O\'Brien\\").",\n'
                 "  arguments (value VARCHAR),\n  returns VARCHAR,\n);\n\n@value\n"
             ),
         },
@@ -168,7 +168,7 @@ def test_given_descriptions_escaping_quotes_when_format_fix_then_triple_quoted_r
             '  description """\n'
             "    True when a name starts with a woman's title: Mme, Mlle, Miss, Mrs, Ms. Any case, "
             "with or\n"
-            '    without a dot ("MISS SARAH BOWEN", "Mrs. C. O\'Leary").\n'
+            '    without a dot ("MISS ANNA PARKER", "Mrs. C. O\'Brien").\n'
             '  """,\n'
         )
     )

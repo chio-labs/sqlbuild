@@ -92,7 +92,7 @@ fn given_header_strings_when_parsing_then_prose_is_folded_and_other_text_kept_as
         },
         HeaderStringTestCase {
             description: "a wrapped escaped quote with apostrophes fails the same way",
-            header: "description \"A woman's title, with or without a dot\n(\\\"MISS SARAH BOWEN\\\", \\\"Mrs. C. O'Leary\\\").\"",
+            header: "description \"A woman's title, with or without a dot\n(\\\"MISS ANNA PARKER\\\", \\\"Mrs. C. O'Brien\\\").\"",
             path: &["description"],
             expected: Err(r#"double quote inside a "..." string at position 54"#),
         },
