@@ -153,12 +153,7 @@ pub(crate) fn declared_output_types(
         branches: Vec::new(),
     }
     .query_types(&parsed, &facts)?;
-    let main: HashSet<String> = profile
-        .declared
-        .iter()
-        .filter(|output| output.cte.is_none() && output.branch == 0)
-        .map(|output| casefold(&output.name))
-        .collect();
+    let main: HashSet<String> = main_output_columns(&parsed, profile.declared);
     Ok(declared
         .into_iter()
         .filter(|(name, data_type)| {
@@ -175,28 +170,68 @@ fn declared_branches(root: &Expression) -> Vec<Branch> {
             && unwrap_annotations(Some(body)).is_some_and(|body| top_level_ctes(body).is_empty())
         {
             for (branch, select) in set_branches(Some(body)).into_iter().enumerate() {
-                branches.push((select, Some(cte_name.to_owned()), branch));
+                branches.push((
+                    std::ptr::from_ref(select),
+                    Some(cte_name.to_owned()),
+                    branch,
+                ));
             }
         }
     }
     for (branch, select) in set_branches(Some(root)).into_iter().enumerate() {
-        branches.push((select, None, branch));
+        branches.push((std::ptr::from_ref(select), None, branch));
     }
     branches
 }
 
-/// The addresses of the selects of `node`'s set operation, left to right, or of `node` itself.
-fn set_branches(node: Option<&Expression>) -> Vec<*const Expression> {
+/// The folded main-query output columns its SQL macro call items stand in, in any branch.
+fn main_output_columns(root: &Expression, declared: &[DeclaredOutput]) -> HashSet<String> {
+    let selects: Vec<&Expression> = set_branches(Some(root));
+    let by_name: bool = set_operation(root).is_some_and(|(_, _, by_name)| by_name);
+    let Some(first) = selects.first() else {
+        return HashSet::new();
+    };
+    let first_names: Vec<&str> = projection_names(first);
+    let mut columns: HashSet<String> = HashSet::new();
+    for output in declared.iter().filter(|output| output.cte.is_none()) {
+        if by_name {
+            columns.insert(casefold(&output.name));
+            continue;
+        }
+        let Some(select) = selects.get(output.branch) else {
+            continue;
+        };
+        let position: Option<usize> = projection_names(select)
+            .iter()
+            .position(|name| name.eq_ignore_ascii_case(&output.name));
+        if let Some(column) = position.and_then(|position| first_names.get(position)) {
+            columns.insert(casefold(column));
+        }
+    }
+    columns
+}
+
+/// The output name of each of `select`'s projections, in order.
+fn projection_names(select: &Expression) -> Vec<&str> {
+    select
+        .get_expressions()
+        .iter()
+        .map(|projection| output_name(unwrap_annotations(Some(projection))))
+        .collect()
+}
+
+/// The selects of `node`'s set operation, left to right, or `node` itself.
+fn set_branches(node: Option<&Expression>) -> Vec<&Expression> {
     let Some(node) = unwrap_annotations(node) else {
         return Vec::new();
     };
     match set_operation(node) {
         Some((left, right, _)) => {
-            let mut branches: Vec<*const Expression> = set_branches(Some(left));
+            let mut branches: Vec<&Expression> = set_branches(Some(left));
             branches.extend(set_branches(Some(right)));
             branches
         }
-        None => vec![std::ptr::from_ref(node)],
+        None => vec![node],
     }
 }
 

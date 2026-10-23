@@ -422,6 +422,23 @@ def test_given_an_any_argument_misused_when_compiling_then_it_fails(
             unexpected_fragments=_UNPROVEN,
         ),
         SqlMacroCompileTestCase(
+            description="a_call_in_a_later_main_query_branch_matching_its_sibling_is_typed",
+            files={
+                **with_rules("SQBRCONTRACT105"),
+                **text_macro("m", "BIGINT", "NULL"),
+                **contract_model(
+                    "orders",
+                    "v (type BIGINT)",
+                    'SELECT CAST(NULL AS BIGINT) AS v FROM __ref("stg_orders") AS o\n'
+                    "UNION ALL\n"
+                    'SELECT @sql.m(o.status) AS v FROM __ref("stg_orders") AS o\n',
+                ),
+            },
+            expected_returncode=0,
+            expected_fragments=("0 errors, 0 warnings",),
+            unexpected_fragments=_UNPROVEN,
+        ),
+        SqlMacroCompileTestCase(
             description="an_inferred_type_of_another_family_still_disagrees_through_a_cte",
             files={
                 **text_macro("shouted", "BIGINT", "UPPER(@value)"),
