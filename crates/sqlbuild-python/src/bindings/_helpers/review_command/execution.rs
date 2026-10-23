@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use serde_json::Value;
 use sqlbuild_analysis::review_command::constants::{
@@ -39,14 +40,15 @@ pub(crate) struct BuildOutcome {
     pub(crate) failed_audits: Vec<(String, String)>,
 }
 
-/// The run's shared inputs to the sub-runs.
+/// The run's shared inputs to the sub-runs, borrowed for the length of the run.
 pub(crate) struct RunInputs<'a, 'py> {
     pub(crate) request: &'a Bound<'py, PyAny>,
-    pub(crate) project_dir: &'a Bound<'py, PyAny>,
+    pub(crate) project_dir: &'a Path,
     pub(crate) review_discovered: &'a Bound<'py, PyAny>,
     pub(crate) review_target: &'a str,
     pub(crate) work_dir: &'a Path,
-    pub(crate) machine: bool,
+    /// The progress stream, and whether stdout carries `--json`.
+    pub(crate) output: (&'a Bound<'py, PyAny>, bool),
 }
 
 /// The JSON result document a sub-run wrote, or `None` when it wrote none.
@@ -73,9 +75,7 @@ fn field<'a>(item: &'a Value, key: &str) -> &'a str {
 }
 
 fn path_object<'py>(py: Python<'py>, path: &Path) -> PyResult<Bound<'py, PyAny>> {
-    py.import("pathlib")?
-        .getattr("Path")?
-        .call1((path.to_path_buf(),))
+    path.into_pyobject(py)
 }
 
 /// How each changed stateful model starts: cloned from `--against` when that is free, else full.
@@ -124,7 +124,7 @@ pub(crate) fn incremental_starts(
         py,
         RecordId::CloneCommandRequest,
         &[
-            ("project_dir", inputs.project_dir.clone()),
+            ("project_dir", path_object(py, inputs.project_dir)?),
             ("no_color", native_field(inputs.request, "no_color")?),
             ("no_sql_validation", boolean(py, true)),
             ("origin_target_name", text(py, &settings.against)),
@@ -136,7 +136,7 @@ pub(crate) fn incremental_starts(
             ("discovered_inputs", inputs.review_discovered.clone()),
         ],
     )?;
-    let code: i32 = quietly(py, inputs.machine, || run_clone_command(py, &request))?;
+    let code: i32 = quietly(inputs.output, || run_clone_command(py, &request))?;
     if code != 0 {
         return Err(review_error(
             py,
@@ -179,7 +179,7 @@ pub(crate) fn build_validated(
         py,
         RecordId::BuildCommandRequest,
         &[
-            ("project_dir", inputs.project_dir.clone()),
+            ("project_dir", path_object(py, inputs.project_dir)?),
             (
                 "no_sql_validation",
                 native_field(inputs.request, "no_sql_validation")?,
@@ -201,7 +201,7 @@ pub(crate) fn build_validated(
             ("discovered_inputs", inputs.review_discovered.clone()),
         ],
     )?;
-    let ran: PyResult<i32> = quietly(py, inputs.machine, || run_build_command(py, &request));
+    let ran: PyResult<i32> = quietly(inputs.output, || run_build_command(py, &request));
     let document: Option<Value> = read_document(&output)?;
     let Some(document) = document else {
         ran?;
@@ -278,7 +278,7 @@ pub(crate) fn run_changed_tests(
         py,
         RecordId::TestCommandRequest,
         &[
-            ("project_dir", inputs.project_dir.clone()),
+            ("project_dir", path_object(py, inputs.project_dir)?),
             (
                 "no_sql_validation",
                 native_field(inputs.request, "no_sql_validation")?,
@@ -291,7 +291,7 @@ pub(crate) fn run_changed_tests(
             ("since", text(py, &settings.since)),
         ],
     )?;
-    let ran: PyResult<i32> = quietly(py, inputs.machine, || run_test_command(py, &request));
+    let ran: PyResult<i32> = quietly(inputs.output, || run_test_command(py, &request));
     let Some(document) = read_document(&output)? else {
         ran?;
         return Ok(ValidationCounts::default());

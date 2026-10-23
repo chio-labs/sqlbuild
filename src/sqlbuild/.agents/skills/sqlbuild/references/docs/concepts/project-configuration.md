@@ -909,7 +909,7 @@ Defaults for [`sqb review`](../cli/review.md):
 [review]
 against = "prod"
 downstream = "critical"
-schema_prefix = "REVIEW"
+schema_prefix = "review"
 critical_tags = ["critical"]
 ```
 
@@ -917,7 +917,7 @@ critical_tags = ["critical"]
 |-------|---------|-------------|
 | `against` | unset | Target to compare with and to read unchanged upstream models from. `--against` overrides it; one of them is required |
 | `downstream` | `"critical"` | Which unchanged downstream models to build and compare: `critical`, `all` or `none`. `--downstream` overrides it |
-| `schema_prefix` | `"REVIEW"` | Prefix of the schema each review creates and drops |
+| `schema_prefix` | `"review"` | Prefix of the schema each review creates and drops; the schema name is lowercase |
 | `critical_tags` | `["critical"]` | Model tags that make a model critical, in addition to `critical true` in its `MODEL` header |
 
 ## dbt

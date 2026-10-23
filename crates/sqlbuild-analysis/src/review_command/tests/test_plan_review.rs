@@ -6,8 +6,16 @@ use crate::review_command::main::review_schema_name::review_schema_name;
 use crate::review_command::models::{ChangedNode, DownstreamPolicy, ReviewPlan};
 use crate::review_command::tests::helpers::{changed, token, waffle_shop};
 use crate::review_command::tests::test_types::{
-    PlanErrorTestCase, PlanTestCase, PolicyTestCase, SchemaNameBuildTestCase, SchemaNameTestCase,
+    HooksTestCase, PlanErrorTestCase, PlanTestCase, PolicyTestCase, SchemaNameBuildTestCase,
+    SchemaNameTestCase,
 };
+
+const EXPORT_TASK: (&str, &str) = ("task:export_revenue", "Python task, not run by review");
+const ARCHIVE_LEFT_OUT: (&str, &str) = (
+    "order_archive",
+    "not on a path to a critical model (--downstream critical)",
+);
+const TOPPINGS_READER: &str = "reads Python node loader:raw_toppings, not rebuilt by review";
 
 #[test]
 fn given_changed_models_when_planning_then_validated_set_follows_policy_and_selection() {
@@ -18,13 +26,11 @@ fn given_changed_models_when_planning_then_validated_set_follows_policy_and_sele
             policy: DownstreamPolicy::Critical,
             select: None,
             expected_validated: vec!["stg_orders", "order_totals", "daily_revenue"],
-            expected_not_validated: vec![(
-                "order_archive",
-                "not on a path to a critical model (--downstream critical)",
-            )],
+            expected_not_validated: vec![ARCHIVE_LEFT_OUT, EXPORT_TASK],
+            expected_added: vec![],
         },
         PlanTestCase {
-            description: "all builds every downstream node",
+            description: "all builds every downstream SQL node and lists the Python node",
             changed: vec!["stg_orders"],
             policy: DownstreamPolicy::All,
             select: None,
@@ -34,7 +40,8 @@ fn given_changed_models_when_planning_then_validated_set_follows_policy_and_sele
                 "order_totals",
                 "daily_revenue",
             ],
-            expected_not_validated: vec![],
+            expected_not_validated: vec![EXPORT_TASK],
+            expected_added: vec![],
         },
         PlanTestCase {
             description: "none builds only the changed model and lists its downstream",
@@ -52,7 +59,9 @@ fn given_changed_models_when_planning_then_validated_set_follows_policy_and_sele
                     "daily_revenue",
                     "downstream of a change (--downstream none)",
                 ),
+                EXPORT_TASK,
             ],
+            expected_added: vec![],
         },
         PlanTestCase {
             description: "a changed critical model needs no downstream path",
@@ -60,7 +69,8 @@ fn given_changed_models_when_planning_then_validated_set_follows_policy_and_sele
             policy: DownstreamPolicy::Critical,
             select: None,
             expected_validated: vec!["daily_revenue"],
-            expected_not_validated: vec![],
+            expected_not_validated: vec![EXPORT_TASK],
+            expected_added: vec![],
         },
         PlanTestCase {
             description: "a change with no critical downstream builds only itself",
@@ -72,6 +82,7 @@ fn given_changed_models_when_planning_then_validated_set_follows_policy_and_sele
                 "customer_lifetime",
                 "not on a path to a critical model (--downstream critical)",
             )],
+            expected_added: vec![],
         },
         PlanTestCase {
             description: "select intersects with the planned scope",
@@ -85,13 +96,12 @@ fn given_changed_models_when_planning_then_validated_set_follows_policy_and_sele
                     "customer_lifetime",
                     "not on a path to a critical model (--downstream critical)",
                 ),
-                (
-                    "order_archive",
-                    "not on a path to a critical model (--downstream critical)",
-                ),
+                ARCHIVE_LEFT_OUT,
                 ("order_totals", "not selected (--select)"),
                 ("daily_revenue", "not selected (--select)"),
+                EXPORT_TASK,
             ],
+            expected_added: vec![],
         },
         PlanTestCase {
             description: "a graph selector keeps only its nodes inside the scope",
@@ -107,10 +117,55 @@ fn given_changed_models_when_planning_then_validated_set_follows_policy_and_sele
                 ],
             )]),
             expected_validated: vec!["stg_orders", "order_totals", "daily_revenue"],
-            expected_not_validated: vec![(
-                "order_archive",
-                "not on a path to a critical model (--downstream critical)",
-            )],
+            expected_not_validated: vec![ARCHIVE_LEFT_OUT, EXPORT_TASK],
+            expected_added: vec![],
+        },
+        PlanTestCase {
+            description: "a selected downstream node adds its changed ancestor",
+            changed: vec!["stg_orders"],
+            policy: DownstreamPolicy::Critical,
+            select: Some(vec![token("order_totals", &["order_totals"])]),
+            expected_validated: vec!["stg_orders", "order_totals"],
+            expected_not_validated: vec![
+                ARCHIVE_LEFT_OUT,
+                ("daily_revenue", "not selected (--select)"),
+                EXPORT_TASK,
+            ],
+            expected_added: vec![("stg_orders", "order_totals")],
+        },
+        PlanTestCase {
+            description: "a selected critical node adds every node between it and the change",
+            changed: vec!["stg_orders"],
+            policy: DownstreamPolicy::Critical,
+            select: Some(vec![token("daily_revenue", &["daily_revenue"])]),
+            expected_validated: vec!["stg_orders", "order_totals", "daily_revenue"],
+            expected_not_validated: vec![ARCHIVE_LEFT_OUT, EXPORT_TASK],
+            expected_added: vec![
+                ("stg_orders", "daily_revenue"),
+                ("order_totals", "daily_revenue"),
+            ],
+        },
+        PlanTestCase {
+            description: "a changed loader leaves it and every SQL node reading it unvalidated",
+            changed: vec!["loader:raw_toppings"],
+            policy: DownstreamPolicy::Critical,
+            select: None,
+            expected_validated: vec![],
+            expected_not_validated: vec![
+                ("loader:raw_toppings", "Python loader, not run by review"),
+                ("stg_toppings", TOPPINGS_READER),
+                ("topping_totals", TOPPINGS_READER),
+            ],
+            expected_added: vec![],
+        },
+        PlanTestCase {
+            description: "an unchanged loader does not stop its readers being validated",
+            changed: vec!["stg_toppings"],
+            policy: DownstreamPolicy::Critical,
+            select: None,
+            expected_validated: vec!["stg_toppings", "topping_totals"],
+            expected_not_validated: vec![],
+            expected_added: vec![],
         },
     ];
     for test_case in test_cases {
@@ -143,6 +198,49 @@ fn given_changed_models_when_planning_then_validated_set_follows_policy_and_sele
             "{}",
             test_case.description
         );
+        let added: Vec<(&str, &str)> = plan
+            .added
+            .iter()
+            .map(|node| (node.name.as_str(), node.required_by.as_str()))
+            .collect();
+        assert_eq!(added, test_case.expected_added, "{}", test_case.description);
+    }
+}
+
+#[test]
+fn given_validated_node_with_hooks_when_planning_then_plan_lists_it() {
+    let test_cases = [
+        HooksTestCase {
+            description: "a validated model with hooks is listed",
+            changed: vec!["stg_orders"],
+            expected_hooks: vec!["order_totals"],
+        },
+        HooksTestCase {
+            description: "a model with hooks the review leaves out is not listed",
+            changed: vec!["stg_customers"],
+            expected_hooks: vec![],
+        },
+    ];
+    for test_case in test_cases {
+        let changed_nodes: Vec<ChangedNode> = test_case
+            .changed
+            .iter()
+            .map(|name| changed(name, "model SQL changed"))
+            .collect();
+
+        let plan: ReviewPlan = plan_review(
+            &waffle_shop(),
+            &changed_nodes,
+            DownstreamPolicy::Critical,
+            None,
+        )
+        .expect(test_case.description);
+
+        assert_eq!(
+            plan.hooks, test_case.expected_hooks,
+            "{}",
+            test_case.description
+        );
     }
 }
 
@@ -171,6 +269,13 @@ fn given_bad_selection_when_planning_then_fails_with_code() {
             expected_fragment: "--downstream critical leaves out",
         },
         PlanErrorTestCase {
+            description: "a node that reads a changed Python node",
+            policy: DownstreamPolicy::All,
+            select: vec![token("stg_toppings", &["stg_toppings"])],
+            expected_code: "C763",
+            expected_fragment: "read Python nodes",
+        },
+        PlanErrorTestCase {
             description: "any downstream node under none",
             policy: DownstreamPolicy::None,
             select: vec![token("order_totals", &["order_totals"])],
@@ -181,7 +286,10 @@ fn given_bad_selection_when_planning_then_fails_with_code() {
     for test_case in test_cases {
         let error = plan_review(
             &waffle_shop(),
-            &[changed("stg_orders", "model SQL changed")],
+            &[
+                changed("stg_orders", "model SQL changed"),
+                changed("loader:raw_toppings", "changed"),
+            ],
             test_case.policy,
             Some(&test_case.select),
         )
@@ -237,16 +345,25 @@ fn given_policy_text_when_parsing_then_known_values_map() {
 
 #[test]
 fn given_schema_name_parts_when_building_then_name_is_strict_and_lowercase_hex() {
-    let test_cases = [SchemaNameBuildTestCase {
-        description: "a long commit and run id are shortened and folded",
-        parts: ("REVIEW", "20261023T101500Z", "3F2A9C1D88", "a1b2c3d4e5f6"),
-        expected_name: "REVIEW_20261023T101500Z_3f2a9c1_a1b2c3",
-    }];
+    let test_cases = [
+        SchemaNameBuildTestCase {
+            description: "a long commit and run id are shortened, and the name is lowercase",
+            parts: ("REVIEW", "20261023T101500Z", "3F2A9C1D88", "a1b2c3d4e5f6"),
+            expected_name: "review_20261023t101500z_3f2a9c1_a1b2c3",
+        },
+        SchemaNameBuildTestCase {
+            description: "a short commit and run id are zero-padded",
+            parts: ("Review", "20261023T101500Z", "", "1f"),
+            expected_name: "review_20261023t101500z_0000000_00001f",
+        },
+    ];
     for test_case in test_cases {
         let (prefix, timestamp, commit, run) = test_case.parts;
-        assert_eq!(
-            review_schema_name(prefix, timestamp, commit, run),
-            test_case.expected_name,
+        let name: String = review_schema_name(prefix, timestamp, commit, run);
+
+        assert_eq!(name, test_case.expected_name, "{}", test_case.description);
+        assert!(
+            parse_review_schema_name(&name).is_some(),
             "{}",
             test_case.description
         );

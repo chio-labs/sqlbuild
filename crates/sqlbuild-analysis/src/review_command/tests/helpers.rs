@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::review_command::models::{
-    ChangedNode, ColumnEvidence, DownstreamPolicy, IncompleteCheck, IncrementalStart,
+    AddedNode, ChangedNode, ColumnEvidence, DownstreamPolicy, IncompleteCheck, IncrementalStart,
     NodeComparison, NodeReport, ReviewBaseline, ReviewExample, ReviewFailure, ReviewFinding,
     ReviewGraph, ReviewNode, ReviewPlan, ReviewReport, ReviewSchemaReport, SelectedToken,
     ValidationCounts,
@@ -16,19 +16,35 @@ fn node(name: &str, kind: &str, critical: bool) -> (String, ReviewNode) {
             critical,
             materialized: "table".to_owned(),
             unique_key: vec!["order_id".to_owned()],
-            has_cursor: false,
+            has_hooks: name == "order_totals",
+            ..ReviewNode::default()
         },
     )
 }
 
-/// A waffle shop whose `stg_orders` reaches a critical `daily_revenue` and an `order_archive`.
+fn python_node(name: &str, kind: &str) -> (String, ReviewNode) {
+    (
+        name.to_owned(),
+        ReviewNode {
+            name: name.to_owned(),
+            kind: kind.to_owned(),
+            python: true,
+            ..ReviewNode::default()
+        },
+    )
+}
+
+/// A waffle shop with a critical `daily_revenue`, a loader-fed `stg_toppings` and a Python task.
 pub(super) fn waffle_shop() -> ReviewGraph {
-    let edges: [(&str, &str); 5] = [
+    let edges: [(&str, &str); 8] = [
         ("waffle_types", "stg_orders"),
         ("stg_orders", "order_totals"),
         ("order_totals", "daily_revenue"),
         ("stg_orders", "order_archive"),
         ("stg_customers", "customer_lifetime"),
+        ("daily_revenue", "task:export_revenue"),
+        ("loader:raw_toppings", "stg_toppings"),
+        ("stg_toppings", "topping_totals"),
     ];
     let mut downstream: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for (upstream, child) in edges {
@@ -46,18 +62,26 @@ pub(super) fn waffle_shop() -> ReviewGraph {
             node("order_archive", "model", false),
             node("daily_revenue", "model", true),
             node("customer_lifetime", "model", false),
+            python_node("task:export_revenue", "task"),
+            python_node("loader:raw_toppings", "loader"),
+            node("stg_toppings", "model", false),
+            node("topping_totals", "model", true),
         ]
         .into_iter()
         .collect(),
         downstream,
         order: [
+            "loader:raw_toppings",
             "waffle_types",
             "stg_customers",
             "stg_orders",
+            "stg_toppings",
             "customer_lifetime",
             "order_archive",
             "order_totals",
+            "topping_totals",
             "daily_revenue",
+            "task:export_revenue",
         ]
         .iter()
         .map(|name| (*name).to_owned())
@@ -70,6 +94,7 @@ pub(super) fn changed(name: &str, reason: &str) -> ChangedNode {
         name: name.to_owned(),
         kind: "model".to_owned(),
         reasons: vec![reason.to_owned()],
+        added: false,
     }
 }
 
@@ -102,7 +127,7 @@ fn full(target_rows: i64, branch_rows: i64) -> NodeComparison {
     NodeComparison {
         mode: "full".to_owned(),
         target_relation: Some("prod.order_totals".to_owned()),
-        branch_relation: Some("REVIEW_20261023T101500Z_3f2a9c1_a1b2c3.order_totals".to_owned()),
+        branch_relation: Some("review_20261023t101500z_3f2a9c1_a1b2c3.order_totals".to_owned()),
         target_rows: Some(target_rows),
         branch_rows: Some(branch_rows),
         compared_rows: Some(target_rows),
@@ -141,6 +166,8 @@ pub(super) fn finding_report() -> ReviewReport {
             validated: names(&["stg_orders", "order_totals", "daily_revenue"]),
             not_validated: Vec::new(),
             critical: names(&["daily_revenue"]),
+            added: Vec::new(),
+            hooks: Vec::new(),
         },
         changed_declarations: vec![(
             "macro".to_owned(),
@@ -192,7 +219,7 @@ pub(super) fn finding_report() -> ReviewReport {
         },
         schema: Some(ReviewSchemaReport {
             database: None,
-            name: "REVIEW_20261023T101500Z_3f2a9c1_a1b2c3".to_owned(),
+            name: "review_20261023t101500z_3f2a9c1_a1b2c3".to_owned(),
             created: true,
             dropped: true,
             error: None,
@@ -200,6 +227,17 @@ pub(super) fn finding_report() -> ReviewReport {
         invocation_id: Some("a1b2c3d4e5f6".to_owned()),
         ..ReviewReport::default()
     }
+}
+
+/// `finding_report` narrowed to `order_totals`, which added `stg_orders` and ran hooks.
+pub(super) fn selected_report() -> ReviewReport {
+    let mut report: ReviewReport = finding_report();
+    report.plan.added = vec![AddedNode {
+        name: "stg_orders".to_owned(),
+        required_by: "order_totals".to_owned(),
+    }];
+    report.plan.hooks = names(&["order_totals"]);
+    report
 }
 
 /// `finding_report` with no differences and one model left incomplete.

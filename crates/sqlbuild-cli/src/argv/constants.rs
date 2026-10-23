@@ -22,6 +22,11 @@ pub(crate) const ERROR_PREFIX: &str = "error[C900]:";
 pub(crate) const ERROR_STRONG_STYLE: &str = "\u{1b}[38;5;167m\u{1b}[1m";
 pub(crate) const STYLE_RESET: &str = "\u{1b}[0m";
 pub(crate) const PARSER_ERROR_EXIT: i64 = 2;
+/// The parser `prog` of `sqb review`, and the option that makes it print a JSON document.
+pub(crate) const REVIEW_PROG: &str = "sqb review";
+pub(crate) const JSON_OPTION: &str = "--json";
+/// Commands whose usage errors exit with their own status, where 2 means something else.
+pub(crate) const USAGE_ERROR_EXITS: [(&str, i64); 1] = [(REVIEW_PROG, 3)];
 pub(crate) const HELP_EXIT: i64 = 0;
 pub(crate) const INDENT_INCREMENT: i64 = 2;
 pub(crate) const MAX_HELP_POSITION: i64 = 24;

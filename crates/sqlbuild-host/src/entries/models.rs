@@ -367,8 +367,8 @@ pub enum ExecutorHost {
     CommandOutputStream,
     OutputRecordPriority,
     SqlValueRenderingError,
-    ReviewSchemaLifecycle,
-    ReviewSchemaMarker,
+    CreateReviewSchema,
+    DropReviewSchema,
     LeftoverReviewSchemas,
 }
 

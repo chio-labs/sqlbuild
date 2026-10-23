@@ -360,11 +360,14 @@ _TARGETS: dict[str, tuple[str, str]] = {
         "sqlbuild.executor.diff.classes.query_artifact_lifecycle",
         "QueryDiffArtifactLifecycle",
     ),
-    "ReviewSchemaLifecycle": (
-        "sqlbuild.executor.review.classes.review_schema_lifecycle",
-        "ReviewSchemaLifecycle",
+    "create_review_schema": (
+        "sqlbuild.executor.review.main.create_review_schema",
+        "create_review_schema",
     ),
-    "ReviewSchemaMarker": ("sqlbuild.executor.review.models", "ReviewSchemaMarker"),
+    "drop_review_schema": (
+        "sqlbuild.executor.review.main.drop_review_schema",
+        "drop_review_schema",
+    ),
     "leftover_review_schemas": (
         "sqlbuild.executor.review.main.leftover_review_schemas",
         "leftover_review_schemas",

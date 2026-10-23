@@ -1,12 +1,12 @@
 //! Compare each built model with `--against`: schema, row counts, keys and values.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyTuple, PyTupleMethods};
 use sqlbuild_analysis::review_command::constants::{
     BOUNDED_COMPARISON_MODE, EXACT_LIMIT, FULL_COMPARISON_MODE, MAX_FINDING_EXAMPLES,
-    NO_COMPARISON_MODE, SCHEMA_ONLY_MODE,
+    MISSING_AGAINST_CODE, NO_COMPARISON_MODE, SCHEMA_ONLY_MODE,
 };
 use sqlbuild_analysis::review_command::models::{
     ColumnEvidence, IncompleteCheck, NodeComparison, ReviewExample, ReviewFinding, ReviewNode,
@@ -26,9 +26,11 @@ use crate::bindings::_helpers::diff_report::command::target_max_full_rows;
 use crate::bindings::_helpers::diff_report::facts::diff_facts;
 use crate::bindings::_helpers::diff_report::support::{error_text, matches_class};
 use crate::bindings::_helpers::execution_history::conversion::optional_text;
+use crate::bindings::_helpers::execution_history::statements::fetch_one;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::review_command::planning::ReviewSettings;
+use crate::bindings::_helpers::review_command::support::review_error;
 
 const KEYED_CHECK: &str = "keyed comparison";
 const MAX_EXAMPLE_LENGTH: usize = 80;
@@ -41,7 +43,7 @@ pub(crate) struct Comparisons {
     pub(crate) incomplete: Vec<IncompleteCheck>,
 }
 
-/// The two compiled projects and the connection a comparison runs on.
+/// The two compiled projects and the connection a comparison runs on, borrowed for the run.
 pub(crate) struct ComparisonContext<'a, 'py> {
     pub(crate) request: &'a Bound<'py, PyAny>,
     pub(crate) discovered: &'a Bound<'py, PyAny>,
@@ -68,13 +70,18 @@ fn key_text(values: &[(String, DiffValue)]) -> String {
         .join(", ")
 }
 
-fn models_by_name<'py>(
+/// The names of `project`'s models among `names`, each with its compiled model.
+fn models_named<'py>(
     project: &Bound<'py, PyAny>,
-) -> PyResult<BTreeMap<String, Bound<'py, PyAny>>> {
-    let mut models: BTreeMap<String, Bound<'py, PyAny>> = BTreeMap::new();
+    names: &[String],
+) -> PyResult<Vec<(String, Bound<'py, PyAny>)>> {
+    let mut models: Vec<(String, Bound<'py, PyAny>)> = Vec::new();
     for model in project_reads::models(project)?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
-        models.insert(native_field(&model, "name")?.extract()?, model);
+        let name: String = native_field(&model, "name")?.extract()?;
+        if names.contains(&name) {
+            models.push((name, model));
+        }
     }
     Ok(models)
 }
@@ -108,10 +115,9 @@ fn row_count(context: &ComparisonContext<'_, '_>, relation: &str) -> PyResult<Op
             ),
         ],
     )?;
-    let row: Bound<'_, PyAny> = cursor.call_method0("fetchone")?;
-    if row.is_none() {
+    let Some(row) = fetch_one(&cursor)? else {
         return Ok(None);
-    }
+    };
     row.get_item(0)?.extract()
 }
 
@@ -307,13 +313,13 @@ fn evidence(facts: &DiffModelFacts, mode: &str) -> (NodeComparison, Vec<ReviewFi
     (comparison, findings)
 }
 
-/// The compiled projects of both sides, and the size limits of an exact comparison.
-struct Sides<'py> {
+/// Both compiled sides, the exact-comparison size limits, and the models `--against` holds.
+pub(crate) struct Sides<'py> {
     left: Bound<'py, PyAny>,
     right: Bound<'py, PyAny>,
-    left_models: BTreeMap<String, Bound<'py, PyAny>>,
     limits: Bound<'py, PyAny>,
     bounded: Option<String>,
+    against_has: BTreeSet<String>,
 }
 
 /// A model without a unique key: its schema and row counts, with the keyed check incomplete.
@@ -438,38 +444,58 @@ fn compare_keyed<'py>(
     })
 }
 
-/// One model: not compared when `--against` lacks it, else keyed or unkeyed.
+/// One model: keyed or unkeyed, or uncompared when `--against` lacks it, incomplete unless new.
 fn compare_model(
     context: &ComparisonContext<'_, '_>,
     sides: &Sides<'_>,
-    node: &ReviewNode,
+    (node, new): (&ReviewNode, bool),
 ) -> PyResult<ModelComparison> {
-    let exists: bool = match sides.left_models.get(&node.name) {
-        Some(model) => target_exists(context, model)?,
-        None => false,
-    };
-    if !exists {
+    if !sides.against_has.contains(&node.name) {
         return Ok(ModelComparison {
             comparison: Some(NodeComparison {
                 mode: NO_COMPARISON_MODE.to_owned(),
-                complete: true,
+                complete: new,
                 ..NodeComparison::default()
             }),
+            incomplete: if new {
+                Vec::new()
+            } else {
+                vec![incomplete(
+                    &node.name,
+                    "--against has no relation for this model, which existed at the base \
+                     revision"
+                        .to_owned(),
+                )]
+            },
             ..ModelComparison::default()
         });
     }
-    if node.unique_key.is_empty() {
-        return compare_unkeyed(context, sides, &node.name);
+    let compared: ModelComparison = if node.unique_key.is_empty() {
+        compare_unkeyed(context, sides, &node.name)?
+    } else {
+        compare_keyed(context, sides, node)?
+    };
+    if compared.comparison.is_none() && compared.incomplete.is_empty() {
+        return Ok(ModelComparison {
+            incomplete: vec![incomplete(
+                &node.name,
+                "the comparison returned no result".to_owned(),
+            )],
+            ..compared
+        });
     }
-    compare_keyed(context, sides, node)
+    Ok(compared)
 }
 
-/// Compile both sides and read the size limits of an exact comparison.
-fn prepare_sides<'py>(
+/// Compile both sides of `models`, failing when `--against` holds none that existed at the base.
+pub(crate) fn prepare_sides<'py>(
     context: &ComparisonContext<'_, 'py>,
     settings: &ReviewSettings,
-    names: &[String],
-) -> PyResult<Sides<'py>> {
+    (models, new): (&[String], &BTreeSet<String>),
+) -> PyResult<Option<Sides<'py>>> {
+    if models.is_empty() {
+        return Ok(None);
+    }
     let py: Python<'py> = context.adapter.py();
     let pipeline: Bound<'py, PyTuple> = run_diff_pipeline(
         py,
@@ -482,13 +508,35 @@ fn prepare_sides<'py>(
                 ("to_target", text(py, context.review_target)),
                 ("resolved_connection", context.connection_config.clone()),
                 ("no_sql_validation", boolean(py, true)),
-                ("select", texts(py, names)?),
+                ("select", texts(py, models)?),
                 ("exclude", PyTuple::empty(py).into_any()),
                 ("cli_vars", native_field(context.request, "cli_vars")?),
             ],
         )?),
     )?;
     let left: Bound<'py, PyAny> = pipeline.get_item(0)?;
+    let mut against_has: BTreeSet<String> = BTreeSet::new();
+    for (name, model) in models_named(&left, models)? {
+        if target_exists(context, &model)? {
+            against_has.insert(name);
+        }
+    }
+    let existing: Vec<&String> = models.iter().filter(|name| !new.contains(*name)).collect();
+    if !existing.is_empty() && !existing.iter().any(|name| against_has.contains(*name)) {
+        return Err(review_error(
+            py,
+            MISSING_AGAINST_CODE,
+            &format!(
+                "--against has none of these relations; check the target: {}",
+                existing
+                    .iter()
+                    .map(|name| name.as_str())
+                    .collect::<Vec<&str>>()
+                    .join(", ")
+            ),
+            Some("pass the target that holds the deployed tables, such as --against prod"),
+        ));
+    }
     let limits: Bound<'py, PyAny> = call_with(
         &host::entry(py, ExecutorHost::FullDiffSizeLimits)?,
         &[
@@ -504,29 +552,28 @@ fn prepare_sides<'py>(
             ),
         ],
     )?;
-    Ok(Sides {
-        left_models: models_by_name(&left)?,
+    Ok(Some(Sides {
         right: pipeline.get_item(1)?,
         left,
         limits,
         bounded: optional_text(&native_field(context.request, "bounded")?)?,
-    })
+        against_has,
+    }))
 }
 
 /// Compare each of `models` (built, by name) between `--against` and the review schema.
 pub(crate) fn compare_models(
     context: &ComparisonContext<'_, '_>,
-    settings: &ReviewSettings,
-    models: &[&ReviewNode],
+    sides: Option<&Sides<'_>>,
+    (models, new): (&[&ReviewNode], &BTreeSet<String>),
 ) -> PyResult<Comparisons> {
-    if models.is_empty() {
-        return Ok(Comparisons::default());
-    }
-    let names: Vec<String> = models.iter().map(|node| node.name.clone()).collect();
-    let sides: Sides<'_> = prepare_sides(context, settings, &names)?;
     let mut out: Comparisons = Comparisons::default();
+    let Some(sides) = sides else {
+        return Ok(out);
+    };
     for node in models {
-        let compared: ModelComparison = compare_model(context, &sides, node)?;
+        let compared: ModelComparison =
+            compare_model(context, sides, (node, new.contains(&node.name)))?;
         out.findings.extend(compared.findings);
         out.incomplete.extend(compared.incomplete);
         if let Some(comparison) = compared.comparison {

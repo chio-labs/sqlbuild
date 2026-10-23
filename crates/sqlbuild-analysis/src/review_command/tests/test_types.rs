@@ -10,6 +10,8 @@ pub(super) struct PlanTestCase {
     pub(super) select: Option<Vec<SelectedToken>>,
     pub(super) expected_validated: Vec<&'static str>,
     pub(super) expected_not_validated: Vec<(&'static str, &'static str)>,
+    /// `(node, the validated node that depends on it)`.
+    pub(super) expected_added: Vec<(&'static str, &'static str)>,
 }
 
 pub(super) struct PlanErrorTestCase {
@@ -56,4 +58,10 @@ pub(super) struct SchemaNameTestCase {
     pub(super) description: &'static str,
     pub(super) name: &'static str,
     pub(super) expected_timestamp: Option<ArchiveTimestamp>,
+}
+
+pub(super) struct HooksTestCase {
+    pub(super) description: &'static str,
+    pub(super) changed: Vec<&'static str>,
+    pub(super) expected_hooks: Vec<&'static str>,
 }

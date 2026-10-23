@@ -4,11 +4,12 @@ use std::time::Instant;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTypeMethods};
+use sqlbuild_analysis::janitor_planning::models::ArchiveTimestamp;
 use sqlbuild_analysis::review_command::errors::ReviewPlanError;
 use sqlbuild_analysis::review_command::models::ReviewFailure;
 use sqlbuild_host::entries::models::ExecutorHost;
 
-use crate::bindings::_helpers::boundary::python_calls::{imported, within};
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, within};
 use crate::bindings::_helpers::clone::clone_progress::write_line;
 use crate::bindings::_helpers::execution_history::conversion::optional_text;
 use crate::bindings::_helpers::janitor::janitor_keys::{now_utc, timestamp_fields};
@@ -109,36 +110,42 @@ pub(crate) fn phase<T>(
     outcome
 }
 
-/// Run `body` with `sys.stdout` sent to `sys.stderr` when stdout must stay machine-readable.
+/// Where a review's progress goes: stderr when stdout carries `--json`, otherwise stdout.
+pub(crate) fn progress_stream(py: Python<'_>, to_stderr: bool) -> PyResult<Bound<'_, PyAny>> {
+    imported(py, "sys", if to_stderr { "stderr" } else { "stdout" })
+}
+
+/// Run `body` with `sys.stdout` sent to the `progress` stream when stdout carries JSON.
 pub(crate) fn quietly<T>(
-    py: Python<'_>,
-    machine: bool,
+    (progress, machine): (&Bound<'_, PyAny>, bool),
     body: impl FnOnce() -> PyResult<T>,
 ) -> PyResult<T> {
     if !machine {
         return body();
     }
-    let redirect: Bound<'_, PyAny> = imported(py, "contextlib", "redirect_stdout")?;
-    within(&redirect.call1((imported(py, "sys", "stderr")?,))?, |_| {
-        body()
-    })
+    let redirect: Bound<'_, PyAny> = imported(progress.py(), "contextlib", "redirect_stdout")?;
+    within(
+        &call_with(&redirect, &[("new_target", progress.clone())])?,
+        |_| body(),
+    )
 }
 
 /// The current UTC time and its `YYYYMMDDTHHMMSSZ` form.
-pub(crate) fn utc_now_compact(py: Python<'_>) -> PyResult<(Bound<'_, PyAny>, String)> {
-    let now: Bound<'_, PyAny> = now_utc(py)?;
-    let fields = timestamp_fields(&now)?;
+pub(crate) fn utc_now_compact(py: Python<'_>) -> PyResult<(ArchiveTimestamp, String)> {
+    let fields: ArchiveTimestamp = timestamp_fields(&now_utc(py)?)?;
     let compact: String = format!(
         "{:04}{:02}{:02}T{:02}{:02}{:02}Z",
         fields.year, fields.month, fields.day, fields.hour, fields.minute, fields.second
     );
-    Ok((now, compact))
+    Ok((fields, compact))
 }
 
 /// The current invocation id, when an invocation identity is active.
 pub(crate) fn invocation_id(py: Python<'_>) -> PyResult<Option<String>> {
-    let identity: Bound<'_, PyAny> =
-        host::entry(py, ExecutorHost::CurrentExecutionIdentity)?.call0()?;
+    let identity: Bound<'_, PyAny> = call_with(
+        &host::entry(py, ExecutorHost::CurrentExecutionIdentity)?,
+        &[],
+    )?;
     if identity.is_none() {
         return Ok(None);
     }

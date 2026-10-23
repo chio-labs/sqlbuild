@@ -18,7 +18,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 
 DATABASE_FILE: str = "review_orders.duckdb"
-REVIEW_SCHEMA_PREFIX: str = "REVIEW_"
+DATABASE_NAME: str = "review_orders"
+REVIEW_SCHEMA_PREFIX: str = "review_"
 STAGING: str = "models/stg_orders.sql"
 ORDER_TOTALS: str = "models/order_totals.sql"
 CUSTOMER_ORDERS: str = "models/customer_orders.sql"
@@ -42,6 +43,13 @@ def build_review_project_files() -> dict[str, str]:
             schema = "prod"
 
             [targets.dev]
+            schema = "dev"
+
+            [targets.empty]
+            schema = "empty"
+
+            [targets.dev_database]
+            database = "{DATABASE_NAME}"
             schema = "dev"
 
             [defaults]
@@ -101,6 +109,53 @@ def build_review_project_files() -> dict[str, str]:
             "),\n"
             "__expected__order_totals AS (SELECT 1 AS order_id, 2.5 AS amount)\nSELECT 1\n"
         ),
+    }
+
+
+def own_database_model(*, amount: str) -> str:
+    """A model that sets its own database."""
+
+    return (
+        "MODEL (description 'Orders with their own database.', unique_key order_id,\n"
+        f"  database {DATABASE_NAME});\n\n"
+        f'SELECT order_id, {amount} AS amount_cents FROM __ref("stg_orders")\n'
+    )
+
+
+def export_task_module() -> str:
+    """A Python task that depends on the critical model."""
+
+    return dedent(
+        """
+        from sqlbuild.refs import model
+        from sqlbuild.tasks import TaskContext, task
+
+
+        @task(depends_on=model("order_totals"))
+        def export_totals(ctx: TaskContext):
+            \"\"\"Export order totals.\"\"\"
+            return ctx.result(metadata={"rows": 0})
+        """
+    ).lstrip()
+
+
+def order_statuses_seed(*, rows: str) -> dict[str, str]:
+    """A seed of order statuses and its column types."""
+
+    return {
+        "seeds/order_statuses.csv": "status,label\n" + rows,
+        "seeds/order_statuses.yml": dedent(
+            """
+            seeds:
+              - name: order_statuses
+                description: Order status labels.
+                columns:
+                  - name: status
+                    type: VARCHAR
+                  - name: label
+                    type: VARCHAR
+            """
+        ).lstrip(),
     }
 
 

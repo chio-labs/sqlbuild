@@ -2,13 +2,12 @@
 
 use std::collections::BTreeSet;
 
-use crate::review_command::_helpers::graph::descendants;
 use crate::review_command::_helpers::scope::{
-    check_token, not_validated_reason, policy_downstream,
+    ReviewScope, in_order, required_upstream, review_scope, selected_scope, split_affected,
 };
 use crate::review_command::errors::ReviewPlanError;
 use crate::review_command::models::{
-    ChangedNode, DownstreamPolicy, NotValidated, ReviewGraph, ReviewPlan, SelectedToken,
+    AddedNode, ChangedNode, DownstreamPolicy, ReviewGraph, ReviewPlan, SelectedToken,
 };
 
 /// Plan a review of `changed` over `graph`; `select` tokens intersect with the planned scope.
@@ -18,61 +17,23 @@ pub fn plan_review(
     policy: DownstreamPolicy,
     select: Option<&[SelectedToken]>,
 ) -> Result<ReviewPlan, ReviewPlanError> {
-    let changed_names: BTreeSet<String> = changed
+    let scope: ReviewScope = review_scope(graph, changed, policy);
+    let mut validated_set: BTreeSet<String> = selected_scope((graph, policy), &scope, select)?;
+    let added: Vec<AddedNode> = required_upstream(graph, &validated_set, &scope.rebuildable);
+    validated_set.extend(added.iter().map(|node| node.name.clone()));
+    let (validated, not_validated) = split_affected((graph, policy), &scope, &validated_set);
+    let hooked: BTreeSet<String> = validated_set
         .iter()
-        .filter(|node| graph.nodes.contains_key(&node.name))
-        .map(|node| node.name.clone())
-        .collect();
-    let downstream: BTreeSet<String> = descendants(graph, &changed_names)
-        .into_iter()
-        .filter(|name| !changed_names.contains(name))
-        .collect();
-    let affected: BTreeSet<String> = changed_names.union(&downstream).cloned().collect();
-    let critical: BTreeSet<String> = affected
-        .iter()
-        .filter(|name| graph.nodes.get(*name).is_some_and(|node| node.critical))
+        .filter(|name| graph.nodes.get(*name).is_some_and(|node| node.has_hooks))
         .cloned()
         .collect();
-    let mut scope: BTreeSet<String> = changed_names.clone();
-    scope.extend(policy_downstream(
-        graph,
-        policy,
-        (&changed_names, &downstream),
-        &critical,
-    ));
-    let validated_set: BTreeSet<String> = match select {
-        None => scope.clone(),
-        Some(tokens) => {
-            let mut selected: BTreeSet<String> = BTreeSet::new();
-            for token in tokens {
-                check_token(token, (graph, policy), (&affected, &scope))?;
-                selected.extend(token.names.iter().cloned());
-            }
-            scope.intersection(&selected).cloned().collect()
-        }
-    };
-    let mut validated: Vec<String> = Vec::new();
-    let mut not_validated: Vec<NotValidated> = Vec::new();
-    for name in &graph.order {
-        if validated_set.contains(name) {
-            validated.push(name.clone());
-        } else if affected.contains(name) {
-            not_validated.push(NotValidated {
-                name: name.clone(),
-                reason: not_validated_reason(name, (&changed_names, &scope), policy),
-            });
-        }
-    }
     Ok(ReviewPlan {
         policy,
         changed: changed.to_vec(),
         validated,
         not_validated,
-        critical: graph
-            .order
-            .iter()
-            .filter(|name| critical.contains(*name))
-            .cloned()
-            .collect(),
+        critical: in_order(graph, &scope.critical),
+        added,
+        hooks: in_order(graph, &hooked),
     })
 }

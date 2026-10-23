@@ -27,6 +27,8 @@ pub fn parse_dbt_execution_arguments(
         settings: &settings,
         host: &mut host,
         writes: Vec::new(),
+        command_prog: None,
+        usage_failure: None,
     };
     let known: Result<KnownArgs, Failure> =
         run.known_args(&parser, head.to_vec(), Namespace::default());
