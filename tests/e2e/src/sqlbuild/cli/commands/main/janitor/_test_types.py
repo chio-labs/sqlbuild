@@ -264,3 +264,27 @@ class JanitorShortenedArchiveE2ETestCase:
     identifier_limit: int
     expected_rows_in_event_insert: int
     expected_event_count: int
+
+
+@dataclass(frozen=True)
+class JanitorJsonErrorE2ETestCase:
+    """Test case for the `--json` error document of a janitor run that fails before cleanup."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_error_code: str
+    expected_stderr_fragment: str
+
+
+@dataclass(frozen=True)
+class JanitorJsonFailedRunE2ETestCase:
+    """Test case for the single `--json` document of a janitor run that fails mid-phase."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    fail_rename: str
+    expected_exit_code: int
+    expected_status: str
+    expected_error_fragment: str
+    expected_failed_items: int

@@ -297,7 +297,13 @@ pub(crate) fn old_name_views(
             style.muted(label)
         ));
     }
-    text.push_str(&overflow(style, hidden, "    "));
+    if hidden > 0 {
+        text.push_str(&format!(
+            "{} {}",
+            tree_connector(style, true),
+            overflow(style, hidden, "")
+        ));
+    }
     text
 }
 

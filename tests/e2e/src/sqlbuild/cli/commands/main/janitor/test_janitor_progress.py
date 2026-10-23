@@ -14,6 +14,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.janitor._test_types import (
     JanitorConcurrentFailureE2ETestCase,
     JanitorInspectionCountE2ETestCase,
     JanitorJsonE2ETestCase,
+    JanitorJsonErrorE2ETestCase,
+    JanitorJsonFailedRunE2ETestCase,
     JanitorProgressE2ETestCase,
     JanitorShortenedArchiveE2ETestCase,
 )
@@ -178,6 +180,79 @@ def test_given_json_flag_when_running_janitor_then_stdout_holds_plan_and_result(
     )
     assert payload["error"] is None
     assert_in_order(output=result.stderr, lines=test_case.expected_stderr_fragments)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorJsonErrorE2ETestCase(
+            description="a refused non-interactive confirmation prints a JSON error document",
+            janitor_command=("janitor", "--json"),
+            expected_exit_code=1,
+            expected_error_code="C503",
+            expected_stderr_fragment="Janitor preview  default",
+        ),
+        JanitorJsonErrorE2ETestCase(
+            description="an invalid setting prints a JSON error document before any inspection",
+            janitor_command=("janitor", "--json", "--retention-days", "-1"),
+            expected_exit_code=1,
+            expected_error_code="C501",
+            expected_stderr_fragment="error[C501]",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_json_flag_when_janitor_fails_before_cleanup_then_stdout_holds_error_document(
+    test_case: JanitorJsonErrorE2ETestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = prepare_probe_janitor_project(
+        tmp_path=tmp_path, project_name="janitor_json_error", stale_tables={"main": 2}
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.janitor_command, project_dir=project_dir
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    payload: dict[str, Any] = json.loads(result.stdout)
+    assert payload["error"]["code"] == test_case.expected_error_code
+    assert test_case.expected_stderr_fragment in result.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorJsonFailedRunE2ETestCase(
+            description="a run failing mid-phase prints exactly one JSON document",
+            janitor_command=("janitor", "--auto-approve", "--json"),
+            fail_rename="old_orders_001",
+            expected_exit_code=1,
+            expected_status="failed",
+            expected_error_fragment="simulated rename failure for old_orders_001",
+            expected_failed_items=1,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_json_flag_when_janitor_fails_mid_phase_then_stdout_holds_one_run_document(
+    test_case: JanitorJsonFailedRunE2ETestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = prepare_probe_janitor_project(
+        tmp_path=tmp_path, project_name="janitor_json_failed", stale_tables={"main": 3}
+    )
+    write_probe_settings(project_dir=project_dir, fail_rename=test_case.fail_rename)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.janitor_command, project_dir=project_dir
+    )
+
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
+    payload: dict[str, Any] = json.loads(result.stdout)
+    assert payload["status"] == test_case.expected_status
+    assert test_case.expected_error_fragment in payload["error"]
+    assert [item["status"] for item in payload["result"]["items"]].count("failed") == (
+        test_case.expected_failed_items
+    )
 
 
 @pytest.mark.parametrize(

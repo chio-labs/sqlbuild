@@ -11,6 +11,9 @@ from sqlbuild.executor.janitor.types import JanitorConnectionProgress
 from sqlbuild.executor.pipeline.main._open_worker_connection_pool import (
     open_worker_connection_pool,
 )
+from sqlbuild.executor.pipeline.main.raise_warehouse_connection_failure import (
+    raise_warehouse_connection_failure,
+)
 
 
 def janitor_worker_count(*, plan: JanitorPlan, adapter: BaseAdapter, concurrency: int) -> int:
@@ -45,12 +48,12 @@ def open_janitor_worker_connections(
         connections: tuple[Any, ...] = open_worker_connection_pool(
             adapter=adapter, connection_config=connection_config, connection_count=count
         )
-    except BaseException:
+    except BaseException as error:
         if progress is not None:
             progress.on_connection_error(
                 connection_count=count, elapsed_seconds=time.monotonic() - started
             )
-        raise
+        raise_warehouse_connection_failure(adapter=adapter, error=error)
     if progress is not None:
         progress.on_connection_complete(
             connection_count=count, elapsed_seconds=time.monotonic() - started

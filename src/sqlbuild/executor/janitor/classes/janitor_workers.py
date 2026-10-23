@@ -9,10 +9,10 @@ from typing import Any
 
 from sqlbuild.executor.janitor._helpers.worker_runs import (
     attempt_janitor_action,
-    collect_janitor_outcomes,
+    submit_janitor_actions,
 )
+from sqlbuild.executor.janitor.classes.janitor_chunk_collector import JanitorChunkCollector
 from sqlbuild.executor.janitor.classes.pooled_janitor_attempt import PooledJanitorAttempt
-from sqlbuild.executor.janitor.models import JanitorActionOutcome, JanitorChunkOutcome
 
 
 class JanitorWorkers:
@@ -32,12 +32,13 @@ class JanitorWorkers:
         *,
         items: Sequence[ItemT],
         action: Callable[..., ResultT],
-        on_done: Callable[..., None],
-    ) -> JanitorChunkOutcome[ResultT]:
-        """Run `action(item=, connection=)` per item until one fails, calling `on_done` per item."""
+        collector: JanitorChunkCollector[ResultT],
+    ) -> None:
+        """Run `action(item=, connection=)` per item into `collector` until it stops accepting."""
 
         if len(self.connections) == 1 or len(items) <= 1:
-            return self._run_in_order(items=items, action=action, on_done=on_done)
+            self._run_in_order(items=items, action=action, collector=collector)
+            return
         connections: queue.Queue[Any] = queue.Queue()
         connection: Any
         for connection in self.connections:
@@ -46,11 +47,12 @@ class JanitorWorkers:
             max_workers=min(len(self.connections), len(items))
         )
         try:
-            return collect_janitor_outcomes(
-                pool=pool,
-                items=items,
-                attempt=PooledJanitorAttempt(action=action, connections=connections),
-                on_done=on_done,
+            collector.drain(
+                futures=submit_janitor_actions(
+                    pool=pool,
+                    items=items,
+                    attempt=PooledJanitorAttempt(action=action, connections=connections),
+                )
             )
         finally:
             pool.shutdown(wait=True, cancel_futures=True)
@@ -60,17 +62,19 @@ class JanitorWorkers:
         *,
         items: Sequence[ItemT],
         action: Callable[..., ResultT],
-        on_done: Callable[..., None],
-    ) -> JanitorChunkOutcome[ResultT]:
-        outcomes: list[JanitorActionOutcome[ResultT] | None] = [None] * len(items)
+        collector: JanitorChunkCollector[ResultT],
+    ) -> None:
         index: int
         item: ItemT
         for index, item in enumerate(items):
-            outcome: JanitorActionOutcome[ResultT] = attempt_janitor_action(
-                action=action, item=item, connection=self.connection
-            )
-            outcomes[index] = outcome
-            on_done(index=index, outcome=outcome)
-            if outcome.error is not None:
-                break
-        return JanitorChunkOutcome(outcomes=tuple(outcomes))
+            if not collector.accepting:
+                return
+            try:
+                collector.record(
+                    index=index,
+                    outcome=attempt_janitor_action(
+                        action=action, item=item, connection=self.connection
+                    ),
+                )
+            except BaseException as error:
+                collector.interrupt(error)

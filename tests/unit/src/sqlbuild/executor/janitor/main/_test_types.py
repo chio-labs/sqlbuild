@@ -159,3 +159,23 @@ class JanitorCaseSafetyTestCase:
     exclude_patterns: tuple[str, ...]
     expected_skipped_relations: tuple[tuple[str, str], ...]
     expected_dropped_targets: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JanitorPhaseEventSafetyTestCase:
+    description: str
+    connection_count: int
+    item_count: int
+    failing_report: int
+    report_error: type[BaseException]
+    expected_error: type[BaseException]
+    expected_minimum_completed: int
+
+
+@dataclass(frozen=True)
+class JanitorPhaseInterruptTestCase:
+    description: str
+    connection_count: int
+    item_count: int
+    expected_error: type[BaseException]
+    expected_minimum_completed: int

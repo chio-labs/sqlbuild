@@ -53,11 +53,11 @@ def finished_actions(
 
 
 def chunk_failure(chunk: JanitorChunkOutcome[JanitorActionDone | None]) -> BaseException | None:
-    """The interrupt that stopped the chunk, else the earliest item's failure."""
+    """The chunk's interrupt, else its earliest item failure, else its report error."""
 
     if chunk.interruption is not None:
         return chunk.interruption
     return next(
         (outcome.error for outcome in chunk.outcomes if outcome is not None and outcome.error),
-        None,
+        chunk.report_error,
     )

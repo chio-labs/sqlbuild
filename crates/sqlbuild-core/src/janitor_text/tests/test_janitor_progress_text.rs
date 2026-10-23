@@ -12,7 +12,7 @@ use crate::janitor_text::main::render_janitor_plan::render_janitor_plan;
 use crate::janitor_text::models::{
     JanitorOutcome, JanitorPhase, JanitorResultCounts, JanitorRunText,
 };
-use crate::janitor_text::tests::helpers::{direct_archive_plan, item, large_plan};
+use crate::janitor_text::tests::helpers::{direct_archive_plan, item, large_plan, old_name_plan};
 use crate::janitor_text::tests::test_types::{
     CompletionTestCase, ItemCountsTestCase, ItemLineTestCase, JsonTestCase, PhaseTextTestCase,
     PreviewTestCase,
@@ -276,6 +276,25 @@ fn given_long_plan_when_previewing_then_lists_are_capped_unless_verbose() {
                 "Skipped objects\n  dev.recent_000  relation is newer than 14 days\n",
             ],
             unexpected_fragments: &["... and", "Skipped objects (7)"],
+        },
+        PreviewTestCase {
+            description: "a capped old-name view tree closes with its overflow line",
+            plan: old_name_plan(12),
+            verbose: false,
+            expected_fragments: &[
+                "\u{251c}\u{2500}\u{2500} dev.orders_v09  -> model:orders_09\n\u{2502}   \u{2514}\u{2500}\u{2500} expires",
+                "\u{2514}\u{2500}\u{2500} ... and 2 more (use --verbose to show all)\n",
+            ],
+            unexpected_fragments: &["\u{2514}\u{2500}\u{2500} dev.orders_v09", "dev.orders_v10"],
+        },
+        PreviewTestCase {
+            description: "an uncapped old-name view tree closes with its last view",
+            plan: old_name_plan(3),
+            verbose: false,
+            expected_fragments: &[
+                "\u{2514}\u{2500}\u{2500} dev.orders_v02  -> model:orders_02\n    \u{2514}",
+            ],
+            unexpected_fragments: &["... and"],
         },
     ];
 

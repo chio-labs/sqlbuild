@@ -26,6 +26,9 @@ use sqlbuild_core::janitor_text::main::validate_janitor_settings::validate_janit
 use sqlbuild_core::janitor_text::models::{JanitorOutcome, JanitorPlanText, JanitorRunText};
 use std::time::Instant;
 
+use crate::bindings::_helpers::cli::machine_output::{
+    report_machine_output_written, take_machine_output_written,
+};
 use crate::bindings::_helpers::command_runtime::preview_target::validate_preview_target;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
@@ -99,7 +102,9 @@ fn write_json(
     write(
         &stdout,
         &format!("{}\n", format_janitor_json(plan, outcome, run, error)),
-    )
+    )?;
+    report_machine_output_written();
+    Ok(())
 }
 
 /// Discover the project and resolve the target and output context.
@@ -346,6 +351,7 @@ fn clean(
 #[pyfunction]
 #[pyo3(signature = (*, request))]
 pub(crate) fn run_janitor_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+    let _ = take_machine_output_written();
     let invocation: Bound<'_, PyAny> = invocation(py, request)?;
     let style: CliStyle = CliStyle {
         use_color: native_field(&invocation, "use_color")?.extract()?,

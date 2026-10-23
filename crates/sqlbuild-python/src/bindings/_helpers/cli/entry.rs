@@ -24,6 +24,7 @@ use crate::bindings::_helpers::cli::argv::parse_cli_invocation;
 use crate::bindings::_helpers::cli::dispatch::{command_facts, dispatch_command};
 use crate::bindings::_helpers::cli::failure_cause::take_failure_cause;
 use crate::bindings::_helpers::cli::launch_state::offer_launch_record;
+use crate::bindings::_helpers::cli::machine_output::take_machine_output_written;
 use crate::bindings::_helpers::cli::observability::{
     CliObservabilityScope, cli_observability_scope,
 };
@@ -207,7 +208,7 @@ fn write_compile_machine_error(
     print_object(&document, None, None)
 }
 
-/// With `sqb recall … --json` or `sqb plan --json`, the failure as `{"error": {"code", "message", "help"}}` on stdout, so callers parsing the output read the error instead of failing to parse it.
+/// With `sqb recall … --json`, `sqb plan --json` or `sqb janitor --json` (before it printed its own document), the failure as `{"error": {"code", "message", "help"}}` on stdout, so callers parsing the output read the error instead of failing to parse it.
 fn write_machine_error(
     invocation: &Invocation<'_>,
     error: &Bound<'_, PyAny>,
@@ -220,6 +221,8 @@ fn write_machine_error(
             .map(|format| format.extract())
             .transpose()?;
         format.as_deref() == Some(JSON_FORMAT)
+    } else if invocation.command_is("janitor") {
+        invocation.flag("json")? && !take_machine_output_written()
     } else {
         invocation.command_is("plan") && invocation.flag("json")?
     };

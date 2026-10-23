@@ -1,5 +1,6 @@
 use crate::janitor_text::models::{
     ArchiveCandidateText, ArchivedRelationText, JanitorItemText, JanitorPhase, JanitorPlanText,
+    OldNameViewText,
 };
 
 /// A direct-mode plan for `dev` that archives one relation and deletes one archive.
@@ -57,6 +58,21 @@ pub(super) fn large_plan(count: usize, skipped: usize) -> JanitorPlanText {
                     ["relation is newer than 14 days", "not tracked by SQLBuild"];
                 let reason: &str = reasons[usize::from(index % 3 != 0)];
                 (format!("dev.recent_{index:03}"), reason.to_owned())
+            })
+            .collect(),
+        ..JanitorPlanText::default()
+    }
+}
+
+/// A plan with `count` live old-name views expiring on one day.
+pub(super) fn old_name_plan(count: usize) -> JanitorPlanText {
+    JanitorPlanText {
+        old_name_live: (0..count)
+            .map(|index| OldNameViewText {
+                name: format!("dev.orders_v{index:02}"),
+                destination_model: format!("orders_{index:02}"),
+                expires_on: Some("2026-11-05".to_owned()),
+                ..OldNameViewText::default()
             })
             .collect(),
         ..JanitorPlanText::default()

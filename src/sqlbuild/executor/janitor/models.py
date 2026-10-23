@@ -252,10 +252,11 @@ class JanitorActionOutcome[ResultT]:
 
 @dataclass(frozen=True)
 class JanitorChunkOutcome[ResultT]:
-    """Each item's outcome in one chunk (none if it never started), and any interrupt."""
+    """Each item's outcome in one chunk (none if never started), interrupt and report error."""
 
     outcomes: tuple[JanitorActionOutcome[ResultT] | None, ...]
     interruption: BaseException | None = None
+    report_error: BaseException | None = None
 
 
 @dataclass(frozen=True)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 from collections.abc import Callable
 from dataclasses import replace
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
@@ -39,7 +39,14 @@ from sqlbuild.compiler.compile.types import (
     CompiledProjectView,
     CompiledSourceView,
 )
-from sqlbuild.executor.janitor_events.constants import JANITOR_EVENTS_TABLE_NAME
+from sqlbuild.executor.janitor.models import JanitorActionDone, JanitorProgressItem
+from sqlbuild.executor.janitor.types import JanitorAction
+from sqlbuild.executor.janitor_events.constants import (
+    JANITOR_EVENT_SCHEMA_VERSION,
+    JANITOR_EVENTS_TABLE_NAME,
+)
+from sqlbuild.executor.janitor_events.models import JanitorEventRecord
+from sqlbuild.executor.janitor_events.types import JanitorEventType
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 
 UNQUOTED_ADDRESSING_REASON: str = (
@@ -610,3 +617,100 @@ _APPEND_RELATION_BY_SELECTED: dict[bool, Callable[[list[RelationInfo], RelationI
     True: _append_relation,
     False: _ignore_relation,
 }
+
+
+PHASE_EVENT_TIME: datetime = datetime(2026, 9, 24, 10, 15, tzinfo=UTC)
+
+
+def phase_event(index: int) -> JanitorEventRecord:
+    """The synthetic audit event of the archive action at `index`."""
+
+    archive_name: str = f"_sqb_archive__20260924t101500z__orders_{index:04d}"
+    return JanitorEventRecord(
+        event_id=f"event_{index:04d}",
+        schema_version=JANITOR_EVENT_SCHEMA_VERSION,
+        event_type=JanitorEventType.ARCHIVE,
+        occurred_at=PHASE_EVENT_TIME,
+        run_id="run_orders_cleanup",
+        relation_database=None,
+        relation_schema="analytics",
+        relation_type="BASE TABLE",
+        original_name=f"orders_{index:04d}",
+        original_qualified_name=f"analytics.orders_{index:04d}",
+        archive_name=archive_name,
+        archive_qualified_name=f"analytics.{archive_name}",
+        archived_at=PHASE_EVENT_TIME,
+    )
+
+
+class PhaseActions:
+    """Archive actions that each return their event and remember that they completed."""
+
+    def __init__(self) -> None:
+        self.completed: list[int] = []
+        self.flushed: list[str] = []
+
+    def apply(self, *, item: int, connection: Any) -> JanitorActionDone:
+        del connection
+        self.completed.append(item)
+        return JanitorActionDone(event=phase_event(item))
+
+    def flush(self, finished: tuple[JanitorActionDone, ...]) -> None:
+        self.flushed.extend(cast(JanitorEventRecord, done.event).event_id for done in finished)
+
+    def completed_event_ids(self) -> list[str]:
+        return sorted(phase_event(item).event_id for item in self.completed)
+
+
+class FailingReportProgress:
+    """Progress whose `failing_report`th finished-action report raises `error`."""
+
+    def __init__(self, *, failing_report: int, error: type[BaseException], size: int) -> None:
+        def quiet() -> None:
+            return None
+
+        def fail() -> None:
+            raise error("progress stream closed")
+
+        self._reactions: list[Callable[[], None]] = [
+            *([quiet] * (failing_report - 1)),
+            fail,
+            *([quiet] * size),
+        ]
+        self._calls: int = 0
+        self.closed_failed: list[bool] = []
+
+    def phase_started(self, *, phase: str, total: int) -> None:
+        del phase, total
+
+    def item_finished(self, *, phase: str, item: object) -> None:
+        del phase, item
+        self._calls += 1
+        self._reactions[self._calls - 1]()
+
+    def phase_finished(self, *, phase: str, failed: bool) -> None:
+        del phase
+        self.closed_failed.append(failed)
+
+
+def interrupting_wait(real_wait: Callable[..., Any]) -> Callable[..., Any]:
+    """`concurrent.futures.wait` that raises KeyboardInterrupt on its first call only."""
+
+    def interrupt(*args: object, **kwargs: object) -> Any:
+        del args, kwargs
+        raise KeyboardInterrupt
+
+    calls: list[Callable[..., Any]] = [interrupt]
+
+    def wait(*args: Any, **kwargs: Any) -> Any:
+        reaction: Callable[..., Any] = [*calls, real_wait][0]
+        calls.clear()
+        return reaction(*args, **kwargs)
+
+    return wait
+
+
+def phase_label(item: int) -> JanitorProgressItem:
+    """The progress label of the archive action at `item`."""
+
+    return JanitorProgressItem(action=JanitorAction.ARCHIVED, name=f"analytics.orders_{item:04d}")

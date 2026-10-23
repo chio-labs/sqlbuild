@@ -14,3 +14,11 @@ class ArchiveNameBuildTestCase:
     expected_length: int
     expected_logical_name_is_original: bool
     kind: str | None = None
+
+
+@dataclass(frozen=True)
+class JanitorWorkerConnectionFailureTestCase:
+    description: str
+    connection_count: int
+    expected_code: str
+    expected_message: str
