@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -83,13 +83,6 @@ class ProviderHookE2ETestCase:
 
 
 @dataclass(frozen=True)
-class ProviderHookDiagnosticE2ETestCase:
-    description: str
-    command: tuple[str, ...]
-    expected_error_fragment: str
-
-
-@dataclass(frozen=True)
 class ProviderHookMaterializationE2ETestCase:
     description: str
     command: tuple[str, ...]
@@ -98,14 +91,6 @@ class ProviderHookMaterializationE2ETestCase:
     extra_repo_files: dict[str, str]
     expected_marker_entries: tuple[str, ...]
     expected_exit_code: int
-
-
-@dataclass(frozen=True)
-class ProviderHookContextConflictE2ETestCase:
-    description: str
-    command: tuple[str, ...]
-    context_parameter_name: str
-    expected_error_fragment: str
 
 
 @dataclass(frozen=True)
@@ -131,3 +116,19 @@ class SlowSinkExitE2ETestCase:
     description: str
     command: tuple[str, ...]
     expected_marker_entries: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ProviderHookOutcomeTestCase:
+    """One provider-injected Python hook build that fails, and what it leaves behind.
+
+    The marker log records provider setup, hook and teardown calls in order.
+    """
+
+    description: str
+    hook_source: str
+    hooks_clause: str
+    expected_exit_code: int
+    expected_marker_entries: tuple[str, ...]
+    expected_error_fragment: str = ""
+    extra_files: dict[str, str] = field(default_factory=dict)

@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build.no_tests_no_audits._test_types import (
+    PythonNodeRunTestCase,
     RunE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
@@ -404,116 +405,6 @@ def test_given_existing_intermediate_target_when_running_source_only_then_reuses
     "test_case",
     [
         RunE2ETestCase(
-            description="run executes selected task node",
-            expected_exit_code=0,
-            expected_table_names=(),
-            expected_view_names=(),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_task_selector_when_running_run_then_task_executes(
-    test_case: RunE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="python_run_project",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_run_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_run_project.duckdb"\n'
-            ),
-            "python/tasks/orders.py": (
-                "from pathlib import Path\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task\n"
-                "def prepare_orders(ctx):\n"
-                "    '''Test task prepare_orders.'''\n    Path(__file__).parents[2].joinpath('task_marker.txt').write_text('ran')\n"
-                "    return ctx.result(payload={'status': 'ok'})\n"
-            ),
-        },
-    )
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=(
-            "--no-color",
-            "build",
-            "--no-tests",
-            "--no-audits",
-            "--select",
-            "task:prepare_orders",
-        ),
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    assert "python    task      prepare_orders" in result.stdout
-    assert "OK" in result.stdout
-    assert (project_dir / "task_marker.txt").read_text(encoding="utf-8") == "ran"
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        RunE2ETestCase(
-            description="run executes selected asset node",
-            expected_exit_code=0,
-            expected_table_names=(),
-            expected_view_names=(),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_asset_selector_when_running_run_then_asset_executes(
-    test_case: RunE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="python_asset_run_project",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_asset_run_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_asset_run_project.duckdb"\n'
-            ),
-            "python/assets/orders.py": (
-                "from pathlib import Path\n"
-                "from sqlbuild.assets import asset\n\n"
-                "@asset\n"
-                "def prepared_orders(ctx):\n"
-                "    '''Test asset prepared_orders.'''\n    Path(__file__).parents[2].joinpath('asset_marker.txt').write_text('ran')\n"
-                "    return ctx.result(payload={'status': 'ok'}, materialized=True)\n"
-            ),
-        },
-    )
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=(
-            "--no-color",
-            "build",
-            "--no-tests",
-            "--no-audits",
-            "--select",
-            "asset:prepared_orders",
-        ),
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    assert "python    asset     prepared_orders" in result.stdout
-    assert "OK" in result.stdout
-    assert (project_dir / "asset_marker.txt").read_text(encoding="utf-8") == "ran"
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        RunE2ETestCase(
             description="run json output includes selected task node",
             expected_exit_code=0,
             expected_table_names=(),
@@ -655,382 +546,6 @@ def test_given_failing_task_selector_when_running_run_then_command_fails(
     "test_case",
     [
         RunE2ETestCase(
-            description="run executes upstream task before source loader and model",
-            expected_exit_code=0,
-            expected_table_names=("fact_orders",),
-            expected_view_names=(),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_task_loader_source_model_chain_when_running_model_then_task_runs_before_loader(
-    test_case: RunE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="python_loader_run_project",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_loader_run_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_loader_run_project.duckdb"\n'
-            ),
-            "python/tasks/orders.py": (
-                "from pathlib import Path\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task\n"
-                "def prepare_orders(ctx):\n"
-                "    '''Test task prepare_orders.'''\n    Path(__file__).parents[2].joinpath('orders_ready.txt').write_text('ready')\n"
-                "    return ctx.result(metadata={'prepared': True})\n"
-            ),
-            "python/loaders/orders.py": (
-                "from pathlib import Path\n"
-                "from sqlbuild.loaders import loader\n"
-                "from python.tasks.orders import prepare_orders\n\n"
-                "@loader(depends_on=(prepare_orders,))\n"
-                "def raw_orders(ctx):\n"
-                "    '''Test loader raw_orders.'''\n    marker = Path(__file__).parents[2].joinpath('orders_ready.txt')\n"
-                "    if not marker.exists():\n"
-                "        raise RuntimeError('orders were not prepared')\n"
-                "    return [{'order_id': 1, 'amount_cents': 100}]\n"
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_orders\n    description: Test source raw_orders.\n"
-                "    managed: true\n"
-                "    write_strategy: table\n"
-                "    columns:\n"
-                "      - name: order_id\n"
-                "        type: INTEGER\n"
-                "      - name: amount_cents\n"
-                "        type: INTEGER\n"
-            ),
-            "models/fact_orders.sql": (
-                "MODEL (description 'Test model fact_orders.', materialized table);\n\n"
-                'SELECT order_id, amount_cents FROM __source("raw_orders")\n'
-            ),
-        },
-    )
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--no-tests", "--no-audits", "--select", "+fact_orders"),
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    assert "python    task      prepare_orders" in result.stdout
-    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
-    assert execution_output.index("prepare_orders") < execution_output.index("fact_orders")
-    db_path: Path = project_dir / "python_loader_run_project.duckdb"
-    for table_name in test_case.expected_table_names:
-        assert table_exists(db_path=db_path, table_name=table_name)
-    assert row_count(db_path=db_path, table_name="fact_orders") == 1
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        RunE2ETestCase(
-            description="run executes selected task after selected model for read-only SQL access",
-            expected_exit_code=0,
-            expected_table_names=("fact_orders",),
-            expected_view_names=(),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_model_and_task_selector_when_running_run_then_task_can_read_built_model(
-    test_case: RunE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="python_model_task_run_project",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_model_task_run_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_model_task_run_project.duckdb"\n'
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_orders\n    description: Test source raw_orders.\n"
-                "    expression: SELECT 1 AS order_id, 100 AS amount_cents\n"
-                "    columns:\n"
-                "      - name: order_id\n"
-                "        type: INTEGER\n"
-                "      - name: amount_cents\n"
-                "        type: INTEGER\n"
-            ),
-            "models/fact_orders.sql": (
-                "MODEL (description 'Test model fact_orders.', materialized table);\n\n"
-                'SELECT order_id, amount_cents FROM __source("raw_orders")\n'
-            ),
-            "python/tasks/orders.py": (
-                "from pathlib import Path\n"
-                "from sqlbuild.refs import model\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task(depends_on=model('fact_orders'))\n"
-                "def summarize_orders(ctx):\n"
-                "    '''Test task summarize_orders.'''\n    orders = ctx.relation(model('fact_orders'))\n"
-                "    rows = ctx.query(f'SELECT COUNT(*) FROM {orders}').fetchall()[0][0]\n"
-                "    Path(__file__).parents[2].joinpath('summary.txt').write_text(str(rows))\n"
-                "    return ctx.result(metadata={'rows': rows})\n"
-            ),
-        },
-    )
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=(
-            "--no-color",
-            "build",
-            "--no-tests",
-            "--no-audits",
-            "--select",
-            "fact_orders summarize_orders",
-        ),
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
-    assert execution_output.index("fact_orders") < execution_output.index("summarize_orders")
-    assert (project_dir / "summary.txt").read_text(encoding="utf-8") == "1"
-    db_path: Path = project_dir / "python_model_task_run_project.duckdb"
-    for table_name in test_case.expected_table_names:
-        assert table_exists(db_path=db_path, table_name=table_name)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        RunE2ETestCase(
-            description="run executes selected asset after selected terminal model",
-            expected_exit_code=0,
-            expected_table_names=("fact_orders",),
-            expected_view_names=(),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_asset_depends_on_terminal_model_when_running_run_then_asset_reads_model(
-    test_case: RunE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="python_model_asset_run_project",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_model_asset_run_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_model_asset_run_project.duckdb"\n'
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_orders\n    description: Test source raw_orders.\n"
-                "    expression: SELECT 1 AS order_id\n"
-                "    columns:\n"
-                "      - name: order_id\n"
-                "        type: INTEGER\n"
-            ),
-            "models/fact_orders.sql": (
-                'MODEL (description "Test model fact_orders.", materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
-            ),
-            "python/assets/orders.py": (
-                "from pathlib import Path\n"
-                "from sqlbuild.assets import asset\n"
-                "from sqlbuild.refs import model\n\n"
-                "@asset(depends_on=model('fact_orders'))\n"
-                "def export_fact_orders(ctx):\n"
-                "    '''Test asset export_fact_orders.'''\n    orders = ctx.relation(model('fact_orders'))\n"
-                "    rows = ctx.query(f'SELECT COUNT(*) FROM {orders}').fetchall()[0][0]\n"
-                "    Path(__file__).parents[2].joinpath('export.txt').write_text(str(rows))\n"
-                "    return ctx.result(metadata={'rows': rows}, materialized=True)\n"
-            ),
-        },
-    )
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=(
-            "--no-color",
-            "build",
-            "--no-tests",
-            "--no-audits",
-            "--select",
-            "fact_orders export_fact_orders",
-        ),
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
-    assert execution_output.index("fact_orders") < execution_output.index("export_fact_orders")
-    assert (project_dir / "export.txt").read_text(encoding="utf-8") == "1"
-    db_path: Path = project_dir / "python_model_asset_run_project.duckdb"
-    for table_name in test_case.expected_table_names:
-        assert table_exists(db_path=db_path, table_name=table_name)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        RunE2ETestCase(
-            description="run expands and executes task asset task chain",
-            expected_exit_code=0,
-            expected_table_names=(),
-            expected_view_names=(),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_task_asset_task_chain_when_running_final_task_then_chain_executes_in_order(
-    test_case: RunE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="python_task_asset_task_run_project",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_task_asset_task_run_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_task_asset_task_run_project.duckdb"\n'
-            ),
-            "python/tasks/fetch_orders.py": (
-                "from sqlbuild.tasks import task\n\n"
-                "@task\n"
-                "def fetch_orders(ctx):\n"
-                "    '''Test task fetch_orders.'''\n    return ctx.result(payload={'rows': 1})\n"
-            ),
-            "python/tasks/notify_orders.py": (
-                "from pathlib import Path\n"
-                "from python.assets.orders import publish_orders\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task(depends_on=publish_orders)\n"
-                "def notify_orders(ctx):\n"
-                "    '''Test task notify_orders.'''\n    metadata = ctx.result_of(node_function=publish_orders).metadata\n"
-                "    output = Path(__file__).parents[2].joinpath('notify.txt')\n"
-                "    output.write_text(str(metadata['published']))\n"
-                "    return ctx.result()\n"
-            ),
-            "python/assets/orders.py": (
-                "from sqlbuild.assets import asset\n"
-                "from python.tasks.fetch_orders import fetch_orders\n\n"
-                "@asset(depends_on=fetch_orders)\n"
-                "def publish_orders(ctx):\n"
-                "    '''Test asset publish_orders.'''\n    payload = ctx.result_of(node_function=fetch_orders).payload\n"
-                "    return ctx.result(payload=payload, metadata={'published': True})\n"
-            ),
-        },
-    )
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--no-tests", "--no-audits", "--select", "+notify_orders"),
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    assert result.stdout.index("fetch_orders") < result.stdout.index("publish_orders")
-    assert result.stdout.index("publish_orders") < result.stdout.index("notify_orders")
-    assert (project_dir / "notify.txt").read_text(encoding="utf-8") == "True"
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        RunE2ETestCase(
-            description="run executes source task asset chain after source load",
-            expected_exit_code=0,
-            expected_table_names=("raw_orders",),
-            expected_view_names=(),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_source_task_asset_selection_when_running_run_then_task_reads_loaded_source(
-    test_case: RunE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="python_source_task_asset_run_project",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_source_task_asset_run_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_source_task_asset_run_project.duckdb"\n'
-            ),
-            "python/loaders/orders.py": (
-                "from sqlbuild.loaders import loader\n\n"
-                "@loader\n"
-                "def raw_orders(ctx):\n"
-                "    '''Test loader raw_orders.'''\n    return [{'order_id': 1, 'amount_cents': 100}]\n"
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_orders\n    description: Test source raw_orders.\n"
-                "    managed: true\n"
-                "    write_strategy: table\n"
-                "    columns:\n"
-                "      - name: order_id\n"
-                "        type: INTEGER\n"
-                "      - name: amount_cents\n"
-                "        type: INTEGER\n"
-            ),
-            "python/tasks/orders.py": (
-                "from sqlbuild.refs import source\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task(depends_on=source('raw_orders'))\n"
-                "def summarize_loaded_orders(ctx):\n"
-                "    '''Test task summarize_loaded_orders.'''\n    orders = ctx.relation(source('raw_orders'))\n"
-                "    rows = ctx.query(f'SELECT COUNT(*) FROM {orders}').fetchall()[0][0]\n"
-                "    return ctx.result(payload={'rows': rows}, metadata={'rows': rows})\n"
-            ),
-            "python/assets/orders.py": (
-                "from sqlbuild.assets import asset\n"
-                "from python.tasks.orders import summarize_loaded_orders\n\n"
-                "@asset(depends_on=summarize_loaded_orders)\n"
-                "def publish_loaded_orders(ctx):\n"
-                "    '''Test asset publish_loaded_orders.'''\n    payload = ctx.result_of(node_function=summarize_loaded_orders).payload\n"
-                "    return ctx.result(payload=payload, materialized=False)\n"
-            ),
-        },
-    )
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=(
-            "--no-color",
-            "build",
-            "--no-tests",
-            "--no-audits",
-            "--select",
-            "+raw_orders summarize_loaded_orders publish_loaded_orders",
-        ),
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
-    assert execution_output.index("raw_orders") < execution_output.index("summarize_loaded_orders")
-    assert execution_output.index("summarize_loaded_orders") < execution_output.index(
-        "publish_loaded_orders"
-    )
-    db_path: Path = project_dir / "python_source_task_asset_run_project.duckdb"
-    for table_name in test_case.expected_table_names:
-        assert table_exists(db_path=db_path, table_name=table_name)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        RunE2ETestCase(
             description="run json includes skipped task and asset materialization fields",
             expected_exit_code=0,
             expected_table_names=(),
@@ -1104,228 +619,6 @@ def test_given_skip_and_asset_selection_with_json_when_running_run_then_json_rec
         "python_check_warn_count": 0,
         "python_check_fail_count": 0,
     }
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        RunE2ETestCase(
-            description="run executes independent Python branches and SQL branch",
-            expected_exit_code=0,
-            expected_table_names=("fact_orders",),
-            expected_view_names=(),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_independent_python_and_sql_selectors_when_running_run_then_all_branches_run(
-    test_case: RunE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="python_independent_run_project",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_independent_run_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_independent_run_project.duckdb"\n'
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_orders\n    description: Test source raw_orders.\n"
-                "    expression: SELECT 1 AS order_id\n"
-                "    columns:\n"
-                "      - name: order_id\n"
-                "        type: INTEGER\n"
-            ),
-            "models/fact_orders.sql": (
-                'MODEL (description "Test model fact_orders.", materialized table);\n\nSELECT order_id FROM __source("raw_orders")\n'
-            ),
-            "python/tasks/branches.py": (
-                "from pathlib import Path\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task\n"
-                "def branch_a(ctx):\n"
-                "    '''Test task branch_a.'''\n    Path(__file__).parents[2].joinpath('branch_a.txt').write_text('a')\n"
-                "    return ctx.result()\n\n"
-                "@task\n"
-                "def branch_b(ctx):\n"
-                "    '''Test task branch_b.'''\n    Path(__file__).parents[2].joinpath('branch_b.txt').write_text('b')\n"
-                "    return ctx.result()\n"
-            ),
-        },
-    )
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=(
-            "--no-color",
-            "build",
-            "--no-tests",
-            "--no-audits",
-            "--select",
-            "fact_orders branch_a branch_b",
-        ),
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    assert (project_dir / "branch_a.txt").read_text(encoding="utf-8") == "a"
-    assert (project_dir / "branch_b.txt").read_text(encoding="utf-8") == "b"
-    db_path: Path = project_dir / "python_independent_run_project.duckdb"
-    for table_name in test_case.expected_table_names:
-        assert table_exists(db_path=db_path, table_name=table_name)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        RunE2ETestCase(
-            description="run executes SQL-ready Python before downstream SQL",
-            expected_exit_code=0,
-            expected_table_names=("stg_orders", "fact_orders"),
-            expected_view_names=(),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_task_depends_on_model_when_running_run_then_task_runs_before_downstream_sql(
-    test_case: RunE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="python_read_side_run_project",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_read_side_run_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_read_side_run_project.duckdb"\n'
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_orders\n    description: Test source raw_orders.\n"
-                "    expression: SELECT 1 AS order_id, 100 AS amount_cents\n"
-                "    columns:\n"
-                "      - name: order_id\n"
-                "        type: INTEGER\n"
-                "      - name: amount_cents\n"
-                "        type: INTEGER\n"
-            ),
-            "models/stg_orders.sql": (
-                'MODEL (description "Test model stg_orders.", materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
-            ),
-            "models/fact_orders.sql": (
-                'MODEL (description "Test model fact_orders.", materialized table);\n\nSELECT * FROM __ref("stg_orders")\n'
-            ),
-            "python/tasks/profile.py": (
-                "from sqlbuild.refs import model\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task(depends_on=model('stg_orders'))\n"
-                "def profile_stg_orders(ctx):\n"
-                "    '''Test task profile_stg_orders.'''\n    orders = ctx.relation(model('stg_orders'))\n"
-                "    rows = ctx.query(f'SELECT COUNT(*) FROM {orders}').fetchall()[0][0]\n"
-                "    return ctx.result(payload={'rows': rows})\n"
-            ),
-        },
-    )
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=(
-            "--no-color",
-            "build",
-            "--no-tests",
-            "--no-audits",
-            "--select",
-            "stg_orders fact_orders profile_stg_orders",
-        ),
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
-    assert execution_output.index("stg_orders") < execution_output.index("profile_stg_orders")
-    assert execution_output.index("profile_stg_orders") < execution_output.index("fact_orders")
-    db_path: Path = project_dir / "python_read_side_run_project.duckdb"
-    for table_name in test_case.expected_table_names:
-        assert table_exists(db_path=db_path, table_name=table_name)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        RunE2ETestCase(
-            description="run executes task after typed source dependency",
-            expected_exit_code=0,
-            expected_table_names=("raw_orders",),
-            expected_view_names=(),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_task_depends_on_source_when_running_run_then_task_runs_after_source_load(
-    test_case: RunE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="python_read_side_source_run_project",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_read_side_source_run_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_read_side_source_run_project.duckdb"\n'
-            ),
-            "python/loaders/orders.py": (
-                "from sqlbuild.loaders import loader\n\n"
-                "@loader\n"
-                "def raw_orders(ctx):\n"
-                "    '''Test loader raw_orders.'''\n    return [{'order_id': 1, 'amount_cents': 100}]\n"
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_orders\n    description: Test source raw_orders.\n"
-                "    managed: true\n"
-                "    write_strategy: table\n"
-                "    columns:\n"
-                "      - name: order_id\n"
-                "        type: INTEGER\n"
-                "      - name: amount_cents\n"
-                "        type: INTEGER\n"
-            ),
-            "python/tasks/profile.py": (
-                "from sqlbuild.refs import source\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task(depends_on=source('raw_orders'))\n"
-                "def profile_raw_orders(ctx):\n"
-                "    '''Test task profile_raw_orders.'''\n    orders = ctx.relation(source('raw_orders'))\n"
-                "    rows = ctx.query(f'SELECT COUNT(*) FROM {orders}').fetchall()[0][0]\n"
-                "    return ctx.result(payload={'rows': rows})\n"
-            ),
-        },
-    )
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=(
-            "--no-color",
-            "build",
-            "--no-tests",
-            "--no-audits",
-            "--select",
-            "+raw_orders profile_raw_orders",
-        ),
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
-    assert execution_output.index("raw_orders") < execution_output.index("profile_raw_orders")
-    db_path: Path = project_dir / "python_read_side_source_run_project.duckdb"
-    for table_name in test_case.expected_table_names:
-        assert table_exists(db_path=db_path, table_name=table_name)
 
 
 @pytest.mark.parametrize(
@@ -1554,334 +847,6 @@ def test_given_task_asset_depend_on_intermediate_loader_when_running_run_then_lo
         "publish_stage_orders"
     )
     db_path: Path = project_dir / "python_intermediate_loader_run_project.duckdb"
-    for table_name in test_case.expected_table_names:
-        assert table_exists(db_path=db_path, table_name=table_name)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        RunE2ETestCase(
-            description="run executes loader task loader chain before model",
-            expected_exit_code=0,
-            expected_table_names=("window_orders", "raw_orders", "fact_orders"),
-            expected_view_names=(),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_loader_task_loader_chain_when_running_model_then_ingress_orders_chain(
-    test_case: RunE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="python_loader_task_loader_run_project",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_loader_task_loader_run_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_loader_task_loader_run_project.duckdb"\n'
-            ),
-            "python/loaders/window.py": (
-                "from sqlbuild.loaders import loader\n\n"
-                "@loader(\n"
-                "    destination='window_orders',\n"
-                "    write_strategy='table',\n"
-                "    columns=[{'name': 'order_id', 'type': 'INTEGER'}],\n"
-                ")\n"
-                "def load_window_orders(ctx):\n"
-                "    '''Test loader load_window_orders.'''\n    return [{'order_id': 1}]\n"
-            ),
-            "python/tasks/orders.py": (
-                "from pathlib import Path\n"
-                "from python.loaders.window import load_window_orders\n"
-                "from sqlbuild.tasks import task\n\n"
-                "@task(depends_on=load_window_orders)\n"
-                "def prepare_raw_orders(ctx):\n"
-                "    '''Test task prepare_raw_orders.'''\n    rows = ctx.query('SELECT COUNT(*) FROM window_orders').fetchall()[0][0]\n"
-                "    Path(__file__).parents[2].joinpath('prepared.txt').write_text(str(rows))\n"
-                "    return ctx.result(metadata={'rows': rows})\n"
-            ),
-            "python/loaders/raw.py": (
-                "from pathlib import Path\n"
-                "from python.tasks.orders import prepare_raw_orders\n"
-                "from sqlbuild.loaders import loader\n\n"
-                "@loader(depends_on=(prepare_raw_orders,))\n"
-                "def raw_orders(ctx):\n"
-                "    '''Test loader raw_orders.'''\n    marker = Path(__file__).parents[2].joinpath('prepared.txt')\n"
-                "    if marker.read_text() != '1':\n"
-                "        raise RuntimeError('window orders were not prepared')\n"
-                "    return [{'order_id': 1}]\n"
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_orders\n    description: Test source raw_orders.\n"
-                "    managed: true\n"
-                "    write_strategy: table\n"
-                "    columns:\n"
-                "      - name: order_id\n"
-                "        type: INTEGER\n"
-            ),
-            "models/fact_orders.sql": (
-                'MODEL (description "Test model fact_orders.", materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
-            ),
-        },
-    )
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--no-tests", "--no-audits", "--select", "+fact_orders"),
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
-    assert execution_output.index("window_orders") < execution_output.index("prepare_raw_orders")
-    assert execution_output.index("raw_orders") < execution_output.index("fact_orders")
-    db_path: Path = project_dir / "python_loader_task_loader_run_project.duckdb"
-    for table_name in test_case.expected_table_names:
-        assert table_exists(db_path=db_path, table_name=table_name)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        RunE2ETestCase(
-            description="run executes task asset loader chain before model",
-            expected_exit_code=0,
-            expected_table_names=("raw_orders", "fact_orders"),
-            expected_view_names=(),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_task_asset_loader_chain_when_running_model_then_ingress_orders_chain(
-    test_case: RunE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="python_task_asset_loader_run_project",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_task_asset_loader_run_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_task_asset_loader_run_project.duckdb"\n'
-            ),
-            "python/tasks/orders.py": (
-                "from sqlbuild.tasks import task\n\n"
-                "@task\n"
-                "def fetch_orders(ctx):\n"
-                "    '''Test task fetch_orders.'''\n    return ctx.result(payload={'order_id': 1})\n"
-            ),
-            "python/assets/orders.py": (
-                "from pathlib import Path\n"
-                "from python.tasks.orders import fetch_orders\n"
-                "from sqlbuild.assets import asset\n\n"
-                "@asset(depends_on=fetch_orders)\n"
-                "def publish_orders(ctx):\n"
-                "    '''Test asset publish_orders.'''\n    payload = ctx.result_of(node_function=fetch_orders).payload\n"
-                "    marker = Path(__file__).parents[2].joinpath('asset_ready.txt')\n"
-                "    marker.write_text(str(payload['order_id']))\n"
-                "    return ctx.result(payload=payload, materialized=True)\n"
-            ),
-            "python/loaders/orders.py": (
-                "from pathlib import Path\n"
-                "from python.assets.orders import publish_orders\n"
-                "from sqlbuild.loaders import loader\n\n"
-                "@loader(depends_on=(publish_orders,))\n"
-                "def raw_orders(ctx):\n"
-                "    '''Test loader raw_orders.'''\n    marker = Path(__file__).parents[2].joinpath('asset_ready.txt')\n"
-                "    if marker.read_text() != '1':\n"
-                "        raise RuntimeError('asset was not ready')\n"
-                "    return [{'order_id': 1}]\n"
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_orders\n    description: Test source raw_orders.\n"
-                "    managed: true\n"
-                "    write_strategy: table\n"
-                "    columns:\n"
-                "      - name: order_id\n"
-                "        type: INTEGER\n"
-            ),
-            "models/fact_orders.sql": (
-                'MODEL (description "Test model fact_orders.", materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
-            ),
-        },
-    )
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--no-tests", "--no-audits", "--select", "+fact_orders"),
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
-    assert execution_output.index("fetch_orders") < execution_output.index("publish_orders")
-    assert execution_output.index("raw_orders") < execution_output.index("fact_orders")
-    db_path: Path = project_dir / "python_task_asset_loader_run_project.duckdb"
-    for table_name in test_case.expected_table_names:
-        assert table_exists(db_path=db_path, table_name=table_name)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        RunE2ETestCase(
-            description="run executes loader asset loader chain before model",
-            expected_exit_code=0,
-            expected_table_names=("window_orders", "raw_orders", "fact_orders"),
-            expected_view_names=(),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_loader_asset_loader_chain_when_running_model_then_ingress_orders_chain(
-    test_case: RunE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="python_loader_asset_loader_run_project",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_loader_asset_loader_run_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_loader_asset_loader_run_project.duckdb"\n'
-            ),
-            "python/loaders/window.py": (
-                "from sqlbuild.loaders import loader\n\n"
-                "@loader(\n"
-                "    destination='window_orders',\n"
-                "    write_strategy='table',\n"
-                "    columns=[{'name': 'order_id', 'type': 'INTEGER'}],\n"
-                ")\n"
-                "def load_window_orders(ctx):\n"
-                "    '''Test loader load_window_orders.'''\n    return [{'order_id': 1}]\n"
-            ),
-            "python/assets/orders.py": (
-                "from pathlib import Path\n"
-                "from python.loaders.window import load_window_orders\n"
-                "from sqlbuild.assets import asset\n\n"
-                "@asset(depends_on=load_window_orders)\n"
-                "def prepare_asset_orders(ctx):\n"
-                "    '''Test asset prepare_asset_orders.'''\n    rows = ctx.query('SELECT COUNT(*) FROM window_orders').fetchall()[0][0]\n"
-                "    Path(__file__).parents[2].joinpath('asset_ready.txt').write_text(str(rows))\n"
-                "    return ctx.result(metadata={'rows': rows}, materialized=True)\n"
-            ),
-            "python/loaders/raw.py": (
-                "from pathlib import Path\n"
-                "from python.assets.orders import prepare_asset_orders\n"
-                "from sqlbuild.loaders import loader\n\n"
-                "@loader(depends_on=(prepare_asset_orders,))\n"
-                "def raw_orders(ctx):\n"
-                "    '''Test loader raw_orders.'''\n    marker = Path(__file__).parents[2].joinpath('asset_ready.txt')\n"
-                "    if marker.read_text() != '1':\n"
-                "        raise RuntimeError('asset orders were not prepared')\n"
-                "    return [{'order_id': 1}]\n"
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_orders\n    description: Test source raw_orders.\n"
-                "    managed: true\n"
-                "    write_strategy: table\n"
-                "    columns:\n"
-                "      - name: order_id\n"
-                "        type: INTEGER\n"
-            ),
-            "models/fact_orders.sql": (
-                'MODEL (description "Test model fact_orders.", materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
-            ),
-        },
-    )
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--no-tests", "--no-audits", "--select", "+fact_orders"),
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
-    assert execution_output.index("window_orders") < execution_output.index("prepare_asset_orders")
-    assert execution_output.index("raw_orders") < execution_output.index("fact_orders")
-    db_path: Path = project_dir / "python_loader_asset_loader_run_project.duckdb"
-    for table_name in test_case.expected_table_names:
-        assert table_exists(db_path=db_path, table_name=table_name)
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        RunE2ETestCase(
-            description="run executes loader loader chain before model",
-            expected_exit_code=0,
-            expected_table_names=("window_orders", "raw_orders", "fact_orders"),
-            expected_view_names=(),
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_loader_loader_chain_when_running_model_then_ingress_orders_chain(
-    test_case: RunE2ETestCase,
-    tmp_path: Path,
-) -> None:
-    project_dir: Path = prepare_inline_project(
-        tmp_path=tmp_path,
-        project_name="python_loader_loader_run_project",
-        repo_files={
-            "sqlbuild_project.toml": (
-                'name = "python_loader_loader_run_project"\n'
-                'adapter = "duckdb"\n\n'
-                "[connection]\n"
-                'database = "python_loader_loader_run_project.duckdb"\n'
-            ),
-            "python/loaders/window.py": (
-                "from sqlbuild.loaders import loader\n\n"
-                "@loader(\n"
-                "    destination='window_orders',\n"
-                "    write_strategy='table',\n"
-                "    columns=[{'name': 'order_id', 'type': 'INTEGER'}],\n"
-                ")\n"
-                "def load_window_orders(ctx):\n"
-                "    '''Test loader load_window_orders.'''\n    return [{'order_id': 1}]\n"
-            ),
-            "python/loaders/raw.py": (
-                "from python.loaders.window import load_window_orders\n"
-                "from sqlbuild.loaders import loader\n\n"
-                "@loader(depends_on=(load_window_orders,))\n"
-                "def raw_orders(ctx):\n"
-                "    '''Test loader raw_orders.'''\n    rows = ctx.query('SELECT COUNT(*) FROM window_orders').fetchall()[0][0]\n"
-                "    return [{'order_id': rows}]\n"
-            ),
-            "sources/raw.yml": (
-                "sources:\n"
-                "  - name: raw_orders\n    description: Test source raw_orders.\n"
-                "    managed: true\n"
-                "    write_strategy: table\n"
-                "    columns:\n"
-                "      - name: order_id\n"
-                "        type: INTEGER\n"
-            ),
-            "models/fact_orders.sql": (
-                'MODEL (description "Test model fact_orders.", materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
-            ),
-        },
-    )
-
-    result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build", "--no-tests", "--no-audits", "--select", "+fact_orders"),
-        project_dir=project_dir,
-    )
-
-    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
-    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
-    assert execution_output.index("window_orders") < execution_output.index("raw_orders")
-    assert execution_output.index("raw_orders") < execution_output.index("fact_orders")
-    db_path: Path = project_dir / "python_loader_loader_run_project.duckdb"
     for table_name in test_case.expected_table_names:
         assert table_exists(db_path=db_path, table_name=table_name)
 
@@ -2241,3 +1206,488 @@ def test_given_check_selector_when_running_run_then_command_rejects_check(
         "Python checks are not selectable here: "
         "check_orders_export. Use sqb check instead." in combined_output
     )
+
+
+_MANAGED_ORDERS_SOURCE: str = (
+    "sources:\n"
+    "  - name: raw_orders\n    description: Test source raw_orders.\n"
+    "    managed: true\n"
+    "    write_strategy: table\n"
+    "    columns:\n"
+    "      - name: order_id\n"
+    "        type: INTEGER\n"
+)
+_MANAGED_ORDER_AMOUNTS_SOURCE: str = (
+    _MANAGED_ORDERS_SOURCE + "      - name: amount_cents\n        type: INTEGER\n"
+)
+_FACT_ORDERS_FROM_SOURCE: str = 'MODEL (description "Test model fact_orders.", materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+_WINDOW_ORDERS_LOADER: str = (
+    "from sqlbuild.loaders import loader\n\n"
+    "@loader(\n"
+    "    destination='window_orders',\n"
+    "    write_strategy='table',\n"
+    "    columns=[{'name': 'order_id', 'type': 'INTEGER'}],\n"
+    ")\n"
+    "def load_window_orders(ctx):\n"
+    "    '''Test loader load_window_orders.'''\n    return [{'order_id': 1}]\n"
+)
+_RAW_ORDERS_LOADER: str = (
+    "from sqlbuild.loaders import loader\n\n"
+    "@loader\n"
+    "def raw_orders(ctx):\n"
+    "    '''Test loader raw_orders.'''\n    return [{'order_id': 1, 'amount_cents': 100}]\n"
+)
+_PYTHON_NODE_RUN_CASES: tuple[PythonNodeRunTestCase, ...] = (
+    PythonNodeRunTestCase(
+        description="run executes selected task node",
+        project_name="python_run_project",
+        files={
+            "python/tasks/orders.py": (
+                "from pathlib import Path\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def prepare_orders(ctx):\n"
+                "    '''Test task prepare_orders.'''\n    Path(__file__).parents[2].joinpath('task_marker.txt').write_text('ran')\n"
+                "    return ctx.result(payload={'status': 'ok'})\n"
+            ),
+        },
+        select="task:prepare_orders",
+        expected_output_fragments=("python    task      prepare_orders", "OK"),
+        expected_markers={"task_marker.txt": "ran"},
+    ),
+    PythonNodeRunTestCase(
+        description="run executes selected asset node",
+        project_name="python_asset_run_project",
+        files={
+            "python/assets/orders.py": (
+                "from pathlib import Path\n"
+                "from sqlbuild.assets import asset\n\n"
+                "@asset\n"
+                "def prepared_orders(ctx):\n"
+                "    '''Test asset prepared_orders.'''\n    Path(__file__).parents[2].joinpath('asset_marker.txt').write_text('ran')\n"
+                "    return ctx.result(payload={'status': 'ok'}, materialized=True)\n"
+            ),
+        },
+        select="asset:prepared_orders",
+        expected_output_fragments=("python    asset     prepared_orders", "OK"),
+        expected_markers={"asset_marker.txt": "ran"},
+    ),
+    PythonNodeRunTestCase(
+        description="run executes upstream task before source loader and model",
+        project_name="python_loader_run_project",
+        files={
+            "python/tasks/orders.py": (
+                "from pathlib import Path\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def prepare_orders(ctx):\n"
+                "    '''Test task prepare_orders.'''\n    Path(__file__).parents[2].joinpath('orders_ready.txt').write_text('ready')\n"
+                "    return ctx.result(metadata={'prepared': True})\n"
+            ),
+            "python/loaders/orders.py": (
+                "from pathlib import Path\n"
+                "from sqlbuild.loaders import loader\n"
+                "from python.tasks.orders import prepare_orders\n\n"
+                "@loader(depends_on=(prepare_orders,))\n"
+                "def raw_orders(ctx):\n"
+                "    '''Test loader raw_orders.'''\n    marker = Path(__file__).parents[2].joinpath('orders_ready.txt')\n"
+                "    if not marker.exists():\n"
+                "        raise RuntimeError('orders were not prepared')\n"
+                "    return [{'order_id': 1, 'amount_cents': 100}]\n"
+            ),
+            "sources/raw.yml": _MANAGED_ORDER_AMOUNTS_SOURCE,
+            "models/fact_orders.sql": (
+                "MODEL (description 'Test model fact_orders.', materialized table);\n\n"
+                'SELECT order_id, amount_cents FROM __source("raw_orders")\n'
+            ),
+        },
+        select="+fact_orders",
+        expected_order=(("prepare_orders", "fact_orders"),),
+        expected_output_fragments=("python    task      prepare_orders",),
+        expected_table_names=("fact_orders",),
+        expected_row_counts={"fact_orders": 1},
+    ),
+    PythonNodeRunTestCase(
+        description="run executes selected task after selected model for read-only SQL access",
+        project_name="python_model_task_run_project",
+        files={
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n    description: Test source raw_orders.\n"
+                "    expression: SELECT 1 AS order_id, 100 AS amount_cents\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+                "      - name: amount_cents\n"
+                "        type: INTEGER\n"
+            ),
+            "models/fact_orders.sql": (
+                "MODEL (description 'Test model fact_orders.', materialized table);\n\n"
+                'SELECT order_id, amount_cents FROM __source("raw_orders")\n'
+            ),
+            "python/tasks/orders.py": (
+                "from pathlib import Path\n"
+                "from sqlbuild.refs import model\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=model('fact_orders'))\n"
+                "def summarize_orders(ctx):\n"
+                "    '''Test task summarize_orders.'''\n    orders = ctx.relation(model('fact_orders'))\n"
+                "    rows = ctx.query(f'SELECT COUNT(*) FROM {orders}').fetchall()[0][0]\n"
+                "    Path(__file__).parents[2].joinpath('summary.txt').write_text(str(rows))\n"
+                "    return ctx.result(metadata={'rows': rows})\n"
+            ),
+        },
+        select="fact_orders summarize_orders",
+        expected_order=(("fact_orders", "summarize_orders"),),
+        expected_markers={"summary.txt": "1"},
+        expected_table_names=("fact_orders",),
+    ),
+    PythonNodeRunTestCase(
+        description="run executes selected asset after selected terminal model",
+        project_name="python_model_asset_run_project",
+        files={
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n    description: Test source raw_orders.\n"
+                "    expression: SELECT 1 AS order_id\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+            ),
+            "models/fact_orders.sql": _FACT_ORDERS_FROM_SOURCE,
+            "python/assets/orders.py": (
+                "from pathlib import Path\n"
+                "from sqlbuild.assets import asset\n"
+                "from sqlbuild.refs import model\n\n"
+                "@asset(depends_on=model('fact_orders'))\n"
+                "def export_fact_orders(ctx):\n"
+                "    '''Test asset export_fact_orders.'''\n    orders = ctx.relation(model('fact_orders'))\n"
+                "    rows = ctx.query(f'SELECT COUNT(*) FROM {orders}').fetchall()[0][0]\n"
+                "    Path(__file__).parents[2].joinpath('export.txt').write_text(str(rows))\n"
+                "    return ctx.result(metadata={'rows': rows}, materialized=True)\n"
+            ),
+        },
+        select="fact_orders export_fact_orders",
+        expected_order=(("fact_orders", "export_fact_orders"),),
+        expected_markers={"export.txt": "1"},
+        expected_table_names=("fact_orders",),
+    ),
+    PythonNodeRunTestCase(
+        description="run expands and executes task asset task chain",
+        project_name="python_task_asset_task_run_project",
+        files={
+            "python/tasks/fetch_orders.py": (
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def fetch_orders(ctx):\n"
+                "    '''Test task fetch_orders.'''\n    return ctx.result(payload={'rows': 1})\n"
+            ),
+            "python/tasks/notify_orders.py": (
+                "from pathlib import Path\n"
+                "from python.assets.orders import publish_orders\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=publish_orders)\n"
+                "def notify_orders(ctx):\n"
+                "    '''Test task notify_orders.'''\n    metadata = ctx.result_of(node_function=publish_orders).metadata\n"
+                "    output = Path(__file__).parents[2].joinpath('notify.txt')\n"
+                "    output.write_text(str(metadata['published']))\n"
+                "    return ctx.result()\n"
+            ),
+            "python/assets/orders.py": (
+                "from sqlbuild.assets import asset\n"
+                "from python.tasks.fetch_orders import fetch_orders\n\n"
+                "@asset(depends_on=fetch_orders)\n"
+                "def publish_orders(ctx):\n"
+                "    '''Test asset publish_orders.'''\n    payload = ctx.result_of(node_function=fetch_orders).payload\n"
+                "    return ctx.result(payload=payload, metadata={'published': True})\n"
+            ),
+        },
+        select="+notify_orders",
+        expected_order=(("fetch_orders", "publish_orders"), ("publish_orders", "notify_orders")),
+        expected_markers={"notify.txt": "True"},
+    ),
+    PythonNodeRunTestCase(
+        description="run executes source task asset chain after source load",
+        project_name="python_source_task_asset_run_project",
+        files={
+            "python/loaders/orders.py": _RAW_ORDERS_LOADER,
+            "sources/raw.yml": _MANAGED_ORDER_AMOUNTS_SOURCE,
+            "python/tasks/orders.py": (
+                "from sqlbuild.refs import source\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=source('raw_orders'))\n"
+                "def summarize_loaded_orders(ctx):\n"
+                "    '''Test task summarize_loaded_orders.'''\n    orders = ctx.relation(source('raw_orders'))\n"
+                "    rows = ctx.query(f'SELECT COUNT(*) FROM {orders}').fetchall()[0][0]\n"
+                "    return ctx.result(payload={'rows': rows}, metadata={'rows': rows})\n"
+            ),
+            "python/assets/orders.py": (
+                "from sqlbuild.assets import asset\n"
+                "from python.tasks.orders import summarize_loaded_orders\n\n"
+                "@asset(depends_on=summarize_loaded_orders)\n"
+                "def publish_loaded_orders(ctx):\n"
+                "    '''Test asset publish_loaded_orders.'''\n    payload = ctx.result_of(node_function=summarize_loaded_orders).payload\n"
+                "    return ctx.result(payload=payload, materialized=False)\n"
+            ),
+        },
+        select="+raw_orders summarize_loaded_orders publish_loaded_orders",
+        expected_order=(
+            ("raw_orders", "summarize_loaded_orders"),
+            ("summarize_loaded_orders", "publish_loaded_orders"),
+        ),
+        expected_table_names=("raw_orders",),
+    ),
+    PythonNodeRunTestCase(
+        description="run executes independent Python branches and SQL branch",
+        project_name="python_independent_run_project",
+        files={
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n    description: Test source raw_orders.\n"
+                "    expression: SELECT 1 AS order_id\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+            ),
+            "models/fact_orders.sql": (
+                'MODEL (description "Test model fact_orders.", materialized table);\n\nSELECT order_id FROM __source("raw_orders")\n'
+            ),
+            "python/tasks/branches.py": (
+                "from pathlib import Path\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def branch_a(ctx):\n"
+                "    '''Test task branch_a.'''\n    Path(__file__).parents[2].joinpath('branch_a.txt').write_text('a')\n"
+                "    return ctx.result()\n\n"
+                "@task\n"
+                "def branch_b(ctx):\n"
+                "    '''Test task branch_b.'''\n    Path(__file__).parents[2].joinpath('branch_b.txt').write_text('b')\n"
+                "    return ctx.result()\n"
+            ),
+        },
+        select="fact_orders branch_a branch_b",
+        expected_markers={"branch_a.txt": "a", "branch_b.txt": "b"},
+        expected_table_names=("fact_orders",),
+    ),
+    PythonNodeRunTestCase(
+        description="run executes SQL-ready Python before downstream SQL",
+        project_name="python_read_side_run_project",
+        files={
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_orders\n    description: Test source raw_orders.\n"
+                "    expression: SELECT 1 AS order_id, 100 AS amount_cents\n"
+                "    columns:\n"
+                "      - name: order_id\n"
+                "        type: INTEGER\n"
+                "      - name: amount_cents\n"
+                "        type: INTEGER\n"
+            ),
+            "models/stg_orders.sql": (
+                'MODEL (description "Test model stg_orders.", materialized table);\n\nSELECT * FROM __source("raw_orders")\n'
+            ),
+            "models/fact_orders.sql": (
+                'MODEL (description "Test model fact_orders.", materialized table);\n\nSELECT * FROM __ref("stg_orders")\n'
+            ),
+            "python/tasks/profile.py": (
+                "from sqlbuild.refs import model\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=model('stg_orders'))\n"
+                "def profile_stg_orders(ctx):\n"
+                "    '''Test task profile_stg_orders.'''\n    orders = ctx.relation(model('stg_orders'))\n"
+                "    rows = ctx.query(f'SELECT COUNT(*) FROM {orders}').fetchall()[0][0]\n"
+                "    return ctx.result(payload={'rows': rows})\n"
+            ),
+        },
+        select="stg_orders fact_orders profile_stg_orders",
+        expected_order=(
+            ("stg_orders", "profile_stg_orders"),
+            ("profile_stg_orders", "fact_orders"),
+        ),
+        expected_table_names=("stg_orders", "fact_orders"),
+    ),
+    PythonNodeRunTestCase(
+        description="run executes task after typed source dependency",
+        project_name="python_read_side_source_run_project",
+        files={
+            "python/loaders/orders.py": _RAW_ORDERS_LOADER,
+            "sources/raw.yml": _MANAGED_ORDER_AMOUNTS_SOURCE,
+            "python/tasks/profile.py": (
+                "from sqlbuild.refs import source\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=source('raw_orders'))\n"
+                "def profile_raw_orders(ctx):\n"
+                "    '''Test task profile_raw_orders.'''\n    orders = ctx.relation(source('raw_orders'))\n"
+                "    rows = ctx.query(f'SELECT COUNT(*) FROM {orders}').fetchall()[0][0]\n"
+                "    return ctx.result(payload={'rows': rows})\n"
+            ),
+        },
+        select="+raw_orders profile_raw_orders",
+        expected_order=(("raw_orders", "profile_raw_orders"),),
+        expected_table_names=("raw_orders",),
+    ),
+    PythonNodeRunTestCase(
+        description="run executes loader task loader chain before model",
+        project_name="python_loader_task_loader_run_project",
+        files={
+            "python/loaders/window.py": _WINDOW_ORDERS_LOADER,
+            "python/tasks/orders.py": (
+                "from pathlib import Path\n"
+                "from python.loaders.window import load_window_orders\n"
+                "from sqlbuild.tasks import task\n\n"
+                "@task(depends_on=load_window_orders)\n"
+                "def prepare_raw_orders(ctx):\n"
+                "    '''Test task prepare_raw_orders.'''\n    rows = ctx.query('SELECT COUNT(*) FROM window_orders').fetchall()[0][0]\n"
+                "    Path(__file__).parents[2].joinpath('prepared.txt').write_text(str(rows))\n"
+                "    return ctx.result(metadata={'rows': rows})\n"
+            ),
+            "python/loaders/raw.py": (
+                "from pathlib import Path\n"
+                "from python.tasks.orders import prepare_raw_orders\n"
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(depends_on=(prepare_raw_orders,))\n"
+                "def raw_orders(ctx):\n"
+                "    '''Test loader raw_orders.'''\n    marker = Path(__file__).parents[2].joinpath('prepared.txt')\n"
+                "    if marker.read_text() != '1':\n"
+                "        raise RuntimeError('window orders were not prepared')\n"
+                "    return [{'order_id': 1}]\n"
+            ),
+            "sources/raw.yml": _MANAGED_ORDERS_SOURCE,
+            "models/fact_orders.sql": _FACT_ORDERS_FROM_SOURCE,
+        },
+        select="+fact_orders",
+        expected_order=(("window_orders", "prepare_raw_orders"), ("raw_orders", "fact_orders")),
+        expected_table_names=("window_orders", "raw_orders", "fact_orders"),
+    ),
+    PythonNodeRunTestCase(
+        description="run executes task asset loader chain before model",
+        project_name="python_task_asset_loader_run_project",
+        files={
+            "python/tasks/orders.py": (
+                "from sqlbuild.tasks import task\n\n"
+                "@task\n"
+                "def fetch_orders(ctx):\n"
+                "    '''Test task fetch_orders.'''\n    return ctx.result(payload={'order_id': 1})\n"
+            ),
+            "python/assets/orders.py": (
+                "from pathlib import Path\n"
+                "from python.tasks.orders import fetch_orders\n"
+                "from sqlbuild.assets import asset\n\n"
+                "@asset(depends_on=fetch_orders)\n"
+                "def publish_orders(ctx):\n"
+                "    '''Test asset publish_orders.'''\n    payload = ctx.result_of(node_function=fetch_orders).payload\n"
+                "    marker = Path(__file__).parents[2].joinpath('asset_ready.txt')\n"
+                "    marker.write_text(str(payload['order_id']))\n"
+                "    return ctx.result(payload=payload, materialized=True)\n"
+            ),
+            "python/loaders/orders.py": (
+                "from pathlib import Path\n"
+                "from python.assets.orders import publish_orders\n"
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(depends_on=(publish_orders,))\n"
+                "def raw_orders(ctx):\n"
+                "    '''Test loader raw_orders.'''\n    marker = Path(__file__).parents[2].joinpath('asset_ready.txt')\n"
+                "    if marker.read_text() != '1':\n"
+                "        raise RuntimeError('asset was not ready')\n"
+                "    return [{'order_id': 1}]\n"
+            ),
+            "sources/raw.yml": _MANAGED_ORDERS_SOURCE,
+            "models/fact_orders.sql": _FACT_ORDERS_FROM_SOURCE,
+        },
+        select="+fact_orders",
+        expected_order=(("fetch_orders", "publish_orders"), ("raw_orders", "fact_orders")),
+        expected_table_names=("raw_orders", "fact_orders"),
+    ),
+    PythonNodeRunTestCase(
+        description="run executes loader asset loader chain before model",
+        project_name="python_loader_asset_loader_run_project",
+        files={
+            "python/loaders/window.py": _WINDOW_ORDERS_LOADER,
+            "python/assets/orders.py": (
+                "from pathlib import Path\n"
+                "from python.loaders.window import load_window_orders\n"
+                "from sqlbuild.assets import asset\n\n"
+                "@asset(depends_on=load_window_orders)\n"
+                "def prepare_asset_orders(ctx):\n"
+                "    '''Test asset prepare_asset_orders.'''\n    rows = ctx.query('SELECT COUNT(*) FROM window_orders').fetchall()[0][0]\n"
+                "    Path(__file__).parents[2].joinpath('asset_ready.txt').write_text(str(rows))\n"
+                "    return ctx.result(metadata={'rows': rows}, materialized=True)\n"
+            ),
+            "python/loaders/raw.py": (
+                "from pathlib import Path\n"
+                "from python.assets.orders import prepare_asset_orders\n"
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(depends_on=(prepare_asset_orders,))\n"
+                "def raw_orders(ctx):\n"
+                "    '''Test loader raw_orders.'''\n    marker = Path(__file__).parents[2].joinpath('asset_ready.txt')\n"
+                "    if marker.read_text() != '1':\n"
+                "        raise RuntimeError('asset orders were not prepared')\n"
+                "    return [{'order_id': 1}]\n"
+            ),
+            "sources/raw.yml": _MANAGED_ORDERS_SOURCE,
+            "models/fact_orders.sql": _FACT_ORDERS_FROM_SOURCE,
+        },
+        select="+fact_orders",
+        expected_order=(("window_orders", "prepare_asset_orders"), ("raw_orders", "fact_orders")),
+        expected_table_names=("window_orders", "raw_orders", "fact_orders"),
+    ),
+    PythonNodeRunTestCase(
+        description="run executes loader loader chain before model",
+        project_name="python_loader_loader_run_project",
+        files={
+            "python/loaders/window.py": _WINDOW_ORDERS_LOADER,
+            "python/loaders/raw.py": (
+                "from python.loaders.window import load_window_orders\n"
+                "from sqlbuild.loaders import loader\n\n"
+                "@loader(depends_on=(load_window_orders,))\n"
+                "def raw_orders(ctx):\n"
+                "    '''Test loader raw_orders.'''\n    rows = ctx.query('SELECT COUNT(*) FROM window_orders').fetchall()[0][0]\n"
+                "    return [{'order_id': rows}]\n"
+            ),
+            "sources/raw.yml": _MANAGED_ORDERS_SOURCE,
+            "models/fact_orders.sql": _FACT_ORDERS_FROM_SOURCE,
+        },
+        select="+fact_orders",
+        expected_order=(("window_orders", "raw_orders"), ("raw_orders", "fact_orders")),
+        expected_table_names=("window_orders", "raw_orders", "fact_orders"),
+    ),
+)
+
+
+@pytest.mark.parametrize("test_case", _PYTHON_NODE_RUN_CASES, ids=lambda case: case.description)
+def test_given_python_node_project_when_running_build_then_nodes_run_in_dependency_order(
+    test_case: PythonNodeRunTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=test_case.project_name,
+        repo_files={
+            "sqlbuild_project.toml": (
+                f'name = "{test_case.project_name}"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                f'database = "{test_case.project_name}.duckdb"\n'
+            ),
+            **test_case.files,
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--no-tests", "--no-audits", "--select", test_case.select),
+        project_dir=project_dir,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in result.stdout
+    execution_output: str = result.stdout[result.stdout.index("Execution  sqb build") :]
+    for earlier, later in test_case.expected_order:
+        assert execution_output.index(earlier) < execution_output.index(later)
+    for marker, contents in test_case.expected_markers.items():
+        assert (project_dir / marker).read_text(encoding="utf-8") == contents
+    db_path: Path = project_dir / f"{test_case.project_name}.duckdb"
+    for table_name in test_case.expected_table_names:
+        assert table_exists(db_path=db_path, table_name=table_name)
+    for table_name, expected_rows in test_case.expected_row_counts.items():
+        assert row_count(db_path=db_path, table_name=table_name) == expected_rows

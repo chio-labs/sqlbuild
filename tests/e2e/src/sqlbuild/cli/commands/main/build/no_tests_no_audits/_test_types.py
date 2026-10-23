@@ -18,3 +18,21 @@ class RunE2ETestCase:
     expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...] = field(
         default_factory=tuple
     )
+
+
+@dataclass(frozen=True)
+class PythonNodeRunTestCase:
+    """One Python-node project built with ``--no-tests --no-audits`` and its observable order.
+
+    ``expected_order`` pairs name what must appear earlier, then later, in the execution section.
+    """
+
+    description: str
+    project_name: str
+    files: dict[str, str]
+    select: str
+    expected_order: tuple[tuple[str, str], ...] = ()
+    expected_output_fragments: tuple[str, ...] = ()
+    expected_markers: dict[str, str] = field(default_factory=dict)
+    expected_table_names: tuple[str, ...] = ()
+    expected_row_counts: dict[str, int] = field(default_factory=dict)
