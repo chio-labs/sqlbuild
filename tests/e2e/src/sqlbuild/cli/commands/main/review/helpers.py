@@ -57,7 +57,7 @@ def build_review_project_files() -> dict[str, str]:
             enabled = true
             """
         ).lstrip(),
-        ".gitignore": "target/\n*.duckdb\n*.duckdb.wal\nreview.md\n",
+        ".gitignore": "target/\nlogs/\n*.duckdb\n*.duckdb.wal\n",
         "sources/raw.yml": dedent(
             """
             sources:
