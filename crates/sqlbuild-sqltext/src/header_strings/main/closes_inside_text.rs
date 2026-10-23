@@ -17,9 +17,7 @@ pub fn closes_inside_text<T: HeaderChar + Into<u32>>(text: &[T], end: usize) -> 
         next += 1;
     }
     let separator: bool = next >= text.len()
-        || [b'\n', b',', b')', b']', b'}', b':']
-            .iter()
-            .any(|byte| is(next, *byte))
+        || b"\n,)]}:".iter().any(|byte| is(next, *byte))
         || (is(next, b'-') && is(next + 1, b'-'))
         || (is(next, b'/') && is(next + 1, b'*'));
     if separator {
