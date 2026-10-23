@@ -455,10 +455,12 @@ def test_given_unusable_setup_when_reviewing_then_it_fails_before_creating_schem
     "test_case",
     (
         ReviewMarkdownFailureE2ETestCase(
-            description="a directory as the Markdown path",
-            edits={STAGING: _SAME_VALUES_STAGING},
-            expected_stdout_fragment="Review passed",
+            description="a directory as the Markdown path of a review with findings",
+            edits={ORDER_TOTALS: _CHANGED_VALUES_TOTALS},
+            expected_stdout_fragment="Review failed",
             expected_code="C775",
+            expected_status="failed",
+            expected_finding_kinds=frozenset({"values", "test"}),
         ),
     ),
     ids=lambda case: case.description,
@@ -469,14 +471,26 @@ def test_given_unwritable_markdown_path_when_reviewing_then_result_prints_and_it
     project_dir: Path = prepare_review_repository(tmp_path=tmp_path, extra_files={})
     edit_project(project_dir=project_dir, files=test_case.edits)
 
-    result: subprocess.CompletedProcess[str] = run_review(
+    human: subprocess.CompletedProcess[str] = run_review(
         project_dir=project_dir, arguments=("--markdown", str(tmp_path))
     )
+    machine: subprocess.CompletedProcess[str] = run_review(
+        project_dir=project_dir, arguments=("--json", "--markdown", str(tmp_path))
+    )
 
-    assert result.returncode == 3, result.stdout + result.stderr
-    assert test_case.expected_stdout_fragment in result.stdout
-    assert test_case.expected_code in result.stderr
-    assert "Traceback" not in result.stderr
+    assert human.returncode == 3, human.stdout + human.stderr
+    assert test_case.expected_stdout_fragment in human.stdout
+    assert test_case.expected_code in human.stderr
+    assert "Traceback" not in human.stderr
+    assert machine.returncode == 3, machine.stdout + machine.stderr
+    document: dict[str, Any] = review_document(machine)
+    assert document["exit_code"] == machine.returncode
+    assert document["status"] == test_case.expected_status
+    assert document["error"]["code"] == test_case.expected_code
+    assert {finding["kind"] for finding in document["findings"]} == (
+        test_case.expected_finding_kinds
+    ), machine.stdout
+    assert "Traceback" not in machine.stderr
     assert review_schemas(project_dir=project_dir) == ()
 
 

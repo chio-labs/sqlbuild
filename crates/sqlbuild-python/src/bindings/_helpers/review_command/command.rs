@@ -677,19 +677,29 @@ fn write_markdown(request: &Bound<'_, PyAny>, report: &ReviewReport) -> PyResult
     }))
 }
 
-/// Print the report to stdout, then write `--markdown`; the Markdown failure, if any.
-fn publish(
-    request: &Bound<'_, PyAny>,
-    report: &ReviewReport,
-    machine: bool,
-) -> PyResult<Option<String>> {
+/// Print the report to stdout, as JSON or text.
+fn print_report(py: Python<'_>, report: &ReviewReport, machine: bool) -> PyResult<()> {
     let document: String = if machine {
         render_review_json(report)
     } else {
         render_review_text(report)
     };
-    write_stdout_bytes(request.py(), document.as_bytes())?;
-    write_markdown(request, report)
+    write_stdout_bytes(py, document.as_bytes())
+}
+
+/// `report` failed by the Markdown write failure, unless an earlier error already failed it.
+fn with_markdown_failure(report: ReviewReport, failure: Option<&String>) -> ReviewReport {
+    match (&report.error, failure) {
+        (None, Some(message)) => ReviewReport {
+            error: Some(ReviewFailure {
+                code: MARKDOWN_WRITE_CODE.to_owned(),
+                message: message.clone(),
+                help: Some("pass a --markdown path in a writable directory".to_owned()),
+            }),
+            ..report
+        },
+        _ => report,
+    }
 }
 
 /// Run one `sqb review` request.
@@ -716,7 +726,9 @@ pub(crate) fn run_review_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> 
             .transpose()?,
         ..report
     };
-    let markdown_failure: Option<String> = publish(request, &report, machine)?;
+    let markdown_failure: Option<String> = write_markdown(request, &report)?;
+    let report: ReviewReport = with_markdown_failure(report, markdown_failure.as_ref());
+    print_report(py, &report, machine)?;
     if let Some(cause) = cause {
         if !cause.is_instance_of::<PyException>(py) {
             return Err(cause);
@@ -727,16 +739,11 @@ pub(crate) fn run_review_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> 
         let error = report.error.clone().unwrap_or_default();
         return Err(failed_error(py, &error, cause));
     }
-    if let Some(message) = markdown_failure {
-        let failure = ReviewFailure {
-            code: MARKDOWN_WRITE_CODE.to_owned(),
-            message,
-            help: Some("pass a --markdown path in a writable directory".to_owned()),
-        };
+    if let Some(error) = &report.error {
         return Err(failed_error(
             py,
-            &failure,
-            pyo3::exceptions::PyOSError::new_err(failure.message.clone()),
+            error,
+            pyo3::exceptions::PyOSError::new_err(error.message.clone()),
         ));
     }
     Ok(review_outcome(&report).1)
