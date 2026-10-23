@@ -570,7 +570,6 @@ pub(crate) fn load_review(payload: Option<&ConfigValue>, file: ConfigFile) -> Lo
             ));
         }
     };
-    let schema_prefix = optional_str(mapping, "schema_prefix").ok().flatten();
     let valid_prefix = |prefix: &str| {
         prefix
             .chars()
@@ -580,15 +579,17 @@ pub(crate) fn load_review(payload: Option<&ConfigValue>, file: ConfigFile) -> Lo
                 .chars()
                 .all(|item| item.is_ascii_alphanumeric() || item == '_')
     };
-    if get(mapping, "schema_prefix").is_some()
-        && !schema_prefix.as_deref().is_some_and(valid_prefix)
-    {
-        return Err(ConfigFailure::at(
-            file,
-            "review.schema_prefix must start with a letter and contain only letters, digits and \
-             underscores",
-        ));
-    }
+    let schema_prefix: Option<String> = match get(mapping, "schema_prefix") {
+        None => None,
+        Some(ConfigValue::String(text)) if valid_prefix(text) => Some(text.clone()),
+        Some(_) => {
+            return Err(ConfigFailure::at(
+                file,
+                "review.schema_prefix must start with a letter and contain only letters, digits \
+                 and underscores",
+            ));
+        }
+    };
     let critical_tags = match get(mapping, "critical_tags") {
         None => None,
         payload => Some(string_sequence(

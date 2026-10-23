@@ -369,6 +369,7 @@ pub enum ExecutorHost {
     SqlValueRenderingError,
     ReviewSchemaLifecycle,
     ReviewSchemaMarker,
+    LeftoverReviewSchemas,
 }
 
 impl ExecutorHost {

@@ -1,3 +1,6 @@
+use serde_json::Value;
+
+use crate::janitor_planning::models::ArchiveTimestamp;
 use crate::review_command::models::{DownstreamPolicy, ReviewReport, SelectedToken};
 
 pub(super) struct PlanTestCase {
@@ -20,17 +23,37 @@ pub(super) struct PlanErrorTestCase {
 pub(super) struct OutcomeTestCase {
     pub(super) description: &'static str,
     pub(super) report: ReviewReport,
-    pub(super) expected: (&'static str, i32),
+    pub(super) expected_status: &'static str,
+    pub(super) expected_exit_code: i32,
+}
+
+pub(super) struct JsonTestCase {
+    pub(super) description: &'static str,
+    pub(super) report: ReviewReport,
+    pub(super) expected_values: Vec<(&'static str, Value)>,
+}
+
+pub(super) struct PolicyTestCase {
+    pub(super) description: &'static str,
+    pub(super) text: &'static str,
+    pub(super) expected_policy: Option<DownstreamPolicy>,
+}
+
+pub(super) struct SchemaNameBuildTestCase {
+    pub(super) description: &'static str,
+    pub(super) parts: (&'static str, &'static str, &'static str, &'static str),
+    pub(super) expected_name: &'static str,
 }
 
 pub(super) struct RenderTestCase {
     pub(super) description: &'static str,
     pub(super) report: ReviewReport,
     pub(super) expected_fragments: Vec<&'static str>,
+    pub(super) unexpected_fragments: Vec<&'static str>,
 }
 
 pub(super) struct SchemaNameTestCase {
     pub(super) description: &'static str,
     pub(super) name: &'static str,
-    pub(super) expected: Option<(i32, u32, u32, u32, u32, u32)>,
+    pub(super) expected_timestamp: Option<ArchiveTimestamp>,
 }

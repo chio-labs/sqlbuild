@@ -844,4 +844,9 @@ pub(crate) const ENTRIES: &[HostEntry] = &[
         kind: HostKind::Class,
         edge: HostEdge::Executor,
     },
+    HostEntry {
+        name: "leftover_review_schemas",
+        kind: HostKind::Function,
+        edge: HostEdge::Executor,
+    },
 ];

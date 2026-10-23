@@ -1,5 +1,6 @@
 //! The report sections the Markdown and terminal renderers share.
 
+use crate::review_command::constants::{CLONE_START, NO_COMPARISON_MODE};
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::review_command::_helpers::outcome::outcome;
@@ -80,7 +81,7 @@ pub(crate) fn compared_count(report: &ReviewReport) -> usize {
         .filter(|node| {
             node.comparison
                 .as_ref()
-                .is_some_and(|comparison| comparison.mode != "none")
+                .is_some_and(|comparison| comparison.mode != NO_COMPARISON_MODE)
         })
         .count()
 }
@@ -173,6 +174,14 @@ fn node_line(node: &NodeReport, style: Style) -> String {
     line
 }
 
+/// One node waiting to be drawn in the impact tree, with the prefix its line starts with.
+struct TreeEntry<'a> {
+    name: &'a str,
+    prefix: String,
+    last: bool,
+    is_root: bool,
+}
+
 /// The impact tree, one line per node, from the changed roots downstream.
 pub(crate) fn impact_tree(report: &ReviewReport, style: Style) -> Vec<String> {
     let nodes: BTreeMap<&str, &NodeReport> = report
@@ -209,9 +218,19 @@ pub(crate) fn impact_tree(report: &ReviewReport, style: Style) -> Vec<String> {
         if shown.contains(root.name.as_str()) {
             continue;
         }
-        let mut stack: Vec<(&str, String, bool, bool)> =
-            vec![(&root.name, String::new(), true, true)];
-        while let Some((name, prefix, last, is_root)) = stack.pop() {
+        let mut stack: Vec<TreeEntry<'_>> = vec![TreeEntry {
+            name: &root.name,
+            prefix: String::new(),
+            last: true,
+            is_root: true,
+        }];
+        while let Some(TreeEntry {
+            name,
+            prefix,
+            last,
+            is_root,
+        }) = stack.pop()
+        {
             let Some(node) = nodes.get(name) else {
                 continue;
             };
@@ -239,7 +258,12 @@ pub(crate) fn impact_tree(report: &ReviewReport, style: Style) -> Vec<String> {
             };
             let next: &[&str] = children.get(name).map_or(&[], Vec::as_slice);
             for (index, child) in next.iter().enumerate().rev() {
-                stack.push((child, child_prefix.clone(), index + 1 == next.len(), false));
+                stack.push(TreeEntry {
+                    name: child,
+                    prefix: child_prefix.clone(),
+                    last: index + 1 == next.len(),
+                    is_root: false,
+                });
             }
         }
     }
@@ -299,7 +323,7 @@ pub(crate) fn baseline_lines(report: &ReviewReport, style: Style) -> Vec<String>
         ));
     }
     for start in &report.incremental_starts {
-        let method: &str = if start.method == "clone" {
+        let method: &str = if start.method == CLONE_START {
             "cloned from the target"
         } else {
             "full refresh"
@@ -315,7 +339,7 @@ pub(crate) fn baseline_lines(report: &ReviewReport, style: Style) -> Vec<String>
         .iter()
         .filter(|node| {
             node.comparison.as_ref().is_some_and(|comparison| {
-                comparison.mode == "none" && comparison.target_relation.is_none()
+                comparison.mode == NO_COMPARISON_MODE && comparison.target_relation.is_none()
             })
         })
         .map(|node| style.code(&node.name))

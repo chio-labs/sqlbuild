@@ -1,6 +1,8 @@
 //! Words the review renders for policies, statuses and counts.
 
-use crate::review_command::constants::{ALL_POLICY, CRITICAL_POLICY, NONE_POLICY};
+use crate::review_command::constants::{
+    ALL_POLICY, CRITICAL_POLICY, NONE_POLICY, SECONDS_PER_MINUTE,
+};
 use crate::review_command::models::DownstreamPolicy;
 
 pub(crate) fn policy_name(policy: DownstreamPolicy) -> &'static str {
@@ -22,11 +24,15 @@ pub(crate) fn counted(count: usize, singular: &str, plural: &str) -> String {
 
 /// `3.25s` or `2m 05s`.
 pub(crate) fn duration_text(seconds: f64) -> String {
-    if seconds < 60.0 {
+    let whole: u64 = seconds.round() as u64;
+    if whole < SECONDS_PER_MINUTE {
         return format!("{seconds:.2}s");
     }
-    let whole: u64 = seconds.round() as u64;
-    format!("{}m {:02}s", whole / 60, whole % 60)
+    format!(
+        "{}m {:02}s",
+        whole / SECONDS_PER_MINUTE,
+        whole % SECONDS_PER_MINUTE
+    )
 }
 
 /// `a`, `a and b`, `a, b and c`.

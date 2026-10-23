@@ -6,16 +6,15 @@ use sqlbuild_analysis::review_command::main::review_schema_name::review_schema_n
 use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::boundary::python_calls::{call_with, keywords};
+use crate::bindings::_helpers::build_command::support::{boolean, none, text};
 use crate::bindings::_helpers::command_runtime::connection::resolve_target_connection_config;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
+use crate::bindings::_helpers::execution_history::conversion::optional_text;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::{field as native_field, replaced};
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::review_command::planning::ReviewSettings;
-use crate::bindings::_helpers::review_command::support::{
-    boolean, compact_timestamp, none, optional_text, text,
-};
 
 /// Where the review builds and where its ownership marker goes.
 pub(crate) struct ReviewSchema<'py> {
@@ -31,7 +30,7 @@ pub(crate) struct ReviewSchema<'py> {
 pub(crate) fn review_schema<'py>(
     (project, discovered): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
     settings: &ReviewSettings,
-    (created_at, head, run_id): (Bound<'py, PyAny>, &str, &str),
+    ((created_at, compact), head, run_id): ((Bound<'py, PyAny>, String), &str, &str),
 ) -> PyResult<ReviewSchema<'py>> {
     let py: Python<'py> = project.py();
     let target: Bound<'py, PyAny> = active_target_config(discovered, &settings.target)?;
@@ -51,12 +50,7 @@ pub(crate) fn review_schema<'py>(
         );
     };
     Ok(ReviewSchema {
-        name: review_schema_name(
-            &settings.schema_prefix,
-            &compact_timestamp(&created_at)?,
-            head,
-            run_id,
-        ),
+        name: review_schema_name(&settings.schema_prefix, &compact, head, run_id),
         database: optional_text(&native_field(&target, "database")?)?,
         marker_database: optional_text(&native_field(project, "effective_target_database")?)?,
         marker_schema,
@@ -78,8 +72,7 @@ fn active_target_config<'py>(
     )
 }
 
-/// `discovered` with a target named after the review schema: the active target's connection and
-/// policies, writing only to the review schema and reading managed sources like `--against`.
+/// `discovered` plus a target that writes only to the review schema, otherwise like the active one.
 pub(crate) fn with_review_target<'py>(
     discovered: &Bound<'py, PyAny>,
     settings: &ReviewSettings,

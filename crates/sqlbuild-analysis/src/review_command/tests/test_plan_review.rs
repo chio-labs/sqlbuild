@@ -1,3 +1,4 @@
+use crate::janitor_planning::models::ArchiveTimestamp;
 use crate::review_command::main::parse_downstream_policy::parse_downstream_policy;
 use crate::review_command::main::parse_review_schema_name::parse_review_schema_name;
 use crate::review_command::main::plan_review::plan_review;
@@ -5,7 +6,7 @@ use crate::review_command::main::review_schema_name::review_schema_name;
 use crate::review_command::models::{ChangedNode, DownstreamPolicy, ReviewPlan};
 use crate::review_command::tests::helpers::{changed, token, waffle_shop};
 use crate::review_command::tests::test_types::{
-    PlanErrorTestCase, PlanTestCase, SchemaNameTestCase,
+    PlanErrorTestCase, PlanTestCase, PolicyTestCase, SchemaNameBuildTestCase, SchemaNameTestCase,
 };
 
 #[test]
@@ -202,54 +203,97 @@ fn given_bad_selection_when_planning_then_fails_with_code() {
 
 #[test]
 fn given_policy_text_when_parsing_then_known_values_map() {
-    assert_eq!(
-        parse_downstream_policy("critical"),
-        Some(DownstreamPolicy::Critical)
-    );
-    assert_eq!(parse_downstream_policy("all"), Some(DownstreamPolicy::All));
-    assert_eq!(
-        parse_downstream_policy("none"),
-        Some(DownstreamPolicy::None)
-    );
-    assert_eq!(parse_downstream_policy("some"), None);
+    let test_cases = [
+        PolicyTestCase {
+            description: "critical",
+            text: "critical",
+            expected_policy: Some(DownstreamPolicy::Critical),
+        },
+        PolicyTestCase {
+            description: "all",
+            text: "all",
+            expected_policy: Some(DownstreamPolicy::All),
+        },
+        PolicyTestCase {
+            description: "none",
+            text: "none",
+            expected_policy: Some(DownstreamPolicy::None),
+        },
+        PolicyTestCase {
+            description: "an unknown policy",
+            text: "some",
+            expected_policy: None,
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            parse_downstream_policy(test_case.text),
+            test_case.expected_policy,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_schema_name_parts_when_building_then_name_is_strict_and_lowercase_hex() {
+    let test_cases = [SchemaNameBuildTestCase {
+        description: "a long commit and run id are shortened and folded",
+        parts: ("REVIEW", "20261023T101500Z", "3F2A9C1D88", "a1b2c3d4e5f6"),
+        expected_name: "REVIEW_20261023T101500Z_3f2a9c1_a1b2c3",
+    }];
+    for test_case in test_cases {
+        let (prefix, timestamp, commit, run) = test_case.parts;
+        assert_eq!(
+            review_schema_name(prefix, timestamp, commit, run),
+            test_case.expected_name,
+            "{}",
+            test_case.description
+        );
+    }
 }
 
 #[test]
 fn given_schema_names_when_parsing_then_only_strict_names_parse() {
-    let built: String =
-        review_schema_name("REVIEW", "20261023T101500Z", "3F2A9C1D88", "a1b2c3d4e5f6");
-    assert_eq!(built, "REVIEW_20261023T101500Z_3f2a9c1_a1b2c3");
+    let created = ArchiveTimestamp {
+        year: 2026,
+        month: 10,
+        day: 23,
+        hour: 10,
+        minute: 15,
+        second: 0,
+    };
     let test_cases = [
         SchemaNameTestCase {
             description: "a built name",
             name: "REVIEW_20261023T101500Z_3f2a9c1_a1b2c3",
-            expected: Some((2026, 10, 23, 10, 15, 0)),
+            expected_timestamp: Some(created),
         },
         SchemaNameTestCase {
             description: "a folded name with an underscored prefix",
             name: "ci_review_20261023t101500z_3f2a9c1_a1b2c3",
-            expected: Some((2026, 10, 23, 10, 15, 0)),
+            expected_timestamp: Some(created),
         },
         SchemaNameTestCase {
             description: "a short commit",
             name: "REVIEW_20261023T101500Z_3f2a_a1b2c3",
-            expected: None,
+            expected_timestamp: None,
         },
         SchemaNameTestCase {
             description: "an invalid month",
             name: "REVIEW_20261323T101500Z_3f2a9c1_a1b2c3",
-            expected: None,
+            expected_timestamp: None,
         },
         SchemaNameTestCase {
             description: "an ordinary schema",
             name: "analytics_prod",
-            expected: None,
+            expected_timestamp: None,
         },
     ];
     for test_case in test_cases {
         assert_eq!(
             parse_review_schema_name(test_case.name),
-            test_case.expected,
+            test_case.expected_timestamp,
             "{}",
             test_case.description
         );

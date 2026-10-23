@@ -1,16 +1,30 @@
 //! The strict review schema name format.
 
+use crate::janitor_planning::models::ArchiveTimestamp;
 use crate::review_command::constants::{
-    SCHEMA_COMMIT_DIGITS, SCHEMA_RUN_DIGITS, SCHEMA_TIMESTAMP_LENGTH,
+    LAST_DAY, LAST_HOUR, LAST_MINUTE, LAST_MONTH, LAST_SECOND, SCHEMA_COMMIT_DIGITS,
+    SCHEMA_RUN_DIGITS, SCHEMA_TIMESTAMP_LENGTH,
 };
 
 fn hex(text: &str, digits: usize) -> bool {
     text.len() == digits && text.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
+/// The decimal value of `bytes`, or `None` unless every byte is an ASCII digit.
+fn decimal(bytes: &[u8]) -> Option<u32> {
+    let mut value: u32 = 0;
+    for byte in bytes {
+        if !byte.is_ascii_digit() {
+            return None;
+        }
+        value = value * 10 + u32::from(byte - b'0');
+    }
+    Some(value)
+}
+
 /// The `YYYYMMDDTHHMMSSZ` creation time of a review schema name, or `None` for any other name.
 #[must_use]
-pub fn parse_review_schema_name(name: &str) -> Option<(i32, u32, u32, u32, u32, u32)> {
+pub fn parse_review_schema_name(name: &str) -> Option<ArchiveTimestamp> {
     let mut parts = name.rsplitn(4, '_');
     let run: &str = parts.next()?;
     let commit: &str = parts.next()?;
@@ -24,23 +38,18 @@ pub fn parse_review_schema_name(name: &str) -> Option<(i32, u32, u32, u32, u32, 
     if bytes.len() != SCHEMA_TIMESTAMP_LENGTH || bytes[8] != b'T' || bytes[15] != b'Z' {
         return None;
     }
-    let digits = |range: std::ops::Range<usize>| -> Option<u32> {
-        let text: &str = upper.get(range)?;
-        if !text.bytes().all(|byte| byte.is_ascii_digit()) {
-            return None;
-        }
-        text.parse().ok()
+    let parsed = ArchiveTimestamp {
+        year: decimal(&bytes[0..4])?,
+        month: decimal(&bytes[4..6])?,
+        day: decimal(&bytes[6..8])?,
+        hour: decimal(&bytes[9..11])?,
+        minute: decimal(&bytes[11..13])?,
+        second: decimal(&bytes[13..15])?,
     };
-    let year: i32 = i32::try_from(digits(0..4)?).ok()?;
-    let (month, day) = (digits(4..6)?, digits(6..8)?);
-    let (hour, minute, second) = (digits(9..11)?, digits(11..13)?, digits(13..15)?);
-    if !(1..=12).contains(&month)
-        || !(1..=31).contains(&day)
-        || hour > 23
-        || minute > 59
-        || second > 59
-    {
-        return None;
-    }
-    Some((year, month, day, hour, minute, second))
+    let valid: bool = (1..=LAST_MONTH).contains(&parsed.month)
+        && (1..=LAST_DAY).contains(&parsed.day)
+        && parsed.hour <= LAST_HOUR
+        && parsed.minute <= LAST_MINUTE
+        && parsed.second <= LAST_SECOND;
+    valid.then_some(parsed)
 }

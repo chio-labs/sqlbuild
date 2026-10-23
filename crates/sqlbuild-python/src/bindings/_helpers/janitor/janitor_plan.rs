@@ -44,6 +44,20 @@ fn age_days(value: &Bound<'_, PyAny>, planned_at: &Bound<'_, PyAny>) -> PyResult
     ))
 }
 
+/// `database.schema` of each leftover review schema, or the schema alone without a database.
+fn review_schema_names(items: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+    let mut names: Vec<String> = Vec::new();
+    for item in items.try_iter()? {
+        let item: Bound<'_, PyAny> = item?;
+        let schema: String = native_field(&item, "schema")?.extract()?;
+        let database: Option<String> = native_field(&item, "database")?.extract()?;
+        names.push(
+            database.map_or_else(|| schema.clone(), |database| format!("{database}.{schema}")),
+        );
+    }
+    Ok(names)
+}
+
 fn names(items: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     items.try_iter()?.map(|item| key_name(&item?)).collect()
 }
@@ -231,10 +245,7 @@ pub(crate) fn janitor_plan_text(plan: &Bound<'_, PyAny>) -> PyResult<JanitorPlan
         old_name_live: old_name_views(&native_field(&views, "live")?)?,
         old_name_missing: old_name_views(&native_field(&views, "missing")?)?,
         query_artifacts: names(&native_field(plan, "query_diff_artifact_candidates")?)?,
-        review_schemas: native_field(plan, "review_schema_candidates")?
-            .try_iter()?
-            .map(|item| item?.call_method0("display_name")?.extract())
-            .collect::<PyResult<Vec<String>>>()?,
+        review_schemas: review_schema_names(&native_field(plan, "review_schema_candidates")?)?,
         state_prunes,
         skipped_relations,
         skipped_schemas: source_schemas(&native_field(plan, "skipped_schemas")?, false)?,

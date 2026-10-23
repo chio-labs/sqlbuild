@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
-from sqlbuild.executor.review._helpers.marker import marked_review_schemas, write_review_marker
-from sqlbuild.executor.review.models import LeftoverReviewSchema, ReviewSchemaMarker
+from sqlbuild.executor.review._helpers.marker import write_review_marker
+from sqlbuild.executor.review.models import ReviewSchemaMarker
 
 
 class ReviewSchemaLifecycle:
-    """Create, drop and find the run-owned schemas `sqb review` builds into."""
+    """Create and drop the run-owned schemas `sqb review` builds into."""
 
     @staticmethod
     def create(
@@ -54,26 +54,3 @@ class ReviewSchemaLifecycle:
     @staticmethod
     def exists(*, adapter: BaseAdapter, connection: Any, database: str | None, schema: str) -> bool:
         return adapter.schema_exists(connection=connection, database=database, schema=schema)
-
-    @staticmethod
-    def leftovers(
-        *,
-        adapter: BaseAdapter,
-        connection: Any,
-        database: str | None,
-        schema: str,
-        now: datetime,
-        max_age: timedelta,
-    ) -> tuple[LeftoverReviewSchema, ...]:
-        """Marked review schemas older than `max_age` that still exist."""
-
-        return tuple(
-            leftover
-            for leftover in marked_review_schemas(
-                adapter=adapter, connection=connection, database=database, schema=schema
-            )
-            if now - leftover.created_at >= max_age
-            and adapter.schema_exists(
-                connection=connection, database=leftover.database, schema=leftover.schema
-            )
-        )

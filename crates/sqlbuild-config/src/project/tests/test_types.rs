@@ -24,5 +24,11 @@ pub(crate) struct GitBaseRefTestCase {
 pub(crate) struct ReviewConfigTestCase {
     pub(crate) description: &'static str,
     pub(crate) project: &'static str,
-    pub(crate) expected: Result<ReviewConfig, &'static str>,
+    pub(crate) expected_config: ReviewConfig,
+}
+
+pub(crate) struct ReviewConfigErrorTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) project: &'static str,
+    pub(crate) expected_fragment: &'static str,
 }
