@@ -14,10 +14,9 @@ Online: https://sqlbuild.com/docs/concepts/macros/sql-macros/
 - Parameters in the body
 - Compose macros
 - Checks and tools
-- Choose the right tool
 
 A SQL macro is a reusable piece of SQL with typed parameters. Unlike a
-[Python macro](../macros.md), it holds no logic: its body is SQL, so the compiler checks
+[Python macro](python-macros.md), it holds no logic: its body is SQL, so the compiler checks
 it on its own, expands it in place, and formatting, rules and column lineage see through every
 call.
 
@@ -275,14 +274,5 @@ macro file.
 Test SQL macros with [macro-mode unit tests](../testing.md#macro-tests), and replace one
 in a model test with a [`__macro__` mock](../testing.md#macro-mocking).
 
-## Choose the right tool
-
-| Use | When |
-|---|---|
-| SQL macro | The fragment is plain SQL with typed inputs: a calculation, a filter, a set of CTEs or columns you repeat. The compiler sees inside it. |
-| [Python macro](../macros.md) | Generating the SQL needs logic: loops, conditions on arguments, the adapter or target, or reading project context. |
-| [SQL function](../functions.md) | The logic belongs in the warehouse, to be called by other tools or evaluated per row there, or it is too large to inline everywhere. |
-| [Generic audit](../audits.md) | The SQL checks data quality on a model rather than producing part of its query. |
-
-Prefer a SQL macro over a Python macro whenever no logic is needed: its calls stay readable,
-typed and checked, and every tool sees the SQL it produces.
+See [Macros](../macros.md#choose-the-right-tool) for when to use a SQL macro, a Python
+macro, a SQL function or a generic audit.

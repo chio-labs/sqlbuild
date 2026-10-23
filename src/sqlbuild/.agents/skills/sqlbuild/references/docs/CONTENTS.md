@@ -52,9 +52,10 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [Collections and Rendering](concepts/constants/collections-and-rendering.md) (`concepts/constants/collections-and-rendering`) - Define list, set, and object constants and control their adapter-specific SQL rendering.
 - [Enum Model Contracts](concepts/enums/model-contracts.md) (`concepts/enums/model-contracts`) - Use an enum as a portable model-column domain with generated accepted-value validation.
 - [Model-Private Values](concepts/model-private-values.md) (`concepts/model-private-values`) - Keep enums and constants inside one model when no other resource should use them.
-- [Writing Macros](concepts/macros.md) (`concepts/macros`) - Write Python functions that generate reusable SQL fragments at compile time.
-- [Composition and Context](concepts/macros/composition-and-context.md) (`concepts/macros/composition-and-context`) - Compose macros through Python, use compile context, and understand scoped imports.
+- [Macros](concepts/macros.md) (`concepts/macros`) - Reuse SQL with typed SQL macros, or generate it with Python macros when it needs logic.
 - [SQL Macros](concepts/macros/sql-macros.md) (`concepts/macros/sql-macros`) - Write typed, logic-free SQL fragments that the compiler checks and sees inside.
+- [Python Macros](concepts/macros/python-macros.md) (`concepts/macros/python-macros`) - Write Python functions that generate SQL at compile time when the SQL needs logic.
+- [Python Macro Composition and Context](concepts/macros/composition-and-context.md) (`concepts/macros/composition-and-context`) - Compose Python macros through imports, and use adapter, target, constants and enums.
 - [Interpolation](concepts/interpolation.md) (`concepts/interpolation`) - How SQLBuild processes variables, context, and dynamic content in SQL and config.
 - [Functions](concepts/functions.md) (`concepts/functions`) - User-defined functions and table functions managed as part of your project.
 - [Incremental Models](concepts/incremental.md) (`concepts/incremental`) - Cursor-based incremental strategies, microbatch execution, and backfill policies.

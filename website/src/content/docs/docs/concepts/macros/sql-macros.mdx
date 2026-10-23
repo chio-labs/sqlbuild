@@ -4,7 +4,7 @@ description: "Write typed, logic-free SQL fragments that the compiler checks and
 ---
 
 A SQL macro is a reusable piece of SQL with typed parameters. Unlike a
-[Python macro](/docs/concepts/macros), it holds no logic: its body is SQL, so the compiler checks
+[Python macro](/docs/concepts/macros/python-macros), it holds no logic: its body is SQL, so the compiler checks
 it on its own, expands it in place, and formatting, rules and column lineage see through every
 call.
 
@@ -262,14 +262,5 @@ macro file.
 Test SQL macros with [macro-mode unit tests](/docs/concepts/testing#macro-tests), and replace one
 in a model test with a [`__macro__` mock](/docs/concepts/testing#macro-mocking).
 
-## Choose the right tool
-
-| Use | When |
-|---|---|
-| SQL macro | The fragment is plain SQL with typed inputs: a calculation, a filter, a set of CTEs or columns you repeat. The compiler sees inside it. |
-| [Python macro](/docs/concepts/macros) | Generating the SQL needs logic: loops, conditions on arguments, the adapter or target, or reading project context. |
-| [SQL function](/docs/concepts/functions) | The logic belongs in the warehouse, to be called by other tools or evaluated per row there, or it is too large to inline everywhere. |
-| [Generic audit](/docs/concepts/audits) | The SQL checks data quality on a model rather than producing part of its query. |
-
-Prefer a SQL macro over a Python macro whenever no logic is needed: its calls stay readable,
-typed and checked, and every tool sees the SQL it produces.
+See [Macros](/docs/concepts/macros#choose-the-right-tool) for when to use a SQL macro, a Python
+macro, a SQL function or a generic audit.

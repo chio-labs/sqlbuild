@@ -772,7 +772,7 @@ Every reference to a model, source, or seed must be explicit and typed. By defau
 
 - A macro whose expanded output contains `__ref()`, `__source()`, or `__seed()` fails to compile
   with `P006`. Pass the reference to the macro as an argument instead; see
-  [Typed reference arguments](macros.md#typed-reference-arguments).
+  [Typed reference arguments](macros/python-macros.md#typed-reference-arguments).
 - Literal SQL passed to `ctx.query()` or `ctx.execute_sql()` in a task, asset, check, loader, or
   Python hook that names a project relation fails to compile with `P008`.
 - The same check runs on SQL sent at run time and reports a `P008` warning; the query still runs.
