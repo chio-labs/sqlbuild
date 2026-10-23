@@ -11,6 +11,8 @@ const DISTINCT_ON_TOKENS: usize = 2;
 const QUERY_OPENERS: [&str; 4] = ["SELECT", "WITH", "VALUES", "FROM"];
 /// Keywords that combine the selects of a query.
 const SET_OPERATIONS: [&str; 3] = ["UNION", "INTERSECT", "EXCEPT"];
+/// A star, which an `EXCEPT` column list may follow as a modifier, not a set operation.
+const STAR: &str = "*";
 /// The words that may stand between a set operation and its parenthesised right branch.
 const SET_OPERATION_MODIFIERS: [&str; 3] = ["ALL", "DISTINCT", "NAME"];
 /// Tokens from `@` to a macro call's name: `@`, the kind, `.` and the name.
@@ -666,7 +668,12 @@ impl QueryParts {
                 }
             }
             if depth == 0 {
-                if token.kind == TokenKind::Word && is_set_operation(token.text(text)) {
+                let star_modifier: bool =
+                    previous_at_top.is_some_and(|previous| previous.text(text) == STAR);
+                if token.kind == TokenKind::Word
+                    && is_set_operation(token.text(text))
+                    && !star_modifier
+                {
                     branch += 1;
                 }
                 previous_at_top = Some(token);

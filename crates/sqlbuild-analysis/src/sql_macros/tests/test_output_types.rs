@@ -115,6 +115,11 @@ fn given_model_sql_when_reading_sql_macro_outputs_then_only_whole_aliased_items_
             expected_names: &[(Some("c"), 0, "one"), (None, 0, "two"), (None, 2, "three")],
         },
         OutputNamesTestCase {
+            description: "a star EXCEPT modifier is not a set operation",
+            sql: "SELECT * EXCEPT (a) FROM t UNION ALL SELECT @sql.b(y) AS two FROM t",
+            expected_names: &[(None, 1, "two")],
+        },
+        OutputNamesTestCase {
             description: "calls in subqueries, a nested WITH or beside a parenthesised branch",
             sql: "WITH c AS (WITH d AS (SELECT 1 AS x) SELECT @sql.a(x) AS one FROM d), e AS (SELECT * FROM (SELECT @sql.b(y) AS two FROM t) AS s) SELECT @sql.c(z) AS three FROM c UNION ALL (SELECT 'x' FROM e)",
             expected_names: &[],
