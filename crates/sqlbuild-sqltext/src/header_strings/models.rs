@@ -22,15 +22,6 @@ pub struct ProseString {
     pub value: String,
 }
 
-/// Why a triple-quoted string does not end where it should.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TripleQuoteError {
-    /// No closing `"""` follows.
-    Unclosed,
-    /// A `"""` at this offset ends the string inside its text.
-    Inside(usize),
-}
-
 /// A header quote error located in its file, with the message and help it reports.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QuoteFailure {

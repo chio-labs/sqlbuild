@@ -10,26 +10,17 @@ from typing import Any
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.header_strings._test_types import (
+    FoldedDescriptionTestCase,
     HeaderQuoteErrorTestCase,
 )
-from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.main.compile.header_strings.helpers import (
+    header_strings_project,
+)
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
 
 _QUOTE_MESSAGE: str = (
     'a double quote ends this "..." string early; use """…""" for text containing double quotes'
 )
-
-_BASE_FILES: dict[str, str] = {
-    "sqlbuild_project.toml": (
-        'name = "shop"\nadapter = "duckdb"\n\n[connection]\ndatabase = "shop.duckdb"\n\n'
-        "[scopes]\nenforce_placement = false\n"
-    ),
-    "seeds/raw_customers.csv": "customer_id,title\n1,Miss\n2,Mr\n",
-    "seeds/raw_customers.yml": (
-        "seeds:\n  - name: raw_customers\n    description: Raw customers.\n"
-        "    columns:\n      - name: customer_id\n        type: BIGINT\n"
-        "      - name: title\n        type: VARCHAR\n"
-    ),
-}
 
 _TITLE_MACRO: str = (
     "MACRO (\n"
@@ -72,12 +63,6 @@ _CUSTOMERS_MODEL: str = (
     "SELECT customer_id, @sql.is_womans_title(title) AS is_womans_title\n"
     'FROM __seed("raw_customers")\n'
 )
-
-
-def _project(tmp_path: Path, files: dict[str, str]) -> Path:
-    return prepare_inline_project(
-        tmp_path=tmp_path, project_name="shop", repo_files={**_BASE_FILES, **files}
-    )
 
 
 @pytest.mark.parametrize(
@@ -160,7 +145,7 @@ def _project(tmp_path: Path, files: dict[str, str]) -> Path:
 def test_given_misquoted_header_string_when_compiling_then_error_names_the_quote_and_the_fix(
     test_case: HeaderQuoteErrorTestCase, tmp_path: Path
 ) -> None:
-    project_dir: Path = _project(tmp_path, {test_case.path: test_case.contents})
+    project_dir: Path = header_strings_project(tmp_path, {test_case.path: test_case.contents})
 
     result: subprocess.CompletedProcess[str] = run_sqb(
         project_dir=project_dir, command=("--no-color", "compile")
@@ -173,17 +158,31 @@ def test_given_misquoted_header_string_when_compiling_then_error_names_the_quote
     assert test_case.expected_code in output, output
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FoldedDescriptionTestCase(
+            description="triple_quoted_and_wrapped_model_schema_and_macro_descriptions",
+            files={
+                "macros/sql/is_womans_title.sql": _TITLE_MACRO,
+                "schemas/customer.sql": _CUSTOMER_SCHEMA,
+                "models/customers.sql": _CUSTOMERS_MODEL,
+            },
+            expected_description=(
+                'Customers with a "woman\'s title" flag, one row each.\n\nBuilt from the raw seed.'
+            ),
+            expected_column_descriptions={
+                "is_womans_title": "True for Miss, Mrs and Ms.",
+                "customer_id": "The customer's key.",
+            },
+        ),
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_triple_quoted_and_wrapped_descriptions_when_compiling_then_folded_text_is_stored(
-    tmp_path: Path,
+    test_case: FoldedDescriptionTestCase, tmp_path: Path
 ) -> None:
-    project_dir: Path = _project(
-        tmp_path,
-        {
-            "macros/sql/is_womans_title.sql": _TITLE_MACRO,
-            "schemas/customer.sql": _CUSTOMER_SCHEMA,
-            "models/customers.sql": _CUSTOMERS_MODEL,
-        },
-    )
+    project_dir: Path = header_strings_project(tmp_path, test_case.files)
 
     compiled: subprocess.CompletedProcess[str] = run_sqb(
         project_dir=project_dir, command=("--no-color", "compile", "--manifest")
@@ -196,13 +195,12 @@ def test_given_triple_quoted_and_wrapped_descriptions_when_compiling_then_folded
     assert dag.returncode == 0, dag.stderr
     manifest: dict[str, Any] = json.loads((project_dir / "target/manifest.json").read_text())
     node: dict[str, Any] = manifest["nodes"]["model.shop.customers"]
-    expected_description: str = (
-        'Customers with a "woman\'s title" flag, one row each.\n\nBuilt from the raw seed.'
-    )
-    assert node["description"] == expected_description
-    assert node["columns"]["is_womans_title"]["description"] == "True for Miss, Mrs and Ms."
-    assert node["columns"]["customer_id"]["description"] == "The customer's key."
+    assert node["description"] == test_case.expected_description
+    assert {
+        name: node["columns"][name]["description"]
+        for name in test_case.expected_column_descriptions
+    } == test_case.expected_column_descriptions
     dag_nodes: dict[str, dict[str, Any]] = {
         dag_node["name"]: dag_node for dag_node in json.loads(dag.stdout)["nodes"]
     }
-    assert dag_nodes["customers"]["description"] == expected_description
+    assert dag_nodes["customers"]["description"] == test_case.expected_description

@@ -11,7 +11,9 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.format._test_types import (
     DescriptionLayoutTestCase,
+    QuoteFixTestCase,
 )
+from tests.e2e.src.sqlbuild.cli.commands.main.format.helpers import stored_descriptions
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 
 _PROJECT_FILE: str = (
@@ -19,14 +21,6 @@ _PROJECT_FILE: str = (
     "[scopes]\nenforce_placement = false\n"
 )
 _BODY: str = "\nSELECT 1 AS customer_id\n"
-
-
-def _stored_descriptions(project_dir: Path) -> dict[str, str]:
-    dag: subprocess.CompletedProcess[str] = run_sqb(
-        project_dir=project_dir, command=("--no-color", "dag", "--json")
-    )
-    assert dag.returncode == 0, dag.stderr
-    return {node["name"]: node["description"] for node in json.loads(dag.stdout)["nodes"]}
 
 
 @pytest.mark.parametrize(
@@ -93,7 +87,7 @@ def test_given_model_description_when_formatting_then_layout_is_canonical_and_te
             "models/customers.sql": test_case.header + _BODY,
         },
     )
-    before: dict[str, str] = _stored_descriptions(project_dir)
+    before: dict[str, str] = stored_descriptions(project_dir)
 
     formatted: subprocess.CompletedProcess[str] = run_sqb(
         project_dir=project_dir, command=("--no-color", "format")
@@ -107,29 +101,56 @@ def test_given_model_description_when_formatting_then_layout_is_canonical_and_te
     assert ", 0 changed)" in checked.stderr
     model: str = (project_dir / "models/customers.sql").read_text()
     assert model == test_case.expected_header + _BODY
-    assert _stored_descriptions(project_dir) == before
+    assert stored_descriptions(project_dir) == before
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        QuoteFixTestCase(
+            description="model_and_wrapped_macro_descriptions",
+            files={
+                "models/customers.sql": (
+                    'MODEL (\n  description "Matches a title (\\"Miss\\").",\n);\n'
+                    "\nSELECT @sql.title('Miss') AS title\n"
+                ),
+                "macros/sql/title.sql": (
+                    "MACRO (\n"
+                    "  description \"True when a name starts with a woman's title: Mme, Mlle, "
+                    "Miss, Mrs, Ms. Any case,\n"
+                    'with or without a dot (\\"MISS ANNA PARKER\\", \\"Mrs. C. O\'Brien\\").",\n'
+                    "  arguments (value VARCHAR),\n  returns VARCHAR,\n);\n\n@value\n"
+                ),
+            },
+            expected_fixes=[
+                ("description-quotes", "customers.sql", 2, "applied"),
+                ("description-quotes", "title.sql", 2, "applied"),
+            ],
+            expected_starts={
+                "models/customers.sql": (
+                    'MODEL (\n  description """Matches a title ("Miss").""",\n);\n'
+                ),
+                "macros/sql/title.sql": (
+                    "MACRO (\n"
+                    '  description """\n'
+                    "    True when a name starts with a woman's title: Mme, Mlle, Miss, Mrs, Ms. "
+                    "Any case, with or\n"
+                    '    without a dot ("MISS ANNA PARKER", "Mrs. C. O\'Brien").\n'
+                    '  """,\n'
+                ),
+            },
+            expected_description='Matches a title ("Miss").',
+        ),
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_descriptions_escaping_quotes_when_format_fix_then_triple_quoted_real_quotes(
-    tmp_path: Path,
+    test_case: QuoteFixTestCase, tmp_path: Path
 ) -> None:
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
         project_name="shop",
-        repo_files={
-            "sqlbuild_project.toml": _PROJECT_FILE,
-            "models/customers.sql": (
-                'MODEL (\n  description "Matches a title (\\"Miss\\").",\n);\n'
-                "\nSELECT @sql.title('Miss') AS title\n"
-            ),
-            "macros/sql/title.sql": (
-                "MACRO (\n"
-                "  description \"True when a name starts with a woman's title: Mme, Mlle, Miss, "
-                "Mrs, Ms. Any case,\n"
-                'with or without a dot (\\"MISS ANNA PARKER\\", \\"Mrs. C. O\'Brien\\").",\n'
-                "  arguments (value VARCHAR),\n  returns VARCHAR,\n);\n\n@value\n"
-            ),
-        },
+        repo_files={"sqlbuild_project.toml": _PROJECT_FILE, **test_case.files},
     )
     failed: subprocess.CompletedProcess[str] = run_sqb(
         project_dir=project_dir, command=("--no-color", "compile")
@@ -147,31 +168,18 @@ def test_given_descriptions_escaping_quotes_when_format_fix_then_triple_quoted_r
 
     assert failed.returncode != 0
     payload: dict[str, Any] = json.loads(fixed.stdout)
-    quote_fixes: list[dict[str, Any]] = [
-        fix for fix in payload["rule_fixes"] if fix["code"] == "description-quotes"
-    ]
-    assert sorted((Path(fix["file"]).name, fix["line"], fix["status"]) for fix in quote_fixes) == [
-        ("customers.sql", 2, "applied"),
-        ("title.sql", 2, "applied"),
-    ]
-    assert any(violation["code"] == "format-fix-skipped" for violation in payload["violations"])
     assert (
-        (project_dir / "models/customers.sql")
-        .read_text()
-        .startswith('MODEL (\n  description """Matches a title ("Miss").""",\n);\n')
-    )
-    assert (
-        (project_dir / "macros/sql/title.sql")
-        .read_text()
-        .startswith(
-            "MACRO (\n"
-            '  description """\n'
-            "    True when a name starts with a woman's title: Mme, Mlle, Miss, Mrs, Ms. Any case, "
-            "with or\n"
-            '    without a dot ("MISS ANNA PARKER", "Mrs. C. O\'Brien").\n'
-            '  """,\n'
+        sorted(
+            (fix["code"], Path(fix["file"]).name, fix["line"], fix["status"])
+            for fix in payload["rule_fixes"]
         )
+        == test_case.expected_fixes
     )
+    assert any(violation["code"] == "format-fix-skipped" for violation in payload["violations"])
+    assert {
+        path: (project_dir / path).read_text()[: len(start)]
+        for path, start in test_case.expected_starts.items()
+    } == test_case.expected_starts
     assert compiled.returncode == 0, compiled.stdout + compiled.stderr
     assert checked.returncode == 0, checked.stdout + checked.stderr
-    assert _stored_descriptions(project_dir)["customers"] == 'Matches a title ("Miss").'
+    assert stored_descriptions(project_dir)["customers"] == test_case.expected_description

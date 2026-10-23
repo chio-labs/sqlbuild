@@ -31,3 +31,6 @@ pub const TRIPLE_QUOTE_INSIDE_MESSAGE: &str =
 pub const TRIPLE_QUOTE_INSIDE_HELP: &str = "a \"\"\"...\"\"\" string ends at the next \"\"\"; reword the text so it has no three double quotes in a row";
 pub const UNCLOSED_TRIPLE_QUOTE_MESSAGE: &str = "this \"\"\" string is never closed";
 pub const UNCLOSED_TRIPLE_QUOTE_HELP: &str = "end the text with \"\"\"";
+
+/// Code points from here on are not ASCII; text running on into one continues a word.
+pub(crate) const FIRST_NON_ASCII: u32 = 0x80;

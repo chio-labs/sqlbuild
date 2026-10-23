@@ -11,10 +11,7 @@ fn line_breaks(run: &str) -> usize {
     run.matches('\n').count() + run.matches('\r').count() - run.matches("\r\n").count()
 }
 
-/// The text `written` stores as folded prose.
-///
-/// Text on one line is kept exactly. Otherwise the space at either end is dropped, a line break
-/// with the spaces around it is one space, and a blank line is a paragraph break (`\n\n`).
+/// The text `written` stores as folded prose; text on one line is kept exactly.
 pub fn fold_prose(written: &str) -> String {
     if !written.contains(['\n', '\r']) {
         return written.to_owned();

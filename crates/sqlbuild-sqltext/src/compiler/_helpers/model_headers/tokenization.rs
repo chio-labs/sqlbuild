@@ -12,12 +12,12 @@ use crate::header_strings::constants::{
     AUDITS_KEY, DESCRIPTION_KEY, DOUBLE_QUOTE_INSIDE, POSITION_SUFFIX, TRIPLE_QUOTE_INSIDE,
     TRIPLE_QUOTE_LENGTH, UNCLOSED_TRIPLE_QUOTE,
 };
+use crate::header_strings::errors::TripleQuoteError;
 use crate::header_strings::main::closes_inside_text::closes_inside_text;
 use crate::header_strings::main::opens_triple_quote::opens_triple_quote;
 use crate::header_strings::main::prose_string::prose_string;
 use crate::header_strings::main::run_on_after_close::run_on_after_close;
 use crate::header_strings::main::triple_quoted_end::triple_quoted_end;
-use crate::header_strings::models::TripleQuoteError;
 use sqlbuild_core::constants::{CLOSE_PAREN, OPEN_PAREN};
 
 pub(crate) const MAX_TOKENIZER_WORKERS: usize = 4;

@@ -15,3 +15,13 @@ class HeaderQuoteErrorTestCase:
     expected_code: str
     expected_location: str
     expected_message: str
+
+
+@dataclass(frozen=True)
+class FoldedDescriptionTestCase:
+    """Project files with prose descriptions and the folded text the manifest stores."""
+
+    description: str
+    files: dict[str, str]
+    expected_description: str
+    expected_column_descriptions: dict[str, str]

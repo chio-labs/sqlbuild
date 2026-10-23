@@ -26,7 +26,7 @@ use crate::bindings::_helpers::format_command::files::FormatChange;
 use crate::bindings::_helpers::format_command::report::lint_report;
 use crate::bindings::_helpers::format_command::run::{FormatOutcome, FormatRequest, run_format};
 use crate::bindings::_helpers::format_command::selection::{LintInputs, resolve_lint_inputs};
-use crate::bindings::_helpers::format_command::stages::has_quote_fixes;
+use crate::bindings::_helpers::format_command::stages::quote_fixable_file_count;
 use crate::bindings::_helpers::frontier::encoder::emit_error;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -232,7 +232,7 @@ fn run_command(
     )?;
     if let Some(error) = &resolved.discovery_error {
         let directory: PathBuf = project_dir.extract()?;
-        if !has_quote_fixes(&directory).map_err(value_error)? {
+        if quote_fixable_file_count(&directory).map_err(value_error)? == 0 {
             return Err(error.clone_ref(py));
         }
     }

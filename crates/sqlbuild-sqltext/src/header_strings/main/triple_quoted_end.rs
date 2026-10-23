@@ -1,19 +1,14 @@
 //! Where a triple-quoted header string's text and closing delimiter end.
 
 use crate::header_strings::constants::{LONGEST_CLOSING_RUN, TRIPLE_QUOTE_LENGTH};
-use crate::header_strings::models::TripleQuoteError;
-use crate::header_strings::types::HeaderChar;
+use crate::header_strings::errors::TripleQuoteError;
 
-/// The end of the text and the end of the closing `"""` of the string opening at `start`.
-///
-/// The first run of three or more double quotes closes the string. Up to two quotes before
-/// the closing three belong to the text, so text may end with a quote; a longer run is a
-/// `"""` inside the text.
-pub fn triple_quoted_end<T: HeaderChar>(
+/// The end of the text and of the closing `"""` of the triple-quoted string at `start`.
+pub fn triple_quoted_end<T: Copy + PartialEq + From<u8>>(
     text: &[T],
     start: usize,
 ) -> Result<(usize, usize), TripleQuoteError> {
-    let quote: T = T::ascii(b'"');
+    let quote: T = T::from(b'"');
     let mut index: usize = start + TRIPLE_QUOTE_LENGTH;
     while index < text.len() {
         if text[index] != quote {

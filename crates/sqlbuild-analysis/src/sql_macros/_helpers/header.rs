@@ -155,10 +155,7 @@ impl HeaderParser<'_> {
         }
     }
 
-    /// The folded prose of the description string `text`.
-    ///
-    /// A backslash is an ordinary character, so `\"` inside `"..."` is a double quote inside
-    /// the text, which only a `"""..."""` string may hold.
+    /// The folded prose of the description string `text`; `\"` in `"..."` is a quote inside it.
     fn description(&self, text: &Token) -> Result<String, SqlMacroError> {
         let raw: &str = text.text(self.source);
         if raw.starts_with(TRIPLE_QUOTE) {

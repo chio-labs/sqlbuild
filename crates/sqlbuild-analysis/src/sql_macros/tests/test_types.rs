@@ -87,6 +87,12 @@ pub(super) struct OutputNamesTestCase {
 pub(super) struct MacroDescriptionTestCase {
     pub(super) description: &'static str,
     pub(super) source: &'static str,
-    /// The stored description, or the start of the error message and its line and column.
-    pub(super) expected: Result<&'static str, (&'static str, usize, usize)>,
+    pub(super) expected_description: &'static str,
+}
+
+pub(super) struct MacroQuoteErrorTestCase {
+    pub(super) description: &'static str,
+    pub(super) source: &'static str,
+    pub(super) expected_message: &'static str,
+    pub(super) expected_location: (usize, usize),
 }
