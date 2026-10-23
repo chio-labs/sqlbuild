@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.174.0](https://github.com/chio-labs/sqlbuild/compare/v0.173.0...v0.174.0) (2026-10-23)
+
+
+### Features
+
+* ANY macro arguments, macro return types in contract checks and per-kind macro folder counts ([#1240](https://github.com/chio-labs/sqlbuild/issues/1240)) ([8b9f207](https://github.com/chio-labs/sqlbuild/commit/8b9f2077a8439fb3deb9cf7eb069b2043c023e6a))
+
 ## [0.173.0](https://github.com/chio-labs/sqlbuild/compare/v0.172.0...v0.173.0) (2026-10-23)
 
 
