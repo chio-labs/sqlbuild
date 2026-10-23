@@ -17,15 +17,11 @@ pub fn lint_sql_bodies(
     options: &LintSqlOptions,
 ) -> Vec<AuthoredDiagnostic> {
     let omitted: Vec<Option<usize>> = bodies.iter().map(omitted_select).collect();
-    let authored: Vec<AuthoredFile<'_>> = files
-        .iter()
-        .map(|text| AuthoredFile::new(text, &options.dialect))
-        .collect();
     let mut payloads: Vec<Value> = Vec::new();
     let mut index_by_request: HashMap<String, usize> = HashMap::new();
     let mut request_of_body: Vec<usize> = Vec::with_capacity(bodies.len());
     for (body, offset) in bodies.iter().zip(&omitted) {
-        let payload: Value = lint_payload((body, &authored[body.file]), *offset, options);
+        let payload: Value = lint_payload((body, files[body.file]), *offset, options);
         let key: String = payload.to_string();
         let next: usize = payloads.len();
         let index: usize = *index_by_request.entry(key).or_insert(next);
@@ -37,6 +33,10 @@ pub fn lint_sql_bodies(
     let responses: Vec<Result<Vec<Value>, String>> = run_batch(&payloads)
         .map(|responses| responses.iter().map(response_diagnostics).collect())
         .unwrap_or_else(|error| vec![Err(error); payloads.len()]);
+    let authored: Vec<AuthoredFile<'_>> = files
+        .iter()
+        .map(|text| AuthoredFile::new(text, &options.dialect))
+        .collect();
     let mut diagnostics: Vec<AuthoredDiagnostic> = Vec::new();
     for ((body, offset), request) in bodies.iter().zip(omitted).zip(request_of_body) {
         let file: &AuthoredFile<'_> = &authored[body.file];

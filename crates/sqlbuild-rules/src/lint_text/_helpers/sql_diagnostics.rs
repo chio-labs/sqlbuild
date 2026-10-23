@@ -1,5 +1,6 @@
 //! Native SQL lint responses mapped back onto authored source through expansion passes.
 
+use std::borrow::Cow;
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -136,13 +137,16 @@ fn integer(value: Option<&Value>) -> Option<i64> {
 }
 
 /// The body's lint text with each comment a SQL macro expansion generated blanked.
-pub(crate) fn without_generated_comments(body: &LintSqlBody, file: &AuthoredFile<'_>) -> String {
+pub(crate) fn without_generated_comments<'b>(
+    body: &'b LintSqlBody,
+    file: (&str, &str),
+) -> Cow<'b, str> {
     let text: &str = &body.lint_text;
     if body.passes.iter().all(Vec::is_empty) || !(text.contains("--") || text.contains("/*")) {
-        return text.to_owned();
+        return Cow::Borrowed(text);
     }
     let bytes: &[u8] = text.as_bytes();
-    let policy = lint_policy(backtick_identifiers(file.dialect));
+    let policy = lint_policy(backtick_identifiers(file.1));
     let mut generated: Vec<(usize, usize)> = Vec::new();
     let (mut index, mut counted_to, mut characters): (usize, usize, i64) = (0, 0, 0);
     while index < bytes.len() {
@@ -162,7 +166,7 @@ pub(crate) fn without_generated_comments(body: &LintSqlBody, file: &AuthoredFile
         }
     }
     if generated.is_empty() {
-        return text.to_owned();
+        return Cow::Borrowed(text);
     }
     let mut blanked: String = String::with_capacity(text.len());
     let mut copied_to: usize = 0;
@@ -175,7 +179,7 @@ pub(crate) fn without_generated_comments(body: &LintSqlBody, file: &AuthoredFile
         copied_to = end;
     }
     blanked.push_str(&text[copied_to..]);
-    blanked
+    Cow::Owned(blanked)
 }
 
 /// The diagnostics outside a `SELECT 1` or expression frame lint added around the body.
@@ -195,12 +199,16 @@ pub(crate) fn without_generated_frame(
 }
 
 /// Whether lint text offset `offset` lies in SQL a `@sql.` call generated in the authored file.
-fn from_sql_macro(body: &LintSqlBody, file: &AuthoredFile<'_>, offset: i64) -> bool {
+fn from_sql_macro(body: &LintSqlBody, (text, dialect): (&str, &str), offset: i64) -> bool {
     let (mapped, generated) = map_offset(offset, &body.passes);
-    generated
-        && file
-            .token_at(body.body_start + mapped)
-            .is_some_and(|token| token.starts_with(SQL_CALL_PREFIX))
+    if !generated {
+        return false;
+    }
+    match usize::try_from(body.body_start + mapped) {
+        Ok(start) => interpolation_text_at(text, start, dialect)
+            .is_some_and(|token| token.starts_with(SQL_CALL_PREFIX)),
+        Err(_) => false,
+    }
 }
 
 /// Keep diagnostics starting inside a framed expression, whose frame lint generated.

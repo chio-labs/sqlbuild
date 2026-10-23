@@ -1,11 +1,13 @@
 //! Native SQL lint request payloads and the batch engine call.
 
+use std::borrow::Cow;
+
 use serde_json::{Map, Value};
 use sqlbuild_attachments::ceremonial_select::main::omitted_select_offset::omitted_select_offset;
 use sqlbuild_attachments::ceremonial_select::models::OmittedSelect;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
-use crate::lint_text::_helpers::sql_diagnostics::{AuthoredFile, without_generated_comments};
+use crate::lint_text::_helpers::sql_diagnostics::without_generated_comments;
 use crate::lint_text::constants::{
     CROSS_KEYWORD, INVALID_BATCH, LINE_COMMENT_PREFIX, LINT_API_VERSION,
     OMITTED_CEREMONIAL_SELECT_SQL,
@@ -41,11 +43,11 @@ fn strings(values: &[String]) -> Value {
 
 /// The engine request for one body, with the omitted `SELECT 1` added back.
 pub(crate) fn lint_payload(
-    (body, file): (&LintSqlBody, &AuthoredFile<'_>),
+    (body, file): (&LintSqlBody, &str),
     omitted: Option<usize>,
     options: &LintSqlOptions,
 ) -> Value {
-    let lint_text: String = without_generated_comments(body, file);
+    let lint_text: Cow<'_, str> = without_generated_comments(body, (file, &options.dialect));
     let sql: String = match omitted {
         Some(offset) => {
             let characters: Vec<char> = lint_text.chars().collect();
@@ -53,7 +55,7 @@ pub(crate) fn lint_payload(
             let tail: String = characters[offset..].iter().collect();
             format!("{head}{OMITTED_CEREMONIAL_SELECT_SQL}{tail}")
         }
-        None => lint_text,
+        None => lint_text.into_owned(),
     };
     let mut payload: Map<String, Value> = Map::new();
     let _ = payload.insert("version".to_string(), Value::from(LINT_API_VERSION));
