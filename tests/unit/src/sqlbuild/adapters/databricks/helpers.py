@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlbuild.adapter.contract.models import RetentionRequest
+from sqlbuild.adapter.contract.models import RelationInfo, RelationUsageReport, RetentionRequest
 from sqlbuild.adapter.contract.types import RetentionScope
+from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
 
 
 def build_retention_request(*, desired_days: int) -> RetentionRequest:
@@ -63,3 +64,64 @@ class FakeDatabricksMetadataConnection:
         cursor: FakeDatabricksMetadataCursor = self._cursors.pop(0)
         self.returned_cursors.append(cursor)
         return cursor
+
+
+class FakeLineageError(Exception):
+    """A Databricks server error with a SQLSTATE."""
+
+    def __init__(self, message: str, sqlstate: str | None) -> None:
+        super().__init__(message)
+        self.sqlstate: str | None = sqlstate
+
+
+class FakeLineageCursor:
+    """Answers lineage reads from stored rows, recording each read."""
+
+    def __init__(self, connection: FakeLineageConnection) -> None:
+        self.connection: FakeLineageConnection = connection
+        self.rows: list[tuple[object, ...]] = []
+
+    def execute(self, sql: str, params: dict[str, object]) -> None:
+        self.connection.queries.append((sql, params))
+        error: Exception
+        for error in self.connection.errors:
+            raise error
+        names: frozenset[object] = frozenset(params.values())
+        self.rows = list(filter(lambda row: row[0] in names, self.connection.rows))
+
+    def fetchall(self) -> list[tuple[object, ...]]:
+        return self.rows
+
+    def close(self) -> None:
+        return None
+
+
+class FakeLineageConnection:
+    def __init__(
+        self,
+        *,
+        rows: tuple[tuple[object, ...], ...] = (),
+        errors: tuple[Exception, ...] = (),
+    ) -> None:
+        self.rows: tuple[tuple[object, ...], ...] = rows
+        self.errors: tuple[Exception, ...] = errors
+        self.queries: list[tuple[str, dict[str, object]]] = []
+
+    def cursor(self) -> FakeLineageCursor:
+        return FakeLineageCursor(self)
+
+
+def usage_relation(database: str | None, schema: str, name: str) -> RelationInfo:
+    """A table relation for usage reads."""
+
+    return RelationInfo(database=database, schema=schema, name=name, relation_type="table")
+
+
+def read_databricks_usage(
+    *, connection: FakeLineageConnection, relations: tuple[RelationInfo, ...], window_seconds: int
+) -> RelationUsageReport:
+    """Databricks' usage report for the relations from the fake connection."""
+
+    return DatabricksAdapter().relation_usage(
+        connection=connection, relations=relations, window_seconds=window_seconds
+    )

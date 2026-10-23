@@ -54,7 +54,6 @@ from sqlbuild.adapter.contract.main.complete_table_freshness_results import (
 )
 from sqlbuild.adapter.contract.main.run_relation_read_probe import run_relation_read_probe
 from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
-from sqlbuild.adapter.contract.main.unsupported_relation_usage import unsupported_relation_usage
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
@@ -122,6 +121,7 @@ from sqlbuild.adapters.bigquery._helpers.grants import (
     render_bigquery_view_move,
     render_bigquery_view_revokes,
 )
+from sqlbuild.adapters.bigquery._helpers.relation_usage import bigquery_relation_usage
 from sqlbuild.adapters.bigquery._helpers.statement_telemetry import affected_rows
 from sqlbuild.adapters.bigquery.classes.bigquery_connection import _BigQueryConnection
 from sqlbuild.adapters.bigquery.classes.bigquery_cursor import _BigQueryCursor
@@ -518,8 +518,11 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         relations: tuple[RelationInfo, ...],
         window_seconds: int,
     ) -> RelationUsageReport:
-        del connection, relations, window_seconds
-        return unsupported_relation_usage()
+        """Read candidate reads from the region's INFORMATION_SCHEMA.JOBS (180 days kept)."""
+
+        return bigquery_relation_usage(
+            connection=connection, relations=relations, window_seconds=window_seconds
+        )
 
     def get_tables_freshness_metadata(
         self,

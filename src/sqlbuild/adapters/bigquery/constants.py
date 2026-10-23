@@ -31,3 +31,14 @@ MAX_CLONE_REFUSAL_ERROR_CHAIN: int = 8
 NATIVE_TABLE_TYPE: str = "TABLE"
 PENDING_JOB_STATE: str = "PENDING"
 PENDING_JOB_POLL_SECONDS: float = 1.0
+USAGE_NAME_CHUNK_SIZE: int = 1_000
+USAGE_UNAVAILABLE_REASON: str = (
+    "cannot read INFORMATION_SCHEMA.JOBS "
+    "(needs bigquery.jobs.listAll, for example the BigQuery Resource Viewer role)"
+)
+USAGE_UNAVAILABLE_ERROR_CODES: frozenset[int] = frozenset({403, 404})
+USAGE_UNAVAILABLE_ERROR_CLASS_NAMES: frozenset[str] = frozenset(
+    {"Forbidden", "NotFound", "PermissionDenied"}
+)
+USAGE_UNAVAILABLE_MESSAGES: tuple[str, ...] = ("access denied", "permission")
+CLONE_STATEMENT_PATTERN: str = r"(?is)\bCLONE\b"

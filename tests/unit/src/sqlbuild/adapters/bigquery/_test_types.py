@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlbuild._native import InferredNullability
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
+    RelationUsageReport,
     RowDiffResult,
     RowDiffSampleRow,
     SchemaDiffResult,
@@ -219,3 +220,42 @@ class BigQueryJobInvalidationTestCase:
     description: str
     operation: str
     expected_reads: dict[str, int]
+
+
+@dataclass(frozen=True)
+class BigQueryRelationUsageTestCase:
+    description: str
+    relations: tuple[tuple[str | None, str, str], ...]
+    dataset_locations: dict[str, str]
+    rows: tuple[tuple[object, ...], ...]
+    expected_queries: tuple[tuple[str, str, tuple[str, ...]], ...]
+    expected_usages: tuple[tuple[str, tuple[str, ...], int, datetime], ...]
+
+
+@dataclass(frozen=True)
+class BigQueryRelationUsageQueryTestCase:
+    description: str
+    window_seconds: int
+    expected_params: dict[str, object]
+    expected_sql_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class BigQueryRelationUsageChunkTestCase:
+    description: str
+    relation_count: int
+    expected_query_names: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class BigQueryRelationUsageErrorTestCase:
+    description: str
+    error: Exception
+    expected_report: RelationUsageReport
+
+
+@dataclass(frozen=True)
+class BigQueryRelationUsageFailureTestCase:
+    description: str
+    error: Exception
+    expected_error_match: str

@@ -98,6 +98,8 @@ Usage comes from the warehouse's query history:
 | Adapter | Usage source |
 |---------|--------------|
 | Snowflake | `SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY` (`direct_objects_accessed`) joined with `QUERY_HISTORY` |
+| BigQuery | `` `<project>.region-<location>`.INFORMATION_SCHEMA.JOBS `` (`referenced_tables`) |
+| Databricks | `system.access.table_lineage` (`source_table_full_name`) |
 | Other adapters | Not available |
 
 On Snowflake, one query reads the access history of all candidates (up to 1,000 names per query). Queries SQLBuild tags as its own (`QUERY_TAG` with `"app":"sqlbuild"`, which builds, audits, loads and hooks set) and `CREATE ... CLONE` statements don't count as reads. SQLBuild's own reads don't need this check: schemas holding the project's sources are skipped, so the project graph already protects what the project reads. Access history needs Enterprise edition, and the janitor's role needs `IMPORTED PRIVILEGES` on the `SNOWFLAKE` database or the `SNOWFLAKE.GOVERNANCE_VIEWER` database role:
@@ -108,7 +110,19 @@ GRANT DATABASE ROLE SNOWFLAKE.GOVERNANCE_VIEWER TO ROLE janitor_role;
 
 Access history lags by up to about 3 hours, so reads in the last few hours may not show yet.
 
-When usage can't be checked, because the adapter has no usage source or the role can't read access history, the preview and the prompt show one notice, such as `usage not checked: unsupported adapter`, and the janitor archives as usual. With `keep_in_use` on, a second notice, `nothing kept in use`, says that relations in use are archived too.
+On BigQuery, the janitor reads the `INFORMATION_SCHEMA.JOBS` view of each candidate's project, in the location of its dataset, and counts successful query jobs that reference the table, by `user_email`. Jobs that run in another project are not in that view, so their reads are not seen. Script parent jobs, `CREATE SNAPSHOT TABLE` and `CREATE TABLE ... CLONE` don't count. SQLBuild sets no job labels on BigQuery, so its own jobs count like any other. The janitor's role needs `bigquery.jobs.listAll` and `bigquery.jobs.create` on each project, for example through the BigQuery Resource Viewer and BigQuery User roles. The view keeps 180 days of jobs, so a longer `in_use_window` sees only the last 180 days.
+
+On Databricks, the janitor counts read events in Unity Catalog's table lineage, by `created_by`; a read through a view also counts for the tables behind it. It needs Unity Catalog with the `access` system schema enabled, and `USE CATALOG` on `system`, `USE SCHEMA` on `system.access` and `SELECT` on `system.access.table_lineage`:
+
+```sql
+GRANT USE CATALOG ON CATALOG system TO `janitor-principal`;
+GRANT USE SCHEMA ON SCHEMA system.access TO `janitor-principal`;
+GRANT SELECT ON TABLE system.access.table_lineage TO `janitor-principal`;
+```
+
+Lineage records only reads Databricks can capture lineage for, and can arrive with a delay. Lineage has no query text, so clones and SQLBuild's own reads can't be told apart and count as reads. The table keeps one year of events.
+
+When usage can't be checked, because the adapter has no usage source or the role can't read its query history, the preview and the prompt show one notice, such as `usage not checked: unsupported adapter`, and the janitor archives as usual. With `keep_in_use` on, a second notice, `nothing kept in use`, says that relations in use are archived too.
 
 In the `--json` plan, each entry of `relations_to_archive` and `kept_in_use` has `in_use`: `null` when usage was not checked, `false` when nothing read the relation within the window, or an object with `last_read`, `readers` and `query_count`. The top-level `usage_check` has `status` (`checked` or `not_checked`), `reason`, `window` and `keep_in_use`, or is `null` when there was nothing to check.
 
