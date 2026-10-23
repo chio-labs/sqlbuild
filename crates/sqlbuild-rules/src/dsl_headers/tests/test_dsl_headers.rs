@@ -5,6 +5,7 @@ use crate::dsl_headers::_helpers::wrap::wrap_description;
 use crate::dsl_headers::main::fix_escaped_quotes::fix_escaped_quotes;
 use crate::dsl_headers::main::format_headers::format_headers;
 use crate::dsl_headers::main::inner_header_text::inner_header_text;
+use crate::dsl_headers::main::lint_headers::lint_headers;
 use crate::dsl_headers::main::measurement_body_ranges::measurement_body_ranges;
 use crate::dsl_headers::main::scan_headers::scan_headers;
 use crate::dsl_headers::main::sql_body_ranges::sql_body_ranges;
@@ -322,4 +323,34 @@ fn given_escaped_quotes_in_descriptions_when_fixing_then_triple_quotes_hold_real
         );
         assert_eq!(lines, test_case.expected_lines, "{}", test_case.description);
     }
+}
+
+#[test]
+fn given_description_near_the_line_limit_when_laid_out_as_a_block_then_length_counts_as_before() {
+    let config = HeaderRulesConfig {
+        line_width: 40,
+        max_description_lines: 3,
+    };
+    let words: &str =
+        "aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii jjjj kkkk llll mmmm nnnn oooo pppp qqqq rrrr";
+    let fits: String = format!("MODEL (\n  description \"{words}\",\n);\nSELECT 1\n");
+    let longer: String =
+        format!("MODEL (\n  description \"{words} ssss tttt uuuu vvvv\",\n);\nSELECT 1\n");
+
+    let lint = |text: &str| -> Vec<&'static str> {
+        let characters: Vec<char> = chars(text);
+        let Ok(violations) = lint_headers(
+            &characters,
+            &scan_headers(&characters, false),
+            config,
+            &NativeParser,
+        );
+        violations.iter().map(|violation| violation.code).collect()
+    };
+    let Ok((formatted, _)) = format_headers(&chars(&fits), config, &NativeParser);
+
+    assert!(formatted.iter().collect::<String>().contains("\"\"\"\n"));
+    assert!(!lint(&fits).contains(&"description-length"));
+    assert!(!lint(&formatted.iter().collect::<String>()).contains(&"description-length"));
+    assert!(lint(&longer).contains(&"description-length"));
 }
