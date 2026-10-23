@@ -89,12 +89,14 @@ class ReviewDatabaseE2ETestCase:
 
 @dataclass(frozen=True)
 class ReviewMarkdownFailureE2ETestCase:
-    """A `--markdown` path the review cannot write, and what it must still print."""
+    """A `--markdown` path the review cannot write, and the outcome it must still report."""
 
     description: str
     edits: dict[str, str]
     expected_stdout_fragment: str
     expected_code: str
+    expected_status: str
+    expected_finding_kinds: frozenset[str]
 
 
 @dataclass(frozen=True)
