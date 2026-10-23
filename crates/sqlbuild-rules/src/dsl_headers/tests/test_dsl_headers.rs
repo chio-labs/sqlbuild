@@ -1,18 +1,14 @@
-use sqlbuild_sqltext::compiler::main::model_header_single_parsing::parse_one;
-use sqlbuild_sqltext::compiler::models::AuthoredValue;
-
 use crate::dsl_headers::_helpers::wrap::wrap_description;
 use crate::dsl_headers::main::fix_escaped_quotes::fix_escaped_quotes;
 use crate::dsl_headers::main::format_headers::format_headers;
-use crate::dsl_headers::main::inner_header_text::inner_header_text;
-use crate::dsl_headers::main::lint_headers::lint_headers;
 use crate::dsl_headers::main::measurement_body_ranges::measurement_body_ranges;
 use crate::dsl_headers::main::scan_headers::scan_headers;
 use crate::dsl_headers::main::sql_body_ranges::sql_body_ranges;
 use crate::dsl_headers::models::HeaderRulesConfig;
-use crate::dsl_headers::tests::helpers::chars;
+use crate::dsl_headers::tests::helpers::{chars, lint_codes, stored_descriptions};
 use crate::dsl_headers::tests::test_types::{
-    CompactParser, FormatTestCase, NativeParser, ProseTestCase, QuoteFixTestCase, ScanTestCase,
+    CompactParser, FormatTestCase, LengthTestCase, NativeParser, ProseTestCase, QuoteFixTestCase,
+    ScanTestCase,
 };
 
 const MODEL_FILE: &str = "-- leading note\n-- second line\nMODEL (\n  name orders,   \n  audits [not_null(column 'order_id'), unique(column 'order_id'), accepted_values(column 'status', values ['a', 'b'])]\n);\nSELECT 1 /* MODEL ( */ , 'MODEL (x)'\n  TEST (\"a\\\")\" ) ;\nSELECT 2\n";
@@ -146,27 +142,6 @@ fn given_description_text_when_wrapping_then_matches_python() {
             test_case.description
         );
     }
-}
-
-/// The description each header of `text` stores, in order.
-fn stored_descriptions(text: &[char]) -> Vec<Option<String>> {
-    scan_headers(text, false)
-        .iter()
-        .map(|header| {
-            let inner: String = inner_header_text(&text[header.start..header.end])
-                .iter()
-                .collect();
-            match parse_one(&inner) {
-                (Some(AuthoredValue::Map(entries)), _, None) => {
-                    entries.iter().find_map(|(key, value)| match value {
-                        AuthoredValue::String(text) if key == "description" => Some(text.clone()),
-                        _ => None,
-                    })
-                }
-                _ => None,
-            }
-        })
-        .collect()
 }
 
 #[test]
@@ -326,31 +301,36 @@ fn given_escaped_quotes_in_descriptions_when_fixing_then_triple_quotes_hold_real
 }
 
 #[test]
-fn given_description_near_the_line_limit_when_laid_out_as_a_block_then_length_counts_as_before() {
-    let config = HeaderRulesConfig {
-        line_width: 40,
-        max_description_lines: 3,
-    };
+fn given_description_near_the_line_limit_when_linting_then_block_layout_counts_as_before() {
     let words: &str =
         "aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii jjjj kkkk llll mmmm nnnn oooo pppp qqqq rrrr";
-    let fits: String = format!("MODEL (\n  description \"{words}\",\n);\nSELECT 1\n");
-    let longer: String =
-        format!("MODEL (\n  description \"{words} ssss tttt uuuu vvvv\",\n);\nSELECT 1\n");
+    let test_cases = [
+        LengthTestCase {
+            description: "three lines wide at the full width stay within the limit",
+            text: format!("MODEL (\n  description \"{words}\",\n);\nSELECT 1\n"),
+            expected_too_long: false,
+        },
+        LengthTestCase {
+            description: "the same words laid out as an indented block stay within the limit",
+            text: "MODEL (\n  description \"\"\"\n    aaaa bbbb cccc dddd eeee ffff gggg\n    hhhh iiii jjjj kkkk llll mmmm nnnn\n    oooo pppp qqqq rrrr\n  \"\"\",\n);\nSELECT 1\n"
+                .to_owned(),
+            expected_too_long: false,
+        },
+        LengthTestCase {
+            description: "more words than fit in three lines exceed the limit",
+            text: format!(
+                "MODEL (\n  description \"{words} ssss tttt uuuu vvvv\",\n);\nSELECT 1\n"
+            ),
+            expected_too_long: true,
+        },
+    ];
 
-    let lint = |text: &str| -> Vec<&'static str> {
-        let characters: Vec<char> = chars(text);
-        let Ok(violations) = lint_headers(
-            &characters,
-            &scan_headers(&characters, false),
-            config,
-            &NativeParser,
+    for test_case in test_cases {
+        assert_eq!(
+            lint_codes(&test_case.text, (40, 3)).contains(&"description-length"),
+            test_case.expected_too_long,
+            "{}",
+            test_case.description
         );
-        violations.iter().map(|violation| violation.code).collect()
-    };
-    let Ok((formatted, _)) = format_headers(&chars(&fits), config, &NativeParser);
-
-    assert!(formatted.iter().collect::<String>().contains("\"\"\"\n"));
-    assert!(!lint(&fits).contains(&"description-length"));
-    assert!(!lint(&formatted.iter().collect::<String>()).contains(&"description-length"));
-    assert!(lint(&longer).contains(&"description-length"));
+    }
 }

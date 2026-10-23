@@ -17,9 +17,7 @@ pub(crate) struct StatementHeader<'a> {
     pub(crate) supported_keys: &'a [String],
 }
 
-/// `parse_header_values` then `reject_unsupported_header_keys`.
-///
-/// `header_start` is the one-based file line and column of the header text's first character.
+/// `parse_header_values` then `reject_unsupported_header_keys`, locating errors from `header_start`.
 pub(crate) fn parse_statement_header(
     contract: &StatementHeader<'_>,
     header: &str,

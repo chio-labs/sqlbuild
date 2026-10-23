@@ -55,8 +55,7 @@ pub(crate) fn parse_faults(violations: &[HeaderViolation]) -> Vec<HeaderViolatio
         .collect()
 }
 
-/// `text` with escaped quotes in descriptions rewritten, and the lines rewritten, when its
-/// headers then parse.
+/// `text` with escaped description quotes rewritten, and their lines, if its headers then parse.
 pub(crate) fn quote_fixed_text(
     text: &str,
     config: HeaderRulesConfig,
@@ -72,16 +71,21 @@ pub(crate) fn quote_fixed_text(
         .then_some((fixed, lines)))
 }
 
-/// Whether any authored SQL file of the project has a description that escapes quotes.
-pub(crate) fn has_quote_fixes(directory: &Path) -> Result<bool, String> {
+/// The number of authored SQL files of the project with a description that escapes quotes.
+pub(crate) fn quote_fixable_file_count(directory: &Path) -> Result<usize, String> {
     let files: Vec<(PathBuf, String)> =
         collect_lint_files(directory, None).map_err(|error| error.to_string())?;
-    Ok(files.iter().any(|(_, text)| {
-        text.contains("\\\"")
-            && !fix_escaped_quotes(&text.chars().collect::<Vec<char>>())
-                .1
-                .is_empty()
-    }))
+    Ok(files
+        .iter()
+        .filter(|(_, text)| text.contains("\\\"") && escapes_quotes(text))
+        .count())
+}
+
+/// Whether a header description of `text` escapes double quotes that a fix can rewrite.
+fn escapes_quotes(text: &str) -> bool {
+    !fix_escaped_quotes(&text.chars().collect::<Vec<char>>())
+        .1
+        .is_empty()
 }
 
 /// `text` with header formatting fixes applied, and the faults relocation reported.

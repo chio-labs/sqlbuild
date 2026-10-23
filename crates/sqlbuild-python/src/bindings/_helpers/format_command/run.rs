@@ -635,11 +635,7 @@ fn quote_fix_reports<'py>(
     Ok(reports)
 }
 
-/// The warning, on the project file, that compiler-verified Rule fixes waited for the
-/// description quote fixes.
-///
-/// Rule fixes compile the project as saved, which still holds the escaped quotes until the
-/// rewritten descriptions are written.
+/// The project-file warning that Rule fixes, which compile the saved files, wait for quote fixes.
 fn rule_fixes_skipped<'py>(py: Python<'py>, directory: &Path) -> PyResult<Bound<'py, PyAny>> {
     new_record_with(
         py,
@@ -740,17 +736,9 @@ pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<Form
             .enumerate()
             .map(|(index, entry)| (entry.path.clone(), index))
             .collect(),
-        safe: (0..entries.len())
-            .filter(|index| {
-                quote_fixes[*index].is_some() || parse_faults(&original_lints[*index]).is_empty()
-            })
-            .collect(),
+        safe: safe_files(&quote_fixes, &original_lints),
         entries,
-        fixed: quote_fixes
-            .into_iter()
-            .enumerate()
-            .filter_map(|(index, fix)| fix.map(|(text, _)| (index, text)))
-            .collect(),
+        fixed: quote_fixed_texts(quote_fixes),
     };
     let (rule_fixes, rule_faults) = if request.fix {
         match request.discovery_error {
@@ -894,4 +882,29 @@ pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<Form
         declined,
         final_contents,
     })
+}
+
+/// The indexes of files whose headers parse as written or once their quotes are fixed.
+fn safe_files(
+    quote_fixes: &[Option<(String, Vec<usize>)>],
+    lints: &[Vec<HeaderViolation>],
+) -> Vec<usize> {
+    let mut safe: Vec<usize> = Vec::new();
+    for (index, (fix, violations)) in quote_fixes.iter().zip(lints).enumerate() {
+        if fix.is_some() || parse_faults(violations).is_empty() {
+            safe.push(index);
+        }
+    }
+    safe
+}
+
+/// The quote-fixed text of each file a quote fix rewrote, by index.
+fn quote_fixed_texts(quote_fixes: Vec<Option<(String, Vec<usize>)>>) -> HashMap<usize, String> {
+    let mut fixed: HashMap<usize, String> = HashMap::new();
+    for (index, fix) in quote_fixes.into_iter().enumerate() {
+        if let Some((text, _)) = fix {
+            fixed.insert(index, text);
+        }
+    }
+    fixed
 }

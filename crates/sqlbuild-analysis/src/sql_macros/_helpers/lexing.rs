@@ -1,12 +1,12 @@
 //! A comment- and quote-aware SQL token scan, and the `@...` constructs it finds.
 
 use sqlbuild_render::macro_calls::main::opens_bare_call::opens_bare_call;
+use sqlbuild_sqltext::header_strings::errors::TripleQuoteError;
 use sqlbuild_sqltext::header_strings::main::closes_inside_text::closes_inside_text;
 use sqlbuild_sqltext::header_strings::main::header_quoted_end::header_quoted_end;
 use sqlbuild_sqltext::header_strings::main::opens_triple_quote::opens_triple_quote;
 use sqlbuild_sqltext::header_strings::main::run_on_after_close::run_on_after_close;
 use sqlbuild_sqltext::header_strings::main::triple_quoted_end::triple_quoted_end;
-use sqlbuild_sqltext::header_strings::models::TripleQuoteError;
 
 use crate::sql_macros::constants::{HEADER_KEYWORD, SQL_KIND_WORD};
 use crate::sql_macros::errors::LexError;
@@ -56,9 +56,6 @@ const PUNCTUATION: &[u8] = b"()[]{},.;";
 pub(crate) const DECLARATION_WORDS: [&str; 3] = ["const", "enum", "param"];
 
 /// Every token of `sql`; text unclosed under doubled-quote escapes is reread with backslash ones.
-///
-/// Strings in a `MACRO (...)` header at the start follow the header string rules instead, so
-/// the header reads the same whatever quotes the body holds.
 pub(crate) fn tokens(sql: &str) -> Result<Vec<Token>, LexError> {
     match scanned_tokens(sql, false) {
         Err(LexError::UnclosedQuote(start)) => {
@@ -191,8 +188,7 @@ impl HeaderScan {
     }
 }
 
-/// The end of the double-quoted header string at `start`: `"""..."""`, or `"..."` with
-/// backslash escapes, checked not to end inside its text.
+/// The end of the `"""..."""` or backslash-escaped `"..."` header string at `start`.
 fn header_string_end(bytes: &[u8], start: usize) -> Result<usize, LexError> {
     if opens_triple_quote(bytes, start) {
         let (content_end, end) = triple_quoted_end(bytes, start).map_err(|error| match error {

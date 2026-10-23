@@ -99,8 +99,7 @@ fn relocated_description(
     (description, vec![fault])
 }
 
-/// The `description` line inserted after a model header's opening parenthesis, if the comment
-/// can be written as a header string.
+/// The `description` line inserted after a model header's `(`, if the comment can be quoted.
 fn description_insertion(description: &[char]) -> Option<Vec<char>> {
     let value: String = fold_prose(&string(description));
     if value.contains(TRIPLE_QUOTE) {
@@ -152,9 +151,6 @@ pub(crate) fn relocate_leading_comment<P: HeaderParser>(
 }
 
 /// Every top-level description of `headers` of the `kinds` in its canonical layout.
-///
-/// A description is laid out again only when its header parses, or for a `MACRO` header, which
-/// the compiler parses, when the description string reads; the layout never changes its text.
 pub(crate) fn wrap_descriptions<P: HeaderParser>(
     text: &[char],
     headers: &[HeaderSpan],

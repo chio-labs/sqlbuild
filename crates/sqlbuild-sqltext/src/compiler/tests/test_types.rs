@@ -134,5 +134,5 @@ pub(crate) struct HeaderStringTestCase {
     pub(crate) header: &'static str,
     /// Map keys, or `[index]` list items, leading to the string value.
     pub(crate) path: &'static [&'static str],
-    pub(crate) expected: Result<&'static str, &'static str>,
+    pub(crate) expected_value: Result<&'static str, &'static str>,
 }

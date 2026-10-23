@@ -14,8 +14,10 @@ use crate::dsl_headers::constants::HEADER_INDENT;
 pub(crate) fn description_string_span(header_text: &[char]) -> Option<(usize, usize)> {
     let (value_start, _) = description_value_span(header_text)?;
     let start: usize = value_start - 1;
-    let end: usize = prose_string(header_text, start).ok()?.end;
-    Some((start, end))
+    let Ok(prose) = prose_string(header_text, start) else {
+        return None;
+    };
+    Some((start, prose.end))
 }
 
 /// The breaks of one paragraph: lines filled to `width`, broken only at single spaces.
@@ -69,11 +71,7 @@ fn block(value: &str, indent: &str, line_width: usize) -> String {
     )
 }
 
-/// The canonical text of the description string at `span` of `header_text`, holding `value`.
-///
-/// Text without line breaks that fits on its line stays one line: `"..."`, or `"""..."""` when
-/// it holds a double quote. Anything longer is an indented `"""` block wrapped at
-/// `line_width`. `None` when no layout stores exactly `value`.
+/// The canonical text of the description string at `span`, or `None` if none stores `value`.
 pub(crate) fn canonical_prose(
     value: &str,
     header_text: &[char],
@@ -103,15 +101,13 @@ pub(crate) fn canonical_prose(
         Some(line) if prefix + line.chars().count() + suffix <= width => line,
         _ => block(value, &indent, width),
     };
-    let stored: String = prose_string(&chars(&rendered), 0).ok()?.value;
-    (stored == value).then_some(rendered)
+    let Ok(stored) = prose_string(&chars(&rendered), 0) else {
+        return None;
+    };
+    (stored.value == value).then_some(rendered)
 }
 
 /// The lines the description-length rule counts for `value` at `span` of `header_text`.
-///
-/// A description that stays on one line is one line. Otherwise it counts as wrapped from its
-/// field to the full line width, so the indentation of a `"""` block never makes a description
-/// longer than the same words were before.
 pub(crate) fn prose_length(
     value: &str,
     header_text: &[char],

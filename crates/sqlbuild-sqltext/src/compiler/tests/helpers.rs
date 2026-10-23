@@ -286,3 +286,41 @@ pub(crate) fn locations(
         })
         .collect()
 }
+
+/// The string at `path`: map keys, call names, or list indexes in brackets.
+pub(crate) fn string_at(value: &AuthoredValue, path: &[&str]) -> Option<String> {
+    let Some((first, rest)) = path.split_first() else {
+        let AuthoredValue::String(text) = value else {
+            return None;
+        };
+        return Some(text.clone());
+    };
+    string_at(child(value, first)?, rest)
+}
+
+/// The value under map key `key`, or list index `key` in brackets, of `value`.
+fn child<'a>(value: &'a AuthoredValue, key: &str) -> Option<&'a AuthoredValue> {
+    let AuthoredValue::Map(entries) = value else {
+        let AuthoredValue::List(items) = value else {
+            return None;
+        };
+        return items.get(key.trim_matches(['[', ']']).parse::<usize>().ok()?);
+    };
+    entries
+        .iter()
+        .find(|(entry_key, _)| entry_key == key)
+        .map(|(_, entry)| entry)
+}
+
+/// The string `header` parses to at `path`, or its parse error.
+pub(crate) fn parsed_string(header: &str, path: &[&str]) -> Result<String, String> {
+    let (value, _, error) = parse_one(header);
+    error.map_or_else(
+        || {
+            value
+                .and_then(|value| string_at(&value, path))
+                .ok_or_else(|| format!("no string at {path:?}"))
+        },
+        Err,
+    )
+}

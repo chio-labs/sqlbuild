@@ -136,3 +136,14 @@ class DescriptionLayoutTestCase:
     description: str
     header: str
     expected_header: str
+
+
+@dataclass(frozen=True)
+class QuoteFixTestCase:
+    """Project files escaping description quotes and what `sqb format --fix` makes of them."""
+
+    description: str
+    files: dict[str, str]
+    expected_fixes: list[tuple[str, str, int, str]]
+    expected_starts: dict[str, str]
+    expected_description: str

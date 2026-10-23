@@ -90,3 +90,9 @@ pub(crate) struct QuoteFixTestCase {
     pub(crate) expected_text: &'static str,
     pub(crate) expected_lines: Vec<usize>,
 }
+
+pub(crate) struct LengthTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) text: String,
+    pub(crate) expected_too_long: bool,
+}

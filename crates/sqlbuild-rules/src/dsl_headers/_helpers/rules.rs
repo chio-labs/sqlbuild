@@ -83,9 +83,7 @@ pub(crate) fn value_violations<P: HeaderParser>(
     let span: Option<(usize, usize)> = described
         .then(|| description_string_span(header_text))
         .flatten();
-    let authored: Option<String> = span
-        .and_then(|(start, _)| prose_string(header_text, start).ok())
-        .map(|prose| prose.value);
+    let authored: Option<String> = span.and_then(|(start, _)| authored_prose(header_text, start));
     let description: Option<String> = match parser.description(&values)? {
         Some(_) if authored.is_some() => authored,
         description => description,
@@ -148,4 +146,12 @@ pub(crate) fn whitespace_violation(
                 ),
             )
         })
+}
+
+/// The folded text of the prose string at `start`, if it reads.
+fn authored_prose(header_text: &[char], start: usize) -> Option<String> {
+    let Ok(prose) = prose_string(header_text, start) else {
+        return None;
+    };
+    Some(prose.value)
 }

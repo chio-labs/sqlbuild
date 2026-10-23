@@ -1,5 +1,4 @@
-//! Exact native equivalent of the possessive Python `MODEL(...)` header regular expression,
-//! extended with `"""..."""` header strings.
+//! The possessive `MODEL(...)` header match, with `"""..."""` header strings.
 
 use crate::header_strings::main::header_quoted_end::header_quoted_end;
 use crate::header_strings::main::opens_triple_quote::opens_triple_quote;
