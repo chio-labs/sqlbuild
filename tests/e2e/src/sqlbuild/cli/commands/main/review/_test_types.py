@@ -117,6 +117,7 @@ class ReviewSetupFailureE2ETestCase:
     arguments: tuple[str, ...]
     expected_code: str
     expected_message_fragment: str
+    expected_node_statuses: frozenset[str]
     extra_files: dict[str, str] = field(default_factory=dict)
 
 

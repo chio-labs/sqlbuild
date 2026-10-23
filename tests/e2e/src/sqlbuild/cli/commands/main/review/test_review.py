@@ -420,12 +420,14 @@ def test_given_invalid_arguments_when_reviewing_then_it_exits_3_with_json_error(
             arguments=(),
             expected_code="C776",
             expected_message_fragment="own_database_orders",
+            expected_node_statuses=frozenset({"planned"}),
         ),
         ReviewSetupFailureE2ETestCase(
             description="an --against target that holds none of the compared tables",
             edits={STAGING: _SAME_VALUES_STAGING},
             arguments=("--against", "empty"),
             expected_code="C774",
+            expected_node_statuses=frozenset({"planned", "not_validated"}),
             expected_message_fragment="--against has none of these relations; check the target",
         ),
     ),
@@ -448,6 +450,8 @@ def test_given_unusable_setup_when_reviewing_then_it_fails_before_creating_schem
     assert document["error"]["code"] == test_case.expected_code, result.stdout
     assert test_case.expected_message_fragment in document["error"]["message"]
     assert not (document["review_schema"] or {}).get("created")
+    assert set(node_statuses(document).values()) <= test_case.expected_node_statuses, result.stdout
+    assert all(node["build_status"] is None for node in document["nodes"]), result.stdout
     assert review_schemas(project_dir=project_dir) == ()
 
 

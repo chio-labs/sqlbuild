@@ -101,8 +101,8 @@ fn deferred(project: &ReviewProject, validated: &[String]) -> Vec<String> {
         .collect()
 }
 
-/// The impact tree's nodes before anything runs.
-fn planned_nodes(project: &ReviewProject, plan: &ReviewPlan, dry_run: bool) -> Vec<NodeReport> {
+/// The impact tree's nodes before anything runs: planned, or not validated.
+fn planned_nodes(project: &ReviewProject, plan: &ReviewPlan) -> Vec<NodeReport> {
     let changed: BTreeSet<&str> = plan.changed.iter().map(|node| node.name.as_str()).collect();
     let validated: BTreeSet<&str> = plan.validated.iter().map(String::as_str).collect();
     let left_out: BTreeMap<&str, &str> = plan
@@ -123,10 +123,9 @@ fn planned_nodes(project: &ReviewProject, plan: &ReviewPlan, dry_run: bool) -> V
                 kind: node.kind.clone(),
                 critical: node.critical,
                 changed: changed.contains(name.as_str()),
-                status: match (reason, dry_run) {
-                    (Some(_), _) => NOT_VALIDATED_NODE.to_owned(),
-                    (None, true) => PLANNED_STATUS.to_owned(),
-                    (None, false) => BUILT_NODE.to_owned(),
+                status: match reason {
+                    Some(_) => NOT_VALIDATED_NODE.to_owned(),
+                    None => PLANNED_STATUS.to_owned(),
                 },
                 reason: reason.map(str::to_owned),
                 ..NodeReport::default()
@@ -618,7 +617,7 @@ fn review(
         )
         .map_err(|error| plan_error(py, &error))?;
         report.impact_edges = impact_edges(&project, &report.plan);
-        report.nodes = planned_nodes(&project, &report.plan, report.dry_run);
+        report.nodes = planned_nodes(&project, &report.plan);
         report.deferred = deferred(&project, &report.plan.validated);
         write_line(
             stream,
