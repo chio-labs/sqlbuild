@@ -1,0 +1,165 @@
+<!-- generated-by: sqlbuild skills -->
+
+# sqb review
+
+> Build what a branch changed in a temporary schema, test it, compare it with a target and report.
+
+Online: https://sqlbuild.com/docs/cli/review/
+
+## Contents
+
+- Usage
+- Flags
+- What gets built
+- Selecting
+- The review schema
+- Checks
+- Output
+- Exit codes
+- Configuration
+
+`sqb review` checks a branch before it merges. It finds the models and seeds the branch changed,
+builds them and their affected downstream models in a schema it creates for this run, runs the
+unit tests and audits those changes affect, compares every built model with the same model in
+another target, and reports the result as text, JSON or Markdown with an exit code a CI job can
+gate on.
+
+## Usage
+
+```bash
+sqb review --since origin/main --against prod
+sqb review --since origin/main --against prod --dry-run
+sqb review --since origin/main --against prod --json --markdown review.md
+```
+
+Two baselines drive a review:
+
+- **`--since <ref>`** is the code baseline. The changed set is everything that differs between
+  the merge base of `<ref>` and `HEAD` (including uncommitted edits), worked out exactly as
+  [`sqb test --since`](test.md#run-only-affected-tests) does.
+- **`--against <target>`** is the data baseline: the target whose tables the review compares
+  with, reads unchanged upstream models from, and clones changed incremental models from.
+
+Both can come from `sqlbuild_project.toml` (see [Configuration](#configuration)), so a project
+with `[git] base_ref` and `[review] against` runs a review with plain `sqb review`.
+
+## Flags
+
+| Flag | Description |
+|------|-------------|
+| `--since <ref>` | Git ref whose merge base with `HEAD` is the code baseline; `@base` reads `[git] base_ref` (default: `[git] base_ref`) |
+| `--against <target>` | Target to compare with and to read unchanged upstream from (default: `[review] against`) |
+| `--downstream <policy>` | Which unchanged downstream models to build and compare: `critical` (default), `all` or `none` |
+| `--select`, `-s` | Narrow the review to these nodes of the changed set; see [Selecting](#selecting) |
+| `--dry-run` | Print the plan without connecting to the warehouse |
+| `--no-clone` | Start changed incremental models and snapshots from a full refresh instead of a clone |
+| `--bounded <window>` | Compare models too large for an exact comparison within a recent cursor window, such as `14d` |
+| `--markdown <path>` | Also write the report as Markdown to `<path>` |
+| `--json` | Print one JSON document on stdout; progress goes to stderr |
+| `--target <name>` | Active target whose connection runs the review and whose schema holds the ownership marker |
+| `--concurrency <n>` | Build concurrency |
+| `--vars` | Project variables, as for `sqb build` |
+
+## What gets built
+
+The **changed set** is every model or seed whose definition changed, whose configuration changed,
+or that reads a changed source, function or macro. Changes that build nothing, such as an edited
+source declaration or unit test, are listed under "What changed" but are not built themselves.
+
+`--downstream` decides which unchanged models below the changed set are built too:
+
+- `critical` builds the models on every path from a changed node to a critical model. A model is
+  critical when its `MODEL` header sets [`critical true`](../concepts/models/configuration.md), or
+  when it carries one of the tags in `[review] critical_tags` (default `["critical"]`).
+- `all` builds every downstream model.
+- `none` builds only the changed set.
+
+Downstream models the policy leaves out are always listed as **not validated**, with the reason.
+The impact tree is computed from the whole changed set, whatever the policy.
+
+Upstream models outside the build are read from `--against`, as with
+[`sqb build --defer-to`](build.md). A changed incremental model or snapshot starts from a
+zero-copy clone of its `--against` table when the adapter supports zero-copy clones and the
+`--against` target allows being a clone origin; otherwise, or with `--no-clone`, it is built with
+a full refresh. The report says which start each one got and why.
+
+## Selecting
+
+`--select` intersects with the review scope: only the selected nodes are built and compared; the
+rest of the scope is listed as not validated. Each selector must name something the review can
+check, or the review fails before connecting:
+
+| Selection | Error |
+|-----------|-------|
+| A name that matches no node | `C761` |
+| Only nodes the branch did not change and that nothing changed above | `C762` |
+| Only affected nodes the downstream policy leaves out | `C763` |
+
+## The review schema
+
+A review builds into a schema named `<prefix>_<UTC timestamp>_<commit>_<run>`, for example
+`REVIEW_20261023T101500Z_3f9c2ab_4e1d0a`. Before creating it, the review writes an ownership marker
+to the active target schema's `_sqlbuild_fingerprints` table, and it refuses a schema that already
+exists. The schema is always dropped when the review ends, whether it passed or not; a failed drop
+makes the review fail with exit code `3`. [`sqb janitor`](janitor.md#review-schemas) drops
+marked review schemas left behind for more than 24 hours.
+
+The adapter must be able to drop a whole schema: SQLite and SQL Server targets cannot run a review.
+
+## Checks
+
+- **Unit tests** that execute a changed node, chosen as `sqb test --since` chooses them, run on the
+  active target. The report counts how many unaffected tests were skipped.
+- **Audits** of the built models run during the build.
+- **Comparison** of every built model with its `--against` table: column names and types, row
+  counts, and, when the model has a `unique_key` and the [size guard](diff.md#size-guard)
+  allows, an exact keyed diff with branch-only keys, target-only keys and changed values, each with
+  example keys. A model the size guard blocks is compared within `--bounded` when given and the
+  model has a cursor. Models without a `unique_key` get the schema and row-count checks only.
+
+Any difference is a finding: a schema change, a different row count, branch-only or target-only
+keys, a changed value, a failed unit test or a failed audit. A check that could not run, such as
+the keyed diff of a model without a `unique_key`, is reported as **incomplete coverage**. A model
+that does not exist in `--against` yet is built but not compared, and the Baseline section says so.
+
+## Output
+
+Text output starts with the outcome, then findings, what changed, the downstream impact tree with
+each node's status (`built`, `ok`, `finding` or `not validated` and why), incomplete coverage, the
+baseline, tests and audits, and run details: the review schema and its cleanup, the downstream
+policy, and the [`sqb recall output`](recall.md) command that shows the whole run.
+
+`--markdown <path>` writes the same report as Markdown for a pull request comment: a title with the
+outcome, a summary table, numbered findings, and per-model evidence in collapsed `<details>` blocks
+that list only the columns that changed.
+
+`--json` prints one document with `format_version`, `status` (`passed`, `findings`, `incomplete`,
+`failed` or `planned`), `exit_code`, `since`, `against`, `summary`, `findings`, `changed`,
+`validated`, `not_validated`, `nodes`, `impact_edges`, `incomplete`, `baseline`, `tests`, `audits`,
+`review_schema`, `recall` and `error`. The document is written on every path, including failures.
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Passed: every check ran and found no difference, or a dry run |
+| `1` | Findings |
+| `2` | Incomplete coverage, and no findings |
+| `3` | The review could not set up, run or clean up |
+
+A failure takes precedence over findings, and findings over incomplete coverage.
+
+## Configuration
+
+```toml
+[git]
+base_ref = "origin/main"
+
+[review]
+against = "prod"
+downstream = "critical"
+schema_prefix = "REVIEW"
+critical_tags = ["critical"]
+```
+
+See [Review](../concepts/project-configuration.md#review) in the project configuration reference.
