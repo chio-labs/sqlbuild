@@ -157,3 +157,12 @@ class MacroLayoutTestCase:
     macro: str
     expected_macro: str
 
+
+@dataclass(frozen=True)
+class RefusedQuoteFixTestCase:
+    """A file whose quote fix would leave other header errors, and the refused fix reported."""
+
+    description: str
+    path: str
+    contents: str
+    expected_fix: tuple[str, str, int, str]
