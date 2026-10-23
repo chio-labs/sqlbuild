@@ -140,6 +140,18 @@ fn given_authored_sql_when_scanning_macro_calls_then_sites_match_python_expansio
             expected_failure: Some((Some(9), ScanError::BareCall)),
         },
         ScanMacroCallSitesTestCase {
+            description: "a name followed by words and a parenthesis is not a call",
+            sql: "@value IS NULL OR TRIM(@value) = '' AND @x IN ('a', 'b') AND @y IS NULL AND (@y IS NULL)",
+            expected_sites: &[],
+            expected_failure: None,
+        },
+        ScanMacroCallSitesTestCase {
+            description: "a name without a kind spaced from its parenthesis is not a call",
+            sql: "@ab (1) @py.m()",
+            expected_sites: &[(8, 15, "m", Some(&["m"]), false)],
+            expected_failure: None,
+        },
+        ScanMacroCallSitesTestCase {
             description: "a SQL macro call fails the Python macro scan",
             sql: "@sql.a(1)",
             expected_sites: &[],

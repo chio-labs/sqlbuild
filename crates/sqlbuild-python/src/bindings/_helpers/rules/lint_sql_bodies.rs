@@ -81,6 +81,7 @@ fn lint_body(
         allows_empty_fixture_star: native_field(body, "allows_empty_fixture_star")?.extract()?,
         relation_keys: relation_keys(body, declared)?,
         relation_names: relation_names(body)?,
+        expression_frame: None,
     })
 }
 

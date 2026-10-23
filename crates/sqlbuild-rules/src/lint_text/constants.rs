@@ -5,6 +5,7 @@ pub const LINT_SENTINEL_PREFIX: &str = "__sqb_lint_";
 pub(crate) const SENTINEL_SUFFIX: &str = "__";
 pub(crate) const AUDIT_PARAMETER_SENTINEL_PREFIX: &str = "__sqlbuild_audit_parameter_";
 pub(crate) const CONTEXT_SENTINEL_PREFIX: &str = "__sqlbuild_context_parameter_";
+pub(crate) const SQL_MACRO_PARAMETER_SENTINEL_PREFIX: &str = "__sqlbuild_macro_parameter_";
 pub(crate) const CONTEXT_INTERPOLATION_TOKEN: &str = "@@CTX:";
 
 /// Every SQLBuild intrinsic call protected while formatting.
@@ -170,5 +171,7 @@ pub(crate) const GROUPED_NAMED_ROLE_KINDS: [(&[&str], &str); 9] = [
 pub(crate) const CROSS_KEYWORD: &[u8] = b"cross";
 /// What a SQL macro expression body is formatted after, and removed from again.
 pub(crate) const EXPRESSION_SELECT_PREFIX: &str = "SELECT ";
+/// The output name lint gives an expression macro body, so it is not an unnamed projection.
+pub(crate) const LINTED_EXPRESSION_ALIAS: &str = "__sqlbuild_macro_expression__";
 /// The characters that open a quoted string or identifier in formatted SQL.
 pub(crate) const STRING_QUOTES: [char; 3] = ['\'', '"', '`'];

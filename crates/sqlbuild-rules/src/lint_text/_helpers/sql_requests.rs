@@ -5,6 +5,7 @@ use sqlbuild_attachments::ceremonial_select::main::omitted_select_offset::omitte
 use sqlbuild_attachments::ceremonial_select::models::OmittedSelect;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
+use crate::lint_text::_helpers::sql_diagnostics::{AuthoredFile, without_generated_comments};
 use crate::lint_text::constants::{
     CROSS_KEYWORD, INVALID_BATCH, LINE_COMMENT_PREFIX, LINT_API_VERSION,
     OMITTED_CEREMONIAL_SELECT_SQL,
@@ -40,18 +41,19 @@ fn strings(values: &[String]) -> Value {
 
 /// The engine request for one body, with the omitted `SELECT 1` added back.
 pub(crate) fn lint_payload(
-    body: &LintSqlBody,
+    (body, file): (&LintSqlBody, &AuthoredFile<'_>),
     omitted: Option<usize>,
     options: &LintSqlOptions,
 ) -> Value {
+    let lint_text: String = without_generated_comments(body, file);
     let sql: String = match omitted {
         Some(offset) => {
-            let characters: Vec<char> = body.lint_text.chars().collect();
+            let characters: Vec<char> = lint_text.chars().collect();
             let head: String = characters[..offset].iter().collect();
             let tail: String = characters[offset..].iter().collect();
             format!("{head}{OMITTED_CEREMONIAL_SELECT_SQL}{tail}")
         }
-        None => body.lint_text.clone(),
+        None => lint_text,
     };
     let mut payload: Map<String, Value> = Map::new();
     let _ = payload.insert("version".to_string(), Value::from(LINT_API_VERSION));

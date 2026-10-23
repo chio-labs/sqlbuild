@@ -2,6 +2,7 @@ pub mod backtick_identifiers;
 pub mod batch_engine;
 pub mod catalogue;
 pub mod cross_join_subject;
+pub mod defined_cte_names;
 pub mod engine;
 pub mod fill_finding_path;
 pub mod format_requests;

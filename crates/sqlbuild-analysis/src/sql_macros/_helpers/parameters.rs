@@ -1,6 +1,8 @@
 //! `@name` parameter references in a SQL macro body, as generic audits write their parameters.
 
-use crate::sql_macros::_helpers::lexing::{Token, TokenKind};
+use sqlbuild_render::macro_calls::main::opens_bare_call::opens_bare_call;
+
+use crate::sql_macros::_helpers::lexing::{DECLARATION_WORDS, Token, TokenKind};
 
 const PLACEHOLDER_PREFIX: &str = "__sqlbuild_parameter__";
 /// Words that may follow a table reference without being its alias.
@@ -68,10 +70,12 @@ pub(crate) fn parameter_references(sql: &str, scanned: &[Token]) -> Vec<Paramete
             continue;
         };
         let after: Option<&Token> = scanned.get(index + 2);
-        if after.is_some_and(|open| open.is(sql, "(")) {
+        let name: &str = word.text(sql);
+        let declaration: bool =
+            DECLARATION_WORDS.contains(&name) && after.is_some_and(|open| open.is(sql, "("));
+        if declaration || opens_bare_call(sql, word.end) {
             continue;
         }
-        let name: &str = word.text(sql);
         if matches!(name, "sql" | "py")
             && after.is_some_and(|dot| dot.is(sql, ".") && dot.start == word.end)
             && scanned.get(index + 4).is_some_and(|open| open.is(sql, "("))

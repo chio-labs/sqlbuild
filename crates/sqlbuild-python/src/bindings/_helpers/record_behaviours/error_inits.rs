@@ -68,16 +68,18 @@ pub(crate) fn macro_argument_error_init(
             native_field(&location, "column")?,
         )
     };
+    let call: String = if macro_name.starts_with('@') {
+        macro_name
+    } else {
+        format!("@py.{macro_name}")
+    };
     let (scope, suffix): (String, String) = if location.is_none() {
         (
             format!("in '{file_path}'"),
-            format!(" of the '@py.{macro_name}' arguments"),
+            format!(" of the '{call}' arguments"),
         )
     } else {
-        (
-            format!("of '@py.{macro_name}' in '{file_path}'"),
-            String::new(),
-        )
+        (format!("of '{call}' in '{file_path}'"), String::new())
     };
     let message: String = format!(
         "Macro arguments {scope} {detail} at line {}, column {}{suffix}",

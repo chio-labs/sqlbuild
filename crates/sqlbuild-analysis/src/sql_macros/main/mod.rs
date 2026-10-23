@@ -4,6 +4,8 @@ pub mod declaration_visible_from_macro;
 pub mod expand_sql_macro_call;
 pub mod parse_sql_macro;
 pub mod render_inline_collection;
+pub mod sql_macro_body_form;
 pub mod sql_macro_calls;
 pub mod sql_macro_cycle;
+pub mod sql_macro_parameter_spans;
 pub mod with_list_sql_macro_calls;

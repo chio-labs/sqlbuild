@@ -8,6 +8,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use pyo3::exceptions::{PyException, PyValueError};
 use pyo3::prelude::{Bound, IntoPyObject, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
+use sqlbuild_analysis::sql_macros::main::sql_macro_body_form::sql_macro_body_form;
+use sqlbuild_analysis::sql_macros::models::SqlMacroForm;
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 use sqlbuild_core::text::main::python_isspace::python_isspace;
 use sqlbuild_core::text::main::python_str_repr::python_str_repr;
@@ -21,17 +23,20 @@ use sqlbuild_rules::dsl_headers::models::{
 use sqlbuild_rules::lint_text::constants::SUPPRESSION_CODE;
 use sqlbuild_rules::lint_text::main::dependency_sites::dependency_sites;
 use sqlbuild_rules::lint_text::main::first_header_only::first_header_only;
+use sqlbuild_rules::lint_text::main::frame_sql_macro_expression::frame_sql_macro_expression;
 use sqlbuild_rules::lint_text::main::lint_sql_bodies::lint_sql_bodies;
 use sqlbuild_rules::lint_text::main::named_declaration_role_kind::named_declaration_role_kind;
 use sqlbuild_rules::lint_text::main::neutralize_audit_parameters::neutralize_audit_parameters;
 use sqlbuild_rules::lint_text::main::neutralize_context_interpolation::neutralize_context_interpolation;
+use sqlbuild_rules::lint_text::main::neutralize_sql_macro_parameters::neutralize_sql_macro_parameters;
 use sqlbuild_rules::lint_text::main::reject_inline_suppressions::reject_inline_suppressions;
 use sqlbuild_rules::lint_text::models::{
-    AuthoredDiagnostic, ExpansionSpan, InterpolationSite, LintSqlBody, LintSqlOptions, Neutralized,
-    SuppressionFinding,
+    AuthoredDiagnostic, ExpansionSpan, FramedExpression, InterpolationSite, LintSqlBody,
+    LintSqlOptions, Neutralized, SuppressionFinding,
 };
 use sqlbuild_rules::project_tree::main::project_real_path::project_real_path;
 use sqlbuild_rules::project_tree::main::project_real_paths::project_real_paths;
+use sqlbuild_rules::sql_lint::main::defined_cte_names::defined_cte_names;
 use sqlbuild_rules::sql_lint::main::fill_finding_path::fill_finding_path;
 use sqlbuild_rules::sql_lint::main::preparation::prepare;
 use sqlbuild_rules::sql_lint::types::PreparedSql;
@@ -58,6 +63,7 @@ const AUDIT_KIND: &str = "audit";
 const SINGULAR_AUDIT_KIND: &str = "singular_audit";
 const SQL_HOOK_KIND: &str = "sql_hook";
 const CEREMONIAL_KINDS: [&str; 2] = ["TEST", "SCENARIO"];
+const SQL_MACRO_KIND: &str = "MACRO";
 const INTERPOLATION_MARKERS: [&str; 2] = ["@", "${"];
 const FAULT_SEVERITY: &str = "FAULT";
 const WARNING_SEVERITY: &str = "WARNING";
@@ -510,6 +516,8 @@ struct PlannedBody {
     input: String,
     sites: Vec<InterpolationSite>,
     source: BodySource,
+    /// The form of a SQL macro file's body, which decides the statement lint parses it as.
+    macro_form: Option<SqlMacroForm>,
 }
 
 /// How a file's bodies expand, shared by each of its bodies.
@@ -542,6 +550,8 @@ struct PendingBody {
     expanded: String,
     passes: Vec<Vec<ExpansionSpan>>,
     sites: Vec<InterpolationSite>,
+    macro_form: Option<SqlMacroForm>,
+    expression_frame: Option<(i64, i64)>,
 }
 
 /// One file's expanded bodies and the expansion failure that stopped it, if any.
@@ -731,7 +741,8 @@ fn plan_bodies(
     let dynamic_star: bool = !request.dynamic_output_paths.is_empty()
         && request.dynamic_output_paths.contains(&resolved(&file.path));
     let external: Vec<String> = external_identifiers(text, headers, &NativeHeaderParser)?;
-    let ceremonial: bool = headers
+    let sql_macro: bool = headers.iter().any(|header| header.kind == SQL_MACRO_KIND);
+    let mut ceremonial: bool = headers
         .iter()
         .any(|header| CEREMONIAL_KINDS.contains(&header.kind.as_str()));
     let mut ranges: Vec<(usize, usize)> = Vec::new();
@@ -741,15 +752,26 @@ fn plan_bodies(
     if ranges.is_empty() {
         ranges = sql_body_ranges(text, headers);
     }
-    let neutralize: Option<fn(&str) -> Neutralized> = neutralizer(&BodyRole {
-        kind,
-        in_project: true,
-        in_hook_directory,
-    });
-    let bodies: Vec<PlannedBody> = ranges
+    let neutralize: Option<fn(&str) -> Neutralized> = if sql_macro {
+        Some(neutralize_sql_macro_parameters)
+    } else {
+        neutralizer(&BodyRole {
+            kind,
+            in_project: true,
+            in_hook_directory,
+        })
+    };
+    let mut bodies: Vec<PlannedBody> = ranges
         .into_iter()
         .map(|range| plan_body(text, range, neutralize, compiled))
         .collect();
+    if sql_macro {
+        for body in &mut bodies {
+            let form: SqlMacroForm = sql_macro_body_form(&body.input);
+            ceremonial = ceremonial || form == SqlMacroForm::CteList;
+            body.macro_form = Some(form);
+        }
+    }
     Ok((
         BodyTraits {
             external_identifiers: external,
@@ -835,6 +857,8 @@ pub(crate) fn prepare_single_body(request: &SingleBodyRequest<'_, '_>) -> PyResu
         expanded,
         passes,
         sites: planned.sites,
+        macro_form: None,
+        expression_frame: None,
     };
     let prior: Vec<usize> = prior_sites(&pending.sites);
     let prepared: Option<PreparedSql> = py
@@ -901,6 +925,7 @@ fn plan_body(
         input,
         sites,
         source,
+        macro_form: None,
     }
 }
 
@@ -930,8 +955,8 @@ fn expand_bodies(
     let mut bodies: Vec<PendingBody> = Vec::with_capacity(planned.len());
     let mut failure: Option<PyErr> = None;
     let mut path: Option<Bound<'_, PyAny>> = None;
-    for body in planned {
-        let (expanded, passes) = match body.source {
+    for mut body in planned {
+        let (expanded, passes) = match std::mem::replace(&mut body.source, BodySource::Plain) {
             BodySource::Compiled(expanded, passes) => (expanded, passes),
             BodySource::Plain => (body.input.clone(), Vec::new()),
             BodySource::Expand => {
@@ -957,13 +982,7 @@ fn expand_bodies(
                 }
             }
         };
-        bodies.push(PendingBody {
-            start: body.start,
-            input: body.input,
-            expanded,
-            passes,
-            sites: body.sites,
-        });
+        bodies.push(framed_body(body, (expanded, passes)));
     }
     Ok(ExpandedFile {
         file: index,
@@ -971,6 +990,29 @@ fn expand_bodies(
         bodies,
         failure,
     })
+}
+
+/// One expanded body, an expression macro body framed as the `SELECT` lint parses it as.
+fn framed_body(
+    body: PlannedBody,
+    (expanded, mut passes): (String, Vec<Vec<ExpansionSpan>>),
+) -> PendingBody {
+    let (expanded, expression_frame) = if body.macro_form == Some(SqlMacroForm::Expression) {
+        let framed: FramedExpression = frame_sql_macro_expression(&expanded);
+        passes.push(framed.pass);
+        (framed.text, Some(framed.frame))
+    } else {
+        (expanded, None)
+    };
+    PendingBody {
+        start: body.start,
+        input: body.input,
+        expanded,
+        passes,
+        sites: body.sites,
+        macro_form: body.macro_form,
+        expression_frame,
+    }
 }
 
 /// A compile-input error while expanding as `ProjectCompileError`; any other error unchanged.
@@ -1063,13 +1105,20 @@ fn prepared_bodies(
 fn lint_body(
     (file, traits): (usize, &BodyTraits),
     body: PendingBody,
-    (lint_text, prepared_sites, externally_referenced_ctes): PreparedSql,
+    (lint_text, prepared_sites, mut externally_referenced_ctes): PreparedSql,
 ) -> PyResult<(LintSqlBody, Vec<(String, String)>)> {
     let dependencies = dependency_sites(&prepared_sites).map_err(value_error)?;
     let mut passes: Vec<Vec<ExpansionSpan>> = Vec::with_capacity(body.passes.len() + 2);
     passes.push(sentinel_spans(&body.sites));
     passes.extend(body.passes);
     passes.push(sentinel_spans(&prepared_sites));
+    if body.macro_form == Some(SqlMacroForm::CteList) {
+        for name in defined_cte_names(&lint_text) {
+            if !externally_referenced_ctes.contains(&name) {
+                externally_referenced_ctes.push(name);
+            }
+        }
+    }
     let body = LintSqlBody {
         file,
         body_start: offset(body.start),
@@ -1083,6 +1132,7 @@ fn lint_body(
         allows_empty_fixture_star: traits.ceremonial,
         relation_keys: Vec::new(),
         relation_names: relation_names(&dependencies.relations),
+        expression_frame: body.expression_frame,
     };
     Ok((body, dependencies.relations))
 }

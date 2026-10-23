@@ -165,3 +165,43 @@ def inspected_text(*, project_dir: Path, relative_paths: tuple[str, ...]) -> str
         (project_dir / relative_path).read_text(encoding="utf-8")
         for relative_path in relative_paths
     )
+
+
+WRAPPING_MACROS: dict[str, str] = {
+    "macros/python/wrapping.py": (
+        "def wrap(expr: str) -> str:\n"
+        '    """Wrap an expression in parentheses."""\n'
+        '    return f"({expr})"\n\n\n'
+        "def pick(mapping: dict) -> str:\n"
+        '    """The expression under key a."""\n'
+        '    return mapping["a"]\n\n\n'
+        "def first(items: list) -> str:\n"
+        '    """The first expression of a list."""\n'
+        "    return items[0]\n\n\n"
+        "def noted(expr: str) -> str:\n"
+        '    """An expression and a block comment."""\n'
+        '    return f"UPPER({expr}) /* noted */"\n'
+    )
+}
+CHECK_MACRO_PATH: str = "macros/sql/check.sql"
+
+
+def with_rules(*codes: str) -> dict[str, str]:
+    """The base project with the given Rules selected."""
+
+    selected: str = ", ".join(f'"{code}"' for code in codes)
+    return {
+        "sqlbuild_project.toml": BASE_FILES["sqlbuild_project.toml"]
+        + f"\n[rules]\nselect = [{selected}]\n"
+    }
+
+
+def check_macro(arguments: str, body: str) -> dict[str, str]:
+    """The SQL macro `check` returning a boolean from `body`."""
+
+    return {
+        CHECK_MACRO_PATH: (
+            f'MACRO (\n  description "A check",\n  arguments ({arguments}),\n'
+            f"  returns BOOLEAN,\n);\n\n{body}\n"
+        )
+    }

@@ -156,7 +156,7 @@ def test_given_repeated_macro_calls_when_rendering_natively_then_each_call_class
                     'SELECT @py.cents("amount") AS a, @py.cents x("amount") AS b\n'
                 ),
             },
-            expected_message_fragment="expected opening parenthesis",
+            expected_message_fragment="is not followed by its opening parenthesis",
         ),
     ],
     ids=lambda case: case.description,

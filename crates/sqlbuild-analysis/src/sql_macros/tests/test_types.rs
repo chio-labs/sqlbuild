@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use sqlbuild_render::macro_arguments::models::ArgumentValue;
+
 use crate::sql_macros::models::SqlMacroDefinition;
 
 pub(super) struct ExpansionTestCase {
@@ -46,3 +48,17 @@ pub(super) struct FakeHost {
     pub(super) definitions: HashMap<String, Arc<SqlMacroDefinition>>,
     pub(super) adapter: &'static str,
 }
+
+/// A model calling a Python macro with a SQL macro call among its arguments.
+pub(super) struct PythonArgumentTestCase {
+    pub(super) description: &'static str,
+    pub(super) body: &'static str,
+    pub(super) sql: &'static str,
+    /// What a Python macro receives after the direct expansion: a line break after a `--` comment.
+    pub(super) expected_suffix: &'static str,
+    /// The argument values, given the SQL macro call's own expansion.
+    pub(super) expected_arguments: fn(String) -> Vec<ArgumentValue>,
+}
+
+/// Argument parsing without Unicode name lookups, which these arguments never use.
+pub(super) struct AsciiArguments;

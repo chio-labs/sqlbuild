@@ -6,7 +6,7 @@ use crate::compiler::main::function_type_validation::function_type_error;
 use crate::sql_macros::_helpers::arguments::{
     ShapeContext, argument_shape, bind_arguments, check_shape, is_atomic, split_arguments,
 };
-use crate::sql_macros::_helpers::body::expand_body;
+use crate::sql_macros::_helpers::body::{expand_body, with_line_comment_closed};
 use crate::sql_macros::_helpers::lexing::{AtConstruct, at_constructs, outer_sql_calls};
 use crate::sql_macros::_helpers::lexing::{Token, line_column, tokens};
 use crate::sql_macros::_helpers::literal_positions::{
@@ -209,7 +209,10 @@ pub(crate) fn expand_call<H: SqlMacroHost>(
     let expansion: BodyExpansion = expand_body(&definition, &body, &rendered)
         .map_err(|error| error.at(body_location(&definition)))?;
     if call.in_python {
-        return Ok((python_string(&expansion.sql), inserted));
+        return Ok((
+            python_string(&with_line_comment_closed(&expansion.sql, true)),
+            inserted,
+        ));
     }
     if matches!(context.scope, SqlMacroScope::Caller) && context.stack.is_empty() {
         let check: SqlMacroCheck = SqlMacroCheck {
@@ -229,8 +232,17 @@ pub(crate) fn expand_call<H: SqlMacroHost>(
         (call.start, call.end),
         call.replaced_end,
     );
-    placed(&definition, (&site, inserted), &expansion, context.owner)
-        .map_err(ExpansionFailure::Macro)
+    let line_continues: bool = context.text[call.replaced_end..]
+        .split('\n')
+        .next()
+        .is_some_and(|rest| !rest.trim().is_empty());
+    placed(
+        &definition,
+        (&site, inserted, line_continues),
+        &expansion,
+        context.owner,
+    )
+    .map_err(ExpansionFailure::Macro)
 }
 
 /// One bound argument checked against its parameter and rendered from `scope`.
@@ -306,14 +318,14 @@ fn rendered_argument<H: SqlMacroHost>(
     })
 }
 
-/// `sql` as a double-quoted Python string literal.
+/// `sql` as a double-quoted Python string literal holding no `"` and no line break.
 fn python_string(sql: &str) -> String {
     let mut quoted: String = String::with_capacity(sql.len() + 2);
     quoted.push('"');
     for character in sql.chars() {
         match character {
             '\\' => quoted.push_str("\\\\"),
-            '"' => quoted.push_str("\\\""),
+            '"' => quoted.push_str("\\x22"),
             '\n' => quoted.push_str("\\n"),
             '\r' => quoted.push_str("\\r"),
             '\t' => quoted.push_str("\\t"),
@@ -327,10 +339,17 @@ fn python_string(sql: &str) -> String {
 /// The expansion placed at the call, or why it cannot stand there or clashes.
 fn placed(
     definition: &SqlMacroDefinition,
-    (site, inserted): (&CallSite<'_>, InsertedNames),
+    (site, inserted, line_continues): (&CallSite<'_>, InsertedNames, bool),
     expansion: &BodyExpansion,
     owner: &str,
 ) -> Result<(String, InsertedNames), SqlMacroError> {
+    let closed = |after: &str| {
+        let followed: bool = match after.chars().next() {
+            None => line_continues,
+            Some(next) => next != '\n' && next != '\r',
+        };
+        with_line_comment_closed(&expansion.sql, followed)
+    };
     let position: CallPosition = site.position();
     let name: &str = &definition.name;
     match definition.form {
@@ -341,9 +360,9 @@ fn placed(
             }
             let comma: &str = site.expression_separator();
             if site.expression_needs_parentheses() && !is_atomic(&expansion.sql) {
-                Ok((format!("({}){comma}", expansion.sql), inserted))
+                Ok((format!("({}){comma}", closed(")")), inserted))
             } else {
-                Ok((format!("{}{comma}", expansion.sql), inserted))
+                Ok((format!("{}{comma}", closed(comma)), inserted))
             }
         }
         SqlMacroForm::CteList => {
@@ -365,7 +384,7 @@ fn placed(
                 ("CTE", owner),
             )?;
             let (before, after) = site.cte_separators();
-            Ok((format!("{before}{}{after}", expansion.sql), inserted))
+            Ok((format!("{before}{}{after}", closed(after)), inserted))
         }
         SqlMacroForm::ColumnList => {
             if position != CallPosition::SelectList {
@@ -395,7 +414,7 @@ fn placed(
                 ("column", owner),
             )?;
             let (before, after) = site.column_separators();
-            Ok((format!("{before}{}{after}", expansion.sql), inserted))
+            Ok((format!("{before}{}{after}", closed(after)), inserted))
         }
     }
 }
