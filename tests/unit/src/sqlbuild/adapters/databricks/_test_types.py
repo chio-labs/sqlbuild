@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sqlbuild._native import InferredNullability
-from sqlbuild.adapter.contract.models import RelationInfo
+from sqlbuild.adapter.contract.models import RelationInfo, RelationUsageReport
 from tests.unit.src.sqlbuild.adapters.databricks.helpers import FakeDatabricksMetadataCursor
 
 
@@ -148,3 +148,43 @@ class DatabricksDeltaDetailAgeTestCase:
     cursors: tuple[FakeDatabricksMetadataCursor, ...]
     expected_sql: tuple[str, ...]
     expected_timestamps: tuple[str, str]
+
+
+@dataclass(frozen=True)
+class DatabricksRelationUsageTestCase:
+    description: str
+    relations: tuple[tuple[str | None, str, str], ...]
+    rows: tuple[tuple[object, ...], ...]
+    expected_object_names: tuple[str, ...]
+    expected_usages: tuple[tuple[str, tuple[str, ...], int, datetime], ...]
+
+
+@dataclass(frozen=True)
+class DatabricksRelationUsageQueryTestCase:
+    description: str
+    window_seconds: int
+    expected_params: dict[str, object]
+    expected_sql_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DatabricksRelationUsageChunkTestCase:
+    description: str
+    relation_count: int
+    expected_query_names: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class DatabricksRelationUsageErrorTestCase:
+    description: str
+    message: str
+    sqlstate: str | None
+    expected_report: RelationUsageReport
+
+
+@dataclass(frozen=True)
+class DatabricksRelationUsageFailureTestCase:
+    description: str
+    message: str
+    sqlstate: str | None
+    expected_error_match: str

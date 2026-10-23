@@ -51,7 +51,6 @@ from sqlbuild.adapter.contract.main.complete_table_freshness_results import (
 from sqlbuild.adapter.contract.main.normalize_seed_csv_value import normalize_seed_csv_value
 from sqlbuild.adapter.contract.main.run_relation_read_probe import run_relation_read_probe
 from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
-from sqlbuild.adapter.contract.main.unsupported_relation_usage import unsupported_relation_usage
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
@@ -119,6 +118,7 @@ from sqlbuild.adapters.databricks._helpers.grants import (
     render_databricks_view_revokes,
     show_grants_object_kind,
 )
+from sqlbuild.adapters.databricks._helpers.relation_usage import read_relation_usage
 from sqlbuild.adapters.databricks.classes.databricks_connection import _DatabricksConnection
 from sqlbuild.adapters.databricks.constants import (
     DELTA_COLUMN_MAPPING_NAME_MODE,
@@ -617,8 +617,11 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         relations: tuple[RelationInfo, ...],
         window_seconds: int,
     ) -> RelationUsageReport:
-        del connection, relations, window_seconds
-        return unsupported_relation_usage()
+        """Read candidate reads from Unity Catalog's system.access.table_lineage."""
+
+        return read_relation_usage(
+            connection=connection, relations=relations, window_seconds=window_seconds
+        )
 
     def get_tables_freshness_metadata(
         self,
