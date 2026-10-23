@@ -27,6 +27,18 @@ fn given_a_typed_macro_output_when_typing_the_column_then_returns_fills_unknown_
             expected_type: None,
         },
         OutputTypeTestCase {
+            description: "a known time type is not unknown",
+            check: typed_check(CallScope::Main, true),
+            item: (None, "label", Some("TIME")),
+            expected_type: None,
+        },
+        OutputTypeTestCase {
+            description: "a known array type is not unknown",
+            check: typed_check(CallScope::Main, true),
+            item: (None, "label", Some("TEXT[]")),
+            expected_type: None,
+        },
+        OutputTypeTestCase {
             description: "another column is untouched",
             check: typed_check(CallScope::Main, true),
             item: (None, "other", None),

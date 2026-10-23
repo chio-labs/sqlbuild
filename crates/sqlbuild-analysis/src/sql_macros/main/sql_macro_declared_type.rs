@@ -1,5 +1,6 @@
-use crate::sql_macros::_helpers::arguments::type_family;
-use crate::sql_macros::models::{DeclaredOutput, TypeFamily};
+use crate::sql_macros::models::DeclaredOutput;
+use crate::type_system::main::normalize_type::normalize_type;
+use crate::type_system::models::TypeFamily;
 
 /// The declared `returns` type an item takes over its inferred type: unknown or same family.
 #[must_use]
@@ -20,8 +21,16 @@ pub fn sql_macro_declared_type(
     let Some(inferred) = inferred.filter(|inferred| !inferred.is_empty()) else {
         return Some(output.returns.clone());
     };
-    let inferred_family: TypeFamily = type_family(inferred, dialect);
-    let refines: bool = inferred_family == TypeFamily::Unknown
-        || inferred_family == type_family(&output.returns, dialect);
-    refines.then(|| output.returns.clone())
+    let Some(inferred_family) = known_family(inferred, dialect) else {
+        return Some(output.returns.clone());
+    };
+    (known_family(&output.returns, dialect) == Some(inferred_family))
+        .then(|| output.returns.clone())
+}
+
+/// The family of `data_type`, `Other` included; `None` where it does not normalise.
+fn known_family(data_type: &str, dialect: &str) -> Option<TypeFamily> {
+    normalize_type(data_type, dialect)
+        .ok()
+        .map(|normalization| normalization.normalized.family)
 }
