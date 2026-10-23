@@ -51,6 +51,7 @@ pub(crate) const POSITIONAL_SELECT_COMMANDS: [&str; 8] = [
 ];
 pub(crate) const CONCURRENCY_COMMANDS: [&str; 5] = ["audit", "build", "load", "seed", "test"];
 pub(crate) const CURSOR_COMMANDS: [&str; 3] = ["build", "load", "plan"];
+pub(crate) const RENAME_COMMAND: &str = "rename";
 pub(crate) const SCOPE_COMMAND: &str = "scope";
 pub(crate) const TEST_COMMAND: &str = "test";
 pub(crate) const JANITOR_COMMAND: &str = "janitor";

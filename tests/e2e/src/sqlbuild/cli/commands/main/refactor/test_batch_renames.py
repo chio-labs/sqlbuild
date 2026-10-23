@@ -12,6 +12,7 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.refactor._test_types import (
     BatchRenameE2ETestCase,
     BatchRenameRefusalE2ETestCase,
+    RenameUsageErrorE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
     MOVE_FILE_PLACEHOLDER,
@@ -165,3 +166,32 @@ def test_given_invalid_batch_rename_when_renaming_then_it_is_refused_and_nothing
     assert renamed.returncode == 1, renamed.stdout + renamed.stderr
     assert test_case.expected_message in " ".join((renamed.stdout + renamed.stderr).split())
     assert project_text(project_dir) == before
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RenameUsageErrorE2ETestCase(
+            description="a target without a new name",
+            arguments=("stg_orders",),
+            expected_returncode=2,
+            expected_message="the following arguments are required: NEW_NAME",
+        ),
+        RenameUsageErrorE2ETestCase(
+            description="no target and no file",
+            arguments=(),
+            expected_returncode=2,
+            expected_message="the following arguments are required: TARGET, NEW_NAME",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_rename_without_a_pair_when_parsing_then_it_is_a_usage_error(
+    tmp_path: Path, test_case: RenameUsageErrorE2ETestCase
+) -> None:
+    project_dir: Path = write_orders_project(tmp_path=tmp_path)
+
+    renamed: subprocess.CompletedProcess[str] = sqb(project_dir, "rename", *test_case.arguments)
+
+    assert renamed.returncode == test_case.expected_returncode, renamed.stdout + renamed.stderr
+    assert test_case.expected_message in renamed.stderr, renamed.stderr

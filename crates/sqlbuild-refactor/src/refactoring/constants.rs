@@ -3,6 +3,7 @@
 pub const MODEL_KIND_PREFIX: &str = "model:";
 pub const SQL_SUFFIX: &str = ".sql";
 pub const PYTHON_SUFFIX: &str = ".py";
+pub const UNREADABLE_PYTHON_REASON: &str = "this Python file cannot be read as UTF-8, so its imports of the moved Python files cannot be checked; fix or remove it first";
 pub const CURRENT_DIRECTORY: &str = ".";
 pub const REF_FUNCTION: &str = "__ref";
 pub const REF_FIXTURE_PREFIX: &str = "__ref__";

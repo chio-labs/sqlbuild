@@ -5,6 +5,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use sqlbuild_core::text::errors::TextDecodeError;
 use sqlbuild_core::text::main::decode_text::decode_text;
 
 use crate::refactoring::_helpers::edits::text_edits::apply_text_edits;
@@ -16,7 +17,7 @@ use crate::refactoring::constants::{
 };
 use crate::refactoring::errors::{RefactorError, RefactorErrorKind};
 use crate::refactoring::models::FileChange;
-use crate::refactoring::types::Originals;
+use crate::refactoring::types::{Originals, ProjectText};
 
 fn io_error(path: &Path, error: impl std::fmt::Display) -> RefactorError {
     RefactorError {
@@ -75,9 +76,12 @@ fn copy_directory(root: &Path, current: &Path, staging_dir: &Path) -> Result<usi
     Ok(copied)
 }
 
-/// Each readable project `(POSIX path, text)` with `wanted` suffix a scratch copy copies, by path.
-pub(crate) fn project_files_with_suffix(project_dir: &Path, wanted: &str) -> Vec<(String, String)> {
-    let mut found: Vec<(String, String)> = Vec::new();
+/// Each project `(POSIX path, text or UTF-8 error)` with `wanted` suffix, by path.
+pub(crate) fn project_files_with_suffix(
+    project_dir: &Path,
+    wanted: &str,
+) -> Result<Vec<ProjectText>, RefactorError> {
+    let mut found: Vec<ProjectText> = Vec::new();
     let mut pending: Vec<PathBuf> = vec![project_dir.to_path_buf()];
     while let Some(current) = pending.pop() {
         let Ok(entries) = fs::read_dir(&current) else {
@@ -102,10 +106,11 @@ pub(crate) fn project_files_with_suffix(project_dir: &Path, wanted: &str) -> Vec
             if suffix(&name) != wanted {
                 continue;
             }
-            let (Ok(relative), Ok(text)) = (path.strip_prefix(project_dir), read_text(&path))
-            else {
+            let Ok(relative) = path.strip_prefix(project_dir) else {
                 continue;
             };
+            let bytes: Vec<u8> = fs::read(&path).map_err(|error| io_error(&path, error))?;
+            let text: Result<String, TextDecodeError> = decode_text(&bytes);
             let relative: Vec<String> = relative
                 .components()
                 .map(|part| part.as_os_str().to_string_lossy().into_owned())
@@ -113,8 +118,8 @@ pub(crate) fn project_files_with_suffix(project_dir: &Path, wanted: &str) -> Vec
             found.push((relative.join("/"), text));
         }
     }
-    found.sort();
-    found
+    found.sort_by(|left, right| left.0.cmp(&right.0));
+    Ok(found)
 }
 
 /// `Path.read_text(encoding="utf-8")`: strict UTF-8 with universal newlines.

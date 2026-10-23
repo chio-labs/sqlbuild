@@ -678,3 +678,21 @@ MIXED_OWNER: dict[str, str] = {
     ),
 }
 MIXED_OWNER_CHILD: str = "models/orders/staging/core/"
+
+RESERVED_CTE_FACT_ORDERS: str = (
+    "MODEL (description 'Test model.',\n  materialized table,\n);\n\n"
+    'WITH __helper__tmp AS (SELECT * FROM __ref("stg_orders"))\n'
+    "SELECT\n  o.order_id,\n  o.customer_id,\n  o.amount,\n  o.order_date\n"
+    "FROM __helper__tmp AS o\n"
+)
+SIBLING_OWNERS: dict[str, str] = {
+    "sqlbuild_project.toml": project_toml()
+    + '\n[rules]\nselect = ["SQBRPROJECT204"]\ndomains = ["orders"]\n\n'
+    + "[rules.thresholds]\nmin_shared_owner_prefix_directories = 2\n",
+    **{
+        f"models/orders/staging/{folder}/orders__stg__{name}.sql": layout_view(
+            f"orders__stg__{name}", '__source("raw_orders")'
+        )
+        for folder, name in (("fin_a", "a"), ("fin_b", "b"), ("core", "c"))
+    },
+}

@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::refactor_command::_helpers::baseline::{first_unused, original_path, parent};
+use crate::refactor_command::_helpers::baseline::{first_unused, original_path, reduced};
 use crate::refactor_command::models::{BaselineComparison, RefactorDiagnostic};
 use crate::refactoring::models::FileChange;
 
@@ -17,16 +17,6 @@ pub fn compare_with_baseline(
         .iter()
         .filter(|diagnostic| diagnostic.rule)
         .cloned()
-        .collect();
-    let touched: BTreeSet<&str> = changes
-        .iter()
-        .flat_map(|change| [change.path.as_str(), change.original_path.as_str()])
-        .chain(
-            changes
-                .iter()
-                .filter(|change| change.moved())
-                .map(|change| parent(&change.path)),
-        )
         .collect();
     let original = |path: &Option<String>| original_path(changes, path.as_deref());
     let mut used: Vec<bool> = vec![false; before.len()];
@@ -46,16 +36,14 @@ pub fn compare_with_baseline(
         }
     }
     for (index, diagnostic) in result.iter().enumerate() {
-        let only_vacated: bool = diagnostic
-            .path
-            .as_deref()
-            .is_some_and(|path| !touched.contains(path.trim_end_matches('/')));
-        if !diagnostic.rule || matched[index].is_some() || !only_vacated {
+        if !diagnostic.rule || matched[index].is_some() {
             continue;
         }
         let path: Option<String> = original(&diagnostic.path);
         matched[index] = first_unused(&before, &used, |earlier| {
-            earlier.code == diagnostic.code && earlier.path == path
+            earlier.code == diagnostic.code
+                && earlier.path == path
+                && reduced(&earlier.message, &diagnostic.message)
         });
         if let Some(found) = matched[index] {
             used[found] = true;
@@ -75,11 +63,14 @@ pub fn compare_with_baseline(
             (diagnostic.code.as_str(), original(&diagnostic.path))
         })
         .collect();
+    let rules_unchecked: bool = blocking.iter().any(|diagnostic| !diagnostic.rule);
     let resolved: Vec<RefactorDiagnostic> = before
         .iter()
         .zip(&used)
         .filter(|(diagnostic, used)| {
-            !**used && !worsened.contains(&(diagnostic.code.as_str(), diagnostic.path.clone()))
+            !rules_unchecked
+                && !**used
+                && !worsened.contains(&(diagnostic.code.as_str(), diagnostic.path.clone()))
         })
         .map(|(diagnostic, _)| diagnostic.clone())
         .collect();

@@ -121,7 +121,9 @@ When a Python file moves, such as a carried macro module, every project Python f
 - `import <module>` without `as`, because code reads the dotted name itself;
 - `from <package> import *` from the moved module's package;
 - `importlib.import_module("<module>")` or `__import__("<module>")` naming the moved module;
-- `from <package> import <module>, <other>` where the other name does not move with it.
+- `from <package> import <module>, <other>` where the other name does not move with it;
+- `from <package> import <module>` when the package's `__init__.py` also binds that name, or when the move renames the module;
+- a project Python file that cannot be read as UTF-8, because its imports cannot be checked.
 
 Declarations are moved, never copied. Folders the move leaves empty are removed.
 
@@ -149,9 +151,9 @@ The command refuses a rename while the model, or the column, still declares `mig
 
 A project that already fails some project rules, such as a folder holding more models than a layout rule allows, can still be refactored, so that a move can repair it. Only rule failures are tolerated: a project with syntax, binding, or reference errors is refused before planning, as is any project `sqb compile` cannot load.
 
-The command records the project's rule failures before planning and compares the edited project with them. A rule failure of the edited project is existing when the project already had one with the same code, at the same place, and with the same message; a file that moves keeps its identity. A failure whose message changed, such as a folder that now holds 41 models instead of 44, is still existing when no moved file lands directly at or in that place and the change edits no file named by it; a failure that names no place must keep its message. Every other rule failure, for example in a folder that receives moved models or in a folder that had none, is new or worse and blocks the write, as do all errors that are not rule failures. Rules stay enabled throughout; nothing is ignored.
+The command compiles the project as `sqb compile` does, including SQL test planning, records its rule failures before planning, and compares the edited project with them. A rule failure of the edited project is existing when the project already had one with the same code, at the same place (a moved file keeps its identity), and with the same message. It is also existing when only its numbers changed and none grew, such as a folder that now holds 41 models instead of 44. Any other change, new numbers, larger numbers, or different words, makes it new or worse, and it blocks the write, as do all errors that are not rule failures. Rules stay enabled throughout; nothing is ignored.
 
-The output, including `--dry-run`, lists the existing failures under `Existing rule failures`, with how many the change resolved and how many remain. Moving the direct models of a folder into a sub-folder at once, so that it turns from a leaf into a branch, is one batch: `sqb mv a models/entry/records/ b models/entry/records/ c models/entry/records/`.
+The output, including `--dry-run`, lists the existing failures under `Existing rule failures`, with how many the change resolved and how many remain. Some rules report a failure at one sample file of a group, so moving part of the group can change the reported place or message and block the move even when it helps. Move the whole group in one batch instead: moving the direct models of a folder into a sub-folder at once, so that it turns from a leaf into a branch, is `sqb mv a models/entry/records/ b models/entry/records/ c models/entry/records/`.
 
 ## Refusals
 

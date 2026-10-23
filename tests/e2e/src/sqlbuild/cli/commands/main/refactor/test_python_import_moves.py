@@ -131,6 +131,13 @@ def test_given_python_imports_of_a_moved_macro_when_moving_then_imports_follow_a
             expected_location=f"{CENTS_CHECK}:4:8",
             expected_reason="imports models.staging._sqlbuild._macros.cents without an alias",
         ),
+        PythonImportRefusalE2ETestCase(
+            description="a project Python file that is not UTF-8",
+            files=cents_check("from models.staging._sqlbuild._macros.cents import to_cents"),
+            binary_files={"rules/legacy.py": b"LABEL = '\xe9'\n"},
+            expected_location="rules/legacy.py",
+            expected_reason="this Python file cannot be read as UTF-8",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -138,6 +145,9 @@ def test_given_unrewritable_python_import_when_moving_then_move_is_refused_namin
     tmp_path: Path, test_case: PythonImportRefusalE2ETestCase
 ) -> None:
     project_dir: Path = write_orders_project(tmp_path=tmp_path, files=test_case.files)
+    for path, contents in test_case.binary_files.items():
+        (project_dir / path).parent.mkdir(parents=True, exist_ok=True)
+        _ = (project_dir / path).write_bytes(contents)
     before: dict[str, str] = project_text(project_dir)
     check_before: str = (project_dir / CENTS_CHECK).read_text(encoding="utf-8")
 

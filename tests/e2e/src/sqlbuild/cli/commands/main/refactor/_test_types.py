@@ -238,6 +238,15 @@ class PythonImportRefusalE2ETestCase:
     files: dict[str, str]
     expected_location: str
     expected_reason: str
+    binary_files: dict[str, bytes] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class RenameUsageErrorE2ETestCase:
+    description: str
+    arguments: tuple[str, ...]
+    expected_returncode: int
+    expected_message: str
 
 
 @dataclass(frozen=True)
@@ -263,6 +272,15 @@ class LayoutRepairE2ETestCase:
     expected_status: str
     expected_baseline: dict[str, int]
     expected_blocking: tuple[str, ...]
+    command: str = "mv"
+
+
+@dataclass(frozen=True)
+class RefusedBaselineE2ETestCase:
+    description: str
+    files: dict[str, str]
+    command: tuple[str, ...]
+    expected_codes: tuple[str, ...]
 
 
 @dataclass(frozen=True)

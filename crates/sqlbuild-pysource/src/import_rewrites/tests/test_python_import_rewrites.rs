@@ -173,7 +173,44 @@ fn given_moved_modules_when_rewriting_imports_then_each_import_follows_or_is_ref
             expected_sources: &[],
             expected_refusals: &[(
                 "python/checks/amounts.py:1:1",
-                "imports the moved module models.staging._sqlbuild._macros.cents from its package",
+                "imports a moved module from models.staging._sqlbuild._macros together with names",
+            )],
+        },
+        ImportRewriteTestCase {
+            description: "a moved module whose package binds its name is refused",
+            sources: &[
+                (
+                    "models/staging/_sqlbuild/_macros/__init__.py",
+                    "from .cents import cents\n",
+                ),
+                (
+                    "python/checks/amounts.py",
+                    "import os\nfrom models.staging._sqlbuild._macros import cents\n",
+                ),
+            ],
+            moves: CENTS_MOVE,
+            expected_sources: &[(
+                "models/staging/_sqlbuild/_macros/__init__.py",
+                "from models.finance._sqlbuild._macros.cents import cents\n",
+            )],
+            expected_refusals: &[(
+                "python/checks/amounts.py:2:1",
+                "imports cents from models.staging._sqlbuild._macros, whose __init__.py also \
+                     binds cents",
+            )],
+        },
+        ImportRewriteTestCase {
+            description: "a module imported by a name the move changes is refused",
+            sources: &[(
+                "python/checks/amounts.py",
+                "from models.staging._sqlbuild._macros import cents\n",
+            )],
+            moves: &[(CENTS, "models/finance/_sqlbuild/_macros/money.py")],
+            expected_sources: &[],
+            expected_refusals: &[(
+                "python/checks/amounts.py:1:1",
+                "imports the moved module models.staging._sqlbuild._macros.cents by its name, \
+                 which becomes models.finance._sqlbuild._macros.money",
             )],
         },
     ];

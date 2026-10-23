@@ -1,17 +1,16 @@
 //! Rewrite the Python imports of modules that move, or say why one cannot be rewritten.
 
-use std::collections::BTreeMap;
-
-use crate::import_rewrites::_helpers::import_statements::{ImportFile, file_rewrites};
-use crate::import_rewrites::_helpers::module_paths::{dotted, module_parts, package_parts};
+use crate::import_rewrites::_helpers::import_statements::source_rewrites;
+use crate::import_rewrites::_helpers::module_paths::module_parts;
+use crate::import_rewrites::_helpers::package_bindings::package_bindings;
 use crate::import_rewrites::constants::STAR_IMPORT_NAME;
-use crate::import_rewrites::models::{ImportRefusal, ImportRewrites, ModuleMove, PythonSource};
-use crate::module_parse::main::parse_python_module::parse_python_module;
+use crate::import_rewrites::models::{ImportRewrites, ModuleMove, PythonSource};
+use crate::import_rewrites::types::ModuleMoves;
 
 /// Byte-offset import edits `moves` need in every source, and the imports they cannot rewrite.
 #[must_use]
 pub fn python_import_rewrites(sources: &[PythonSource], moves: &[ModuleMove]) -> ImportRewrites {
-    let modules: BTreeMap<Vec<String>, Vec<String>> = moves
+    let modules: ModuleMoves = moves
         .iter()
         .filter_map(|item| Some((module_parts(&item.from)?, module_parts(&item.to)?)))
         .filter(|(old, new)| old != new)
@@ -20,6 +19,7 @@ pub fn python_import_rewrites(sources: &[PythonSource], moves: &[ModuleMove]) ->
     if modules.is_empty() {
         return rewrites;
     }
+    let bindings = package_bindings(sources);
     let names: Vec<&str> = modules
         .keys()
         .filter_map(|old| old.last().map(String::as_str))
@@ -36,35 +36,7 @@ pub fn python_import_rewrites(sources: &[PythonSource], moves: &[ModuleMove]) ->
         if destination.is_none() && !mentions {
             continue;
         }
-        let module = match parse_python_module(&source.contents) {
-            Ok(module) => module,
-            Err(_) => {
-                if let Some(old) = modules
-                    .keys()
-                    .find(|old| source.contents.contains(&dotted(old)))
-                {
-                    rewrites.refusals.push(ImportRefusal {
-                        path: source.path.clone(),
-                        line: 1,
-                        column: 1,
-                        reason: format!(
-                            "names {} but is not valid Python, so its imports cannot be \
-                             rewritten; fix the file first",
-                            dotted(old)
-                        ),
-                    });
-                }
-                continue;
-            }
-        };
-        let file = ImportFile {
-            path: &source.path,
-            contents: &source.contents,
-            package: package_parts(&source.path),
-            new_package: package_parts(destination.unwrap_or(&source.path)),
-            moves: &modules,
-        };
-        let (edits, refusals) = file_rewrites(&file, &module);
+        let (edits, refusals) = source_rewrites(source, destination, (&modules, &bindings));
         rewrites.edits.extend(edits);
         rewrites.refusals.extend(refusals);
     }

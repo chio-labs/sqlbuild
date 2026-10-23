@@ -12,12 +12,14 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.refactor._test_types import (
     LayoutRepairDryRunE2ETestCase,
     LayoutRepairE2ETestCase,
-    ProjectFailureE2ETestCase,
+    RefusedBaselineE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
     MIXED_OWNER,
     MIXED_OWNER_CHILD,
     OVER_FULL_STAGING,
+    RESERVED_CTE_FACT_ORDERS,
+    SIBLING_OWNERS,
     layout_view,
     project_text,
     sqb,
@@ -84,6 +86,23 @@ from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
             expected_blocking=(),
         ),
         LayoutRepairE2ETestCase(
+            description="a count that grows at a file nothing moves into blocks",
+            files=SIBLING_OWNERS,
+            arguments=("orders__stg__c", "models/orders/staging/fin_c/"),
+            expected_status="compile_failed",
+            expected_baseline={"before": 1, "remaining": 0, "resolved": 0},
+            expected_blocking=("SQBRPROJECT204 3 sibling owner directories",),
+        ),
+        LayoutRepairE2ETestCase(
+            description="a rename that adds another error is blocked despite the baseline",
+            files=OVER_FULL_STAGING,
+            command="rename",
+            arguments=("stg_order_notes", "__expected__notes"),
+            expected_status="compile_failed",
+            expected_baseline={"before": 1, "remaining": 0, "resolved": 0},
+            expected_blocking=("D016",),
+        ),
+        LayoutRepairE2ETestCase(
             description="moving only one direct model of a mixed owner still mixes it",
             files=MIXED_OWNER,
             arguments=("orders__stg__lines", MIXED_OWNER_CHILD),
@@ -100,7 +119,9 @@ def test_given_existing_rule_failures_when_moving_then_only_new_or_worse_failure
     project_dir: Path = write_orders_project(tmp_path=tmp_path, files=test_case.files)
     before: dict[str, str] = project_text(project_dir)
 
-    moved: subprocess.CompletedProcess[str] = sqb(project_dir, "mv", *test_case.arguments, "--json")
+    moved: subprocess.CompletedProcess[str] = sqb(
+        project_dir, test_case.command, *test_case.arguments, "--json"
+    )
     payload: dict[str, Any] = json.loads(moved.stdout)
 
     baseline: dict[str, list[dict[str, Any]]] = payload["rule_baseline"]
@@ -156,26 +177,31 @@ def test_given_existing_rule_failures_when_dry_run_then_baseline_and_result_are_
 @pytest.mark.parametrize(
     "test_case",
     [
-        ProjectFailureE2ETestCase(
+        RefusedBaselineE2ETestCase(
             description="an over-full folder and a reference to a missing model",
+            files={
+                **OVER_FULL_STAGING,
+                "models/marts/order_gaps.sql": layout_view("order_gaps", '__ref("missing_orders")'),
+            },
             command=("mv", "stg_order_notes", "models/support/"),
             expected_codes=("P001",),
+        ),
+        RefusedBaselineE2ETestCase(
+            description="an over-full folder and a unit test that cannot be planned",
+            files={**OVER_FULL_STAGING, "models/marts/fact_orders.sql": RESERVED_CTE_FACT_ORDERS},
+            command=("mv", "customer_totals", "models/support/"),
+            expected_codes=("XSQBRLAYOUT001", "P001"),
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_rule_failure_and_reference_error_when_moving_then_project_is_refused(
-    tmp_path: Path, test_case: ProjectFailureE2ETestCase
+def test_given_rule_failure_and_other_error_when_moving_then_project_is_refused(
+    tmp_path: Path, test_case: RefusedBaselineE2ETestCase
 ) -> None:
-    """Existing rule failures are tolerated, but a reference error still stops the move."""
+    """Existing rule failures are tolerated, but any other error still stops the move."""
 
-    project_dir: Path = write_orders_project(
-        tmp_path=tmp_path,
-        files={
-            **OVER_FULL_STAGING,
-            "models/marts/order_gaps.sql": layout_view("order_gaps", '__ref("missing_orders")'),
-        },
-    )
+    project_dir: Path = write_orders_project(tmp_path=tmp_path, files=test_case.files)
+    before: dict[str, str] = project_text(project_dir)
 
     moved: subprocess.CompletedProcess[str] = sqb(project_dir, *test_case.command, "--json")
     payload: dict[str, Any] = json.loads(moved.stdout)
@@ -185,3 +211,4 @@ def test_given_rule_failure_and_reference_error_when_moving_then_project_is_refu
     assert tuple(error["code"] for error in payload["compile"]["errors"]) == (
         test_case.expected_codes
     ), payload
+    assert project_text(project_dir) == before

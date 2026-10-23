@@ -165,7 +165,12 @@ pub(crate) fn compile_for_refactor<'py>(
     };
     let mut errors: Vec<Bound<'py, PyAny>> =
         error_diagnostics(native_field(&analysis, "diagnostics")?)?;
-    if errors.is_empty() {
+    let rule_phase: Bound<'py, PyAny> = enum_member(py, RecordId::DiagnosticPhase, "RULE")?;
+    let mut only_rule_failures: bool = true;
+    for error in &errors {
+        only_rule_failures &= native_field(error, "phase")?.is(&rule_phase);
+    }
+    if only_rule_failures {
         let planned: PyResult<Bound<'py, PyTuple>> = static_sql_test_planning_diagnostics(
             py,
             Some(keywords(

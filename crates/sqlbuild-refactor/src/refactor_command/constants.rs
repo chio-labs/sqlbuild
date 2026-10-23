@@ -14,6 +14,8 @@ pub(crate) const RENAME_PAIRS_USAGE: &str =
     "pass model TARGET NEW_NAME pairs, or --from-file with one pair per line";
 pub(crate) const BATCH_RENAME_USAGE: &str =
     "rename columns, or use --cascade, with one TARGET NEW_NAME per sqb rename";
+/// What stands for each number when rule failure messages are compared.
+pub(crate) const NUMBER_PLACEHOLDER: char = '#';
 pub(crate) const MOVE_FILE_COMMENT: char = '#';
 pub(crate) const COLUMN_TARGET_KIND: &str = "column";
 pub(crate) const COLUMN_TARGET_SEPARATOR: char = '.';

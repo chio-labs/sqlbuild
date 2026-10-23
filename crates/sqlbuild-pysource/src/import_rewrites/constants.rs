@@ -8,6 +8,8 @@ pub(crate) const PATH_SEPARATOR: char = '/';
 pub(crate) const PYTHON_SUFFIX: &str = ".py";
 /// The stem of a package's own module file.
 pub(crate) const PACKAGE_INIT_STEM: &str = "__init__";
+/// The file name of a package's own module.
+pub(crate) const PACKAGE_INIT_FILE: &str = "__init__.py";
 /// The alias name of a star import.
 pub(crate) const STAR_IMPORT_NAME: &str = "*";
 /// The keyword that starts a `from ... import` statement.

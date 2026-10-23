@@ -1,18 +1,18 @@
 //! The import edits and refusals of one Python file.
 
-use std::collections::BTreeMap;
-
 use ruff_python_ast::visitor::{Visitor, walk_expr, walk_stmt};
 use ruff_python_ast::{Alias, Expr, ExprCall, ModModule, Stmt, StmtImport, StmtImportFrom};
 use ruff_text_size::Ranged;
 
 use crate::import_rewrites::_helpers::module_paths::{
-    dotted, dotted_parts, resolve_relative, spell_from_target,
+    dotted, dotted_parts, package_parts, resolve_relative, spell_from_target,
 };
 use crate::import_rewrites::constants::{
     DYNAMIC_IMPORT_FUNCTIONS, FROM_KEYWORD, MODULE_SEPARATOR, STAR_IMPORT_NAME,
 };
-use crate::import_rewrites::models::{ImportEdit, ImportRefusal};
+use crate::import_rewrites::models::{ImportEdit, ImportRefusal, PythonSource};
+use crate::import_rewrites::types::{ModuleMoves, PackageBindings};
+use crate::module_parse::main::parse_python_module::parse_python_module;
 
 /// One file's text, path, packages before and after any move of the file, and module moves.
 pub(crate) struct ImportFile<'a> {
@@ -23,11 +23,48 @@ pub(crate) struct ImportFile<'a> {
     /// The package relative imports start from, where the file will be.
     pub(crate) new_package: Vec<String>,
     /// Each moved module's dotted parts, before and after.
-    pub(crate) moves: &'a BTreeMap<Vec<String>, Vec<String>>,
+    pub(crate) moves: &'a ModuleMoves,
+    /// The names each project package's `__init__.py` binds, by package parts.
+    pub(crate) package_bindings: &'a PackageBindings,
+}
+
+/// The edits and refusals of every import in `source`, which moves to `destination` if any.
+pub(crate) fn source_rewrites(
+    source: &PythonSource,
+    destination: Option<&str>,
+    (moves, bindings): (&ModuleMoves, &PackageBindings),
+) -> (Vec<ImportEdit>, Vec<ImportRefusal>) {
+    let Ok(module) = parse_python_module(&source.contents) else {
+        let refusals: Vec<ImportRefusal> = moves
+            .keys()
+            .find(|old| source.contents.contains(&dotted(old)))
+            .map(|old| ImportRefusal {
+                path: source.path.clone(),
+                line: 1,
+                column: 1,
+                reason: format!(
+                    "names {} but is not valid Python, so its imports cannot be rewritten; fix \
+                     the file first",
+                    dotted(old)
+                ),
+            })
+            .into_iter()
+            .collect();
+        return (Vec::new(), refusals);
+    };
+    let file = ImportFile {
+        path: &source.path,
+        contents: &source.contents,
+        package: package_parts(&source.path),
+        new_package: package_parts(destination.unwrap_or(&source.path)),
+        moves,
+        package_bindings: bindings,
+    };
+    file_rewrites(&file, &module)
 }
 
 /// The edits and refusals of every import in `module`, in source order.
-pub(crate) fn file_rewrites(
+fn file_rewrites(
     file: &ImportFile<'_>,
     module: &ModModule,
 ) -> (Vec<ImportEdit>, Vec<ImportRefusal>) {
@@ -197,28 +234,17 @@ impl Collector<'_, '_> {
                 moved.push((alias, new));
             }
         }
-        let Some((first, first_moved)) = moved.first() else {
+        let Some((_, first_moved)) = moved.first() else {
             return Some(base.to_vec());
         };
         let package: &[String] = first_moved.split_last().map_or(&[], |(_, parent)| parent);
-        let together: bool = moved.len() == import.names.len()
-            && moved
-                .iter()
-                .all(|(alias, new)| keeps_name_in(alias, new, package));
-        if together {
-            return Some(package.to_vec());
+        match submodule_refusal(self.file, base, (&moved, import.names.len()), package) {
+            None => Some(package.to_vec()),
+            Some(reason) => {
+                self.refuse(start, reason);
+                None
+            }
         }
-        let mut old: Vec<String> = base.to_vec();
-        old.push(first.name.as_str().to_owned());
-        self.refuse(
-            start,
-            format!(
-                "imports the moved module {} from its package together with names that do not \
-                 move with it; split the import first",
-                dotted(&old)
-            ),
-        );
-        None
     }
 
     /// The byte span of `<level dots><module>` after `from`, when the source spells it plainly.
@@ -290,10 +316,52 @@ impl Collector<'_, '_> {
     }
 }
 
-/// Whether `new` is `package.<alias name>`.
-fn keeps_name_in(alias: &Alias, new: &[String], package: &[String]) -> bool {
-    new.split_last()
-        .is_some_and(|(name, parent)| parent == package && name == alias.name.as_str())
+/// Why moved modules imported by name from `base` cannot follow to `package`, if they cannot.
+fn submodule_refusal(
+    file: &ImportFile<'_>,
+    base: &[String],
+    (moved, names): (&[(&Alias, &Vec<String>)], usize),
+    package: &[String],
+) -> Option<String> {
+    for (alias, new) in moved {
+        let name: &str = alias.name.as_str();
+        let mut old: Vec<String> = base.to_vec();
+        old.push(name.to_owned());
+        if file
+            .package_bindings
+            .get(base)
+            .is_some_and(|bound| bound.contains(name))
+        {
+            return Some(format!(
+                "imports {name} from {}, whose __init__.py also binds {name}, so the import \
+                 would read the moved module {} instead after a rewrite; rewrite it by hand first",
+                dotted(base),
+                dotted(&old)
+            ));
+        }
+        if new.last().map(String::as_str) != Some(name) {
+            return Some(format!(
+                "imports the moved module {} by its name, which becomes {}; rewrite the import \
+                 by hand or import the module with an alias first",
+                dotted(&old),
+                dotted(new)
+            ));
+        }
+        if new.split_last().map(|(_, parent)| parent) != Some(package) {
+            return Some(format!(
+                "imports modules from {} that move to different packages; split the import \
+                 first",
+                dotted(base)
+            ));
+        }
+    }
+    (moved.len() != names).then(|| {
+        format!(
+            "imports a moved module from {} together with names that do not move with it; split \
+             the import first",
+            dotted(base)
+        )
+    })
 }
 
 fn unusual_spelling(parts: &[String]) -> String {

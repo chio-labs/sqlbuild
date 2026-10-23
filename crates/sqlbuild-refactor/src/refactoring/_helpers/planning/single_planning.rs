@@ -45,7 +45,7 @@ pub(crate) fn plan_single(
     if destination != target.source_path {
         moves.push((target.source_path.clone(), destination));
     }
-    let imports = python_import_parts(Path::new(&facts.project_dir), &moves);
+    let imports = python_import_parts(Path::new(&facts.project_dir), &moves)?;
     parts.edits.extend(imports.edits);
     parts.blocking.extend(imports.blocking);
     Ok(build_plan(

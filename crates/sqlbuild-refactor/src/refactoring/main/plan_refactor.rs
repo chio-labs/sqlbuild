@@ -35,7 +35,7 @@ pub fn plan_refactor(
         .collect::<Result<_, _>>()?;
     let mut parts = batch_parts(facts, &targets, &context, (host, test_host))?;
     let moves: Vec<(String, String)> = parts.moves.clone();
-    let imports = python_import_parts(Path::new(&facts.project_dir), &moves);
+    let imports = python_import_parts(Path::new(&facts.project_dir), &moves)?;
     parts.edits.extend(imports.edits);
     parts.blocking.extend(imports.blocking);
     let batch: Vec<RefactorRequest> = targets.into_iter().map(|target| target.request).collect();
