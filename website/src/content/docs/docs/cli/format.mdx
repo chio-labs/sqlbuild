@@ -176,10 +176,12 @@ reason, and the run continues. A cycle or the 128-pass limit fails without writi
 | SQBRSQL030 boolean CASE simplification | Refused | The `COALESCE` rewrite is not proved portable to every supported dialect. |
 | SQBRSQL042 unused CTE output | Applied when row-neutral | Only a column reference or deterministic scalar expression is removed, from a CTE without `DISTINCT`, `DISTINCT ON`, `GROUP BY ALL`, `ORDER BY ALL`, an ungrouped aggregate, or positional `GROUP BY`/`ORDER BY`. Other removals could change the rows and are refused with the reason. |
 
-`--fix` also rewrites a header description that escapes double quotes with `\"`, which
-descriptions do not support, as a `"""..."""` string holding real quotes, and reports it as an
-applied `description-quotes` fix. It rewrites only a description whose sole backslashes escape
-quotes, and only when the new string stores exactly that text. When the project cannot compile
+`--fix` also rewrites a header description that escapes double quotes as `\"` or doubles them as
+`""`, which descriptions do not support, as a `"""..."""` string holding real quotes, and reports
+it as an applied `description-quotes` fix. It rewrites only a description whose sole backslashes
+escape quotes, and only when the new string stores exactly that text. A file that still has header
+syntax errors once its descriptions are rewritten is left as written, and the fix is reported as
+refused. When the project cannot compile
 until the rewritten descriptions are saved, the run skips the compiler-verified Rule fixes with a
 `format-fix-skipped` warning; run `sqb format --fix` again to apply them.
 

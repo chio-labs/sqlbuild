@@ -109,13 +109,15 @@ MODEL (
 ```
 
 A `"` inside a `"..."` string ends it, so it is an error with its line and column rather than the
-start of an escape. A description has no `\"` escape: a backslash in a description is an ordinary
-character. `sqb format --fix` rewrites a description that escapes its quotes with `\"` as a
-`"""..."""` string holding real quotes:
+start of an escape. A description has no `\"` escape and no `""` doubling: in a `"..."`
+description a backslash is an ordinary character, so `"Files under C:\"` ends with a backslash and
+`"Path C:\\temp"` stores both backslashes. In a `'...'` description, `\'` and `''` both stand for
+one `'`, as in `'it\'s'` and `'it''s'`. `sqb format --fix` rewrites a description that escapes its
+quotes as `\"` or doubles them as `""` into a `"""..."""` string holding real quotes:
 
 ```text
 error[D002]: MODEL(...) in 'models/customers.sql:2:34' contains invalid SQLBuild header syntax: a double quote ends this "..." string early; use """…""" for text containing double quotes
-  = help: write the text between triple quotes, where quotes need no escaping: description """Matches "Miss"."""; sqb format --fix rewrites a description that escapes its quotes with \"
+  = help: write the text between triple quotes, where quotes need no escaping: description """Matches "Miss"."""; sqb format --fix rewrites a description that escapes its quotes as \" or doubles them as ""
 ```
 
 A `"""..."""` string ends at the first three double quotes in a row. Up to two quotes just before
@@ -150,7 +152,7 @@ These strings are folded prose:
 
 | String | Where |
 |--------|-------|
-| `description` | `MODEL`, `SCENARIO`, `SCHEMA`, `FUNCTION`, `HOOK` and `MACRO` headers |
+| `description` | The top level of every header. `MODEL`, `SCENARIO`, `SCHEMA`, `FUNCTION`, `HOOK` and `MACRO` headers take one; `AUDIT`, `ENUM`, `CONSTANT` and `TEST` headers reject the key |
 | Column `description` | Entries of `columns (...)` in `MODEL` and `SCHEMA` headers |
 | Audit `description` | The `description` option of an audit in `audits [...]` |
 | Exception `reason` | `reason` of `[[rules.rule_exceptions]]`, `[[rules.graph_edge_exceptions]]`, `[[rules.rule_ignores]]`, `[[rules.select_star_allow]]` and `[[rules.threshold_overrides]]` in `sqlbuild_project.toml` |
