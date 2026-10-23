@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.171.0](https://github.com/chio-labs/sqlbuild/compare/v0.170.0...v0.171.0) (2026-10-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* Python macros now live in macros/python/ (and the python/ folder of scoped macro roots) and are called as @py.name(...). A macro file directly under a macros/ folder fails with D013, and a bare @name(...) call fails with P014; move files into macros/python/ and replace @name( with @py.name( in project SQL.
+
+### Features
+
+* add typed SQL macros and require [@py](https://github.com/py)./[@sql](https://github.com/sql). macro calls ([#1224](https://github.com/chio-labs/sqlbuild/issues/1224)) ([21a802b](https://github.com/chio-labs/sqlbuild/commit/21a802bfbb22b6cb23eab6be932da2de48beb45f))
+
 ## [0.170.0](https://github.com/chio-labs/sqlbuild/compare/v0.169.0...v0.170.0) (2026-10-23)
 
 
