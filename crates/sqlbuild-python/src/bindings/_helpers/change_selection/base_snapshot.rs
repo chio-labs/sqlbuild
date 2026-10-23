@@ -192,6 +192,25 @@ fn read_notes(py: Python<'_>, base: &GitBase, path: &Path) -> PyResult<String> {
     }
 }
 
+/// Cache `snapshot` at `cached` with its `notes`, staging the snapshot so readers never see half.
+fn store_snapshot(
+    cached: &Path,
+    (snapshot, notes): (&DefinitionSnapshot, &str),
+) -> std::io::Result<()> {
+    let notes_path: PathBuf = cached.with_extension(NOTES_EXTENSION);
+    if notes.is_empty() {
+        match std::fs::remove_file(&notes_path) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error),
+            _ => {}
+        }
+    } else {
+        std::fs::write(&notes_path, notes)?;
+    }
+    let staged: PathBuf = cached.with_extension(format!("{}.tmp", std::process::id()));
+    std::fs::write(&staged, definition_snapshot_json(snapshot))?;
+    std::fs::rename(&staged, cached)
+}
+
 /// Resolve `since` to its merge base and load, or compile and cache, the base snapshot.
 pub(crate) fn base_comparison<'py>(
     (stream, project_dir): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
@@ -249,21 +268,7 @@ pub(crate) fn base_comparison<'py>(
     let _ = std::fs::remove_dir_all(&work);
     let (snapshot, notes) = compiled?;
     write(stream, &notes)?;
-    let staged: PathBuf = cached.with_extension(format!("{}.tmp", std::process::id()));
-    let notes_path: PathBuf = cached.with_extension(NOTES_EXTENSION);
-    let notes_saved: std::io::Result<()> = if notes.is_empty() {
-        std::fs::remove_file(&notes_path).or_else(|error| match error.kind() {
-            std::io::ErrorKind::NotFound => Ok(()),
-            _ => Err(error),
-        })
-    } else {
-        std::fs::write(&notes_path, &notes)
-    };
-    if notes_saved.is_ok()
-        && let Ok(()) = std::fs::write(&staged, definition_snapshot_json(&snapshot))
-    {
-        let _ = std::fs::rename(&staged, &cached);
-    }
+    store_snapshot(&cached, (&snapshot, &notes)).map_err(|error| io_failed(py, &base, &error))?;
     prune_snapshots(&cache_dir).map_err(|error| io_failed(py, &base, &error))?;
     write(
         stream,
