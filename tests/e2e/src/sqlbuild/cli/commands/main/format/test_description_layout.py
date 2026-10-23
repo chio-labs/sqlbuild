@@ -11,6 +11,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.format._test_types import (
     DescriptionLayoutTestCase,
+    MacroLayoutTestCase,
     QuoteFixTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.format.helpers import stored_descriptions
@@ -183,3 +184,55 @@ def test_given_descriptions_escaping_quotes_when_format_fix_then_triple_quoted_r
     assert compiled.returncode == 0, compiled.stdout + compiled.stderr
     assert checked.returncode == 0, checked.stdout + checked.stderr
     assert stored_descriptions(project_dir)["customers"] == test_case.expected_description
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MacroLayoutTestCase(
+            description="long_single_quoted_description_with_a_doubled_quote",
+            macro=(
+                "MACRO (\n  description 'it''s a "
+                + " ".join(["word"] * 30)
+                + " end',\n  arguments (value VARCHAR),\n  returns VARCHAR,\n);\n\n"
+                "LOWER(@value)\n"
+            ),
+            expected_macro=(
+                'MACRO (\n  description """\n'
+                "    it's a "
+                + " ".join(["word"] * 18)
+                + "\n    "
+                + " ".join(["word"] * 12)
+                + ' end\n  """,\n  arguments (value VARCHAR),\n  returns VARCHAR,\n);\n\n'
+                "LOWER(@value)\n"
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_macro_description_when_formatting_then_its_text_survives_and_it_compiles(
+    test_case: MacroLayoutTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="shop",
+        repo_files={
+            "sqlbuild_project.toml": _PROJECT_FILE,
+            "macros/sql/lowered.sql": test_case.macro,
+            "models/customers.sql": (
+                "MODEL (description \"Customers.\");\n\nSELECT @sql.lowered('Miss') AS title\n"
+            ),
+        },
+    )
+
+    formatted: subprocess.CompletedProcess[str] = run_sqb(
+        project_dir=project_dir, command=("--no-color", "format")
+    )
+    compiled: subprocess.CompletedProcess[str] = run_sqb(
+        project_dir=project_dir, command=("--no-color", "compile")
+    )
+
+    assert formatted.returncode == 0, formatted.stdout + formatted.stderr
+    assert (project_dir / "macros/sql/lowered.sql").read_text() == test_case.expected_macro
+    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
+

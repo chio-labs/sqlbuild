@@ -8,6 +8,7 @@ use sqlbuild_sqltext::header_strings::constants::TRIPLE_QUOTE;
 use sqlbuild_sqltext::header_strings::main::fold_prose::fold_prose;
 use sqlbuild_sqltext::header_strings::main::prose_string::prose_string;
 
+use crate::dsl_headers::_helpers::macro_header::same_macro;
 use crate::dsl_headers::_helpers::prose_layout::{canonical_prose, description_string_span};
 use crate::dsl_headers::_helpers::quoted::split_outside_quotes;
 use crate::dsl_headers::_helpers::rules::violation_at;
@@ -167,12 +168,16 @@ pub(crate) fn wrap_descriptions<P: HeaderParser>(
         else {
             continue;
         };
-        updated = [
+        let candidate: Vec<char> = [
             slice(&updated, 0, header.start),
             &rewritten,
             tail(&updated, header.end),
         ]
         .concat();
+        if header.kind == SQL_MACRO_HEADER_KIND && !same_macro(&updated, &candidate) {
+            continue;
+        }
+        updated = candidate;
     }
     Ok(updated)
 }

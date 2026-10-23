@@ -214,6 +214,18 @@ fn given_descriptions_when_formatting_then_layout_is_canonical_idempotent_and_te
             expected_text: "MACRO (\n  description \"\"\"\n    True when a name starts with a woman's title: Mme, Mlle,\n    Miss, Mrs, Ms. Any case.\n  \"\"\",\n  arguments (value VARCHAR),\n  returns BOOLEAN,\n);\n\n@value IS NOT NULL\n",
         },
         FormatTestCase {
+            description: "a long MACRO description with a doubled quote keeps its text",
+            text: "MACRO (\n  description 'it''s a word word word word word word word word word end',\n  arguments (v VARCHAR),\n  returns VARCHAR,\n);\n\nLOWER(@v)\n",
+            line_width: 50,
+            expected_text: "MACRO (\n  description \"\"\"\n    it's a word word word word word word word word\n    word end\n  \"\"\",\n  arguments (v VARCHAR),\n  returns VARCHAR,\n);\n\nLOWER(@v)\n",
+        },
+        FormatTestCase {
+            description: "a long model description with an escaped single quote keeps its text",
+            text: "MODEL (\n  description 'it\\'s a word word word word word word word word word end',\n);\nSELECT 1\n",
+            line_width: 50,
+            expected_text: "MODEL (\n  description \"\"\"\n    it's a word word word word word word word word\n    word end\n  \"\"\",\n);\nSELECT 1\n",
+        },
+        FormatTestCase {
             description: "a description ending in a backslash stays as written",
             text: "MODEL (\n  description \"Files under C:\\\",\n);\nSELECT 1\n",
             line_width: 100,
