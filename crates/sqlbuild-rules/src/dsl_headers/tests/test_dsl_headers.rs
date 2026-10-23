@@ -286,6 +286,24 @@ fn given_escaped_quotes_in_descriptions_when_fixing_then_triple_quotes_hold_real
             expected_lines: vec![3],
         },
         QuoteFixTestCase {
+            description: "doubled quotes in a model description",
+            text: "MODEL (\n  description \"say \"\"hi\"\" now\",\n);\nSELECT 1\n",
+            expected_text: "MODEL (\n  description \"\"\"say \"hi\" now\"\"\",\n);\nSELECT 1\n",
+            expected_lines: vec![2],
+        },
+        QuoteFixTestCase {
+            description: "doubled quotes in a macro description",
+            text: "MACRO (\n  description \"say \"\"hi\"\" now\",\n  returns VARCHAR,\n);\n'x'\n",
+            expected_text: "MACRO (\n  description \"\"\"say \"hi\" now\"\"\",\n  returns VARCHAR,\n);\n'x'\n",
+            expected_lines: vec![2],
+        },
+        QuoteFixTestCase {
+            description: "a description that already reads is left alone",
+            text: "MODEL (\n  description \"Files under C:\\\",\n);\nSELECT 1\n",
+            expected_text: "MODEL (\n  description \"Files under C:\\\",\n);\nSELECT 1\n",
+            expected_lines: vec![],
+        },
+        QuoteFixTestCase {
             description: "another backslash escape is not rewritten",
             text: "MODEL (\n  description \"Path C:\\\\data \\\"x\\\"\",\n);\nSELECT 1\n",
             expected_text: "MODEL (\n  description \"Path C:\\\\data \\\"x\\\"\",\n);\nSELECT 1\n",

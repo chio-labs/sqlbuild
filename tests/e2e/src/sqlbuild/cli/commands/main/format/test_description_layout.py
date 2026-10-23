@@ -142,6 +142,28 @@ def test_given_model_description_when_formatting_then_layout_is_canonical_and_te
             },
             expected_description='Matches a title ("Miss").',
         ),
+        QuoteFixTestCase(
+            description="model_and_macro_descriptions_doubling_quotes",
+            files={
+                "models/customers.sql": (
+                    'MODEL (\n  description "say ""hi"" now",\n);\n'
+                    "\nSELECT @sql.title('Miss') AS title\n"
+                ),
+                "macros/sql/title.sql": (
+                    'MACRO (\n  description "say ""hi"" now",\n'
+                    "  arguments (value VARCHAR),\n  returns VARCHAR,\n);\n\n@value\n"
+                ),
+            },
+            expected_fixes=[
+                ("description-quotes", "customers.sql", 2, "applied"),
+                ("description-quotes", "title.sql", 2, "applied"),
+            ],
+            expected_starts={
+                "models/customers.sql": 'MODEL (\n  description """say "hi" now""",\n);\n',
+                "macros/sql/title.sql": 'MACRO (\n  description """say "hi" now""",\n',
+            },
+            expected_description='say "hi" now',
+        ),
     ],
     ids=lambda case: case.description,
 )
