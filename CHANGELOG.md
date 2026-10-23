@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.170.0](https://github.com/chio-labs/sqlbuild/compare/v0.169.0...v0.170.0) (2026-10-23)
+
+
+### Features
+
+* batch renames, Python import rewrites and repairs of existing rule failures in sqb rename and sqb mv ([#1229](https://github.com/chio-labs/sqlbuild/issues/1229)) ([39fef4b](https://github.com/chio-labs/sqlbuild/commit/39fef4b7d80c4e78d987716dd8748918131fae11))
+
 ## [0.169.0](https://github.com/chio-labs/sqlbuild/compare/v0.168.0...v0.169.0) (2026-10-23)
 
 
