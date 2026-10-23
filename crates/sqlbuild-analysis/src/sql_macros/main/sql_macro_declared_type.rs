@@ -1,3 +1,4 @@
+use crate::constants::UNKNOWN_SQL_TYPE;
 use crate::sql_macros::models::DeclaredOutput;
 use crate::type_system::main::normalize_type::normalize_type;
 use crate::type_system::models::NormalizedType;
@@ -19,7 +20,9 @@ pub fn sql_macro_declared_type(
                 _ => false,
             }
     })?;
-    let Some(inferred) = inferred.filter(|inferred| !inferred.is_empty()) else {
+    let Some(inferred) = inferred.filter(|inferred| {
+        !inferred.is_empty() && !inferred.eq_ignore_ascii_case(UNKNOWN_SQL_TYPE)
+    }) else {
         return Some(output.returns.clone());
     };
     let Some(inferred_type) = normalized(inferred, dialect) else {

@@ -33,6 +33,12 @@ fn given_a_typed_macro_output_when_typing_the_column_then_returns_fills_unknown_
             expected_type: None,
         },
         OutputTypeTestCase {
+            description: "the unknown placeholder takes returns",
+            check: typed_check(CallScope::Main, 0),
+            item: (None, 0, "label", Some("UNKNOWN")),
+            expected_type: Some("VARCHAR"),
+        },
+        OutputTypeTestCase {
             description: "a known time type is not unknown",
             check: typed_check(CallScope::Main, 0),
             item: (None, 0, "label", Some("TIME")),

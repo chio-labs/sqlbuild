@@ -404,6 +404,24 @@ def test_given_an_any_argument_misused_when_compiling_then_it_fails(
             expected_fragments=('error[SQBRCONTRACT105]: output "status_bar"',),
         ),
         SqlMacroCompileTestCase(
+            description="an_untyped_upstream_column_in_a_cte_takes_returns",
+            files={
+                **with_rules("SQBRCONTRACT105"),
+                **text_macro("m", "BIGINT", "@value"),
+                "models/marts/up.sql": (
+                    'MODEL (description "Up");\n\nSELECT NULL AS s FROM __ref("stg_orders") AS o\n'
+                ),
+                **contract_model(
+                    "orders",
+                    "v (type BIGINT)",
+                    'WITH c AS (SELECT @sql.m(u.s) AS v FROM __ref("up") AS u)\nSELECT v FROM c\n',
+                ),
+            },
+            expected_returncode=0,
+            expected_fragments=("0 errors, 0 warnings",),
+            unexpected_fragments=_UNPROVEN,
+        ),
+        SqlMacroCompileTestCase(
             description="an_inferred_type_of_another_family_still_disagrees_through_a_cte",
             files={
                 **text_macro("shouted", "BIGINT", "UPPER(@value)"),
