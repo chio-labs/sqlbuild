@@ -24,6 +24,7 @@ use crate::bindings::_helpers::cli::argv::parse_cli_invocation;
 use crate::bindings::_helpers::cli::dispatch::{command_facts, dispatch_command};
 use crate::bindings::_helpers::cli::failure_cause::take_failure_cause;
 use crate::bindings::_helpers::cli::launch_state::offer_launch_record;
+use crate::bindings::_helpers::cli::machine_output::take_machine_output_written;
 use crate::bindings::_helpers::cli::observability::{
     CliObservabilityScope, cli_observability_scope,
 };
@@ -207,7 +208,7 @@ fn write_compile_machine_error(
     print_object(&document, None, None)
 }
 
-/// With `sqb recall … --json` or `sqb plan --json`, the failure as `{"error": {"code", "message", "help"}}` on stdout, so callers parsing the output read the error instead of failing to parse it.
+/// With `sqb recall … --json`, `sqb plan --json` or `sqb janitor --json` (before it printed its own document), the failure as `{"error": {"code", "message", "help"}}` on stdout, so callers parsing the output read the error instead of failing to parse it.
 fn write_machine_error(
     invocation: &Invocation<'_>,
     error: &Bound<'_, PyAny>,
@@ -220,6 +221,8 @@ fn write_machine_error(
             .map(|format| format.extract())
             .transpose()?;
         format.as_deref() == Some(JSON_FORMAT)
+    } else if invocation.command_is("janitor") {
+        invocation.flag("json")? && !take_machine_output_written()
     } else {
         invocation.command_is("plan") && invocation.flag("json")?
     };
@@ -599,6 +602,14 @@ fn observed_dispatch<'py>(
 
 /// Dispatch once and project every expected failure to its coded error and exit code.
 fn handled_dispatch<'py>(invocation: &Invocation<'py>) -> PyResult<Bound<'py, PyAny>> {
+    let _ = take_machine_output_written();
+    let handled: PyResult<Bound<'py, PyAny>> = report_dispatch(invocation);
+    let _ = take_machine_output_written();
+    handled
+}
+
+/// Dispatch the command and report its failure, writing any machine-readable error document.
+fn report_dispatch<'py>(invocation: &Invocation<'py>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = invocation.py();
     let policy: InvocationPolicy = invocation_policy(&invocation.facts);
     report_skill_freshness(invocation, policy)?;

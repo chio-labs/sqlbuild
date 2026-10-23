@@ -1,12 +1,13 @@
 //! `sqb janitor` phases: compile, connect, inspect and plan, clean up and close.
 
-use sqlbuild_host::entries::models::ExecutorHost;
+use sqlbuild_host::entries::models::{AdapterHost, ExecutorHost};
 
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::native_host::connections::connection_failure;
 use std::time::Instant;
 
+use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
 
@@ -15,6 +16,7 @@ use crate::bindings::_helpers::build_progress::progress_reporters::{
     ConnectionProgressReporter, PlanningProgressReporter,
 };
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
+use crate::bindings::_helpers::command_runtime::concurrency::resolve_concurrency;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_connection_context;
 use crate::bindings::_helpers::janitor::janitor_facts::Warehouse;
 use crate::bindings::_helpers::janitor::janitor_planning::{
@@ -43,8 +45,13 @@ pub(crate) struct JanitorCompiled<'py> {
     pub(crate) connection_config: Bound<'py, PyAny>,
 }
 
-fn stdout(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    py.import("sys")?.getattr("stdout")
+/// Where human output goes: stderr when stdout carries `--json`, otherwise stdout.
+pub(crate) fn output_stream<'py>(invocation: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let machine_output: bool = native_field(invocation, "machine_output")?.is_truthy()?;
+    invocation
+        .py()
+        .import("sys")?
+        .getattr(if machine_output { "stderr" } else { "stdout" })
 }
 
 fn use_color(invocation: &Bound<'_, PyAny>) -> PyResult<bool> {
@@ -76,7 +83,7 @@ pub(crate) fn compile_janitor_project<'py>(
     let started: Instant = Instant::now();
     let status: Bound<'py, PyAny> = Bound::new(
         py,
-        PlanningProgressReporter::new(py, &stdout(py)?, use_color(invocation)?)?,
+        PlanningProgressReporter::new(py, &output_stream(invocation)?, use_color(invocation)?)?,
     )?
     .into_any();
     let as_target: Bound<'py, PyAny> = native_field(invocation, "as_target")?;
@@ -145,7 +152,7 @@ pub(crate) fn connect_janitor_warehouse<'py>(
                 py,
                 &[
                     ("adapter_name", compiled.adapter_name.clone()),
-                    ("stream", stdout(py)?),
+                    ("stream", output_stream(invocation)?),
                     (
                         "use_color",
                         PyBool::new(py, use_color(invocation)?)
@@ -221,7 +228,8 @@ pub(crate) fn build_janitor_execution_plan<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = invocation.py();
     let started: Instant = Instant::now();
-    let status: Bound<'py, PyAny> = status_reporter(&stdout(py)?, use_color(invocation)?)?;
+    let status: Bound<'py, PyAny> =
+        status_reporter(&output_stream(invocation)?, use_color(invocation)?)?;
     status.call_method1("start", ("Inspecting warehouse state...",))?;
     let janitor: Bound<'py, PyAny> = native_field(invocation, "discovered_inputs")?
         .getattr("project_config")?
@@ -229,36 +237,45 @@ pub(crate) fn build_janitor_execution_plan<'py>(
     let plan: Bound<'py, PyAny> = within(
         &lifecycle(py, ("janitor", "janitor_candidate_planning"))?,
         |lifecycle| {
-            let plan: Bound<'py, PyAny> = build_plan(
-                (
-                    &compiled.project,
-                    &Warehouse {
-                        adapter: compiled.adapter.clone(),
-                        connection: connection.clone(),
-                    },
-                ),
-                &JanitorSettings {
-                    retention_days: native_field(settings, "retention_days")?.extract()?,
-                    delete_tracked_only: native_field(&janitor, "delete_tracked_only")?
-                        .is_truthy()?,
-                    exclude_patterns: native_field(&janitor, "exclude_patterns")?.extract()?,
-                    direct_mode: true,
-                    state_history_versions: native_field(
-                        settings,
-                        "direct_state_history_versions",
-                    )?
-                    .extract()?,
-                    archive_retention_days: native_field(settings, "archive_retention_days")?
-                        .extract()?,
-                    early_old_name_view_drops: native_field(settings, "drop_old_name_views")?
-                        .extract()?,
-                },
-                &RelationScope {
-                    scan_keys: Vec::new(),
-                    protected_keys: Vec::new(),
-                    reasons: Vec::new(),
-                },
+            let catalog: Bound<'py, PyAny> = call_with(
+                &host::entry(py, AdapterHost::OpenInspectionCatalog)?,
+                &[
+                    ("adapter", compiled.adapter.clone()),
+                    ("connection", connection.clone()),
+                ],
             )?;
+            let plan: Bound<'py, PyAny> = within(&catalog, |_| {
+                build_plan(
+                    (
+                        &compiled.project,
+                        &Warehouse {
+                            adapter: compiled.adapter.clone(),
+                            connection: connection.clone(),
+                        },
+                    ),
+                    &JanitorSettings {
+                        retention_days: native_field(settings, "retention_days")?.extract()?,
+                        delete_tracked_only: native_field(&janitor, "delete_tracked_only")?
+                            .is_truthy()?,
+                        exclude_patterns: native_field(&janitor, "exclude_patterns")?.extract()?,
+                        direct_mode: true,
+                        state_history_versions: native_field(
+                            settings,
+                            "direct_state_history_versions",
+                        )?
+                        .extract()?,
+                        archive_retention_days: native_field(settings, "archive_retention_days")?
+                            .extract()?,
+                        early_old_name_view_drops: native_field(settings, "drop_old_name_views")?
+                            .extract()?,
+                    },
+                    &RelationScope {
+                        scan_keys: Vec::new(),
+                        protected_keys: Vec::new(),
+                        reasons: Vec::new(),
+                    },
+                )
+            })?;
             let metadata: Bound<'py, PyDict> = PyDict::new(py);
             metadata.set_item("item_count", candidate_count(&plan)?)?;
             let options: Bound<'py, PyDict> = PyDict::new(py);
@@ -285,18 +302,49 @@ pub(crate) fn build_janitor_execution_plan<'py>(
     Ok(plan)
 }
 
-/// Execute the warehouse cleanup plan.
+/// Execute the cleanup plan on up to the command's concurrency, reporting to `progress`.
 pub(crate) fn execute_janitor_cleanup<'py>(
-    compiled: &JanitorCompiled<'py>,
-    connection: &Bound<'py, PyAny>,
-    plan: &Bound<'py, PyAny>,
+    invocation: &Bound<'py, PyAny>,
+    (compiled, connection): (&JanitorCompiled<'py>, &Bound<'py, PyAny>),
+    (plan, progress): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = invocation.py();
+    let concurrency: i64 = resolve_concurrency(
+        &py.None().into_bound(py),
+        &native_field(invocation, "discovered_inputs")?,
+        &native_field(invocation, "selected_target")?,
+    )?
+    .limit;
+    let connection_progress: Bound<'py, PyAny> = Bound::new(
+        py,
+        ConnectionProgressReporter::new(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("adapter_name", compiled.adapter_name.clone()),
+                    ("stream", output_stream(invocation)?),
+                    (
+                        "use_color",
+                        PyBool::new(py, use_color(invocation)?)
+                            .to_owned()
+                            .into_any(),
+                    ),
+                ],
+            )?),
+        )?,
+    )?
+    .into_any();
     call_with(
-        &host::entry(compiled.adapter.py(), ExecutorHost::ExecuteJanitorPlan)?,
+        &host::entry(py, ExecutorHost::ExecuteJanitorPlan)?,
         &[
             ("plan", plan.clone()),
             ("adapter", compiled.adapter.clone()),
             ("connection", connection.clone()),
+            ("progress", progress.clone()),
+            ("connection_config", compiled.connection_config.clone()),
+            ("concurrency", concurrency.into_pyobject(py)?.into_any()),
+            ("connection_progress", connection_progress),
         ],
     )
 }

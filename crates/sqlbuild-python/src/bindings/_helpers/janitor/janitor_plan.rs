@@ -4,7 +4,7 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::cli_text::models::CliStyle;
-use sqlbuild_core::janitor_text::main::janitor_completion_text::janitor_completion_text;
+use sqlbuild_core::janitor_text::main::render_janitor_completion::render_janitor_completion;
 use sqlbuild_core::janitor_text::main::render_janitor_plan::render_janitor_plan;
 use sqlbuild_core::janitor_text::models::{
     ArchiveCandidateText, ArchivedRelationText, JanitorPlanText, JanitorResultCounts,
@@ -193,20 +193,34 @@ pub(crate) fn janitor_result_counts(result: &Bound<'_, PyAny>) -> PyResult<Janit
 
 /// Render one executor janitor plan as the `sqb janitor` preview.
 #[pyfunction]
-#[pyo3(name = "render_janitor_plan", signature = (*, plan, use_color = false))]
-fn render_janitor_plan_text(plan: &Bound<'_, PyAny>, use_color: bool) -> PyResult<String> {
+#[pyo3(name = "render_janitor_plan", signature = (*, plan, use_color = false, verbose = false))]
+fn render_janitor_plan_text(
+    plan: &Bound<'_, PyAny>,
+    use_color: bool,
+    verbose: bool,
+) -> PyResult<String> {
     Ok(render_janitor_plan(
         &janitor_plan_text(plan)?,
+        verbose,
         CliStyle { use_color },
     ))
 }
 
 /// Render one executor janitor result as the `sqb janitor` completion line.
 #[pyfunction]
-#[pyo3(name = "render_janitor_completion", signature = (*, result, use_color = false))]
-fn render_janitor_completion_text(result: &Bound<'_, PyAny>, use_color: bool) -> PyResult<String> {
-    Ok(janitor_completion_text(
+#[pyo3(
+    name = "render_janitor_completion",
+    signature = (*, result, elapsed_seconds = None, use_color = false)
+)]
+fn render_janitor_completion_text(
+    result: &Bound<'_, PyAny>,
+    elapsed_seconds: Option<f64>,
+    use_color: bool,
+) -> PyResult<String> {
+    Ok(render_janitor_completion(
         &janitor_result_counts(result)?,
+        elapsed_seconds,
+        false,
         CliStyle { use_color },
     ))
 }

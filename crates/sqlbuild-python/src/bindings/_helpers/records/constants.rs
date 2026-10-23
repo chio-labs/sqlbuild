@@ -463,6 +463,8 @@ const JANITOR_COMMAND_REQUEST: RecordSpec = RecordSpec {
         FieldSpec::new("drop_old_name_views", FieldDefault::EmptyTuple),
         FieldSpec::new("selected_target", FieldDefault::None),
         FieldSpec::new("as_target", FieldDefault::None),
+        FieldSpec::new("verbose", FieldDefault::False),
+        FieldSpec::new("json_output", FieldDefault::False),
     ],
 };
 const JANITOR_INVOCATION: RecordSpec = RecordSpec {
@@ -475,6 +477,7 @@ const JANITOR_INVOCATION: RecordSpec = RecordSpec {
         FieldSpec::new("selected_target", FieldDefault::None),
         FieldSpec::new("active_target_name", FieldDefault::None),
         FieldSpec::new("as_target", FieldDefault::None),
+        FieldSpec::new("machine_output", FieldDefault::False),
     ],
 };
 const JANITOR_SETTINGS: RecordSpec = RecordSpec {

@@ -124,3 +124,14 @@ class BrokenPipeTestCase:
     prepare: Callable[[Path], None]
     expected_exit_code: int
     expected_stderr_end: bytes
+
+
+@dataclass(frozen=True)
+class MachineOutputResetTestCase:
+    """A successful machine-output command followed in-process by an early failure."""
+
+    description: str
+    first_args: tuple[str, ...]
+    failing_args: tuple[str, ...]
+    failing_extra_toml: str
+    expected_error_code: str

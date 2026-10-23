@@ -87,6 +87,7 @@ class JanitorArchiveExecutionTestCase:
     expected_dropped_targets: tuple[str, ...]
     expected_dropped_view_targets: tuple[str, ...]
     expected_event_insert_count: int
+    expected_event_row_count: int
     expected_event_table_create_count: int
 
 
@@ -158,3 +159,45 @@ class JanitorCaseSafetyTestCase:
     exclude_patterns: tuple[str, ...]
     expected_skipped_relations: tuple[tuple[str, str], ...]
     expected_dropped_targets: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JanitorPhaseEventSafetyTestCase:
+    description: str
+    connection_count: int
+    item_count: int
+    failing_report: int
+    report_error: type[BaseException]
+    expected_error: type[BaseException]
+    expected_minimum_completed: int
+
+
+@dataclass(frozen=True)
+class JanitorPhaseInterruptTestCase:
+    description: str
+    connection_count: int
+    item_count: int
+    expected_error: type[BaseException]
+    expected_minimum_completed: int
+
+
+@dataclass(frozen=True)
+class JanitorPhaseSubmitInterruptTestCase:
+    description: str
+    connection_count: int
+    item_count: int
+    failing_submit: int
+    expected_error: type[BaseException]
+    expected_maximum_completed: int
+
+
+@dataclass(frozen=True)
+class JanitorPhaseFlushFailureTestCase:
+    description: str
+    item_count: int
+    failing_item: int
+    action_error: type[BaseException]
+    flush_error: type[BaseException]
+    expected_error: type[BaseException]
+    expected_chained_error: type[BaseException]
+    expected_unwritten: tuple[tuple[int, tuple[str, ...], str], ...]

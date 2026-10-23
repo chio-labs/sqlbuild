@@ -7,6 +7,8 @@ from datetime import datetime
 
 from sqlbuild._native import OldNameViewDropReason, OldNameViewHistory
 from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup
+from sqlbuild.executor.janitor.types import JanitorAction
+from sqlbuild.executor.janitor_events.models import JanitorEventRecord
 
 
 @dataclass(frozen=True, eq=False)
@@ -226,3 +228,40 @@ class JanitorExecutionResult:
     )
     pruned_direct_state: tuple[JanitorDirectStatePruneCandidate, ...] = field(default_factory=tuple)
     dropped_old_name_views: tuple[JanitorOldNameView, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class JanitorProgressItem:
+    """How the progress output names one janitor action, and once finished its error and time."""
+
+    action: JanitorAction
+    name: str
+    destination: str | None = None
+    error: str | None = None
+    duration_seconds: float = 0.0
+
+
+@dataclass(frozen=True)
+class JanitorActionOutcome[ResultT]:
+    """What one janitor action returned or raised, and how long it ran."""
+
+    result: ResultT | None = None
+    error: BaseException | None = None
+    duration_seconds: float = 0.0
+
+
+@dataclass(frozen=True)
+class JanitorChunkOutcome[ResultT]:
+    """Each item's outcome in one chunk (none if never started), interrupt and report error."""
+
+    outcomes: tuple[JanitorActionOutcome[ResultT] | None, ...]
+    interruption: BaseException | None = None
+    report_error: BaseException | None = None
+
+
+@dataclass(frozen=True)
+class JanitorActionDone:
+    """A finished action: the action taken when it differs from the described one, and its event."""
+
+    taken: JanitorAction | None = None
+    event: JanitorEventRecord | None = None

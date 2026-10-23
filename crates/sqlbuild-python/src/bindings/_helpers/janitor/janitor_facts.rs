@@ -18,7 +18,8 @@ use crate::bindings::_helpers::janitor::janitor_keys::{
 use crate::bindings::_helpers::records::fields::replaced;
 
 const QUERY_ARTIFACT_LIFECYCLE: ExecutorHost = ExecutorHost::QueryDiffArtifactLifecycle;
-const RELATION_LOOKUP: AdapterHost = AdapterHost::BuildRelationLookup;
+const INSPECTION_LIST: AdapterHost = AdapterHost::ListRelationsForInspection;
+const ACTIVE_CATALOG: AdapterHost = AdapterHost::ActiveInspectionCatalog;
 const LOG_DEBUG_EVENT: ExecutorHost = ExecutorHost::LogDebugEvent;
 const EXECUTION_LOGGER: &str = "sqlbuild.execution";
 use crate::bindings::_helpers::native_host::host;
@@ -47,6 +48,93 @@ impl<'py> Warehouse<'py> {
             vec![("connection", self.connection.clone())];
         arguments.extend(pairs.iter().cloned());
         call_with(&native_field(&self.adapter, method)?, &arguments)
+    }
+
+    /// `list_relations`, served from the open inspection catalog so each schema is read once.
+    pub(crate) fn list_relations(
+        &self,
+        database: Option<&str>,
+        (schemas, names): (Option<&[String]>, Option<&[String]>),
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let py: Python<'py> = self.py();
+        let texts = |values: Option<&[String]>| -> PyResult<Bound<'py, PyAny>> {
+            match values {
+                Some(values) => tuple(py, values.iter().map(|value| text(py, value))),
+                None => Ok(py.None().into_bound(py)),
+            }
+        };
+        call_with(
+            &host::entry(py, INSPECTION_LIST)?,
+            &[
+                ("adapter", self.adapter.clone()),
+                ("connection", self.connection.clone()),
+                ("database", optional(py, database)?),
+                ("schemas", texts(schemas)?),
+                ("names", texts(names)?),
+            ],
+        )
+    }
+
+    /// The inspection catalog open on this connection, or none.
+    fn catalog(&self) -> PyResult<Option<Bound<'py, PyAny>>> {
+        let catalog: Bound<'py, PyAny> = call_with(
+            &host::entry(self.py(), ACTIVE_CATALOG)?,
+            &[
+                ("adapter", self.adapter.clone()),
+                ("connection", self.connection.clone()),
+            ],
+        )?;
+        Ok((!catalog.is_none()).then_some(catalog))
+    }
+
+    /// Read every not-yet-listed schema concurrently when the open catalog lists whole schemas.
+    pub(crate) fn prefetch_schema_listings(
+        &self,
+        scopes: &[(Option<String>, String)],
+    ) -> PyResult<()> {
+        let py: Python<'py> = self.py();
+        let Some(catalog) = self.catalog()?.filter(|_| !scopes.is_empty()) else {
+            return Ok(());
+        };
+        let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
+        for (database, schema) in scopes {
+            items.push(tuple(
+                py,
+                [optional(py, database.as_deref())?, text(py, schema)],
+            )?);
+        }
+        call_with(
+            &native_field(&catalog, "prefetch_schema_listings")?,
+            &[("scopes", tuple(py, items)?)],
+        )?;
+        Ok(())
+    }
+
+    /// Read these views' definitions with one read per schema, when a catalog is open.
+    pub(crate) fn prefetch_view_definitions(
+        &self,
+        requests: &[(Option<String>, String, Vec<String>)],
+    ) -> PyResult<()> {
+        let py: Python<'py> = self.py();
+        let Some(catalog) = self.catalog()?.filter(|_| !requests.is_empty()) else {
+            return Ok(());
+        };
+        let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
+        for (database, schema, names) in requests {
+            items.push(tuple(
+                py,
+                [
+                    optional(py, database.as_deref())?,
+                    text(py, schema),
+                    tuple(py, names.iter().map(|name| text(py, name)))?,
+                ],
+            )?);
+        }
+        call_with(
+            &native_field(&catalog, "prefetch_view_definitions")?,
+            &[("requests", tuple(py, items)?)],
+        )?;
+        Ok(())
     }
 
     pub(crate) fn age_metadata_support(&self) -> PyResult<bool> {
@@ -156,7 +244,7 @@ fn source_schemas(
     Ok(schemas)
 }
 
-/// Relations matched case-insensitively and respelled as their target schema.
+/// Each target schema's relations, listed once through the catalog and respelled as targeted.
 fn list_target_schema_relations<'py>(
     warehouse: &Warehouse<'py>,
     target_schemas: &[SchemaKey],
@@ -168,6 +256,7 @@ fn list_target_schema_relations<'py>(
             databases.push(database);
         }
     }
+    warehouse.prefetch_schema_listings(&concrete_schemas(target_schemas))?;
     let mut result: SchemaRelations<'py> = Vec::new();
     for database in databases {
         let mut concrete: Vec<String> = target_schemas
@@ -177,87 +266,82 @@ fn list_target_schema_relations<'py>(
             .collect();
         concrete.sort();
         concrete.dedup();
-        let schemas: Bound<'py, PyAny> = if concrete.is_empty() {
-            py.None().into_bound(py)
+        let requests: Vec<Option<Vec<String>>> = if concrete.is_empty() {
+            vec![None]
         } else {
-            tuple(py, concrete.iter().map(|schema| text(py, schema)))?
+            concrete
+                .into_iter()
+                .map(|schema| Some(vec![schema]))
+                .collect()
         };
-        let listed: Bound<'py, PyAny> = warehouse.call(
-            "list_relations",
-            &[
-                ("database", optional(py, database.as_deref())?),
-                ("schemas", schemas),
-            ],
-        )?;
-        for relation in listed.try_iter()? {
-            let relation: Bound<'py, PyAny> = relation?;
-            let folded: SchemaKey = folded_schema(&(
-                native_field(&relation, "database")?.extract()?,
-                native_field(&relation, "schema")?.extract()?,
-            ));
-            let Some(target) = target_schemas
-                .iter()
-                .find(|target| folded_schema(target) == folded)
-            else {
-                continue;
-            };
-            let respelled: Bound<'py, PyAny> = replaced(
-                &relation,
-                &[
-                    ("database", optional(py, target.0.as_deref())?),
-                    ("schema", optional(py, target.1.as_deref())?),
-                ],
-            )?;
-            match result.iter_mut().find(|(listed, _)| listed == target) {
-                Some((_, relations)) => relations.push(respelled),
-                None => result.push((target.clone(), vec![respelled])),
+        for schemas in requests {
+            let listed: Bound<'py, PyAny> =
+                warehouse.list_relations(database.as_deref(), (schemas.as_deref(), None))?;
+            for relation in listed.try_iter()? {
+                let relation: Bound<'py, PyAny> = relation?;
+                let folded: SchemaKey = folded_schema(&(
+                    native_field(&relation, "database")?.extract()?,
+                    native_field(&relation, "schema")?.extract()?,
+                ));
+                let Some(target) = target_schemas
+                    .iter()
+                    .find(|target| folded_schema(target) == folded)
+                else {
+                    continue;
+                };
+                let respelled: Bound<'py, PyAny> = replaced(
+                    &relation,
+                    &[
+                        ("database", optional(py, target.0.as_deref())?),
+                        ("schema", optional(py, target.1.as_deref())?),
+                    ],
+                )?;
+                match result.iter_mut().find(|(listed, _)| listed == target) {
+                    Some((_, relations)) => relations.push(respelled),
+                    None => result.push((target.clone(), vec![respelled])),
+                }
             }
         }
     }
     Ok(result)
 }
 
-/// `build_relation_lookup` over the given locations.
-fn relation_lookup<'py>(
-    warehouse: &Warehouse<'py>,
+/// Folded keys of relations in the locations' schemas, listed through the inspection catalog.
+fn relation_lookup(
+    warehouse: &Warehouse<'_>,
     locations: &[(Option<String>, String, &str)],
-) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = warehouse.py();
-    let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
-    for (database, schema, name) in locations {
-        items.push(tuple(
-            py,
-            [
-                optional(py, database.as_deref())?,
-                text(py, schema),
-                text(py, name),
-            ],
-        )?);
+) -> PyResult<HashSet<Folded>> {
+    let mut scopes: Vec<(Option<String>, String)> = Vec::new();
+    for (database, schema, _) in locations {
+        if !scopes.contains(&(database.clone(), schema.clone())) {
+            scopes.push((database.clone(), schema.clone()));
+        }
     }
-    call_with(
-        &host::entry(py, RELATION_LOOKUP)?,
-        &[
-            ("adapter", warehouse.adapter.clone()),
-            ("connection", warehouse.connection.clone()),
-            ("locations", tuple(py, items)?),
-        ],
-    )
+    let mut present: HashSet<Folded> = HashSet::new();
+    for (database, schema) in scopes {
+        let schemas: [String; 1] = [schema];
+        for relation in warehouse
+            .list_relations(database.as_deref(), (Some(&schemas), None))?
+            .try_iter()?
+        {
+            present.insert(Key::of(&relation?)?.folded());
+        }
+    }
+    Ok(present)
 }
 
 fn lookup_exists(
-    lookup: &Bound<'_, PyAny>,
+    lookup: &HashSet<Folded>,
     (database, schema, name): (Option<&str>, &str, &str),
-) -> PyResult<bool> {
-    let py: Python<'_> = lookup.py();
-    call_with(
-        &native_field(lookup, "exists")?,
-        &[
-            ("database", optional(py, database)?),
-            ("schema", text(py, schema)),
-            ("name", text(py, name)),
-        ],
-    )?
-    .is_truthy()
+) -> bool {
+    lookup.contains(
+        &Key {
+            database: database.map(str::to_owned),
+            schema: Some(schema.to_owned()),
+            name: name.to_owned(),
+        }
+        .folded(),
+    )
 }
 
 fn concrete_schemas(target_schemas: &[SchemaKey]) -> Vec<(Option<String>, String)> {
@@ -282,13 +366,13 @@ fn tracked_relation_keys(
         .iter()
         .map(|(database, schema)| (database.clone(), schema.clone(), FINGERPRINT_TABLE_NAME))
         .collect();
-    let lookup: Bound<'_, PyAny> = relation_lookup(warehouse, &locations)?;
+    let lookup: HashSet<Folded> = relation_lookup(warehouse, &locations)?;
     let mut tracked: HashSet<Folded> = HashSet::new();
     for (database, schema) in &schemas {
         let exists: bool = lookup_exists(
             &lookup,
             (database.as_deref(), schema, FINGERPRINT_TABLE_NAME),
-        )?;
+        );
         let read: PyResult<Bound<'_, PyAny>> = read_latest_fingerprints(Some(&keywords(
             py,
             &[
@@ -411,7 +495,7 @@ pub(crate) fn direct_state_prune_candidates<'py>(
             SOURCE_FRESHNESS_TABLE_NAME,
         ));
     }
-    let lookup: Bound<'py, PyAny> = relation_lookup(warehouse, &locations)?;
+    let lookup: HashSet<Folded> = relation_lookup(warehouse, &locations)?;
     let mut candidates: Vec<Bound<'py, PyAny>> = Vec::new();
     for (database, schema) in &schemas {
         for (table_name, render) in [
@@ -424,7 +508,7 @@ pub(crate) fn direct_state_prune_candidates<'py>(
                 "render_prune_source_freshness_history_sql",
             ),
         ] {
-            if !lookup_exists(&lookup, (database.as_deref(), schema, table_name))? {
+            if !lookup_exists(&lookup, (database.as_deref(), schema, table_name)) {
                 continue;
             }
             let prune_sql: Bound<'py, PyAny> = call_with(

@@ -85,6 +85,7 @@ from sqlbuild.adapter.contract.types import (
     StatementSizeLimit,
     TablePromotionMode,
 )
+from sqlbuild.adapter.relations.main.cached_view_definition import cached_view_definition
 from sqlbuild.adapter.relations.main.get_columns_for_relations import (
     get_columns_for_relations_bulk,
 )
@@ -1684,6 +1685,11 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
     def read_view_definition(
         self, *, connection: Any, database: str | None, schema: str, name: str
     ) -> str | None:
+        prefetched: tuple[bool, str | None] = cached_view_definition(
+            adapter=self, connection=connection, database=database, schema=schema, name=name
+        )
+        if prefetched[0]:
+            return prefetched[1]
         database_filter: str = (
             "" if database is None else f" AND database_name = {_duckdb_string_literal(database)}"
         )
@@ -1696,6 +1702,32 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
             ),
         ).fetchall()
         return None if not rows else str(rows[0][0])
+
+    def read_view_definitions(
+        self, *, connection: Any, database: str | None, schema: str, names: tuple[str, ...]
+    ) -> dict[str, str]:
+        """Read the stored definitions of several views in one schema with one query."""
+
+        if not names:
+            return {}
+        database_filter: str = (
+            "" if database is None else f" AND database_name = {_duckdb_string_literal(database)}"
+        )
+        rows: list[tuple[Any, ...]] = self.execute(
+            connection=connection,
+            sql=(
+                "SELECT view_name, sql FROM duckdb_views() WHERE schema_name = "
+                f"{_duckdb_string_literal(schema)} AND view_name IN ("
+                + ", ".join(_duckdb_string_literal(name) for name in names)
+                + ")"
+                + database_filter
+            ),
+        ).fetchall()
+        definitions: dict[str, str] = {}
+        row: tuple[Any, ...]
+        for row in rows:
+            definitions.setdefault(str(row[0]), str(row[1]))
+        return definitions
 
     def view_definition_matches(
         self, *, connection: Any, database: str | None, schema: str, name: str, sql: str

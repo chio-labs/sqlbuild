@@ -160,6 +160,7 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         nested_block_comments=True,
     )
     max_identifier_length: ClassVar[int] = 255
+    concurrent_ddl_limit: ClassVar[int] = 16
     _snapshot_sql_dialect: ClassVar[SnapshotSqlDialect] = SnapshotSqlDialect(
         timestamp_type="TIMESTAMP",
         distinct_condition=render_is_distinct_from,

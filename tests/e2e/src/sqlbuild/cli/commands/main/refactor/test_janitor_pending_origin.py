@@ -27,7 +27,7 @@ _PENDING_REASON: str = "analytics.order_history  pending migration origin for or
     [
         PendingOriginJanitorE2ETestCase(
             description="janitor keeps the origin until the rename is migrated",
-            janitor_args=("janitor", "--retention-days", "0", "--auto-approve"),
+            janitor_args=("janitor", "--retention-days", "0", "--auto-approve", "--verbose"),
             expected_order_ids=(1, 2, 3, 4),
         ),
     ],

@@ -11,3 +11,14 @@ pub(crate) const DROP_EXPIRED: &str = "expired";
 pub(crate) const DROP_MISSING: &str = "missing";
 pub(crate) const DISABLED_DETAIL: &str = "Janitor is opt-in. It previews stale warehouse objects \
 and asks before archiving or deleting anything.";
+/// How many entries each preview section shows without `--verbose`.
+pub(crate) const PREVIEW_LIMIT: usize = 10;
+pub(crate) const VERBOSE_FLAG: &str = "--verbose";
+/// The width of the longest janitor action value.
+pub(crate) const ACTION_WIDTH: usize = "archived".len();
+pub(crate) const RECORDED_ACTION: &str = "recorded";
+pub(crate) const DROPPED_ACTION: &str = "dropped";
+pub(crate) const SECONDS_PER_MINUTE: u64 = 60;
+/// Durations below this many seconds show seconds with two decimals.
+pub(crate) const MINUTE_SECONDS: f64 = 60.0;
+pub(crate) const SECONDS_PER_HOUR: u64 = 3600;

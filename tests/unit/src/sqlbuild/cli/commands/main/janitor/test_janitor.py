@@ -30,7 +30,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.janitor.helpers import (
                 "suppressed archive: blocked.old_model",
                 "No janitor actions will be performed.",
                 "Skipped schemas\n  dev  contains active source raw.orders",
-                "Skipped objects\n  dev.source_table  source relation",
+                "Skipped objects (1)\n  1  source relation",
             ),
             unexpected_output_fragments=(
                 "\033[",
@@ -108,6 +108,30 @@ def test_given_direct_archive_plan_when_writing_preview_then_lists_archive_actio
 ) -> None:
     output: str = render_janitor_plan(
         plan=build_direct_archive_plan(), use_color=test_case.use_color
+    )
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in output
+    for fragment in test_case.unexpected_output_fragments:
+        assert fragment not in output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorPlanOutputTestCase(
+            description="verbose preview lists each skipped object with its reason",
+            use_color=False,
+            expected_output_fragments=("Skipped objects\n  dev.source_table  source relation",),
+            unexpected_output_fragments=("Skipped objects (1)",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_janitor_plan_when_writing_verbose_preview_then_lists_every_skipped_object(
+    test_case: JanitorPlanOutputTestCase,
+) -> None:
+    output: str = render_janitor_plan(
+        plan=build_janitor_plan(), use_color=test_case.use_color, verbose=True
     )
     for fragment in test_case.expected_output_fragments:
         assert fragment in output

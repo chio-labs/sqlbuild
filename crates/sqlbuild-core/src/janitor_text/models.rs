@@ -81,3 +81,98 @@ pub struct JanitorResultCounts {
     pub dropped_old_name_views: usize,
     pub pruned_direct_state: usize,
 }
+
+/// One janitor apply phase, in execution order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum JanitorPhase {
+    DeleteRelations,
+    Archive,
+    DeleteArchives,
+    DropOldNameViews,
+    DropQueryArtifacts,
+    PruneDirectState,
+}
+
+impl JanitorPhase {
+    /// The phase from the executor's `JanitorPhase` value.
+    #[must_use]
+    pub fn from_value(value: &str) -> Option<Self> {
+        match value {
+            "delete_relations" => Some(Self::DeleteRelations),
+            "archive" => Some(Self::Archive),
+            "delete_archives" => Some(Self::DeleteArchives),
+            "drop_old_name_views" => Some(Self::DropOldNameViews),
+            "drop_query_artifacts" => Some(Self::DropQueryArtifacts),
+            "prune_direct_state" => Some(Self::PruneDirectState),
+            _ => None,
+        }
+    }
+
+    /// The executor's `JanitorPhase` value.
+    #[must_use]
+    pub fn value(self) -> &'static str {
+        match self {
+            Self::DeleteRelations => "delete_relations",
+            Self::Archive => "archive",
+            Self::DeleteArchives => "delete_archives",
+            Self::DropOldNameViews => "drop_old_name_views",
+            Self::DropQueryArtifacts => "drop_query_artifacts",
+            Self::PruneDirectState => "prune_direct_state",
+        }
+    }
+}
+
+/// One finished janitor action.
+#[derive(Clone, Debug, PartialEq)]
+pub struct JanitorItemText {
+    pub phase: JanitorPhase,
+    /// The `JanitorAction` value, such as `archived`.
+    pub action: String,
+    pub name: String,
+    /// Where the action moved the relation, such as its archive name.
+    pub destination: Option<String>,
+    /// The error that stopped the action, or none when it succeeded.
+    pub error: Option<String>,
+    pub duration_seconds: Option<f64>,
+}
+
+/// The actions a janitor run finished, what it changed, and how long it took.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct JanitorRunText {
+    pub items: Vec<JanitorItemText>,
+    pub counts: JanitorResultCounts,
+    pub elapsed_seconds: f64,
+}
+
+/// How a janitor invocation ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum JanitorOutcome {
+    /// Janitor is not enabled for the project.
+    Disabled,
+    /// An inspection-only `--as` preview.
+    Previewed,
+    /// Active sources block every action.
+    Blocked,
+    /// The plan changes nothing.
+    NothingToDo,
+    Cancelled,
+    Completed,
+    /// An action failed after the cleanup started.
+    Failed,
+}
+
+impl JanitorOutcome {
+    /// The `status` of `sqb janitor --json`.
+    #[must_use]
+    pub fn value(self) -> &'static str {
+        match self {
+            Self::Disabled => "disabled",
+            Self::Previewed => "previewed",
+            Self::Blocked => "blocked",
+            Self::NothingToDo => "nothing_to_do",
+            Self::Cancelled => "cancelled",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+        }
+    }
+}

@@ -31,7 +31,7 @@ OLD_TIME: datetime = datetime.now(UTC) - timedelta(days=30)
     "test_case",
     [
         JanitorArchiveExecutionTestCase(
-            description="renames stale table and view, drops expired archive, and audits each",
+            description="renames stale table and view, drops expired archive, and audits each per phase",
             relation_infos=(
                 relation_info("old_orders", created_at=OLD_TIME),
                 relation_info("old_customers_view", relation_type="VIEW", created_at=OLD_TIME),
@@ -42,7 +42,8 @@ OLD_TIME: datetime = datetime.now(UTC) - timedelta(days=30)
             expected_view_rename_origins=("analytics.old_customers_view",),
             expected_dropped_targets=("analytics._sqb_archive__20200101t000000z__old_products",),
             expected_dropped_view_targets=(),
-            expected_event_insert_count=3,
+            expected_event_insert_count=2,
+            expected_event_row_count=3,
             expected_event_table_create_count=1,
         ),
         JanitorArchiveExecutionTestCase(
@@ -56,7 +57,8 @@ OLD_TIME: datetime = datetime.now(UTC) - timedelta(days=30)
             expected_view_rename_origins=("analytics.old_customers_view",),
             expected_dropped_targets=("analytics._sqb_archive__",),
             expected_dropped_view_targets=("analytics._sqb_archive__",),
-            expected_event_insert_count=4,
+            expected_event_insert_count=2,
+            expected_event_row_count=4,
             expected_event_table_create_count=1,
         ),
     ],
@@ -110,6 +112,10 @@ def test_given_direct_archive_plan_when_executing_then_renames_drops_and_writes_
         filter(lambda sql: sql.startswith("CREATE TABLE"), event_statements)
     )
     assert len(event_inserts) == test_case.expected_event_insert_count
+    assert sum(sql.count("), (") + 1 for sql in event_inserts) == (
+        test_case.expected_event_row_count
+    )
+    assert len(tuple(filter(lambda sql: sql.startswith("SELECT"), event_statements))) == 1
     assert len(event_creates) == test_case.expected_event_table_create_count
     assert tuple(candidate.key.name for candidate in result.archived) == tuple(
         origin.rsplit(".", maxsplit=1)[-1]
