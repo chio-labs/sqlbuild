@@ -119,6 +119,17 @@ pub struct LintSqlBody {
     pub relation_keys: Vec<(String, Vec<Vec<String>>)>,
     /// The relation name each dependency sentinel stands for.
     pub relation_names: Vec<(String, String)>,
+    /// The generated characters before and after an expression macro body framed as a `SELECT`.
+    pub expression_frame: Option<(i64, i64)>,
+}
+
+/// An expression macro body framed as a `SELECT`, the pass back to the body, and the frame size.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FramedExpression {
+    pub text: String,
+    pub pass: Vec<ExpansionSpan>,
+    /// The generated characters before the expression and after it, to the end of `text`.
+    pub frame: (i64, i64),
 }
 
 /// The rule selection and thresholds of one SQL lint run.

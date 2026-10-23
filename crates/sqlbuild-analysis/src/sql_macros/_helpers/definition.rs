@@ -106,7 +106,7 @@ fn unclosed_body(name: &str, location: SqlMacroLocation) -> SqlMacroError {
 }
 
 /// The form a body's first token decides.
-fn body_form(body: &str, scanned: &[Token]) -> SqlMacroForm {
+pub(crate) fn body_form(body: &str, scanned: &[Token]) -> SqlMacroForm {
     match scanned.first() {
         Some(first) if first.is_word(body, WITH_KEYWORD) => SqlMacroForm::CteList,
         Some(first) if first.is_word(body, SELECT_KEYWORD) => SqlMacroForm::ColumnList,

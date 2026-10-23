@@ -261,7 +261,9 @@ fn call_arguments<'py>(
         values.push(evaluate_call(run, (&text, site), false)?);
     }
     if let Some(failure) = &scan.failure {
-        return Err(run.expansion.failed_scan(run.classes, failure, py));
+        return Err(run
+            .expansion
+            .failed_scan(run.classes, (&text, failure), Some(name), py));
     }
     let nested: Vec<(usize, usize)> = scan
         .sites
@@ -399,31 +401,43 @@ impl<'py> ArgumentSource<'_, 'py> {
 
     /// `MacroArgumentError` at a code point offset of the argument text.
     fn argument_error(&self, offset: usize, detail: &str, help: &str) -> PyErr {
-        let before: &str = self.text.slice(0, offset.min(self.text.bytes.len() - 1));
-        let line: usize = before.matches('\n').count() + 1;
-        let column: usize = before
-            .rsplit_once('\n')
-            .map_or(before, |(_, last)| last)
-            .chars()
-            .count()
-            + 1;
-        let created = (|| {
-            let py: Python<'_> = self.run.handle.py();
-            let fields: Bound<'_, PyDict> = PyDict::new(py);
-            fields.set_item("detail", detail)?;
-            fields.set_item("help", help)?;
-            fields.set_item("macro_name", self.name)?;
-            fields.set_item("file_path", self.run.expansion.file_path.bind(py))?;
-            fields.set_item("offset", offset)?;
-            fields.set_item("relative_position", (line, column))?;
-            self.run
-                .classes
-                .macro_argument_error
-                .call((), Some(&fields))
-        })();
-        match created {
-            Ok(instance) => PyErr::from_value(instance),
-            Err(failure) => failure,
-        }
+        macro_argument_error(
+            (self.run.expansion, self.run.classes),
+            self.text,
+            (self.name, offset),
+            (detail, help),
+        )
+    }
+}
+
+/// `MacroArgumentError` of the call `name` at code point `offset` of `text`.
+pub(crate) fn macro_argument_error(
+    (expansion, classes): (&NativeMacroExpansion, &ExpansionClasses<'_>),
+    text: &CallText<'_>,
+    (name, offset): (&str, usize),
+    (detail, help): (&str, &str),
+) -> PyErr {
+    let before: &str = text.slice(0, offset.min(text.bytes.len() - 1));
+    let line: usize = before.matches('\n').count() + 1;
+    let column: usize = before
+        .rsplit_once('\n')
+        .map_or(before, |(_, last)| last)
+        .chars()
+        .count()
+        + 1;
+    let created = (|| {
+        let py: Python<'_> = classes.macro_argument_error.py();
+        let fields: Bound<'_, PyDict> = PyDict::new(py);
+        fields.set_item("detail", detail)?;
+        fields.set_item("help", help)?;
+        fields.set_item("macro_name", name)?;
+        fields.set_item("file_path", expansion.file_path.bind(py))?;
+        fields.set_item("offset", offset)?;
+        fields.set_item("relative_position", (line, column))?;
+        classes.macro_argument_error.call((), Some(&fields))
+    })();
+    match created {
+        Ok(instance) => PyErr::from_value(instance),
+        Err(failure) => failure,
     }
 }

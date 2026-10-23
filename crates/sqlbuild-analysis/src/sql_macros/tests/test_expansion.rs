@@ -1,5 +1,11 @@
+use sqlbuild_render::macro_arguments::main::parse_macro_arguments::parse_macro_arguments;
+use sqlbuild_render::macro_arguments::models::ArgumentValue;
+use sqlbuild_render::macro_calls::main::scan_macro_call_sites::scan_macro_call_sites;
+
 use crate::sql_macros::tests::helpers::expanded_for;
-use crate::sql_macros::tests::test_types::{ExpansionErrorTestCase, ExpansionTestCase};
+use crate::sql_macros::tests::test_types::{
+    AsciiArguments, ExpansionErrorTestCase, ExpansionTestCase, PythonArgumentTestCase,
+};
 
 const CENTS_TO_DOLLARS: (&str, &str) = (
     "cents_to_dollars",
@@ -86,6 +92,30 @@ const STATUS_LABEL: (&str, &str) = (
 const HAS_TAG: (&str, &str) = (
     "has_tag",
     "MACRO (description \"Tagged\", arguments (tags VARCHAR[], tag VARCHAR), returns BOOLEAN);\n\nlist_contains(@tags, @tag)\n",
+);
+const IS_BLANK: (&str, &str) = (
+    "is_blank",
+    "MACRO (description \"Blank\", arguments (value VARCHAR), returns BOOLEAN);\n\n@value IS NULL OR TRIM(@value) = ''\n",
+);
+const IS_BLANK_PARENTHESISED: (&str, &str) = (
+    "is_blank",
+    "MACRO (description \"Blank\", arguments (value VARCHAR), returns BOOLEAN);\n\n((@value) IS NULL AND (@value) IS NULL) OR TRIM(@value) = ''\n",
+);
+const BOTH_MISSING: (&str, &str) = (
+    "both_missing",
+    "MACRO (description \"Both missing\", arguments (x VARCHAR, y VARCHAR), returns BOOLEAN);\n\n@x IS NULL AND (@y IS NULL)\n",
+);
+const IS_LETTER: (&str, &str) = (
+    "is_letter",
+    "MACRO (description \"Letter\", arguments (x VARCHAR), returns BOOLEAN);\n\nCASE WHEN @x IN ('a', 'b') THEN TRUE ELSE FALSE END\n",
+);
+const TRAILING_COMMENT: (&str, &str) = (
+    "has_x",
+    "MACRO (description \"Has x\", arguments (value VARCHAR), returns BOOLEAN);\n\nCONTAINS(@value, 'x') -- why x\n",
+);
+const SPACED_DECLARATIONS: (&str, &str) = (
+    "spaced",
+    "MACRO (description \"Spaced\", arguments (status VARCHAR, places INT), returns BOOLEAN);\n\n@status <> @enum (\"order_status\").CLOSED AND @places = @const (\"price_places\")\n",
 );
 const ODD: (&str, &str) = (
     "odd",
@@ -285,6 +315,62 @@ fn given_calls_of_each_form_when_expanding_then_the_ticket_examples_compile() {
             expected_sql: "SELECT list_contains(o.tags, 'vip') AS vip FROM orders AS o",
         },
         ExpansionTestCase {
+            description: "a parameter followed by words and a parenthesis is a parameter",
+            adapter: "",
+            macros: &[IS_BLANK],
+            sql: "SELECT @sql.is_blank(o.email) AS b FROM orders AS o",
+            expected_sql: "SELECT o.email IS NULL OR TRIM(o.email) = '' AS b FROM orders AS o",
+        },
+        ExpansionTestCase {
+            description: "parenthesised parameters in a body opening with two parentheses",
+            adapter: "",
+            macros: &[IS_BLANK_PARENTHESISED],
+            sql: "SELECT @sql.is_blank(o.email) AS b FROM orders AS o",
+            expected_sql: "SELECT ((o.email) IS NULL AND (o.email) IS NULL) OR TRIM(o.email) = '' AS b FROM orders AS o",
+        },
+        ExpansionTestCase {
+            description: "a parameter before AND and a parenthesised predicate",
+            adapter: "",
+            macros: &[BOTH_MISSING],
+            sql: "SELECT @sql.both_missing(o.a, o.b) AS m FROM orders AS o",
+            expected_sql: "SELECT o.a IS NULL AND (o.b IS NULL) AS m FROM orders AS o",
+        },
+        ExpansionTestCase {
+            description: "a parameter before IN inside a CASE",
+            adapter: "",
+            macros: &[IS_LETTER],
+            sql: "SELECT @sql.is_letter(o.a) AS l FROM orders AS o",
+            expected_sql: "SELECT CASE WHEN o.a IN ('a', 'b') THEN TRUE ELSE FALSE END AS l FROM orders AS o",
+        },
+        ExpansionTestCase {
+            description: "a body ending in a line comment ends its line, so the call's alias stays code",
+            adapter: "",
+            macros: &[TRAILING_COMMENT],
+            sql: "SELECT @sql.has_x(o.a) AS l FROM orders AS o",
+            expected_sql: "SELECT CONTAINS(o.a, 'x') -- why x\n AS l FROM orders AS o",
+        },
+        ExpansionTestCase {
+            description: "a body ending in a line comment, called last on its line, adds no line",
+            adapter: "",
+            macros: &[TRAILING_COMMENT],
+            sql: "SELECT @sql.has_x(o.a)\nFROM orders AS o",
+            expected_sql: "SELECT CONTAINS(o.a, 'x') -- why x\nFROM orders AS o",
+        },
+        ExpansionTestCase {
+            description: "a body ending in a line comment, followed by an operator, closes its line",
+            adapter: "",
+            macros: &[TRAILING_COMMENT],
+            sql: "SELECT @sql.has_x(o.a) = TRUE\nFROM orders AS o",
+            expected_sql: "SELECT CONTAINS(o.a, 'x') -- why x\n = TRUE\nFROM orders AS o",
+        },
+        ExpansionTestCase {
+            description: "spaced enum and constant references in a body are declarations",
+            adapter: "",
+            macros: &[SPACED_DECLARATIONS],
+            sql: "SELECT @sql.spaced(o.status, o.places) AS s FROM orders AS o",
+            expected_sql: "SELECT o.status <> @enum (\"order_status\").CLOSED AND o.places = @const (\"price_places\") AS s FROM orders AS o",
+        },
+        ExpansionTestCase {
             description: "generic SQL checks no adapter types",
             adapter: "",
             macros: &[ODD],
@@ -460,6 +546,126 @@ fn given_invalid_calls_when_expanding_then_each_error_names_the_problem() {
             "{}: {}",
             test_case.description,
             error.message
+        );
+    }
+}
+
+#[test]
+fn given_a_sql_macro_call_in_python_macro_arguments_when_expanding_then_python_receives_its_expansion()
+ {
+    let wrapped = |sql: String| vec![ArgumentValue::Str(sql)];
+    let test_cases = [
+        PythonArgumentTestCase {
+            description: "a double quote inside a SQL string literal",
+            body: "CONTAINS(@value, '\"')",
+            sql: "SELECT @py.wrap(@sql.m(o.email)) AS probe",
+            expected_suffix: "",
+            expected_arguments: wrapped,
+        },
+        PythonArgumentTestCase {
+            description: "a double quote compared directly",
+            body: "@value = '\"'",
+            sql: "SELECT @py.wrap(@sql.m(o.email)) AS probe",
+            expected_suffix: "",
+            expected_arguments: wrapped,
+        },
+        PythonArgumentTestCase {
+            description: "a single quote inside a double-quoted identifier",
+            body: "@value = \"it's\"",
+            sql: "SELECT @py.wrap(@sql.m(o.email)) AS probe",
+            expected_suffix: "",
+            expected_arguments: wrapped,
+        },
+        PythonArgumentTestCase {
+            description: "doubled single quotes",
+            body: "@value = ''''",
+            sql: "SELECT @py.wrap(@sql.m(o.email)) AS probe",
+            expected_suffix: "",
+            expected_arguments: wrapped,
+        },
+        PythonArgumentTestCase {
+            description: "backslashes, one before a quote",
+            body: "@value LIKE 'a\\_b' OR @value = '\\'",
+            sql: "SELECT @py.wrap(@sql.m(o.email)) AS probe",
+            expected_suffix: "",
+            expected_arguments: wrapped,
+        },
+        PythonArgumentTestCase {
+            description: "a line break",
+            body: "@value = 'a'\n  OR @value = 'b'",
+            sql: "SELECT @py.wrap(@sql.m(o.email)) AS probe",
+            expected_suffix: "",
+            expected_arguments: wrapped,
+        },
+        PythonArgumentTestCase {
+            description: "a line comment, a block comment and a comment ending the body",
+            body: "-- why\nCONTAINS(@value, /* sign */ '\"') -- end",
+            sql: "SELECT @py.wrap(@sql.m(o.email)) AS probe",
+            expected_suffix: "\n",
+            expected_arguments: wrapped,
+        },
+        PythonArgumentTestCase {
+            description: "a dict value",
+            body: "CONTAINS(@value, '\"')",
+            sql: "SELECT @py.pick({\"a\": @sql.m(o.email)}) AS probe",
+            expected_suffix: "",
+            expected_arguments: |sql| {
+                vec![ArgumentValue::Dict(vec![(
+                    ArgumentValue::Str("a".to_owned()),
+                    ArgumentValue::Str(sql),
+                )])]
+            },
+        },
+        PythonArgumentTestCase {
+            description: "a nested list",
+            body: "CONTAINS(@value, '\"')",
+            sql: "SELECT @py.pick([@sql.m(o.email), [@sql.m(o.email)]]) AS probe",
+            expected_suffix: "",
+            expected_arguments: |sql| {
+                vec![ArgumentValue::List(vec![
+                    ArgumentValue::Str(sql.clone()),
+                    ArgumentValue::List(vec![ArgumentValue::Str(sql)]),
+                ])]
+            },
+        },
+    ];
+
+    for test_case in test_cases {
+        let source: String = format!(
+            "MACRO (description \"M\", arguments (value VARCHAR), returns BOOLEAN);\n\n{}\n",
+            test_case.body
+        );
+        let macros: [(&str, &str); 1] = [("m", source.as_str())];
+        let direct: Result<String, _> = expanded_for("", &macros, "@sql.m(o.email)");
+        let expanded: Result<String, _> = expanded_for("", &macros, test_case.sql);
+        let (Ok(direct), Ok(expanded)) = (direct, expanded) else {
+            panic!("{} does not expand", test_case.description);
+        };
+
+        let scan = scan_macro_call_sites(&expanded);
+        let arguments: Option<String> = scan.sites.first().map(|site| {
+            expanded
+                .chars()
+                .skip(site.args_start)
+                .take(site.end - 1 - site.args_start)
+                .collect()
+        });
+        let parsed =
+            arguments.map(|arguments| parse_macro_arguments(&AsciiArguments, &arguments, &[]));
+
+        assert_eq!(
+            (scan.failure, scan.sites.len()),
+            (None, 1),
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            parsed.map(|parsed| parsed.map(|arguments| arguments.positional)),
+            Some(Ok((test_case.expected_arguments)(
+                direct + test_case.expected_suffix
+            ))),
+            "{}",
+            test_case.description
         );
     }
 }

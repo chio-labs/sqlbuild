@@ -295,6 +295,39 @@ pub(crate) fn expand_body(
     Ok(BodyExpansion { sql, names })
 }
 
+/// `sql`, with a line break when it ends in a `--` comment and `followed` text would join that line.
+pub(crate) fn with_line_comment_closed(sql: &str, followed: bool) -> String {
+    let mut sql: String = sql.to_owned();
+    if !followed {
+        return sql;
+    }
+    let Ok(scanned) = tokens(&sql) else {
+        return sql;
+    };
+    let mut rest: &str = &sql[scanned.last().map_or(0, |last| last.end)..];
+    let mut open_line_comment: bool = false;
+    loop {
+        rest = rest.trim_start();
+        if let Some(comment) = rest.strip_prefix("--") {
+            match comment.split_once('\n') {
+                Some((_, after)) => rest = after,
+                None => {
+                    open_line_comment = true;
+                    break;
+                }
+            }
+        } else if let Some(comment) = rest.strip_prefix("/*") {
+            rest = comment.split_once("*/").map_or("", |(_, after)| after);
+        } else {
+            break;
+        }
+    }
+    if open_line_comment {
+        sql.push('\n');
+    }
+    sql
+}
+
 /// The text after its first token, the body's `WITH` or `SELECT`, trimmed.
 fn without_leading_keyword(text: &str) -> String {
     match tokens(text) {

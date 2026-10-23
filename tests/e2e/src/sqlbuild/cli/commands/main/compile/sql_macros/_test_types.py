@@ -68,3 +68,15 @@ class SqlMacroRecompileTestCase:
     replaced_text: tuple[str, str]
     expected_code: str
     expected_fragment: str
+
+
+@dataclass(frozen=True)
+class SqlMacroCompileTestCase:
+    """One project compiled, what its output and inspected files hold, and what they must not."""
+
+    description: str
+    files: dict[str, str]
+    expected_returncode: int
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...] = ()
+    inspected_paths: tuple[str, ...] = ()

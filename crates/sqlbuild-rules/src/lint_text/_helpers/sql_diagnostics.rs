@@ -1,5 +1,6 @@
 //! Native SQL lint responses mapped back onto authored source through expansion passes.
 
+use std::borrow::Cow;
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -15,6 +16,8 @@ use crate::lint_text::constants::{
 };
 use crate::lint_text::models::{AuthoredDiagnostic, AuthoredEdit, ExpansionSpan, LintSqlBody};
 use crate::sql_lint::main::backtick_identifiers::backtick_identifiers;
+use sqlbuild_analysis::sql_macros::constants::SQL_CALL_PREFIX;
+use sqlbuild_sqltext::sql_scan::main::non_code_end::non_code_end;
 
 static PARSE_ERROR_POSITION: LazyLock<Result<Regex, regex::Error>> =
     LazyLock::new(|| Regex::new(PARSE_ERROR_POSITION_PATTERN));
@@ -133,8 +136,96 @@ fn integer(value: Option<&Value>) -> Option<i64> {
     }
 }
 
+/// The body's lint text with each comment a SQL macro expansion generated blanked.
+pub(crate) fn without_generated_comments<'b>(
+    body: &'b LintSqlBody,
+    file: (&str, &str),
+) -> Cow<'b, str> {
+    let text: &str = &body.lint_text;
+    if body.passes.iter().all(Vec::is_empty) || !(text.contains("--") || text.contains("/*")) {
+        return Cow::Borrowed(text);
+    }
+    let bytes: &[u8] = text.as_bytes();
+    let policy = lint_policy(backtick_identifiers(file.1));
+    let mut generated: Vec<(usize, usize)> = Vec::new();
+    let (mut index, mut counted_to, mut characters): (usize, usize, i64) = (0, 0, 0);
+    while index < bytes.len() {
+        match non_code_end(bytes, index, policy) {
+            Ok(Some(end)) => {
+                if matches!(bytes[index], b'-' | b'/') {
+                    characters += text[counted_to..index].chars().count() as i64;
+                    counted_to = index;
+                    if from_sql_macro(body, file, characters) {
+                        generated.push((index, end));
+                    }
+                }
+                index = end;
+            }
+            Ok(None) => index += 1,
+            Err(_) => break,
+        }
+    }
+    if generated.is_empty() {
+        return Cow::Borrowed(text);
+    }
+    let mut blanked: String = String::with_capacity(text.len());
+    let mut copied_to: usize = 0;
+    for (start, end) in generated {
+        blanked.push_str(&text[copied_to..start]);
+        blanked.extend(text[start..end].chars().map(|character| match character {
+            '\n' | '\r' => character,
+            _ => ' ',
+        }));
+        copied_to = end;
+    }
+    blanked.push_str(&text[copied_to..]);
+    Cow::Owned(blanked)
+}
+
+/// The diagnostics outside a `SELECT 1` or expression frame lint added around the body.
+pub(crate) fn without_generated_frame(
+    diagnostics: Vec<Value>,
+    body: &LintSqlBody,
+    omitted: Option<usize>,
+) -> Vec<Value> {
+    let diagnostics: Vec<Value> = match omitted {
+        Some(offset) => authored_prefix(diagnostics, offset as i64),
+        None => diagnostics,
+    };
+    match body.expression_frame {
+        Some(frame) => inside_frame(diagnostics, frame, body.lint_text.chars().count() as i64),
+        None => diagnostics,
+    }
+}
+
+/// Whether lint text offset `offset` lies in SQL a `@sql.` call generated in the authored file.
+fn from_sql_macro(body: &LintSqlBody, (text, dialect): (&str, &str), offset: i64) -> bool {
+    let (mapped, generated) = map_offset(offset, &body.passes);
+    if !generated {
+        return false;
+    }
+    match usize::try_from(body.body_start + mapped) {
+        Ok(start) => interpolation_text_at(text, start, dialect)
+            .is_some_and(|token| token.starts_with(SQL_CALL_PREFIX)),
+        Err(_) => false,
+    }
+}
+
+/// Keep diagnostics starting inside a framed expression, whose frame lint generated.
+fn inside_frame(diagnostics: Vec<Value>, (prefix, suffix): (i64, i64), length: i64) -> Vec<Value> {
+    let end_of_expression: i64 = length - suffix;
+    let kept: Vec<Value> = diagnostics
+        .into_iter()
+        .filter(|raw| {
+            integer(raw.get("start"))
+                .is_none_or(|start| start >= prefix && start < end_of_expression)
+        })
+        .collect();
+    authored_prefix(kept, end_of_expression)
+}
+
 /// Keep diagnostics before an added `SELECT 1`, clamped to end there.
-pub(crate) fn authored_prefix(diagnostics: Vec<Value>, offset: i64) -> Vec<Value> {
+fn authored_prefix(diagnostics: Vec<Value>, offset: i64) -> Vec<Value> {
     let mut kept: Vec<Value> = Vec::new();
     for raw in diagnostics {
         let Value::Object(mut diagnostic) = raw else {

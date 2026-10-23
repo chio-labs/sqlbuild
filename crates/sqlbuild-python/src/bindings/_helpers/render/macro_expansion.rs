@@ -24,7 +24,9 @@ use crate::bindings::_helpers::render::declaration_expansion::usage_visibility;
 use crate::bindings::_helpers::render::macro_call_classes::{CallClass, ClassInputs};
 use crate::bindings::_helpers::render::macro_call_memo::{MacroCallMemo, poisoned};
 use crate::bindings::_helpers::render::macro_call_rows::{SpanTuple, span_row, span_tuple};
-use crate::bindings::_helpers::render::macro_evaluation::{CallText, Evaluation, evaluate_call};
+use crate::bindings::_helpers::render::macro_evaluation::{
+    CallText, Evaluation, evaluate_call, macro_argument_error,
+};
 use crate::bindings::_helpers::render::macro_expansion_facts::{ExpansionFacts, ResourceRef};
 use crate::bindings::_helpers::render::macro_generated_references::{
     GeneratedOrigin, GeneratedReferenceClasses, report_generated_references,
@@ -37,6 +39,32 @@ const RELATION_SUFFIX: &str = "__";
 const CONSTANT_KIND: &str = "constant";
 const RELATIONSHIP_CONSUMER_KINDS: [&str; 2] = ["test", "scenario"];
 const SQL_LANGUAGE: &str = "sql";
+const DECLARATION_FORMS: [&str; 3] = ["const", "enum", "param"];
+const UNREAD_CALL_HELP: &str = "Close every quote, block comment and parenthesis in the macro \
+                                call, and follow its name with its opening parenthesis";
+
+/// Why the scan could not read the call `@{called}`, if the scan stopped inside a call.
+fn unread_call_detail(error: ScanError, called: &str) -> Option<String> {
+    let reason: String = match error {
+        ScanError::UnclosedQuote => format!("a quoted string in {called} is not closed"),
+        ScanError::UnclosedComment => format!("a block comment in {called} is not closed"),
+        ScanError::UnclosedParenthesis => format!("{called} is not closed with ')'"),
+        ScanError::MissingParenthesis => {
+            format!("{called} is not followed by its opening parenthesis")
+        }
+        ScanError::BareCall | ScanError::SqlCall => return None,
+    };
+    Some(format!("could not be read: {reason}"))
+}
+
+/// How a scanned call is written: `@py.name`, or `@const` and the other declaration forms.
+fn written_call(name: &str) -> String {
+    if DECLARATION_FORMS.contains(&name) {
+        format!("@{name}")
+    } else {
+        format!("@py.{name}")
+    }
+}
 
 positional_record! {
     into;
@@ -293,7 +321,7 @@ impl NativeMacroExpansion {
             outputs.push(self.evaluated_output(run, (text, site))?);
         }
         if let Some(failure) = &scan.failure {
-            return Err(self.failed_scan(run.classes, failure, run.handle.py()));
+            return Err(self.failed_scan(run.classes, (text, failure), None, run.handle.py()));
         }
         Ok(outputs)
     }
@@ -318,11 +346,12 @@ impl NativeMacroExpansion {
         Ok(false)
     }
 
-    /// `raise_failed_macro_call`: the failing call's macro lookup error, else the scan's error.
+    /// `raise_failed_macro_call`: the lookup error, the unreadable call located, or the scan's error.
     pub(crate) fn failed_scan(
         &self,
         classes: &ExpansionClasses<'_>,
-        failure: &MacroScanFailure,
+        (text, failure): (&CallText<'_>, &MacroScanFailure),
+        enclosing: Option<&str>,
         py: Python<'_>,
     ) -> PyErr {
         let name: &str = failure.call_name.as_deref().unwrap_or_default();
@@ -358,6 +387,23 @@ impl NativeMacroExpansion {
             && let Err(error) = self.resolved_macro(classes, name, py)
         {
             return error;
+        }
+        let written: String = written_call(name);
+        if let (Some(start), Some(detail)) = (
+            failure.call_start,
+            unread_call_detail(failure.error, &written),
+        ) {
+            let labelled: &str = match enclosing {
+                Some(enclosing) => enclosing,
+                None if DECLARATION_FORMS.contains(&name) => &written,
+                None => name,
+            };
+            return macro_argument_error(
+                (self, classes),
+                text,
+                (labelled, start),
+                (&detail, UNREAD_CALL_HELP),
+            );
         }
         raised(&classes.compile_error, failure.error.message())
     }

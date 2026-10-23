@@ -71,6 +71,21 @@ pub(crate) fn prepare(
     Ok(Some((neutralized.text, neutralized.sites, referenced)))
 }
 
+/// Every CTE name `sql` defines, lowercased, in order and without repeats.
+pub(crate) fn defined_cte_names(sql: &str) -> Vec<String> {
+    let Ok(cte_pattern) = CTES.as_ref() else {
+        return Vec::new();
+    };
+    let mut names: Vec<String> = Vec::new();
+    for capture in cte_pattern.captures_iter(sql) {
+        let name: String = capture["name"].to_ascii_lowercase();
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    names
+}
+
 /// The byte offset of character position `position`, or `None` past the end.
 fn byte_offset(text: &str, position: usize) -> Option<usize> {
     text.char_indices()

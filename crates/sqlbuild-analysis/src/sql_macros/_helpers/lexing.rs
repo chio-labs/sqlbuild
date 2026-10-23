@@ -1,5 +1,7 @@
 //! A comment- and quote-aware SQL token scan, and the `@...` constructs it finds.
 
+use sqlbuild_render::macro_calls::main::opens_bare_call::opens_bare_call;
+
 use crate::sql_macros::constants::SQL_KIND_WORD;
 use crate::sql_macros::errors::LexError;
 
@@ -45,7 +47,7 @@ impl Token {
 
 const PUNCTUATION: &[u8] = b"()[]{},.;";
 /// The `@word(...)` declaration forms that are not macro calls.
-const DECLARATION_WORDS: [&str; 3] = ["const", "enum", "param"];
+pub(crate) const DECLARATION_WORDS: [&str; 3] = ["const", "enum", "param"];
 
 /// Every token of `sql`; text unclosed under doubled-quote escapes is reread with backslash ones.
 pub(crate) fn tokens(sql: &str) -> Result<Vec<Token>, LexError> {
@@ -341,7 +343,7 @@ pub(crate) fn at_constructs(sql: &str) -> Result<Vec<AtConstruct>, LexError> {
             });
             continue;
         }
-        if scanned.get(index + 2).is_some_and(|open| open.is(sql, "(")) {
+        if opens_bare_call(sql, word.end) {
             found.push(AtConstruct::Bare {
                 name: word_text.to_owned(),
                 start: token.start,

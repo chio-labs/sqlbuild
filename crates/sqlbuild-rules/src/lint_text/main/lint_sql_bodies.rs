@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use serde_json::Value;
 
 use crate::lint_text::_helpers::sql_diagnostics::{
-    AuthoredFile, authored_diagnostic, authored_prefix, parse_failure, response_diagnostics,
+    AuthoredFile, authored_diagnostic, parse_failure, response_diagnostics, without_generated_frame,
 };
 use crate::lint_text::_helpers::sql_requests::{lint_payload, omitted_select, run_batch};
 use crate::lint_text::models::{AuthoredDiagnostic, LintSqlBody, LintSqlOptions};
@@ -21,7 +21,7 @@ pub fn lint_sql_bodies(
     let mut index_by_request: HashMap<String, usize> = HashMap::new();
     let mut request_of_body: Vec<usize> = Vec::with_capacity(bodies.len());
     for (body, offset) in bodies.iter().zip(&omitted) {
-        let payload: Value = lint_payload(body, *offset, options);
+        let payload: Value = lint_payload((body, files[body.file]), *offset, options);
         let key: String = payload.to_string();
         let next: usize = payloads.len();
         let index: usize = *index_by_request.entry(key).or_insert(next);
@@ -47,10 +47,7 @@ pub fn lint_sql_bodies(
                 continue;
             }
         };
-        let raw: Vec<Value> = match offset {
-            Some(offset) => authored_prefix(raw, offset as i64),
-            None => raw,
-        };
+        let raw: Vec<Value> = without_generated_frame(raw, body, offset);
         for item in &raw {
             match authored_diagnostic(item, body, file) {
                 Ok(Some(diagnostic)) => diagnostics.push(diagnostic),

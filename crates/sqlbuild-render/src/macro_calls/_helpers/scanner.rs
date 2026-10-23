@@ -3,6 +3,7 @@
 use sqlbuild_core::text::main::is_letter::is_letter;
 
 use crate::macro_calls::errors::ScanError;
+use crate::macro_calls::main::opens_bare_call::opens_bare_call;
 
 /// The prefix of a Python macro call after its `@`.
 const PYTHON_PREFIX: &str = "py.";
@@ -89,11 +90,13 @@ pub(crate) fn call_start_at(text: &str, at: usize) -> CallStart {
         return CallStart::Sql;
     }
     if name_call_at(text, at + 1) {
-        let name: &str = &text[at + 1..identifier_end(text, at + 1)];
-        if DECLARATION_NAMES.contains(&name) {
+        let name_end: usize = identifier_end(text, at + 1);
+        if DECLARATION_NAMES.contains(&&text[at + 1..name_end]) {
             return CallStart::Declaration;
         }
-        return CallStart::Bare;
+        if opens_bare_call(text, name_end) {
+            return CallStart::Bare;
+        }
     }
     CallStart::None
 }

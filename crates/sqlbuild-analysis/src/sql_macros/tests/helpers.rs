@@ -5,7 +5,7 @@ use crate::sql_macros::errors::ExpansionFailure;
 use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::main::parse_sql_macro::parse_sql_macro;
 use crate::sql_macros::models::{SqlMacroDefinition, TextContext};
-use crate::sql_macros::tests::test_types::FakeHost;
+use crate::sql_macros::tests::test_types::{AsciiArguments, FakeHost};
 use crate::sql_macros::types::{ConstantShape, SqlMacroHost, SqlMacroScope};
 
 /// Constants and enum members the fake host renders, by reference text.
@@ -115,4 +115,14 @@ fn macro_error(failure: ExpansionFailure<String>) -> SqlMacroError {
 /// Each name as an owned string.
 pub(super) fn owned(names: &[&str]) -> Vec<String> {
     names.iter().map(|name| (*name).to_owned()).collect()
+}
+
+impl sqlbuild_render::macro_arguments::types::ArgumentHost for AsciiArguments {
+    fn character_named(&self, _name: &str) -> Option<String> {
+        None
+    }
+
+    fn identifier(&self, _text: &str) -> Option<String> {
+        None
+    }
 }
