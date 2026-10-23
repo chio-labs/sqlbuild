@@ -72,7 +72,7 @@ def test_given_default_config_when_running_janitor_then_it_reports_disabled(
         JanitorCleanupE2ETestCase(
             description="tracked-only direct janitor archives only tracked stale relations",
             build_command=("--no-color", "build", "--full-refresh"),
-            janitor_command=("janitor", "--auto-approve"),
+            janitor_command=("janitor", "--auto-approve", "--verbose"),
             expected_exit_code=0,
             expected_stdout_fragments=(
                 "relations to archive   1",
@@ -311,7 +311,7 @@ def test_given_source_in_managed_schema_when_running_direct_janitor_then_blocks_
         JanitorCleanupE2ETestCase(
             description="tracked-only direct janitor archives strict scenario artifacts",
             build_command=("--no-color", "build", "--full-refresh"),
-            janitor_command=("janitor", "--auto-approve"),
+            janitor_command=("janitor", "--auto-approve", "--verbose"),
             expected_exit_code=0,
             expected_stdout_fragments=(
                 "relations to archive   2",
@@ -395,7 +395,7 @@ def test_given_scenario_artifacts_when_running_direct_janitor_then_it_archives_t
                 "Eligible direct state pruning",
                 "main._sqlbuild_fingerprints  keep latest 2",
                 "main._sqlbuild_source_freshness  keep latest 2",
-                "pruned 2 direct state tables",
+                "Pruned 2 direct state tables.",
             ),
             expected_fingerprint_count_before=5,
             expected_fingerprint_count_after=3,

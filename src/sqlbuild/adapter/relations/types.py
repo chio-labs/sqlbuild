@@ -57,6 +57,16 @@ class SchemaScopedMetadataReader(Protocol):
         ...
 
 
+class ViewDefinitionBatchReader(Protocol):
+    """An adapter's ``read_view_definitions``: stored definitions of named views in one schema."""
+
+    def __call__(
+        self, *, connection: Any, database: str | None, schema: str, names: tuple[str, ...]
+    ) -> dict[str, str]:
+        """Return each found view's definition keyed by the requested name."""
+        ...
+
+
 class InspectionCompletion[ResultT](Protocol):
     """Callback receiving one finished inspection read on the calling thread."""
 

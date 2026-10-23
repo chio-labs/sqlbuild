@@ -338,3 +338,19 @@ def run_without_reader(program: Path, *, args: tuple[str, ...], cwd: Path) -> La
     finally:
         os.close(writer)
     return completed.returncode, b"", completed.stderr
+
+
+def write_janitor_project(project_dir: Path, *, extra_toml: str) -> Path:
+    """Write a DuckDB project with one model, janitor left disabled, and extra settings."""
+
+    project_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "models").mkdir(exist_ok=True)
+    (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "orders_shop"\nadapter = "duckdb"\n\n[connection]\n'
+        f'database = "orders.duckdb"\n{extra_toml}',
+        encoding="utf-8",
+    )
+    (project_dir / "models" / "orders.sql").write_text(
+        "MODEL (description 'Orders.');\n\nSELECT 1 AS order_id\n", encoding="utf-8"
+    )
+    return project_dir

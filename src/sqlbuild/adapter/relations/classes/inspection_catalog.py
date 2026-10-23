@@ -19,7 +19,7 @@ from sqlbuild.adapter.relations.models import (
     SchemaColumnListing,
     SchemaRelationListing,
 )
-from sqlbuild.adapter.relations.types import SchemaScopedMetadataReader
+from sqlbuild.adapter.relations.types import SchemaScopedMetadataReader, ViewDefinitionBatchReader
 
 type _RelationIdentity = tuple[str | None, str | None, str]
 type _SchemaKey = tuple[str | None, str]
@@ -43,6 +43,7 @@ class InspectionCatalog:
         self._remember_lock: threading.Lock = threading.Lock()
         self._relation_requests: dict[_RelationRequestKey, tuple[RelationInfo, ...]] = {}
         self._relation_columns: dict[_RelationIdentity, tuple[ColumnInfo, ...] | None] = {}
+        self._view_definitions: dict[_RelationIdentity, str | None] = {}
 
     def remember[ValueT](self, *, key: tuple[str, ...], compute: Callable[[], ValueT]) -> ValueT:
         """Compute one adapter-owned metadata fact at most once per planning invocation."""
@@ -130,6 +131,77 @@ class InspectionCatalog:
         for missing_key, listing in zip(missing, listings, strict=True):
             if listing is not None:
                 self._relation_listings[missing_key] = listing
+
+    def prefetch_view_definitions(
+        self, *, requests: tuple[tuple[str | None, str, tuple[str, ...]], ...]
+    ) -> None:
+        """Read each (database, schema, names) request's view definitions in one batched read."""
+
+        read_batch: ViewDefinitionBatchReader | None = getattr(
+            self.adapter, "read_view_definitions", None
+        )
+        if read_batch is None:
+            return
+        pending: list[tuple[str | None, str, tuple[str, ...]]] = []
+        database: str | None
+        schema: str
+        names: tuple[str, ...]
+        for database, schema, names in requests:
+            missing: tuple[str, ...] = tuple(
+                name
+                for name in dict.fromkeys(names)
+                if (database, schema, name) not in self._view_definitions
+            )
+            if missing:
+                pending.append((database, schema, missing))
+        results: list[dict[str, str]] = run_bounded_inspections(
+            tasks=tuple(
+                self._bind_view_definitions(
+                    read_batch=read_batch, database=database, schema=schema, names=names
+                )
+                for database, schema, names in pending
+            ),
+            concurrency=self._concurrency,
+        )
+        definitions: dict[str, str]
+        for (database, schema, names), definitions in zip(pending, results, strict=True):
+            name: str
+            for name in names:
+                self._view_definitions[(database, schema, name)] = definitions.get(name)
+
+    def cached_view_definition(
+        self, *, database: str | None, schema: str, name: str
+    ) -> tuple[bool, str | None]:
+        """Return whether a prefetched definition is known for this view, and the definition."""
+
+        key: _RelationIdentity = (database, schema, name)
+        if key not in self._view_definitions:
+            return False, None
+        return True, self._view_definitions[key]
+
+    def _bind_view_definitions(
+        self,
+        *,
+        read_batch: ViewDefinitionBatchReader,
+        database: str | None,
+        schema: str,
+        names: tuple[str, ...],
+    ) -> Callable[[], dict[str, str]]:
+        def read_definitions() -> dict[str, str]:
+            definitions: dict[str, str] = {}
+            start: int
+            for start in range(0, len(names), INSPECTION_IN_LIST_LIMIT):
+                definitions.update(
+                    read_batch(
+                        connection=self.connection,
+                        database=database,
+                        schema=schema,
+                        names=names[start : start + INSPECTION_IN_LIST_LIMIT],
+                    )
+                )
+            return definitions
+
+        return read_definitions
 
     def get_columns_for_relations(
         self, *, relations: tuple[RelationInfo, ...]

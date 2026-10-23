@@ -47,7 +47,7 @@ RECENT_ARCHIVE_NAME: str = (
     [
         JanitorArchiveRetentionE2ETestCase(
             description="retired tracked relation is archived after retention and then retained",
-            janitor_command=("--no-color", "janitor", "--auto-approve"),
+            janitor_command=("--no-color", "janitor", "--auto-approve", "--verbose"),
             retired_model_ages_days={"customers": 20, "products": 3},
             expected_archived_names=("customers",),
             expected_retained_names=("products",),
@@ -136,7 +136,7 @@ def test_given_retired_tracked_relation_past_retention_when_running_janitor_then
     [
         JanitorArchiveExpiryE2ETestCase(
             description="only expired strict archives in managed schemas are deleted",
-            janitor_command=("--no-color", "janitor", "--auto-approve"),
+            janitor_command=("--no-color", "janitor", "--auto-approve", "--verbose"),
             expected_deleted_names=(
                 "_sqb_archive__20200101t000000z__old_customers_view",
                 "_sqb_archive__20200101t000000z__old_products",
@@ -163,7 +163,7 @@ def test_given_retired_tracked_relation_past_retention_when_running_janitor_then
                 "main._sqb_archive_notes  name resembles a janitor archive",
                 "main._SQB_ARCHIVE__20200101T000000Z__legacy_orders  relation name is not a plain "
                 "lowercase identifier and may require quoting; janitor does not act on it",
-                "Deleted 2 objects",
+                "\u2713 Janitor completed  archived 0, deleted 2",
             ),
             expected_delete_event_count=2,
             expected_total_event_count=5,
@@ -262,7 +262,7 @@ def test_given_archive_named_relations_when_running_janitor_then_deletes_only_ex
                 "archived in this run",
                 "Eligible direct state pruning",
                 "main._sqlbuild_fingerprints  keep latest 2",
-                "Archived 2 relations. Deleted 2 objects",
+                "\u2713 Janitor completed  archived 2, deleted 2",
             ),
             expected_event_types=(
                 ("archive", "stale_customers_view"),
@@ -405,7 +405,7 @@ def test_given_small_identifier_limit_when_archiving_long_name_then_fits_name_an
             expected_second_stdout_fragments=(
                 "archives to delete     1",
                 "Archives to delete",
-                "Deleted 1 object",
+                "\u2713 Janitor completed  archived 0, deleted 1",
             ),
         )
     ],
@@ -478,7 +478,7 @@ def test_given_audit_write_interrupted_after_rename_when_janitor_reruns_then_arc
     [
         JanitorUnaddressableRelationE2ETestCase(
             description="quoted mixed-case relation is reported and left while plain one archives",
-            janitor_command=("--no-color", "janitor", "--auto-approve"),
+            janitor_command=("--no-color", "janitor", "--auto-approve", "--verbose"),
             plain_relation="old_orders",
             quoted_relation="LegacyCustomers",
             expected_stdout_fragments=(

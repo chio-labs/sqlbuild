@@ -115,7 +115,6 @@ fn physical_old_names<'py>(
     histories: &[Bound<'py, PyAny>],
     relations: &SchemaRelations<'py>,
 ) -> PyResult<HashMap<Folded, Bound<'py, PyAny>>> {
-    let py: Python<'py> = warehouse.py();
     let mut known: Vec<(String, &Vec<Bound<'py, PyAny>>)> = Vec::new();
     for ((_, schema), listed) in relations {
         let folded: String = schema.as_deref().unwrap_or("").to_lowercase();
@@ -143,17 +142,8 @@ fn physical_old_names<'py>(
         let mut names: Vec<String> = unscanned.iter().map(|key| key.name.clone()).collect();
         names.sort();
         names.dedup();
-        let listed: Bound<'py, PyAny> = warehouse.call(
-            "list_relations",
-            &[
-                ("database", optional(py, first.database.as_deref())?),
-                (
-                    "schemas",
-                    tuple(py, schemas.iter().map(|schema| text(py, schema)))?,
-                ),
-                ("names", tuple(py, names.iter().map(|name| text(py, name)))?),
-            ],
-        )?;
+        let listed: Bound<'py, PyAny> =
+            warehouse.list_relations(first.database.as_deref(), (Some(&schemas), Some(&names)))?;
         for relation in listed.try_iter()? {
             scanned.push(relation?);
         }
@@ -287,6 +277,23 @@ pub(crate) fn plan_old_name_views<'py>(
             requested.push((name.clone(), false));
         }
     }
+    let mut definitions: Vec<(Option<String>, String, Vec<String>)> = Vec::new();
+    for history in &histories {
+        let key: Key = old_key(history)?;
+        let (Some(schema), true) = (&key.schema, physical.contains_key(&key.folded())) else {
+            continue;
+        };
+        match definitions
+            .iter_mut()
+            .find(|(database, listed, _)| *database == key.database && listed == schema)
+        {
+            Some((_, _, names)) => names.push(key.name.clone()),
+            None => {
+                definitions.push((key.database.clone(), schema.clone(), vec![key.name.clone()]))
+            }
+        }
+    }
+    warehouse.prefetch_view_definitions(&definitions)?;
     let is_compatibility_view: Bound<'py, PyAny> = host::entry(py, IS_COMPATIBILITY_VIEW)?;
     let (mut live, mut drops, mut missing) = (Vec::new(), Vec::new(), Vec::new());
     let mut keys: HashSet<Folded> = HashSet::new();

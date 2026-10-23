@@ -486,7 +486,7 @@ pub(crate) const DEBUG_ROUTE: Route = routed(
     },
 );
 
-const JANITOR_FIELDS: [Field; 8] = [
+const JANITOR_FIELDS: [Field; 10] = [
     PROJECT_DIR,
     NO_COLOR,
     same("auto_approve"),
@@ -498,6 +498,8 @@ const JANITOR_FIELDS: [Field; 8] = [
     ),
     SELECTED_TARGET,
     same("as_target"),
+    same("verbose"),
+    JSON_OUTPUT,
 ];
 const JANITOR_ARGUMENTS: [Field; 1] = [request(class("JanitorCommandRequest"), &JANITOR_FIELDS)];
 pub(crate) const JANITOR_ROUTE: Route = routed(

@@ -186,3 +186,105 @@ class JanitorNonInteractiveE2ETestCase:
     expected_exit_code: int
     expected_stderr_fragments: tuple[str, ...]
     expected_existing_tables: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JanitorProgressE2ETestCase:
+    """Test case for streamed janitor phase and action lines."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    stale_tables: int
+    expected_exit_code: int
+    expected_ordered_lines: tuple[str, ...]
+    expected_archive_events: int
+    unexpected_fragments: tuple[str, ...] = field(default_factory=tuple)
+    fail_rename: str | None = None
+    expected_remaining_tables: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class JanitorJsonE2ETestCase:
+    """Test case for `sqb janitor --json` output streams."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    stale_tables: int
+    expected_status: str
+    expected_archived: int
+    expected_item_statuses: tuple[str, ...]
+    expected_stderr_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JanitorInspectionCountE2ETestCase:
+    """Test case for warehouse reads and audit writes per schema."""
+
+    description: str
+    stale_tables: dict[str, int]
+    renamed_models: tuple[str, ...]
+    expected_listings_per_schema: int
+    expected_multi_schema_listings: int
+    expected_existence_queries_per_schema: int
+    expected_view_definition_reads: int
+    expected_batched_view_definition_reads: int
+    expected_event_inserts: dict[str, int]
+
+
+@dataclass(frozen=True)
+class JanitorConcurrencyE2ETestCase:
+    """Test case comparing concurrent janitor actions with sequential ones."""
+
+    description: str
+    stale_tables: dict[str, int]
+    concurrency: int
+    expected_exit_code: int
+    expected_connection_line: str
+
+
+@dataclass(frozen=True)
+class JanitorConcurrentFailureE2ETestCase:
+    """Test case for one failing action among concurrent janitor actions."""
+
+    description: str
+    stale_tables: dict[str, int]
+    concurrency: int
+    fail_rename: str
+    expected_exit_code: int
+    expected_failed_lines: int
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JanitorShortenedArchiveE2ETestCase:
+    """Test case for the audit event of an archive whose name was shortened."""
+
+    description: str
+    long_relation_name: str
+    identifier_limit: int
+    expected_rows_in_event_insert: int
+    expected_event_count: int
+
+
+@dataclass(frozen=True)
+class JanitorJsonErrorE2ETestCase:
+    """Test case for the `--json` error document of a janitor run that fails before cleanup."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_error_code: str
+    expected_stderr_fragment: str
+
+
+@dataclass(frozen=True)
+class JanitorJsonFailedRunE2ETestCase:
+    """Test case for the single `--json` document of a janitor run that fails mid-phase."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    fail_rename: str
+    expected_exit_code: int
+    expected_status: str
+    expected_error_fragment: str
+    expected_failed_items: int

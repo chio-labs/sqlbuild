@@ -114,6 +114,7 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     statement_cancellation_is_asynchronous: ClassVar[bool] = False
     statement_limit_excludes_queueing: ClassVar[bool] = False
     metadata_inspection_concurrency: ClassVar[int] = 1
+    concurrent_ddl_limit: ClassVar[int] = 1
     supports_session_warehouse: ClassVar[bool] = False
     state_timestamp_type: ClassVar[str | None] = None
     _snapshot_sql_dialect: ClassVar[SnapshotSqlDialect] = SnapshotSqlDialect(

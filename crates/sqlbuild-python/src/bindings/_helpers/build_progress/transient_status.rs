@@ -51,7 +51,7 @@ impl TransientStatusReporter {
         within(self.lock.bind(py), |_| body())
     }
 
-    fn write_persistent(&self, py: Python<'_>, text: &str) -> PyResult<()> {
+    pub(crate) fn write_persistent(&self, py: Python<'_>, text: &str) -> PyResult<()> {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("stream", self.stream.bind(py))?;
         options.set_item("text", text)?;
@@ -161,7 +161,7 @@ impl TransientStatusReporter {
         })
     }
 
-    fn start(slf: &Bound<'_, Self>, message: String) -> PyResult<()> {
+    pub(crate) fn start(slf: &Bound<'_, Self>, message: String) -> PyResult<()> {
         let py: Python<'_> = slf.py();
         let reporter: &Self = slf.get();
         if reporter.enabled {
@@ -182,7 +182,7 @@ impl TransientStatusReporter {
         reporter.write_message(py, &message, true)
     }
 
-    fn update(&self, py: Python<'_>, message: String) -> PyResult<()> {
+    pub(crate) fn update(&self, py: Python<'_>, message: String) -> PyResult<()> {
         if self.enabled {
             let updated: bool = self.locked(py, || {
                 let drawn: bool = {
@@ -206,7 +206,11 @@ impl TransientStatusReporter {
     }
 
     #[pyo3(signature = (*, message, blank_line_after = false))]
-    fn complete(slf: &Bound<'_, Self>, message: &str, blank_line_after: bool) -> PyResult<()> {
+    pub(crate) fn complete(
+        slf: &Bound<'_, Self>,
+        message: &str,
+        blank_line_after: bool,
+    ) -> PyResult<()> {
         let py: Python<'_> = slf.py();
         Self::close(slf)?;
         slf.get().write_message(py, message, true)?;
@@ -218,7 +222,7 @@ impl TransientStatusReporter {
 
     /// Complete with a pre-styled message written verbatim.
     #[pyo3(signature = (*, message, blank_line_after = false))]
-    fn complete_styled(
+    pub(crate) fn complete_styled(
         slf: &Bound<'_, Self>,
         message: &str,
         blank_line_after: bool,

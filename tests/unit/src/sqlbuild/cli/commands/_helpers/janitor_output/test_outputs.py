@@ -1,4 +1,4 @@
-"""Janitor completion summary wording."""
+"""Janitor completion line wording."""
 
 from __future__ import annotations
 
@@ -18,32 +18,31 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.janitor_output.helpers import
     "test_case",
     (
         JanitorCompletionTestCase(
-            description="single archive and object use singular nouns",
+            description="counts archived, deleted and pruned items",
             archived=1,
             deleted=1,
             pruned_direct_state=0,
-            expected_output="Archived 1 relation. Deleted 1 object.\n",
+            expected_output="\u2713 Janitor completed  archived 1, deleted 1, pruned 0\n",
         ),
         JanitorCompletionTestCase(
-            description="single pruned state table uses a singular noun",
+            description="zero counts stay visible",
             archived=0,
             deleted=0,
             pruned_direct_state=1,
-            expected_output="Deleted 0 objects and pruned 1 direct state table.\n",
+            expected_output="\u2713 Janitor completed  archived 0, deleted 0, pruned 1\n",
         ),
         JanitorCompletionTestCase(
-            description="plural counts keep plural nouns",
+            description="elapsed time follows the counts",
             archived=2,
             deleted=3,
             pruned_direct_state=2,
-            expected_output=(
-                "Archived 2 relations. Deleted 3 objects and pruned 2 direct state tables.\n"
-            ),
+            elapsed_seconds=302.4,
+            expected_output="\u2713 Janitor completed  archived 2, deleted 3, pruned 2  (5m 02s)\n",
         ),
     ),
     ids=lambda case: case.description,
 )
-def test_given_janitor_counts_when_writing_completion_then_nouns_match_counts(
+def test_given_janitor_counts_when_writing_completion_then_line_reports_totals(
     test_case: JanitorCompletionTestCase,
 ) -> None:
     result: JanitorExecutionResult = JanitorExecutionResult(
@@ -52,7 +51,9 @@ def test_given_janitor_counts_when_writing_completion_then_nouns_match_counts(
         pruned_direct_state=placeholder_candidates(test_case.pruned_direct_state),
     )
 
-    output: str = render_janitor_completion(result=result, use_color=False)
+    output: str = render_janitor_completion(
+        result=result, elapsed_seconds=test_case.elapsed_seconds, use_color=False
+    )
 
     assert output == test_case.expected_output
 

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
+import re
 import subprocess
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from itertools import product
 from pathlib import Path
 from textwrap import dedent
 from types import MappingProxyType
@@ -233,7 +236,7 @@ class AgedJanitorDuckDbAdapter(DuckDbAdapter):
         return True
 
     def maximum_identifier_length(self) -> int:
-        return int(_settings().get("identifier_limit", super().maximum_identifier_length()))
+        return int(_settings().get("identifier_limit") or super().maximum_identifier_length())
 
     def list_relations(
         self,
@@ -460,3 +463,238 @@ def probe_fingerprint_count(*, db_path: Path, schema: str) -> int:
         ),
     )
     return int(str(rows[0][0]))
+
+
+PROBE_JANITOR_ADAPTER_NAME: str = "probe_janitor_duckdb"
+PROBE_JANITOR_SETTINGS_FILENAME: str = "janitor_probe_settings.json"
+PROBE_STATEMENT_LOG_FILENAME: str = "janitor_statements.log"
+PROBE_JANITOR_ADAPTER_SOURCE: str = """
+import json
+import threading
+from pathlib import Path
+from typing import Any
+
+from sqlbuild.adapter.contract.exceptions import AdapterUserError
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+
+_ROOT = Path(__file__).resolve().parent.parent
+_LOG_LOCK = threading.Lock()
+
+
+def _settings() -> dict[str, Any]:
+    path = _ROOT / "janitor_probe_settings.json"
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+class ProbeJanitorDuckDbAdapter(DuckDbAdapter):
+    adapter_name = "probe_janitor_duckdb"
+
+    @property
+    def concurrent_ddl_limit(self) -> int:
+        return int(_settings().get("concurrent_ddl_limit", 1))
+
+    def maximum_identifier_length(self) -> int:
+        return int(_settings().get("identifier_limit") or super().maximum_identifier_length())
+
+    def _execute(self, *, connection: Any, sql: str) -> Any:
+        settings = _settings()
+        failing = settings.get("fail_rename")
+        if failing and sql.startswith("ALTER TABLE") and f".{failing} RENAME" in sql:
+            raise AdapterUserError(f"simulated rename failure for {failing}")
+        if settings.get("log"):
+            with _LOG_LOCK, (_ROOT / "janitor_statements.log").open("a") as handle:
+                handle.write(" ".join(sql.split()) + "\\n")
+        return super()._execute(connection=connection, sql=sql)
+"""
+
+
+ARCHIVE_ITEM_LINE: re.Pattern[str] = re.compile(
+    r"^\s+(?P<index>\d+)/(?P<total>\d+)  archived  ", re.MULTILINE
+)
+
+
+def _probe_model_sql(*, schema: str, migrate_from: str) -> str:
+    migration: str = {"": ""}.get(migrate_from, f', migrate_from "{migrate_from}"')
+    return f"MODEL (description 'Test model.', schema {schema}{migration});\n\nSELECT 1 AS id\n"
+
+
+def prepare_probe_janitor_project(
+    *,
+    tmp_path: Path,
+    project_name: str,
+    stale_tables: Mapping[str, int],
+    renamed_models: tuple[str, ...] = (),
+    concurrency: int = 1,
+) -> Path:
+    """Build a DuckDB project with stale tables and an expired archive in each schema."""
+
+    models: dict[str, str] = {
+        f"models/{schema}_{name}.sql": _probe_model_sql(schema=schema, migrate_from="")
+        for schema, name in product(stale_tables, ("orders", *renamed_models))
+    }
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name=project_name,
+        repo_files={
+            "sqlbuild_project.toml": (
+                f'name = "{project_name}"\n'
+                'adapter = "duckdb"\n\n'
+                "[connection]\n"
+                f'database = "{(tmp_path / project_name / "janitor.duckdb").as_posix()}"\n\n'
+                f"[settings]\nconcurrency = {concurrency}\n\n"
+                "[janitor]\n"
+                "enabled = true\n"
+                "retention_days = 0\n"
+                "archive_retention_days = 14\n"
+                "delete_tracked_only = false\n"
+                "direct_state_history_versions = 2\n\n"
+                "[defaults]\n"
+                'materialized = "table"\n'
+            ),
+            f"adapters/{PROBE_JANITOR_ADAPTER_NAME}.py": PROBE_JANITOR_ADAPTER_SOURCE,
+            **models,
+        },
+    )
+    _build(project_dir)
+    db_path: Path = project_dir / "janitor.duckdb"
+    schema: str
+    count: int
+    for schema, count in stale_tables.items():
+        tables: str = "; ".join(
+            f"CREATE TABLE {schema}.old_orders_{index:03d} AS SELECT {index} AS id"
+            for index in range(count)
+        )
+        execute_duckdb(
+            db_path=db_path,
+            sql=f'{tables}; CREATE TABLE {schema}."{EXPIRED_ARCHIVE_NAME}" AS SELECT 1 AS id',
+        )
+    return project_dir
+
+
+def rename_probe_models(
+    *, project_dir: Path, schemas: tuple[str, ...], renamed_models: tuple[str, ...]
+) -> None:
+    """Rename each model with `migrate_from` and rebuild, leaving compatibility views behind."""
+
+    schema: str
+    name: str
+    for schema, name in product(schemas, renamed_models):
+        (project_dir / "models" / f"{schema}_{name}.sql").unlink()
+        (project_dir / "models" / f"{schema}_{name}_v2.sql").write_text(
+            _probe_model_sql(schema=schema, migrate_from=f"{schema}.{schema}_{name}"),
+            encoding="utf-8",
+        )
+    _build(project_dir)
+
+
+def _build(project_dir: Path) -> None:
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def write_probe_settings(
+    *,
+    project_dir: Path,
+    concurrent_ddl_limit: int = 1,
+    fail_rename: str | None = None,
+    identifier_limit: int | None = None,
+) -> None:
+    """Run janitor on the probe adapter with statement logging and these fault switches."""
+
+    (project_dir / "sqlbuild_local.toml").write_text(
+        f'adapter = "{PROBE_JANITOR_ADAPTER_NAME}"\n', encoding="utf-8"
+    )
+    (project_dir / PROBE_STATEMENT_LOG_FILENAME).write_text("", encoding="utf-8")
+    (project_dir / PROBE_JANITOR_SETTINGS_FILENAME).write_text(
+        json.dumps(
+            {
+                "log": True,
+                "concurrent_ddl_limit": concurrent_ddl_limit,
+                "fail_rename": fail_rename,
+                "identifier_limit": identifier_limit,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def read_probe_statements(*, project_dir: Path) -> tuple[str, ...]:
+    """Return every statement the probe adapter logged, in order."""
+
+    return tuple(
+        (project_dir / PROBE_STATEMENT_LOG_FILENAME).read_text(encoding="utf-8").splitlines()
+    )
+
+
+def count_statements(
+    *, statements: tuple[str, ...], fragments: tuple[str, ...], excluded: tuple[str, ...] = ()
+) -> int:
+    """Count statements containing every fragment and none of the excluded fragments."""
+
+    return len(
+        tuple(
+            filter(
+                lambda statement: (
+                    all(fragment in statement for fragment in fragments)
+                    and not any(fragment in statement for fragment in excluded)
+                ),
+                statements,
+            )
+        )
+    )
+
+
+def statement_index(*, statements: tuple[str, ...], prefix: str) -> int:
+    """The position of the first statement starting with `prefix`."""
+
+    return [statement.startswith(prefix) for statement in statements].index(True)
+
+
+def archive_line_positions(output: str) -> tuple[tuple[int, int], ...]:
+    """The `n/N` counter of every archived action line, in printed order."""
+
+    return tuple(
+        (int(match["index"]), int(match["total"])) for match in ARCHIVE_ITEM_LINE.finditer(output)
+    )
+
+
+def assert_in_order(*, output: str, lines: tuple[str, ...]) -> None:
+    """Assert each line appears in `output` after the previous one."""
+
+    position: int = 0
+    line: str
+    for line in lines:
+        found: int = output.find(line, position)
+        assert found >= 0, f"{line!r} missing after position {position} in:\n{output}"
+        position = found + len(line)
+
+
+def janitor_end_state(*, db_path: Path, schemas: tuple[str, ...]) -> tuple[tuple[object, ...], ...]:
+    """Every relation and every audit event in `schemas`, with archive timestamps masked."""
+
+    relations: list[tuple[object, ...]] = query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT table_schema, regexp_replace(table_name, '[0-9]{8}t[0-9]{6}z', 'ts') "
+            "FROM information_schema.tables WHERE table_schema NOT IN ('information_schema') "
+            "ORDER BY 1, 2"
+        ),
+    )
+    events: list[tuple[object, ...]] = []
+    schema: str
+    for schema in schemas:
+        events.extend(
+            query_duckdb(
+                db_path=db_path,
+                sql=(
+                    "SELECT relation_schema, event_type, original_name, "
+                    "regexp_replace(archive_name, '[0-9]{8}t[0-9]{6}z', 'ts') "
+                    f"FROM {schema}._sqlbuild_janitor_events ORDER BY 1, 2, 3, 4"
+                ),
+            )
+        )
+    return (*relations, *events)

@@ -8,3 +8,4 @@ class JanitorCompletionTestCase:
     deleted: int
     pruned_direct_state: int
     expected_output: str
+    elapsed_seconds: float | None = None

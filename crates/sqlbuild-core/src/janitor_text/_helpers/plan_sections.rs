@@ -3,9 +3,28 @@
 use crate::cli_text::models::CliStyle;
 use crate::janitor_text::constants::{
     DROP_EARLY, DROP_EXPIRED, DROP_MISSING, LABEL_WIDTH, TREE_BLANK, TREE_BRANCH_GLYPH,
-    TREE_CONTINUATION, TREE_LAST_GLYPH,
+    TREE_CONTINUATION, TREE_LAST_GLYPH, VERBOSE_FLAG,
 };
 use crate::janitor_text::models::{JanitorPlanText, OldNameViewText};
+
+/// The first `limit` items, or all of them, and how many are hidden.
+fn visible<T>(items: &[T], limit: Option<usize>) -> (&[T], usize) {
+    let shown: usize = limit.map_or(items.len(), |limit| items.len().min(limit));
+    (&items[..shown], items.len() - shown)
+}
+
+/// The dim `... and N more` line of a section that hides entries.
+fn overflow(style: CliStyle, hidden: usize, indent: &str) -> String {
+    if hidden == 0 {
+        return String::new();
+    }
+    format!(
+        "{}\n",
+        style.muted(&format!(
+            "{indent}... and {hidden} more (use {VERBOSE_FLAG} to show all)"
+        ))
+    )
+}
 
 fn row(label: &str, rendered: &str) -> String {
     format!("  {label:<LABEL_WIDTH$} {rendered}\n")
@@ -103,7 +122,7 @@ pub(crate) fn summary(plan: &JanitorPlanText, style: CliStyle) -> String {
 }
 
 /// Schemas whose active sources block every janitor action.
-pub(crate) fn blocked(plan: &JanitorPlanText, style: CliStyle) -> String {
+pub(crate) fn blocked(plan: &JanitorPlanText, limit: Option<usize>, style: CliStyle) -> String {
     if plan.blocked_schemas.is_empty() {
         return String::new();
     }
@@ -126,18 +145,22 @@ pub(crate) fn blocked(plan: &JanitorPlanText, style: CliStyle) -> String {
                 schema.source_names.join(", ")
             ))
         ));
-        for name in &schema.suppressed_candidates {
+        let (candidates, hidden) = visible(&schema.suppressed_candidates, limit);
+        for name in candidates {
             text.push_str(&format!(
                 "    {}\n",
                 style.error_muted(&format!("suppressed {action}: {name}"))
             ));
         }
-        for name in &schema.suppressed_archive_deletions {
+        text.push_str(&overflow(style, hidden, "    "));
+        let (deletions, hidden) = visible(&schema.suppressed_archive_deletions, limit);
+        for name in deletions {
             text.push_str(&format!(
                 "    {}\n",
                 style.error_muted(&format!("suppressed archive deletion: {name}"))
             ));
         }
+        text.push_str(&overflow(style, hidden, "    "));
     }
     text.push_str(&format!(
         "  {}\n",
@@ -147,11 +170,12 @@ pub(crate) fn blocked(plan: &JanitorPlanText, style: CliStyle) -> String {
 }
 
 /// Relations to archive, archives to delete, and retained archives.
-pub(crate) fn archives(plan: &JanitorPlanText, style: CliStyle) -> String {
+pub(crate) fn archives(plan: &JanitorPlanText, limit: Option<usize>, style: CliStyle) -> String {
     let mut text: String = String::new();
     if !plan.archive_candidates.is_empty() {
         text.push_str(&format!("\n{}\n", style.success("Relations to archive")));
-        for candidate in &plan.archive_candidates {
+        let (candidates, hidden) = visible(&plan.archive_candidates, limit);
+        for candidate in candidates {
             let expiry: String = if candidate.expires_now {
                 "deleted in this run".to_owned()
             } else {
@@ -164,10 +188,12 @@ pub(crate) fn archives(plan: &JanitorPlanText, style: CliStyle) -> String {
                 style.muted(&format!("{}, {expiry}", age(candidate.age_days)))
             ));
         }
+        text.push_str(&overflow(style, hidden, "  "));
     }
     if !plan.archive_deletions.is_empty() {
         text.push_str(&format!("\n{}\n", style.success("Archives to delete")));
-        for deletion in &plan.archive_deletions {
+        let (deletions, hidden) = visible(&plan.archive_deletions, limit);
+        for deletion in deletions {
             let detail: String = if deletion.archived_in_run {
                 "archived in this run".to_owned()
             } else {
@@ -184,10 +210,12 @@ pub(crate) fn archives(plan: &JanitorPlanText, style: CliStyle) -> String {
                 style.muted(&detail)
             ));
         }
+        text.push_str(&overflow(style, hidden, "  "));
     }
     if !plan.retained_archives.is_empty() {
         text.push_str(&format!("\n{}\n", style.success("Retained archives")));
-        for retained in &plan.retained_archives {
+        let (retained_archives, hidden) = visible(&plan.retained_archives, limit);
+        for retained in retained_archives {
             text.push_str(&format!(
                 "  {}  {}\n",
                 style.object_name(&retained.name),
@@ -197,6 +225,7 @@ pub(crate) fn archives(plan: &JanitorPlanText, style: CliStyle) -> String {
                 ))
             ));
         }
+        text.push_str(&overflow(style, hidden, "  "));
     }
     text
 }
@@ -228,7 +257,11 @@ fn old_name_detail(view: &OldNameViewText) -> (&'static str, String) {
 }
 
 /// Compatibility views at old model names and what happens to each.
-pub(crate) fn old_name_views(plan: &JanitorPlanText, style: CliStyle) -> String {
+pub(crate) fn old_name_views(
+    plan: &JanitorPlanText,
+    limit: Option<usize>,
+    style: CliStyle,
+) -> String {
     let listed: Vec<&OldNameViewText> = plan
         .old_name_drops
         .iter()
@@ -243,7 +276,8 @@ pub(crate) fn old_name_views(plan: &JanitorPlanText, style: CliStyle) -> String 
         style.success("Old name views"),
         style.muted(&format!("({})", listed.len()))
     );
-    for (index, view) in listed.iter().enumerate() {
+    let (shown, hidden) = visible(&listed, limit);
+    for (index, view) in shown.iter().enumerate() {
         let last: bool = index + 1 == listed.len();
         text.push_str(&format!(
             "{} {}  {}\n",
@@ -263,16 +297,28 @@ pub(crate) fn old_name_views(plan: &JanitorPlanText, style: CliStyle) -> String 
             style.muted(label)
         ));
     }
+    if hidden > 0 {
+        text.push_str(&format!(
+            "{} {}",
+            tree_connector(style, true),
+            overflow(style, hidden, "")
+        ));
+    }
     text
 }
 
 /// A titled list of `  name` or `  name  detail` lines, or nothing when empty.
-pub(crate) fn listing(style: CliStyle, title: &str, items: &[(String, Option<String>)]) -> String {
+pub(crate) fn listing(
+    (style, limit): (CliStyle, Option<usize>),
+    title: &str,
+    items: &[(String, Option<String>)],
+) -> String {
     if items.is_empty() {
         return String::new();
     }
     let mut text: String = format!("\n{}\n", style.success(title));
-    for (name, detail) in items {
+    let (shown, hidden) = visible(items, limit);
+    for (name, detail) in shown {
         match detail {
             Some(detail) => text.push_str(&format!(
                 "  {}  {}\n",
@@ -282,5 +328,54 @@ pub(crate) fn listing(style: CliStyle, title: &str, items: &[(String, Option<Str
             None => text.push_str(&format!("  {}\n", style.object_name(name))),
         }
     }
+    text.push_str(&overflow(style, hidden, "  "));
+    text
+}
+
+/// Skipped objects: each with its reason when `limit` is none, otherwise counted by reason.
+pub(crate) fn skipped_objects(
+    plan: &JanitorPlanText,
+    limit: Option<usize>,
+    style: CliStyle,
+) -> String {
+    let Some(limit) = limit else {
+        let skipped: Vec<(String, Option<String>)> = plan
+            .skipped_relations
+            .iter()
+            .map(|(name, reason)| (name.clone(), Some(reason.clone())))
+            .collect();
+        return listing((style, None), "Skipped objects", &skipped);
+    };
+    if plan.skipped_relations.is_empty() {
+        return String::new();
+    }
+    let mut groups: Vec<(usize, &str)> = Vec::new();
+    for (_, reason) in &plan.skipped_relations {
+        match groups
+            .iter_mut()
+            .find(|(_, known)| *known == reason.as_str())
+        {
+            Some((count, _)) => *count += 1,
+            None => groups.push((1, reason.as_str())),
+        }
+    }
+    groups.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| left.1.cmp(right.1)));
+    let width: usize = groups
+        .first()
+        .map_or(1, |(count, _)| count.to_string().len());
+    let mut text: String = format!(
+        "\n{} {}\n",
+        style.success("Skipped objects"),
+        style.muted(&format!("({})", plan.skipped_relations.len()))
+    );
+    let (shown, hidden) = visible(&groups, Some(limit));
+    for (count, reason) in shown {
+        text.push_str(&format!(
+            "  {}  {}\n",
+            style.accent(&format!("{count:>width$}")),
+            style.muted(reason)
+        ));
+    }
+    text.push_str(&overflow(style, hidden, "  "));
     text
 }

@@ -58,30 +58,40 @@ def build_create_table_sql(
     )
 
 
-def build_existing_event_sql(
+def build_existing_run_events_sql(
     *,
-    record: JanitorEventRecord,
+    database: str | None,
+    schema: str,
+    run_id: str,
     render_qualified_name: Callable[..., str | None],
 ) -> str:
+    """Select the IDs of every event one run already wrote to one schema's table."""
+
     qualified_name: str = build_qualified_table_name(
-        database=record.relation_database,
-        schema=record.relation_schema,
-        render_qualified_name=render_qualified_name,
+        database=database, schema=schema, render_qualified_name=render_qualified_name
     )
-    event_id: str = _column_literal(column=COLUMN_EVENT_ID, value=record.event_id)
-    return f"SELECT {COLUMN_EVENT_ID} FROM {qualified_name} WHERE {COLUMN_EVENT_ID} = {event_id}"
+    run: str = _column_literal(column=COLUMN_RUN_ID, value=run_id)
+    return f"SELECT {COLUMN_EVENT_ID} FROM {qualified_name} WHERE {COLUMN_RUN_ID} = {run}"
 
 
-def build_insert_sql(
+def build_insert_many_sql(
     *,
-    record: JanitorEventRecord,
+    records: tuple[JanitorEventRecord, ...],
     render_qualified_name: Callable[..., str | None],
 ) -> str:
+    """Append several events to the table of the first record's schema in one statement."""
+
+    first: JanitorEventRecord = records[0]
     qualified_name: str = build_qualified_table_name(
-        database=record.relation_database,
-        schema=record.relation_schema,
+        database=first.relation_database,
+        schema=first.relation_schema,
         render_qualified_name=render_qualified_name,
     )
+    rows: str = ", ".join(f"({_row_literals(record=record)})" for record in records)
+    return f"INSERT INTO {qualified_name} ({', '.join(JANITOR_EVENT_COLUMNS)}) VALUES {rows}"
+
+
+def _row_literals(*, record: JanitorEventRecord) -> str:
     values: dict[str, object | None] = {
         COLUMN_EVENT_ID: record.event_id,
         COLUMN_SCHEMA_VERSION: record.schema_version,
@@ -97,10 +107,9 @@ def build_insert_sql(
         COLUMN_ARCHIVE_QUALIFIED_NAME: record.archive_qualified_name,
         COLUMN_ARCHIVED_AT: record.archived_at,
     }
-    literals: str = ", ".join(
+    return ", ".join(
         _column_literal(column=column, value=values[column]) for column in JANITOR_EVENT_COLUMNS
     )
-    return f"INSERT INTO {qualified_name} ({', '.join(JANITOR_EVENT_COLUMNS)}) VALUES ({literals})"
 
 
 def _column_literal(*, column: str, value: object | None) -> str:
