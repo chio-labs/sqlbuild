@@ -189,10 +189,10 @@ fn given_prose_string_when_reading_then_text_is_folded_and_escaped_quotes_reject
         },
         ProseTestCase {
             description: "a triple-quoted block is folded",
-            text: "\"\"\"\n    True for \"Mrs. C. O'Leary\",\n    any case.\n  \"\"\"",
+            text: "\"\"\"\n    True for \"Mrs. C. O'Brien\",\n    any case.\n  \"\"\"",
             expected: Ok((
                 HeaderQuote::Triple,
-                r#"True for "Mrs. C. O'Leary", any case."#,
+                r#"True for "Mrs. C. O'Brien", any case."#,
             )),
         },
         ProseTestCase {

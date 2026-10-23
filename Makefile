@@ -164,6 +164,7 @@ E2E_DUCKDB_CLI_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/databricks \
 	tests/e2e/src/sqlbuild/cli/commands/main/dbt \
 	tests/e2e/src/sqlbuild/cli/commands/main/debug \
+	tests/e2e/src/sqlbuild/cli/commands/main/format/test_description_layout.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/format/test_format_cache.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/format/test_format_example_projects.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/format/test_rule_fixes.py \

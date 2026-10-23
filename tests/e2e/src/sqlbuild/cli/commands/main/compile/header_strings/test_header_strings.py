@@ -35,7 +35,7 @@ _TITLE_MACRO: str = (
     "MACRO (\n"
     '  description """\n'
     "    True when a title is a woman's title, with or without a dot\n"
-    '    ("Miss", "Mrs. C. O\'Leary").\n'
+    '    ("Miss", "Mrs. C. O\'Brien").\n'
     '  """,\n'
     "  arguments (title VARCHAR),\n"
     "  returns BOOLEAN,\n"
@@ -112,9 +112,9 @@ def _project(tmp_path: Path, files: dict[str, str]) -> Path:
                 "MACRO (\n"
                 "  description \"True when a name starts with a woman's title: Mme, Mlle, Miss, "
                 "Mrs, Ms. Any case,\n"
-                'with or without a dot (\\"MISS SARAH BOWEN\\", \\"Mrs. C. O\'Leary\\", '
-                '\\"Ms.Johnston\\"). Capital\n'
-                'initials before a surname (\\"MS. Nigge\\" for M. S. Nigge) are not a title.",\n'
+                'with or without a dot (\\"MISS ANNA PARKER\\", \\"Mrs. C. O\'Brien\\", '
+                '\\"Ms.Robinson\\"). Capital\n'
+                'initials before a surname (\\"MS. Ramos\\" for M. S. Ramos) are not a title.",\n'
                 "  arguments (value VARCHAR),\n  returns VARCHAR,\n);\n\n@value\n"
             ),
             expected_code="P015",

@@ -192,9 +192,9 @@ fn given_descriptions_when_formatting_then_layout_is_canonical_idempotent_and_te
         },
         FormatTestCase {
             description: "continuation lines at column zero become a block",
-            text: "MODEL (\n  description \"True when a name starts with a woman's title: Mme, Mlle, Miss, Mrs, Ms. Any case,\nwith or without a dot ('MISS SARAH BOWEN', 'Mrs. C. O'Leary', 'Ms.Johnston').\",\n);\nSELECT 1\n",
+            text: "MODEL (\n  description \"True when a name starts with a woman's title: Mme, Mlle, Miss, Mrs, Ms. Any case,\nwith or without a dot ('MISS ANNA PARKER', 'Mrs. C. O'Brien', 'Ms.Robinson').\",\n);\nSELECT 1\n",
             line_width: 100,
-            expected_text: "MODEL (\n  description \"\"\"\n    True when a name starts with a woman's title: Mme, Mlle, Miss, Mrs, Ms. Any case, with or\n    without a dot ('MISS SARAH BOWEN', 'Mrs. C. O'Leary', 'Ms.Johnston').\n  \"\"\",\n);\nSELECT 1\n",
+            expected_text: "MODEL (\n  description \"\"\"\n    True when a name starts with a woman's title: Mme, Mlle, Miss, Mrs, Ms. Any case, with or\n    without a dot ('MISS ANNA PARKER', 'Mrs. C. O'Brien', 'Ms.Robinson').\n  \"\"\",\n);\nSELECT 1\n",
         },
         FormatTestCase {
             description: "a short description with double quotes uses one-line triple quotes",
@@ -204,9 +204,9 @@ fn given_descriptions_when_formatting_then_layout_is_canonical_idempotent_and_te
         },
         FormatTestCase {
             description: "a long description with double quotes becomes a block",
-            text: "MODEL (\n  description \"\"\"True when a name starts with a title, with or without a dot (\"MISS SARAH BOWEN\", \"Mrs. C. O'Leary\").\"\"\",\n);\nSELECT 1\n",
+            text: "MODEL (\n  description \"\"\"True when a name starts with a title, with or without a dot (\"MISS ANNA PARKER\", \"Mrs. C. O'Brien\").\"\"\",\n);\nSELECT 1\n",
             line_width: 80,
-            expected_text: "MODEL (\n  description \"\"\"\n    True when a name starts with a title, with or without a dot (\"MISS SARAH\n    BOWEN\", \"Mrs. C. O'Leary\").\n  \"\"\",\n);\nSELECT 1\n",
+            expected_text: "MODEL (\n  description \"\"\"\n    True when a name starts with a title, with or without a dot (\"MISS ANNA\n    PARKER\", \"Mrs. C. O'Brien\").\n  \"\"\",\n);\nSELECT 1\n",
         },
         FormatTestCase {
             description: "paragraphs stay separated by a blank line",
@@ -282,8 +282,8 @@ fn given_escaped_quotes_in_descriptions_when_fixing_then_triple_quotes_hold_real
         },
         QuoteFixTestCase {
             description: "a wrapped macro description with apostrophes",
-            text: "MACRO (\n  description \"A woman's title,\nwith a dot (\\\"Mrs. C. O'Leary\\\").\",\n  returns VARCHAR,\n);\n'x'\n",
-            expected_text: "MACRO (\n  description \"\"\"A woman's title,\nwith a dot (\"Mrs. C. O'Leary\").\"\"\",\n  returns VARCHAR,\n);\n'x'\n",
+            text: "MACRO (\n  description \"A woman's title,\nwith a dot (\\\"Mrs. C. O'Brien\\\").\",\n  returns VARCHAR,\n);\n'x'\n",
+            expected_text: "MACRO (\n  description \"\"\"A woman's title,\nwith a dot (\"Mrs. C. O'Brien\").\"\"\",\n  returns VARCHAR,\n);\n'x'\n",
             expected_lines: vec![2],
         },
         QuoteFixTestCase {

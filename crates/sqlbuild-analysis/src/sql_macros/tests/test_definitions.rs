@@ -296,7 +296,7 @@ fn given_macro_descriptions_when_parsing_then_text_is_folded_or_the_quote_is_loc
         },
         MacroDescriptionTestCase {
             description: "apostrophes elsewhere no longer let an escaped quote through",
-            source: "MACRO (\n  description \"True when a name starts with a woman's title. Any case,\nwith or without a dot (\\\"MISS SARAH BOWEN\\\", \\\"Mrs. C. O'Leary\\\").\",\n  arguments (value VARCHAR),\n  returns VARCHAR,\n);\n@value\n",
+            source: "MACRO (\n  description \"True when a name starts with a woman's title. Any case,\nwith or without a dot (\\\"MISS ANNA PARKER\\\", \\\"Mrs. C. O'Brien\\\").\",\n  arguments (value VARCHAR),\n  returns VARCHAR,\n);\n@value\n",
             expected: Err((quote_message, 3, 25)),
         },
         MacroDescriptionTestCase {
@@ -311,8 +311,8 @@ fn given_macro_descriptions_when_parsing_then_text_is_folded_or_the_quote_is_loc
         },
         MacroDescriptionTestCase {
             description: "a triple-quoted block across lines is folded",
-            source: "MACRO (\n  description \"\"\"\n    True for \"Mrs. C. O'Leary\",\n    any case.\n  \"\"\",\n  returns VARCHAR,\n);\n'x'\n",
-            expected: Ok("True for \"Mrs. C. O'Leary\", any case."),
+            source: "MACRO (\n  description \"\"\"\n    True for \"Mrs. C. O'Brien\",\n    any case.\n  \"\"\",\n  returns VARCHAR,\n);\n'x'\n",
+            expected: Ok("True for \"Mrs. C. O'Brien\", any case."),
         },
         MacroDescriptionTestCase {
             description: "a wrapped description stores the same as one line",

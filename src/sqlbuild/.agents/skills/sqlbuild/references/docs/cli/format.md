@@ -88,7 +88,7 @@ canonical layout, which never changes their words, their quotes or the text they
 MODEL (
   description """
     True when a name starts with a woman's title: Mme, Mlle, Miss, Mrs, Ms. Any case, with or
-    without a dot ("MISS SARAH BOWEN", "Mrs. C. O'Leary", "Ms.Johnston").
+    without a dot ("MISS ANNA PARKER", "Mrs. C. O'Brien", "Ms.Robinson").
   """,
 );
 ```
