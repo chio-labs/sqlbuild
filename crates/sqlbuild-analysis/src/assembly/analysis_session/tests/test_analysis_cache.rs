@@ -3,13 +3,13 @@ use sqlbuild_cache::store::models::NativeStore;
 
 use crate::assembly::analysis_session::models::{ModelReference, SessionRequest};
 use crate::assembly::analysis_session::tests::helpers::{
-    amounts_family, cache_stats, cached_run, current_model_key, damaged, model_keys,
-    model_requests, orders_request, pairs, second_model, session_lines, shapes, started,
-    uncached_catalog,
+    amounts_family, cache_stats, cached_run, completed, current_model_key, damaged,
+    declared_label_request, described, model_keys, model_requests, orders_request, pairs,
+    second_model, session_lines, shapes, started, step_lines, uncached_catalog,
 };
 use crate::assembly::analysis_session::tests::test_types::{
     CacheEditTestCase, CacheKeyTestCase, CacheReuseTestCase, CachedRun, DamagedCacheTestCase,
-    ModelSpec, RelationDigestTestCase,
+    DeclaredHitTestCase, ModelSpec, RelationDigestTestCase,
 };
 
 const STG_ORDERS: ModelSpec = (
@@ -70,6 +70,15 @@ const EVENTS_TOO_DEEP: ModelSpec = (
         " AS deep FROM __source(\"raw_events\")",
     ),
     &["raw_events"],
+    &[],
+);
+
+/// Labels orders with a function the inference does not type, in CTE `final`.
+const LABELLED: ModelSpec = (
+    "labelled",
+    "WITH final AS (SELECT order_id, bar(amount, 0, 10) AS label FROM __source(\"raw_orders\")) \
+     SELECT * FROM final",
+    &["raw_orders"],
     &[],
 );
 
@@ -514,6 +523,50 @@ fn given_a_read_relation_fact_changed_when_keying_then_the_reading_model_key_cha
         assert_eq!(
             current_model_key(&session, test_case.subject) != before,
             test_case.expected_changed,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_a_declared_sql_macro_output_when_rerunning_then_the_hit_keeps_its_type_unpatched() {
+    let test_cases = [DeclaredHitTestCase {
+        description: "a call item in a final CTE, read with a star",
+        models: &[LABELLED],
+        expected_label: "label VARCHAR",
+    }];
+    for test_case in test_cases {
+        let (uncached_steps, uncached_models, _) =
+            completed(started(declared_label_request(test_case.models)));
+        let cold: CachedRun = cached_run(
+            declared_label_request(test_case.models),
+            NativeStore::default(),
+        );
+        let cold_lines = cold.lines;
+        let warm: CachedRun = cached_run(declared_label_request(test_case.models), cold.store);
+        let uncached = (
+            uncached_steps.iter().map(step_lines).collect::<Vec<_>>(),
+            uncached_models.iter().map(described).collect::<Vec<_>>(),
+        );
+
+        assert!(
+            uncached.1[0]
+                .iter()
+                .any(|line| line.starts_with(test_case.expected_label)),
+            "{}: {:?}",
+            test_case.description,
+            uncached.1
+        );
+        assert_eq!(
+            (&cold_lines, &warm.lines),
+            (&uncached, &uncached),
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            (warm.hits, warm.deferred),
+            (vec![true], vec![true]),
             "{}",
             test_case.description
         );

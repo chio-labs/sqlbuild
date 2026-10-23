@@ -7,5 +7,8 @@ pub mod render_inline_collection;
 pub mod sql_macro_body_form;
 pub mod sql_macro_calls;
 pub mod sql_macro_cycle;
+pub mod sql_macro_declared_outputs;
+pub mod sql_macro_declared_type;
+pub mod sql_macro_output_names;
 pub mod sql_macro_parameter_spans;
 pub mod with_list_sql_macro_calls;

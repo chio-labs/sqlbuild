@@ -36,6 +36,13 @@ fn given_valid_macro_files_when_parsing_then_each_parameter_and_the_body_are_rea
             expected_body_position: (2, 1),
         },
         DefinitionTestCase {
+            description: "ANY parameter, with and without a default",
+            source: "MACRO (description \"x\", arguments (store VARCHAR, number ANY, separator ANY DEFAULT '::'), returns VARCHAR);\n@store || @separator || CAST(@number AS VARCHAR)",
+            expected_labels: &["VARCHAR", "ANY", "ANY"],
+            expected_form: "expression",
+            expected_body_position: (2, 1),
+        },
+        DefinitionTestCase {
             description: "CONST parameter as LIMIT",
             source: "MACRO (description \"x\", arguments (src RELATION (id BIGINT), n BIGINT CONST));\nWITH firsts AS (SELECT id FROM @src LIMIT @n)",
             expected_labels: &["RELATION (id BIGINT)", "BIGINT CONST"],
@@ -179,6 +186,30 @@ fn given_invalid_macro_files_when_parsing_then_each_is_rejected() {
             source: "MACRO (description \"x\", arguments (codes LIST VARCHAR CONST), returns BOOLEAN);\n'a' IN @codes",
             expected_code: "P015",
             expected_message: "argument codes LIST VARCHAR CONST: a LIST argument is always known at compile time, so it takes no CONST",
+        },
+        DefinitionErrorTestCase {
+            description: "ANY with CONST",
+            source: "MACRO (description \"x\", arguments (n ANY CONST), returns BIGINT);\n@n",
+            expected_code: "P015",
+            expected_message: "argument n ANY CONST: a CONST argument needs a type its values are checked against",
+        },
+        DefinitionErrorTestCase {
+            description: "ANY with more after it",
+            source: "MACRO (description \"x\", arguments (n ANY[]), returns BIGINT);\n@n",
+            expected_code: "P015",
+            expected_message: "argument n ANY takes nothing after it",
+        },
+        DefinitionErrorTestCase {
+            description: "LIST of ANY",
+            source: "MACRO (description \"x\", arguments (codes LIST ANY), returns BOOLEAN);\n'a' IN @codes",
+            expected_code: "P015",
+            expected_message: "argument codes LIST ANY: ANY is for scalar arguments only",
+        },
+        DefinitionErrorTestCase {
+            description: "ANY parameter as LIMIT",
+            source: "MACRO (description \"x\", arguments (src RELATION (id BIGINT), n ANY));\nWITH firsts AS (SELECT id FROM @src LIMIT @n)",
+            expected_code: "P023",
+            expected_message: "n is used where a literal is required; declare it with a type and CONST, such as n VARCHAR CONST",
         },
         DefinitionErrorTestCase {
             description: "array type with CONST",

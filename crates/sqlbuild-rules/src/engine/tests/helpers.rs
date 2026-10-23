@@ -77,6 +77,10 @@ pub(crate) fn scope_with_macros(paths: &[String]) -> Value {
             .enumerate()
             .map(|(index, path)| {
                 let relative = path.trim_start_matches("models/commerce/_macros/");
+                let relative = relative
+                    .strip_prefix("python/")
+                    .or_else(|| relative.strip_prefix("sql/"))
+                    .unwrap_or(relative);
                 let bucket_path = std::path::Path::new(relative)
                     .parent()
                     .and_then(std::path::Path::to_str)

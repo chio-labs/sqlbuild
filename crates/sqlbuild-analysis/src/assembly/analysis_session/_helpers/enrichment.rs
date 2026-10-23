@@ -113,6 +113,7 @@ fn legacy(input: &EnrichmentInput<'_>, cleaned: &str) -> Result<Enrichment, Stri
             function_return_types: input.function_return_types,
             rules: input.nullability_rules,
             callback: input.nullability_callback,
+            declared: &[],
         },
     })?;
     Ok(Enrichment {
@@ -204,6 +205,7 @@ fn native_projection(
             function_return_types: input.function_return_types,
             rules: input.nullability_rules,
             callback: input.nullability_callback,
+            declared: &[],
         },
     })?;
     let resources: HashMap<&str, (&str, &str)> = input

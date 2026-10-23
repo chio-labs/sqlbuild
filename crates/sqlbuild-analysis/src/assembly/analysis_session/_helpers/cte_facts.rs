@@ -35,6 +35,8 @@ use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::nullability_rules::main::conditional_result_nullability::conditional_result_nullability;
 use crate::nullability_rules::main::first_arg_nullability::first_arg_nullability;
 use crate::nullability_rules::main::safe_cast_nullability::safe_cast_nullability;
+use crate::sql_macros::main::sql_macro_declared_type::sql_macro_declared_type;
+use crate::sql_macros::models::DeclaredOutput;
 use crate::type_system::main::normalize_type::normalize_type;
 use crate::type_system::models::{NormalizedType, TypeFamily};
 
@@ -58,6 +60,8 @@ pub(crate) struct RecoveryProfile<'a> {
     pub(crate) rules: Option<&'a Pairs>,
     /// Runs the adapter's own rules, those with the `python` rule id.
     pub(crate) callback: Option<&'a NullabilityCallback>,
+    /// The model's select items that are one SQL macro call each, typed by its `returns`.
+    pub(crate) declared: &'a [DeclaredOutput],
 }
 
 /// One enrichment's recovery request.
@@ -129,6 +133,108 @@ pub(crate) struct LegacyAnalysis {
     pub(crate) lineage: Vec<LineageRow>,
 }
 
+/// The model query's output types its SQL macro call items change, given the relation types.
+pub(crate) fn declared_output_types(
+    cleaned_sql: &str,
+    types: &ShapeTable,
+    profile: &RecoveryProfile<'_>,
+) -> Fact<Vec<(String, String)>> {
+    let Some(parsed) = parse_one(cleaned_sql, profile.dialect)? else {
+        return Ok(Vec::new());
+    };
+    let facts: Relations = referenced_types(&parsed, types);
+    let declared: Vec<(String, String)> = Context {
+        profile,
+        branches: declared_branches(&parsed),
+    }
+    .query_types(&parsed, &facts)?;
+    let plain: Vec<(String, String)> = Context {
+        profile,
+        branches: Vec::new(),
+    }
+    .query_types(&parsed, &facts)?;
+    let main: HashSet<String> = main_output_columns(&parsed, profile.declared);
+    Ok(declared
+        .into_iter()
+        .filter(|(name, data_type)| {
+            dict_get(&plain, name) != Some(data_type) || main.contains(&casefold(name))
+        })
+        .collect())
+}
+
+/// Each select of the main query and top-level CTEs by address, with its scope and branch.
+fn declared_branches(root: &Expression) -> Vec<Branch> {
+    let mut branches: Vec<Branch> = Vec::new();
+    for (cte_name, has_column_aliases, body) in top_level_ctes(root) {
+        if !has_column_aliases
+            && unwrap_annotations(Some(body)).is_some_and(|body| top_level_ctes(body).is_empty())
+        {
+            for (branch, select) in set_branches(Some(body)).into_iter().enumerate() {
+                branches.push((
+                    std::ptr::from_ref(select),
+                    Some(cte_name.to_owned()),
+                    branch,
+                ));
+            }
+        }
+    }
+    for (branch, select) in set_branches(Some(root)).into_iter().enumerate() {
+        branches.push((std::ptr::from_ref(select), None, branch));
+    }
+    branches
+}
+
+/// The folded main-query output columns its SQL macro call items stand in, in any branch.
+fn main_output_columns(root: &Expression, declared: &[DeclaredOutput]) -> HashSet<String> {
+    let selects: Vec<&Expression> = set_branches(Some(root));
+    let by_name: bool = set_operation(root).is_some_and(|(_, _, by_name)| by_name);
+    let Some(first) = selects.first() else {
+        return HashSet::new();
+    };
+    let first_names: Vec<&str> = projection_names(first);
+    let mut columns: HashSet<String> = HashSet::new();
+    for output in declared.iter().filter(|output| output.cte.is_none()) {
+        if by_name {
+            columns.insert(casefold(&output.name));
+            continue;
+        }
+        let Some(select) = selects.get(output.branch) else {
+            continue;
+        };
+        let position: Option<usize> = projection_names(select)
+            .iter()
+            .position(|name| name.eq_ignore_ascii_case(&output.name));
+        if let Some(column) = position.and_then(|position| first_names.get(position)) {
+            columns.insert(casefold(column));
+        }
+    }
+    columns
+}
+
+/// The output name of each of `select`'s projections, in order.
+fn projection_names(select: &Expression) -> Vec<&str> {
+    select
+        .get_expressions()
+        .iter()
+        .map(|projection| output_name(unwrap_annotations(Some(projection))))
+        .collect()
+}
+
+/// The selects of `node`'s set operation, left to right, or `node` itself.
+fn set_branches(node: Option<&Expression>) -> Vec<&Expression> {
+    let Some(node) = unwrap_annotations(node) else {
+        return Vec::new();
+    };
+    match set_operation(node) {
+        Some((left, right, _)) => {
+            let mut branches: Vec<&Expression> = set_branches(Some(left));
+            branches.extend(set_branches(Some(right)));
+            branches
+        }
+        None => vec![node],
+    }
+}
+
 /// Python's legacy analysis of a model the native engine handed back, or why it defers.
 pub(crate) fn legacy_analysis(input: &LegacyInput<'_>) -> Fact<LegacyAnalysis> {
     let Some(parsed) = parse_one(input.cleaned_sql, input.profile.dialect)? else {
@@ -166,6 +272,7 @@ pub(crate) fn legacy_analysis(input: &LegacyInput<'_>) -> Fact<LegacyAnalysis> {
     let unqualified: Option<&(String, String)> = single_resource(&resources);
     let context = Context {
         profile: &input.profile,
+        branches: Vec::new(),
     };
     let (cte_types, cte_nullability) = if input.recover {
         (
@@ -436,6 +543,7 @@ fn passthrough_facts(
     }
     let context = Context {
         profile: &input.profile,
+        branches: Vec::new(),
     };
     recovery.types = context.passthrough_types(root, &input_types(input))?;
     recovery.nullability = context.passthrough_nullability(root, &input_nullability(input))?;
@@ -466,24 +574,21 @@ fn direct_cte_outputs(root: &Expression, cte_names: &HashSet<String>) -> HashSet
     outputs
 }
 
+/// A select's address, its top-level CTE or `None` for the main query, and its branch.
+type Branch = (*const Expression, Option<String>, usize);
+
 /// The profile every resolver reads.
 struct Context<'a, 'b> {
     profile: &'a RecoveryProfile<'b>,
+    /// The selects whose SQL macro call items take their declared types.
+    branches: Vec<Branch>,
 }
 
 impl Context<'_, '_> {
-    /// Python's `_polyglot_cte_passthrough_types_from_parsed`.
-    fn passthrough_types(
-        &self,
-        root: &Expression,
-        facts: &Relations,
-    ) -> Fact<Vec<(String, String)>> {
-        let ctes: Vec<(&str, bool, &Expression)> = top_level_ctes(root);
-        if ctes.is_empty() {
-            return Ok(Vec::new());
-        }
+    /// The model query's output types, through its top-level CTEs.
+    fn query_types(&self, root: &Expression, facts: &Relations) -> Fact<Vec<(String, String)>> {
         let mut relations: Relations = referenced_facts(root, facts);
-        for (cte_name, has_column_aliases, body) in ctes {
+        for (cte_name, has_column_aliases, body) in top_level_ctes(root) {
             if has_column_aliases {
                 continue;
             }
@@ -497,6 +602,52 @@ impl Context<'_, '_> {
             return self.set_operation_types(root, &relations);
         }
         self.direct_select_types(Some(root), &relations)
+    }
+
+    /// Python's `_polyglot_cte_passthrough_types_from_parsed`.
+    fn passthrough_types(
+        &self,
+        root: &Expression,
+        facts: &Relations,
+    ) -> Fact<Vec<(String, String)>> {
+        if top_level_ctes(root).is_empty() {
+            return Ok(Vec::new());
+        }
+        self.query_types(root, facts)
+    }
+
+    /// `types` of `select` with each of its SQL macro call items typed by its `returns`.
+    fn declared_types(
+        &self,
+        select: &Expression,
+        mut types: Vec<(String, String)>,
+    ) -> Vec<(String, String)> {
+        let address: *const Expression = std::ptr::from_ref(select);
+        let Some((_, cte, branch)) = self
+            .branches
+            .iter()
+            .find(|(branch_select, _, _)| *branch_select == address)
+        else {
+            return types;
+        };
+        for output in self.profile.declared {
+            let key: String = types
+                .iter()
+                .map(|(name, _)| name)
+                .find(|name| name.eq_ignore_ascii_case(&output.name))
+                .cloned()
+                .unwrap_or_else(|| output.name.clone());
+            let inferred: Option<&str> = dict_get(&types, &key).map(String::as_str);
+            if let Some(declared) = sql_macro_declared_type(
+                self.profile.declared,
+                (cte.as_deref(), *branch, &output.name),
+                inferred,
+                self.profile.dialect,
+            ) {
+                types = dict_set(types, &key, declared);
+            }
+        }
+        types
     }
 
     /// Python's `_polyglot_select_output_types`.
@@ -689,7 +840,7 @@ impl Context<'_, '_> {
                 inferred = dict_set(inferred, output, inferred_type);
             }
         }
-        Ok(inferred)
+        Ok(self.declared_types(select, inferred))
     }
 
     /// Python's `_polyglot_direct_expression_type`.

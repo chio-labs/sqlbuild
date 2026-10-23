@@ -117,6 +117,10 @@ const SPACED_DECLARATIONS: (&str, &str) = (
     "spaced",
     "MACRO (description \"Spaced\", arguments (status VARCHAR, places INT), returns BOOLEAN);\n\n@status <> @enum (\"order_status\").CLOSED AND @places = @const (\"price_places\")\n",
 );
+const ORDER_KEY: (&str, &str) = (
+    "order_key",
+    "MACRO (description \"Order key\", arguments (store_code VARCHAR, order_number ANY), returns VARCHAR);\n\n@store_code || '::' || CAST(@order_number AS VARCHAR)\n",
+);
 const ODD: (&str, &str) = (
     "odd",
     "MACRO (description \"Odd\", arguments (v FOO BAR), returns BIGINT);\n\n@v + 1\n",
@@ -350,6 +354,13 @@ fn given_calls_of_each_form_when_expanding_then_the_ticket_examples_compile() {
             expected_sql: "SELECT CONTAINS(o.a, 'x') -- why x\n AS l FROM orders AS o",
         },
         ExpansionTestCase {
+            description: "ANY arguments of any type: a column, a number, a string, an expression and a scalar constant",
+            adapter: "duckdb",
+            macros: &[ORDER_KEY],
+            sql: "SELECT @sql.order_key(o.store, o.number) AS a, @sql.order_key(o.store, 42) AS b, @sql.order_key(o.store, 'x') AS c, @sql.order_key(o.store, o.number + 1) AS d, @sql.order_key(o.store, @const(\"price_places\")) AS e FROM orders AS o",
+            expected_sql: "SELECT o.store || '::' || CAST(o.number AS VARCHAR) AS a, o.store || '::' || CAST(42 AS VARCHAR) AS b, o.store || '::' || CAST('x' AS VARCHAR) AS c, o.store || '::' || CAST((o.number + 1) AS VARCHAR) AS d, o.store || '::' || CAST(2 AS VARCHAR) AS e FROM orders AS o",
+        },
+        ExpansionTestCase {
             description: "a body ending in a line comment, called last on its line, adds no line",
             adapter: "",
             macros: &[TRAILING_COMMENT],
@@ -521,6 +532,30 @@ fn given_invalid_calls_when_expanding_then_each_error_names_the_problem() {
             sql: "SELECT @sql.scaled_by_runtime(o.amount, 3) AS v FROM orders AS o",
             expected_code: "P017",
             expected_message: "argument factor of macro scaled() expects INT CONST",
+        },
+        ExpansionErrorTestCase {
+            description: "a list passed to an ANY argument",
+            adapter: "",
+            macros: &[ORDER_KEY],
+            sql: "SELECT @sql.order_key(o.store, [1, 2]) AS k FROM orders AS o",
+            expected_code: "P017",
+            expected_message: "argument order_number of macro order_key() expects ANY: a scalar SQL expression; got [1, 2]",
+        },
+        ExpansionErrorTestCase {
+            description: "a list constant passed to an ANY argument",
+            adapter: "",
+            macros: &[ORDER_KEY],
+            sql: "SELECT @sql.order_key(o.store, @const(\"supported_countries\")) AS k FROM orders AS o",
+            expected_code: "P017",
+            expected_message: "argument order_number of macro order_key() expects ANY: a scalar constant",
+        },
+        ExpansionErrorTestCase {
+            description: "a relation passed to an ANY argument",
+            adapter: "",
+            macros: &[ORDER_KEY],
+            sql: "SELECT @sql.order_key(o.store, __ref(\"orders\")) AS k FROM orders AS o",
+            expected_code: "P017",
+            expected_message: "argument order_number of macro order_key() expects ANY: a scalar SQL expression",
         },
         ExpansionErrorTestCase {
             description: "type the adapter cannot parse",

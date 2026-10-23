@@ -182,6 +182,7 @@ impl Tables<'_> {
                     function_return_types: &self.request.function_return_types,
                     rules: self.request.nullability_rules.as_ref(),
                     callback: self.request.nullability_callback.as_ref(),
+                    declared: &[],
                 },
             })
         })?;

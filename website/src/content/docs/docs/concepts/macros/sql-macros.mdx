@@ -37,6 +37,11 @@ my_project/
 A file directly under a `macros/` folder fails with `D013`, which names the subfolder to move it
 to. Folder scopes use the same layout, such as `models/marts/_sqlbuild/_macros/sql/`.
 
+Rules that bound declaration folders, such as `SQBRDECLARATION304` (files per folder) and
+`SQBRDECLARATION306` (shared filename prefixes), count `python/` and `sql/` as separate folders. To
+split a full `sql/` folder, move files into subfolders such as `macros/sql/text/`: a SQL macro is
+named by its file, so it keeps its name and its callers stay unchanged.
+
 A SQL macro file starts with a `MACRO` header, then the body:
 
 ```sql
@@ -139,6 +144,7 @@ Every parameter has a type, and may have a `DEFAULT`:
 | Type | Accepts |
 |---|---|
 | `BIGINT`, `VARCHAR`, `TIMESTAMP`, ... | Any SQL expression of a compatible type, evaluated per row: a column, arithmetic, a function call, a literal or a constant. |
+| `ANY` | Any scalar SQL expression, whatever its type: a column, a literal, an expression or a scalar constant. Its type is not checked. Lists and relations fail with `P017`. |
 | `<type> CONST` | Only a value known at compile time: a literal, a scalar constant, an enum value, or a `CONST` parameter of a calling macro. A column or expression fails with `P017`. Scalar types only. |
 | `LIST <type>`, `SET <type>` | An inline list or set, or a list or set constant. Always compile-time, so they take no `CONST`. They render like constants. |
 | `ENUM <name>` | A member of that enum, such as `@enum("order_status").OPEN`. |
@@ -148,6 +154,13 @@ Every parameter has a type, and may have a `DEFAULT`:
 SQL types are written as in [schema declarations](/docs/concepts/models/schemas) and checked against the
 adapter's SQL dialect the same way, including the dialect's array types such as `VARCHAR[]`. A
 runtime array value uses the array type; `LIST VARCHAR` is a list known at compile time.
+
+Use `ANY` when the body works for values of any type, typically because it casts the argument
+itself, as in `CAST(@order_ref AS VARCHAR)`, so callers can pass a number or a string. The body is
+still checked, and the argument's type counts as unknown there. `ANY` is not `VARIANT`: a
+`VARIANT` parameter says the macro takes semi-structured data, while `ANY` says it takes a plain
+value of any type. `ANY` takes a `DEFAULT` but not `CONST`, which needs a type to check values
+against, and it cannot be a `LIST` or `SET` element type.
 
 Leave `CONST` off unless the body needs a literal. `CONST` is part of the macro's contract: callers
 can no longer pass a column.
@@ -251,6 +264,19 @@ query part with `UNION`, `INTERSECT` or `EXCEPT`, arguments built from `__ref()`
 parameters of a calling macro, and calls in models with runtime placeholders; the model's own
 column checks still run on the expanded SQL. All other errors also point at the call and at the
 macro file.
+
+A select-list item that is one expression macro call under an alias, as in
+`@sql.cents_to_dollars(o.amount_cents) AS amount`, has the macro's `returns` type wherever the
+compiler infers no type for the expanded SQL, or exactly that type. This holds in the main query
+and in any top-level CTE, including each branch of their `UNION`, `INTERSECT` or `EXCEPT`, and the
+type flows on as an inferred type would: through `SELECT * FROM final`, pass-through columns and
+joins, to contract checks (`K002`, `K003`), `SQBRCONTRACT105` and models that read the column. A
+set operation's column combines its branches as usual, so a sibling branch of another type still
+leaves it unproven, and a CTE holding one is read by column name, since `SELECT *` over it is not
+typed. Such a call needs no `CAST` to satisfy a matching contract column. Any other
+inferred type stands, even a close one such as `VARCHAR(100)` for `returns VARCHAR(5)`, and `K002`
+reports the mismatch. A call inside a larger expression, a subquery, a nested `WITH` or a set
+operation with a parenthesised branch is typed from the expanded SQL as before.
 
 - `sqb format` formats SQL macro files, bodies of every form and the `MACRO` header, and
   normalises the commas around CTE-list and column-list calls.

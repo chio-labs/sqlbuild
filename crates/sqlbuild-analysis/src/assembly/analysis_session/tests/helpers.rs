@@ -27,6 +27,7 @@ use crate::assembly::analysis_session::tests::test_types::{
 };
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::models::{CatalogInput, ProjectCatalog};
+use crate::sql_macros::models::{CallScope, SqlMacroCheck, TypedOutput};
 
 const TRANSFORM_NAMES: [&str; 6] = [
     "direct",
@@ -179,6 +180,11 @@ pub(crate) fn cached_run(request: SessionRequest, store: NativeStore) -> CachedR
             (keys, hits, taken)
         });
     CachedRun {
+        deferred: outcome
+            .models
+            .iter()
+            .map(|model| model.deferred_cleaning.is_some())
+            .collect(),
         lines: (
             steps.iter().map(step_lines).collect(),
             outcome.models.iter().map(described).collect(),
@@ -471,6 +477,7 @@ pub(crate) fn recovered_facts(sql: &str) -> Option<(Pairs, Pairs, Vec<String>, V
             function_return_types: &Vec::new(),
             rules: Some(&rules),
             callback: None,
+            declared: &[],
         },
     })
     .ok()?;
@@ -550,6 +557,7 @@ pub(crate) fn legacy_lines(sql: &str) -> Option<Vec<String>> {
             function_return_types: &Vec::new(),
             rules: Some(&rules),
             callback: None,
+            declared: &[],
         },
     })
     .ok()?;
@@ -696,4 +704,22 @@ pub(crate) fn injected_relations(
     }
     request.forced_order = Some((relations.dependency_ordered, relations.cyclic));
     request
+}
+
+/// The orders request over `models`, the first typing `label` in CTE `final` as VARCHAR.
+pub(crate) fn declared_label_request(models: &[ModelSpec]) -> SessionRequest {
+    let mut requests: Vec<ModelRequest> = model_requests(models);
+    requests[0].sql_macro_checks.push(SqlMacroCheck {
+        macro_name: "label".to_owned(),
+        scope: CallScope::Cte("final".to_owned()),
+        plain_select: true,
+        arguments: Vec::new(),
+        call: None,
+        output: Some(TypedOutput {
+            name: "label".to_owned(),
+            returns: "VARCHAR".to_owned(),
+            branch: 0,
+        }),
+    });
+    orders_request(requests)
 }
