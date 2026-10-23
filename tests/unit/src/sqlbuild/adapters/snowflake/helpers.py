@@ -414,12 +414,15 @@ class FakeUsageWarehouse:
         *,
         current_database: str | None = None,
         access_rows: tuple[tuple[object, ...], ...] = (),
+        dependency_rows: tuple[tuple[str, str], ...] = (),
         errors: tuple[Exception, ...] = (),
     ) -> None:
         self.current_database: str | None = current_database
         self.access_rows: tuple[tuple[object, ...], ...] = access_rows
+        self.dependency_rows: tuple[tuple[str, str], ...] = dependency_rows
         self.errors: tuple[Exception, ...] = errors
         self.queries: list[tuple[str, tuple[object, ...]]] = []
+        self.dependency_queries: list[tuple[str, tuple[object, ...]]] = []
 
     def current_database_rows(self) -> list[tuple[object, ...]]:
         return [(self.current_database,)]
@@ -432,6 +435,13 @@ class FakeUsageWarehouse:
         names: frozenset[object] = frozenset(params)
         return list(filter(lambda row: row[0] in names, self.access_rows))
 
+    def object_dependency_rows(
+        self, sql: str, params: tuple[object, ...]
+    ) -> list[tuple[object, ...]]:
+        self.dependency_queries.append((sql, params))
+        names: frozenset[object] = frozenset(params)
+        return list(filter(lambda row: row[0] in names, self.dependency_rows))
+
 
 class FakeUsageCursor:
     """Cursor double routing each statement to the fake usage warehouse."""
@@ -441,11 +451,12 @@ class FakeUsageCursor:
         self.rows: list[tuple[object, ...]] = []
 
     def execute(self, sql: str, params: tuple[object, ...] = ()) -> None:
-        reads: dict[bool, Callable[[], list[tuple[object, ...]]]] = {
-            True: self.warehouse.current_database_rows,
-            False: lambda: self.warehouse.access_history_rows(sql, params),
+        reads: dict[tuple[bool, bool], Callable[[], list[tuple[object, ...]]]] = {
+            (True, False): self.warehouse.current_database_rows,
+            (False, True): lambda: self.warehouse.object_dependency_rows(sql, params),
+            (False, False): lambda: self.warehouse.access_history_rows(sql, params),
         }
-        self.rows = reads[sql == "SELECT CURRENT_DATABASE()"]()
+        self.rows = reads[(sql == "SELECT CURRENT_DATABASE()", "OBJECT_DEPENDENCIES" in sql)]()
 
     def fetchone(self) -> tuple[object, ...] | None:
         return next(iter(self.rows), None)
@@ -467,10 +478,20 @@ class FakeUsageConnection:
         return FakeUsageCursor(self.warehouse)
 
 
-def usage_relation(database: str | None, schema: str, name: str) -> RelationInfo:
-    """A base table relation for usage reads."""
+def usage_relation(
+    database: str | None, schema: str, name: str, relation_type: str = "base table"
+) -> RelationInfo:
+    """A relation for usage reads, a base table unless given another type."""
 
-    return RelationInfo(database=database, schema=schema, name=name, relation_type="base table")
+    return RelationInfo(database=database, schema=schema, name=name, relation_type=relation_type)
+
+
+def direct_read(
+    object_name: str, user: str, query_count: int, read_at: object
+) -> tuple[object, ...]:
+    """An access-history result row for direct reads."""
+
+    return (object_name, user, query_count, read_at, True, None)
 
 
 def read_snowflake_usage(

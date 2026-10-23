@@ -8,6 +8,8 @@ pub struct RelationUsageText {
     /// Reader user names, most queries first.
     pub readers: Vec<String>,
     pub query_count: i64,
+    /// The objects it was read through when it was never read directly; empty when unnamed.
+    pub via: Option<Vec<String>>,
 }
 
 /// A relation to archive: its name, archive name, age and expiry.

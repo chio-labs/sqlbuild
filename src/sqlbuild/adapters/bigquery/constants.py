@@ -41,4 +41,13 @@ USAGE_UNAVAILABLE_ERROR_CLASS_NAMES: frozenset[str] = frozenset(
     {"Forbidden", "NotFound", "PermissionDenied"}
 )
 USAGE_UNAVAILABLE_MESSAGES: tuple[str, ...] = ("access denied", "permission")
-CLONE_STATEMENT_PATTERN: str = r"(?is)\bCLONE\b"
+_CLONE_IDENTIFIER: str = r"(`[^`]*`|[A-Za-z0-9_-]+)"
+_CLONE_NAME: str = _CLONE_IDENTIFIER + r"(\s*\.\s*" + _CLONE_IDENTIFIER + r"){0,2}"
+CLONE_STATEMENT_PATTERN: str = (
+    r"(?is)^(\s|--[^\n]*\n|#[^\n]*\n|/\*([^*]|\*+[^*/])*\*+/)*"
+    r"CREATE\s+(OR\s+REPLACE\s+)?(TEMP(ORARY)?\s+)?TABLE\s+(IF\s+NOT\s+EXISTS\s+)?"
+    + _CLONE_NAME
+    + r"\s+CLONE\s+"
+    + _CLONE_NAME
+    + r"([^A-Za-z0-9_`-]|$)"
+)

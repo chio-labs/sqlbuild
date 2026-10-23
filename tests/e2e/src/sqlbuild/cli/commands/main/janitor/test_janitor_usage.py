@@ -11,6 +11,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.janitor._test_types import (
     JanitorUsageE2ETestCase,
+    JanitorUsageFailureE2ETestCase,
     JanitorUsageJsonE2ETestCase,
     JanitorUsagePromptE2ETestCase,
     JanitorUsageUncheckedE2ETestCase,
@@ -184,6 +185,22 @@ def test_given_duckdb_when_running_janitor_json_then_usage_check_is_not_checked(
             expected_archived=2,
         ),
         JanitorUsageE2ETestCase(
+            description="a relation read only through views names them",
+            janitor_config="",
+            janitor_command=APPROVED_JANITOR,
+            reads={"old_orders_002": (("alice",), 3)},
+            via={"old_orders_002": ("main.orders_report", "main.orders_summary")},
+            expected_ordered_lines=(
+                "Checked relation usage: 1 of 4 in use. (",
+                "  main.old_orders_002  queried 2026-10-21 by alice via main.orders_report, "
+                "main.orders_summary (3 queries in 7 days); frozen since 2026-09-01, "
+                "still in use\n",
+            ),
+            unexpected_fragments=("Kept (in use)",),
+            expected_remaining=(),
+            expected_archived=4,
+        ),
+        JanitorUsageE2ETestCase(
             description="keep_in_use in the project and in_use_window reach the usage source",
             janitor_config='keep_in_use = true\nin_use_window = "36h"\n',
             janitor_command=APPROVED_JANITOR,
@@ -211,7 +228,7 @@ def test_given_usage_source_when_running_janitor_then_in_use_relations_are_shown
         stale_views=("old_orders_view",),
         janitor_config=test_case.janitor_config,
     )
-    write_usage_settings(project_dir=project_dir, reads=test_case.reads)
+    write_usage_settings(project_dir=project_dir, reads=test_case.reads, via=test_case.via)
 
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=test_case.janitor_command, project_dir=project_dir
@@ -256,11 +273,17 @@ def test_given_usage_source_when_running_janitor_then_in_use_relations_are_shown
                         "last_read": "2026-10-21T09:30:00Z",
                         "readers": list(FIVE_READERS),
                         "query_count": 40,
+                        "via": None,
                     },
                 ),
                 (
                     "main.old_orders_002",
-                    {"last_read": "2026-10-21T09:30:00Z", "readers": ["alice"], "query_count": 2},
+                    {
+                        "last_read": "2026-10-21T09:30:00Z",
+                        "readers": ["alice"],
+                        "query_count": 2,
+                        "via": ["main.orders_report"],
+                    },
                 ),
             ),
             expected_archived=1,
@@ -277,6 +300,7 @@ def test_given_usage_source_when_janitor_prints_json_then_candidates_carry_in_us
     write_usage_settings(
         project_dir=project_dir,
         reads={"old_orders_000": (FIVE_READERS, 40), "old_orders_002": (("alice",), 2)},
+        via={"old_orders_002": ("main.orders_report",)},
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
@@ -290,6 +314,9 @@ def test_given_usage_source_when_janitor_prints_json_then_candidates_carry_in_us
         test_case.expected_archive_in_use
     )
     assert in_use_entries(payload["plan"]["kept_in_use"]) == test_case.expected_kept_in_use
+    assert all(
+        set(entry) == {"name", "age_days", "in_use"} for entry in payload["plan"]["kept_in_use"]
+    )
     assert payload["result"]["counts"]["archived"] == test_case.expected_archived
     assert read_usage_calls(project_dir=project_dir)["window_seconds"] == 7 * 86_400
 
@@ -339,6 +366,39 @@ def test_given_usage_check_when_prompting_then_prompt_states_usage(
     fragment: str
     for fragment in test_case.expected_fragments:
         assert fragment in result.stdout, result.stdout
+    assert len(list_archive_names(db_path=project_dir / "janitor.duckdb")) == 1
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorUsageFailureE2ETestCase(
+            description="a failed usage read prints a failure line and archives nothing",
+            failure="usage warehouse went away",
+            expected_ordered_lines=(
+                "Checking relation usage...",
+                "Relation usage check failed. (",
+                "usage warehouse went away",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_failing_usage_source_when_running_janitor_then_failure_line_is_printed(
+    test_case: JanitorUsageFailureE2ETestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = prepare_usage_janitor_project(
+        tmp_path=tmp_path, project_name="janitor_usage_failure", stale_tables=1
+    )
+    write_usage_settings(project_dir=project_dir, failure=test_case.failure)
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=APPROVED_JANITOR, project_dir=project_dir
+    )
+
+    assert result.returncode != 0, result.stdout
+    assert_in_order(output=result.stdout + result.stderr, lines=test_case.expected_ordered_lines)
+    assert "Janitor preview" not in result.stdout
     assert len(list_archive_names(db_path=project_dir / "janitor.duckdb")) == 1
 
 

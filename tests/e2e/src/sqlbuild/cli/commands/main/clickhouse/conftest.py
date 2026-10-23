@@ -9,6 +9,7 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse.helpers import (
     CLICKHOUSE_IMAGE,
     build_unique_schema_name,
+    cleanup_clickhouse_schema,
     execute_clickhouse_sql,
 )
 
@@ -59,3 +60,10 @@ def recall_database(clickhouse_e2e_config: dict[str, object]) -> Iterator[str]:
     execute_clickhouse_sql(
         config=clickhouse_e2e_config, statements=(f"DROP DATABASE IF EXISTS {database} SYNC",)
     )
+
+
+@pytest.fixture
+def janitor_schema(clickhouse_e2e_config: dict[str, object]) -> Iterator[str]:
+    schema: str = build_unique_schema_name(prefix="janitor_usage")
+    yield schema
+    cleanup_clickhouse_schema(config=clickhouse_e2e_config, schema_name=schema)

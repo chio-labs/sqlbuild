@@ -5,7 +5,7 @@ use crate::janitor_text::main::janitor_confirmation_prompt::janitor_confirmation
 use crate::janitor_text::main::render_janitor_plan::render_janitor_plan;
 use crate::janitor_text::models::JanitorOutcome;
 use crate::janitor_text::tests::helpers::{
-    direct_archive_plan, kept_usage_plan, unchecked_plan, usage_plan,
+    direct_archive_plan, kept_usage_plan, unchecked_plan, usage_plan, via_usage_plan,
 };
 use crate::janitor_text::tests::test_types::{JsonTestCase, PreviewTestCase, UsagePromptTestCase};
 
@@ -43,6 +43,19 @@ fn given_usage_check_when_rendering_preview_then_in_use_relations_show_readers()
                 "  dev.old_orders  queried 2026-10-21 by svc_reporting, alice, bob +2 more",
             ],
             unexpected_fragments: &["\nIn use\n", "dev.old_orders  ->", "dev.orders_daily  ->"],
+        },
+        PreviewTestCase {
+            description: "relations read only through views name the views, or say so",
+            plan: via_usage_plan(),
+            verbose: false,
+            expected_fragments: &[
+                "  dev.orders_base  queried 2026-10-21 by alice via dev.orders_daily, \
+                 dev.orders_weekly, dev.orders_monthly +1 more (3 queries in 7 days); \
+                 frozen since 2026-09-01, still in use\n",
+                "  dev.orders_view  queried 2026-10-21 by alice through a view \
+                 (3 queries in 7 days)\n",
+            ],
+            unexpected_fragments: &["dev.orders_yearly"],
         },
         PreviewTestCase {
             description: "an unchecked usage shows one notice and no in-use rows",
@@ -152,7 +165,7 @@ fn given_usage_check_when_formatting_json_then_candidates_carry_in_use() {
             expected_fragments: &[
                 "\"in_use\": {\n          \"last_read\": \"2026-10-21T09:30:00Z\",\n          \
                  \"readers\": [\n            \"svc_reporting\"\n          ],\n          \
-                 \"query_count\": 14\n        }",
+                 \"query_count\": 14,\n          \"via\": null\n        }",
                 "\"in_use\": false",
                 "\"kept_in_use\": []",
                 "\"usage_check\": {\n    \"status\": \"checked\",\n    \"reason\": null,\n    \
@@ -166,7 +179,8 @@ fn given_usage_check_when_formatting_json_then_candidates_carry_in_use() {
             run: None,
             error: None,
             expected_fragments: &[
-                "\"kept_in_use\": [\n      {\n        \"name\": \"dev.orders_daily\"",
+                "\"kept_in_use\": [\n      {\n        \"name\": \"dev.orders_daily\",\n        \
+                 \"age_days\": null,\n        \"in_use\": {",
                 "\"keep_in_use\": true",
             ],
         },

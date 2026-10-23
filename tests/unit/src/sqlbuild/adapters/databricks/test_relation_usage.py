@@ -35,10 +35,10 @@ ORDERS_DAILY: tuple[RelationInfo, ...] = (usage_relation("shop", "mart", "orders
             description="read events per user add up and names fold to lowercase",
             relations=(("Shop", "Mart", "orders_daily"), ("shop", "mart", "customers")),
             rows=(
-                ("shop.mart.orders_daily", "svc-reporting@example.com", 10, READ_AT),
-                ("shop.mart.orders_daily", "alice@example.com", 4, EARLIER_READ_AT),
-                ("shop.mart.orders_daily", None, 1, EARLIER_READ_AT),
-                ("shop.mart.products", "bob@example.com", 3, READ_AT),
+                ("shop.mart.orders_daily", "svc-reporting@example.com", 10, READ_AT, True, None),
+                ("shop.mart.orders_daily", "alice@example.com", 4, EARLIER_READ_AT, True, None),
+                ("shop.mart.orders_daily", None, 1, EARLIER_READ_AT, True, None),
+                ("shop.mart.products", "bob@example.com", 3, READ_AT, True, None),
             ),
             expected_object_names=("shop.mart.customers", "shop.mart.orders_daily"),
             expected_usages=(
@@ -48,6 +48,43 @@ ORDERS_DAILY: tuple[RelationInfo, ...] = (usage_relation("shop", "mart", "orders
                     15,
                     READ_AT,
                 ),
+            ),
+            expected_via=((True, ()),),
+        ),
+        DatabricksRelationUsageTestCase(
+            description="tables read only through views name them, or say a view when unknown",
+            relations=(
+                ("shop", "mart", "orders_base"),
+                ("shop", "mart", "customers"),
+                ("shop", "mart", "products"),
+            ),
+            rows=(
+                (
+                    "shop.mart.orders_base",
+                    "alice@example.com",
+                    3,
+                    READ_AT,
+                    False,
+                    ["shop.mart.orders_v", "shop.mart.orders_w"],
+                ),
+                ("shop.mart.customers", "alice@example.com", 2, READ_AT, False, None),
+                ("shop.mart.products", "alice@example.com", 2, READ_AT, False, None),
+                ("shop.mart.products", "bob@example.com", 1, EARLIER_READ_AT, True, None),
+            ),
+            expected_object_names=(
+                "shop.mart.customers",
+                "shop.mart.orders_base",
+                "shop.mart.products",
+            ),
+            expected_usages=(
+                ("customers", ("alice@example.com",), 2, READ_AT),
+                ("orders_base", ("alice@example.com",), 3, READ_AT),
+                ("products", ("alice@example.com", "bob@example.com"), 3, READ_AT),
+            ),
+            expected_via=(
+                (False, ()),
+                (False, ("shop.mart.orders_v", "shop.mart.orders_w")),
+                (True, ()),
             ),
         ),
         DatabricksRelationUsageTestCase(
@@ -79,6 +116,7 @@ def test_given_lineage_when_reading_usage_then_reads_match_candidates(
         (usage.name, usage.readers, usage.query_count, usage.last_read_at)
         for usage in report.usages
     ) == (test_case.expected_usages)
+    assert tuple((usage.direct, usage.via) for usage in report.usages) == (test_case.expected_via)
 
 
 @pytest.mark.parametrize(
@@ -91,11 +129,16 @@ def test_given_lineage_when_reading_usage_then_reads_match_candidates(
             expected_sql_fragments=(
                 "FROM system.access.table_lineage",
                 "lower(source_table_full_name) AS object_name",
-                "created_by AS user_name",
-                "COUNT(DISTINCT COALESCE(statement_id, event_id)) AS query_count",
-                "MAX(event_time) AS last_read_at",
+                "COALESCE(direct_access, true) AS direct",
+                "reads.created_by AS user_name",
+                "COUNT(DISTINCT COALESCE(reads.statement_id, reads.event_id)) AS query_count",
+                "MAX(reads.event_time) AS last_read_at",
                 "event_date >= DATE(TIMESTAMPADD(SECOND, -:window_seconds, current_timestamp()))",
-                "lower(source_table_full_name) IN (:name_0)",
+                "WHERE object_name IN (:name_0)",
+                "JOIN lineage AS views ON views.statement_id = reads.statement_id "
+                "AND views.direct AND views.source_type IN "
+                "('VIEW', 'MATERIALIZED_VIEW', 'METRIC_VIEW')",
+                "bool_or(reads.direct) AS direct",
             ),
         ),
     ),

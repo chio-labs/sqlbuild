@@ -761,6 +761,8 @@ class UsageJanitorDuckDbAdapter(DuckDbAdapter):
             encoding="utf-8",
         )
         settings: dict[str, Any] = _settings()
+        if settings["failure"] is not None:
+            raise RuntimeError(settings["failure"])
         if settings["unavailable"] is not None:
             return RelationUsageReport(checked=False, reason=settings["unavailable"])
         reads: dict[str, dict[str, Any]] = settings["reads"]
@@ -774,6 +776,8 @@ class UsageJanitorDuckDbAdapter(DuckDbAdapter):
                     last_read_at=datetime.fromisoformat(reads[relation.name]["last_read_at"]),
                     readers=tuple(reads[relation.name]["readers"]),
                     query_count=int(reads[relation.name]["query_count"]),
+                    direct=reads[relation.name]["via"] is None,
+                    via=tuple(reads[relation.name]["via"] or ()),
                 )
                 for relation in relations
                 if relation.name in reads
@@ -836,8 +840,13 @@ def write_usage_settings(
     project_dir: Path,
     reads: Mapping[str, tuple[tuple[str, ...], int]] = MappingProxyType({}),
     unavailable: str | None = None,
+    via: Mapping[str, tuple[str, ...]] = MappingProxyType({}),
+    failure: str | None = None,
 ) -> None:
-    """Run janitor on the usage adapter: who read which relation, or why usage is unavailable."""
+    """Run janitor on the usage adapter: who read which relation, or why usage is unavailable.
+
+    A relation in `via` was read only through the named objects; `failure` makes the read fail.
+    """
 
     (project_dir / "sqlbuild_local.toml").write_text(
         f'adapter = "{USAGE_JANITOR_ADAPTER_NAME}"\n', encoding="utf-8"
@@ -851,10 +860,12 @@ def write_usage_settings(
                         "readers": list(readers),
                         "query_count": count,
                         "last_read_at": "2026-10-21T09:30:00+00:00",
+                        "via": via.get(name),
                     }
                     for name, (readers, count) in reads.items()
                 },
                 "unavailable": unavailable,
+                "failure": failure,
             }
         ),
         encoding="utf-8",

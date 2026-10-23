@@ -85,6 +85,7 @@ fn usage(readers: &[&str], query_count: i64) -> RelationUsageText {
         last_read_at: "2026-10-21 09:30:00".to_owned(),
         readers: readers.iter().map(|reader| (*reader).to_owned()).collect(),
         query_count,
+        via: None,
     }
 }
 
@@ -138,6 +139,37 @@ fn checked_plan(keep_in_use: bool) -> JanitorPlanText {
 pub(super) fn usage_plan() -> JanitorPlanText {
     JanitorPlanText {
         archive_candidates: usage_candidates().to_vec(),
+        ..checked_plan(false)
+    }
+}
+
+/// A checked plan archiving a table read through four named views and a view read through one.
+pub(super) fn via_usage_plan() -> JanitorPlanText {
+    let views: Vec<String> = ["daily", "weekly", "monthly", "yearly"]
+        .iter()
+        .map(|grain| format!("dev.orders_{grain}"))
+        .collect();
+    JanitorPlanText {
+        archive_candidates: vec![
+            ArchiveCandidateText {
+                name: "dev.orders_base".to_owned(),
+                is_table: true,
+                changed_on: Some("2026-09-01".to_owned()),
+                usage: Some(RelationUsageText {
+                    via: Some(views),
+                    ..usage(&["alice"], 3)
+                }),
+                ..ArchiveCandidateText::default()
+            },
+            ArchiveCandidateText {
+                name: "dev.orders_view".to_owned(),
+                usage: Some(RelationUsageText {
+                    via: Some(Vec::new()),
+                    ..usage(&["alice"], 3)
+                }),
+                ..ArchiveCandidateText::default()
+            },
+        ],
         ..checked_plan(false)
     }
 }

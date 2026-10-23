@@ -1,32 +1,38 @@
-"""Fold per-reader usage rows into one usage per relation."""
+"""Fold per-reader reads into one usage per relation."""
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from datetime import UTC, datetime
+from datetime import datetime
 
-from sqlbuild.adapter.contract.models import RelationInfo, RelationUsage
+from sqlbuild.adapter.contract._helpers.relation_reads import utc_datetime
+from sqlbuild.adapter.contract.models import RelationInfo, RelationRead, RelationUsage
 from sqlbuild.adapter.relations.constants import UNKNOWN_RELATION_READER
 
 
 def aggregate_relation_usage(
-    *, rows: Iterable[tuple[object, ...]], relations_by_name: Mapping[str, RelationInfo]
+    *, reads: Iterable[RelationRead], relations_by_name: Mapping[str, RelationInfo]
 ) -> tuple[RelationUsage, ...]:
-    """One usage per read relation from `(object_name, reader, query_count, last_read)` rows."""
+    """One usage per read relation; it is direct when any reader read it directly."""
 
     readers: dict[str, dict[str, int]] = {}
     last_read: dict[str, datetime] = {}
-    row: tuple[object, ...]
-    for row in rows:
-        object_name: str = str(row[0])
-        if object_name not in relations_by_name:
+    direct: set[str] = set()
+    via: dict[str, set[str]] = {}
+    read: RelationRead
+    for read in reads:
+        if read.object_name not in relations_by_name:
             continue
-        reader: str = UNKNOWN_RELATION_READER if row[1] is None else str(row[1])
-        counts: dict[str, int] = readers.setdefault(object_name, {})
-        counts[reader] = counts.get(reader, 0) + int(str(row[2]))
-        read_at: datetime = _utc(row[3])
-        last_read[object_name] = max(read_at, last_read.get(object_name, read_at))
+        reader: str = UNKNOWN_RELATION_READER if read.reader is None else read.reader
+        counts: dict[str, int] = readers.setdefault(read.object_name, {})
+        counts[reader] = counts.get(reader, 0) + read.query_count
+        read_at: datetime = utc_datetime(read.last_read_at)
+        last_read[read.object_name] = max(read_at, last_read.get(read.object_name, read_at))
+        if read.direct:
+            direct.add(read.object_name)
+        via.setdefault(read.object_name, set()).update(read.via)
     usages: list[RelationUsage] = []
+    object_name: str
     for object_name in sorted(readers):
         relation: RelationInfo = relations_by_name[object_name]
         counts = readers[object_name]
@@ -38,14 +44,8 @@ def aggregate_relation_usage(
                 last_read_at=last_read[object_name],
                 readers=tuple(sorted(counts, key=lambda reader: (-counts[reader], reader))),
                 query_count=sum(counts.values()),
+                direct=object_name in direct,
+                via=() if object_name in direct else tuple(sorted(via[object_name])),
             )
         )
     return tuple(usages)
-
-
-def _utc(value: object) -> datetime:
-    if not isinstance(value, datetime):
-        return datetime.fromisoformat(str(value)).astimezone(UTC)
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value.astimezone(UTC)

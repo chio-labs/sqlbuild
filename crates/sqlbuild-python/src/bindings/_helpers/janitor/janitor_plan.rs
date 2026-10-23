@@ -138,6 +138,11 @@ fn relation_usage(usage: &Bound<'_, PyAny>) -> PyResult<Option<RelationUsageText
         last_read_at: formatted(&native_field(usage, "last_read_at")?, TIMESTAMP_FORMAT)?,
         readers: native_field(usage, "readers")?.extract()?,
         query_count: native_field(usage, "query_count")?.extract()?,
+        via: if native_field(usage, "direct")?.is_truthy()? {
+            None
+        } else {
+            Some(native_field(usage, "via")?.extract()?)
+        },
     }))
 }
 

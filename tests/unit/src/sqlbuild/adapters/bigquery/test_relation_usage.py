@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 
 import pytest
 
 from sqlbuild.adapter.contract.models import RelationInfo, RelationUsageReport
-from sqlbuild.adapters.bigquery.constants import USAGE_UNAVAILABLE_REASON
+from sqlbuild.adapters.bigquery.constants import CLONE_STATEMENT_PATTERN, USAGE_UNAVAILABLE_REASON
 from tests.unit.src.sqlbuild.adapters.bigquery._test_types import (
+    BigQueryCloneStatementTestCase,
     BigQueryRelationUsageChunkTestCase,
     BigQueryRelationUsageErrorTestCase,
     BigQueryRelationUsageFailureTestCase,
@@ -97,7 +99,7 @@ def test_given_jobs_history_when_reading_usage_then_reads_match_candidates(
 
     assert report.checked
     assert tuple(
-        (sql.split(" FROM ")[1].split(" AS jobs")[0], location, queried_names(params))
+        (sql.split(" FROM ")[1].split(" WHERE ")[0], location, queried_names(params))
         for sql, location, params in client.queries
     ) == (test_case.expected_queries)
     assert tuple(
@@ -114,20 +116,21 @@ def test_given_jobs_history_when_reading_usage_then_reads_match_candidates(
             window_seconds=WINDOW_SECONDS,
             expected_params={
                 "window_seconds": WINDOW_SECONDS,
-                "clone_pattern": r"(?is)\bCLONE\b",
+                "clone_pattern": CLONE_STATEMENT_PATTERN,
                 "object_names": ["shop-analytics.mart.orders_daily"],
             },
             expected_sql_fragments=(
                 "UNNEST(jobs.referenced_tables) AS referenced",
+                "UNNEST(jobs.referenced_logical_views) AS referenced",
                 "INTERVAL @window_seconds SECOND",
-                "jobs.job_type = 'QUERY'",
-                "jobs.error_result IS NULL",
+                "job_type = 'QUERY'",
+                "error_result IS NULL",
                 "NOT IN ('SCRIPT', 'CREATE_SNAPSHOT_TABLE')",
-                "AND NOT (STARTS_WITH(COALESCE(jobs.statement_type, ''), 'CREATE_TABLE') "
-                "AND REGEXP_CONTAINS(jobs.query, @clone_pattern))",
-                "IN UNNEST(@object_names)",
-                "COUNT(DISTINCT jobs.job_id) AS query_count",
-                "jobs.user_email AS user_name",
+                "AND NOT (STARTS_WITH(COALESCE(statement_type, ''), 'CREATE_TABLE') "
+                "AND REGEXP_CONTAINS(query, @clone_pattern))",
+                "WHERE object_name IN UNNEST(@object_names)",
+                "COUNT(DISTINCT job_id) AS query_count",
+                "user_email AS user_name",
             ),
         ),
     ),
@@ -244,6 +247,51 @@ def test_given_other_jobs_failure_when_reading_usage_then_error_propagates(
 
     with pytest.raises(FakeBigQueryError, match=test_case.expected_error_match):
         read_bigquery_usage(client=client, relations=ORDERS_DAILY, window_seconds=WINDOW_SECONDS)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        BigQueryCloneStatementTestCase(
+            description="a table clone",
+            statement="CREATE TABLE mart.orders_copy CLONE mart.orders",
+            expected_clone=True,
+        ),
+        BigQueryCloneStatementTestCase(
+            description="a replaced clone of a quoted name at a point in time",
+            statement="create or replace table `shop-analytics.mart.orders_copy` clone "
+            "`shop-analytics.mart.orders` FOR SYSTEM_TIME AS OF TIMESTAMP '2026-10-01'",
+            expected_clone=True,
+        ),
+        BigQueryCloneStatementTestCase(
+            description="a clone after a leading comment",
+            statement="# nightly copy\nCREATE TABLE IF NOT EXISTS mart.orders_copy CLONE mart.orders;",
+            expected_clone=True,
+        ),
+        BigQueryCloneStatementTestCase(
+            description="a CTAS selecting a column named clone",
+            statement="CREATE TABLE mart.orders_copy AS SELECT clone FROM mart.orders",
+            expected_clone=False,
+        ),
+        BigQueryCloneStatementTestCase(
+            description="a CTAS with clone inside a string",
+            statement="CREATE TABLE mart.notes AS SELECT 'orders CLONE copy' AS note",
+            expected_clone=False,
+        ),
+        BigQueryCloneStatementTestCase(
+            description="a CTAS whose comment mentions a clone",
+            statement="CREATE TABLE mart.c AS SELECT 1 AS n -- not CREATE TABLE a CLONE b",
+            expected_clone=False,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_statement_when_matching_clone_pattern_then_only_clones_match(
+    test_case: BigQueryCloneStatementTestCase,
+) -> None:
+    matched: bool = re.search(CLONE_STATEMENT_PATTERN, test_case.statement) is not None
+
+    assert matched == test_case.expected_clone
 
 
 if __name__ == "__main__":

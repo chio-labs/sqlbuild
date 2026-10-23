@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 
 import pytest
@@ -15,16 +16,19 @@ from sqlbuild.adapters.snowflake.constants import (
     USAGE_UNAVAILABLE_REASON,
 )
 from tests.unit.src.sqlbuild.adapters.snowflake._test_types import (
+    SnowflakeCloneStatementTestCase,
     SnowflakeRelationUsageChunkTestCase,
     SnowflakeRelationUsageErrorTestCase,
     SnowflakeRelationUsageFailureTestCase,
     SnowflakeRelationUsageQueryTestCase,
     SnowflakeRelationUsageTestCase,
+    SnowflakeRelationUsageViaTestCase,
     UnsupportedRelationUsageTestCase,
 )
 from tests.unit.src.sqlbuild.adapters.snowflake.helpers import (
     FakeAccessHistoryError,
     FakeUsageWarehouse,
+    direct_read,
     read_snowflake_usage,
     usage_relation,
 )
@@ -43,9 +47,9 @@ ORDERS_DAILY: tuple[RelationInfo, ...] = (usage_relation("analytics", "mart", "o
             relations=(("analytics", "mart", "orders_daily"), ("analytics", "mart", "customers")),
             current_database=None,
             access_rows=(
-                ("ANALYTICS.MART.ORDERS_DAILY", "SVC_REPORTING", 10, READ_AT),
-                ("ANALYTICS.MART.ORDERS_DAILY", "ALICE", 4, EARLIER_READ_AT),
-                ("ANALYTICS.MART.PRODUCTS", "BOB", 3, READ_AT),
+                direct_read("ANALYTICS.MART.ORDERS_DAILY", "SVC_REPORTING", 10, READ_AT),
+                direct_read("ANALYTICS.MART.ORDERS_DAILY", "ALICE", 4, EARLIER_READ_AT),
+                direct_read("ANALYTICS.MART.PRODUCTS", "BOB", 3, READ_AT),
             ),
             expected_object_names=("ANALYTICS.MART.CUSTOMERS", "ANALYTICS.MART.ORDERS_DAILY"),
             expected_usages=(("orders_daily", ("SVC_REPORTING", "ALICE"), 14, READ_AT),),
@@ -54,7 +58,7 @@ ORDERS_DAILY: tuple[RelationInfo, ...] = (usage_relation("analytics", "mart", "o
             description="unqualified relations use the session database and names fold upper",
             relations=((None, "mart", "orders_daily"),),
             current_database="SHOP_DB",
-            access_rows=(("SHOP_DB.MART.ORDERS_DAILY", "SVC_REPORTING", 2, READ_AT),),
+            access_rows=(direct_read("SHOP_DB.MART.ORDERS_DAILY", "SVC_REPORTING", 2, READ_AT),),
             expected_object_names=("SHOP_DB.MART.ORDERS_DAILY",),
             expected_usages=(("orders_daily", ("SVC_REPORTING",), 2, READ_AT),),
         ),
@@ -62,7 +66,7 @@ ORDERS_DAILY: tuple[RelationInfo, ...] = (usage_relation("analytics", "mart", "o
             description="names that need quoting match the quoted object name, case kept upper",
             relations=(("analytics", "mart", "order-lines"),),
             current_database=None,
-            access_rows=(('ANALYTICS.MART."ORDER-LINES"', "ALICE", 1, READ_AT),),
+            access_rows=(direct_read('ANALYTICS.MART."ORDER-LINES"', "ALICE", 1, READ_AT),),
             expected_object_names=('ANALYTICS.MART."ORDER-LINES"',),
             expected_usages=(("order-lines", ("ALICE",), 1, READ_AT),),
         ),
@@ -70,7 +74,7 @@ ORDERS_DAILY: tuple[RelationInfo, ...] = (usage_relation("analytics", "mart", "o
             description="a mixed-case reader object does not match an unquoted relation",
             relations=(("analytics", "mart", "orders_daily"),),
             current_database=None,
-            access_rows=(('ANALYTICS.MART."orders_daily"', "ALICE", 1, READ_AT),),
+            access_rows=(direct_read('ANALYTICS.MART."orders_daily"', "ALICE", 1, READ_AT),),
             expected_object_names=("ANALYTICS.MART.ORDERS_DAILY",),
             expected_usages=(),
         ),
@@ -109,17 +113,22 @@ def test_given_access_history_when_reading_usage_then_reads_match_candidates(
             expected_params=(
                 WINDOW_SECONDS,
                 "ANALYTICS.MART.ORDERS_DAILY",
+                "ANALYTICS.MART.ORDERS_DAILY",
                 WINDOW_SECONDS,
                 '"app":"sqlbuild"',
-                r".*\sCLONE\s.*",
+                CLONE_STATEMENT_PATTERN,
             ),
             expected_sql_fragments=(
-                "FROM SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY AS history, "
+                "FROM SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY",
                 "LATERAL FLATTEN(INPUT => history.direct_objects_accessed) AS accessed",
+                "LATERAL FLATTEN(INPUT => history.base_objects_accessed) AS accessed",
+                "WHERE direct_read.query_id = base.query_id "
+                "AND direct_read.object_name = base.object_name",
                 "NOT EXISTS (SELECT 1 FROM SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY AS query",
                 "CONTAINS(COALESCE(query.query_tag, ''), %s)",
                 "STARTSWITH(query.query_type, 'CREATE') AND REGEXP_LIKE(query.query_text, %s",
-                "COUNT(DISTINCT history.query_id) AS query_count",
+                "COUNT(DISTINCT reads.query_id) AS query_count",
+                "BOOLOR_AGG(reads.direct) AS direct",
             ),
         ),
     ),
@@ -138,8 +147,174 @@ def test_given_access_history_query_when_built_then_sqlbuild_queries_and_clones_
     params: tuple[object, ...]
     ((sql, params),) = warehouse.queries
     assert params == test_case.expected_params
-    assert (SQLBUILD_QUERY_TAG_FRAGMENT, CLONE_STATEMENT_PATTERN) == (test_case.expected_params[3:])
+    assert (SQLBUILD_QUERY_TAG_FRAGMENT, CLONE_STATEMENT_PATTERN) == (test_case.expected_params[4:])
     assert all(fragment in sql for fragment in test_case.expected_sql_fragments)
+
+
+VIEW_DOMAINS: tuple[str, ...] = ("VIEW", "MATERIALIZED VIEW", "SECURE VIEW")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SnowflakeRelationUsageViaTestCase(
+            description="a table read only through a view names the view; any direct read wins",
+            relations=(
+                ("analytics", "mart", "orders_base", "base table"),
+                ("analytics", "mart", "customers", "base table"),
+            ),
+            access_rows=(
+                (
+                    "ANALYTICS.MART.ORDERS_BASE",
+                    "ALICE",
+                    3,
+                    READ_AT,
+                    False,
+                    '[\n  "ANALYTICS.MART.ORDERS_V",\n  "ANALYTICS.MART.ORDERS_W"\n]',
+                ),
+                ("ANALYTICS.MART.CUSTOMERS", "ALICE", 2, READ_AT, False, '["ANALYTICS.MART.C_V"]'),
+                direct_read("ANALYTICS.MART.CUSTOMERS", "BOB", 1, EARLIER_READ_AT),
+            ),
+            dependency_rows=(),
+            expected_dependency_params=(),
+            expected_usages=(
+                ("customers", ("ALICE", "BOB"), 3, True, ()),
+                (
+                    "orders_base",
+                    ("ALICE",),
+                    3,
+                    False,
+                    ("analytics.mart.orders_v", "analytics.mart.orders_w"),
+                ),
+            ),
+        ),
+        SnowflakeRelationUsageViaTestCase(
+            description="candidates behind an in-use candidate view are in use through it",
+            relations=(
+                ("analytics", "mart", "orders_v", "view"),
+                ("analytics", "mart", "orders_v2", "view"),
+                ("analytics", "mart", "orders", "base table"),
+                ("analytics", "mart", "unread_v", "view"),
+            ),
+            access_rows=(
+                direct_read("ANALYTICS.MART.ORDERS_V", "ALICE", 5, READ_AT),
+                (
+                    "ANALYTICS.MART.ORDERS",
+                    "ALICE",
+                    5,
+                    READ_AT,
+                    False,
+                    '["ANALYTICS.MART.ORDERS_V"]',
+                ),
+            ),
+            dependency_rows=(
+                ("ANALYTICS.MART.ORDERS_V", "ANALYTICS.MART.ORDERS_V2"),
+                ("ANALYTICS.MART.ORDERS_V2", "ANALYTICS.MART.ORDERS"),
+                ("ANALYTICS.MART.UNREAD_V", "ANALYTICS.MART.ORDERS"),
+                ("ANALYTICS.MART.ORDERS_V2", "ANALYTICS.MART.NOT_A_CANDIDATE"),
+            ),
+            expected_dependency_params=(
+                (
+                    *VIEW_DOMAINS,
+                    "ANALYTICS.MART.ORDERS_V",
+                    "ANALYTICS.MART.ORDERS_V2",
+                    "ANALYTICS.MART.UNREAD_V",
+                ),
+            ),
+            expected_usages=(
+                ("orders", ("ALICE",), 5, False, ("analytics.mart.orders_v",)),
+                ("orders_v", ("ALICE",), 5, True, ()),
+                ("orders_v2", ("ALICE",), 5, False, ("analytics.mart.orders_v",)),
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_view_reads_when_reading_usage_then_indirect_reads_name_their_views(
+    test_case: SnowflakeRelationUsageViaTestCase,
+) -> None:
+    warehouse: FakeUsageWarehouse = FakeUsageWarehouse(
+        access_rows=test_case.access_rows, dependency_rows=test_case.dependency_rows
+    )
+
+    report: RelationUsageReport = read_snowflake_usage(
+        warehouse=warehouse,
+        relations=tuple(usage_relation(*relation) for relation in test_case.relations),
+        window_seconds=WINDOW_SECONDS,
+    )
+
+    assert report.checked
+    assert tuple(params for _, params in warehouse.dependency_queries) == (
+        test_case.expected_dependency_params
+    )
+    assert all(
+        "referencing_object_domain IN (%s, %s, %s)" in sql
+        for sql, _ in warehouse.dependency_queries
+    )
+    assert tuple(
+        sorted(
+            (usage.name, usage.readers, usage.query_count, usage.direct, usage.via)
+            for usage in report.usages
+        )
+    ) == (test_case.expected_usages)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SnowflakeCloneStatementTestCase(
+            description="a table clone",
+            statement="CREATE TABLE analytics.mart.orders_copy CLONE analytics.mart.orders",
+            expected_clone=True,
+        ),
+        SnowflakeCloneStatementTestCase(
+            description="a replaced transient clone at a point in time",
+            statement="create or replace transient table orders_copy clone orders "
+            "at(offset => -60);",
+            expected_clone=True,
+        ),
+        SnowflakeCloneStatementTestCase(
+            description="a schema clone after leading comments",
+            statement="-- nightly copy\n/* keep */\nCREATE SCHEMA mart_copy CLONE mart",
+            expected_clone=True,
+        ),
+        SnowflakeCloneStatementTestCase(
+            description="quoted names and a dynamic table",
+            statement='CREATE DYNAMIC TABLE "Orders Copy" CLONE "Orders"',
+            expected_clone=True,
+        ),
+        SnowflakeCloneStatementTestCase(
+            description="a CTAS selecting a column named clone",
+            statement="CREATE TABLE orders_copy AS SELECT clone FROM orders",
+            expected_clone=False,
+        ),
+        SnowflakeCloneStatementTestCase(
+            description="a view whose comment mentions a clone",
+            statement="CREATE VIEW orders_v AS SELECT 1 AS clone_id -- see a CLONE b",
+            expected_clone=False,
+        ),
+        SnowflakeCloneStatementTestCase(
+            description="a CTAS with clone inside a string",
+            statement="CREATE TABLE notes AS SELECT 'orders CLONE copy' AS note",
+            expected_clone=False,
+        ),
+        SnowflakeCloneStatementTestCase(
+            description="a select with a clone statement in a comment",
+            statement="SELECT * FROM orders -- CREATE TABLE a CLONE b",
+            expected_clone=False,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_statement_when_matching_clone_pattern_then_only_clones_match(
+    test_case: SnowflakeCloneStatementTestCase,
+) -> None:
+    matched: bool = (
+        re.fullmatch(CLONE_STATEMENT_PATTERN, test_case.statement, re.IGNORECASE | re.DOTALL)
+        is not None
+    )
+
+    assert matched == test_case.expected_clone
 
 
 @pytest.mark.parametrize(
@@ -173,7 +348,7 @@ def test_given_many_candidates_when_reading_usage_then_names_are_chunked(
     )
 
     assert report.checked
-    assert tuple(len(params) - 4 for _, params in warehouse.queries) == (
+    assert tuple((len(params) - 4) // 2 for _, params in warehouse.queries) == (
         test_case.expected_query_names
     )
     assert all(sql.count("%s") == len(params) for sql, params in warehouse.queries)

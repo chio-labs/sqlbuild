@@ -157,6 +157,7 @@ class DatabricksRelationUsageTestCase:
     rows: tuple[tuple[object, ...], ...]
     expected_object_names: tuple[str, ...]
     expected_usages: tuple[tuple[str, tuple[str, ...], int, datetime], ...]
+    expected_via: tuple[tuple[bool, tuple[str, ...]], ...] = ()
 
 
 @dataclass(frozen=True)

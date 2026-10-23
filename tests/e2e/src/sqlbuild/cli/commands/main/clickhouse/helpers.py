@@ -13,7 +13,11 @@ from textwrap import dedent
 from typing import Any, cast
 
 from sqlbuild.adapters.clickhouse.classes.clickhouse_adapter import ClickHouseAdapter
-from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_waffle_shop
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
+    prepare_inline_project,
+    prepare_waffle_shop,
+    run_sqb,
+)
 from tests.integration.src.sqlbuild.cli.recall.helpers import (
     killed_build,
     killed_during_discovery,
@@ -1042,4 +1046,75 @@ def stale_views(*, config: dict[str, object], database: str) -> tuple[tuple[obje
         config=config,
         sql="SELECT countIf(position(create_table_query, 'join_use_nulls') > 0) "
         f"FROM system.tables WHERE database = '{database}' AND engine = 'View'",
+    )
+
+
+JANITOR_SETTINGS: str = (
+    "\n[janitor]\nenabled = true\nretention_days = 0\ndelete_tracked_only = false\n"
+)
+STALE_RELATIONS: tuple[str, ...] = (
+    "CREATE TABLE {schema}.old_orders ENGINE = MergeTree ORDER BY id "
+    "AS SELECT toInt64(number) AS id FROM numbers(3)",
+    "CREATE TABLE {schema}.old_customers ENGINE = MergeTree ORDER BY id AS SELECT toInt64(1) AS id",
+    "CREATE VIEW {schema}.old_orders_v2 AS SELECT id FROM {schema}.old_orders",
+    "CREATE VIEW {schema}.old_orders_v AS SELECT id FROM {schema}.old_orders_v2",
+)
+
+
+def prepare_janitor_usage_project(
+    *, tmp_path: Path, config: dict[str, object], schema: str, connection_settings: str = ""
+) -> Path:
+    """A built project in `schema` beside a stale table, an unread table and a view chain on it."""
+
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="clickhouse_janitor_usage",
+        repo_files={
+            "sqlbuild_project.toml": build_clickhouse_project_toml(
+                project_name="clickhouse_janitor_usage",
+                schema_name=schema,
+                config=config,
+                extra=JANITOR_SETTINGS,
+            ).replace("\n[targets.dev]", connection_settings + "\n[targets.dev]"),
+            "models/orders.sql": "MODEL (description 'Orders.');\n\nSELECT toInt64(1) AS id\n",
+        },
+    )
+    built: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert built.returncode == 0, built.stdout + built.stderr
+    execute_clickhouse_sql(
+        config=config,
+        statements=tuple(statement.format(schema=schema) for statement in STALE_RELATIONS),
+    )
+    return project_dir
+
+
+def read_as(*, config: dict[str, object], sql: str) -> None:
+    """Run one query as the user in `config`, as any client would, outside SQLBuild."""
+
+    import clickhouse_connect
+
+    client: Any = clickhouse_connect.get_client(
+        host=str(config["host"]),
+        port=int(str(config["port"])),
+        username=str(config["user"]),
+        password=str(config["password"]),
+    )
+    try:
+        client.query(sql)
+    finally:
+        client.close()
+
+
+def stale_relation_names(*, config: dict[str, object], schema: str) -> tuple[str, ...]:
+    """The `old_*` relations still in `schema`."""
+
+    return tuple(
+        str(row[0])
+        for row in fetch_clickhouse_rows(
+            config=config,
+            sql=f"SELECT name FROM system.tables WHERE database = '{schema}' "
+            "AND startsWith(name, 'old_') ORDER BY name",
+        )
     )

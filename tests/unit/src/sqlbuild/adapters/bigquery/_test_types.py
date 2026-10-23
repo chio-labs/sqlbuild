@@ -259,3 +259,10 @@ class BigQueryRelationUsageFailureTestCase:
     description: str
     error: Exception
     expected_error_match: str
+
+
+@dataclass(frozen=True)
+class BigQueryCloneStatementTestCase:
+    description: str
+    statement: str
+    expected_clone: bool
