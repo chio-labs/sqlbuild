@@ -11,8 +11,8 @@ use crate::header_strings::main::triple_quoted_end::triple_quoted_end;
 use crate::header_strings::models::HeaderQuote;
 use crate::header_strings::tests::helpers::chars;
 use crate::header_strings::tests::test_types::{
-    ClosesInsideTestCase, FoldTestCase, ProseTestCase, QuoteFailureTestCase, QuotedEndTestCase,
-    TripleEndTestCase,
+    ClosesInsideTestCase, DescriptionEndTestCase, FoldTestCase, ProseTestCase,
+    QuoteFailureTestCase, QuotedEndTestCase, TripleEndTestCase,
 };
 
 #[test]
@@ -158,6 +158,51 @@ fn given_header_string_when_finding_its_end_then_triple_and_escaped_quotes_are_s
 }
 
 #[test]
+fn given_description_string_when_finding_its_end_then_prose_rules_decide_it() {
+    let test_cases = [
+        DescriptionEndTestCase {
+            description: "a description may end in a backslash",
+            text: r#"description "C:\", tags x"#,
+            start: 12,
+            expected_end: Some(17),
+        },
+        DescriptionEndTestCase {
+            description: "any other string reads the backslash as an escape",
+            text: r#"name "C:\", tags x""#,
+            start: 5,
+            expected_end: Some(19),
+        },
+        DescriptionEndTestCase {
+            description: "a misquoted description still ends where the escape reading ends",
+            text: r#"description "say \"hi\"", x"#,
+            start: 12,
+            expected_end: Some(24),
+        },
+        DescriptionEndTestCase {
+            description: "a doubled single quote stays inside the description",
+            text: "DESCRIPTION 'it''s', x",
+            start: 12,
+            expected_end: Some(19),
+        },
+        DescriptionEndTestCase {
+            description: "a key that only ends in description is not one",
+            text: r#"redescription "C:\", x""#,
+            start: 14,
+            expected_end: Some(23),
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            header_quoted_end(&chars(test_case.text), test_case.start),
+            test_case.expected_end,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
 fn given_closing_triple_quote_when_text_follows_then_it_was_inside_the_text() {
     let test_cases = [
         ClosesInsideTestCase {
@@ -225,6 +270,36 @@ fn given_prose_string_when_reading_then_text_is_folded_and_escaped_quotes_reject
             description: "an escaped double quote is rejected at the quote",
             text: r#""Matches \"Miss\".""#,
             expected_prose: Err(r#"double quote inside a "..." string at position 10"#),
+        },
+        ProseTestCase {
+            description: "a backslash may end a double-quoted description",
+            text: r#""ends in C:\""#,
+            expected_prose: Ok((HeaderQuote::Double, r"ends in C:\")),
+        },
+        ProseTestCase {
+            description: "an escaped quote before more text is inside the text",
+            text: r#""C:\" more""#,
+            expected_prose: Err(r#"double quote inside a "..." string at position 4"#),
+        },
+        ProseTestCase {
+            description: "doubled double quotes are rejected at the second quote",
+            text: r#""say ""hi"" now""#,
+            expected_prose: Err(r#"double quote inside a "..." string at position 5"#),
+        },
+        ProseTestCase {
+            description: "a backslash escapes a single quote",
+            text: r"'it\'s here'",
+            expected_prose: Ok((HeaderQuote::Single, "it's here")),
+        },
+        ProseTestCase {
+            description: "a doubled single quote is one quote",
+            text: "'it''s a long one'",
+            expected_prose: Ok((HeaderQuote::Single, "it's a long one")),
+        },
+        ProseTestCase {
+            description: "a lone single quote ends the string inside the text",
+            text: "'it's fine'",
+            expected_prose: Err("single quote inside a '...' string at position 3"),
         },
         ProseTestCase {
             description: "an unclosed triple-quoted string reports where it starts",

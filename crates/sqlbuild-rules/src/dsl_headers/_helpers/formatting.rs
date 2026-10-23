@@ -105,7 +105,7 @@ fn description_insertion(description: &[char]) -> Option<Vec<char>> {
     if value.contains(TRIPLE_QUOTE) {
         return None;
     }
-    let quoted: String = if value.contains('"') || value.ends_with('\\') {
+    let quoted: String = if value.contains('"') {
         format!("{TRIPLE_QUOTE}{value}{TRIPLE_QUOTE}")
     } else {
         format!("\"{value}\"")

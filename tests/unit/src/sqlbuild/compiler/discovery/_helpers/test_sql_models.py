@@ -599,12 +599,12 @@ def test_given_sql_model_header_variants_when_parsing_then_it_returns_expected_h
         ParseModelSqlErrorTestCase(
             description="reports an unterminated string with escaped quotes before parentheses",
             contents='MODEL (description "' + '\\")' * 20000 + "); SELECT 1",
-            expected_error_fragment="unterminated double-quoted string",
+            expected_error_fragment="unexpected double quote inside bare value",
         ),
         ParseModelSqlErrorTestCase(
             description="reports an unterminated string with many escaped quotes",
             contents='MODEL (description "' + '\\"' * 20000 + "); SELECT 1",
-            expected_error_fragment="unterminated double-quoted string",
+            expected_error_fragment="a double quote ends this",
         ),
         ParseModelSqlErrorTestCase(
             description="raises when the model header is missing",

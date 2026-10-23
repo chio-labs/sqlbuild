@@ -11,12 +11,11 @@ use crate::sql_macros::errors::LexError;
 use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::models::{ParameterKind, SqlMacroLocation, SqlMacroParameter};
 use sqlbuild_sqltext::header_strings::constants::{
-    DOUBLE_QUOTE_INSIDE_HELP, DOUBLE_QUOTE_INSIDE_MESSAGE, TRIPLE_QUOTE, TRIPLE_QUOTE_INSIDE_HELP,
-    TRIPLE_QUOTE_INSIDE_MESSAGE, TRIPLE_QUOTE_LENGTH, UNCLOSED_TRIPLE_QUOTE_HELP,
-    UNCLOSED_TRIPLE_QUOTE_MESSAGE,
+    DOUBLE_QUOTE_INSIDE_HELP, DOUBLE_QUOTE_INSIDE_MESSAGE, SINGLE_QUOTE_INSIDE_HELP,
+    SINGLE_QUOTE_INSIDE_MESSAGE, TRIPLE_QUOTE_INSIDE_HELP, TRIPLE_QUOTE_INSIDE_MESSAGE,
+    UNCLOSED_TRIPLE_QUOTE_HELP, UNCLOSED_TRIPLE_QUOTE_MESSAGE,
 };
-use sqlbuild_sqltext::header_strings::main::fold_prose::fold_prose;
-use sqlbuild_sqltext::header_strings::main::triple_quoted_end::triple_quoted_end;
+use sqlbuild_sqltext::header_strings::main::prose_string::prose_string;
 
 /// What the header declares and where the body starts.
 pub(crate) struct Header {
@@ -52,6 +51,9 @@ impl HeaderParser<'_> {
             LexError::QuoteInside(at) => self
                 .error(at, DOUBLE_QUOTE_INSIDE_MESSAGE)
                 .helped(DOUBLE_QUOTE_INSIDE_HELP),
+            LexError::SingleQuoteInside(at) => self
+                .error(at, SINGLE_QUOTE_INSIDE_MESSAGE)
+                .helped(SINGLE_QUOTE_INSIDE_HELP),
             LexError::TripleQuoteInside(at) => self
                 .error(at, TRIPLE_QUOTE_INSIDE_MESSAGE)
                 .helped(TRIPLE_QUOTE_INSIDE_HELP),
@@ -155,34 +157,12 @@ impl HeaderParser<'_> {
         }
     }
 
-    /// The folded prose of the description string `text`; `\"` in `"..."` is a quote inside it.
+    /// The folded prose of the description string `text`, which lexing found well quoted.
     fn description(&self, text: &Token) -> Result<String, SqlMacroError> {
-        let raw: &str = text.text(self.source);
-        if raw.starts_with(TRIPLE_QUOTE) {
-            let content_end: usize = triple_quoted_end(raw.as_bytes(), 0)
-                .map_or(raw.len() - TRIPLE_QUOTE_LENGTH, |(content_end, _)| {
-                    content_end
-                });
-            return Ok(fold_prose(&raw[TRIPLE_QUOTE_LENGTH..content_end]));
-        }
-        if !raw.starts_with('"') {
-            return Ok(fold_prose(&unquoted(raw)));
-        }
-        let bytes: &[u8] = raw.as_bytes();
-        let mut index: usize = 1;
-        while index + 1 < bytes.len() {
-            if bytes[index] == b'\\' {
-                if bytes[index + 1] == b'"' && index + 2 < bytes.len() {
-                    return Err(self
-                        .error(text.start + index + 1, DOUBLE_QUOTE_INSIDE_MESSAGE)
-                        .helped(DOUBLE_QUOTE_INSIDE_HELP));
-                }
-                index += 2;
-                continue;
-            }
-            index += 1;
-        }
-        Ok(fold_prose(&raw[1..raw.len() - 1]))
+        let raw: Vec<char> = text.text(self.source).chars().collect();
+        prose_string(&raw, 0)
+            .map(|prose| prose.value)
+            .map_err(|_| self.error(text.start, "description must be one quoted string"))
     }
 
     fn parameter(&self, tokens: &[Token]) -> Result<SqlMacroParameter, SqlMacroError> {

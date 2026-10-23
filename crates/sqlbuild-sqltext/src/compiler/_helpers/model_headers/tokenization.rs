@@ -9,14 +9,16 @@ use crate::constants::{
     THRESHOLDS_KEY, TYPE_KEY,
 };
 use crate::header_strings::constants::{
-    AUDITS_KEY, DESCRIPTION_KEY, DOUBLE_QUOTE_INSIDE, POSITION_SUFFIX, TRIPLE_QUOTE_INSIDE,
-    TRIPLE_QUOTE_LENGTH, UNCLOSED_TRIPLE_QUOTE,
+    AUDITS_KEY, DESCRIPTION_KEY, POSITION_SUFFIX, TRIPLE_QUOTE_INSIDE, TRIPLE_QUOTE_LENGTH,
+    UNCLOSED_TRIPLE_QUOTE,
 };
 use crate::header_strings::errors::TripleQuoteError;
 use crate::header_strings::main::closes_inside_text::closes_inside_text;
+use crate::header_strings::main::follows_description_key::follows_description_key;
 use crate::header_strings::main::opens_triple_quote::opens_triple_quote;
+use crate::header_strings::main::prose_end::prose_end;
+use crate::header_strings::main::prose_error_message::prose_error_message;
 use crate::header_strings::main::prose_string::prose_string;
-use crate::header_strings::main::run_on_after_close::run_on_after_close;
 use crate::header_strings::main::triple_quoted_end::triple_quoted_end;
 use sqlbuild_core::constants::{CLOSE_PAREN, OPEN_PAREN};
 
@@ -554,93 +556,129 @@ fn parse_word(value: String) -> AuthoredValue {
     }
 }
 
+/// The tokens of `characters`; when they fail after a misquoted description, that error.
 fn tokenize(characters: &[char]) -> Result<Vec<HeaderToken>, String> {
-    let mut tokens: Vec<HeaderToken> = Vec::new();
-    let mut index = 0;
-    while index < characters.len() {
-        let character = characters[index];
-        if char::is_whitespace(character) {
-            index += 1;
-            continue;
-        }
-        if starts_comment(characters, index) {
-            index = comment_end(characters, index)?;
-            continue;
-        }
-        if starts_template(characters, index) {
-            let template_end = find_character(characters, '}', index + 2)
-                .ok_or_else(|| format!("unterminated template value at position {index}"))?;
-            tokens.push((
-                WORD_TOKEN,
-                characters[index..=template_end].iter().collect(),
-                index,
-            ));
-            index = template_end + 1;
-            continue;
-        }
-        if is_symbol(character) || character == ':' {
-            tokens.push((SYMBOL_TOKEN, character.to_string(), index));
-            index += 1;
-            continue;
-        }
-        if opens_triple_quote(characters, index) {
-            let (content_end, end) = triple_quoted_string(characters, index)?;
-            tokens.push((
-                STRING_TOKEN,
-                characters[index + TRIPLE_QUOTE_LENGTH..content_end]
-                    .iter()
-                    .collect(),
-                index,
-            ));
-            index = end;
-            continue;
-        }
-        if matches!(character, '\'' | '"') {
-            let (value, next_index) = read_quoted_string(characters, index)?;
-            if character == '"' && run_on_after_close(characters, next_index) {
-                return Err(format!(
-                    "{DOUBLE_QUOTE_INSIDE}{POSITION_SUFFIX}{}",
-                    next_index - 1
-                ));
-            }
-            tokens.push((STRING_TOKEN, value, index));
-            index = next_index;
-            continue;
-        }
+    let mut scan: TokenScan<'_> = TokenScan {
+        characters,
+        prose_error: None,
+    };
+    scan.tokens()
+        .map_err(|error| scan.prose_error.take().unwrap_or(error))
+}
 
-        let start = index;
+/// One tokenization of a header, remembering the first description that is misquoted as prose.
+struct TokenScan<'a> {
+    characters: &'a [char],
+    prose_error: Option<String>,
+}
+
+impl TokenScan<'_> {
+    fn tokens(&mut self) -> Result<Vec<HeaderToken>, String> {
+        let characters: &[char] = self.characters;
+        let mut tokens: Vec<HeaderToken> = Vec::new();
+        let mut index = 0;
         while index < characters.len() {
+            let character = characters[index];
+            if char::is_whitespace(character) {
+                index += 1;
+                continue;
+            }
+            if starts_comment(characters, index) {
+                index = comment_end(characters, index)?;
+                continue;
+            }
             if starts_template(characters, index) {
                 let template_end = find_character(characters, '}', index + 2)
                     .ok_or_else(|| format!("unterminated template value at position {index}"))?;
+                tokens.push((
+                    WORD_TOKEN,
+                    characters[index..=template_end].iter().collect(),
+                    index,
+                ));
                 index = template_end + 1;
                 continue;
             }
-            let next = characters[index];
-            if char::is_whitespace(next)
-                || is_symbol(next)
-                || next == ':'
-                || starts_comment(characters, index)
-            {
-                break;
+            if is_symbol(character) || character == ':' {
+                tokens.push((SYMBOL_TOKEN, character.to_string(), index));
+                index += 1;
+                continue;
             }
-            if matches!(next, '\'' | '"') {
-                let quote_name = if next == '\'' { "single" } else { "double" };
+            if opens_triple_quote(characters, index) {
+                let (content_end, end) = triple_quoted_string(characters, index)?;
+                tokens.push((
+                    STRING_TOKEN,
+                    characters[index + TRIPLE_QUOTE_LENGTH..content_end]
+                        .iter()
+                        .collect(),
+                    index,
+                ));
+                index = end;
+                continue;
+            }
+            if matches!(character, '\'' | '"') {
+                let (value, next_index) = self.quoted_token(index)?;
+                tokens.push((STRING_TOKEN, value, index));
+                index = next_index;
+                continue;
+            }
+
+            let start = index;
+            while index < characters.len() {
+                if starts_template(characters, index) {
+                    let template_end =
+                        find_character(characters, '}', index + 2).ok_or_else(|| {
+                            format!("unterminated template value at position {index}")
+                        })?;
+                    index = template_end + 1;
+                    continue;
+                }
+                let next = characters[index];
+                if char::is_whitespace(next)
+                    || is_symbol(next)
+                    || next == ':'
+                    || starts_comment(characters, index)
+                {
+                    break;
+                }
+                if matches!(next, '\'' | '"') {
+                    let quote_name = if next == '\'' { "single" } else { "double" };
+                    return Err(format!(
+                        "unexpected {quote_name} quote inside bare value at position {index}; quote the whole value"
+                    ));
+                }
+                index += 1;
+            }
+            if start == index {
                 return Err(format!(
-                    "unexpected {quote_name} quote inside bare value at position {index}; quote the whole value"
+                    "unexpected character '{character}' at position {start}"
                 ));
             }
-            index += 1;
+            tokens.push((WORD_TOKEN, characters[start..index].iter().collect(), start));
         }
-        if start == index {
-            return Err(format!(
-                "unexpected character '{character}' at position {start}"
-            ));
-        }
-        tokens.push((WORD_TOKEN, characters[start..index].iter().collect(), start));
+        tokens.push((END_TOKEN, String::new(), characters.len()));
+        Ok(tokens)
     }
-    tokens.push((END_TOKEN, String::new(), characters.len()));
-    Ok(tokens)
+
+    /// The value and end of the quoted string at `start`; a description's ends where prose ends.
+    fn quoted_token(&mut self, start: usize) -> Result<(String, usize), String> {
+        let characters: &[char] = self.characters;
+        let read: Result<(String, usize), String> = read_quoted_string(characters, start);
+        if !follows_description_key(characters, start) {
+            return read;
+        }
+        let end: usize = match prose_end(characters, start) {
+            Ok(end) => end,
+            Err(error) => {
+                self.prose_error
+                    .get_or_insert_with(|| prose_error_message(error, characters[start]));
+                return read;
+            }
+        };
+        match read {
+            Ok((value, read_end)) if read_end == end => Ok((value, end)),
+            _ => Ok((characters[start + 1..end - 1].iter().collect(), end)),
+        }
+    }
 }
 
 /// The text end and end of the `"""` string at `start`, checked not to close inside its text.

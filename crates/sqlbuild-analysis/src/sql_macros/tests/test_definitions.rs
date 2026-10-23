@@ -302,6 +302,21 @@ fn given_macro_descriptions_when_parsing_then_the_folded_text_is_stored() {
             expected_description: "True for \"Mrs. C. O'Brien\", any case.",
         },
         MacroDescriptionTestCase {
+            description: "a backslash escapes a quote in a single-quoted description",
+            source: "MACRO (\n  description 'it\\'s here',\n  arguments (v VARCHAR),\n  returns VARCHAR,\n);\n\nLOWER(@v)\n",
+            expected_description: "it's here",
+        },
+        MacroDescriptionTestCase {
+            description: "a doubled quote is one quote in a single-quoted description",
+            source: "MACRO (\n  description 'it''s',\n  returns VARCHAR,\n);\n'x'\n",
+            expected_description: "it's",
+        },
+        MacroDescriptionTestCase {
+            description: "a double-quoted description may end in a backslash",
+            source: "MACRO (\n  description \"ends in C:\\\",\n  returns VARCHAR,\n);\n'x'\n",
+            expected_description: "ends in C:\\",
+        },
+        MacroDescriptionTestCase {
             description: "a wrapped description stores the same as one line",
             source: "MACRO (\n  description \"True for a woman's title,\nany case.\",\n  returns VARCHAR,\n);\n'it''s'\n",
             expected_description: "True for a woman's title, any case.",
@@ -341,6 +356,18 @@ fn given_misquoted_macro_descriptions_when_parsing_then_the_quote_is_located() {
             source: "MACRO (description \"Matches \"Miss\".\", returns VARCHAR);\n'x'\n",
             expected_message: QUOTE_MESSAGE,
             expected_location: (1, 29),
+        },
+        MacroQuoteErrorTestCase {
+            description: "doubled double quotes fail at the second quote",
+            source: "MACRO (description \"say \"\"hi\"\" now\", returns VARCHAR);\n'x'\n",
+            expected_message: QUOTE_MESSAGE,
+            expected_location: (1, 25),
+        },
+        MacroQuoteErrorTestCase {
+            description: "a lone quote inside a single-quoted description",
+            source: "MACRO (description 'it's here', returns VARCHAR);\n'x'\n",
+            expected_message: "a single quote ends this '...' string early",
+            expected_location: (1, 23),
         },
         MacroQuoteErrorTestCase {
             description: "an unclosed triple quote reports where it started",

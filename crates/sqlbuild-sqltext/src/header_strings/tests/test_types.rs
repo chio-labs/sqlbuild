@@ -38,3 +38,10 @@ pub(crate) struct ClosesInsideTestCase {
     pub(crate) end: usize,
     pub(crate) expected_inside: bool,
 }
+
+pub(crate) struct DescriptionEndTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) text: &'static str,
+    pub(crate) start: usize,
+    pub(crate) expected_end: Option<usize>,
+}
