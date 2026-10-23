@@ -3199,7 +3199,7 @@ _COMPILE_REUSE_EXTRA_PROJECT_FILES: dict[str, str] = {
         '    """Return the rounding scale."""\n    return _SCALE\n'
     ),
     "macros/python/currency.py": (
-        '"""Project-wide currency macros."""\n\nfrom macros._rounding import scale\n\n\n'
+        '"""Project-wide currency macros."""\n\nfrom macros.python._rounding import scale\n\n\n'
         "def line_total_cents(price_cents: str, quantity: str) -> str:\n"
         '    """Calculate line total cents from a unit price and quantity."""\n'
         '    return f"ROUND({price_cents} * {quantity}, {scale()})"\n'
