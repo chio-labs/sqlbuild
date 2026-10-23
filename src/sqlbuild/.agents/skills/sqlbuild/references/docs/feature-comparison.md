@@ -28,6 +28,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | Macro / UDF / table function tests | `TEST(mode macro)`, `TEST(mode udf)`, or `TEST(mode table_fn)` | No | No |
 | Zero-row assertions | `__assert__` CTEs in tests and scenarios | No | No |
 | Failure diagnostics | Bounded, redacted unexpected and missing row samples in text and JSON | Adapter/tool dependent | Row diffs |
+| Change-aware tests | `--since <ref>` runs only the unit tests and scenarios a change affects, with the reason for each | `state:modified` selection against a saved manifest | `plan` detects changed models and backfills those affected |
 
 ### Audits
 
@@ -52,6 +53,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 | Compiler-integrated Rules | Native and custom rules over compiler-owned SQL, models, dependencies, contracts, tests, and project paths | Project conventions through packages and external tooling | Built-in audits and external linting |
 | SQL transpilation | For local E2E replay into DuckDB | No | For cross-dialect model execution |
 | Python macros | `@py.name()` syntax | No (Jinja only) | SQLMesh macro syntax |
+| SQL macros | Typed `@sql.name()` macros, each call checked against the caller's column types at compile time | Jinja macros | Typed Python macros (type hints check and convert arguments) |
 | Compiler-enforced declaration scopes | Project, descendant-public, exact-owner-private, and model-private tiers with offline `sqb scope` inspection | No lexical declaration scopes | No lexical declaration scopes |
 | Jinja support | No (Python macros instead) | Yes (core templating) | Yes |
 
@@ -78,6 +80,8 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 |---------|----------|-----|---------|
 | Data diffs | Full row-level data comparison across targets | No | Table diff |
 | Zero-copy cloning | `sqb clone` | No | No |
+| Safe refactoring | `sqb rename` and `sqb mv` rewrite references and Python imports, verify the result compiles, and keep old-name views | VS Code extension (Fusion) updates `ref()` calls on rename | No |
+| Stale object cleanup | `sqb janitor` archives relations no longer in the project, shows which are still in use, and deletes archives after retention | No | `janitor` removes expired environments and snapshots |
 
 ### Models
 
@@ -128,7 +132,7 @@ SQLBuild, dbt, and SQLMesh are all SQL pipeline frameworks. They share common gr
 
 | Tool | Best for |
 |------|----------|
-| **SQLBuild** | Rigor-first SQL pipelines: compile-time verification, pre-promotion audit gating, multi-model tests, and local E2E replay by default. Opt into change-aware builds and warehouse-native state when full rebuilds get expensive, plus ingestion and Python nodes as the project grows. |
+| **SQLBuild** | Rigor-first SQL pipelines: compile-time verification, pre-promotion audit gating, multi-model tests, change-aware testing, safe refactoring, and local E2E replay by default. Opt into change-aware builds and warehouse-native state when full rebuilds get expensive, plus ingestion and Python nodes as the project grows. |
 | **dbt** | The most widely adopted SQL transformation framework with the largest adapter and community ecosystem. |
 | **SQLMesh** | State-managed pipelines with interval tracking and cross-dialect transpilation. |
 
