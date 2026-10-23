@@ -368,14 +368,14 @@ lifetime_orders
 						<div class="step">
 							<div class="step-text">
 								<span class="num">09 · Investigate</span>
-								<h3>Find out what happened, then check what's true now</h3>
+								<h3>Look back at past runs</h3>
 								<p>
-									SQLBuild records every run: what ran, the SQL it executed, audit results and everything it printed. You or an agent can query that history in SQL, and the same command queries the warehouse to check what's true now.
+									SQLBuild keeps a record of every run: what ran, the SQL, audit results and the output. Query it in SQL, and query the warehouse with the same command.
 								</p>
 								<p>
-									Here an audit started warning on the latest run, but the build still exited 0. The first two commands show when it started and what the run printed. The third finds the cause, still in prod: a refund stored as a negative payment.
+									Here an audit started warning but the build still passed. Two queries find when it started and what the run printed; a third finds the bad row, still in prod.
 								</p>
-								<p>History lives in a SQLite file in your project, or in ClickHouse for a team. No service to run, no account, no paid tier.</p>
+								<p>The record is a SQLite file in your project, or ClickHouse for a team.</p>
 								<p class="more"><a href="/docs/concepts/observability/recall/">How Recall works →</a></p>
 							</div>
 <pre class="terminal"><span class="cmd">sqb recall query &quot;SELECT substr(a.invocation_started_at, 1, 16) AS run,
