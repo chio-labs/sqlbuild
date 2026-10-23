@@ -2223,6 +2223,33 @@ def build_since_project_files() -> dict[str, str]:
     }
 
 
+def build_since_sql_macro_files() -> dict[str, str]:
+    """Build a model whose scoped SQL macro calls another scoped SQL macro, and its test."""
+
+    return {
+        "models/_macros/sql/round_cents.sql": (
+            "MACRO (\n  description 'Cents rounded to whole dollars.',\n"
+            "  arguments (cents INTEGER),\n  returns DOUBLE,\n);\n\n"
+            "ROUND(CAST(@cents AS DOUBLE) / 100, 0)\n"
+        ),
+        "models/_macros/sql/net_dollars.sql": (
+            "MACRO (\n  description 'Net dollars after a fixed fee.',\n"
+            "  arguments (cents INTEGER),\n  returns DOUBLE,\n);\n\n"
+            "@sql.round_cents(@cents) - 1\n"
+        ),
+        "models/order_net.sql": (
+            "MODEL (description 'Net order amounts.');\n\n"
+            "SELECT order_id, @sql.net_dollars(amount_cents) AS net\n"
+            'FROM __ref("stg_orders")\n'
+        ),
+        "tests/unit/test_order_net.sql": (
+            "TEST ();\n\nWITH\n"
+            "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents),\n"
+            "__expected__order_net AS (SELECT 1 AS order_id, 2.0 AS net)\nSELECT 1\n"
+        ),
+    }
+
+
 def build_since_indirect_files() -> dict[str, str]:
     """Build files that reach tests indirectly: variables, defaults, helpers, seeds, functions."""
 

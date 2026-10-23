@@ -8,3 +8,4 @@ pub mod selection_json;
 pub mod selection_reasons;
 pub mod selection_report;
 pub mod sql_definition_digest;
+pub mod sql_macro_definition_digest;

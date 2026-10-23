@@ -15,6 +15,7 @@ use sqlbuild_analysis::definition_changes::constants::{
 use sqlbuild_analysis::definition_changes::main::definition_digest::definition_digest;
 use sqlbuild_analysis::definition_changes::main::node_key::node_key;
 use sqlbuild_analysis::definition_changes::main::sql_definition_digest::sql_definition_digest;
+use sqlbuild_analysis::definition_changes::main::sql_macro_definition_digest::sql_macro_definition_digest;
 use sqlbuild_analysis::definition_changes::models::{DefinitionSnapshot, NodeDefinition};
 
 use crate::bindings::_helpers::change_selection::fingerprints::{
@@ -132,14 +133,22 @@ pub(crate) fn declaration_uses(
     Ok(uses)
 }
 
-/// The digest of a declaration file: Python with its imports, anything else as normalised SQL.
-fn declaration_file_digest(fingerprints: &Fingerprinting, path: &str) -> String {
+/// A declaration file's digest: Python with imports, a SQL macro's definition, or normalised SQL.
+fn declaration_file_digest(
+    fingerprints: &Fingerprinting,
+    path: &str,
+    sql_macro: Option<&str>,
+) -> String {
     if path.ends_with(PYTHON_SUFFIX) {
         return fingerprints.python_module_digest(Path::new(path));
     }
     match std::fs::read_to_string(fingerprints.project_dir.join(path)) {
         Ok(contents) => {
-            let mut parts: Vec<String> = vec![sql_definition_digest(&contents)];
+            let definition: String = match sql_macro {
+                Some(name) => sql_macro_definition_digest(name, path, &contents),
+                None => sql_definition_digest(&contents),
+            };
+            let mut parts: Vec<String> = vec![definition];
             parts.extend(fingerprints.referenced_vars_digest(&contents));
             let borrowed: Vec<&str> = parts.iter().map(String::as_str).collect();
             definition_digest(&borrowed)
@@ -148,7 +157,7 @@ fn declaration_file_digest(fingerprints: &Fingerprinting, path: &str) -> String 
     }
 }
 
-/// Scope declarations by their file; a Python macro also by its facts and macro dependencies.
+/// Scope declarations by their file, a Python macro by its facts too, with the macros it calls.
 fn declaration_nodes(
     project: &Bound<'_, PyAny>,
     fingerprints: &Fingerprinting,
@@ -165,21 +174,29 @@ fn declaration_nodes(
         let name: String = native_field(&identity, "name")?.extract()?;
         let path: String = native_field(&declaration, "path")?.extract()?;
         let macro_facts: Bound<'_, PyAny> = native_field(&declaration, "macro")?;
+        let sql_macro: Option<&str> =
+            (kind == MACRO_KIND && !path.ends_with(PYTHON_SUFFIX)).then_some(name.as_str());
         let (digest, uses): (String, Vec<String>) = if kind == MACRO_KIND && !macro_facts.is_none()
         {
             let dependencies: Vec<String> = native_field(&macro_facts, "dependencies")?
                 .try_iter()?
                 .map(|dependency| declaration_key(&dependency?))
                 .collect::<PyResult<_>>()?;
-            (
+            let file: String = declaration_file_digest(fingerprints, &path, sql_macro);
+            let digest: String = if sql_macro.is_some() {
+                file
+            } else {
                 definition_digest(&[
                     &fingerprints.canonical_digest(&macro_facts, (&[], &[]))?,
-                    &declaration_file_digest(fingerprints, &path),
-                ]),
-                dependencies,
-            )
+                    &file,
+                ])
+            };
+            (digest, dependencies)
         } else {
-            (declaration_file_digest(fingerprints, &path), Vec::new())
+            (
+                declaration_file_digest(fingerprints, &path, sql_macro),
+                Vec::new(),
+            )
         };
         let mut definition: NodeDefinition = node(&kind, &name, vec![(DEFINITION_ASPECT, digest)]);
         definition.uses = uses;
