@@ -13,6 +13,7 @@ default = []
 test-support = []
 
 [dependencies]
+memchr.workspace = true
 polyglot-sql.workspace = true
 polyglot-sql-function-catalogs.workspace = true
 rayon.workspace = true

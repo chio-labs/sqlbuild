@@ -19,10 +19,7 @@ pub fn bare_macro_calls(text: &str) -> Vec<(String, usize)> {
 
 /// Whether an `@` followed by a name and `(` that is not a kind prefix or declaration occurs.
 fn may_hold_bare_call(bytes: &[u8]) -> bool {
-    let mut index: usize = 0;
-    while let Some(offset) = bytes[index..].iter().position(|byte| *byte == b'@') {
-        let at: usize = index + offset;
-        index = at + 1;
+    for at in memchr::memchr_iter(b'@', bytes) {
         let start: usize = at + 1;
         let mut end: usize = start;
         while bytes.get(end).is_some_and(|byte| {
