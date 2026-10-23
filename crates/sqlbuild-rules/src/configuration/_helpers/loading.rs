@@ -359,18 +359,14 @@ fn validate_published_layer_options(config: &RulesConfig) -> Result<(), String> 
         if qualifier.is_none() && paths.is_none() {
             return Err(shape);
         }
-        if qualifier.is_some_and(str::is_empty) || reason.is_empty() {
-            return Err(format!(
-                "{label} entries need a non-empty qualifier and reason"
-            ));
+        if reason.is_empty() {
+            return Err(format!("{label} entries need a non-empty reason"));
         }
-        if paths
-            .as_ref()
-            .is_some_and(|paths| paths.is_empty() || paths.iter().any(|path| path.is_empty()))
-        {
-            return Err(format!(
-                "{label} entries need a non-empty list of non-empty paths"
-            ));
+        if qualifier.is_some_and(str::is_empty) {
+            return Err(format!("{label} entries need a non-empty qualifier"));
+        }
+        if let Some(paths) = &paths {
+            validate_allowed_paths(paths, &label)?;
         }
         let paths: Vec<&str> = paths.unwrap_or_default();
         let described: String = match qualifier {
@@ -380,6 +376,24 @@ fn validate_published_layer_options(config: &RulesConfig) -> Result<(), String> 
         if !seen.insert((domain, qualifier, paths)) {
             return Err(format!("duplicate {label} entry: {described}"));
         }
+    }
+    Ok(())
+}
+
+/// One entry's sorted `paths` globs: non-empty, `/`-separated and each listed once.
+fn validate_allowed_paths(paths: &[&str], label: &str) -> Result<(), String> {
+    if paths.is_empty() || paths.iter().any(|path| path.is_empty()) {
+        return Err(format!(
+            "{label} entries need a non-empty list of non-empty paths"
+        ));
+    }
+    if let Some(path) = paths.iter().find(|path| path.contains('\\')) {
+        return Err(format!(
+            "{label} paths must be project-relative globs with / separators: {path}"
+        ));
+    }
+    if let Some(pair) = paths.windows(2).find(|pair| pair[0] == pair[1]) {
+        return Err(format!("{label} entry lists path {} twice", pair[0]));
     }
     Ok(())
 }

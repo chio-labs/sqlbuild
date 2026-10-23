@@ -156,7 +156,8 @@ pub(crate) fn analyze<'py>(
     let enabled: bool = !(native_field(selection, "select")?.is_truthy()?
         || native_field(selection, "exclude")?.is_truthy()?)
         && crate::bindings::_helpers::compile_context::delta::injection().is_none();
-    let early_lint: Bound<'py, EarlySqlLint> = Bound::new(py, EarlySqlLint::new(enabled))?;
+    let early_lint: Bound<'py, EarlySqlLint> =
+        Bound::new(py, EarlySqlLint::new(enabled, options.no_cache()?))?;
     let early_rules: EarlyRulesScope = EarlyRulesScope::new();
     let analysis: PyResult<Bound<'py, PyAny>> =
         analyzed(py, &options, (&early_lint, enabled.then_some(&early_rules)));

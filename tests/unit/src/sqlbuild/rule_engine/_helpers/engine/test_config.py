@@ -219,6 +219,39 @@ _IGNORE_ENTRY: str = (
             expected_error_pattern="need a non-empty list of non-empty paths",
         ),
         RulesConfigErrorTestCase(
+            description="allowed paths entry with an empty reason",
+            source=(
+                "[rules.rule_options.SQBRPROJECT107]\n"
+                'allowed_qualifiers = [{ paths = ["models/sales/*"], reason = " " }]\n'
+            ),
+            expected_error_pattern=r"allowed_qualifiers entries need a non-empty reason$",
+        ),
+        RulesConfigErrorTestCase(
+            description="allowed qualifier that is empty",
+            source=(
+                "[rules.rule_options.SQBRPROJECT107]\n"
+                'allowed_qualifiers = [{ qualifier = "", reason = "Exports." }]\n'
+            ),
+            expected_error_pattern=r"allowed_qualifiers entries need a non-empty qualifier$",
+        ),
+        RulesConfigErrorTestCase(
+            description="allowed path with backslash separators",
+            source=(
+                "[rules.rule_options.SQBRPROJECT107]\n"
+                "allowed_qualifiers = [{ paths = ['models\\sales\\*'], reason = \"Exports.\" }]\n"
+            ),
+            expected_error_pattern=r"paths must be project-relative globs with / separators",
+        ),
+        RulesConfigErrorTestCase(
+            description="allowed path listed twice in one entry",
+            source=(
+                "[rules.rule_options.SQBRPROJECT107]\n"
+                'allowed_qualifiers = [{ paths = ["models/sales/*", "models/sales/*"], '
+                'reason = "Exports." }]\n'
+            ),
+            expected_error_pattern=r"allowed_qualifiers entry lists path models/sales/\* twice",
+        ),
+        RulesConfigErrorTestCase(
             description="duplicate allowed qualifier glob",
             source=(
                 "[rules.rule_options.SQBRPROJECT107]\n"
