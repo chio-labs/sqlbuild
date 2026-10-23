@@ -133,6 +133,7 @@ class RelationUsageReport:
     checked: bool
     reason: str | None = None
     usages: tuple[RelationUsage, ...] = ()
+    notices: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

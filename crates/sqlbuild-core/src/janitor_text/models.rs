@@ -41,6 +41,8 @@ pub struct UsageCheckText {
     pub window: String,
     /// Whether in-use relations are kept instead of archived.
     pub keep_in_use: bool,
+    /// What a check that ran could not cover, such as view chains it could not follow.
+    pub notices: Vec<String>,
 }
 
 /// An archived relation to delete or retain.

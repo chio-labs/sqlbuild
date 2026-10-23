@@ -15,6 +15,7 @@ from tests.unit.src.sqlbuild.adapters.clickhouse._test_types import (
     ClickHouseRelationUsageChunkTestCase,
     ClickHouseRelationUsageFailureTestCase,
     ClickHouseRelationUsageQueryTestCase,
+    ClickHouseRelationUsageReplicaTestCase,
     ClickHouseRelationUsageTestCase,
     ClickHouseRelationUsageUncheckedTestCase,
 )
@@ -221,6 +222,35 @@ def test_given_other_query_log_failure_when_reading_usage_then_error_propagates(
         read_clickhouse_usage(
             connection=connection, relations=ORDERS, window_seconds=WINDOW_SECONDS
         )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ClickHouseRelationUsageReplicaTestCase(
+            description="a single server reads every query",
+            replicas=1,
+            expected_notices=(),
+        ),
+        ClickHouseRelationUsageReplicaTestCase(
+            description="other replicas of this server's shard are not read, and it says so",
+            replicas=3,
+            expected_notices=("usage read from this server only; other replicas not checked",),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_replicas_when_reading_usage_then_other_replicas_are_noted(
+    test_case: ClickHouseRelationUsageReplicaTestCase,
+) -> None:
+    connection: FakeQueryLogConnection = FakeQueryLogConnection(replicas=test_case.replicas)
+
+    report: RelationUsageReport = read_clickhouse_usage(
+        connection=connection, relations=ORDERS, window_seconds=WINDOW_SECONDS
+    )
+
+    assert report.checked
+    assert report.notices == test_case.expected_notices
 
 
 if __name__ == "__main__":

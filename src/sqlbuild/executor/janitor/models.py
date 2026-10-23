@@ -203,6 +203,7 @@ class JanitorUsageCheck:
     window: str
     keep_in_use: bool = False
     reason: str | None = None
+    notices: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

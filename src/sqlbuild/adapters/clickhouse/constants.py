@@ -124,3 +124,10 @@ USAGE_QUERY_KINDS: tuple[str, ...] = ("Select", "Insert")
 USAGE_ERROR_CODE_PATTERN: re.Pattern[str] = re.compile(r"Code: (\d+)\.")
 LOGGING_SETTING_SQL: str = "SELECT getSetting('log_queries')"
 LOGGING_OFF_VALUES: frozenset[str] = frozenset({"0", "False"})
+REPLICA_COUNT_SQL: str = (
+    "SELECT max(replicas) FROM (SELECT count() AS replicas FROM system.clusters "
+    "WHERE (cluster, shard_num) IN "
+    "(SELECT cluster, shard_num FROM system.clusters WHERE is_local) "
+    "GROUP BY cluster, shard_num)"
+)
+OTHER_REPLICAS_NOTICE: str = "usage read from this server only; other replicas not checked"

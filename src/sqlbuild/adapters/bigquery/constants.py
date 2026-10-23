@@ -36,11 +36,16 @@ USAGE_UNAVAILABLE_REASON: str = (
     "cannot read INFORMATION_SCHEMA.JOBS "
     "(needs bigquery.jobs.listAll, for example the BigQuery Resource Viewer role)"
 )
-USAGE_UNAVAILABLE_ERROR_CODES: frozenset[int] = frozenset({403, 404})
-USAGE_UNAVAILABLE_ERROR_CLASS_NAMES: frozenset[str] = frozenset(
-    {"Forbidden", "NotFound", "PermissionDenied"}
+FORBIDDEN_STATUS: int = 403
+NOT_FOUND_STATUS: int = 404
+FORBIDDEN_ERROR_CLASS_NAMES: frozenset[str] = frozenset({"Forbidden", "PermissionDenied"})
+NOT_FOUND_ERROR_CLASS_NAMES: frozenset[str] = frozenset({"NotFound"})
+USAGE_UNAVAILABLE_ERROR_REASONS: frozenset[str] = frozenset({"accessDenied", "notFound"})
+USAGE_UNAVAILABLE_MESSAGES: tuple[str, ...] = (
+    "access denied",
+    "permission bigquery.jobs.listall",
+    "permission denied",
 )
-USAGE_UNAVAILABLE_MESSAGES: tuple[str, ...] = ("access denied", "permission")
 _CLONE_IDENTIFIER: str = r"(`[^`]*`|[A-Za-z0-9_-]+)"
 _CLONE_NAME: str = _CLONE_IDENTIFIER + r"(\s*\.\s*" + _CLONE_IDENTIFIER + r"){0,2}"
 CLONE_STATEMENT_PATTERN: str = (

@@ -73,11 +73,14 @@ pub(crate) fn usage_detail(candidate: &ArchiveCandidateText, window: &str) -> Op
     Some(text)
 }
 
-/// The notice lines when usage could not be checked, empty otherwise.
+/// The notice lines when usage could not be checked, or what a check that ran left out.
 pub(crate) fn usage_notices(plan: &JanitorPlanText) -> Vec<String> {
-    let Some(check) = plan.usage_check.as_ref().filter(|check| !check.checked) else {
+    let Some(check) = plan.usage_check.as_ref() else {
         return Vec::new();
     };
+    if check.checked {
+        return check.notices.clone();
+    }
     let mut notices: Vec<String> = vec![format!(
         "{USAGE_NOT_CHECKED_PREFIX}{}",
         check.reason.as_deref().unwrap_or("unknown reason")

@@ -5,7 +5,8 @@ use crate::janitor_text::main::janitor_confirmation_prompt::janitor_confirmation
 use crate::janitor_text::main::render_janitor_plan::render_janitor_plan;
 use crate::janitor_text::models::JanitorOutcome;
 use crate::janitor_text::tests::helpers::{
-    direct_archive_plan, kept_usage_plan, unchecked_plan, usage_plan, via_usage_plan,
+    chains_unfollowed_plan, direct_archive_plan, kept_usage_plan, unchecked_plan, usage_plan,
+    via_usage_plan,
 };
 use crate::janitor_text::tests::test_types::{JsonTestCase, PreviewTestCase, UsagePromptTestCase};
 
@@ -56,6 +57,16 @@ fn given_usage_check_when_rendering_preview_then_in_use_relations_show_readers()
                  (3 queries in 7 days)\n",
             ],
             unexpected_fragments: &["dev.orders_yearly"],
+        },
+        PreviewTestCase {
+            description: "a check that could not follow view chains says so once",
+            plan: chains_unfollowed_plan(),
+            verbose: false,
+            expected_fragments: &[
+                "\n  view chains not followed: grant SNOWFLAKE.OBJECT_VIEWER\n",
+                "\nIn use\n",
+            ],
+            unexpected_fragments: &["usage not checked", "nothing kept in use"],
         },
         PreviewTestCase {
             description: "an unchecked usage shows one notice and no in-use rows",
@@ -115,6 +126,13 @@ fn given_usage_check_when_prompting_then_prompt_states_in_use_count() {
             expected_phrase: "archive 3 and delete 0 objects from dev",
         },
         UsagePromptTestCase {
+            description: "a check that could not follow view chains repeats its notice",
+            plan: chains_unfollowed_plan(),
+            expected_fragment: "2 of them are in use.\nView chains not followed: grant \
+                SNOWFLAKE.OBJECT_VIEWER\nRetention: 14 days\n",
+            expected_phrase: "archive 3 and delete 0 objects from dev",
+        },
+        UsagePromptTestCase {
             description: "keep_in_use counts the kept relations and leaves them out of the phrase",
             plan: kept_usage_plan(),
             expected_fragment: "Janitor will archive 1 and delete 0 objects from dev.\n\
@@ -169,7 +187,7 @@ fn given_usage_check_when_formatting_json_then_candidates_carry_in_use() {
                 "\"in_use\": false",
                 "\"kept_in_use\": []",
                 "\"usage_check\": {\n    \"status\": \"checked\",\n    \"reason\": null,\n    \
-                 \"window\": \"7d\",\n    \"keep_in_use\": false\n  }",
+                 \"window\": \"7d\",\n    \"keep_in_use\": false,\n    \"notices\": []\n  }",
             ],
         },
         JsonTestCase {
@@ -182,6 +200,16 @@ fn given_usage_check_when_formatting_json_then_candidates_carry_in_use() {
                 "\"kept_in_use\": [\n      {\n        \"name\": \"dev.orders_daily\",\n        \
                  \"age_days\": null,\n        \"in_use\": {",
                 "\"keep_in_use\": true",
+            ],
+        },
+        JsonTestCase {
+            description: "notices of a check that ran are listed in usage_check",
+            plan: Some(chains_unfollowed_plan()),
+            outcome: JanitorOutcome::Previewed,
+            run: None,
+            error: None,
+            expected_fragments: &[
+                "\"notices\": [\n      \"view chains not followed: grant SNOWFLAKE.OBJECT_VIEWER\"\n    ]",
             ],
         },
         JsonTestCase {
