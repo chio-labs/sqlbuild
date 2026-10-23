@@ -108,6 +108,18 @@ const CLI_ERRORS: &[ErrorSpec] = &[
         ],
     },
     ErrorSpec {
+        name: "ReviewFailedError",
+        parent: "CliUserError",
+        doc: "A review that could not set up, run or clean up; its report is already written.",
+        class_attributes: &[
+            ("code", ClassValue::Text("C760")),
+            ("exit_code", ClassValue::Int(3)),
+        ],
+        required: &[],
+        optional: &[],
+        fixed: &[],
+    },
+    ErrorSpec {
         name: "DiffSizeGuardError",
         parent: "CliUserError",
         doc: "A default full model diff stopped before reading data because of table sizes.",
@@ -256,6 +268,7 @@ const BUILD_COMMAND_REQUEST: RecordSpec = RecordSpec {
         FieldSpec::new("selection_diagnostics", FieldDefault::False),
         FieldSpec::new("selector_files", FieldDefault::EmptyTuple),
         FieldSpec::new("test_timeout", FieldDefault::None),
+        FieldSpec::new("discovered_inputs", FieldDefault::None),
     ],
 };
 const BUILD_INVOCATION: RecordSpec = RecordSpec {
@@ -326,6 +339,7 @@ const CLONE_COMMAND_REQUEST: RecordSpec = RecordSpec {
         FieldSpec::new("cli_vars", FieldDefault::None),
         FieldSpec::new("json_output_path", FieldDefault::None),
         FieldSpec::new("event_output_path", FieldDefault::None),
+        FieldSpec::new("discovered_inputs", FieldDefault::None),
     ],
 };
 const DBT_SQLBUILD_WORK_CONTEXT: RecordSpec = RecordSpec {
@@ -412,6 +426,29 @@ const DIFF_COMMAND_REQUEST: RecordSpec = RecordSpec {
         FieldSpec::new("max_value_length", FieldDefault::None),
         FieldSpec::new("suppress_example_values", FieldDefault::False),
         FieldSpec::new("full_example_values", FieldDefault::False),
+    ],
+};
+const REVIEW_COMMAND_REQUEST: RecordSpec = RecordSpec {
+    name: "ReviewCommandRequest",
+    doc: "CLI inputs for one `sqb review` invocation.",
+    fields: &[
+        FieldSpec::new("project_dir", FieldDefault::None),
+        FieldSpec::new("no_color", FieldDefault::False),
+        FieldSpec::new("no_sql_validation", FieldDefault::False),
+        FieldSpec::new("selected_target", FieldDefault::None),
+        FieldSpec::new("select", FieldDefault::EmptyTuple),
+        FieldSpec::new("cli_vars", FieldDefault::None),
+        FieldSpec::new("json_output", FieldDefault::False),
+        FieldSpec::new("since", FieldDefault::None),
+        FieldSpec::new("against", FieldDefault::None),
+        FieldSpec::new("downstream", FieldDefault::None),
+        FieldSpec::new("dry_run", FieldDefault::False),
+        FieldSpec::new("no_clone", FieldDefault::False),
+        FieldSpec::new("bounded", FieldDefault::None),
+        FieldSpec::new("markdown_path", FieldDefault::None),
+        FieldSpec::new("concurrency", FieldDefault::None),
+        FieldSpec::new("verbose", FieldDefault::False),
+        FieldSpec::new("debug", FieldDefault::False),
     ],
 };
 const QUERY_DIFF_PREPARATION: RecordSpec = RecordSpec {
@@ -828,6 +865,7 @@ const COMMAND_RECORDS: &[RecordSpec] = &[
     PLAN_SAFETY_GATES,
     DBT_INIT_COMMAND_REQUEST,
     DIFF_COMMAND_REQUEST,
+    REVIEW_COMMAND_REQUEST,
     QUERY_DIFF_PREPARATION,
     FRESHNESS_COMMAND_REQUEST,
     JANITOR_COMMAND_REQUEST,
@@ -943,6 +981,7 @@ const CLI_ENTRYPOINT_HANDLERS: RecordSpec = RecordSpec {
         FieldSpec::new("run_contract", FieldDefault::None),
         FieldSpec::new("run_refactor", FieldDefault::None),
         FieldSpec::new("run_recall", FieldDefault::None),
+        FieldSpec::new("run_review", FieldDefault::None),
     ],
 };
 const COMMAND_WAREHOUSE_SCOPE: RecordSpec = RecordSpec {
@@ -1517,6 +1556,7 @@ const CLI_COMMAND: EnumSpec = EnumSpec {
         ("SEED", "seed"),
         ("CLONE", "clone"),
         ("DIFF", "diff"),
+        ("REVIEW", "review"),
         ("DEBUG", "debug"),
         ("LINEAGE", "lineage"),
         ("QUERY", "query"),

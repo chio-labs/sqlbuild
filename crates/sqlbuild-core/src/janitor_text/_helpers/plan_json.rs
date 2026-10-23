@@ -217,6 +217,7 @@ pub(crate) fn plan_payload(plan: &JanitorPlanText) -> JsonValue {
         ),
         ("old_name_views", JsonValue::Array(views)),
         ("query_artifacts", texts(&plan.query_artifacts)),
+        ("review_schemas", texts(&plan.review_schemas)),
         (
             "direct_state_prunes",
             JsonValue::Array(
@@ -271,6 +272,10 @@ fn counts_payload(counts: &JanitorResultCounts) -> JsonValue {
         (
             "deleted_query_artifacts",
             integer(counts.deleted_query_artifacts),
+        ),
+        (
+            "dropped_review_schemas",
+            integer(counts.dropped_review_schemas),
         ),
         (
             "dropped_old_name_views",

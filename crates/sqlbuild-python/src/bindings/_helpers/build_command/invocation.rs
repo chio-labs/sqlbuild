@@ -112,16 +112,19 @@ pub(crate) fn resolve_build_context<'py>(
     let project_dir: Bound<'py, PyAny> = or_none(native_field(request, "project_dir")?, || {
         imported(py, "pathlib", "Path")?.call_method0("cwd")
     })?;
-    let discovered: Bound<'py, PyAny> = discover_project_inputs(
-        py,
-        Some(keywords(
-            py,
-            &[
-                ("project_dir", project_dir.clone()),
-                ("extract_output_column_locations", boolean(py, false)),
-            ],
-        )?),
-    )?;
+    let discovered: Bound<'py, PyAny> =
+        or_none(native_field(request, "discovered_inputs")?, || {
+            discover_project_inputs(
+                py,
+                Some(keywords(
+                    py,
+                    &[
+                        ("project_dir", project_dir.clone()),
+                        ("extract_output_column_locations", boolean(py, false)),
+                    ],
+                )?),
+            )
+        })?;
     let selected_target: Bound<'py, PyAny> = native_field(request, "selected_target")?;
     let target_name: Bound<'py, PyAny> = resolve_target_name(
         py,

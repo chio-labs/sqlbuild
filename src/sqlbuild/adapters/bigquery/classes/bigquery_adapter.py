@@ -1705,6 +1705,10 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             sql += f" OPTIONS(location = '{self._location}')"
         return (sql,)
 
+    def render_drop_schema(self, *, database: str | None, schema: str) -> tuple[str, ...]:
+        target: str = f"{database}.{schema}" if database is not None else schema
+        return (f"DROP SCHEMA IF EXISTS {self._quote_identifier_path(target)} CASCADE",)
+
     def render_create_table_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
         return (f"CREATE OR REPLACE TABLE {self._quote_identifier_path(destination)} AS {sql}",)
 

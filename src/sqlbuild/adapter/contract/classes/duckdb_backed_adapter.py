@@ -251,6 +251,15 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         target: str = f"{database}.{schema}" if database is not None else schema
         return (f"CREATE SCHEMA IF NOT EXISTS {target}",)
 
+    def render_drop_schema(
+        self,
+        *,
+        database: str | None,
+        schema: str,
+    ) -> tuple[str, ...]:
+        target: str = f"{database}.{schema}" if database is not None else schema
+        return (f"DROP SCHEMA IF EXISTS {target} CASCADE",)
+
     def ensure_schema(
         self,
         *,

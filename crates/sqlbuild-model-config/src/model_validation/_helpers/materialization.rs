@@ -33,6 +33,8 @@ use crate::model_validation::types::Check;
 use crate::types::{AuthoredNode, NodeKind};
 
 const MIGRATE_FROM_KEY: &str = "migrate_from";
+/// The model key that marks a model whose downstream paths `sqb review` validates.
+const CRITICAL_KEY: &str = "critical";
 const MIGRATE_FORCE_KEY: &str = "migrate_force";
 
 /// Check `validate_microbatch_project_capability`.
@@ -94,6 +96,14 @@ pub(crate) fn check_execution_limit<N: AuthoredNode>(config: &ConfigView<'_, N>)
         "{MODEL_MAX_DURATION_KEY} must be a positive fixed duration such as '15m' or '1h', or \
          'disabled', got '{text}'"
     )))
+}
+
+/// Check that the `critical` review marker is a boolean.
+pub(crate) fn check_review_marker<N: AuthoredNode>(config: &ConfigView<'_, N>) -> Check {
+    match config.get(CRITICAL_KEY).map(AuthoredNode::kind) {
+        None | Some(NodeKind::Bool(_)) => Ok(()),
+        Some(_) => Err(config.error(format!("{CRITICAL_KEY} must be a boolean"))),
+    }
 }
 
 /// Check `validate_non_incremental_config`.

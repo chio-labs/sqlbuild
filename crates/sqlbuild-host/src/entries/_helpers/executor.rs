@@ -834,4 +834,14 @@ pub(crate) const ENTRIES: &[HostEntry] = &[
         kind: HostKind::Exception,
         edge: HostEdge::Executor,
     },
+    HostEntry {
+        name: "ReviewSchemaLifecycle",
+        kind: HostKind::Class,
+        edge: HostEdge::Executor,
+    },
+    HostEntry {
+        name: "ReviewSchemaMarker",
+        kind: HostKind::Class,
+        edge: HostEdge::Executor,
+    },
 ];

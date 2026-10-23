@@ -322,6 +322,14 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"'{escaped_schema}') EXEC('CREATE SCHEMA {self.render_identifier(schema)}')",
         )
 
+    def render_drop_schema(self, *, database: str | None, schema: str) -> tuple[str, ...]:
+        del database
+        raise AdapterUserError(
+            f"the {self.adapter_name} adapter cannot drop schema '{schema}' with its contents",
+            code="A714",
+            help="sqb review needs a warehouse that can drop a schema it created",
+        )
+
     def render_create_fingerprint_table_sql(
         self,
         *,

@@ -17,6 +17,7 @@ pub fn janitor_item_counts(items: &[JanitorItemText]) -> JanitorResultCounts {
             }
             JanitorPhase::DropOldNameViews => {}
             JanitorPhase::DropQueryArtifacts => counts.deleted_query_artifacts += 1,
+            JanitorPhase::DropReviewSchemas => counts.dropped_review_schemas += 1,
             JanitorPhase::PruneDirectState => counts.pruned_direct_state += 1,
         }
     }

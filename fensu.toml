@@ -398,6 +398,16 @@ symbols = ["QueryDiffArtifactLifecycle"]
 reason = "Native code resolves these through the sqlbuild._native_host name table."
 
 [[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.review.classes.review_schema_lifecycle"]
+symbols = ["ReviewSchemaLifecycle"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.review.models"]
+symbols = ["ReviewSchemaMarker"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
 modules = ["sqlbuild.executor.diff.exceptions"]
 symbols = ["FullDiffSizeGuardError"]
 reason = "Native code resolves these through the sqlbuild._native_host name table."

@@ -15,8 +15,8 @@ use crate::project::_helpers::help::{
 use crate::project::_helpers::keys::Place;
 use crate::project::_helpers::sections::{
     load_constants, load_cost, load_cursors, load_dbt, load_diff, load_git, load_janitor,
-    load_local_dbt, load_microbatches, load_migrations, load_policy_flag, load_scenario,
-    load_settings, load_snapshots, setting_overrides,
+    load_local_dbt, load_microbatches, load_migrations, load_policy_flag, load_review,
+    load_scenario, load_settings, load_snapshots, setting_overrides,
 };
 use crate::project::_helpers::sinks::load_sinks;
 use crate::project::_helpers::targets::{
@@ -28,7 +28,7 @@ use crate::project::constants::{
     REQUIRE_SQL_ANALYSIS_KEY, SQL_ANALYSIS_KEY,
 };
 use crate::project::errors::{ConfigFailure, FailureClass, LoadFailure, MessagePiece};
-use crate::project::models::{Built, ConfigFile, ConfigPaths};
+use crate::project::models::{Built, ConfigFile, ConfigPaths, ReviewConfig};
 use crate::project::types::{Entries, Fields, Loaded};
 use crate::recall::constants::RECALL_SECTION;
 use crate::recall::main::recall_section::recall_section;
@@ -277,6 +277,7 @@ fn project_fields(payload: &Entries) -> Loaded<Fields> {
             .map_err(|message| ConfigFailure::at(PROJECT_FILE, message))?;
     }
     load_git(get(payload, "git"), PROJECT_FILE)?;
+    load_review(get(payload, "review"), PROJECT_FILE)?;
     let mut fields = identity(payload)?;
     fields.extend(sections(payload)?);
     fields.push(("targets", targets(payload)?));
@@ -431,4 +432,12 @@ pub(crate) fn git_base_ref(paths: &ConfigPaths) -> Result<Option<String>, LoadFa
     let table = load_toml_mapping(paths, file)?;
     let payload = table.as_map().unwrap_or_default();
     Ok(load_git(get(payload, "git"), PROJECT_FILE)?)
+}
+
+/// `[review]` of `sqlbuild_project.toml`, validated as project loading validates it.
+pub(crate) fn review_config(paths: &ConfigPaths) -> Result<ReviewConfig, LoadFailure> {
+    let file = resolve(paths, false)?;
+    let table = load_toml_mapping(paths, file)?;
+    let payload = table.as_map().unwrap_or_default();
+    Ok(load_review(get(payload, "review"), PROJECT_FILE)?)
 }

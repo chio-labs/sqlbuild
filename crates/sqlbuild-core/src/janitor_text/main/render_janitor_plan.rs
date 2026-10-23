@@ -57,6 +57,16 @@ pub fn render_janitor_plan(plan: &JanitorPlanText, verbose: bool, style: CliStyl
         "Eligible expired query artifacts",
         &artifacts,
     ));
+    let review_schemas: Vec<(String, Option<String>)> = plan
+        .review_schemas
+        .iter()
+        .map(|name| (name.clone(), None))
+        .collect();
+    text.push_str(&listing(
+        (style, limit),
+        "Leftover review schemas",
+        &review_schemas,
+    ));
     let prunes: Vec<(String, Option<String>)> = plan
         .state_prunes
         .iter()

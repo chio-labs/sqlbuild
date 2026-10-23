@@ -604,6 +604,14 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"VALUES ({_quote_sql_string(schema)}, {self.render_current_timestamp()})",
         )
 
+    def render_drop_schema(self, *, database: str | None, schema: str) -> tuple[str, ...]:
+        del database
+        raise AdapterUserError(
+            f"the {self.adapter_name} adapter cannot drop schema '{schema}' with its contents",
+            code="A714",
+            help="sqb review needs a warehouse that can drop a schema it created",
+        )
+
     def ensure_schema(
         self,
         *,

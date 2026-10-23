@@ -12,9 +12,10 @@ use sqlbuild_config::project::errors::{ConfigFailure, FailureClass, LoadFailure}
 use sqlbuild_config::project::main::load_git_base_ref::load_git_base_ref;
 use sqlbuild_config::project::main::load_local_config::load_local_config;
 use sqlbuild_config::project::main::load_project_config::load_project_config;
+use sqlbuild_config::project::main::load_review_config::load_review_config;
 use sqlbuild_config::project::main::local_sql_analysis_failure::local_sql_analysis_failure;
 use sqlbuild_config::project::main::resolve_config_file::resolve_config_file;
-use sqlbuild_config::project::models::{Built, ConfigFile, ConfigPaths};
+use sqlbuild_config::project::models::{Built, ConfigFile, ConfigPaths, ReviewConfig};
 
 use crate::bindings::_helpers::boundary::config_values::config_value_to_python;
 use crate::bindings::_helpers::records::construct::error_class;
@@ -178,6 +179,13 @@ pub(crate) fn load_project_config_file(
 pub(crate) fn configured_git_base_ref(project_dir: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
     let files = files(project_dir)?;
     load_git_base_ref(&files.native)
+        .or_else(|failure| Err(load_error(project_dir.py(), &failure, &files)?))
+}
+
+/// `[review]` of the project at `project_dir`: the defaults `sqb review` falls back to.
+pub(crate) fn configured_review(project_dir: &Bound<'_, PyAny>) -> PyResult<ReviewConfig> {
+    let files = files(project_dir)?;
+    load_review_config(&files.native)
         .or_else(|failure| Err(load_error(project_dir.py(), &failure, &files)?))
 }
 

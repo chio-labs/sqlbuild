@@ -16,7 +16,7 @@ pub fn janitor_confirmation_prompt(plan: &JanitorPlanText) -> String {
         let objects: usize = if plan.direct_mode {
             physical_deletion_count(plan)
         } else {
-            plan.candidates.len() + plan.query_artifacts.len()
+            plan.candidates.len() + plan.query_artifacts.len() + plan.review_schemas.len()
         };
         format!("Janitor will {prefix}delete {objects} objects from {environment}.\n")
     } else {

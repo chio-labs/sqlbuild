@@ -16,6 +16,7 @@ pub fn render_janitor_completion(
     let deleted: usize = counts.deleted
         + counts.deleted_archives
         + counts.deleted_query_artifacts
+        + counts.dropped_review_schemas
         + counts.dropped_old_name_views;
     let mut summary: String = [
         ("archived", counts.archived),

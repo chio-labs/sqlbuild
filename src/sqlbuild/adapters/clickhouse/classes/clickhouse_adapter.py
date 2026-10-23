@@ -668,6 +668,10 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         del database
         return (f"CREATE DATABASE IF NOT EXISTS {schema}",)
 
+    def render_drop_schema(self, *, database: str | None, schema: str) -> tuple[str, ...]:
+        del database
+        return (f"DROP DATABASE IF EXISTS {schema}",)
+
     def ensure_schema(
         self,
         *,

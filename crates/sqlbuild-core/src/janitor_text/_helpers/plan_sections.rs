@@ -123,6 +123,7 @@ pub(crate) fn summary(plan: &JanitorPlanText, style: CliStyle) -> String {
         text.push_str(&count_row(style, "eligible for deletion", &plan.candidates));
     }
     text.push_str(&count_row(style, "query artifacts", &plan.query_artifacts));
+    text.push_str(&count_row(style, "review schemas", &plan.review_schemas));
     text.push_str(&count_row(style, "direct state pruned", &plan.state_prunes));
     text.push_str(&row(
         "objects skipped",

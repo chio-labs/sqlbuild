@@ -1,4 +1,5 @@
 use crate::project::errors::ConfigFailure;
+use crate::project::models::ReviewConfig;
 
 pub(super) struct ProjectFailureTestCase {
     pub(super) description: &'static str,
@@ -18,4 +19,10 @@ pub(crate) struct GitBaseRefTestCase {
     pub(crate) description: &'static str,
     pub(crate) project: &'static str,
     pub(crate) expected_base_ref: Option<&'static str>,
+}
+
+pub(crate) struct ReviewConfigTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) project: &'static str,
+    pub(crate) expected: Result<ReviewConfig, &'static str>,
 }

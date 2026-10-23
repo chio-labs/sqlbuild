@@ -9,6 +9,7 @@ from sqlbuild._native import OldNameViewDropReason, OldNameViewHistory
 from sqlbuild.adapter.contract.models import RelationInfo, RelationLookup, RelationUsage
 from sqlbuild.executor.janitor.types import JanitorAction
 from sqlbuild.executor.janitor_events.models import JanitorEventRecord
+from sqlbuild.executor.review.models import LeftoverReviewSchema
 
 
 @dataclass(frozen=True, eq=False)
@@ -224,6 +225,7 @@ class JanitorPlan:
     direct_state_prune_candidates: tuple[JanitorDirectStatePruneCandidate, ...] = field(
         default_factory=tuple
     )
+    review_schema_candidates: tuple[LeftoverReviewSchema, ...] = field(default_factory=tuple)
     skipped_relations: tuple[JanitorSkippedRelation, ...] = field(default_factory=tuple)
     skipped_schemas: tuple[JanitorSkippedSchema, ...] = field(default_factory=tuple)
     blocked_schemas: tuple[JanitorBlockedSchema, ...] = field(default_factory=tuple)
@@ -265,6 +267,7 @@ class JanitorExecutionResult:
     )
     pruned_direct_state: tuple[JanitorDirectStatePruneCandidate, ...] = field(default_factory=tuple)
     dropped_old_name_views: tuple[JanitorOldNameView, ...] = field(default_factory=tuple)
+    dropped_review_schemas: tuple[LeftoverReviewSchema, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

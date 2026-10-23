@@ -25,6 +25,7 @@ pub fn janitor_phase_flow_width(plan: &JanitorPlanText, phase: JanitorPhase) -> 
             .map(|view| view.name.clone())
             .collect(),
         JanitorPhase::DropQueryArtifacts => plan.query_artifacts.clone(),
+        JanitorPhase::DropReviewSchemas => plan.review_schemas.clone(),
         JanitorPhase::PruneDirectState => plan
             .state_prunes
             .iter()
