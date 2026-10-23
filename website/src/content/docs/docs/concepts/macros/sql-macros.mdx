@@ -220,10 +220,11 @@ other (`P020`); compose them in the model by passing results, as in
 a visible name.
 
 A body may not call `__ref()`, `__source()` or `__seed()` (`P016`): pass relations in as `RELATION`
-arguments. `@const(...)` and `@enum(...)` in a body resolve from the macro file's own folder, like
-audits and unlike Python macros; one that is not visible from there fails with `S026`. Make it a
-parameter and pass the value from the caller instead. SQL macros a body calls resolve the same way,
-so a macro can call a folder-local macro beside it that its callers cannot see.
+arguments. `@const(...)` and `@enum(...)` in a body resolve from the macro file's folder, not from
+the calling model, so a macro means the same thing wherever it's called. A constant or enum that
+isn't visible from there fails with `S026`; to use a caller's value, make it an argument and pass
+`@const(...)` at the call site. SQL macros a body calls resolve the same way, so a macro can call a
+folder-local macro beside it that its callers cannot see.
 
 ## Checks and tools
 
