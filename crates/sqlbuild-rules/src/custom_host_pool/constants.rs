@@ -25,3 +25,13 @@ pub(crate) const INVALID_PAYLOAD: &str = "custom rule host returned an invalid p
 pub(crate) const INVALID_EVALUATION: &str = "custom rule host returned an invalid evaluation";
 /// The `RulesError` message of findings that are not a list.
 pub(crate) const INVALID_FINDINGS: &str = "custom rule host returned invalid findings";
+
+/// The `compile_timings` key of every custom-rule invocation the hosts ran.
+pub const CUSTOM_RULES_INVOCATIONS_KEY: &str = "custom_rules_invocations";
+/// The `compile_timings` key of the hosts' module-state monitor CPU.
+pub const CUSTOM_RULES_MONITOR_KEY: &str = "custom_rules_monitor_cpu_ms";
+/// The `compile_timings` key of the hosts' runtime-guard check CPU.
+pub const CUSTOM_RULES_GUARD_KEY: &str = "custom_rules_guard_cpu_ms";
+/// The prefix of one rule code's `compile_timings` keys: `custom_rules.<code>.<measure>`.
+pub(crate) const CUSTOM_RULE_KEY_PREFIX: &str = "custom_rules.";
+pub(crate) const NANOSECONDS_PER_MILLISECOND: u64 = 1_000_000;

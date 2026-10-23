@@ -26,7 +26,7 @@ use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::rules::results::{format_rules_result, rules_progress};
 use crate::bindings::_helpers::rules::rule_dispatch::evaluate_rules;
-use crate::bindings::_helpers::rules::rules_config::load_rules_config;
+use crate::bindings::_helpers::rules::rules_config::load_rules_config_with_cache;
 
 const GENERIC_DIALECT: &str = "generic";
 
@@ -80,16 +80,12 @@ fn run_rules_gate<'py>(
             rules_error.call1(("compiler rules require a resolved project directory",))?,
         ));
     }
-    let mut config: Bound<'py, PyAny> =
-        load_rules_config(py, project_dir.extract()?)?.into_bound(py);
-    if native_field(options, "no_cache")?.is_truthy()? {
-        let cache: Bound<'py, PyAny> = new_record_with(
-            py,
-            RecordId::RulesCacheConfig,
-            &[("enabled", false.into_pyobject(py)?.to_owned().into_any())],
-        )?;
-        config = replaced(&config, &[("cache", cache)])?;
-    }
+    let config: Bound<'py, PyAny> = load_rules_config_with_cache(
+        py,
+        project_dir.extract()?,
+        !native_field(options, "no_cache")?.is_truthy()?,
+    )?
+    .into_bound(py);
     progress(on_progress, "Evaluating configured rules...")?;
     let started: f64 = monotonic(py)?;
     let dialect: Bound<'py, PyAny> = adapter.call_method0("sql_analysis_dialect")?;

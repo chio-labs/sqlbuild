@@ -59,8 +59,11 @@ pub fn builtin_options(code: &str) -> Vec<BuiltinOption> {
             BuiltinOption {
                 kind: BuiltinOptionKind::TableList,
                 name: ALLOWED_QUALIFIERS_OPTION,
-                description: "Literal qualifiers that do not count towards a domain's name \
-                              shape, as { qualifier, reason } tables with an optional domain.",
+                description: "Qualifiers that do not count towards a domain's name shape, as \
+                              { qualifier, reason } tables with an optional domain. qualifier \
+                              is a case-sensitive glob such as \"[a-z][a-z][a-z]\"; \
+                              { paths = [...], reason } instead leaves out published models \
+                              whose file path matches a glob.",
             },
         ],
         "SQBRTEST203" => vec![BuiltinOption {

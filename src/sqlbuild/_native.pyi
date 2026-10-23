@@ -10704,6 +10704,7 @@ class RulesRunResult(NativeRecord):
     cache_hits: int
     cache_misses: int
     skipped_type_proof_rules: tuple[str, ...]
+    custom_rule_timings: tuple[tuple[str, int], ...]
     def __init__(
         self,
         findings: tuple[Finding, ...],
@@ -10715,6 +10716,7 @@ class RulesRunResult(NativeRecord):
         cache_hits: int = ...,
         cache_misses: int = ...,
         skipped_type_proof_rules: tuple[str, ...] = ...,
+        custom_rule_timings: tuple[tuple[str, int], ...] = ...,
     ) -> None: ...
 
 class CustomRulesOutcome(NativeRecord):
@@ -10725,6 +10727,7 @@ class CustomRulesOutcome(NativeRecord):
     cache_misses: int
     custom_ms: int
     custom_cpu_ms: int
+    custom_rule_timings: tuple[tuple[str, int], ...]
     def __init__(
         self,
         findings: tuple[Finding, ...],
@@ -10732,6 +10735,7 @@ class CustomRulesOutcome(NativeRecord):
         cache_misses: int,
         custom_ms: int,
         custom_cpu_ms: int = ...,
+        custom_rule_timings: tuple[tuple[str, int], ...] = ...,
     ) -> None: ...
 
 class ResourceKind(StrEnum):
@@ -15835,6 +15839,7 @@ class RulesResult(NativeRecord):
     built_in_ms: int
     custom_ms: int
     custom_cpu_ms: int
+    custom_rule_timings: tuple[tuple[str, int], ...]
     def __init__(
         self,
         findings: tuple[Finding, ...],
@@ -15845,6 +15850,7 @@ class RulesResult(NativeRecord):
         built_in_ms: int = ...,
         custom_ms: int = ...,
         custom_cpu_ms: int = ...,
+        custom_rule_timings: tuple[tuple[str, int], ...] = ...,
     ) -> None: ...
 
 class RuleFile(NativeRecord):
@@ -15929,6 +15935,8 @@ class CustomRuleRun(NativeRecord):
     uncacheable_codes: frozenset[str]
     observed: tuple[tuple[tuple[str, ...], str | None], ...]
     stateful_codes: frozenset[str]
+    rule_timings: dict[str, tuple[int, int]]
+    monitor_ns: int
     def __init__(
         self,
         evaluations: tuple[CustomRuleEvaluation, ...],
@@ -15936,6 +15944,8 @@ class CustomRuleRun(NativeRecord):
         uncacheable_codes: frozenset[str] = ...,
         observed: tuple[tuple[tuple[str, ...], str | None], ...] = ...,
         stateful_codes: frozenset[str] = ...,
+        rule_timings: dict[str, tuple[int, int]] = ...,
+        monitor_ns: int = ...,
     ) -> None: ...
 
 class CustomHostPartition(NativeRecord):
