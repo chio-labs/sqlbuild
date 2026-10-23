@@ -214,6 +214,12 @@ fn given_descriptions_when_formatting_then_layout_is_canonical_idempotent_and_te
             expected_text: "MACRO (\n  description \"\"\"\n    True when a name starts with a woman's title: Mme, Mlle,\n    Miss, Mrs, Ms. Any case.\n  \"\"\",\n  arguments (value VARCHAR),\n  returns BOOLEAN,\n);\n\n@value IS NOT NULL\n",
         },
         FormatTestCase {
+            description: "a description ending in a backslash stays as written",
+            text: "MODEL (\n  description \"Files under C:\\\",\n);\nSELECT 1\n",
+            line_width: 100,
+            expected_text: "MODEL (\n  description \"Files under C:\\\",\n);\nSELECT 1\n",
+        },
+        FormatTestCase {
             description: "a SCHEMA description is laid out",
             text: "SCHEMA (\n  name order_columns,\n  description \"Columns every\n  order model shares.\",\n  columns (order_id (type BIGINT)),\n);\n",
             line_width: 100,

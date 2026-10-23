@@ -5,7 +5,7 @@ use sqlbuild_sqltext::header_strings::main::prose_string::prose_string;
 
 use crate::dsl_headers::_helpers::quoted::description_value_span;
 use crate::dsl_headers::_helpers::text::{
-    chars, find, line_count, rfind_before, rstrip, slice, string,
+    chars, find, line_count, rfind_before, rstrip, slice, string, tail,
 };
 use crate::dsl_headers::_helpers::wrap::wrap_description;
 use crate::dsl_headers::constants::HEADER_INDENT;
@@ -90,21 +90,28 @@ pub(crate) fn canonical_prose(
     if value.contains(TRIPLE_QUOTE) {
         return None;
     }
+    let after: &[char] = tail(header_text, end);
     let one_line: Option<String> = (!value.contains('\n')).then(|| {
-        if value.contains('"') || value.ends_with('\\') {
-            format!("{TRIPLE_QUOTE}{value}{TRIPLE_QUOTE}")
+        let double: String = format!("\"{value}\"");
+        if !value.contains('"') && stores_in_place(&double, value, after) {
+            double
         } else {
-            format!("\"{value}\"")
+            format!("{TRIPLE_QUOTE}{value}{TRIPLE_QUOTE}")
         }
     });
     let rendered: String = match one_line {
         Some(line) if prefix + line.chars().count() + suffix <= width => line,
         _ => block(value, &indent, width),
     };
-    let Ok(stored) = prose_string(&chars(&rendered), 0) else {
-        return None;
-    };
-    (stored.value == value).then_some(rendered)
+    stores_in_place(&rendered, value, after).then_some(rendered)
+}
+
+/// Whether `rendered`, followed by the header text `after` it, reads as exactly `value`.
+fn stores_in_place(rendered: &str, value: &str, after: &[char]) -> bool {
+    let rendered: Vec<char> = chars(rendered);
+    let followed: Vec<char> = [rendered.as_slice(), after].concat();
+    prose_string(&followed, 0)
+        .is_ok_and(|stored| stored.end == rendered.len() && stored.value == value)
 }
 
 /// The lines the description-length rule counts for `value` at `span` of `header_text`.

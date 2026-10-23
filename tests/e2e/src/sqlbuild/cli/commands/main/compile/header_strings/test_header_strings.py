@@ -10,8 +10,11 @@ from typing import Any
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.header_strings._test_types import (
+    AcceptedDescriptionTestCase,
     FoldedDescriptionTestCase,
     HeaderQuoteErrorTestCase,
+    ListStringTestCase,
+    MacroDescriptionTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.header_strings.helpers import (
     header_strings_project,
@@ -204,3 +207,131 @@ def test_given_triple_quoted_and_wrapped_descriptions_when_compiling_then_folded
         dag_node["name"]: dag_node for dag_node in json.loads(dag.stdout)["nodes"]
     }
     assert dag_nodes["customers"]["description"] == test_case.expected_description
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AcceptedDescriptionTestCase(
+            description="escaped_quote_in_single_quotes",
+            header="MODEL (\n  description 'it\\'s fine',\n);\n",
+            expected_description="it's fine",
+        ),
+        AcceptedDescriptionTestCase(
+            description="doubled_quote_in_single_quotes",
+            header="MODEL (\n  description 'it''s fine',\n);\n",
+            expected_description="it's fine",
+        ),
+        AcceptedDescriptionTestCase(
+            description="double_quotes_ending_in_a_backslash",
+            header='MODEL (\n  description "ends in C:\\",\n);\n',
+            expected_description="ends in C:\\",
+        ),
+        AcceptedDescriptionTestCase(
+            description="doubled_backslash_kept_literally",
+            header='MODEL (\n  description "Path C:\\\\temp",\n);\n',
+            expected_description="Path C:\\\\temp",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_model_description_quoted_as_before_when_compiling_then_its_text_is_stored(
+    test_case: AcceptedDescriptionTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = header_strings_project(
+        tmp_path, {"models/customers.sql": test_case.header + "\nSELECT 1 AS customer_id\n"}
+    )
+
+    dag: subprocess.CompletedProcess[str] = run_sqb(
+        project_dir=project_dir, command=("--no-color", "dag", "--json")
+    )
+
+    assert dag.returncode == 0, dag.stdout + dag.stderr
+    descriptions: dict[str, str] = {
+        node["name"]: node["description"] for node in json.loads(dag.stdout)["nodes"]
+    }
+    assert descriptions["customers"] == test_case.expected_description
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MacroDescriptionTestCase(
+            description="escaped_quote_in_single_quotes",
+            header="description 'it\\'s here'",
+            expected_exit_code=0,
+        ),
+        MacroDescriptionTestCase(
+            description="doubled_quote_in_single_quotes",
+            header="description 'it''s here'",
+            expected_exit_code=0,
+        ),
+        MacroDescriptionTestCase(
+            description="double_quotes_ending_in_a_backslash",
+            header='description "ends in C:\\"',
+            expected_exit_code=0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_macro_description_quoted_as_before_when_compiling_then_the_project_compiles(
+    test_case: MacroDescriptionTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = header_strings_project(
+        tmp_path,
+        {
+            "macros/sql/lowered.sql": (
+                f"MACRO (\n  {test_case.header},\n  arguments (value VARCHAR),\n"
+                "  returns VARCHAR,\n);\n\nLOWER(@value)\n"
+            ),
+            "models/customers.sql": (
+                'MODEL (description "Customers.");\n\n'
+                "SELECT customer_id, @sql.lowered(title) AS title\n"
+                'FROM __seed("raw_customers")\n'
+            ),
+        },
+    )
+
+    compiled: subprocess.CompletedProcess[str] = run_sqb(
+        project_dir=project_dir, command=("--no-color", "compile")
+    )
+
+    assert compiled.returncode == test_case.expected_exit_code, compiled.stdout + compiled.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ListStringTestCase(
+            description="adjacent_double_quoted_strings",
+            tags='["a""b"]',
+            expected_tags=["a", "b"],
+        ),
+        ListStringTestCase(
+            description="double_then_single_quoted_string",
+            tags="[\"x\"'y']",
+            expected_tags=["x", "y"],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_adjacent_strings_outside_descriptions_when_compiling_then_they_read_as_before(
+    test_case: ListStringTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = header_strings_project(
+        tmp_path,
+        {
+            "models/customers.sql": (
+                f'MODEL (\n  description "Customers.",\n  tags {test_case.tags},\n);\n\n'
+                "SELECT 1 AS customer_id\n"
+            )
+        },
+    )
+
+    compiled: subprocess.CompletedProcess[str] = run_sqb(
+        project_dir=project_dir, command=("--no-color", "compile", "--manifest")
+    )
+
+    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
+    manifest: dict[str, Any] = json.loads((project_dir / "target/manifest.json").read_text())
+    assert manifest["nodes"]["model.shop.customers"]["tags"] == test_case.expected_tags

@@ -24,8 +24,7 @@ pub const DOUBLE_QUOTE_INSIDE_MESSAGE: &str = "a double quote ends this \"...\" 
 pub const DOUBLE_QUOTE_INSIDE_HELP: &str = "write the text between triple quotes, where quotes need no escaping: description \"\"\"Matches \"Miss\".\"\"\"; sqb format --fix rewrites a description that escapes its quotes with \\\"";
 pub const SINGLE_QUOTE_INSIDE_MESSAGE: &str =
     "a single quote ends this '...' string early; use \"...\" for text containing single quotes";
-pub const SINGLE_QUOTE_INSIDE_HELP: &str =
-    "write the text between double quotes: description \"Matches 'Miss'.\"";
+pub const SINGLE_QUOTE_INSIDE_HELP: &str = "write the text between double quotes, description \"Matches 'Miss'.\", or double the quote: 'it''s'";
 pub const TRIPLE_QUOTE_INSIDE_MESSAGE: &str =
     "\"\"\" inside a \"\"\"...\"\"\" string ends it early";
 pub const TRIPLE_QUOTE_INSIDE_HELP: &str = "a \"\"\"...\"\"\" string ends at the next \"\"\"; reword the text so it has no three double quotes in a row";

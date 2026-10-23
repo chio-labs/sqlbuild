@@ -1,11 +1,11 @@
 //! A comment- and quote-aware SQL token scan, and the `@...` constructs it finds.
 
 use sqlbuild_render::macro_calls::main::opens_bare_call::opens_bare_call;
-use sqlbuild_sqltext::header_strings::errors::TripleQuoteError;
+use sqlbuild_sqltext::header_strings::errors::{ProseError, TripleQuoteError};
 use sqlbuild_sqltext::header_strings::main::closes_inside_text::closes_inside_text;
-use sqlbuild_sqltext::header_strings::main::header_quoted_end::header_quoted_end;
+use sqlbuild_sqltext::header_strings::main::follows_description_key::follows_description_key;
 use sqlbuild_sqltext::header_strings::main::opens_triple_quote::opens_triple_quote;
-use sqlbuild_sqltext::header_strings::main::run_on_after_close::run_on_after_close;
+use sqlbuild_sqltext::header_strings::main::prose_end::prose_end;
 use sqlbuild_sqltext::header_strings::main::triple_quoted_end::triple_quoted_end;
 
 use crate::sql_macros::constants::{HEADER_KEYWORD, SQL_KIND_WORD};
@@ -95,9 +95,7 @@ fn scanned_tokens(sql: &str, backslash_escapes: bool) -> Result<Vec<Token>, LexE
         let in_header: bool = matches!(header, HeaderScan::Inside(_));
         let kind: TokenKind = match byte {
             b'\'' if in_header => {
-                index = quoted_end(bytes, index)
-                    .or_else(|| quote_end(bytes, index, true))
-                    .ok_or(LexError::UnclosedQuote(start))?;
+                index = header_string_end(bytes, index)?;
                 TokenKind::Text
             }
             b'"' if in_header => {
@@ -188,8 +186,22 @@ impl HeaderScan {
     }
 }
 
-/// The end of the `"""..."""` or backslash-escaped `"..."` header string at `start`.
+/// The lexing error of a prose string that does not end where it should.
+fn prose_lex_error(error: ProseError) -> LexError {
+    match error {
+        ProseError::Unterminated(start) => LexError::UnclosedQuote(start),
+        ProseError::DoubleQuoteInside(position) => LexError::QuoteInside(position),
+        ProseError::SingleQuoteInside(position) => LexError::SingleQuoteInside(position),
+        ProseError::TripleQuoteInside(position) => LexError::TripleQuoteInside(position),
+        ProseError::UnclosedTripleQuote(start) => LexError::UnclosedTripleQuote(start),
+    }
+}
+
+/// The end of the header string at `start`: a description by prose rules, else as a SQL string.
 fn header_string_end(bytes: &[u8], start: usize) -> Result<usize, LexError> {
+    if follows_description_key(bytes, start) {
+        return prose_end(bytes, start).map_err(prose_lex_error);
+    }
     if opens_triple_quote(bytes, start) {
         let (content_end, end) = triple_quoted_end(bytes, start).map_err(|error| match error {
             TripleQuoteError::Unclosed => LexError::UnclosedTripleQuote(start),
@@ -200,11 +212,9 @@ fn header_string_end(bytes: &[u8], start: usize) -> Result<usize, LexError> {
         }
         return Ok(end);
     }
-    let end: usize = header_quoted_end(bytes, start).ok_or(LexError::UnclosedQuote(start))?;
-    if run_on_after_close(bytes, end) {
-        return Err(LexError::QuoteInside(end - 1));
-    }
-    Ok(end)
+    quoted_end(bytes, start)
+        .or_else(|| quote_end(bytes, start, true))
+        .ok_or(LexError::UnclosedQuote(start))
 }
 
 fn is_operator_byte(byte: u8) -> bool {

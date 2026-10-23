@@ -2,14 +2,21 @@
 
 use crate::header_strings::constants::TRIPLE_QUOTE_LENGTH;
 use crate::header_strings::errors::TripleQuoteError;
+use crate::header_strings::main::follows_description_key::follows_description_key;
 use crate::header_strings::main::opens_triple_quote::opens_triple_quote;
+use crate::header_strings::main::prose_end::prose_end;
 use crate::header_strings::main::triple_quoted_end::triple_quoted_end;
 
 /// The offset just past the header string opening at `start`, or `None` when it never closes.
-pub fn header_quoted_end<T: Copy + PartialEq + From<u8>>(
+pub fn header_quoted_end<T: Copy + PartialEq + From<u8> + Into<u32>>(
     text: &[T],
     start: usize,
 ) -> Option<usize> {
+    if follows_description_key(text, start)
+        && let Ok(end) = prose_end(text, start)
+    {
+        return Some(end);
+    }
     if opens_triple_quote(text, start) {
         return match triple_quoted_end(text, start) {
             Ok((_, end)) => Some(end),
