@@ -72,7 +72,8 @@ reviewed exceptions. Listed tests are not flagged and still count toward `SQBRTE
 [Empty-input tests](../testing.md#empty-input-tests).
 
 `SQBRGRAPH103` and `SQBRPROJECT107` accept `published_layers`, and `SQBRPROJECT107` accepts
-`allowed_qualifiers`, a list of `{ qualifier, reason }` tables with an optional `domain`. See
+`allowed_qualifiers`, a list of `{ qualifier, reason }` or `{ paths, reason }` tables with an
+optional `domain`; `qualifier` and `paths` accept globs. See
 [Published-layer Rules](published-layer-rules.md).
 
 Unknown Rule codes, option names, and invalid option values fail configuration.
