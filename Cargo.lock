@@ -1396,6 +1396,7 @@ dependencies = [
  "sqlbuild-config",
  "sqlbuild-core",
  "sqlbuild-model-config",
+ "sqlbuild-pysource",
  "sqlbuild-sqltext",
  "tempfile",
 ]

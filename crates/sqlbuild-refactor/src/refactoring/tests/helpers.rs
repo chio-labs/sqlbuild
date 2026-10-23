@@ -778,3 +778,29 @@ pub(super) fn planned_batch(
             .collect(),
     ))
 }
+
+/// A change that moves `original_path` to `path` without edits.
+pub(super) fn moved(original_path: &str, path: &str) -> FileChange {
+    FileChange {
+        path: path.to_owned(),
+        original_path: original_path.to_owned(),
+        edits: Vec::new(),
+    }
+}
+
+/// Each of `paths` that is a file below `root`, with its contents, sorted by path.
+pub(super) fn tree(root: &Path, paths: &[&str]) -> Vec<(String, String)> {
+    let mut files: Vec<(String, String)> = paths
+        .iter()
+        .filter(|path| root.join(path).is_file())
+        .map(|path| {
+            (
+                (*path).to_owned(),
+                fs::read_to_string(root.join(path)).unwrap_or_default(),
+            )
+        })
+        .collect();
+    files.sort();
+    files.dedup();
+    files
+}

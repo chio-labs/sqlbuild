@@ -5,17 +5,17 @@ use sqlbuild_core::json::main::dumps::dumps;
 use sqlbuild_core::json::models::{JsonDialect, JsonValue, StdlibJsonOptions};
 
 use crate::refactor_command::_helpers::json::{
-    batch_moves, count, file, integer, location, object, operation_value, optional_text, text,
+    batch_moves, count, diagnostic_array, file, location, object, operation_value, optional_text,
+    text,
 };
 use crate::refactor_command::_helpers::output_text::refactor_target;
-use crate::refactor_command::models::{RefactorDiagnostic, RefactorStatus};
-use crate::refactoring::models::RefactorPlan;
+use crate::refactor_command::models::{BaselineComparison, RefactorDiagnostic, RefactorStatus};
+use crate::refactoring::models::{RefactorOperation, RefactorPlan};
 
 /// The same facts as the text output, as stable JSON with a trailing newline.
 pub fn render_refactor_json(
     plan: &RefactorPlan,
-    status: RefactorStatus,
-    diagnostics: &[RefactorDiagnostic],
+    (status, diagnostics, baseline): (RefactorStatus, &[RefactorDiagnostic], &BaselineComparison),
 ) -> Result<String, JsonEmitError> {
     let request = &plan.request;
     let changed: usize = if status == RefactorStatus::Applied {
@@ -81,27 +81,25 @@ pub fn render_refactor_json(
             "compile",
             object(vec![
                 ("ok", JsonValue::Bool(diagnostics.is_empty())),
-                (
-                    "errors",
-                    JsonValue::Array(
-                        diagnostics
-                            .iter()
-                            .map(|diagnostic| {
-                                object(vec![
-                                    ("code", text(&diagnostic.code)),
-                                    ("message", text(&diagnostic.message)),
-                                    ("path", optional_text(diagnostic.path.as_deref())),
-                                    ("line", integer(diagnostic.line)),
-                                ])
-                            })
-                            .collect(),
-                    ),
-                ),
+                ("errors", diagnostic_array(diagnostics)),
+            ]),
+        ),
+        (
+            "rule_baseline",
+            object(vec![
+                ("before", diagnostic_array(&baseline.before)),
+                ("remaining", diagnostic_array(&baseline.remaining)),
+                ("resolved", diagnostic_array(&baseline.resolved)),
             ]),
         ),
     ];
     if !plan.batch.is_empty() {
-        entries.insert(4, ("moves", batch_moves(plan)));
+        let key: &str = if request.operation == RefactorOperation::MoveModel {
+            "moves"
+        } else {
+            "renames"
+        };
+        entries.insert(4, (key, batch_moves(plan)));
     }
     let payload: JsonValue = object(entries);
     let dialect: JsonDialect = JsonDialect::Stdlib(StdlibJsonOptions::new(Some(2)));

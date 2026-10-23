@@ -16,5 +16,7 @@ mod sql_sites;
 mod test_types;
 #[path = "tests/test_text_edits.rs"]
 mod text_edits;
+#[path = "tests/test_workspace.rs"]
+mod workspace;
 #[path = "tests/test_yaml_edits.rs"]
 mod yaml_edits;

@@ -5,8 +5,8 @@ use crate::argv::constants::{
     COMMAND_DEST, CONCURRENCY_COMMANDS, CONCURRENCY_ENV_VAR, CURSOR_COMMANDS, DBT_COMMAND,
     DBT_DEBUG_COMMAND, DBT_PASSTHROUGH_COMMANDS, DBT_PASSTHROUGH_SEPARATOR, DBT_VERBOSE_OPTION,
     DBT_VERBOSE_OPTIONS, DEBUG_OPTION, INT_CONVERTER, JANITOR_COMMAND, NO_COLOR_OPTION,
-    POSITIONAL_SELECT_COMMANDS, SCOPE_COMMAND, SCOPE_DEFAULT_PAGE_SIZE, SCOPE_GLOBAL_SUMMARY,
-    SCOPE_KIND_DEST, TEST_COMMAND,
+    POSITIONAL_SELECT_COMMANDS, RENAME_COMMAND, SCOPE_COMMAND, SCOPE_DEFAULT_PAGE_SIZE,
+    SCOPE_GLOBAL_SUMMARY, SCOPE_KIND_DEST, TEST_COMMAND,
 };
 use crate::argv::models::{Namespace, ParserSpec, Value};
 
@@ -95,6 +95,12 @@ impl Run<'_> {
                     "--start-cursor/--end-cursor cannot be combined with the -ts or -int cursor flags",
                 ));
             }
+        }
+        if command == RENAME_COMMAND
+            && let Some(message) = rename_error(&namespace)
+        {
+            let rename: &ParserSpec = subcommand_parser(parser, RENAME_COMMAND).unwrap_or(parser);
+            return Err(self.error(rename, &message));
         }
         if command == SCOPE_COMMAND
             && let Some(message) = scope_error(parser, &namespace)
@@ -262,4 +268,29 @@ fn integer(value: &Value) -> i128 {
     } else {
         i128::MAX
     })
+}
+
+/// The usage error of a `sqb rename` without `--from-file` and without one full pair.
+fn rename_error(namespace: &Namespace) -> Option<String> {
+    if namespace.value("refactor_from_file") != Value::None
+        || namespace.value("refactor_new_name") != Value::None
+    {
+        return None;
+    }
+    let missing: &str = if namespace.value("refactor_target") == Value::None {
+        "TARGET, NEW_NAME"
+    } else {
+        "NEW_NAME"
+    };
+    Some(format!("the following arguments are required: {missing}"))
+}
+
+/// The parser of sub-command `name` below `parser`.
+fn subcommand_parser<'a>(parser: &'a ParserSpec, name: &str) -> Option<&'a ParserSpec> {
+    parser
+        .actions
+        .iter()
+        .flat_map(|action| &action.parsers)
+        .find(|(command, _)| command == name)
+        .map(|(_, spec)| spec)
 }

@@ -48,6 +48,11 @@
     "compile": {
      "ok": true,
      "errors": []
+    },
+    "rule_baseline": {
+     "before": [],
+     "remaining": [],
+     "resolved": []
     }
    }
   },

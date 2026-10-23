@@ -1,5 +1,7 @@
 //! Callback and alias types shared by refactoring planning and its bindings.
 
+use sqlbuild_core::text::errors::TextDecodeError;
+
 use crate::refactoring::errors::RefactorError;
 use crate::refactoring::models::DeclarationPlacement;
 
@@ -13,6 +15,9 @@ pub type UnitTestScopeHost<'a> =
 
 /// Original texts keyed by original path, in plan order.
 pub type Originals = Vec<(String, String)>;
+
+/// One project file's POSIX path and its text, or why it is not UTF-8.
+pub type ProjectText = (String, Result<String, TextDecodeError>);
 
 /// One physical column: `(name, type)`.
 pub type PhysicalColumn = (String, String);

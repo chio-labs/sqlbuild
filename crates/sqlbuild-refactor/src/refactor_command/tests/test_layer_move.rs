@@ -2,7 +2,9 @@ use sqlbuild_core::cli_text::models::CliStyle;
 
 use crate::refactor_command::main::layer_move_suggestion::layer_move_suggestion;
 use crate::refactor_command::main::render_refactor_text::render_refactor_text;
-use crate::refactor_command::models::{LayerMove, RefactorDiagnostic, RefactorStatus};
+use crate::refactor_command::models::{
+    BaselineComparison, LayerMove, RefactorDiagnostic, RefactorStatus,
+};
 use crate::refactor_command::tests::helpers::{rename_plan, rule_diagnostics};
 use crate::refactor_command::tests::test_types::{LayerMoveTestCase, RenderTestCase};
 use crate::refactoring::models::RefactorPlan;
@@ -165,7 +167,11 @@ fn given_layer_failure_when_rendering_text_then_suggestion_follows_errors() {
         assert_eq!(
             render_refactor_text(
                 &plan,
-                (RefactorStatus::CompileFailed, &diagnostics),
+                (
+                    RefactorStatus::CompileFailed,
+                    &diagnostics,
+                    &BaselineComparison::default(),
+                ),
                 suggestion.as_ref(),
                 CliStyle { use_color: false },
             ),

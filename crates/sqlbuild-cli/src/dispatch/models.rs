@@ -97,7 +97,6 @@ pub struct CommandFacts {
     pub command: Option<String>,
     pub subcommand: Option<String>,
     pub json: bool,
-    pub refactor_target: bool,
     pub from_target: bool,
     pub contract_ready: bool,
     pub format_diff: bool,

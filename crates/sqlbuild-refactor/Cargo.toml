@@ -17,5 +17,6 @@ sqlbuild-analysis.workspace = true
 sqlbuild-config.workspace = true
 sqlbuild-core.workspace = true
 sqlbuild-model-config.workspace = true
+sqlbuild-pysource.workspace = true
 sqlbuild-sqltext.workspace = true
 tempfile.workspace = true

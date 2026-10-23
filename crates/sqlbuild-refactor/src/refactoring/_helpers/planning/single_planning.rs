@@ -1,10 +1,13 @@
 //! One model rename, model move, or column rename planned from compiler facts.
 
+use std::path::Path;
+
 use crate::refactoring::_helpers::edits::text_edits::build_plan;
 use crate::refactoring::_helpers::planning::column_planning::{
     column_rename_context, column_rename_parts,
 };
 use crate::refactoring::_helpers::planning::model_planning::{model_parts, model_target};
+use crate::refactoring::_helpers::planning::python_imports::python_import_parts;
 use crate::refactoring::_helpers::scanning::scan_context::ScanContext;
 use crate::refactoring::constants::{COLUMN_MANUAL_HELP, MODEL_MANUAL_HELP};
 use crate::refactoring::errors::RefactorError;
@@ -36,12 +39,15 @@ pub(crate) fn plan_single(
         ));
     }
     let target = model_target(facts, request)?;
-    let parts = model_parts(facts, &target, &context, (host, test_host))?;
+    let mut parts = model_parts(facts, &target, &context, (host, test_host))?;
     let mut moves = parts.moves.clone();
     let destination = target.destination();
     if destination != target.source_path {
         moves.push((target.source_path.clone(), destination));
     }
+    let imports = python_import_parts(Path::new(&facts.project_dir), &moves)?;
+    parts.edits.extend(imports.edits);
+    parts.blocking.extend(imports.blocking);
     Ok(build_plan(
         target.request,
         parts,

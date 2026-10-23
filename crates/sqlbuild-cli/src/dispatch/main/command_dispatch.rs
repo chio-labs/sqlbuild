@@ -9,7 +9,6 @@ use crate::dispatch::constants::{
     LINEAGE_ROUTE, LOAD_ROUTE, PLAN_ROUTE, PLAYGROUND_ROUTE, QUERY_ROUTE, RECALL_COMMAND_NAME,
     RECALL_ROUTE, REFACTOR_ROUTE, RULES_ROUTE, SCOPE_ROUTE, SEED_ROUTE, SKILLS_ROUTE, TEST_ROUTE,
 };
-use crate::dispatch::main::unavailable_handler::unavailable_handler;
 use crate::dispatch::models::{CommandFacts, Dispatch, DispatchFailure, Route};
 
 /// The route `facts` select, checked in the order the Python dispatcher checked them.
@@ -21,11 +20,7 @@ pub fn command_dispatch(facts: &CommandFacts) -> Dispatch {
     let checked =
         |route: &'static Route, failure: Option<DispatchFailure>| Dispatch::Run(route, failure);
     match command {
-        "rename" => checked(
-            &REFACTOR_ROUTE,
-            (!facts.refactor_target).then(|| unavailable_handler(command, "C950")),
-        ),
-        "mv" => run(&REFACTOR_ROUTE),
+        "rename" | "mv" => run(&REFACTOR_ROUTE),
         "contract" => checked(
             &CONTRACT_ROUTE,
             (!facts.contract_ready).then(|| {

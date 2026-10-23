@@ -248,3 +248,12 @@ pub(super) struct BatchPlanTestCase {
     pub(super) expected_blocking: &'static [&'static str],
     pub(super) expected_moves: &'static [&'static str],
 }
+
+/// Files on disk, file moves applied to them, and the files left afterwards.
+pub(super) struct StagedCommitOrderTestCase {
+    pub(super) description: &'static str,
+    pub(super) files: &'static [(&'static str, &'static str)],
+    /// `(original path, path)` of each moved file, in plan order.
+    pub(super) changes: &'static [(&'static str, &'static str)],
+    pub(super) expected_files: &'static [(&'static str, &'static str)],
+}

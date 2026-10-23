@@ -5,5 +5,6 @@ pub(crate) mod column_references;
 pub(crate) mod declaration_moves;
 pub(crate) mod model_planning;
 pub(crate) mod model_references;
+pub(crate) mod python_imports;
 pub(crate) mod single_planning;
 pub(crate) mod unit_test_moves;

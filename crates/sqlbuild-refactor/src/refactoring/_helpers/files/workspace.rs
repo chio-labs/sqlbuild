@@ -1,9 +1,11 @@
 //! Stage edits in a scratch copy, then commit with rollback, as `workspace.py` does.
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use sqlbuild_core::text::errors::TextDecodeError;
 use sqlbuild_core::text::main::decode_text::decode_text;
 
 use crate::refactoring::_helpers::edits::text_edits::apply_text_edits;
@@ -15,7 +17,7 @@ use crate::refactoring::constants::{
 };
 use crate::refactoring::errors::{RefactorError, RefactorErrorKind};
 use crate::refactoring::models::FileChange;
-use crate::refactoring::types::Originals;
+use crate::refactoring::types::{Originals, ProjectText};
 
 fn io_error(path: &Path, error: impl std::fmt::Display) -> RefactorError {
     RefactorError {
@@ -72,6 +74,52 @@ fn copy_directory(root: &Path, current: &Path, staging_dir: &Path) -> Result<usi
         copied += copy_directory(root, &directory, staging_dir)?;
     }
     Ok(copied)
+}
+
+/// Each project `(POSIX path, text or UTF-8 error)` with `wanted` suffix, by path.
+pub(crate) fn project_files_with_suffix(
+    project_dir: &Path,
+    wanted: &str,
+) -> Result<Vec<ProjectText>, RefactorError> {
+    let mut found: Vec<ProjectText> = Vec::new();
+    let mut pending: Vec<PathBuf> = vec![project_dir.to_path_buf()];
+    while let Some(current) = pending.pop() {
+        let Ok(entries) = fs::read_dir(&current) else {
+            continue;
+        };
+        for entry in entries.filter_map(Result::ok) {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let is_link = entry.file_type().is_ok_and(|kind| kind.is_symlink());
+            if name.starts_with(HIDDEN_PREFIX) {
+                continue;
+            }
+            if path.is_dir() {
+                let ignored = (current == project_dir
+                    && IGNORED_PROJECT_DIRECTORIES.contains(&name.as_str()))
+                    || name == PYCACHE_DIRECTORY;
+                if !ignored && !is_link {
+                    pending.push(path);
+                }
+                continue;
+            }
+            if suffix(&name) != wanted {
+                continue;
+            }
+            let Ok(relative) = path.strip_prefix(project_dir) else {
+                continue;
+            };
+            let bytes: Vec<u8> = fs::read(&path).map_err(|error| io_error(&path, error))?;
+            let text: Result<String, TextDecodeError> = decode_text(&bytes);
+            let relative: Vec<String> = relative
+                .components()
+                .map(|part| part.as_os_str().to_string_lossy().into_owned())
+                .collect();
+            found.push((relative.join("/"), text));
+        }
+    }
+    found.sort_by(|left, right| left.0.cmp(&right.0));
+    Ok(found)
 }
 
 /// `Path.read_text(encoding="utf-8")`: strict UTF-8 with universal newlines.
@@ -143,22 +191,33 @@ fn write_text(path: &Path, contents: &str) -> Result<(), RefactorError> {
     fs::write(path, translated).map_err(|error| io_error(path, error))
 }
 
-/// Apply a plan to the scratch copy.
+/// Moved sources no change writes to; staging and commit both remove them after every write.
+pub(crate) fn vacated_paths(changes: &[FileChange]) -> Vec<&str> {
+    let written: BTreeSet<&str> = changes.iter().map(|change| change.path.as_str()).collect();
+    changes
+        .iter()
+        .filter(|change| change.moved())
+        .map(|change| change.original_path.as_str())
+        .filter(|source| !written.contains(source))
+        .collect()
+}
+
+/// Apply a plan to the scratch copy, in the same order as the real write.
 pub(crate) fn write_staged_changes(
     staging_dir: &Path,
     originals: &Originals,
     changes: &[FileChange],
 ) -> Result<(), RefactorError> {
     let contents = edited_contents(originals, changes)?;
-    for change in changes.iter().filter(|change| change.moved()) {
-        let _ = fs::remove_file(join(staging_dir, &change.original_path));
-    }
     for change in changes {
         let target = join(staging_dir, &change.path);
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent).map_err(|error| io_error(parent, error))?;
         }
         write_text(&target, contents_for(&contents, &change.path))?;
+    }
+    for source in vacated_paths(changes) {
+        let _ = fs::remove_file(join(staging_dir, source));
     }
     prune_emptied_directories(staging_dir, changes);
     Ok(())
@@ -245,8 +304,8 @@ fn write_all(
             }
             write_atomically(&target, contents_for(contents, &change.path))?;
         }
-        for change in changes.iter().filter(|change| change.moved()) {
-            let source = join(project_dir, &change.original_path);
+        for source in vacated_paths(changes) {
+            let source = join(project_dir, source);
             fs::remove_file(&source).map_err(|error| io_error(&source, error))?;
         }
         Ok(())
