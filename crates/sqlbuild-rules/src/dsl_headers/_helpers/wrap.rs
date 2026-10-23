@@ -2,7 +2,7 @@
 
 use sqlbuild_core::text::main::python_isspace::python_isspace;
 
-use crate::dsl_headers::_helpers::text::{chars, find, rfind_before, rstrip, slice, strip};
+use crate::dsl_headers::_helpers::text::{chars, strip};
 
 fn is_ascii_space(character: char) -> bool {
     matches!(character, '\t' | '\n' | '\u{b}' | '\u{c}' | '\r' | ' ')
@@ -109,24 +109,4 @@ pub(crate) fn wrap_description(description: &[char], first_width: i64, width: i6
         wrapped.push(lines.join(&'\n'));
     }
     wrapped.join(&['\n', '\n'][..])
-}
-
-/// A description wrapped to fit the header line holding its value at `span`.
-pub(crate) fn wrap_header_description(
-    description: &[char],
-    header_text: &[char],
-    (value_start, value_end): (usize, usize),
-    line_width: i64,
-) -> Vec<char> {
-    let line_start: usize =
-        rfind_before(header_text, '\n', value_start).map_or(0, |found| found + 1);
-    let line_end: usize = find(header_text, &['\n'], value_end).unwrap_or(header_text.len());
-    let suffix: i64 =
-        i64::try_from(rstrip(slice(header_text, value_end, line_end)).len()).unwrap_or(i64::MAX);
-    let prefix: i64 = i64::try_from(value_start - line_start).unwrap_or(i64::MAX);
-    wrap_description(
-        description,
-        (line_width - prefix - suffix).max(1),
-        (line_width - suffix).max(1),
-    )
 }

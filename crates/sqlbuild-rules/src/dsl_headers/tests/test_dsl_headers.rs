@@ -1,13 +1,16 @@
-use crate::dsl_headers::_helpers::quoted::decode_description;
+use sqlbuild_sqltext::compiler::main::model_header_single_parsing::parse_one;
+use sqlbuild_sqltext::compiler::models::AuthoredValue;
+
 use crate::dsl_headers::_helpers::wrap::wrap_description;
 use crate::dsl_headers::main::format_headers::format_headers;
+use crate::dsl_headers::main::inner_header_text::inner_header_text;
 use crate::dsl_headers::main::measurement_body_ranges::measurement_body_ranges;
 use crate::dsl_headers::main::scan_headers::scan_headers;
 use crate::dsl_headers::main::sql_body_ranges::sql_body_ranges;
 use crate::dsl_headers::models::HeaderRulesConfig;
 use crate::dsl_headers::tests::helpers::chars;
 use crate::dsl_headers::tests::test_types::{
-    CompactParser, FormatTestCase, ProseTestCase, ScanTestCase,
+    CompactParser, FormatTestCase, NativeParser, ProseTestCase, ScanTestCase,
 };
 
 const MODEL_FILE: &str = "-- leading note\n-- second line\nMODEL (\n  name orders,   \n  audits [not_null(column 'order_id'), unique(column 'order_id'), accepted_values(column 'status', values ['a', 'b'])]\n);\nSELECT 1 /* MODEL ( */ , 'MODEL (x)'\n  TEST (\"a\\\")\" ) ;\nSELECT 2\n";
@@ -123,20 +126,15 @@ fn given_sql_macro_headers_when_formatting_then_each_is_laid_out_canonically_and
 }
 
 #[test]
-fn given_description_text_when_wrapping_and_decoding_then_matches_python() {
+fn given_description_text_when_wrapping_then_matches_python() {
     let test_cases = [ProseTestCase {
-        description: "paragraphs, an unbreakable word and every escape form",
+        description: "paragraphs and an unbreakable word",
         prose: "  The  orders\tmodel joins every customer to supercalifragilisticexpialidociously long words.\n \n Second   paragraph here.",
-        escaped: r#"a\"b\\c\nd\u00e9\U0001F600\uD800\x"#,
         expected_wrapped: "The orders model\njoins every customer to\nsupercalifragilisticexpialidociously\nlong words.\n\nSecond paragraph here.",
-        expected_decoded: "a\"b\\c\nd\u{e9}\u{1f600}\\uD800\\x",
     }];
 
     for test_case in test_cases {
         let wrapped: String = wrap_description(&chars(test_case.prose), 20, 30)
-            .into_iter()
-            .collect();
-        let decoded: String = decode_description(&chars(test_case.escaped), '"')
             .into_iter()
             .collect();
 
@@ -145,9 +143,127 @@ fn given_description_text_when_wrapping_and_decoding_then_matches_python() {
             "{}",
             test_case.description
         );
+    }
+}
+
+/// The description each header of `text` stores, in order.
+fn stored_descriptions(text: &[char]) -> Vec<Option<String>> {
+    scan_headers(text, false)
+        .iter()
+        .map(|header| {
+            let inner: String = inner_header_text(&text[header.start..header.end])
+                .iter()
+                .collect();
+            match parse_one(&inner) {
+                (Some(AuthoredValue::Map(entries)), _, None) => {
+                    entries.iter().find_map(|(key, value)| match value {
+                        AuthoredValue::String(text) if key == "description" => Some(text.clone()),
+                        _ => None,
+                    })
+                }
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+#[test]
+fn given_descriptions_when_formatting_then_layout_is_canonical_idempotent_and_text_unchanged() {
+    let test_cases = [
+        FormatTestCase {
+            description: "a short wrapped description is joined onto one line",
+            text: "MODEL (\n  description \"Orders placed\n  by day.\",\n  materialized table,\n);\nSELECT 1\n",
+            line_width: 100,
+            expected_text: "MODEL (\n  description \"Orders placed by day.\",\n  materialized table,\n);\nSELECT 1\n",
+        },
+        FormatTestCase {
+            description: "a description that fits stays one line",
+            text: "MODEL (\n  description \"Orders placed by day.\",\n);\nSELECT 1\n",
+            line_width: 100,
+            expected_text: "MODEL (\n  description \"Orders placed by day.\",\n);\nSELECT 1\n",
+        },
+        FormatTestCase {
+            description: "a long description becomes an indented block wrapped at the width",
+            text: "MODEL (\n  description \"True when a name starts with a woman's title: Mme, Mlle, Miss, Mrs, Ms. Any case, with or without a dot.\",\n  materialized table,\n);\nSELECT 1\n",
+            line_width: 60,
+            expected_text: "MODEL (\n  description \"\"\"\n    True when a name starts with a woman's title: Mme, Mlle,\n    Miss, Mrs, Ms. Any case, with or without a dot.\n  \"\"\",\n  materialized table,\n);\nSELECT 1\n",
+        },
+        FormatTestCase {
+            description: "continuation lines at column zero become a block",
+            text: "MODEL (\n  description \"True when a name starts with a woman's title: Mme, Mlle, Miss, Mrs, Ms. Any case,\nwith or without a dot ('MISS SARAH BOWEN', 'Mrs. C. O'Leary', 'Ms.Johnston').\",\n);\nSELECT 1\n",
+            line_width: 100,
+            expected_text: "MODEL (\n  description \"\"\"\n    True when a name starts with a woman's title: Mme, Mlle, Miss, Mrs, Ms. Any case, with or\n    without a dot ('MISS SARAH BOWEN', 'Mrs. C. O'Leary', 'Ms.Johnston').\n  \"\"\",\n);\nSELECT 1\n",
+        },
+        FormatTestCase {
+            description: "a short description with double quotes uses one-line triple quotes",
+            text: "MODEL (\n  description 'Matches \"Miss\".',\n);\nSELECT 1\n",
+            line_width: 100,
+            expected_text: "MODEL (\n  description \"\"\"Matches \"Miss\".\"\"\",\n);\nSELECT 1\n",
+        },
+        FormatTestCase {
+            description: "a long description with double quotes becomes a block",
+            text: "MODEL (\n  description \"\"\"True when a name starts with a title, with or without a dot (\"MISS SARAH BOWEN\", \"Mrs. C. O'Leary\").\"\"\",\n);\nSELECT 1\n",
+            line_width: 80,
+            expected_text: "MODEL (\n  description \"\"\"\n    True when a name starts with a title, with or without a dot (\"MISS SARAH\n    BOWEN\", \"Mrs. C. O'Leary\").\n  \"\"\",\n);\nSELECT 1\n",
+        },
+        FormatTestCase {
+            description: "paragraphs stay separated by a blank line",
+            text: "MODEL (\n  description \"First paragraph about orders.\n\n  Second paragraph about refunds.\",\n);\nSELECT 1\n",
+            line_width: 100,
+            expected_text: "MODEL (\n  description \"\"\"\n    First paragraph about orders.\n\n    Second paragraph about refunds.\n  \"\"\",\n);\nSELECT 1\n",
+        },
+        FormatTestCase {
+            description: "a one-line triple-quoted description without quotes becomes plain",
+            text: "MODEL (\n  description \"\"\"Orders by day.\"\"\",\n);\nSELECT 1\n",
+            line_width: 100,
+            expected_text: "MODEL (\n  description \"Orders by day.\",\n);\nSELECT 1\n",
+        },
+        FormatTestCase {
+            description: "a one-line single-quoted description that fits is kept",
+            text: "MODEL (\n  description 'Orders by day.',\n);\nSELECT 1\n",
+            line_width: 100,
+            expected_text: "MODEL (\n  description 'Orders by day.',\n);\nSELECT 1\n",
+        },
+        FormatTestCase {
+            description: "an escaped quote is left for format --fix",
+            text: "MODEL (\n  description \"Matches \\\"Miss\\\".\",\n);\nSELECT 1\n",
+            line_width: 100,
+            expected_text: "MODEL (\n  description \"Matches \\\"Miss\\\".\",\n);\nSELECT 1\n",
+        },
+        FormatTestCase {
+            description: "a long MACRO description becomes a block under its laid-out header",
+            text: "MACRO (description \"True when a name starts with a woman's title: Mme, Mlle, Miss, Mrs, Ms. Any case.\", arguments (value VARCHAR), returns BOOLEAN);\n\n@value IS NOT NULL\n",
+            line_width: 60,
+            expected_text: "MACRO (\n  description \"\"\"\n    True when a name starts with a woman's title: Mme, Mlle,\n    Miss, Mrs, Ms. Any case.\n  \"\"\",\n  arguments (value VARCHAR),\n  returns BOOLEAN,\n);\n\n@value IS NOT NULL\n",
+        },
+        FormatTestCase {
+            description: "a SCHEMA description is laid out",
+            text: "SCHEMA (\n  name order_columns,\n  description \"Columns every\n  order model shares.\",\n  columns (order_id (type BIGINT)),\n);\n",
+            line_width: 100,
+            expected_text: "SCHEMA (\n  name order_columns,\n  description \"Columns every order model shares.\",\n  columns (order_id (type BIGINT)),\n);\n",
+        },
+    ];
+
+    for test_case in test_cases {
+        let config = HeaderRulesConfig {
+            line_width: test_case.line_width,
+            max_description_lines: 10,
+        };
+        let text: Vec<char> = chars(test_case.text);
+        let Ok((formatted, _)) = format_headers(&text, config, &NativeParser);
+        let Ok((again, _)) = format_headers(&formatted, config, &NativeParser);
+
         assert_eq!(
-            decoded, test_case.expected_decoded,
+            formatted.iter().collect::<String>(),
+            test_case.expected_text,
             "{}",
+            test_case.description
+        );
+        assert_eq!(again, formatted, "idempotent: {}", test_case.description);
+        assert_eq!(
+            stored_descriptions(&formatted),
+            stored_descriptions(&text),
+            "stored text unchanged: {}",
             test_case.description
         );
     }
