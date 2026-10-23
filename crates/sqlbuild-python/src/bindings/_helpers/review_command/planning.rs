@@ -19,6 +19,7 @@ use sqlbuild_analysis::review_command::models::{
 use sqlbuild_config::project::models::ReviewConfig;
 
 use crate::bindings::_helpers::boundary::python_calls::{imported, keywords};
+use crate::bindings::_helpers::build_command::support::{boolean, text};
 use crate::bindings::_helpers::change_selection::base_snapshot::{base_comparison, base_variant};
 use crate::bindings::_helpers::change_selection::definition_snapshot::project_wide_keys;
 use crate::bindings::_helpers::change_selection::selection::{ChangedProject, changed_project};
@@ -34,11 +35,10 @@ use crate::bindings::_helpers::contracts::spec_resolution::{
 use crate::bindings::_helpers::discovery::project_config::{
     configured_git_base_ref, configured_review,
 };
+use crate::bindings::_helpers::execution_history::conversion::optional_text;
 use crate::bindings::_helpers::planner_selection::selectors::select_project_graph;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::review_command::support::{
-    boolean, optional_text, review_error, strings, text,
-};
+use crate::bindings::_helpers::review_command::support::review_error;
 
 const BASE_REF_ALIAS: &str = "@base";
 const UDF_KIND: &str = "udf";
@@ -72,6 +72,16 @@ pub(crate) struct ReviewProject<'py> {
     pub(crate) merge_base: String,
     /// Incremental and snapshot models by name.
     pub(crate) stateful: BTreeSet<String>,
+}
+
+fn strings(value: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+    if value.is_none() {
+        return Ok(Vec::new());
+    }
+    value
+        .try_iter()?
+        .map(|item| item?.str()?.extract())
+        .collect()
 }
 
 fn setting_error(py: Python<'_>, code: &str, message: &str, help: &str) -> pyo3::PyErr {
@@ -244,11 +254,15 @@ fn topological(
     order
 }
 
+/// The buildable graph with each node's direct reads of sources and functions.
+struct ProjectGraph {
+    graph: ReviewGraph,
+    reads: BTreeMap<String, Vec<String>>,
+    stateful: BTreeSet<String>,
+}
+
 /// The buildable graph, each node's direct reads of sources and functions, and stateful models.
-fn review_graph(
-    project: &Bound<'_, PyAny>,
-    critical_tags: &[String],
-) -> PyResult<(ReviewGraph, BTreeMap<String, Vec<String>>, BTreeSet<String>)> {
+fn review_graph(project: &Bound<'_, PyAny>, critical_tags: &[String]) -> PyResult<ProjectGraph> {
     let mut nodes: BTreeMap<String, ReviewNode> = BTreeMap::new();
     let mut downstream: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut reads: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -294,15 +308,15 @@ fn review_graph(
     }
     let names: BTreeSet<String> = nodes.keys().cloned().collect();
     let order: Vec<String> = topological(&names, &downstream);
-    Ok((
-        ReviewGraph {
+    Ok(ProjectGraph {
+        graph: ReviewGraph {
             nodes,
             downstream,
             order,
         },
         reads,
         stateful,
-    ))
+    })
 }
 
 /// Discover, compare with the base revision, compile, and find the changed models and seeds.
@@ -346,7 +360,11 @@ pub(crate) fn review_project<'py>(
     let project: Bound<'py, PyAny> = native_field(&graph, "project")?;
     let directory: PathBuf = project_dir.extract()?;
     let changed: ChangedProject = changed_project((&project, &discovered), &directory, base)?;
-    let (review_graph, reads, stateful) = review_graph(&project, &settings.critical_tags)?;
+    let ProjectGraph {
+        graph: review_graph,
+        reads,
+        stateful,
+    } = review_graph(&project, &settings.critical_tags)?;
     let project_wide: Vec<String> = project_wide_keys();
     let mut changed_nodes: Vec<ChangedNode> = Vec::new();
     for name in &review_graph.order {
@@ -366,17 +384,17 @@ pub(crate) fn review_project<'py>(
             });
         }
     }
-    let changes_json: Option<Value> = serde_json::from_str(&changed.json((0, &[]))).ok();
+    let changes_json: Value = serde_json::from_str(&changed.json((0, &[])))
+        .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
     Ok(ReviewProject {
         changed_declarations: changed_declarations(&changed.changes),
         reference: changed.reference.clone(),
         merge_base: changes_json
-            .as_ref()
-            .and_then(|json| json.get("merge_base"))
+            .get("merge_base")
             .and_then(Value::as_str)
             .unwrap_or_default()
             .to_owned(),
-        changes_json,
+        changes_json: Some(changes_json),
         project_dir,
         discovered,
         adapter,

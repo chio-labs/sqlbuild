@@ -42,3 +42,41 @@ class ReviewTextOutputE2ETestCase:
     expected_stdout_fragments: tuple[str, ...]
     expected_markdown_fragments: tuple[str, ...]
     expected_exit_code: int = 0
+
+
+@dataclass(frozen=True)
+class ReviewIncrementalStartE2ETestCase:
+    """A review that builds an incremental model, and how the report says it started."""
+
+    description: str
+    arguments: tuple[str, ...]
+    expected_starts: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class ReviewSelectionE2ETestCase:
+    """A `--select` inside the changed set, and what the review validates."""
+
+    description: str
+    select: str
+    expected_validated: tuple[str, ...]
+    expected_not_validated_member: str
+
+
+@dataclass(frozen=True)
+class ReviewDryRunE2ETestCase:
+    """A dry run, and the plan it reports without touching the warehouse."""
+
+    description: str
+    expected_status: str
+    expected_validated: tuple[str, ...]
+    expected_node_statuses: frozenset[str]
+
+
+@dataclass(frozen=True)
+class ReviewCleanupFailureE2ETestCase:
+    """A review whose schema drop fails, and the leftover the janitor later removes."""
+
+    description: str
+    expired_schema: str
+    expected_exit_code: int

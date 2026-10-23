@@ -1,5 +1,6 @@
 //! The downstream columns a change reaches, from column lineage.
 
+use sqlbuild_analysis::review_command::constants::NO_COMPARISON_MODE;
 use std::collections::{BTreeMap, BTreeSet};
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
@@ -15,7 +16,7 @@ use crate::bindings::_helpers::records::registry;
 /// The columns of a changed model a comparison proved changed, or `None` when every column may.
 fn changed_columns(comparison: Option<&NodeComparison>) -> Option<Vec<String>> {
     let comparison: &NodeComparison = comparison?;
-    if !comparison.complete || comparison.mode == "none" {
+    if !comparison.complete || comparison.mode == NO_COMPARISON_MODE {
         return None;
     }
     let mut columns: Vec<String> = comparison.added_columns.clone();

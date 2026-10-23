@@ -4,71 +4,55 @@ use crate::review_command::main::render_review_json::render_review_json;
 use crate::review_command::main::render_review_markdown::render_review_markdown;
 use crate::review_command::main::render_review_text::render_review_text;
 use crate::review_command::main::review_outcome::review_outcome;
-use crate::review_command::models::{ReviewError, ReviewReport};
-use crate::review_command::tests::helpers::{finding_report, incomplete_report};
-use crate::review_command::tests::test_types::{OutcomeTestCase, RenderTestCase};
-
-fn failed_report() -> ReviewReport {
-    let mut report: ReviewReport = incomplete_report();
-    if let Some(schema) = report.schema.as_mut() {
-        schema.dropped = false;
-        schema.error = Some("permission denied".to_owned());
-    }
-    report
-}
-
-fn passed_report() -> ReviewReport {
-    let mut report: ReviewReport = incomplete_report();
-    report.incomplete.clear();
-    report
-}
+use crate::review_command::tests::helpers::{
+    dry_run_report, errored_report, failed_report, finding_report, incomplete_report, passed_report,
+};
+use crate::review_command::tests::test_types::{JsonTestCase, OutcomeTestCase, RenderTestCase};
 
 #[test]
 fn given_evidence_when_deciding_outcome_then_failure_beats_findings_beats_incomplete() {
-    let mut errored: ReviewReport = finding_report();
-    errored.error = Some(ReviewError {
-        code: "C761".to_owned(),
-        message: "--select x matches no model or seed".to_owned(),
-        help: None,
-    });
-    let mut dry_run: ReviewReport = passed_report();
-    dry_run.dry_run = true;
     let test_cases = [
         OutcomeTestCase {
             description: "no findings and complete coverage passes",
             report: passed_report(),
-            expected: ("passed", 0),
+            expected_status: "passed",
+            expected_exit_code: 0,
         },
         OutcomeTestCase {
             description: "a finding needs a fix",
             report: finding_report(),
-            expected: ("findings", 1),
+            expected_status: "findings",
+            expected_exit_code: 1,
         },
         OutcomeTestCase {
             description: "an incomplete check is incomplete",
             report: incomplete_report(),
-            expected: ("incomplete", 2),
+            expected_status: "incomplete",
+            expected_exit_code: 2,
         },
         OutcomeTestCase {
             description: "a review schema that was not dropped fails",
             report: failed_report(),
-            expected: ("failed", 3),
+            expected_status: "failed",
+            expected_exit_code: 3,
         },
         OutcomeTestCase {
             description: "an error fails even with findings",
-            report: errored,
-            expected: ("failed", 3),
+            report: errored_report(),
+            expected_status: "failed",
+            expected_exit_code: 3,
         },
         OutcomeTestCase {
             description: "a dry run only plans",
-            report: dry_run,
-            expected: ("planned", 0),
+            report: dry_run_report(),
+            expected_status: "planned",
+            expected_exit_code: 0,
         },
     ];
     for test_case in test_cases {
         assert_eq!(
             review_outcome(&test_case.report),
-            test_case.expected,
+            (test_case.expected_status, test_case.expected_exit_code),
             "{}",
             test_case.description
         );
@@ -76,24 +60,58 @@ fn given_evidence_when_deciding_outcome_then_failure_beats_findings_beats_incomp
 }
 
 #[test]
-fn given_finding_report_when_rendering_json_then_document_is_versioned_and_complete() {
-    let document: Value =
-        serde_json::from_str(&render_review_json(&finding_report())).expect("valid JSON");
+fn given_reports_when_rendering_json_then_document_is_versioned_and_complete() {
+    let test_cases = [
+        JsonTestCase {
+            description: "a finding",
+            report: finding_report(),
+            expected_values: vec![
+                ("/format_version", Value::from(1)),
+                ("/status", Value::from("findings")),
+                ("/exit_code", Value::from(1)),
+                ("/summary/findings", Value::from(1)),
+                ("/summary/not_validated", Value::from(1)),
+                ("/findings/0/column", Value::from("amount")),
+                ("/findings/0/examples/0/key", Value::from("order_id=3")),
+                ("/tests/skipped", Value::from(3)),
+                ("/review_schema/dropped", Value::from(true)),
+                (
+                    "/recall/command",
+                    Value::from("sqb recall output a1b2c3d4e5f6"),
+                ),
+                ("/changed/1/kind", Value::from("macro")),
+            ],
+        },
+        JsonTestCase {
+            description: "an error",
+            report: errored_report(),
+            expected_values: vec![
+                ("/status", Value::from("failed")),
+                ("/exit_code", Value::from(3)),
+                ("/error/code", Value::from("C761")),
+            ],
+        },
+    ];
+    for test_case in test_cases {
+        let document: Value =
+            serde_json::from_str(&render_review_json(&test_case.report)).expect("valid JSON");
 
-    assert_eq!(document["format_version"], 1);
-    assert_eq!(document["status"], "findings");
-    assert_eq!(document["exit_code"], 1);
-    assert_eq!(document["summary"]["findings"], 1);
-    assert_eq!(document["summary"]["not_validated"], 1);
-    assert_eq!(document["findings"][0]["column"], "amount");
-    assert_eq!(document["findings"][0]["examples"][0]["key"], "order_id=3");
-    assert_eq!(document["tests"]["skipped"], 3);
-    assert_eq!(document["review_schema"]["dropped"], true);
-    assert_eq!(
-        document["recall"]["command"],
-        "sqb recall output a1b2c3d4e5f6"
-    );
-    assert_eq!(document["changed"][1]["kind"], "macro");
+        let actual: Vec<(&str, Value)> = test_case
+            .expected_values
+            .iter()
+            .map(|(pointer, _)| {
+                (
+                    *pointer,
+                    document.pointer(pointer).cloned().unwrap_or(Value::Null),
+                )
+            })
+            .collect();
+        assert_eq!(
+            actual, test_case.expected_values,
+            "{}",
+            test_case.description
+        );
+    }
 }
 
 #[test]
@@ -116,6 +134,7 @@ fn given_reports_when_rendering_markdown_then_sections_follow_the_agreed_layout(
                 "rows prod 5, branch 5; 2 other columns compared with no difference (full comparison).",
                 "## Run details\n\n- Review schema `REVIEW_20261023T101500Z_3f2a9c1_a1b2c3`: dropped\n- Downstream policy: critical (critical: `daily_revenue`)\n- Recall: `sqb recall output a1b2c3d4e5f6`",
             ],
+            unexpected_fragments: vec![],
         },
         RenderTestCase {
             description: "incomplete coverage",
@@ -125,6 +144,7 @@ fn given_reports_when_rendering_markdown_then_sections_follow_the_agreed_layout(
                 "## Findings\n\nNo findings.",
                 "## Incomplete coverage\n\n- `order_totals` keyed comparison: the model has no unique_key",
             ],
+            unexpected_fragments: vec![],
         },
         RenderTestCase {
             description: "a cleanup failure",
@@ -133,30 +153,75 @@ fn given_reports_when_rendering_markdown_then_sections_follow_the_agreed_layout(
                 "# Review failed\n",
                 "- Review schema `REVIEW_20261023T101500Z_3f2a9c1_a1b2c3`: not dropped: permission denied",
             ],
+            unexpected_fragments: vec![],
         },
     ];
     for test_case in test_cases {
         let markdown: String = render_review_markdown(&test_case.report);
 
-        for fragment in &test_case.expected_fragments {
-            assert!(
-                markdown.contains(fragment),
-                "{}: missing {fragment:?} in\n{markdown}",
-                test_case.description
-            );
-        }
+        let present: Vec<&str> = test_case
+            .expected_fragments
+            .iter()
+            .copied()
+            .filter(|fragment| markdown.contains(fragment))
+            .collect();
+        let absent: Vec<&str> = test_case
+            .unexpected_fragments
+            .iter()
+            .copied()
+            .filter(|fragment| !markdown.contains(fragment))
+            .collect();
+        assert_eq!(
+            present, test_case.expected_fragments,
+            "{}: {markdown}",
+            test_case.description
+        );
+        assert_eq!(
+            absent, test_case.unexpected_fragments,
+            "{}: {markdown}",
+            test_case.description
+        );
     }
 }
 
 #[test]
-fn given_finding_report_when_rendering_text_then_summary_ends_with_outcome() {
-    let text: String = render_review_text(&finding_report());
+fn given_reports_when_rendering_text_then_summary_ends_with_outcome() {
+    let test_cases = [RenderTestCase {
+        description: "a finding",
+        report: finding_report(),
+        expected_fragments: vec![
+            "Findings\n  1. order_totals.amount values differ in 1 of 5 rows",
+            "What changed\n  stg_orders (model): model SQL changed",
+            "Downstream impact\n  stg_orders [ok]\n  ├── order_totals [finding]",
+            "Recall: sqb recall output a1b2c3d4e5f6",
+            "\nReview needs a fix: 1 finding  changed=2  built=3  compared=3  tests=2  findings=1  not_validated=1  incomplete=0\n",
+        ],
+        unexpected_fragments: vec!["`"],
+    }];
+    for test_case in test_cases {
+        let text: String = render_review_text(&test_case.report);
 
-    assert!(text.contains("Findings\n  1. order_totals.amount values differ in 1 of 5 rows"));
-    assert!(text.contains("Downstream impact\n  stg_orders [ok]\n  ├── order_totals [finding]"));
-    assert!(text.contains("Recall: sqb recall output a1b2c3d4e5f6"));
-    assert!(text.contains(
-        "\nReview needs a fix: 1 finding  changed=2  built=3  compared=3  tests=2  findings=1  not_validated=1  incomplete=0\n"
-    ));
-    assert!(!text.contains('`'));
+        let present: Vec<&str> = test_case
+            .expected_fragments
+            .iter()
+            .copied()
+            .filter(|fragment| text.contains(fragment))
+            .collect();
+        let absent: Vec<&str> = test_case
+            .unexpected_fragments
+            .iter()
+            .copied()
+            .filter(|fragment| !text.contains(fragment))
+            .collect();
+        assert_eq!(
+            present, test_case.expected_fragments,
+            "{}: {text}",
+            test_case.description
+        );
+        assert_eq!(
+            absent, test_case.unexpected_fragments,
+            "{}: {text}",
+            test_case.description
+        );
+    }
 }

@@ -139,10 +139,7 @@ fn review_schema_candidates<'py>(
         &[("seconds", integer(py, LEFTOVER_REVIEW_SCHEMA_AGE_SECONDS)?)],
     )?;
     let leftovers: Bound<'py, PyAny> = call_with(
-        &native_field(
-            &host::entry(py, ExecutorHost::ReviewSchemaLifecycle)?,
-            "leftovers",
-        )?,
+        &host::entry(py, ExecutorHost::LeftoverReviewSchemas)?,
         &[
             ("adapter", warehouse.adapter.clone()),
             ("connection", warehouse.connection.clone()),

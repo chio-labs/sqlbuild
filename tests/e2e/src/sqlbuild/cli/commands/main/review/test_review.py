@@ -8,8 +8,12 @@ from typing import Any
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.review._test_types import (
+    ReviewCleanupFailureE2ETestCase,
+    ReviewDryRunE2ETestCase,
+    ReviewIncrementalStartE2ETestCase,
     ReviewOutcomeE2ETestCase,
     ReviewSelectErrorE2ETestCase,
+    ReviewSelectionE2ETestCase,
     ReviewTextOutputE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.review.helpers import (
@@ -115,7 +119,7 @@ _NEW_COLUMN_TOTALS: str = edited_order_totals(
             expected_incomplete_nodes=("customer_orders",),
         ),
     ),
-    ids=lambda test_case: test_case.description,
+    ids=lambda case: case.description,
 )
 def test_given_branch_edit_when_reviewing_then_report_shows_outcome(
     test_case: ReviewOutcomeE2ETestCase, tmp_path: Path
@@ -150,22 +154,38 @@ def test_given_branch_edit_when_reviewing_then_report_shows_outcome(
     assert review_schemas(project_dir=project_dir) == ()
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ReviewIncrementalStartE2ETestCase(
+            description="DuckDB has no zero-copy clone, so the incremental is fully refreshed",
+            arguments=("--downstream", "all"),
+            expected_starts=(("order_ledger", "full_refresh"),),
+        ),
+        ReviewIncrementalStartE2ETestCase(
+            description="--no-clone fully refreshes the incremental",
+            arguments=("--downstream", "all", "--no-clone"),
+            expected_starts=(("order_ledger", "full_refresh"),),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
 def test_given_incremental_downstream_when_reviewing_then_its_start_is_reported(
-    tmp_path: Path,
+    test_case: ReviewIncrementalStartE2ETestCase, tmp_path: Path
 ) -> None:
     project_dir: Path = prepare_review_repository(tmp_path=tmp_path, extra_files={})
     edit_project(project_dir=project_dir, files={STAGING: _SAME_VALUES_STAGING})
 
     result: subprocess.CompletedProcess[str] = run_review(
-        project_dir=project_dir, arguments=("--json", "--downstream", "all")
+        project_dir=project_dir, arguments=("--json", *test_case.arguments)
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
     starts: list[dict[str, Any]] = review_document(result)["baseline"]["incremental_starts"]
-    assert [(start["node"], start["method"]) for start in starts] == [
-        ("order_ledger", "full_refresh")
-    ], result.stdout
-    assert starts[0]["reason"], result.stdout
+    assert tuple((start["node"], start["method"]) for start in starts) == (
+        test_case.expected_starts
+    ), result.stdout
+    assert all(start["reason"] for start in starts), result.stdout
 
 
 @pytest.mark.parametrize(
@@ -193,7 +213,7 @@ def test_given_incremental_downstream_when_reviewing_then_its_start_is_reported(
             expected_message_fragment="open_orders",
         ),
     ),
-    ids=lambda test_case: test_case.description,
+    ids=lambda case: case.description,
 )
 def test_given_unusable_select_when_reviewing_then_it_fails_with_json_error(
     test_case: ReviewSelectErrorE2ETestCase, tmp_path: Path
@@ -213,23 +233,51 @@ def test_given_unusable_select_when_reviewing_then_it_fails_with_json_error(
     assert review_schemas(project_dir=project_dir) == ()
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ReviewSelectionE2ETestCase(
+            description="selecting the changed model leaves its critical downstream unvalidated",
+            select="stg_orders",
+            expected_validated=("stg_orders",),
+            expected_not_validated_member="order_totals",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
 def test_given_select_inside_changed_set_when_reviewing_then_only_selection_is_validated(
-    tmp_path: Path,
+    test_case: ReviewSelectionE2ETestCase, tmp_path: Path
 ) -> None:
     project_dir: Path = prepare_review_repository(tmp_path=tmp_path, extra_files={})
     edit_project(project_dir=project_dir, files={STAGING: _SAME_VALUES_STAGING})
 
     result: subprocess.CompletedProcess[str] = run_review(
-        project_dir=project_dir, arguments=("--json", "--select", "stg_orders")
+        project_dir=project_dir, arguments=("--json", "--select", test_case.select)
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
     document: dict[str, Any] = review_document(result)
-    assert document["validated"] == ["stg_orders"]
-    assert "order_totals" in {item["name"] for item in document["not_validated"]}
+    assert tuple(document["validated"]) == test_case.expected_validated
+    assert test_case.expected_not_validated_member in {
+        item["name"] for item in document["not_validated"]
+    }
 
 
-def test_given_dry_run_when_reviewing_then_nothing_is_built_or_created(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ReviewDryRunE2ETestCase(
+            description="a dry run plans the review without creating a schema or building",
+            expected_status="planned",
+            expected_validated=("order_totals", "stg_orders"),
+            expected_node_statuses=frozenset({"planned", "not_validated"}),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_dry_run_when_reviewing_then_nothing_is_built_or_created(
+    test_case: ReviewDryRunE2ETestCase, tmp_path: Path
+) -> None:
     project_dir: Path = prepare_review_repository(tmp_path=tmp_path, extra_files={})
     edit_project(project_dir=project_dir, files={STAGING: _SAME_VALUES_STAGING})
 
@@ -240,10 +288,10 @@ def test_given_dry_run_when_reviewing_then_nothing_is_built_or_created(tmp_path:
     assert result.returncode == 0, result.stdout + result.stderr
     document: dict[str, Any] = review_document(result)
     assert document["dry_run"] is True
-    assert document["status"] == "planned"
+    assert document["status"] == test_case.expected_status
     assert document["review_schema"] is None
-    assert sorted(document["validated"]) == ["order_totals", "stg_orders"]
-    assert set(node_statuses(document).values()) <= {"planned", "not_validated"}
+    assert tuple(sorted(document["validated"])) == test_case.expected_validated
+    assert set(node_statuses(document).values()) <= test_case.expected_node_statuses
     assert review_schemas(project_dir=project_dir) == ()
     assert not (project_dir / "target" / "review").exists()
 
@@ -275,7 +323,7 @@ def test_given_dry_run_when_reviewing_then_nothing_is_built_or_created(tmp_path:
             expected_markdown_fragments=("## Findings", "order_totals", "amount"),
         ),
     ),
-    ids=lambda test_case: test_case.description,
+    ids=lambda case: case.description,
 )
 def test_given_markdown_path_when_reviewing_then_text_and_markdown_are_written(
     test_case: ReviewTextOutputE2ETestCase, tmp_path: Path
@@ -296,8 +344,19 @@ def test_given_markdown_path_when_reviewing_then_text_and_markdown_are_written(
         assert fragment in markdown, markdown
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ReviewCleanupFailureE2ETestCase(
+            description="a failed drop exits 3 and the janitor removes only the expired leftover",
+            expired_schema="REVIEW_20200101T000000Z_0000000_000000",
+            expected_exit_code=3,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
 def test_given_failing_schema_drop_when_reviewing_then_it_exits_3_and_janitor_cleans_old_schema(
-    tmp_path: Path,
+    test_case: ReviewCleanupFailureE2ETestCase, tmp_path: Path
 ) -> None:
     project_dir: Path = prepare_review_repository(tmp_path=tmp_path, extra_files={})
     edit_project(project_dir=project_dir, files={STAGING: _SAME_VALUES_STAGING})
@@ -307,7 +366,7 @@ def test_given_failing_schema_drop_when_reviewing_then_it_exits_3_and_janitor_cl
         project_dir=project_dir, arguments=("--json",), env=plugin_env
     )
 
-    assert result.returncode == 3, result.stdout + result.stderr
+    assert result.returncode == test_case.expected_exit_code, result.stdout + result.stderr
     document: dict[str, Any] = review_document(result)
     assert document["status"] == "failed"
     schema: dict[str, Any] = document["review_schema"]
@@ -317,7 +376,7 @@ def test_given_failing_schema_drop_when_reviewing_then_it_exits_3_and_janitor_cl
     leftover: str = schema["name"]
     assert review_schemas(project_dir=project_dir) == (leftover,)
 
-    expired: str = "REVIEW_20200101T000000Z_0000000_000000"
+    expired: str = test_case.expired_schema
     execute_review_database(
         project_dir=project_dir,
         sql=(

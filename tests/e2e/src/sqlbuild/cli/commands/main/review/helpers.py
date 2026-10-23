@@ -198,13 +198,13 @@ def review_schemas(*, project_dir: Path) -> tuple[str, ...]:
     connection: duckdb.DuckDBPyConnection = duckdb.connect(str(project_dir / DATABASE_FILE))
     try:
         rows: list[tuple[Any, ...]] = connection.execute(
-            "SELECT schema_name FROM information_schema.schemata"
+            "SELECT schema_name FROM information_schema.schemata "
+            "WHERE starts_with(schema_name, ?) ORDER BY schema_name",
+            [REVIEW_SCHEMA_PREFIX],
         ).fetchall()
     finally:
         connection.close()
-    return tuple(
-        sorted(str(row[0]) for row in rows if str(row[0]).startswith(REVIEW_SCHEMA_PREFIX))
-    )
+    return tuple(str(row[0]) for row in rows)
 
 
 def execute_review_database(*, project_dir: Path, sql: str) -> None:

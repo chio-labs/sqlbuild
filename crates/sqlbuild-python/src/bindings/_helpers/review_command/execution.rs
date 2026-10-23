@@ -5,19 +5,21 @@ use std::path::{Path, PathBuf};
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use serde_json::Value;
-use sqlbuild_analysis::review_command::constants::SEED_KIND;
+use sqlbuild_analysis::review_command::constants::{
+    CLONE_START, FULL_REFRESH_START, SEED_KIND, UNIT_TEST_LABEL,
+};
 use sqlbuild_analysis::review_command::models::{IncrementalStart, ReviewGraph, ValidationCounts};
 
 use crate::bindings::_helpers::build_command::command::run_build_command;
+use crate::bindings::_helpers::build_command::support::{boolean, text};
 use crate::bindings::_helpers::clone::clone_command::run_clone_command;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
+use crate::bindings::_helpers::dagster_invocation::access::string_tuple as texts;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::review_command::planning::ReviewSettings;
-use crate::bindings::_helpers::review_command::support::{
-    boolean, quietly, review_error, text, texts,
-};
+use crate::bindings::_helpers::review_command::support::{quietly, review_error};
 use crate::bindings::_helpers::sql_test_command::test_command::run_test_command;
 
 const FAILED_STATUS: &str = "failed";
@@ -47,8 +49,16 @@ pub(crate) struct RunInputs<'a, 'py> {
     pub(crate) machine: bool,
 }
 
-fn read_document(path: &Path) -> Option<Value> {
-    serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()
+/// The JSON result document a sub-run wrote, or `None` when it wrote none.
+fn read_document(path: &Path) -> PyResult<Option<Value>> {
+    let text: String = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(pyo3::exceptions::PyOSError::new_err(error.to_string())),
+    };
+    serde_json::from_str(&text)
+        .map(Some)
+        .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))
 }
 
 fn entries<'a>(document: &'a Value, key: &str) -> &'a [Value] {
@@ -83,7 +93,7 @@ pub(crate) fn incremental_starts(
             .iter()
             .map(|node| IncrementalStart {
                 node: node.clone(),
-                method: "full_refresh".to_owned(),
+                method: FULL_REFRESH_START.to_owned(),
                 reason: reason.to_owned(),
             })
             .collect()
@@ -142,7 +152,7 @@ pub(crate) fn incremental_starts(
         .iter()
         .map(|node| IncrementalStart {
             node: node.clone(),
-            method: "clone".to_owned(),
+            method: CLONE_START.to_owned(),
             reason: format!("zero-copy clone of {}", settings.against),
         })
         .collect())
@@ -192,7 +202,7 @@ pub(crate) fn build_validated(
         ],
     )?;
     let ran: PyResult<i32> = quietly(py, inputs.machine, || run_build_command(py, &request));
-    let document: Option<Value> = read_document(&output);
+    let document: Option<Value> = read_document(&output)?;
     let Some(document) = document else {
         ran?;
         return Err(review_error(
@@ -282,7 +292,7 @@ pub(crate) fn run_changed_tests(
         ],
     )?;
     let ran: PyResult<i32> = quietly(py, inputs.machine, || run_test_command(py, &request));
-    let Some(document) = read_document(&output) else {
+    let Some(document) = read_document(&output)? else {
         ran?;
         return Ok(ValidationCounts::default());
     };
@@ -310,7 +320,7 @@ pub(crate) fn run_changed_tests(
             counts.failed += 1;
             counts
                 .failures
-                .push(format!("unit test {}", field(check, "name")));
+                .push(format!("{UNIT_TEST_LABEL}{}", field(check, "name")));
         }
     }
     counts.total = document

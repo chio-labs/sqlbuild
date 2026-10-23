@@ -1,6 +1,6 @@
 //! The changed nodes a review does not build, such as macros, sources and settings.
 
-use crate::definition_changes::_helpers::aspects::kind_words;
+use crate::definition_changes::main::kind_label::kind_label;
 use crate::definition_changes::models::DefinitionChanges;
 use crate::review_command::constants::{MODEL_KIND, SEED_KIND};
 
@@ -18,7 +18,7 @@ pub fn changed_declarations(changes: &DefinitionChanges) -> Vec<(String, String,
                 "changed".to_owned()
             };
             (
-                kind_words(&change.kind).0.to_owned(),
+                kind_label(&change.kind).to_owned(),
                 change.name.clone(),
                 detail,
             )

@@ -71,14 +71,6 @@ pub struct ReviewPlan {
     pub critical: Vec<String>,
 }
 
-/// A user error that stops planning.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct ReviewPlanError {
-    pub code: String,
-    pub message: String,
-    pub help: Option<String>,
-}
-
 /// One named key or cell value shown as an example.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ReviewExample {
@@ -187,9 +179,9 @@ pub struct ReviewSchemaReport {
     pub error: Option<String>,
 }
 
-/// The error that ended a review early.
+/// The code, message and help of the error that ended a review early.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct ReviewError {
+pub struct ReviewFailure {
     pub code: String,
     pub message: String,
     pub help: Option<String>,
@@ -229,5 +221,5 @@ pub struct ReviewReport {
     pub audits: ValidationCounts,
     pub schema: Option<ReviewSchemaReport>,
     pub invocation_id: Option<String>,
-    pub error: Option<ReviewError>,
+    pub error: Option<ReviewFailure>,
 }

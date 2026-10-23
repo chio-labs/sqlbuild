@@ -21,6 +21,19 @@ pub const FINDINGS_EXIT_CODE: i32 = 1;
 pub const INCOMPLETE_EXIT_CODE: i32 = 2;
 pub const FAILURE_EXIT_CODE: i32 = 3;
 
+/// How a model was compared: not at all, schema only, every row, or a recent cursor window.
+pub const NO_COMPARISON_MODE: &str = "none";
+pub const SCHEMA_ONLY_MODE: &str = "schema_only";
+pub const FULL_COMPARISON_MODE: &str = "full";
+pub const BOUNDED_COMPARISON_MODE: &str = "bounded";
+
+/// How a changed incremental model or snapshot starts in the review schema.
+pub const CLONE_START: &str = "clone";
+pub const FULL_REFRESH_START: &str = "full_refresh";
+
+/// Durations shorter than this print as seconds, longer ones as minutes and seconds.
+pub const SECONDS_PER_MINUTE: u64 = 60;
+
 /// Node statuses in the impact tree.
 pub const BUILT_NODE: &str = "built";
 pub const OK_NODE: &str = "ok";
@@ -46,8 +59,21 @@ pub const SCHEMA_COMMIT_DIGITS: usize = 7;
 pub const SCHEMA_RUN_DIGITS: usize = 6;
 /// Characters of the `YYYYMMDDTHHMMSSZ` timestamp in a review schema name.
 pub const SCHEMA_TIMESTAMP_LENGTH: usize = 16;
+/// The largest month, day, hour, minute and second a review schema timestamp accepts.
+pub const LAST_MONTH: u32 = 12;
+pub const LAST_DAY: u32 = 31;
+pub const LAST_HOUR: u32 = 23;
+pub const LAST_MINUTE: u32 = 59;
+pub const LAST_SECOND: u32 = 59;
 /// How old a marked review schema must be before the janitor drops it, in seconds.
 pub const LEFTOVER_REVIEW_SCHEMA_AGE_SECONDS: i64 = 24 * 60 * 60;
+
+/// Finding kinds of failed checks, and the limit they missed.
+pub const AUDIT_FINDING: &str = "audit";
+pub const TEST_FINDING: &str = "test";
+pub const PASSES_LIMIT: &str = "passes";
+/// The prefix of a failed unit test in the test counts.
+pub const UNIT_TEST_LABEL: &str = "unit test ";
 
 /// The comparison limit of the minimum review: any difference is a finding.
 pub const EXACT_LIMIT: &str = "exact match";

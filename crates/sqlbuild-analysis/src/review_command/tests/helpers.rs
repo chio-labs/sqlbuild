@@ -2,8 +2,9 @@ use std::collections::BTreeMap;
 
 use crate::review_command::models::{
     ChangedNode, ColumnEvidence, DownstreamPolicy, IncompleteCheck, IncrementalStart,
-    NodeComparison, NodeReport, ReviewBaseline, ReviewExample, ReviewFinding, ReviewGraph,
-    ReviewNode, ReviewPlan, ReviewReport, ReviewSchemaReport, SelectedToken, ValidationCounts,
+    NodeComparison, NodeReport, ReviewBaseline, ReviewExample, ReviewFailure, ReviewFinding,
+    ReviewGraph, ReviewNode, ReviewPlan, ReviewReport, ReviewSchemaReport, SelectedToken,
+    ValidationCounts,
 };
 
 fn node(name: &str, kind: &str, critical: bool) -> (String, ReviewNode) {
@@ -20,8 +21,7 @@ fn node(name: &str, kind: &str, critical: bool) -> (String, ReviewNode) {
     )
 }
 
-/// A waffle shop: `stg_orders` feeds a critical `daily_revenue` through `order_totals`,
-/// and an uncritical `order_archive`; `stg_customers` feeds `customer_lifetime`.
+/// A waffle shop whose `stg_orders` reaches a critical `daily_revenue` and an `order_archive`.
 pub(super) fn waffle_shop() -> ReviewGraph {
     let edges: [(&str, &str); 5] = [
         ("waffle_types", "stg_orders"),
@@ -214,4 +214,45 @@ pub(super) fn incomplete_report() -> ReviewReport {
         reason: "the model has no unique_key".to_owned(),
     });
     report
+}
+
+/// The incomplete review whose schema could not be dropped.
+pub(super) fn failed_report() -> ReviewReport {
+    let report: ReviewReport = incomplete_report();
+    ReviewReport {
+        schema: report.schema.clone().map(|schema| ReviewSchemaReport {
+            dropped: false,
+            error: Some("permission denied".to_owned()),
+            ..schema
+        }),
+        ..report
+    }
+}
+
+/// The incomplete review with every check completed.
+pub(super) fn passed_report() -> ReviewReport {
+    ReviewReport {
+        incomplete: Vec::new(),
+        ..incomplete_report()
+    }
+}
+
+/// The passing review as a dry run.
+pub(super) fn dry_run_report() -> ReviewReport {
+    ReviewReport {
+        dry_run: true,
+        ..passed_report()
+    }
+}
+
+/// The finding review ended by a `--select` error.
+pub(super) fn errored_report() -> ReviewReport {
+    ReviewReport {
+        error: Some(ReviewFailure {
+            code: "C761".to_owned(),
+            message: "--select x matches no model or seed".to_owned(),
+            help: None,
+        }),
+        ..finding_report()
+    }
 }

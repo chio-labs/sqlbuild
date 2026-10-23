@@ -3,8 +3,7 @@
 use crate::definition_changes::main::selection_reasons::selection_reasons;
 use crate::definition_changes::models::{DefinitionChanges, DefinitionSnapshot, ExecutedItem};
 
-/// The reasons `key` changed: its own definition, a declaration it uses, or a source or function
-/// it reads; empty when nothing it depends on directly changed.
+/// Why `key` changed: its definition, a declaration it uses, or a source or function it reads.
 #[must_use]
 pub fn node_change_reasons(
     key: &str,
