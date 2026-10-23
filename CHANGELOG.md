@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.172.0](https://github.com/chio-labs/sqlbuild/compare/v0.171.0...v0.172.0) (2026-10-23)
+
+
+### Features
+
+* show which janitor candidates are in use, and measure and cut custom rule overhead ([#1232](https://github.com/chio-labs/sqlbuild/issues/1232)) ([90970f2](https://github.com/chio-labs/sqlbuild/commit/90970f23c289f4bd5de8d4988bddedd809b2f17e))
+
+
+### Bug Fixes
+
+* lint SQL macro bodies as compiled and pass SQL macro expansions to Python macros intact ([#1236](https://github.com/chio-labs/sqlbuild/issues/1236)) ([2357ce2](https://github.com/chio-labs/sqlbuild/commit/2357ce2c6550b102cf35bdf3aaa2b1e7944eca8b))
+
 ## [0.171.0](https://github.com/chio-labs/sqlbuild/compare/v0.170.0...v0.171.0) (2026-10-23)
 
 
