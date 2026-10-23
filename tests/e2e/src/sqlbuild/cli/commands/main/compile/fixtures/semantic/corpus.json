@@ -535,7 +535,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/marts/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT @cents_to_dollars('SUM(amount_usd)') AS d FROM __source(\"raw__payments\")\n"
+        "models/marts/probe.sql": "MODEL (description \"Test model probe.\", materialized table);\n\nSELECT @py.cents_to_dollars('SUM(amount_usd)') AS d FROM __source(\"raw__payments\")\n"
       }
     },
     {
@@ -799,7 +799,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/marts/probe_m.sql": "MODEL (description \"Test model probe_m.\", materialized table);\n\nSELECT @cents_to_dollars('SUM(amount_usd)') AS d FROM __source(\"raw__payments\")\n"
+        "models/marts/probe_m.sql": "MODEL (description \"Test model probe_m.\", materialized table);\n\nSELECT @py.cents_to_dollars('SUM(amount_usd)') AS d FROM __source(\"raw__payments\")\n"
       }
     },
     {
@@ -811,7 +811,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/marts/daily_revenue.sql": "MODEL (\n  materialized table,\n  tags [marts],\n  description \"Daily revenue aggregation.\",\n  audits [\n    expression_is_true (\n      name \"revenue_is_non_negative\",\n      expression \"total_revenue_cents >= 0\",\n    ),\n  ],\n  contract enforced,\n  columns (\n    revenue_date (nullable false),\n    order_count (type BIGINT),\n    waffles_sold (type HUGEINT),\n    total_revenue_cents (type VARCHAR),\n    total_revenue_dollars (type DOUBLE),\n    avg_order_value_cents (type DOUBLE),\n  ),\n);\n\nSELECT\n  CAST(o.ordered_at AS DATE) AS revenue_date,\n  COUNT(DISTINCT o.order_id) AS order_count,\n  SUM(o.quantity) AS waffles_sold,\n  SUM(p.amount_cents) AS total_revenue_cents,\n  @cents_to_dollars('SUM(p.amount_cents)') AS total_revenue_dollars,\n  SUM(p.amount_cents) / COUNT(DISTINCT o.order_id) AS avg_order_value_cents\nFROM __ref(\"stg_orders\") o\nINNER JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id AND p.payment_status = 'success'\nGROUP BY CAST(o.ordered_at AS DATE)\n"
+        "models/marts/daily_revenue.sql": "MODEL (\n  materialized table,\n  tags [marts],\n  description \"Daily revenue aggregation.\",\n  audits [\n    expression_is_true (\n      name \"revenue_is_non_negative\",\n      expression \"total_revenue_cents >= 0\",\n    ),\n  ],\n  contract enforced,\n  columns (\n    revenue_date (nullable false),\n    order_count (type BIGINT),\n    waffles_sold (type HUGEINT),\n    total_revenue_cents (type VARCHAR),\n    total_revenue_dollars (type DOUBLE),\n    avg_order_value_cents (type DOUBLE),\n  ),\n);\n\nSELECT\n  CAST(o.ordered_at AS DATE) AS revenue_date,\n  COUNT(DISTINCT o.order_id) AS order_count,\n  SUM(o.quantity) AS waffles_sold,\n  SUM(p.amount_cents) AS total_revenue_cents,\n  @py.cents_to_dollars('SUM(p.amount_cents)') AS total_revenue_dollars,\n  SUM(p.amount_cents) / COUNT(DISTINCT o.order_id) AS avg_order_value_cents\nFROM __ref(\"stg_orders\") o\nINNER JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id AND p.payment_status = 'success'\nGROUP BY CAST(o.ordered_at AS DATE)\n"
       }
     },
     {
@@ -861,7 +861,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/marts/fact_orders.sql": "MODEL (\n  materialized table,\n  tags [marts],\n  description \"Order fact table with waffle and payment details.\",\n  columns (\n    order_id (nullable false, audits [not_null]),\n  ),\n);\n\nSELECT\n  o.order_id,\n  o.customer_id,\n  o.waffle_type_id,\n  w.waffle_name,\n  w.category AS waffle_category,\n  o.quantity,\n  @line_total_cents(\"w.price_cents\", \"o.quantity\") AS line_total_cents,\n  o.ordered_at,\n  o.status AS order_status,\n  __udf(\"udf__is_completed_order\")(o.status) AS is_completed_order,\n  p.payment_method,\n  p.payment_status,\n  p.amount_usd AS payment_amount_cents\nFROM __ref(\"stg_orders\") o\nLEFT JOIN __seed(\"waffle_types\") w ON o.waffle_type_id = w.waffle_type_id\nLEFT JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id\n"
+        "models/marts/fact_orders.sql": "MODEL (\n  materialized table,\n  tags [marts],\n  description \"Order fact table with waffle and payment details.\",\n  columns (\n    order_id (nullable false, audits [not_null]),\n  ),\n);\n\nSELECT\n  o.order_id,\n  o.customer_id,\n  o.waffle_type_id,\n  w.waffle_name,\n  w.category AS waffle_category,\n  o.quantity,\n  @py.line_total_cents(\"w.price_cents\", \"o.quantity\") AS line_total_cents,\n  o.ordered_at,\n  o.status AS order_status,\n  __udf(\"udf__is_completed_order\")(o.status) AS is_completed_order,\n  p.payment_method,\n  p.payment_status,\n  p.amount_usd AS payment_amount_cents\nFROM __ref(\"stg_orders\") o\nLEFT JOIN __seed(\"waffle_types\") w ON o.waffle_type_id = w.waffle_type_id\nLEFT JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id\n"
       }
     },
     {
@@ -1075,7 +1075,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/marts/probe_m.sql": "MODEL (description \"Test model probe_m.\", materialized table);\n\nSELECT @cents_to_dollars('SUM(p.amount_usd)') AS d FROM __ref(\"stg_payments\") p\n"
+        "models/marts/probe_m.sql": "MODEL (description \"Test model probe_m.\", materialized table);\n\nSELECT @py.cents_to_dollars('SUM(p.amount_usd)') AS d FROM __ref(\"stg_payments\") p\n"
       }
     },
     {
@@ -1195,7 +1195,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/marts/daily_revenue.sql": "MODEL (\n  materialized table,\n  tags [marts],\n  description \"Daily revenue aggregation.\",\n  audits [\n    expression_is_true (\n      name \"revenue_is_non_negative\",\n      expression \"total_revenue >= 0\",\n    ),\n  ],\n  columns (\n    revenue_date (nullable false),\n  ),\n);\n\nSELECT\n  CAST(o.ordered_at AS DATE) AS revenue_date,\n  COUNT(DISTINCT o.order_id) AS order_count,\n  SUM(o.quantity) AS waffles_sold,\n  SUM(p.amount_cents) AS total_revenue_cents,\n  @cents_to_dollars('SUM(p.amount_cents)') AS total_revenue_dollars,\n  SUM(p.amount_cents) / COUNT(DISTINCT o.order_id) AS avg_order_value_cents\nFROM __ref(\"stg_orders\") o\nINNER JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id AND p.payment_status = 'success'\nGROUP BY CAST(o.ordered_at AS DATE)\n"
+        "models/marts/daily_revenue.sql": "MODEL (\n  materialized table,\n  tags [marts],\n  description \"Daily revenue aggregation.\",\n  audits [\n    expression_is_true (\n      name \"revenue_is_non_negative\",\n      expression \"total_revenue >= 0\",\n    ),\n  ],\n  columns (\n    revenue_date (nullable false),\n  ),\n);\n\nSELECT\n  CAST(o.ordered_at AS DATE) AS revenue_date,\n  COUNT(DISTINCT o.order_id) AS order_count,\n  SUM(o.quantity) AS waffles_sold,\n  SUM(p.amount_cents) AS total_revenue_cents,\n  @py.cents_to_dollars('SUM(p.amount_cents)') AS total_revenue_dollars,\n  SUM(p.amount_cents) / COUNT(DISTINCT o.order_id) AS avg_order_value_cents\nFROM __ref(\"stg_orders\") o\nINNER JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id AND p.payment_status = 'success'\nGROUP BY CAST(o.ordered_at AS DATE)\n"
       }
     },
     {
@@ -1291,7 +1291,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/marts/daily_revenue.sql": "MODEL (\n  materialized table,\n  tags [marts],\n  description \"Daily revenue aggregation.\",\n  audits [\n    expression_is_true (\n      name \"revenue_is_non_negative\",\n      expression \"total_revenue_cents >= 0\",\n    ),\n  ],\n  contract enforced,\n  columns (\n    revenue_date (type DATE),\n    order_count (type BIGINT),\n    waffles_sold (type HUGEINT),\n    total_revenue_cents (type TIMESTAMP),\n    total_revenue_dollars (type DOUBLE),\n    avg_order_value_cents (type DOUBLE),\n  ),\n);\n\nSELECT\n  CAST(o.ordered_at AS DATE) AS revenue_date,\n  COUNT(DISTINCT o.order_id) AS order_count,\n  SUM(o.quantity) AS waffles_sold,\n  SUM(p.amount_cents) AS total_revenue_cents,\n  @cents_to_dollars('SUM(p.amount_cents)') AS total_revenue_dollars,\n  SUM(p.amount_cents) / COUNT(DISTINCT o.order_id) AS avg_order_value_cents\nFROM __ref(\"stg_orders\") o\nINNER JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id AND p.payment_status = 'success'\nGROUP BY CAST(o.ordered_at AS DATE)\n"
+        "models/marts/daily_revenue.sql": "MODEL (\n  materialized table,\n  tags [marts],\n  description \"Daily revenue aggregation.\",\n  audits [\n    expression_is_true (\n      name \"revenue_is_non_negative\",\n      expression \"total_revenue_cents >= 0\",\n    ),\n  ],\n  contract enforced,\n  columns (\n    revenue_date (type DATE),\n    order_count (type BIGINT),\n    waffles_sold (type HUGEINT),\n    total_revenue_cents (type TIMESTAMP),\n    total_revenue_dollars (type DOUBLE),\n    avg_order_value_cents (type DOUBLE),\n  ),\n);\n\nSELECT\n  CAST(o.ordered_at AS DATE) AS revenue_date,\n  COUNT(DISTINCT o.order_id) AS order_count,\n  SUM(o.quantity) AS waffles_sold,\n  SUM(p.amount_cents) AS total_revenue_cents,\n  @py.cents_to_dollars('SUM(p.amount_cents)') AS total_revenue_dollars,\n  SUM(p.amount_cents) / COUNT(DISTINCT o.order_id) AS avg_order_value_cents\nFROM __ref(\"stg_orders\") o\nINNER JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id AND p.payment_status = 'success'\nGROUP BY CAST(o.ordered_at AS DATE)\n"
       }
     },
     {
@@ -1303,7 +1303,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/marts/daily_revenue.sql": "MODEL (\n  materialized table,\n  tags [marts],\n  description \"Daily revenue aggregation.\",\n  audits [\n    expression_is_true (\n      name \"revenue_is_non_negative\",\n      expression \"total_revenue_cents >= 0\",\n    ),\n  ],\n  contract enforced,\n  columns (\n    revenue_date (type INTEGER),\n    order_count (type BIGINT),\n    waffles_sold (type HUGEINT),\n    total_revenue_cents (type HUGEINT),\n    total_revenue_dollars (type DOUBLE),\n    avg_order_value_cents (type DOUBLE),\n  ),\n);\n\nSELECT\n  CAST(o.ordered_at AS DATE) AS revenue_date,\n  COUNT(DISTINCT o.order_id) AS order_count,\n  SUM(o.quantity) AS waffles_sold,\n  SUM(p.amount_cents) AS total_revenue_cents,\n  @cents_to_dollars('SUM(p.amount_cents)') AS total_revenue_dollars,\n  SUM(p.amount_cents) / COUNT(DISTINCT o.order_id) AS avg_order_value_cents\nFROM __ref(\"stg_orders\") o\nINNER JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id AND p.payment_status = 'success'\nGROUP BY CAST(o.ordered_at AS DATE)\n"
+        "models/marts/daily_revenue.sql": "MODEL (\n  materialized table,\n  tags [marts],\n  description \"Daily revenue aggregation.\",\n  audits [\n    expression_is_true (\n      name \"revenue_is_non_negative\",\n      expression \"total_revenue_cents >= 0\",\n    ),\n  ],\n  contract enforced,\n  columns (\n    revenue_date (type INTEGER),\n    order_count (type BIGINT),\n    waffles_sold (type HUGEINT),\n    total_revenue_cents (type HUGEINT),\n    total_revenue_dollars (type DOUBLE),\n    avg_order_value_cents (type DOUBLE),\n  ),\n);\n\nSELECT\n  CAST(o.ordered_at AS DATE) AS revenue_date,\n  COUNT(DISTINCT o.order_id) AS order_count,\n  SUM(o.quantity) AS waffles_sold,\n  SUM(p.amount_cents) AS total_revenue_cents,\n  @py.cents_to_dollars('SUM(p.amount_cents)') AS total_revenue_dollars,\n  SUM(p.amount_cents) / COUNT(DISTINCT o.order_id) AS avg_order_value_cents\nFROM __ref(\"stg_orders\") o\nINNER JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id AND p.payment_status = 'success'\nGROUP BY CAST(o.ordered_at AS DATE)\n"
       }
     },
     {
@@ -1327,7 +1327,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/marts/fact_orders.sql": "MODEL (\n  materialized table,\n  tags [marts],\n  description \"Order fact table with waffle and payment details.\",\n  columns (\n    order_id (nullable false, audits [not_null]),\n  ),\n);\n\nSELECT\n  o.order_id,\n  o.customer_id,\n  o.waffle_type_id,\n  w.waffle_name,\n  w.category AS waffle_category,\n  o.quantity,\n  @line_total_cents(\"w.price_cents\", \"o.quantity\") AS line_total_cents,\n  o.ordered_at,\n  o.status AS order_status,\n  __udf(\"udf__is_completed_order\")(o.status) AS is_completed_order,\n  p.payment_method,\n  p.payment_status,\n  p.amount_usd AS payment_amount_cents\nFROM __ref(\"stg_orders\") o\nLEFT JOIN __seed(\"waffle_types\") w ON o.waffle_type_id = w.waffle_type_id\nLEFT JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id\n"
+        "models/marts/fact_orders.sql": "MODEL (\n  materialized table,\n  tags [marts],\n  description \"Order fact table with waffle and payment details.\",\n  columns (\n    order_id (nullable false, audits [not_null]),\n  ),\n);\n\nSELECT\n  o.order_id,\n  o.customer_id,\n  o.waffle_type_id,\n  w.waffle_name,\n  w.category AS waffle_category,\n  o.quantity,\n  @py.line_total_cents(\"w.price_cents\", \"o.quantity\") AS line_total_cents,\n  o.ordered_at,\n  o.status AS order_status,\n  __udf(\"udf__is_completed_order\")(o.status) AS is_completed_order,\n  p.payment_method,\n  p.payment_status,\n  p.amount_usd AS payment_amount_cents\nFROM __ref(\"stg_orders\") o\nLEFT JOIN __seed(\"waffle_types\") w ON o.waffle_type_id = w.waffle_type_id\nLEFT JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id\n"
       }
     },
     {
@@ -1339,7 +1339,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/marts/fact_orders.sql": "MODEL (\n  materialized table,\n  tags [marts],\n  description \"Order fact table with waffle and payment details.\",\n  columns (\n    order_id (nullable false, audits [not_null]),\n  ),\n);\n\nSELECT\n  o.order_id,\n  o.customer_id,\n  o.waffle_type_id,\n  w.waffle_name,\n  w.category AS waffle_category,\n  o.quantity,\n  @line_total_cents(\"w.price_cents\", \"o.quantity\") AS line_total_cents,\n  o.ordered_at,\n  o.status AS order_status,\n  __udf(\"udf__is_completed_order\")(o.status) AS is_completed_order,\n  p.payment_method,\n  p.payment_status,\n  amount_usd AS payment_amount_cents\nFROM __ref(\"stg_orders\") o\nLEFT JOIN __seed(\"waffle_types\") w ON o.waffle_type_id = w.waffle_type_id\nLEFT JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id\n"
+        "models/marts/fact_orders.sql": "MODEL (\n  materialized table,\n  tags [marts],\n  description \"Order fact table with waffle and payment details.\",\n  columns (\n    order_id (nullable false, audits [not_null]),\n  ),\n);\n\nSELECT\n  o.order_id,\n  o.customer_id,\n  o.waffle_type_id,\n  w.waffle_name,\n  w.category AS waffle_category,\n  o.quantity,\n  @py.line_total_cents(\"w.price_cents\", \"o.quantity\") AS line_total_cents,\n  o.ordered_at,\n  o.status AS order_status,\n  __udf(\"udf__is_completed_order\")(o.status) AS is_completed_order,\n  p.payment_method,\n  p.payment_status,\n  amount_usd AS payment_amount_cents\nFROM __ref(\"stg_orders\") o\nLEFT JOIN __seed(\"waffle_types\") w ON o.waffle_type_id = w.waffle_type_id\nLEFT JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id\n"
       }
     },
     {
@@ -1375,7 +1375,7 @@
       ],
       "pending_native": false,
       "repo_files": {
-        "models/marts/fact_orders.sql": "MODEL (\n  materialized table,\n  tags [marts],\n  description \"Order fact table with waffle and payment details.\",\n  columns (\n    order_id (nullable false, audits [not_null]),\n  ),\n);\n\nSELECT\n  o.order_id,\n  o.customer_id,\n  o.waffle_type_id,\n  w.waffle_name,\n  w.category AS waffle_category,\n  o.qty,\n  @line_total_cents(\"w.price_cents\", \"o.quantity\") AS line_total_cents,\n  o.ordered_at,\n  o.status AS order_status,\n  __udf(\"udf__is_completed_order\")(o.status) AS is_completed_order,\n  p.payment_method,\n  p.payment_status,\n  p.amount_cents AS payment_amount_cents\nFROM __ref(\"stg_orders_typed\") o\nLEFT JOIN __seed(\"waffle_types\") w ON o.waffle_type_id = w.waffle_type_id\nLEFT JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id\n"
+        "models/marts/fact_orders.sql": "MODEL (\n  materialized table,\n  tags [marts],\n  description \"Order fact table with waffle and payment details.\",\n  columns (\n    order_id (nullable false, audits [not_null]),\n  ),\n);\n\nSELECT\n  o.order_id,\n  o.customer_id,\n  o.waffle_type_id,\n  w.waffle_name,\n  w.category AS waffle_category,\n  o.qty,\n  @py.line_total_cents(\"w.price_cents\", \"o.quantity\") AS line_total_cents,\n  o.ordered_at,\n  o.status AS order_status,\n  __udf(\"udf__is_completed_order\")(o.status) AS is_completed_order,\n  p.payment_method,\n  p.payment_status,\n  p.amount_cents AS payment_amount_cents\nFROM __ref(\"stg_orders_typed\") o\nLEFT JOIN __seed(\"waffle_types\") w ON o.waffle_type_id = w.waffle_type_id\nLEFT JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id\n"
       }
     },
     {
@@ -2515,7 +2515,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/marts/probe_m.sql": "MODEL (description \"Test model probe_m.\", materialized table);\n\nSELECT UPPER(@cents_to_dollars('p.amount_cents')) AS d FROM __ref(\"stg_payments\") p\n"
+        "models/marts/probe_m.sql": "MODEL (description \"Test model probe_m.\", materialized table);\n\nSELECT UPPER(@py.cents_to_dollars('p.amount_cents')) AS d FROM __ref(\"stg_payments\") p\n"
       }
     },
     {
@@ -2525,7 +2525,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/marts/daily_revenue.sql": "MODEL (\n  materialized table,\n  tags [marts],\n  description \"Daily revenue aggregation.\",\n  audits [\n    expression_is_true (\n      name \"revenue_is_non_negative\",\n      expression \"revenue_date > 5\",\n    ),\n  ],\n  columns (\n    revenue_date (nullable false),\n  ),\n);\n\nSELECT\n  CAST(o.ordered_at AS DATE) AS revenue_date,\n  COUNT(DISTINCT o.order_id) AS order_count,\n  SUM(o.quantity) AS waffles_sold,\n  SUM(p.amount_cents) AS total_revenue_cents,\n  @cents_to_dollars('SUM(p.amount_cents)') AS total_revenue_dollars,\n  SUM(p.amount_cents) / COUNT(DISTINCT o.order_id) AS avg_order_value_cents\nFROM __ref(\"stg_orders\") o\nINNER JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id AND p.payment_status = 'success'\nGROUP BY CAST(o.ordered_at AS DATE)\n"
+        "models/marts/daily_revenue.sql": "MODEL (\n  materialized table,\n  tags [marts],\n  description \"Daily revenue aggregation.\",\n  audits [\n    expression_is_true (\n      name \"revenue_is_non_negative\",\n      expression \"revenue_date > 5\",\n    ),\n  ],\n  columns (\n    revenue_date (nullable false),\n  ),\n);\n\nSELECT\n  CAST(o.ordered_at AS DATE) AS revenue_date,\n  COUNT(DISTINCT o.order_id) AS order_count,\n  SUM(o.quantity) AS waffles_sold,\n  SUM(p.amount_cents) AS total_revenue_cents,\n  @py.cents_to_dollars('SUM(p.amount_cents)') AS total_revenue_dollars,\n  SUM(p.amount_cents) / COUNT(DISTINCT o.order_id) AS avg_order_value_cents\nFROM __ref(\"stg_orders\") o\nINNER JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id AND p.payment_status = 'success'\nGROUP BY CAST(o.ordered_at AS DATE)\n"
       }
     },
     {
@@ -2555,7 +2555,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/marts/fact_orders.sql": "MODEL (\n  materialized table,\n  tags [marts],\n  description \"Order fact table with waffle and payment details.\",\n  columns (\n    order_id (nullable false, audits [not_null]),\n  ),\n);\n\nSELECT\n  o.order_id,\n  o.customer_id,\n  o.waffle_type_id,\n  w.waffle_name,\n  w.category AS waffle_category,\n  o.quantity,\n  @line_total_cents(\"w.price_cents\", \"o.quantity\") AS line_total_cents,\n  o.ordered_at,\n  o.status AS order_status,\n  __udf(\"udf__is_completed_order\")(o.status) AS is_completed_order,\n  p.payment_method,\n  p.payment_status,\n  p.amount_cents AS payment_amount_cents\nFROM __ref(\"stg_orders\") o\nLEFT JOIN __seed(\"waffle_types\") w ON o.waffle_type_id = w.waffle_type_id\nLEFT JOIN __ref(\"stg_payments\") p ON o.order_id = p.payment_method\n"
+        "models/marts/fact_orders.sql": "MODEL (\n  materialized table,\n  tags [marts],\n  description \"Order fact table with waffle and payment details.\",\n  columns (\n    order_id (nullable false, audits [not_null]),\n  ),\n);\n\nSELECT\n  o.order_id,\n  o.customer_id,\n  o.waffle_type_id,\n  w.waffle_name,\n  w.category AS waffle_category,\n  o.quantity,\n  @py.line_total_cents(\"w.price_cents\", \"o.quantity\") AS line_total_cents,\n  o.ordered_at,\n  o.status AS order_status,\n  __udf(\"udf__is_completed_order\")(o.status) AS is_completed_order,\n  p.payment_method,\n  p.payment_status,\n  p.amount_cents AS payment_amount_cents\nFROM __ref(\"stg_orders\") o\nLEFT JOIN __seed(\"waffle_types\") w ON o.waffle_type_id = w.waffle_type_id\nLEFT JOIN __ref(\"stg_payments\") p ON o.order_id = p.payment_method\n"
       }
     },
     {
@@ -2565,7 +2565,7 @@
       "expected_codes": [],
       "pending_native": true,
       "repo_files": {
-        "models/marts/fact_orders.sql": "MODEL (\n  materialized table,\n  tags [marts],\n  description \"Order fact table with waffle and payment details.\",\n  columns (\n    order_id (nullable false, audits [not_null]),\n  ),\n);\n\nSELECT\n  o.order_id,\n  o.customer_id,\n  o.waffle_type_id,\n  w.waffle_name,\n  w.category AS waffle_category,\n  o.quantity,\n  @line_total_cents(\"w.price_cents\", \"o.quantity\") AS line_total_cents,\n  o.ordered_at,\n  o.status AS order_status,\n  __udf(\"udf__is_completed_order\")(o.status) AS is_completed_order,\n  p.payment_method,\n  p.payment_status,\n  SUM(p.payment_method) OVER () AS payment_amount_cents\nFROM __ref(\"stg_orders\") o\nLEFT JOIN __seed(\"waffle_types\") w ON o.waffle_type_id = w.waffle_type_id\nLEFT JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id\n"
+        "models/marts/fact_orders.sql": "MODEL (\n  materialized table,\n  tags [marts],\n  description \"Order fact table with waffle and payment details.\",\n  columns (\n    order_id (nullable false, audits [not_null]),\n  ),\n);\n\nSELECT\n  o.order_id,\n  o.customer_id,\n  o.waffle_type_id,\n  w.waffle_name,\n  w.category AS waffle_category,\n  o.quantity,\n  @py.line_total_cents(\"w.price_cents\", \"o.quantity\") AS line_total_cents,\n  o.ordered_at,\n  o.status AS order_status,\n  __udf(\"udf__is_completed_order\")(o.status) AS is_completed_order,\n  p.payment_method,\n  p.payment_status,\n  SUM(p.payment_method) OVER () AS payment_amount_cents\nFROM __ref(\"stg_orders\") o\nLEFT JOIN __seed(\"waffle_types\") w ON o.waffle_type_id = w.waffle_type_id\nLEFT JOIN __ref(\"stg_payments\") p ON o.order_id = p.order_id\n"
       }
     }
   ]
