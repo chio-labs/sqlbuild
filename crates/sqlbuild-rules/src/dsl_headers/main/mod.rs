@@ -1,3 +1,4 @@
+pub mod fix_escaped_quotes;
 pub mod format_headers;
 pub mod inner_header_text;
 pub mod lint_headers;

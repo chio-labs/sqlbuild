@@ -1,10 +1,13 @@
 //! The per-file native work of a format run: header lint and header formatting.
 
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use rayon::ThreadPool;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use sqlbuild_core::format_command::main::collect_lint_files::collect_lint_files;
 use sqlbuild_rules::dsl_headers::constants::RULE_HEADER_PARSE;
+use sqlbuild_rules::dsl_headers::main::fix_escaped_quotes::fix_escaped_quotes;
 use sqlbuild_rules::dsl_headers::main::format_headers::format_headers;
 use sqlbuild_rules::dsl_headers::main::scan_headers::scan_headers;
 use sqlbuild_rules::dsl_headers::models::{HeaderRulesConfig, HeaderViolation};
@@ -50,6 +53,35 @@ pub(crate) fn parse_faults(violations: &[HeaderViolation]) -> Vec<HeaderViolatio
         .filter(|violation| violation.code == RULE_HEADER_PARSE)
         .cloned()
         .collect()
+}
+
+/// `text` with escaped quotes in descriptions rewritten, and the lines rewritten, when its
+/// headers then parse.
+pub(crate) fn quote_fixed_text(
+    text: &str,
+    config: HeaderRulesConfig,
+) -> Result<Option<(String, Vec<usize>)>, String> {
+    let characters: Vec<char> = text.chars().collect();
+    let (fixed, lines) = fix_escaped_quotes(&characters);
+    if lines.is_empty() {
+        return Ok(None);
+    }
+    let fixed: String = fixed.into_iter().collect();
+    Ok(parse_faults(&lint_header_text(&fixed, config)?)
+        .is_empty()
+        .then_some((fixed, lines)))
+}
+
+/// Whether any authored SQL file of the project has a description that escapes quotes.
+pub(crate) fn has_quote_fixes(directory: &Path) -> Result<bool, String> {
+    let files: Vec<(PathBuf, String)> =
+        collect_lint_files(directory, None).map_err(|error| error.to_string())?;
+    Ok(files.iter().any(|(_, text)| {
+        text.contains("\\\"")
+            && !fix_escaped_quotes(&text.chars().collect::<Vec<char>>())
+                .1
+                .is_empty()
+    }))
 }
 
 /// `text` with header formatting fixes applied, and the faults relocation reported.
