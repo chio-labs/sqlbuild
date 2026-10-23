@@ -60,6 +60,15 @@ findings and cache entries match a single-process run. The result stays correct,
 longer runs in parallel and costs an extra host process. Keep each subject's findings independent
 of the others so Rules can run in parallel.
 
+SQLBuild compares module state once per subject, after every selected Rule has evaluated it. A
+change still present then is reported against each Rule whose module, or helper module it imports,
+holds the changed value, the same Rules a check after every invocation would name. A change undone
+before the subject's last Rule finishes, such as a scratch list one Rule fills and another empties
+for the same model, is not detected. The same check decides which Rules the cache can track by the
+facts they read: a Rule whose module state changed is cached against every project fact instead, so
+any edit evaluates it again. `compile_timings` reports the time this check takes as
+`custom_rules_monitor_cpu_ms`; see [`sqb compile`](../../../cli/compile.md#json-output).
+
 ## Helpers
 
 Custom Rules can import repository-owned helpers under `rules/` and these deterministic standard

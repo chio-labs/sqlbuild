@@ -46,6 +46,10 @@ genuinely project-wide invariants, with correspondingly broader invalidation.
 Positive and negative project-tree observations are dependencies. If a Rule observes that a glob
 has no matches, adding a matching file invalidates that result.
 
+`--no-cache` on `sqb compile`, `sqb plan`, and `sqb build` turns the Rules cache off for that
+invocation: every built-in and custom Rule evaluates again, and stored results are neither read nor
+written. Use it when a Rule finding looks stale.
+
 ## Built-in-only execution
 
 When no custom Rule is selected, SQLBuild does not initialize the custom Python host. When every
