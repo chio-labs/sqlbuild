@@ -15,6 +15,7 @@ Online: https://sqlbuild.com/docs/cli/janitor/
 - Speed
 - Targets
 - Lifecycle
+- Review schemas
 - Compatibility views
 - Pending migration origins
 - Relation age
@@ -65,7 +66,7 @@ Deleted 1 expired archive. (0.12s)
 ✓ Janitor completed  archived 3, deleted 1, pruned 0  (0.81s)
 ```
 
-The phases are archiving stale relations, deleting expired archives, dropping old-name views, dropping expired query artifacts and pruning direct state, in that order. If an action fails, its line shows `FAIL` and the error, no further action starts, and the run ends with `✗ Janitor failed` and the totals completed before the failure, exiting with `1`.
+The phases are archiving stale relations, deleting expired archives, dropping old-name views, dropping expired query artifacts, dropping leftover review schemas and pruning direct state, in that order. If an action fails, its line shows `FAIL` and the error, no further action starts, and the run ends with `✗ Janitor failed` and the totals completed before the failure, exiting with `1`.
 
 Long preview sections show their first 10 entries and then `... and N more (use --verbose to show all)`. Skipped objects are counted by reason:
 
@@ -184,6 +185,10 @@ Archive names are written as unquoted lowercase identifiers, so warehouses that 
 Long names are shortened with a short hash so they fit the adapter's identifier limit. The prefix and timestamp are never shortened.
 
 Setting both `retention_days` and `archive_retention_days` to `0` archives and deletes stale relations in the same run.
+
+## Review schemas
+
+[`sqb review`](review.md) builds into a schema it creates for one run and drops when the run ends. Before creating the schema it writes an ownership marker to the active target schema's `_sqlbuild_fingerprints` table. When a review could not drop its schema, the janitor drops it once the timestamp in its name is more than 24 hours old, so a review that is still running is never touched. Only schemas with a marker in the active target schema are dropped; a schema whose name merely looks like a review schema is left alone.
 
 ## Compatibility views
 

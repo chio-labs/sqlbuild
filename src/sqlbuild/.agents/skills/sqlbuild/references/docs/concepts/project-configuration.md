@@ -22,6 +22,7 @@ Online: https://sqlbuild.com/docs/concepts/project-configuration/
 - Migrations
 - Scenario
 - Git
+- Review
 - dbt
 - Skills
 - Project Python
@@ -898,7 +899,26 @@ base_ref = "origin/main"
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `base_ref` | unset | Git ref that [`sqb test --since @base`](../cli/test.md#run-only-affected-tests) and `sqb scenario test --since @base` read. Use a ref every checkout has, such as the remote default branch. |
+| `base_ref` | unset | Git ref that [`sqb test --since @base`](../cli/test.md#run-only-affected-tests), `sqb scenario test --since @base` and [`sqb review`](../cli/review.md) read. Use a ref every checkout has, such as the remote default branch. |
+
+## Review
+
+Defaults for [`sqb review`](../cli/review.md):
+
+```toml
+[review]
+against = "prod"
+downstream = "critical"
+schema_prefix = "REVIEW"
+critical_tags = ["critical"]
+```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `against` | unset | Target to compare with and to read unchanged upstream models from. `--against` overrides it; one of them is required |
+| `downstream` | `"critical"` | Which unchanged downstream models to build and compare: `critical`, `all` or `none`. `--downstream` overrides it |
+| `schema_prefix` | `"REVIEW"` | Prefix of the schema each review creates and drops |
+| `critical_tags` | `["critical"]` | Model tags that make a model critical, in addition to `critical true` in its `MODEL` header |
 
 ## dbt
 
