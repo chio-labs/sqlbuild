@@ -301,7 +301,7 @@ impl AnalysisSession {
         for model in models {
             let declared: Vec<DeclaredOutput> =
                 sql_macro_declared_outputs(&self.request.models[*model].sql_macro_checks);
-            if declared.is_empty() {
+            if declared.is_empty() || self.cache_hit(*model) {
                 continue;
             }
             self.ensure_cleaned(&[*model])?;
@@ -358,6 +358,11 @@ impl AnalysisSession {
             }
         }
         Ok(())
+    }
+
+    /// Whether the cache answered `model` with an outcome that already holds its declared types.
+    fn cache_hit(&self, model: usize) -> bool {
+        self.cache.as_ref().is_some_and(|cache| cache.hits[model])
     }
 
     /// Each model's SQL macro call arguments checked against its analysed types, cache hits too.
