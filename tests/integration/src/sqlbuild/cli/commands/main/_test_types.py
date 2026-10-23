@@ -1287,3 +1287,19 @@ class CompiledViewFallbacksTestCase:
     command: tuple[str, ...]
     expected_exit_code: int
     expected_fallbacks: int
+
+
+@dataclass(frozen=True)
+class RuleOutputTestCase:
+    """One project run through one Rules or compile command and its exact reported records.
+
+    Each expected record names only the fields it checks; the run must report exactly as many
+    records, in order.
+    """
+
+    description: str
+    files: dict[str, str]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_records: tuple[dict[str, object], ...] = ()
+    expected_stderr_fragments: tuple[str, ...] = ()
