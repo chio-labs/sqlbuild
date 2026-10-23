@@ -232,6 +232,18 @@ fn given_descriptions_when_formatting_then_layout_is_canonical_idempotent_and_te
             expected_text: "MODEL (\n  description \"Files under C:\\\",\n);\nSELECT 1\n",
         },
         FormatTestCase {
+            description: "a short description stays when later fields make its line long",
+            text: "FUNCTION (description 'Test function is_large_order.', arguments (amount_cents INTEGER), returns BOOLEAN);\n\namount_cents > 100\n",
+            line_width: 100,
+            expected_text: "FUNCTION (description 'Test function is_large_order.', arguments (amount_cents INTEGER), returns BOOLEAN);\n\namount_cents > 100\n",
+        },
+        FormatTestCase {
+            description: "a description too long by itself becomes a block before later fields",
+            text: "FUNCTION (description \"Whether an order is large enough to need review.\", returns BOOLEAN);\n\nTRUE\n",
+            line_width: 50,
+            expected_text: "FUNCTION (description \"\"\"\n  Whether an order is large enough to need review.\n\"\"\", returns BOOLEAN);\n\nTRUE\n",
+        },
+        FormatTestCase {
             description: "a SCHEMA description is laid out",
             text: "SCHEMA (\n  name order_columns,\n  description \"Columns every\n  order model shares.\",\n  columns (order_id (type BIGINT)),\n);\n",
             line_width: 100,

@@ -9,7 +9,9 @@ use sqlbuild_sqltext::header_strings::main::fold_prose::fold_prose;
 use sqlbuild_sqltext::header_strings::main::prose_string::prose_string;
 
 use crate::dsl_headers::_helpers::macro_header::same_macro;
-use crate::dsl_headers::_helpers::prose_layout::{canonical_prose, description_string_span};
+use crate::dsl_headers::_helpers::prose_layout::{
+    canonical_prose, closing_width, description_string_span,
+};
 use crate::dsl_headers::_helpers::quoted::split_outside_quotes;
 use crate::dsl_headers::_helpers::rules::violation_at;
 use crate::dsl_headers::_helpers::text::{
@@ -229,8 +231,8 @@ fn keeps_single_quotes(
     }
     let line_start: usize = rfind_before(header_text, '\n', start).map_or(0, |found| found + 1);
     let line_end: usize = find(header_text, &['\n'], end).unwrap_or(header_text.len());
-    i64::try_from(rstrip(slice(header_text, line_start, line_end)).len())
-        .is_ok_and(|width| width <= line_width)
+    let width: usize = end - line_start + closing_width(slice(header_text, end, line_end));
+    i64::try_from(width).is_ok_and(|width| width <= line_width)
 }
 
 /// Whether two header texts parse to equal values; a header syntax error equals nothing.

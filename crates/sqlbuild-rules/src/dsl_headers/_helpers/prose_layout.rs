@@ -82,7 +82,7 @@ pub(crate) fn canonical_prose(
     let line_start: usize = rfind_before(header_text, '\n', start).map_or(0, |found| found + 1);
     let line_end: usize = find(header_text, &['\n'], end).unwrap_or(header_text.len());
     let prefix: usize = start - line_start;
-    let suffix: usize = rstrip(slice(header_text, end, line_end)).len();
+    let suffix: usize = closing_width(slice(header_text, end, line_end));
     let indent: String = header_text[line_start..start]
         .iter()
         .take_while(|character| matches!(character, ' ' | '\t'))
@@ -104,6 +104,26 @@ pub(crate) fn canonical_prose(
         _ => block(value, &indent, width),
     };
     stores_in_place(&rendered, value, after).then_some(rendered)
+}
+
+/// The width a description's line adds after it: its separator, plus closing brackets that end it.
+pub(crate) fn closing_width(rest: &[char]) -> usize {
+    let rest: &[char] = rstrip(rest);
+    if rest
+        .iter()
+        .all(|character| matches!(character, ',' | ')' | ';' | ' ' | '\t'))
+    {
+        return rest.len();
+    }
+    let spaces: usize = rest
+        .iter()
+        .take_while(|character| matches!(character, ' ' | '\t'))
+        .count();
+    if rest.get(spaces) == Some(&',') {
+        spaces + 1
+    } else {
+        0
+    }
 }
 
 /// Whether `rendered`, followed by the header text `after` it, reads as exactly `value`.
