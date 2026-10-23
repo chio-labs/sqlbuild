@@ -106,7 +106,13 @@ impl AuditParse<'_> {
                 .iter()
                 .filter(|character| **character == '\n')
                 .count();
-        let header_values: Vec<(String, AuthoredValue)> = self.header(&header, header_line)?;
+        let line_start: usize = block_chars[..=open_index]
+            .iter()
+            .rposition(|character| *character == '\n')
+            .map_or(0, |newline| newline + 1);
+        let header_column: usize = open_index + 2 - line_start;
+        let header_values: Vec<(String, AuthoredValue)> =
+            self.header(&header, (header_line, header_column))?;
         let evaluation_mode: &'static str = evaluation_mode(&header_values, file_path)?;
         let body: &[char] = &block_chars[body_start..];
         let mut measure_sql: Option<String> = None;
@@ -154,7 +160,7 @@ impl AuditParse<'_> {
     fn header(
         &self,
         header: &str,
-        header_line: usize,
+        header_start: (usize, usize),
     ) -> Result<Vec<(String, AuthoredValue)>, ParseStop> {
         let file_path: &str = self.file_path;
         let values: Vec<(String, AuthoredValue)> = parse_statement_header(
@@ -166,7 +172,7 @@ impl AuditParse<'_> {
                 supported_keys: &self.options.audit_keys,
             },
             header,
-            header_line,
+            header_start,
         )?;
         for key in STRING_KEYS {
             if let Some(value) = get(&values, key)

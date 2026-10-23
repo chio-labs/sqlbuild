@@ -1,9 +1,10 @@
 //! Line-leading parenthesized DSL regions, found past comments and SQL strings.
 
 use sqlbuild_core::text::main::python_isspace::python_isspace;
+use sqlbuild_sqltext::header_strings::main::header_quoted_end::header_quoted_end;
 
 use crate::dsl_headers::_helpers::text::{find, is_word};
-use crate::dsl_headers::constants::{ESCAPE, QUOTES};
+use crate::dsl_headers::constants::QUOTES;
 use crate::dsl_headers::models::HeaderSpan;
 
 /// The end of the SQL string quoted by `quote` that opens at `start`; `''` escapes a quote.
@@ -72,23 +73,15 @@ fn header_end(text: &[char], body_start: usize) -> Option<usize> {
         return None;
     }
     let mut depth: i64 = 0;
-    let mut in_quote: Option<char> = None;
     loop {
-        let found: usize = (index..text.len()).find(|position| match in_quote {
-            None => matches!(text[*position], '(' | ')' | '\'' | '"'),
-            Some(quote) => text[*position] == ESCAPE || text[*position] == quote,
-        })?;
-        index = found;
+        index = (index..text.len())
+            .find(|position| matches!(text[*position], '(' | ')' | '\'' | '"'))?;
         let character: char = text[index];
-        if in_quote.is_some() {
-            if character == ESCAPE {
-                index += 2;
-                continue;
-            }
-            in_quote = None;
-        } else if QUOTES.contains(&character) {
-            in_quote = Some(character);
-        } else if character == '(' {
+        if QUOTES.contains(&character) {
+            index = header_quoted_end(text, index)?;
+            continue;
+        }
+        if character == '(' {
             depth += 1;
         } else {
             depth -= 1;

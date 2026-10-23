@@ -8,6 +8,7 @@ use crate::constants::{
 use crate::models::RulesConfig;
 use fensu_policy::policy::types::RuleCodeGrammar;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
+use sqlbuild_sqltext::header_strings::main::fold_prose::fold_prose;
 use std::path::Path;
 
 pub(crate) fn load(project_dir: &Path) -> Result<RulesConfig, RulesConfigLoadError> {
@@ -30,7 +31,7 @@ pub(crate) fn load(project_dir: &Path) -> Result<RulesConfig, RulesConfigLoadErr
             "unsupported legacy rules configuration; use [rules]".to_owned(),
         ));
     }
-    let config = match root.get("rules") {
+    let mut config = match root.get("rules") {
         None => RulesConfig::default(),
         Some(value) => {
             if let Some(error) = value.as_table().and_then(removed_settings) {
@@ -44,7 +45,43 @@ pub(crate) fn load(project_dir: &Path) -> Result<RulesConfig, RulesConfigLoadErr
         }
     };
     validate(&config).map_err(invalid)?;
+    fold_reasons(&mut config);
     Ok(config)
+}
+
+/// Every exception and ignore reason as folded prose, as header descriptions are stored.
+fn fold_reasons(config: &mut RulesConfig) {
+    let reasons = config
+        .rule_exceptions
+        .iter_mut()
+        .map(|entry| &mut entry.reason)
+        .chain(
+            config
+                .graph_edge_exceptions
+                .iter_mut()
+                .map(|entry| &mut entry.reason),
+        )
+        .chain(
+            config
+                .rule_ignores
+                .iter_mut()
+                .map(|entry| &mut entry.reason),
+        )
+        .chain(
+            config
+                .select_star_allow
+                .iter_mut()
+                .map(|entry| &mut entry.reason),
+        )
+        .chain(
+            config
+                .threshold_overrides
+                .iter_mut()
+                .map(|entry| &mut entry.reason),
+        );
+    for reason in reasons {
+        *reason = fold_prose(reason);
+    }
 }
 
 fn validate_raw(value: &toml::Value) -> Result<(), String> {

@@ -1,5 +1,6 @@
 //! Split a SQL test file into `TEST` blocks and parse each block header.
 
+use crate::_helpers::header_syntax::header_position;
 use crate::_helpers::statement_headers::{StatementHeader, parse_statement_header};
 use crate::models::{DiscoveryFailure, FailureKind};
 use crate::sql_tests::models::{DiscoveredSqlTestFile, SqlTestBlock, SqlTestFileOptions};
@@ -43,8 +44,8 @@ pub(crate) fn parse_sql_test_file(
             .get(index + 1)
             .map_or(contents.len(), |next| next.start);
         let header: &str = &contents[block.header_start..block.header_end];
-        let header_line: usize = contents[..block.header_start].matches('\n').count() + 1;
-        match parse_statement_header(&contract, header, header_line) {
+        let header_start: (usize, usize) = header_position(&contents, block.header_start);
+        match parse_statement_header(&contract, header, header_start) {
             Ok(header_values) => {
                 let body_start: usize = block.end.min(next_start);
                 let authored: &str =

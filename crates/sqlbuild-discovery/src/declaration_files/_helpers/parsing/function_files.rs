@@ -1,5 +1,6 @@
 //! Python's `parse_function_sql`: a `FUNCTION(...);` header and the SQL body after it.
 
+use crate::_helpers::header_syntax::header_position;
 use crate::_helpers::statement_headers::{StatementHeader, parse_statement_header};
 use crate::declaration_files::_helpers::checks::stops::ParseStop;
 use crate::declaration_files::models::{DeclarationFileOptions, FunctionFile};
@@ -33,7 +34,7 @@ pub(crate) fn parse_function_file(
             supported_keys: &options.function_keys,
         },
         &contents[header_start..header_end],
-        contents[..header_start].matches('\n').count() + 1,
+        header_position(&contents, header_start),
     )?;
     let body_sql: String = str::trim(&contents[sql_start..]).to_owned();
     if body_sql.is_empty() {

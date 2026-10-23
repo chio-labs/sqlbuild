@@ -8,6 +8,16 @@ use crate::constants::{
     COLUMNS_KEY, CONSTANT_CALL, INLINE_SQL_HOOK, MAX_HEADER_NESTING_DEPTH, OUTSIDE_KEY, SQL_HOOK,
     THRESHOLDS_KEY, TYPE_KEY,
 };
+use crate::header_strings::constants::{
+    AUDITS_KEY, DESCRIPTION_KEY, DOUBLE_QUOTE_INSIDE, POSITION_SUFFIX, TRIPLE_QUOTE_INSIDE,
+    TRIPLE_QUOTE_LENGTH, UNCLOSED_TRIPLE_QUOTE,
+};
+use crate::header_strings::main::closes_inside_text::closes_inside_text;
+use crate::header_strings::main::opens_triple_quote::opens_triple_quote;
+use crate::header_strings::main::prose_string::prose_string;
+use crate::header_strings::main::run_on_after_close::run_on_after_close;
+use crate::header_strings::main::triple_quoted_end::triple_quoted_end;
+use crate::header_strings::models::TripleQuoteError;
 use sqlbuild_core::constants::{CLOSE_PAREN, OPEN_PAREN};
 
 pub(crate) const MAX_TOKENIZER_WORKERS: usize = 4;
@@ -32,14 +42,16 @@ pub(crate) fn parse_batch(headers: &[String]) -> Result<Vec<HeaderParseResult>, 
 }
 
 pub(crate) fn parse_one(header: &str) -> HeaderParseResult {
-    match tokenize(header).and_then(HeaderParser::parse) {
+    let characters: Vec<char> = header.chars().collect();
+    match tokenize(&characters).and_then(|tokens| HeaderParser::parse(tokens, &characters)) {
         Ok((value, offsets)) => (Some(value), Some(offsets), None),
         Err(error) => (None, None, Some(error)),
     }
 }
 
 pub(crate) fn tokenize_one(header: &str) -> Result<Vec<HeaderToken>, String> {
-    tokenize(header)
+    let characters: Vec<char> = header.chars().collect();
+    tokenize(&characters)
 }
 
 pub(crate) fn build_tokenizer_pool(header_count: usize) -> Result<ThreadPool, String> {
@@ -50,8 +62,10 @@ pub(crate) fn build_tokenizer_pool(header_count: usize) -> Result<ThreadPool, St
         .map_err(|error| error.to_string())
 }
 
-struct HeaderParser {
+struct HeaderParser<'a> {
     tokens: Vec<HeaderToken>,
+    /// The header text the token positions index, which prose values are read from.
+    characters: &'a [char],
     index: usize,
     column_offsets: Vec<HeaderColumnOffset>,
     /// The open containers, at most `MAX_HEADER_NESTING_DEPTH`, which bounds the recursion.
@@ -65,6 +79,10 @@ struct ParseValueOptions {
     nested_columns: bool,
     nested_metadata: bool,
     record_nested_columns: bool,
+    /// The value of an `audits` key, whose audit calls have a prose `description` option.
+    audit_list: bool,
+    /// An item of an `audits` list.
+    audit_call: bool,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -75,12 +93,18 @@ struct ParseMapOptions<'a> {
     column_entries: bool,
     column_metadata: bool,
     record_column_entries: bool,
+    /// Whether a `description` string here is prose, stored folded.
+    prose_descriptions: bool,
 }
 
-impl HeaderParser {
-    fn parse(tokens: Vec<HeaderToken>) -> Result<(AuthoredValue, Vec<HeaderColumnOffset>), String> {
+impl<'a> HeaderParser<'a> {
+    fn parse(
+        tokens: Vec<HeaderToken>,
+        characters: &'a [char],
+    ) -> Result<(AuthoredValue, Vec<HeaderColumnOffset>), String> {
         let mut parser = Self {
             tokens,
+            characters,
             index: 0,
             column_offsets: Vec::new(),
             depth: 0,
@@ -88,7 +112,10 @@ impl HeaderParser {
         let value = if parser.peek().0 == END_TOKEN {
             AuthoredValue::Map(Vec::new())
         } else {
-            AuthoredValue::Map(parser.parse_map(ParseMapOptions::default())?)
+            AuthoredValue::Map(parser.parse_map(ParseMapOptions {
+                prose_descriptions: true,
+                ..ParseMapOptions::default()
+            })?)
         };
         parser.expect_end()?;
         Ok((value, parser.column_offsets))
@@ -128,6 +155,12 @@ impl HeaderParser {
                 self.parse_hook_field(&key)?
             } else if options.column_metadata && key == TYPE_KEY {
                 self.parse_type()?
+            } else if options.prose_descriptions
+                && key == DESCRIPTION_KEY
+                && self.peek().0 == STRING_TOKEN
+            {
+                let position: usize = self.advance().2;
+                AuthoredValue::String(prose_string(self.characters, position)?.value)
             } else {
                 self.parse_value(ParseValueOptions {
                     threshold_policy: key == THRESHOLDS_KEY,
@@ -136,6 +169,8 @@ impl HeaderParser {
                     nested_columns: key == COLUMNS_KEY,
                     nested_metadata: options.column_entries,
                     record_nested_columns: options.end.is_none() && key == COLUMNS_KEY,
+                    audit_list: key == AUDITS_KEY,
+                    audit_call: false,
                 })?
             };
             values.push((key, value));
@@ -205,14 +240,18 @@ impl HeaderParser {
             }
             return Ok(parse_word(token.1));
         }
+        let items: ParseValueOptions = ParseValueOptions {
+            audit_call: options.audit_list,
+            ..ParseValueOptions::default()
+        };
         if self.match_symbol("[") {
             return self.nested(token.2, |parser| {
-                Ok(AuthoredValue::List(parser.parse_sequence("]")?))
+                Ok(AuthoredValue::List(parser.parse_sequence("]", items)?))
             });
         }
         if self.match_symbol("{") {
             return self.nested(token.2, |parser| {
-                Ok(AuthoredValue::Set(parser.parse_sequence("}")?))
+                Ok(AuthoredValue::Set(parser.parse_sequence("}", items)?))
             });
         }
         if self.match_symbol("(") {
@@ -224,6 +263,7 @@ impl HeaderParser {
                     column_entries: options.nested_columns,
                     column_metadata: options.nested_metadata,
                     record_column_entries: options.record_nested_columns,
+                    prose_descriptions: options.nested_metadata,
                 })?))
             });
         }
@@ -255,6 +295,7 @@ impl HeaderParser {
                 end: Some(")"),
                 threshold_policy: options.threshold_policy,
                 allow_outside: options.allow_outside,
+                prose_descriptions: options.audit_call,
                 ..ParseMapOptions::default()
             })
         })?;
@@ -279,13 +320,17 @@ impl HeaderParser {
         value
     }
 
-    fn parse_sequence(&mut self, end: &str) -> Result<Vec<AuthoredValue>, String> {
+    fn parse_sequence(
+        &mut self,
+        end: &str,
+        items: ParseValueOptions,
+    ) -> Result<Vec<AuthoredValue>, String> {
         let mut values: Vec<AuthoredValue> = Vec::new();
         while !self.at_end_symbol(Some(end)) {
             if self.match_symbol(",") {
                 continue;
             }
-            values.push(self.parse_value(ParseValueOptions::default())?);
+            values.push(self.parse_value(items)?);
             self.match_symbol(",");
         }
         self.consume_symbol(end)?;
@@ -509,8 +554,7 @@ fn parse_word(value: String) -> AuthoredValue {
     }
 }
 
-fn tokenize(header: &str) -> Result<Vec<HeaderToken>, String> {
-    let characters: Vec<char> = header.chars().collect();
+fn tokenize(characters: &[char]) -> Result<Vec<HeaderToken>, String> {
     let mut tokens: Vec<HeaderToken> = Vec::new();
     let mut index = 0;
     while index < characters.len() {
@@ -519,12 +563,12 @@ fn tokenize(header: &str) -> Result<Vec<HeaderToken>, String> {
             index += 1;
             continue;
         }
-        if starts_comment(&characters, index) {
-            index = comment_end(&characters, index)?;
+        if starts_comment(characters, index) {
+            index = comment_end(characters, index)?;
             continue;
         }
-        if starts_template(&characters, index) {
-            let template_end = find_character(&characters, '}', index + 2)
+        if starts_template(characters, index) {
+            let template_end = find_character(characters, '}', index + 2)
                 .ok_or_else(|| format!("unterminated template value at position {index}"))?;
             tokens.push((
                 WORD_TOKEN,
@@ -539,8 +583,26 @@ fn tokenize(header: &str) -> Result<Vec<HeaderToken>, String> {
             index += 1;
             continue;
         }
+        if opens_triple_quote(characters, index) {
+            let (content_end, end) = triple_quoted_string(characters, index)?;
+            tokens.push((
+                STRING_TOKEN,
+                characters[index + TRIPLE_QUOTE_LENGTH..content_end]
+                    .iter()
+                    .collect(),
+                index,
+            ));
+            index = end;
+            continue;
+        }
         if matches!(character, '\'' | '"') {
-            let (value, next_index) = read_quoted_string(&characters, index)?;
+            let (value, next_index) = read_quoted_string(characters, index)?;
+            if character == '"' && run_on_after_close(characters, next_index) {
+                return Err(format!(
+                    "{DOUBLE_QUOTE_INSIDE}{POSITION_SUFFIX}{}",
+                    next_index - 1
+                ));
+            }
             tokens.push((STRING_TOKEN, value, index));
             index = next_index;
             continue;
@@ -548,8 +610,8 @@ fn tokenize(header: &str) -> Result<Vec<HeaderToken>, String> {
 
         let start = index;
         while index < characters.len() {
-            if starts_template(&characters, index) {
-                let template_end = find_character(&characters, '}', index + 2)
+            if starts_template(characters, index) {
+                let template_end = find_character(characters, '}', index + 2)
                     .ok_or_else(|| format!("unterminated template value at position {index}"))?;
                 index = template_end + 1;
                 continue;
@@ -558,7 +620,7 @@ fn tokenize(header: &str) -> Result<Vec<HeaderToken>, String> {
             if char::is_whitespace(next)
                 || is_symbol(next)
                 || next == ':'
-                || starts_comment(&characters, index)
+                || starts_comment(characters, index)
             {
                 break;
             }
@@ -579,6 +641,22 @@ fn tokenize(header: &str) -> Result<Vec<HeaderToken>, String> {
     }
     tokens.push((END_TOKEN, String::new(), characters.len()));
     Ok(tokens)
+}
+
+/// The text end and end of the `"""` string at `start`, checked not to close inside its text.
+fn triple_quoted_string(characters: &[char], start: usize) -> Result<(usize, usize), String> {
+    let (content_end, end) = triple_quoted_end(characters, start).map_err(|error| match error {
+        TripleQuoteError::Unclosed => format!("{UNCLOSED_TRIPLE_QUOTE}{POSITION_SUFFIX}{start}"),
+        TripleQuoteError::Inside(position) => {
+            format!("{TRIPLE_QUOTE_INSIDE}{POSITION_SUFFIX}{position}")
+        }
+    })?;
+    if closes_inside_text(characters, end) {
+        return Err(format!(
+            "{TRIPLE_QUOTE_INSIDE}{POSITION_SUFFIX}{content_end}"
+        ));
+    }
+    Ok((content_end, end))
 }
 
 fn read_quoted_string(characters: &[char], start: usize) -> Result<(String, usize), String> {

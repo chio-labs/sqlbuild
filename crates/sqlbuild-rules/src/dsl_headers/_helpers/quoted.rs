@@ -3,27 +3,17 @@
 use sqlbuild_core::text::main::python_isalnum::python_isalnum;
 use sqlbuild_core::text::main::python_isspace::python_isspace;
 
+use sqlbuild_sqltext::header_strings::main::header_quoted_end::header_quoted_end;
+
 use crate::dsl_headers::_helpers::text::{is_alpha, string};
 use crate::dsl_headers::constants::{DESCRIPTION_KEY, ESCAPE, QUOTES};
 
 const MAX_CODEPOINT: u32 = 0x0010_FFFF;
 const SURROGATES: std::ops::RangeInclusive<u32> = 0xD800..=0xDFFF;
 
-/// The offset just past the quoted value that opens at `start`.
+/// The offset just past the quoted value that opens at `start`, or the end when it never closes.
 pub(crate) fn quoted_value_end(text: &[char], start: usize) -> usize {
-    let quote: char = text[start];
-    let mut index: usize = start + 1;
-    while index < text.len() {
-        if text[index] == ESCAPE && index + 1 < text.len() {
-            index += 2;
-            continue;
-        }
-        if text[index] == quote {
-            return index + 1;
-        }
-        index += 1;
-    }
-    text.len()
+    header_quoted_end(text, start).map_or(text.len(), |end| end.min(text.len()))
 }
 
 /// The span of the top-level `description` string value inside the header parentheses.
@@ -147,24 +137,14 @@ pub(crate) fn escape_quoted(value: &[char], quote: char) -> Vec<char> {
 pub(crate) fn split_outside_quotes(text: &[char]) -> Vec<&[char]> {
     let mut lines: Vec<&[char]> = Vec::new();
     let mut line_start: usize = 0;
-    let mut in_quote: Option<char> = None;
     let mut index: usize = 0;
     while index < text.len() {
         let character: char = text[index];
-        if let Some(quote) = in_quote {
-            if character == ESCAPE && index + 1 < text.len() {
-                index += 2;
-                continue;
-            }
-            if character == quote {
-                in_quote = None;
-            }
-            index += 1;
+        if QUOTES.contains(&character) {
+            index = quoted_value_end(text, index);
             continue;
         }
-        if QUOTES.contains(&character) {
-            in_quote = Some(character);
-        } else if character == '\n' {
+        if character == '\n' {
             lines.push(&text[line_start..index]);
             line_start = index + 1;
         }

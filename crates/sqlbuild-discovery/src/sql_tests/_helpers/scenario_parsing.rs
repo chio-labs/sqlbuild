@@ -1,5 +1,6 @@
 //! Parse a scenario file header; Python builds the scenario from the parsed values.
 
+use crate::_helpers::header_syntax::header_position;
 use crate::_helpers::statement_headers::{StatementHeader, parse_statement_header};
 use crate::models::{DiscoveryFailure, FailureKind};
 use crate::sql_tests::models::{DiscoveredScenarioFile, SqlTestFileOptions};
@@ -34,7 +35,7 @@ pub(crate) fn parse_scenario_file(
             supported_keys: &options.scenario_keys,
         },
         &contents[header_start..header_end],
-        contents[..header_start].matches('\n').count() + 1,
+        header_position(&contents, header_start),
     )?;
     let sql_body: String = python_cleandoc(&contents[sql_start..]);
     let span_start: usize = contents[..sql_start].chars().count();
