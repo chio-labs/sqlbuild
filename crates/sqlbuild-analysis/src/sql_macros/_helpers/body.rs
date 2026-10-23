@@ -10,7 +10,6 @@ use crate::sql_macros::_helpers::parameters::{
     with_placeholders,
 };
 use crate::sql_macros::constants::{ARGUMENT_CODE, INVALID_DEFINITION_CODE};
-use crate::sql_macros::errors::LexError;
 use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::models::{
     ArgumentShape, BodyExpansion, ParameterKind, RenderedArgument, SqlMacroDefinition,
@@ -335,6 +334,6 @@ fn without_leading_keyword(text: &str) -> String {
             Some(first) => text[first.end..].trim().to_owned(),
             None => text.trim().to_owned(),
         },
-        Err(LexError::UnclosedQuote(_) | LexError::UnclosedComment(_)) => text.trim().to_owned(),
+        Err(_) => text.trim().to_owned(),
     }
 }

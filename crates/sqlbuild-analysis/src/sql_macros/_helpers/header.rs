@@ -10,6 +10,13 @@ use crate::sql_macros::constants::{
 use crate::sql_macros::errors::LexError;
 use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::models::{ParameterKind, SqlMacroLocation, SqlMacroParameter};
+use sqlbuild_sqltext::header_strings::constants::{
+    DOUBLE_QUOTE_INSIDE_HELP, DOUBLE_QUOTE_INSIDE_MESSAGE, TRIPLE_QUOTE, TRIPLE_QUOTE_INSIDE_HELP,
+    TRIPLE_QUOTE_INSIDE_MESSAGE, TRIPLE_QUOTE_LENGTH, UNCLOSED_TRIPLE_QUOTE_HELP,
+    UNCLOSED_TRIPLE_QUOTE_MESSAGE,
+};
+use sqlbuild_sqltext::header_strings::main::fold_prose::fold_prose;
+use sqlbuild_sqltext::header_strings::main::triple_quoted_end::triple_quoted_end;
 
 /// What the header declares and where the body starts.
 pub(crate) struct Header {
@@ -42,6 +49,15 @@ impl HeaderParser<'_> {
         let scanned: Vec<Token> = tokens(source).map_err(|error| match error {
             LexError::UnclosedQuote(at) => self.error(at, "unclosed quote in SQL macro file"),
             LexError::UnclosedComment(at) => self.error(at, "unclosed comment in SQL macro file"),
+            LexError::QuoteInside(at) => self
+                .error(at, DOUBLE_QUOTE_INSIDE_MESSAGE)
+                .helped(DOUBLE_QUOTE_INSIDE_HELP),
+            LexError::TripleQuoteInside(at) => self
+                .error(at, TRIPLE_QUOTE_INSIDE_MESSAGE)
+                .helped(TRIPLE_QUOTE_INSIDE_HELP),
+            LexError::UnclosedTripleQuote(at) => self
+                .error(at, UNCLOSED_TRIPLE_QUOTE_MESSAGE)
+                .helped(UNCLOSED_TRIPLE_QUOTE_HELP),
         })?;
         let starts_with_header: bool = scanned
             .first()
@@ -89,7 +105,7 @@ impl HeaderParser<'_> {
         match key_text.as_str() {
             DESCRIPTION_KEY => match value {
                 [text] if matches!(text.kind, TokenKind::Quoted | TokenKind::Text) => {
-                    header.description = Some(unquoted(text.text(source)));
+                    header.description = Some(self.description(text)?);
                     Ok(header)
                 }
                 _ => Err(self.error(key.start, "description must be one quoted string")),
@@ -137,6 +153,39 @@ impl HeaderParser<'_> {
                 )
                 .helped("a MACRO header accepts description, arguments and returns")),
         }
+    }
+
+    /// The folded prose of the description string `text`.
+    ///
+    /// A backslash is an ordinary character, so `\"` inside `"..."` is a double quote inside
+    /// the text, which only a `"""..."""` string may hold.
+    fn description(&self, text: &Token) -> Result<String, SqlMacroError> {
+        let raw: &str = text.text(self.source);
+        if raw.starts_with(TRIPLE_QUOTE) {
+            let content_end: usize = triple_quoted_end(raw.as_bytes(), 0)
+                .map_or(raw.len() - TRIPLE_QUOTE_LENGTH, |(content_end, _)| {
+                    content_end
+                });
+            return Ok(fold_prose(&raw[TRIPLE_QUOTE_LENGTH..content_end]));
+        }
+        if !raw.starts_with('"') {
+            return Ok(fold_prose(&unquoted(raw)));
+        }
+        let bytes: &[u8] = raw.as_bytes();
+        let mut index: usize = 1;
+        while index + 1 < bytes.len() {
+            if bytes[index] == b'\\' {
+                if bytes[index + 1] == b'"' && index + 2 < bytes.len() {
+                    return Err(self
+                        .error(text.start + index + 1, DOUBLE_QUOTE_INSIDE_MESSAGE)
+                        .helped(DOUBLE_QUOTE_INSIDE_HELP));
+                }
+                index += 2;
+                continue;
+            }
+            index += 1;
+        }
+        Ok(fold_prose(&raw[1..raw.len() - 1]))
     }
 
     fn parameter(&self, tokens: &[Token]) -> Result<SqlMacroParameter, SqlMacroError> {

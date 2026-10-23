@@ -33,11 +33,22 @@ pub(crate) fn violation_at(
     }
 }
 
-fn parse_fault(starts: &[usize], header: &HeaderSpan, failure: ParseFailure) -> HeaderViolation {
+fn parse_fault(
+    (text, starts): (&[char], &[usize]),
+    header: &HeaderSpan,
+    failure: ParseFailure,
+) -> HeaderViolation {
     let kind: &str = &header.kind;
+    let open: Option<usize> = slice(text, header.start, header.end)
+        .iter()
+        .position(|character| *character == '(');
+    let offset: usize = match (failure.position, open) {
+        (Some(position), Some(open)) => header.start + open + 1 + position,
+        _ => header.start,
+    };
     violation_at(
         starts,
-        header.start,
+        offset,
         (RULE_HEADER_PARSE, HeaderSeverity::Fault),
         (
             format!("{kind}() header could not be parsed: {}", failure.message),
@@ -62,7 +73,7 @@ pub(crate) fn value_violations<P: HeaderParser>(
     let values: P::Values = match parser.parse(kind, &string(inner_header_text(header_text))) {
         ParseOutcome::Parsed(values) => values,
         ParseOutcome::Rejected(failure) | ParseOutcome::Raised(_, failure) => {
-            return Ok(vec![parse_fault(starts, header, failure)]);
+            return Ok(vec![parse_fault((text, starts), header, failure)]);
         }
     };
     let mut violations: Vec<HeaderViolation> = Vec::new();

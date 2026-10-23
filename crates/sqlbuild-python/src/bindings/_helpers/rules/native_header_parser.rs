@@ -9,6 +9,8 @@ use sqlbuild_rules::dsl_headers::types::HeaderParser;
 use sqlbuild_sqltext::compiler::main::header_word_value::header_word_value;
 use sqlbuild_sqltext::compiler::main::model_header_single_parsing::parse_one;
 use sqlbuild_sqltext::compiler::models::{AuthoredValue, HeaderWord};
+use sqlbuild_sqltext::header_strings::main::quote_failure::quote_failure;
+use sqlbuild_sqltext::header_strings::models::QuoteFailure;
 
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::records::construct::error_class;
@@ -53,6 +55,7 @@ impl HeaderParser for NativeHeaderParser {
                     ParseFailure {
                         message,
                         help: None,
+                        position: None,
                     },
                 );
             }
@@ -62,12 +65,14 @@ impl HeaderParser for NativeHeaderParser {
             return ParseOutcome::Parsed(value);
         }
         let error: String = error.unwrap_or_else(|| "None".to_owned());
+        let quote: Option<QuoteFailure> = quote_failure(&error, inner, (1, 1));
         let (detail, help, _) = header_failure(&error, inner, None);
         let failure: ParseFailure = ParseFailure {
             message: format!(
                 "{kind}(...) in '{SENTINEL_PATH}' contains invalid SQLBuild header syntax: {detail}"
             ),
             help,
+            position: quote.map(|quote| quote.position),
         };
         ParseOutcome::Rejected(failure)
     }

@@ -5,6 +5,7 @@ use sqlbuild_model_config::header_metadata::constants::AUDIT_OPTION_KEYS;
 use sqlbuild_sqltext::compiler::main::model_header_matching::match_batch;
 use sqlbuild_sqltext::compiler::main::model_header_tokenizing::tokenize_one;
 use sqlbuild_sqltext::compiler::main::statement_header_matching::match_statement_header;
+use sqlbuild_sqltext::header_strings::main::header_quoted_end::header_quoted_end;
 
 use crate::refactoring::_helpers::edits::text_edits::{text_edit, whole_word_offsets};
 use crate::refactoring::_helpers::scanning::chars::{find, rfind, slice, starts_with};
@@ -118,21 +119,10 @@ pub(crate) fn span_tokens(
 
 /// The offset just past the quoted value that opens at `start` (`quoted_value_end`).
 fn quoted_value_end(text: &[char], start: usize) -> usize {
-    let Some(&quote) = text.get(start) else {
+    if start >= text.len() {
         return text.len();
-    };
-    let mut index = start + 1;
-    while index < text.len() {
-        if text[index] == '\\' && index + 1 < text.len() {
-            index += 2;
-            continue;
-        }
-        if text[index] == quote {
-            return index + 1;
-        }
-        index += 1;
     }
-    text.len()
+    header_quoted_end(text, start).map_or(text.len(), |end| end.min(text.len()))
 }
 
 fn is_separator(token: &HeaderToken) -> bool {

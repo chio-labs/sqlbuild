@@ -2,7 +2,7 @@ use crate::sql_macros::main::parse_sql_macro::parse_sql_macro;
 use crate::sql_macros::main::sql_macro_cycle::sql_macro_cycle;
 use crate::sql_macros::tests::helpers::owned;
 use crate::sql_macros::tests::test_types::{
-    CycleTestCase, DefinitionErrorTestCase, DefinitionTestCase,
+    CycleTestCase, DefinitionErrorTestCase, DefinitionTestCase, MacroDescriptionTestCase,
 };
 
 #[test]
@@ -282,6 +282,84 @@ fn given_invalid_macro_files_when_parsing_then_each_is_rejected() {
             test_case.description,
             error.message
         );
+    }
+}
+
+#[test]
+fn given_macro_descriptions_when_parsing_then_text_is_folded_or_the_quote_is_located() {
+    let quote_message: &str = "a double quote ends this \"...\" string early; use \"\"\"…\"\"\" for text containing double quotes";
+    let test_cases = [
+        MacroDescriptionTestCase {
+            description: "an escaped quote on one line fails at the quote",
+            source: "MACRO (\n  description \"Matches a title (\\\"Miss\\\").\",\n  arguments (value VARCHAR),\n  returns VARCHAR,\n);\n@value\n",
+            expected: Err((quote_message, 2, 34)),
+        },
+        MacroDescriptionTestCase {
+            description: "apostrophes elsewhere no longer let an escaped quote through",
+            source: "MACRO (\n  description \"True when a name starts with a woman's title. Any case,\nwith or without a dot (\\\"MISS SARAH BOWEN\\\", \\\"Mrs. C. O'Leary\\\").\",\n  arguments (value VARCHAR),\n  returns VARCHAR,\n);\n@value\n",
+            expected: Err((quote_message, 3, 25)),
+        },
+        MacroDescriptionTestCase {
+            description: "a bare quote that ends the string early fails where it is",
+            source: "MACRO (description \"Matches \"Miss\".\", returns VARCHAR);\n'x'\n",
+            expected: Err((quote_message, 1, 29)),
+        },
+        MacroDescriptionTestCase {
+            description: "a triple-quoted description on one line keeps its quotes",
+            source: "MACRO (description \"\"\"Matches \"Miss\", it's.\"\"\", returns VARCHAR);\n'x'\n",
+            expected: Ok("Matches \"Miss\", it's."),
+        },
+        MacroDescriptionTestCase {
+            description: "a triple-quoted block across lines is folded",
+            source: "MACRO (\n  description \"\"\"\n    True for \"Mrs. C. O'Leary\",\n    any case.\n  \"\"\",\n  returns VARCHAR,\n);\n'x'\n",
+            expected: Ok("True for \"Mrs. C. O'Leary\", any case."),
+        },
+        MacroDescriptionTestCase {
+            description: "a wrapped description stores the same as one line",
+            source: "MACRO (\n  description \"True for a woman's title,\nany case.\",\n  returns VARCHAR,\n);\n'it''s'\n",
+            expected: Ok("True for a woman's title, any case."),
+        },
+        MacroDescriptionTestCase {
+            description: "an unclosed triple quote reports where it started",
+            source: "MACRO (\n  description \"\"\"never closed,\n  returns VARCHAR,\n);\n'x'\n",
+            expected: Err(("this \"\"\" string is never closed", 2, 15)),
+        },
+        MacroDescriptionTestCase {
+            description: "a triple quote inside a triple-quoted string",
+            source: "MACRO (description \"\"\"a \"\"\"b\"\"\" c\"\"\", returns VARCHAR);\n'x'\n",
+            expected: Err((
+                "\"\"\" inside a \"\"\"...\"\"\" string ends it early",
+                1,
+                25,
+            )),
+        },
+    ];
+
+    for test_case in test_cases {
+        let actual = parse_sql_macro("m", "macros/sql/m.sql", test_case.source)
+            .map(|definition| definition.description.unwrap_or_default())
+            .map_err(|error| {
+                let location = error
+                    .locations
+                    .first()
+                    .map_or((0, 0), |location| (location.line, location.column));
+                (error.code, error.message, location)
+            });
+        match (actual, test_case.expected) {
+            (Ok(description), Ok(expected)) => {
+                assert_eq!(description, expected, "{}", test_case.description);
+            }
+            (Err((code, message, location)), Err((expected, line, column))) => {
+                assert_eq!(code, "P015", "{}", test_case.description);
+                assert!(
+                    message.starts_with(expected),
+                    "{}: {message}",
+                    test_case.description
+                );
+                assert_eq!(location, (line, column), "{}", test_case.description);
+            }
+            (actual, _) => panic!("{}: {actual:?}", test_case.description),
+        }
     }
 }
 
