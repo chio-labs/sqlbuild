@@ -855,6 +855,7 @@ const R_SCENARIO_FIXTURE_PLAN: RecordSpec = RecordSpec {
         FieldSpec::required("logical_name"),
         FieldSpec::required("destination"),
         FieldSpec::required("sql"),
+        FieldSpec::new("authored_sql", FieldDefault::Text("")),
     ],
 };
 const R_SCENARIO_EXPECTED_EXPECTATION_PLAN: RecordSpec = RecordSpec {

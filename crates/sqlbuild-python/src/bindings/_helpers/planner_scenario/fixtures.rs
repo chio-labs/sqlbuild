@@ -60,7 +60,7 @@ pub(super) fn fixture_plans<'py>(
         for name in native_field(graph, names)?.try_iter()? {
             let name: String = name?.extract()?;
             let target = required_target(&context.relations, locations, &name, kind)?;
-            let Some(mut sql) = fixtures.get_item(&name)? else {
+            let Some(authored) = fixtures.get_item(&name)? else {
                 return Err(error(
                     py,
                     &format!("Scenario is missing {kind} fixture SQL '{name}'"),
@@ -68,6 +68,7 @@ pub(super) fn fixture_plans<'py>(
                     None,
                 )?);
             };
+            let mut sql = authored.clone();
             if kind != super::constants::DBT_REF && !overrides.is_none() {
                 sql = mapping_get_or(overrides, (resource, &name), sql)?;
             }
@@ -87,6 +88,7 @@ pub(super) fn fixture_plans<'py>(
                     ("logical_name", string(py, &name)),
                     ("destination", target),
                     ("sql", string(py, &sql)),
+                    ("authored_sql", authored),
                 ],
             )?);
         }

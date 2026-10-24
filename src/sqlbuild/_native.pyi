@@ -14198,12 +14198,14 @@ class ScenarioFixturePlan(NativeRecord):
     logical_name: str
     destination: CompiledRelationLocation
     sql: str
+    authored_sql: str
     def __init__(
         self,
         kind: ScenarioArtifactKind,
         logical_name: str,
         destination: CompiledRelationLocation,
         sql: str,
+        authored_sql: str = ...,
     ) -> None: ...
 
 class ScenarioExpectedExpectationPlan(NativeRecord):
