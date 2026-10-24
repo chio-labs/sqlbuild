@@ -12,11 +12,11 @@ pub fn sql_macro_definition_digest(name: &str, path: &str, source: &str) -> Stri
     };
     let mut parts: Vec<String> = vec![
         definition.form.label().to_owned(),
-        definition
-            .returns
-            .as_deref()
-            .map(type_text)
-            .unwrap_or_default(),
+        match (&definition.returns, &definition.returns_like) {
+            (Some(returns), _) => type_text(returns),
+            (None, Some(like)) => format!("type of {}", like.to_lowercase()),
+            (None, None) => String::new(),
+        },
         sql_definition_digest(&definition.body),
     ];
     for parameter in &definition.parameters {

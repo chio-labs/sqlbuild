@@ -50,6 +50,7 @@ pub(crate) fn model_row(facts: &CompiledModelFacts) -> Result<ModelRow, String> 
             .iter()
             .map(declaration)
             .collect(),
+        typed_calls: facts.typed_calls.clone(),
     })
 }
 

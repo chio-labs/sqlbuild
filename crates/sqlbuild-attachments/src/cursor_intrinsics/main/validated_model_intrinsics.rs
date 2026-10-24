@@ -1,5 +1,6 @@
 //! `get_validated_model_cursor_intrinsics`: check and canonicalize one model query's intrinsics.
 
+use crate::cursor_intrinsics::_helpers::reserved::reserved_function_error;
 use crate::cursor_intrinsics::main::replace_intrinsics::replace_intrinsics;
 use crate::cursor_intrinsics::models::IntrinsicModel;
 
@@ -17,6 +18,9 @@ pub fn validated_model_intrinsics(
         return Err(format!(
             "{context} contains a reserved internal cursor marker"
         ));
+    }
+    if let Some(message) = reserved_function_error(sql, &context) {
+        return Err(message);
     }
     let (canonical, found) = replace_intrinsics(sql, &context, |name| format!("{name}()"))?;
     if !found {

@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use crate::sql_macros::errors::ExpansionFailure;
-use crate::sql_macros::models::{SqlMacroCheck, SqlMacroDefinition};
+use crate::sql_macros::models::{RenderedDeclarations, SqlMacroCheck, SqlMacroDefinition};
 
 /// Whose scope a piece of SQL resolves its declarations and macros in.
 #[derive(Clone, Debug)]
@@ -33,12 +33,12 @@ pub trait SqlMacroHost {
         name: &str,
     ) -> Result<Arc<SqlMacroDefinition>, ExpansionFailure<Self::Error>>;
 
-    /// `text` with its `@const` and `@enum` references rendered from `scope`.
+    /// `text` with its `@const` and `@enum` references rendered from `scope`, and where each landed.
     fn render_declarations(
         &self,
         scope: &SqlMacroScope,
         text: &str,
-    ) -> Result<String, ExpansionFailure<Self::Error>>;
+    ) -> Result<RenderedDeclarations, ExpansionFailure<Self::Error>>;
 
     /// What the constant `name` visible from `scope` holds.
     fn constant_shape(

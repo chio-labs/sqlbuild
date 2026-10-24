@@ -777,7 +777,7 @@ def test_given_sql_with_at_tokens_when_finding_macro_calls_then_returns_real_uni
                     'MACRO (description "Valid", arguments (v BIGINT), returns BIGINT);\n\n@v + 1\n'
                 ),
                 "macros/sql/z_invalid.sql": (
-                    'MACRO (description "Invalid", arguments (v BIGINT));\n\n@v + 1\n'
+                    'MACRO (description "Invalid", returns BIGINT);\n\nWITH a AS (SELECT 1)\n'
                 ),
             },
             expected_exports=("a_valid",),

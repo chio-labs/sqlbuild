@@ -89,6 +89,8 @@ pub(crate) struct ExpressionItem {
     pub(crate) direct_column: Option<String>,
     pub(crate) cast_type: Option<String>,
     pub(crate) start: Option<usize>,
+    /// The normalized characters from the expression's first token to its last, alias excluded.
+    pub(crate) span: Option<(usize, usize)>,
 }
 
 #[derive(Debug)]
@@ -249,6 +251,14 @@ impl<'a> ModelSource<'a> {
             .get(offset)
             .copied()
             .unwrap_or_else(|| self.bytes.len() - 1)
+    }
+
+    /// The model's byte range from normalized character `start` to the character before `end`.
+    pub(crate) fn byte_range(&self, start: usize, end: usize) -> (usize, usize) {
+        let last: usize = self.bytes.len() - 1;
+        let first: usize = self.bytes[self.original(start).min(last)];
+        let after: usize = self.bytes[(self.original(end.saturating_sub(1)) + 1).min(last)];
+        (first, after.max(first))
     }
 
     /// The 1-based line and column of normalized character `offset`.

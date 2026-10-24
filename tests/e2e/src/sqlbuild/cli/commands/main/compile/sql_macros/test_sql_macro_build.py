@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -145,7 +146,7 @@ _NESTED_LOCAL: dict[str, str] = {
                 ),
             },
             query="SELECT order_id, amount, fees, net, label FROM orders",
-            expected_rows=[(2, 5.0, 1.0, 4.5, "[5.0]")],
+            expected_rows=[(2, Decimal("5.00"), Decimal("1.00"), Decimal("4.50"), "[5.00]")],
         ),
         SqlMacroBuildTestCase(
             description="cte_list_and_column_list_macros_with_enum_and_list_constant_arguments",
@@ -458,7 +459,7 @@ def test_given_any_spelling_of_list_calls_when_building_then_the_model_holds_the
             files={
                 **CENTS_TO_DOLLARS,
                 "macros/sql/zz_invalid.sql": (
-                    'MACRO (description "Invalid", arguments (v BIGINT));\n\n@v + 1\n'
+                    'MACRO (description "Invalid", returns BIGINT);\n\nWITH a AS (SELECT 1)\n'
                 ),
                 **orders_model(
                     'SELECT @sql.cents_to_dollars(amount_cents) AS d FROM __ref("stg_orders")\n'
@@ -468,7 +469,7 @@ def test_given_any_spelling_of_list_calls_when_building_then_the_model_holds_the
             expected_returncode=1,
             expected_fragments=(
                 "Resource: macro:cents_to_dollars",
-                "ERROR S021 macros/sql/zz_invalid.sql: expression macro zz_invalid() needs returns",
+                "ERROR S021 macros/sql/zz_invalid.sql: CTE-list macro zz_invalid() cannot declare returns",
             ),
         ),
     ],

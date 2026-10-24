@@ -7,7 +7,10 @@ use crate::sql_macros::models::{ParameterKind, SqlMacroParameter};
 pub(crate) fn parameter_text(parameter: &SqlMacroParameter) -> String {
     let kind: String = match &parameter.kind {
         ParameterKind::Expression { data_type } => format!("expression {}", type_text(data_type)),
-        ParameterKind::Any => "expression any".to_owned(),
+        ParameterKind::Any { family: None } => "expression any".to_owned(),
+        ParameterKind::Any {
+            family: Some(family),
+        } => format!("expression any {}", family.keyword().to_lowercase()),
         ParameterKind::Constant { data_type } => format!("const {}", type_text(data_type)),
         ParameterKind::Collection { set, data_type } => {
             format!("collection {set} {}", type_text(data_type))

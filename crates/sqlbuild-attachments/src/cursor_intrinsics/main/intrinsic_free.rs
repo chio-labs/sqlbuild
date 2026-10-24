@@ -1,5 +1,6 @@
 //! `reject_cursor_intrinsics`, with the error it raises.
 
+use crate::cursor_intrinsics::_helpers::reserved::reserved_function_error;
 use crate::cursor_intrinsics::main::replace_intrinsics::replace_intrinsics;
 use crate::cursor_intrinsics::models::IntrinsicCheck;
 
@@ -13,6 +14,9 @@ pub fn intrinsic_free(sql: &str, reserved_markers: &[String], context: &str) -> 
         return IntrinsicCheck::Rejected(format!(
             "{context} contains a reserved internal cursor marker"
         ));
+    }
+    if let Some(message) = reserved_function_error(sql, context) {
+        return IntrinsicCheck::Rejected(message);
     }
     match replace_intrinsics(sql, context, str::to_owned) {
         Err(message) => IntrinsicCheck::Rejected(message),

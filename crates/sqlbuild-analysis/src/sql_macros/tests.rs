@@ -4,7 +4,7 @@ mod helpers;
 mod test_definitions;
 #[path = "tests/test_expansion.rs"]
 mod test_expansion;
-#[path = "tests/test_output_types.rs"]
-mod test_output_types;
+#[path = "tests/test_typed_calls.rs"]
+mod test_typed_calls;
 #[path = "tests/test_types.rs"]
 mod test_types;

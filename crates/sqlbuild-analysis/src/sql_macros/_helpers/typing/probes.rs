@@ -4,10 +4,10 @@ use polyglot_sql::ValidationSchema;
 use serde_json::{Value, json};
 
 use crate::query_analysis::main::output_types::output_types;
-use crate::sql_macros::_helpers::arguments::{fits, type_family};
-use crate::sql_macros::_helpers::header::unquoted;
-use crate::sql_macros::_helpers::lexing::{Token, TokenKind, tokens};
-use crate::sql_macros::_helpers::placement::{QueryParts, top_level_parts};
+use crate::sql_macros::_helpers::parsing::header::unquoted;
+use crate::sql_macros::_helpers::parsing::lexing::{Token, TokenKind, tokens};
+use crate::sql_macros::_helpers::rendering::arguments::{fits, type_family};
+use crate::sql_macros::_helpers::rendering::placement::{QueryParts, top_level_parts};
 use crate::sql_macros::constants::{
     ALIAS_PRECEDING_KEYWORDS, FROM_KEYWORD, INFERRED_TEXT_TYPE, PROBE_COLUMN_PREFIX,
     PROBE_TAIL_ENDS, STAR_PROJECTION, UNKNOWN_TYPE_HINT, VARCHAR_TYPE,
@@ -193,7 +193,7 @@ pub(crate) fn probe_plan(sql: &str, checks: &[SqlMacroCheck]) -> ProbePlan {
                         evidence[index] = Some(Evidence::Columns(plan.probes.len() - 1));
                     }
                 }
-                ArgumentExpectation::Typed { .. } => {
+                ArgumentExpectation::Typed { .. } | ArgumentExpectation::Family { .. } => {
                     let group: usize = match typed_probe_index(&scopes, &check.scope) {
                         Some(group) => group,
                         None => {
@@ -345,7 +345,7 @@ pub(crate) fn check_findings(
                     ));
                 }
             }
-            ArgumentExpectation::Typed { data_type } => {
+            ArgumentExpectation::Typed { .. } | ArgumentExpectation::Family { .. } => {
                 let Some(Some(Evidence::Column(probe, column))) = evidence.get(index) else {
                     continue;
                 };
@@ -354,6 +354,28 @@ pub(crate) fn check_findings(
                 };
                 let Some(Some(actual)) = column_type(found, column) else {
                     continue;
+                };
+                let data_type: &str = match &argument.expected {
+                    ArgumentExpectation::Family { family } => {
+                        if !family.admits(type_family(actual, dialect)) {
+                            findings.push(finding(
+                                argument,
+                                format!(
+                                    "argument {parameter} of macro {name}() expects {}; {} is {}",
+                                    family.noun(),
+                                    argument.text,
+                                    shown_type(actual)
+                                ),
+                                Some(format!(
+                                    "pass {} or declare {parameter} with a wider type",
+                                    family.noun()
+                                )),
+                            ));
+                        }
+                        continue;
+                    }
+                    ArgumentExpectation::Typed { data_type } => data_type,
+                    _ => continue,
                 };
                 if !compatible(Some(actual), data_type, dialect) {
                     findings.push(finding(

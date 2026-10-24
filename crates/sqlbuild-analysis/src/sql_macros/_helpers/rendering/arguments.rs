@@ -1,7 +1,8 @@
 //! A call's argument list: split, bound to parameters and checked against their types.
 
-use crate::sql_macros::_helpers::header::{split_top_level, unquoted};
-use crate::sql_macros::_helpers::lexing::{Token, TokenKind, closing_token, tokens};
+use crate::sql_macros::_helpers::parsing::header::{split_top_level, unquoted};
+use crate::sql_macros::_helpers::parsing::lexing::{Token, TokenKind, closing_token, tokens};
+use crate::sql_macros::_helpers::typing::returns_check::adapter_dialect;
 use crate::sql_macros::constants::{
     ARGUMENT_CODE, BOOLEAN_WORDS, NAMED_ARGUMENT_MIN_TOKENS, NULL_WORD, REFERENCE_FUNCTIONS,
 };
@@ -238,7 +239,7 @@ pub(crate) fn argument_shape(text: &str) -> ArgumentShape {
 }
 
 fn unquote(text: &str) -> String {
-    crate::sql_macros::_helpers::header::unquoted(text)
+    crate::sql_macros::_helpers::parsing::header::unquoted(text)
 }
 
 /// The type family of a SQL literal argument.
@@ -350,11 +351,34 @@ pub(crate) fn check_shape(
             Err(expects("a SQL expression"))
         }
         (ParameterKind::Expression { .. }, _) => Ok(()),
-        (ParameterKind::Any, ArgumentShape::InlineCollection | ArgumentShape::Reference { .. }) => {
+        (
+            ParameterKind::Any { .. },
+            ArgumentShape::InlineCollection | ArgumentShape::Reference { .. },
+        ) => {
             Err(expects("a scalar SQL expression")
                 .helped("an ANY argument takes one value per row, such as a column, a literal or an expression; pass lists to LIST arguments and relations to RELATION arguments"))
         }
-        (ParameterKind::Any, _) => Ok(()),
+        (
+            ParameterKind::Any {
+                family: Some(family),
+            },
+            ArgumentShape::Literal,
+        ) => {
+            let actual: TypeFamily = literal_family(argument);
+            if family.admits(actual) {
+                Ok(())
+            } else {
+                Err(SqlMacroError::new(
+                    ARGUMENT_CODE,
+                    format!(
+                        "argument {name} of macro {macro_name}() expects {}; {shown} is {}",
+                        family.noun(),
+                        family_label(actual)
+                    ),
+                ))
+            }
+        }
+        (ParameterKind::Any { .. }, _) => Ok(()),
         (ParameterKind::Constant { .. }, ArgumentShape::ConstantReference { .. }) => Ok(()),
         (ParameterKind::Constant { .. }, _) => Err(expects("a literal, a scalar constant or an enum value")
             .helped(format!("pass a literal, such as 2, or a constant, such as @const(\"{name}\"); a CONST argument is known at compile time, so a column or expression cannot be passed"))),
@@ -391,10 +415,10 @@ pub(crate) fn check_shape(
 /// Whether an argument of kind `outer`, forwarded as `@name`, fits a parameter of kind `inner`.
 fn forwards(outer: &ParameterKind, inner: &ParameterKind) -> bool {
     match inner {
-        ParameterKind::Expression { .. } | ParameterKind::Any => matches!(
+        ParameterKind::Expression { .. } | ParameterKind::Any { .. } => matches!(
             outer,
             ParameterKind::Expression { .. }
-                | ParameterKind::Any
+                | ParameterKind::Any { .. }
                 | ParameterKind::Constant { .. }
                 | ParameterKind::Enum { .. }
                 | ParameterKind::ColumnOf { .. }
@@ -493,11 +517,7 @@ pub(crate) fn is_atomic(sql: &str) -> bool {
 /// The family of a declared type, normalized as schema declaration types are for the adapter.
 pub(crate) fn type_family(data_type: &str, adapter: &str) -> TypeFamily {
     use crate::type_system::models::TypeFamily as Normalized;
-    let dialect: &str = match adapter {
-        "motherduck" => "duckdb",
-        "" => "generic",
-        other => other,
-    };
+    let dialect: &str = adapter_dialect(adapter);
     let normalized = normalize_type(data_type, dialect)
         .or_else(|_| normalize_type(data_type, "generic"))
         .map(|normalization| normalization.normalized.family);

@@ -22,6 +22,10 @@ pub const MISPLACED_CALL_CODE: &str = "P021";
 pub const PARAMETER_REFERENCE_CODE: &str = "P022";
 /// A runtime parameter a SQL macro body uses where SQL requires a literal.
 pub const LITERAL_REQUIRED_CODE: &str = "P023";
+/// An expression macro whose body's known type is not its declared `returns`.
+pub const RETURNS_MISMATCH_CODE: &str = "P024";
+/// An expression macro body that misuses the type of an `ANY` family argument.
+pub const BODY_TYPE_CODE: &str = "P025";
 /// A declaration a SQL macro body uses that is not visible from the macro file.
 pub const BODY_SCOPE_CODE: &str = "S026";
 
@@ -35,11 +39,17 @@ pub(crate) const DEFAULT_KEYWORD: &str = "DEFAULT";
 pub(crate) const RELATION_KEYWORD: &str = "RELATION";
 pub(crate) const COLUMN_KEYWORD: &str = "COLUMN";
 pub(crate) const OF_KEYWORD: &str = "OF";
+pub(crate) const TYPE_KEYWORD: &str = "TYPE";
 pub(crate) const ENUM_KEYWORD: &str = "ENUM";
 pub(crate) const LIST_KEYWORD: &str = "LIST";
 pub(crate) const SET_KEYWORD: &str = "SET";
 /// Names a parameter may not take, because `@name` already means something else.
-pub(crate) const RESERVED_PARAMETER_NAMES: [&str; 5] = ["sql", "py", "const", "enum", "param"];
+pub(crate) const RESERVED_PARAMETER_NAMES: [&str; 6] =
+    ["sql", "py", "const", "enum", "param", CTE_ARGUMENT];
+/// The reserved call argument naming the CTEs a CTE-list macro call inserts.
+pub const CTE_ARGUMENT: &str = "__cte";
+/// What joins a call's `__cte` name to the name of each CTE but the last.
+pub(crate) const CTE_NAME_SEPARATOR: &str = "__";
 /// Type names that would make a parameter raw, untyped text.
 pub(crate) const RAW_TYPE_NAMES: [&str; 3] = ["RAW", "SQL", "EXPRESSION"];
 /// The type of a parameter that takes any scalar expression and checks no type.
@@ -64,8 +74,6 @@ pub(crate) const CTE_NOUN: &str = "CTE";
 /// Clause keywords a call position reads.
 pub(crate) const WITH_KEYWORD: &str = "WITH";
 pub(crate) const SELECT_KEYWORD: &str = "SELECT";
-/// The keyword before an alias.
-pub(crate) const AS_KEYWORD: &str = "AS";
 /// Punctuation and operators the scans compare against.
 pub(crate) const COMMA: &str = ",";
 pub(crate) const AT_SIGN: &str = "@";
@@ -101,7 +109,14 @@ pub(crate) const PROBE_TAIL_ENDS: [&str; 11] = [
 pub(crate) const INFERRED_TEXT_TYPE: &str = "TEXT";
 pub(crate) const VARCHAR_TYPE: &str = "VARCHAR";
 pub(crate) const FROM_KEYWORD: &str = "FROM";
-/// The projection name of an unexpanded star in a probe's analysis.
+/// Words that end a select item rather than alias it.
+pub(crate) const ITEM_ENDS: [&str; 4] = ["FROM", "WHERE", "UNION", "ORDER"];
+/// The relation whose columns stand in for a macro's arguments while its body is typed.
+pub(crate) const STAND_IN_RELATION: &str = "__sqlbuild_macro_arguments";
+/// The polyglot validation error codes, by number, of operands and arguments of a wrong type.
+pub(crate) const TYPE_ERROR_CODES: (usize, usize) = (210, 219);
+/// The polyglot validation warning codes, by number, of implicit conversions.
+pub(crate) const TYPE_WARNING_CODES: (usize, usize) = (210, 216);
 pub(crate) const STAR_PROJECTION: &str = "*";
 /// The type hint analysis reports for a column whose type it does not know.
 pub(crate) const UNKNOWN_TYPE_HINT: &str = "UNKNOWN";
@@ -110,3 +125,12 @@ pub(crate) const ALIAS_PRECEDING_KEYWORDS: [&str; 13] = [
     "FROM", "JOIN", "ON", "AND", "OR", "NOT", "WHERE", "USING", "LATERAL", "IN", "IS", "BY",
     "SELECT",
 ];
+/// Dialects tried in turn to judge whether typed markers keep a query parseable.
+pub(crate) const MARKER_PARSE_DIALECTS: [polyglot_sql::DialectType; 4] = [
+    polyglot_sql::DialectType::Generic,
+    polyglot_sql::DialectType::DuckDB,
+    polyglot_sql::DialectType::Snowflake,
+    polyglot_sql::DialectType::BigQuery,
+];
+/// The literal a typed marker still types, though it is one bare word.
+pub(crate) const NULL_KEYWORD: &str = "NULL";

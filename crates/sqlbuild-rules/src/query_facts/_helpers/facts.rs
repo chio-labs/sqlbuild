@@ -322,6 +322,15 @@ impl Builder<'_> {
             direct_projection: column_name(value).is_some(),
             direct_column: column_name(unwrapped),
             cast_type,
+            span: range
+                .as_ref()
+                .filter(|range| !range.is_empty())
+                .map(|range| {
+                    (
+                        self.tokens.start(range.start),
+                        self.tokens.end(range.end - 1),
+                    )
+                }),
             start: range.and_then(|range| self.tokens.leaf_start(&range)),
         })
     }

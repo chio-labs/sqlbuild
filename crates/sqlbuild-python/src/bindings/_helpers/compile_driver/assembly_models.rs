@@ -6,6 +6,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSetMethods, PyList, PyString, PyTuple};
 
 use crate::bindings::_helpers::analysis_session::model_analyses::ModelAnalyses;
+use crate::bindings::_helpers::analysis_session::profile_inputs::profile_dialect;
 use crate::bindings::_helpers::analysis_session::query_columns::ColumnsRow;
 use crate::bindings::_helpers::analysis_session::stage_functions::query_column_rows;
 use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_sql;
@@ -14,6 +15,7 @@ use crate::bindings::_helpers::compile_driver::assembly_analysis::{
     AnalysisContext, model_stem, selected_for_analysis,
 };
 use crate::bindings::_helpers::compiled_views::model_input_view::NativeModelInput;
+use crate::bindings::_helpers::compiled_views::model_input_view::input_analysis_sql;
 use crate::bindings::_helpers::hand_built::compiled_model::compiled_model as hand_built_model;
 use crate::bindings::_helpers::project_assembly::syntax_checks::model_placeholders;
 use crate::bindings::_helpers::project_assembly::syntax_validation::{
@@ -80,7 +82,7 @@ fn compiled_model<'py>(
         py,
         &analysis_cursor_sql(
             py,
-            &native_field(model_input, "query_sql")?.extract::<String>()?,
+            &input_analysis_sql(model_input, &profile_dialect(&context.profile)?)?,
             &mapping_get(&config_values, "cursor_type")?,
         )?,
     )

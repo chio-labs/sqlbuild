@@ -63,27 +63,6 @@ pub(super) struct PythonArgumentTestCase {
 /// Argument parsing without Unicode name lookups, which these arguments never use.
 pub(super) struct AsciiArguments;
 
-/// One recorded call, one analysed select item and the type the item then has, if changed.
-pub(super) struct OutputTypeTestCase {
-    pub(super) description: &'static str,
-    pub(super) check: crate::sql_macros::models::SqlMacroCheck,
-    /// The item's CTE (`None` for the main query), set-operation branch, name and inferred type.
-    pub(super) item: (
-        Option<&'static str>,
-        usize,
-        &'static str,
-        Option<&'static str>,
-    ),
-    pub(super) expected_type: Option<&'static str>,
-}
-
-/// Model SQL and the scope and alias of each whole-item SQL macro call.
-pub(super) struct OutputNamesTestCase {
-    pub(super) description: &'static str,
-    pub(super) sql: &'static str,
-    pub(super) expected_names: &'static [(Option<&'static str>, usize, &'static str)],
-}
-
 pub(super) struct MacroDescriptionTestCase {
     pub(super) description: &'static str,
     pub(super) source: &'static str,
@@ -95,4 +74,43 @@ pub(super) struct MacroQuoteErrorTestCase {
     pub(super) source: &'static str,
     pub(super) expected_message: &'static str,
     pub(super) expected_location: (usize, usize),
+}
+
+/// A text expanded with its typed calls, each shown as `macro returns: text`.
+pub(super) struct TypedCallTestCase {
+    pub(super) description: &'static str,
+    pub(super) macros: &'static [(&'static str, &'static str)],
+    pub(super) sql: &'static str,
+    pub(super) expected_calls: &'static [&'static str],
+}
+
+/// A compiled text and its calls, with the analysis text the markers make of it.
+pub(super) struct TypedAnalysisTestCase {
+    pub(super) description: &'static str,
+    pub(super) sql: &'static str,
+    pub(super) calls: &'static [(usize, usize, Option<&'static str>)],
+    pub(super) expected_sql: &'static str,
+}
+
+/// Two names that must stay equal.
+pub(super) struct ReservedNameTestCase {
+    pub(super) description: &'static str,
+    pub(super) authored_name: &'static str,
+    pub(super) expected_parsed_name: &'static str,
+}
+
+/// A query and the texts of its untyped calls, with the outputs each whole call names.
+pub(super) struct UntypedOutputsTestCase {
+    pub(super) description: &'static str,
+    pub(super) sql: &'static str,
+    pub(super) call_texts: &'static [&'static str],
+    pub(super) expected_outputs: &'static [(&'static str, &'static str)],
+}
+
+/// A query calling `macros`, with the analysis text its expansion marks.
+pub(super) struct ExpandedAnalysisTestCase {
+    pub(super) description: &'static str,
+    pub(super) macros: &'static [(&'static str, &'static str)],
+    pub(super) sql: &'static str,
+    pub(super) expected_sql: &'static str,
 }
