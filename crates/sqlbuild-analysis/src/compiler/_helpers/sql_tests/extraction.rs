@@ -683,6 +683,14 @@ fn macro_mock_value(
     }
     let (value, end) = read_string(body, index)?;
     index = skip_ignorable(body, end, syntax)?;
+    if let Some(alias_start) = consume_keyword(body, index, "AS") {
+        let alias: usize = skip_ignorable(body, alias_start, syntax)?;
+        let alias_end: usize = identifier_end(body, alias);
+        if alias_end == alias {
+            return Err(macro_mock_shape(file, &cte.0, true));
+        }
+        index = skip_ignorable(body, alias_end, syntax)?;
+    }
     if byte_at(body, index) == Some(b';') {
         index = skip_ignorable(body, index + 1, syntax)?;
     }
@@ -690,6 +698,20 @@ fn macro_mock_value(
         return Err(macro_mock_shape(file, &cte.0, true));
     }
     Ok(value)
+}
+
+/// The end of the plain or double-quoted identifier at `start`, or `start` when there is none.
+fn identifier_end(sql: &str, start: usize) -> usize {
+    if byte_at(sql, start) == Some(b'"') {
+        return sql[start + 1..]
+            .find('"')
+            .map_or(start, |close| start + close + 2);
+    }
+    let mut end: usize = start;
+    while char_at(sql, end).is_some_and(is_identifier_continue) {
+        end += char_len(sql, end);
+    }
+    end
 }
 
 fn macro_mock_shape(file: &str, name: &str, trailing: bool) -> String {

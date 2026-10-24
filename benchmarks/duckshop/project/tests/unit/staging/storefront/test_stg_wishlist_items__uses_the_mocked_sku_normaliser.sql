@@ -1,7 +1,7 @@
 TEST (name "stg_wishlist_items__uses_the_mocked_sku_normaliser");
 
 WITH __macro__normalise_sku AS (
-  SELECT '''MOCKED-SKU'''
+  SELECT '''MOCKED-SKU''' AS normalised_sku
 ),
 
 __ref__stg_wishlists AS (

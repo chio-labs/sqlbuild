@@ -154,7 +154,6 @@ noted here:
   them provide the incremental model as a fixture.
 - `sqb format` rewrites a typed `WHERE FALSE` fixture into `__empty_fixture()` even where the
   relation's schema is not authoritative, so the empty fixtures here use `WHERE 1 = 0`.
-- A macro mock must be an unaliased `SELECT` of one string literal, which `SQBRSQL022` rejects.
 - A file with several `TEST` blocks cannot satisfy `SQBRTEST102`, which names the file after each
   block.
 - Loaders that return rows write JSON values as `PARSE_JSON(...)` inside a `VALUES` list, which

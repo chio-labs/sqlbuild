@@ -237,13 +237,6 @@ days without activity report zero instead of disappearing. Both sides are small 
 """
 
 [[rules.rule_exceptions]]
-rule = "SQBRSQL022"
-path = "tests/unit/staging/storefront/test_stg_wishlist_items__uses_the_mocked_sku_normaliser.sql"
-reason = """
-A macro mock must be a bare SELECT of one string literal, so its projection cannot carry an alias.
-"""
-
-[[rules.rule_exceptions]]
 rule = "SQBRTEST102"
 path = "tests/unit/marts/catalogue/test_rpt_wishlist_conversion__edge_cases.sql"
 reason = """

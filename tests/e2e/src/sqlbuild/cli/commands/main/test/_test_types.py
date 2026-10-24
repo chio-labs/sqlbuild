@@ -582,3 +582,14 @@ class FixtureDeclaredTypeE2ETestCase:
     expected_sql: str
     expected_artifact_fragment: str
     expected_stdout_fragment: str = "PASS=1  FAIL=0  TOTAL=1"
+
+
+@dataclass(frozen=True)
+class MacroMockAliasTestCase:
+    """A macro mock's select item, with SQL rules selected, and what one command makes of it."""
+
+    description: str
+    mock_select: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_fragment: str

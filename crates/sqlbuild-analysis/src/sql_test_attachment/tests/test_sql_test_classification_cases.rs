@@ -162,6 +162,16 @@ fn given_sql_test_blocks_when_classifying_then_outcomes_are_exact() {
             expected_response: r####"{"error":{"index":0,"message":"SQL test 'tests/unit/orders.sql' check CTE '__assert__expected_is_nonempty' must not depend on '__expected__orders' through 'expected_helper'; expected results and assertions must be independent","help":null,"token":null,"tokenOffset":null}}"####,
         },
         BatchClassificationTestCase {
+            description: "model roles: a macro mock may name its one string literal",
+            request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH\n        __macro__country AS (SELECT '''US''' AS country_filter),\n        __macro__region AS (SELECT 'EU' AS \"region\"),\n        __source__raw_orders AS (SELECT 1 AS order_id),\n        __expected__orders AS (SELECT 1 AS order_id)\n        SELECT 1", "fileLabel": "tests/unit/orders.sql", "mode": "model", "raw": true}]}"####,
+            expected_response: r####"{"tests":[{"kind":"model","mode":"model","authored":[["__source__raw_orders","SELECT 1 AS order_id"]],"macroMocks":[["country","'US'"],["region","EU"]],"mockModels":[],"mockSources":["raw_orders"],"mockSeeds":[],"mockDbtRefs":[],"mockTableFunctions":[],"expected":[["__expected__orders","SELECT 1 AS order_id"]],"expectedModels":["orders"],"assertions":[],"assertionNames":[]}]}"####,
+        },
+        BatchClassificationTestCase {
+            description: "invalid: raises when a macro mock's alias is missing after AS",
+            request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH __macro__country AS (SELECT 'US' AS),\n        __source__raw_orders AS (SELECT 1 AS order_id),\n        __expected__orders AS (SELECT 1 AS order_id)\n        SELECT 1", "fileLabel": "tests/unit/orders.sql", "mode": "model", "raw": true}]}"####,
+            expected_response: r####"{"error":{"index":0,"message":"SQL test 'tests/unit/orders.sql' macro mock '__macro__country' must be a single SELECT string literal with no FROM, UNION, or additional columns","help":null,"token":null,"tokenOffset":null}}"####,
+        },
+        BatchClassificationTestCase {
             description: "invalid: raises when macro mock returns multiple columns",
             request: r####"{"syntax": {"backslashEscapeQuotes": [], "escapeStringPrefix": false, "rawStringPrefix": false, "tripleQuotedStrings": false, "nestedBlockComments": false, "lineCommentPrefixes": ["--"]}, "tests": [{"sql": "WITH __macro__country AS (SELECT 'US', 'CA'),\n        __source__raw_orders AS (SELECT 1 AS order_id),\n        __expected__orders AS (SELECT 1 AS order_id)\n        SELECT 1", "fileLabel": "tests/unit/orders.sql", "mode": "model", "raw": true}]}"####,
             expected_response: r####"{"error":{"index":0,"message":"SQL test 'tests/unit/orders.sql' macro mock '__macro__country' must be a single SELECT string literal with no FROM, UNION, or additional columns","help":null,"token":null,"tokenOffset":null}}"####,
