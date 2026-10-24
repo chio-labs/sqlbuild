@@ -1069,3 +1069,34 @@ def build_contracted_star_empty_fixture_project_files() -> dict[str, str]:
             "SELECT 1\n"
         ),
     }
+
+
+def build_cursor_intrinsic_scenario_project_files() -> dict[str, str]:
+    """Build a scenario over a non-microbatch incremental model that reads cursor intrinsics."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "cursor_scenario"\nadapter = "duckdb"\n\n'
+            '[connection]\ndatabase = "cursor_scenario.duckdb"\n'
+        ),
+        "models/orders.sql": (
+            "MODEL (description 'Test model orders.');\n"
+            "SELECT 1 AS order_id, TIMESTAMP '2026-01-02 10:00:00' AS ordered_at\n"
+        ),
+        "models/hourly_orders.sql": (
+            "MODEL (\n  description 'Test model hourly_orders.',\n  materialized incremental,\n"
+            "  incremental_strategy delete_insert,\n  cursor ordered_at,\n"
+            "  cursor_type timestamp,\n  cursor_grain hour,\n  cursor_inputs (orders ordered_at),\n"
+            ");\n"
+            'SELECT o.order_id, o.ordered_at FROM __ref("orders") AS o\n'
+            "WHERE o.ordered_at >= __cursor_start() AND o.ordered_at < __cursor_end()\n"
+        ),
+        "tests/scenarios/hourly_orders_window.sql": (
+            "SCENARIO (description 'Test scenario hourly_orders_window.');\n"
+            "WITH\n__ref__orders AS (\n"
+            "  SELECT 1 AS order_id, TIMESTAMP '2026-01-02 10:00:00' AS ordered_at\n),\n"
+            "__expected__hourly_orders AS (\n"
+            "  SELECT 1 AS order_id, TIMESTAMP '2026-01-02 10:00:00' AS ordered_at\n)\n"
+            "SELECT 1\n"
+        ),
+    }
