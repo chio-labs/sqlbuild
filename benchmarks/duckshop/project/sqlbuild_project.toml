@@ -235,11 +235,3 @@ reason = """
 The KPI grid is every reporting day for every region and metric pair that has ever had a value, so
 days without activity report zero instead of disappearing. Both sides are small and bounded.
 """
-
-[[rules.rule_exceptions]]
-rule = "SQBRTEST102"
-path = "tests/unit/marts/catalogue/test_rpt_wishlist_conversion__edge_cases.sql"
-reason = """
-This file keeps two related edge cases for one report together as separate TEST blocks. Each block
-has its own name, so the file cannot be named after both.
-"""

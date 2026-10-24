@@ -154,8 +154,6 @@ noted here:
   them provide the incremental model as a fixture.
 - `sqb format` rewrites a typed `WHERE FALSE` fixture into `__empty_fixture()` even where the
   relation's schema is not authoritative, so the empty fixtures here use `WHERE 1 = 0`.
-- A file with several `TEST` blocks cannot satisfy `SQBRTEST102`, which names the file after each
-  block.
 - Loaders that return rows write JSON values as `PARSE_JSON(...)` inside a `VALUES` list, which
   Snowflake rejects because `VALUES` accepts only constants. The DuckShop loaders therefore write
   their own tables, parsing JSON in the select list of each `INSERT` (`python/loaders/_writer.py`).

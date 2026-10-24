@@ -75,6 +75,17 @@ fn given_sql_test_facts_when_evaluating_project_rules_then_returns_expected_faul
                 "source_digest": "digest"
             }}
         }));
+    let first_edge_case = helpers::sql_test_fact(
+        "tests/unit/test_stg_orders__edge_cases.sql",
+        Some("stg_orders__keeps_paid_orders"),
+        json!(["stg_orders"]),
+    );
+    let mut second_edge_case = helpers::sql_test_fact(
+        "tests/unit/test_stg_orders__edge_cases.sql",
+        Some("stg_orders__excludes_cancelled_orders"),
+        json!(["stg_orders"]),
+    );
+    second_edge_case["block_index"] = json!(2);
     let test_cases = [
         test_types::SqlTestRulesTestCase {
             description: "canonical roots run without a model anchor",
@@ -124,6 +135,17 @@ fn given_sql_test_facts_when_evaluating_project_rules_then_returns_expected_faul
             expected_fault_count: 2,
             expected_evaluated_models: 0,
             expected_paths: &["tests/scenarios/daily_revenue.sql", "tests/unit/orders.sql"],
+        },
+        test_types::SqlTestRulesTestCase {
+            description: "a file of several test blocks needs only the filename grammar",
+            code: "SQBRTEST102",
+            tests: json!([first_edge_case, second_edge_case]),
+            scenarios: json!([]),
+            scope_index: scope.clone(),
+            config: json!({}),
+            expected_fault_count: 0,
+            expected_evaluated_models: 0,
+            expected_paths: &[],
         },
         test_types::SqlTestRulesTestCase {
             description: "resolved ownership uses LCA, pipeline, and direct resource paths",
