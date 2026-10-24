@@ -1,0 +1,227 @@
+{
+  "capture_adapter": "snowflake",
+  "capture_dialect": "snowflake",
+  "captured_at": "2026-10-24T13:09:48Z",
+  "format": "jsonl",
+  "input_fingerprint": "b9d2023c2fa62158a7028e977f0c110f6cccffdefd44c237f6f8deabf236d189",
+  "relations": [
+    {
+      "bytes": 2555,
+      "columns": [
+        {
+          "local_type": "TEXT(2)",
+          "name": "order_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(2)",
+          "name": "customer_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(2)",
+          "name": "region_code",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "placed_at",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "DATE",
+          "name": "placed_date_local",
+          "warehouse_type": "DATE"
+        },
+        {
+          "local_type": "TEXT(9)",
+          "name": "order_status",
+          "warehouse_type": "VARCHAR(9)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "sales_channel",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "DECIMAL(1, 0)",
+          "name": "units",
+          "warehouse_type": "NUMBER(1,0)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "currency_code",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "amount",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "DECIMAL(18, 2)",
+          "name": "amount_usd",
+          "warehouse_type": "NUMBER(18,2)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "rate_to_usd",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "rate_date",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "gross_amount_usd",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "DECIMAL(18, 2)",
+          "name": "discount_amount_usd",
+          "warehouse_type": "NUMBER(18,2)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "tax_amount_usd",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "promo_code",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "utm_source",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "utm_medium",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "utm_campaign",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "basket_size",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "order_number",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "BOOLEAN",
+          "name": "is_first_order",
+          "warehouse_type": "BOOLEAN"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "first_paid_at",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "first_delivered_at",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "hours_paid_to_shipped",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "captured_minor",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "refunded_minor",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "net_collected_minor",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "is_fully_refunded",
+          "warehouse_type": "VARCHAR(16777216)"
+        }
+      ],
+      "file": "refs/fct_orders.jsonl",
+      "kind": "ref",
+      "logical_name": "fct_orders",
+      "row_count": 4
+    },
+    {
+      "bytes": 946,
+      "columns": [
+        {
+          "local_type": "TEXT(26)",
+          "name": "recognition_key",
+          "warehouse_type": "VARCHAR(26)"
+        },
+        {
+          "local_type": "DATE",
+          "name": "recognition_date",
+          "warehouse_type": "DATE"
+        },
+        {
+          "local_type": "TEXT(2)",
+          "name": "region_code",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(12)",
+          "name": "revenue_stream",
+          "warehouse_type": "VARCHAR(12)"
+        },
+        {
+          "local_type": "DECIMAL(18, 2)",
+          "name": "revenue_usd",
+          "warehouse_type": "NUMBER(18,2)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "document_count",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "month_to_date_usd",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "trailing_7d_usd",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "share_of_day",
+          "warehouse_type": "VARCHAR(16777216)"
+        }
+      ],
+      "file": "refs/int_revenue_recognition_daily.jsonl",
+      "kind": "ref",
+      "logical_name": "int_revenue_recognition_daily",
+      "row_count": 4
+    }
+  ],
+  "scenario_name": "region_scorecard__combines_sales_and_recognised_revenue",
+  "sqlbuild_version": "0.175.0",
+  "total_bytes": 3501,
+  "total_rows": 8,
+  "version": 1
+}

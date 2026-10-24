@@ -1,0 +1,440 @@
+{
+  "capture_adapter": "snowflake",
+  "capture_dialect": "snowflake",
+  "captured_at": "2026-10-24T13:09:48Z",
+  "format": "jsonl",
+  "input_fingerprint": "254ac9c703e031b78a662fe89d70629adb43efa5a83e1fdfa6af8376c2a2afee",
+  "relations": [
+    {
+      "bytes": 2565,
+      "columns": [
+        {
+          "local_type": "TEXT(2)",
+          "name": "order_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(2)",
+          "name": "customer_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(2)",
+          "name": "region_code",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "placed_at",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "DATE",
+          "name": "placed_date_local",
+          "warehouse_type": "DATE"
+        },
+        {
+          "local_type": "TEXT(9)",
+          "name": "order_status",
+          "warehouse_type": "VARCHAR(9)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "sales_channel",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "units",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "currency_code",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "amount",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "DECIMAL(18, 2)",
+          "name": "amount_usd",
+          "warehouse_type": "NUMBER(18,2)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "rate_to_usd",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "rate_date",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "gross_amount_usd",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "discount_amount_usd",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "tax_amount_usd",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "promo_code",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "utm_source",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "utm_medium",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(4)",
+          "name": "utm_campaign",
+          "warehouse_type": "VARCHAR(4)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "basket_size",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "order_number",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "is_first_order",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "first_paid_at",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "first_delivered_at",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "hours_paid_to_shipped",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "captured_minor",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "refunded_minor",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "net_collected_minor",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "is_fully_refunded",
+          "warehouse_type": "VARCHAR(16777216)"
+        }
+      ],
+      "file": "refs/fct_orders.jsonl",
+      "kind": "ref",
+      "logical_name": "fct_orders",
+      "row_count": 4
+    },
+    {
+      "bytes": 411,
+      "columns": [
+        {
+          "local_type": "TEXT(4)",
+          "name": "campaign_id",
+          "warehouse_type": "VARCHAR(4)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "campaign_name",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "channel",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "objective",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "DATE",
+          "name": "starts_on",
+          "warehouse_type": "DATE"
+        },
+        {
+          "local_type": "DATE",
+          "name": "ends_on",
+          "warehouse_type": "DATE"
+        },
+        {
+          "local_type": "DECIMAL(18, 2)",
+          "name": "budget_usd",
+          "warehouse_type": "NUMBER(18,2)"
+        },
+        {
+          "local_type": "DECIMAL(18, 2)",
+          "name": "spend_usd",
+          "warehouse_type": "NUMBER(18,2)"
+        },
+        {
+          "local_type": "DECIMAL(9, 2)",
+          "name": "budget_used_pct",
+          "warehouse_type": "NUMBER(9,2)"
+        },
+        {
+          "local_type": "DECIMAL(38, 0)",
+          "name": "paid_clicks",
+          "warehouse_type": "NUMBER(38,0)"
+        },
+        {
+          "local_type": "DECIMAL(38, 0)",
+          "name": "email_clicks",
+          "warehouse_type": "NUMBER(38,0)"
+        },
+        {
+          "local_type": "DECIMAL(38, 0)",
+          "name": "attributed_sessions",
+          "warehouse_type": "NUMBER(38,0)"
+        },
+        {
+          "local_type": "DECIMAL(38, 0)",
+          "name": "attributed_orders",
+          "warehouse_type": "NUMBER(38,0)"
+        },
+        {
+          "local_type": "DECIMAL(18, 2)",
+          "name": "attributed_revenue_usd",
+          "warehouse_type": "NUMBER(18,2)"
+        },
+        {
+          "local_type": "DECIMAL(12, 4)",
+          "name": "return_on_ad_spend",
+          "warehouse_type": "NUMBER(12,4)"
+        },
+        {
+          "local_type": "DECIMAL(38, 0)",
+          "name": "target_region_count",
+          "warehouse_type": "NUMBER(38,0)"
+        },
+        {
+          "local_type": "JSON",
+          "name": "unsupported_target_regions",
+          "warehouse_type": "ARRAY"
+        },
+        {
+          "local_type": "DECIMAL(38, 0)",
+          "name": "spend_rank_in_channel",
+          "warehouse_type": "NUMBER(38,0)"
+        }
+      ],
+      "file": "refs/int_campaign_performance.jsonl",
+      "kind": "ref",
+      "logical_name": "int_campaign_performance",
+      "row_count": 1
+    },
+    {
+      "bytes": 1433,
+      "columns": [
+        {
+          "local_type": "TEXT(3)",
+          "name": "spend_id",
+          "warehouse_type": "VARCHAR(3)"
+        },
+        {
+          "local_type": "TEXT(4)",
+          "name": "campaign_id",
+          "warehouse_type": "VARCHAR(4)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "campaign_name",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(6)",
+          "name": "channel",
+          "warehouse_type": "VARCHAR(6)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "platform_account_id",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "DATE",
+          "name": "spend_date",
+          "warehouse_type": "DATE"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "currency_code",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "spend_amount",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "DECIMAL(18, 2)",
+          "name": "spend_usd",
+          "warehouse_type": "NUMBER(18,2)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "impressions",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "DECIMAL(2, 0)",
+          "name": "clicks",
+          "warehouse_type": "NUMBER(2,0)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "conversions",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "click_through_rate",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "cost_per_click_usd",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "metric_count",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "JSON",
+          "name": "unknown_metrics",
+          "warehouse_type": "ARRAY"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "is_in_flight",
+          "warehouse_type": "VARCHAR(16777216)"
+        }
+      ],
+      "file": "refs/int_campaign_spend_usd.jsonl",
+      "kind": "ref",
+      "logical_name": "int_campaign_spend_usd",
+      "row_count": 4
+    },
+    {
+      "bytes": 563,
+      "columns": [
+        {
+          "local_type": "TEXT(4)",
+          "name": "campaign_id",
+          "warehouse_type": "VARCHAR(4)"
+        },
+        {
+          "local_type": "TEXT(13)",
+          "name": "campaign_name",
+          "warehouse_type": "VARCHAR(13)"
+        },
+        {
+          "local_type": "TEXT(6)",
+          "name": "channel",
+          "warehouse_type": "VARCHAR(6)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "objective",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "DATE",
+          "name": "starts_on",
+          "warehouse_type": "DATE"
+        },
+        {
+          "local_type": "DATE",
+          "name": "ends_on",
+          "warehouse_type": "DATE"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "budget_minor",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "currency_code",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "target_regions",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "target_age_min",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "target_age_max",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "source_seq",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "source_loaded_at",
+          "warehouse_type": "VARCHAR(16777216)"
+        }
+      ],
+      "file": "refs/stg_campaigns.jsonl",
+      "kind": "ref",
+      "logical_name": "stg_campaigns",
+      "row_count": 2
+    }
+  ],
+  "scenario_name": "campaign_roas__attributes_orders_to_channel_spend",
+  "sqlbuild_version": "0.175.0",
+  "total_bytes": 4972,
+  "total_rows": 11,
+  "version": 1
+}

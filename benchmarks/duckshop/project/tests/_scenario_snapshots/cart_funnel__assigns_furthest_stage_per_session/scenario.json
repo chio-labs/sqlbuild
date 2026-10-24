@@ -1,0 +1,256 @@
+{
+  "capture_adapter": "snowflake",
+  "capture_dialect": "snowflake",
+  "captured_at": "2026-10-24T13:09:48Z",
+  "format": "jsonl",
+  "input_fingerprint": "aa91e305117c08fb3ab2ad5ba5bdabbf39510e852bfd6995b57a6b7223b2146a",
+  "relations": [
+    {
+      "bytes": 1324,
+      "columns": [
+        {
+          "local_type": "TEXT(2)",
+          "name": "session_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(2)",
+          "name": "anonymous_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "customer_id",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "session_day",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TIMESTAMP(9)",
+          "name": "session_start_utc",
+          "warehouse_type": "TIMESTAMP_NTZ(9)"
+        },
+        {
+          "local_type": "TIMESTAMP(9)",
+          "name": "session_end_utc",
+          "warehouse_type": "TIMESTAMP_NTZ(9)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "session_start_visitor_local",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "duration_seconds",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "event_count",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "page_view_count",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "landing_page_path",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "exit_page_path",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "referrer_host",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "landing_page_url",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "BOOLEAN",
+          "name": "is_bounce",
+          "warehouse_type": "BOOLEAN"
+        },
+        {
+          "local_type": "BOOLEAN",
+          "name": "has_add_to_cart",
+          "warehouse_type": "BOOLEAN"
+        },
+        {
+          "local_type": "BOOLEAN",
+          "name": "has_order",
+          "warehouse_type": "BOOLEAN"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "acc",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "i",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "q",
+          "warehouse_type": "VARCHAR(16777216)"
+        }
+      ],
+      "file": "refs/int_web_sessions.jsonl",
+      "kind": "ref",
+      "logical_name": "int_web_sessions",
+      "row_count": 3
+    },
+    {
+      "bytes": 447,
+      "columns": [
+        {
+          "local_type": "TEXT(4)",
+          "name": "checkout_step_key",
+          "warehouse_type": "VARCHAR(4)"
+        },
+        {
+          "local_type": "TEXT(2)",
+          "name": "anonymous_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "DECIMAL(1, 0)",
+          "name": "step_number",
+          "warehouse_type": "NUMBER(1,0)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "step_name",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TIMESTAMP(9)",
+          "name": "first_reached_at_utc",
+          "warehouse_type": "TIMESTAMP_NTZ(9)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "payment_option",
+          "warehouse_type": "VARCHAR(16777216)"
+        }
+      ],
+      "file": "refs/stg_web_checkout_steps.jsonl",
+      "kind": "ref",
+      "logical_name": "stg_web_checkout_steps",
+      "row_count": 3
+    },
+    {
+      "bytes": 1881,
+      "columns": [
+        {
+          "local_type": "TEXT(2)",
+          "name": "event_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TIMESTAMP(9)",
+          "name": "received_at",
+          "warehouse_type": "TIMESTAMP_NTZ(9)"
+        },
+        {
+          "local_type": "TEXT(16)",
+          "name": "event_type",
+          "warehouse_type": "VARCHAR(16)"
+        },
+        {
+          "local_type": "TIMESTAMP(9)",
+          "name": "event_at_utc",
+          "warehouse_type": "TIMESTAMP_NTZ(9)"
+        },
+        {
+          "local_type": "TEXT(2)",
+          "name": "anonymous_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "customer_id",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "user_email",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "page_url",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "page_path",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "referrer_host",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "user_agent",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "locale",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(13)",
+          "name": "client_timezone",
+          "warehouse_type": "VARCHAR(13)"
+        },
+        {
+          "local_type": "BOOLEAN",
+          "name": "is_bot",
+          "warehouse_type": "BOOLEAN"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "properties",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "JSON",
+          "name": "items",
+          "warehouse_type": "ARRAY"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "i",
+          "warehouse_type": "VARCHAR(16777216)"
+        }
+      ],
+      "file": "refs/stg_web_events.jsonl",
+      "kind": "ref",
+      "logical_name": "stg_web_events",
+      "row_count": 4
+    }
+  ],
+  "scenario_name": "cart_funnel__assigns_furthest_stage_per_session",
+  "sqlbuild_version": "0.175.0",
+  "total_bytes": 3652,
+  "total_rows": 10,
+  "version": 1
+}

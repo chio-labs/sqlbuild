@@ -1,0 +1,587 @@
+{
+  "capture_adapter": "snowflake",
+  "capture_dialect": "snowflake",
+  "captured_at": "2026-10-24T13:09:48Z",
+  "format": "jsonl",
+  "input_fingerprint": "530fe2a9605bd0a7eedf6b5fbbc55b5e1cc40095cd9af0aff18ddd1b47788541",
+  "relations": [
+    {
+      "bytes": 303,
+      "columns": [
+        {
+          "local_type": "TEXT(2)",
+          "name": "order_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(2)",
+          "name": "customer_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TIMESTAMPTZ",
+          "name": "placed_at",
+          "warehouse_type": "TIMESTAMP_TZ(9)"
+        },
+        {
+          "local_type": "DATE",
+          "name": "placed_date_local",
+          "warehouse_type": "DATE"
+        },
+        {
+          "local_type": "DECIMAL(1, 0)",
+          "name": "order_number",
+          "warehouse_type": "NUMBER(1,0)"
+        },
+        {
+          "local_type": "BOOLEAN",
+          "name": "is_first_order",
+          "warehouse_type": "BOOLEAN"
+        },
+        {
+          "local_type": "DECIMAL(38, 0)",
+          "name": "days_since_previous_order",
+          "warehouse_type": "NUMBER(38,0)"
+        },
+        {
+          "local_type": "DECIMAL(18, 2)",
+          "name": "amount_usd",
+          "warehouse_type": "NUMBER(18,2)"
+        },
+        {
+          "local_type": "DECIMAL(18, 2)",
+          "name": "lifetime_revenue_usd",
+          "warehouse_type": "NUMBER(18,2)"
+        },
+        {
+          "local_type": "DECIMAL(18, 2)",
+          "name": "rolling_90d_revenue_usd",
+          "warehouse_type": "NUMBER(18,2)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "previous_sales_channel",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "BOOLEAN",
+          "name": "is_channel_switch",
+          "warehouse_type": "BOOLEAN"
+        },
+        {
+          "local_type": "DATE",
+          "name": "cohort_month",
+          "warehouse_type": "DATE"
+        }
+      ],
+      "file": "refs/int_customer_order_sequence.jsonl",
+      "kind": "ref",
+      "logical_name": "int_customer_order_sequence",
+      "row_count": 1
+    },
+    {
+      "bytes": 289,
+      "columns": [
+        {
+          "local_type": "TEXT(2)",
+          "name": "order_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "DECIMAL(38, 0)",
+          "name": "transition_count",
+          "warehouse_type": "NUMBER(38,0)"
+        },
+        {
+          "local_type": "TIMESTAMPTZ",
+          "name": "first_paid_at",
+          "warehouse_type": "TIMESTAMP_TZ(9)"
+        },
+        {
+          "local_type": "TIMESTAMPTZ",
+          "name": "first_shipped_at",
+          "warehouse_type": "TIMESTAMP_TZ(9)"
+        },
+        {
+          "local_type": "TIMESTAMPTZ",
+          "name": "first_delivered_at",
+          "warehouse_type": "TIMESTAMP_TZ(9)"
+        },
+        {
+          "local_type": "TIMESTAMPTZ",
+          "name": "cancelled_at",
+          "warehouse_type": "TIMESTAMP_TZ(9)"
+        },
+        {
+          "local_type": "DECIMAL(38, 0)",
+          "name": "minutes_to_pay",
+          "warehouse_type": "NUMBER(38,0)"
+        },
+        {
+          "local_type": "DECIMAL(12, 2)",
+          "name": "hours_paid_to_shipped",
+          "warehouse_type": "NUMBER(12,2)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "status_path",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "BOOLEAN",
+          "name": "has_regression",
+          "warehouse_type": "BOOLEAN"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "last_status",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "longest_status",
+          "warehouse_type": "VARCHAR(16777216)"
+        }
+      ],
+      "file": "refs/int_order_status_timeline.jsonl",
+      "kind": "ref",
+      "logical_name": "int_order_status_timeline",
+      "row_count": 1
+    },
+    {
+      "bytes": 1367,
+      "columns": [
+        {
+          "local_type": "TEXT(2)",
+          "name": "order_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(2)",
+          "name": "customer_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(2)",
+          "name": "region_code",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(3)",
+          "name": "currency_code",
+          "warehouse_type": "VARCHAR(3)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "placed_at",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "placed_date_local",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(9)",
+          "name": "order_status",
+          "warehouse_type": "VARCHAR(9)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "sales_channel",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "units",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "amount",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "amount_usd",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "gross_amount_usd",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "discount_amount_usd",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "tax_amount_usd",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "rate_to_usd",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "rate_date",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "rate_age_days",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "is_rate_stale",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "promo_code",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "utm_source",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "utm_medium",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "utm_campaign",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "basket_size",
+          "warehouse_type": "VARCHAR(16777216)"
+        }
+      ],
+      "file": "refs/int_orders_usd.jsonl",
+      "kind": "ref",
+      "logical_name": "int_orders_usd",
+      "row_count": 3
+    },
+    {
+      "bytes": 1324,
+      "columns": [
+        {
+          "local_type": "TEXT(2)",
+          "name": "payment_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(2)",
+          "name": "order_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "DECIMAL(1, 0)",
+          "name": "attempt_number",
+          "warehouse_type": "NUMBER(1,0)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "attempt_count",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "BOOLEAN",
+          "name": "is_final_attempt",
+          "warehouse_type": "BOOLEAN"
+        },
+        {
+          "local_type": "TEXT(12)",
+          "name": "payment_method",
+          "warehouse_type": "VARCHAR(12)"
+        },
+        {
+          "local_type": "DECIMAL(4, 0)",
+          "name": "amount_minor",
+          "warehouse_type": "NUMBER(4,0)"
+        },
+        {
+          "local_type": "TEXT(3)",
+          "name": "currency_code",
+          "warehouse_type": "VARCHAR(3)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "authorised_at",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "seconds_since_previous_attempt",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "gateway_status",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "BOOLEAN",
+          "name": "is_successful",
+          "warehouse_type": "BOOLEAN"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "decline_family",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "gateway_error_code",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "risk_score",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "risk_band",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "three_ds_outcome",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "card_bin_valid",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "card_scheme",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "had_chargeback",
+          "warehouse_type": "VARCHAR(16777216)"
+        }
+      ],
+      "file": "refs/int_payment_attempts.jsonl",
+      "kind": "ref",
+      "logical_name": "int_payment_attempts",
+      "row_count": 3
+    },
+    {
+      "bytes": 523,
+      "columns": [
+        {
+          "local_type": "TEXT(3)",
+          "name": "chargeback_id",
+          "warehouse_type": "VARCHAR(3)"
+        },
+        {
+          "local_type": "TEXT(2)",
+          "name": "payment_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "DECIMAL(3, 0)",
+          "name": "amount_minor",
+          "warehouse_type": "NUMBER(3,0)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "currency_code",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "reason_code",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "reason_family",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "opened_at",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "closed_at",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(4)",
+          "name": "outcome",
+          "warehouse_type": "VARCHAR(4)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "evidence_document_count",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "evidence",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "source_seq",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "source_loaded_at",
+          "warehouse_type": "VARCHAR(16777216)"
+        }
+      ],
+      "file": "refs/stg_chargebacks.jsonl",
+      "kind": "ref",
+      "logical_name": "stg_chargebacks",
+      "row_count": 2
+    },
+    {
+      "bytes": 421,
+      "columns": [
+        {
+          "local_type": "TEXT(2)",
+          "name": "transaction_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(3)",
+          "name": "gift_card_id",
+          "warehouse_type": "VARCHAR(3)"
+        },
+        {
+          "local_type": "TEXT(2)",
+          "name": "order_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(6)",
+          "name": "transaction_type",
+          "warehouse_type": "VARCHAR(6)"
+        },
+        {
+          "local_type": "DECIMAL(4, 0)",
+          "name": "signed_amount_minor",
+          "warehouse_type": "NUMBER(4,0)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "occurred_at",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "channel",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "terminal_id",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "source_seq",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "source_loaded_at",
+          "warehouse_type": "VARCHAR(16777216)"
+        }
+      ],
+      "file": "refs/stg_gift_card_transactions.jsonl",
+      "kind": "ref",
+      "logical_name": "stg_gift_card_transactions",
+      "row_count": 2
+    },
+    {
+      "bytes": 233,
+      "columns": [
+        {
+          "local_type": "TEXT(2)",
+          "name": "refund_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(2)",
+          "name": "payment_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "DECIMAL(4, 0)",
+          "name": "amount_minor",
+          "warehouse_type": "NUMBER(4,0)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "reason_text",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(6)",
+          "name": "reason_category",
+          "warehouse_type": "VARCHAR(6)"
+        },
+        {
+          "local_type": "TIMESTAMPTZ",
+          "name": "refunded_at",
+          "warehouse_type": "TIMESTAMP_TZ(9)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "initiated_by",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "DECIMAL(38, 0)",
+          "name": "refunded_line_count",
+          "warehouse_type": "NUMBER(38,0)"
+        },
+        {
+          "local_type": "JSON",
+          "name": "refunded_items",
+          "warehouse_type": "ARRAY"
+        },
+        {
+          "local_type": "DECIMAL(38, 0)",
+          "name": "source_seq",
+          "warehouse_type": "NUMBER(38,0)"
+        },
+        {
+          "local_type": "TIMESTAMP(9)",
+          "name": "source_loaded_at",
+          "warehouse_type": "TIMESTAMP_NTZ(9)"
+        }
+      ],
+      "file": "refs/stg_refunds.jsonl",
+      "kind": "ref",
+      "logical_name": "stg_refunds",
+      "row_count": 1
+    }
+  ],
+  "scenario_name": "payments__fully_refunded_orders_collect_nothing",
+  "sqlbuild_version": "0.175.0",
+  "total_bytes": 4460,
+  "total_rows": 13,
+  "version": 1
+}

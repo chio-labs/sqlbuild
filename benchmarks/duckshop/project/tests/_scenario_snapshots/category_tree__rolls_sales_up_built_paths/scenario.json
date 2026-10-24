@@ -1,0 +1,360 @@
+{
+  "capture_adapter": "snowflake",
+  "capture_dialect": "snowflake",
+  "captured_at": "2026-10-24T13:09:48Z",
+  "format": "jsonl",
+  "input_fingerprint": "e255c9818b7d3a41a17d7120c9e300e5208ddc445b17405167dc33ec487cbfb8",
+  "relations": [
+    {
+      "bytes": 1219,
+      "columns": [
+        {
+          "local_type": "TEXT(12)",
+          "name": "sku",
+          "warehouse_type": "VARCHAR(12)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "product_id",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "sku_family",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "title",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "variant_label",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "brand_name",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "is_private_label",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "category_level_1",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "category_slug_path",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "is_active",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "launched_on",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "list_price_usd",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "margin_pct",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "primary_supplier_code",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "supplier_count",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "review_count",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "average_rating",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "wishlisting_customers",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "source_loaded_at",
+          "warehouse_type": "VARCHAR(16777216)"
+        }
+      ],
+      "file": "refs/dim_products.jsonl",
+      "kind": "ref",
+      "logical_name": "dim_products",
+      "row_count": 3
+    },
+    {
+      "bytes": 1434,
+      "columns": [
+        {
+          "local_type": "TEXT(2)",
+          "name": "order_line_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(2)",
+          "name": "order_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(12)",
+          "name": "sku",
+          "warehouse_type": "VARCHAR(12)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "sku_family",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "category_level_1",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "DECIMAL(1, 0)",
+          "name": "quantity",
+          "warehouse_type": "NUMBER(1,0)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "unit_amount_minor",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "list_amount_minor",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "markdown_pct",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "gross_amount_minor",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "discount_amount_minor",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "DECIMAL(5, 0)",
+          "name": "net_amount_minor",
+          "warehouse_type": "NUMBER(5,0)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "tax_amount_minor",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "promo_codes",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "has_stacked_promotions",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "line_weight_kg",
+          "warehouse_type": "VARCHAR(16777216)"
+        }
+      ],
+      "file": "refs/fct_order_lines.jsonl",
+      "kind": "ref",
+      "logical_name": "fct_order_lines",
+      "row_count": 4
+    },
+    {
+      "bytes": 1084,
+      "columns": [
+        {
+          "local_type": "TEXT(12)",
+          "name": "sku",
+          "warehouse_type": "VARCHAR(12)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "product_id",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "sku_family",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "title",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "variant_label",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "brand_code",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "brand_name",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "is_private_label",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(2)",
+          "name": "category_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "category_slug_path",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "category_level_1",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "material",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "weight_kg",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "primary_image_url",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "image_count",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "is_active",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "launched_on",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "is_bundle_component",
+          "warehouse_type": "VARCHAR(16777216)"
+        }
+      ],
+      "file": "refs/int_product_catalogue.jsonl",
+      "kind": "ref",
+      "logical_name": "int_product_catalogue",
+      "row_count": 3
+    },
+    {
+      "bytes": 911,
+      "columns": [
+        {
+          "local_type": "TEXT(2)",
+          "name": "category_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(2)",
+          "name": "parent_category_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(12)",
+          "name": "slug",
+          "warehouse_type": "VARCHAR(12)"
+        },
+        {
+          "local_type": "TEXT(18)",
+          "name": "display_name",
+          "warehouse_type": "VARCHAR(18)"
+        },
+        {
+          "local_type": "DECIMAL(1, 0)",
+          "name": "sort_order",
+          "warehouse_type": "NUMBER(1,0)"
+        },
+        {
+          "local_type": "JSON",
+          "name": "translations",
+          "warehouse_type": "VARIANT"
+        },
+        {
+          "local_type": "TEXT(1)",
+          "name": "_op",
+          "warehouse_type": "VARCHAR(1)"
+        },
+        {
+          "local_type": "DECIMAL(1, 0)",
+          "name": "_seq",
+          "warehouse_type": "NUMBER(1,0)"
+        },
+        {
+          "local_type": "TIMESTAMP(9)",
+          "name": "_loaded_at",
+          "warehouse_type": "TIMESTAMP_NTZ(9)"
+        }
+      ],
+      "file": "sources/catalogue__categories.jsonl",
+      "kind": "source",
+      "logical_name": "catalogue__categories",
+      "row_count": 5
+    }
+  ],
+  "scenario_name": "category_tree__rolls_sales_up_built_paths",
+  "sqlbuild_version": "0.175.0",
+  "total_bytes": 4648,
+  "total_rows": 15,
+  "version": 1
+}

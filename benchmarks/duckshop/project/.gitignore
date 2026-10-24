@@ -1,0 +1,4 @@
+sqlbuild_local.toml
+target/
+logs/
+.sqlbuild/

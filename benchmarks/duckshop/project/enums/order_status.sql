@@ -1,0 +1,4 @@
+ENUM (
+  name order_status,
+  members [PENDING, PAID, PACKED, SHIPPED, DELIVERED, CANCELLED, RETURNED],
+);

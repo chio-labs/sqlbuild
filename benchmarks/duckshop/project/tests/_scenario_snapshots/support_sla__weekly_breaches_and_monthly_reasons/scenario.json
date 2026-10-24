@@ -1,0 +1,177 @@
+{
+  "capture_adapter": "snowflake",
+  "capture_dialect": "snowflake",
+  "captured_at": "2026-10-24T13:09:48Z",
+  "format": "jsonl",
+  "input_fingerprint": "ff58d21aed3cd7a80e929c630ce7234d21fe2c7e4d3a2bcb9545688ce112446e",
+  "relations": [
+    {
+      "bytes": 2377,
+      "columns": [
+        {
+          "local_type": "TEXT(2)",
+          "name": "ticket_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "customer_id",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(5)",
+          "name": "channel",
+          "warehouse_type": "VARCHAR(5)"
+        },
+        {
+          "local_type": "DECIMAL(1, 0)",
+          "name": "priority",
+          "warehouse_type": "NUMBER(1,0)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "ticket_status",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(17)",
+          "name": "contact_reason",
+          "warehouse_type": "VARCHAR(17)"
+        },
+        {
+          "local_type": "TIMESTAMP(9)",
+          "name": "created_at_utc",
+          "warehouse_type": "TIMESTAMP_NTZ(9)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "solved_at",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "DECIMAL(2, 0)",
+          "name": "minutes_to_first_response",
+          "warehouse_type": "NUMBER(2,0)"
+        },
+        {
+          "local_type": "DECIMAL(3, 0)",
+          "name": "business_minutes_to_response",
+          "warehouse_type": "NUMBER(3,0)"
+        },
+        {
+          "local_type": "BOOLEAN",
+          "name": "is_first_response_breached",
+          "warehouse_type": "BOOLEAN"
+        },
+        {
+          "local_type": "BOOLEAN",
+          "name": "is_resolution_breached",
+          "warehouse_type": "BOOLEAN"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "comment_count",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "handoff_count",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "sentiment_label",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "ticket_number_for_customer",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "BOOLEAN",
+          "name": "is_repeat_contact_7d",
+          "warehouse_type": "BOOLEAN"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "csat_score",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "source_loaded_at",
+          "warehouse_type": "VARCHAR(16777216)"
+        }
+      ],
+      "file": "refs/fct_support_tickets.jsonl",
+      "kind": "ref",
+      "logical_name": "fct_support_tickets",
+      "row_count": 5
+    },
+    {
+      "bytes": 640,
+      "columns": [
+        {
+          "local_type": "TEXT(3)",
+          "name": "call_id",
+          "warehouse_type": "VARCHAR(3)"
+        },
+        {
+          "local_type": "TEXT(2)",
+          "name": "ticket_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "agent_id",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "first_menu_choice",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "final_menu_node",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "menu_steps",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "repeated_menu_visits",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "BOOLEAN",
+          "name": "abandoned_in_ivr",
+          "warehouse_type": "BOOLEAN"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "caller_region",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "duration_bucket",
+          "warehouse_type": "VARCHAR(16777216)"
+        }
+      ],
+      "file": "refs/int_call_ivr_paths.jsonl",
+      "kind": "ref",
+      "logical_name": "int_call_ivr_paths",
+      "row_count": 3
+    }
+  ],
+  "scenario_name": "support_sla__weekly_breaches_and_monthly_reasons",
+  "sqlbuild_version": "0.175.0",
+  "total_bytes": 3017,
+  "total_rows": 8,
+  "version": 1
+}

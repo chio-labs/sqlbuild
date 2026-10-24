@@ -1,0 +1,109 @@
+seeds:
+  - name: currencies
+    description: ISO currencies sold in, with the exponent of their minor unit (0, 2 or 3).
+    columns:
+      - name: currency_code
+        type: VARCHAR
+        nullable: false
+        audits:
+          - not_null
+          - unique
+      - name: currency_name
+        type: VARCHAR
+      - name: minor_unit_exponent
+        type: NUMBER(38,0)
+        nullable: false
+        audits:
+          - not_null
+          - accepted_values:
+              values: [0, 2, 3]
+      - name: symbol
+        type: VARCHAR
+
+  - name: countries
+    description: Countries served, with their storefront region and default time zone.
+    csv_settings:
+      na_values:
+        vat_registered: ["n/a"]
+      keep_default_na: false
+    columns:
+      - name: country_code
+        type: VARCHAR
+        nullable: false
+        audits:
+          - not_null
+          - unique
+      - name: country_name
+        type: VARCHAR
+      - name: region_code
+        type: VARCHAR
+        nullable: false
+        audits:
+          - not_null
+      - name: default_timezone
+        type: VARCHAR
+      - name: currency_code
+        type: VARCHAR
+        audits:
+          - relationships:
+              to: __seed("currencies")
+              field: currency_code
+      - name: vat_registered
+        type: BOOLEAN
+
+  - name: carriers
+    description: Delivery carriers and their public tracking URL templates.
+    csv_settings:
+      na_values:
+        tracking_url_template: [""]
+    columns:
+      - name: carrier_code
+        type: VARCHAR
+        nullable: false
+        audits:
+          - not_null
+          - unique
+      - name: carrier_name
+        type: VARCHAR
+      - name: tracking_url_template
+        type: VARCHAR
+      - name: is_express
+        type: BOOLEAN
+
+  - name: holiday_calendar
+    description: Public holidays per storefront region, used for business-day logic.
+    csv_settings:
+      delimiter: ";"
+      encoding: utf-8
+    columns:
+      - name: region_code
+        type: VARCHAR
+        nullable: false
+        audits:
+          - not_null
+      - name: holiday_date
+        type: DATE
+        nullable: false
+        audits:
+          - not_null
+      - name: holiday_name
+        type: VARCHAR
+
+  - name: channel_mapping
+    description: Maps UTM source and medium pairs to reporting channels; "-" matches any source.
+    columns:
+      - name: utm_source
+        type: VARCHAR
+        nullable: false
+      - name: utm_medium
+        type: VARCHAR
+        nullable: false
+        audits:
+          - not_null
+      - name: channel_code
+        type: VARCHAR
+        nullable: false
+        audits:
+          - not_null
+      - name: is_paid
+        type: BOOLEAN

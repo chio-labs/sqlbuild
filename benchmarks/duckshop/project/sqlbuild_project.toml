@@ -1,0 +1,252 @@
+name = "duckshop"
+adapter = "snowflake"
+default_target = "dev"
+
+# Placeholders only. Real connection details belong in the untracked sqlbuild_local.toml;
+# see sqlbuild_local.toml.example. Compiling needs no connection.
+[connections.warehouse]
+account = "example-account"
+user = "example_user"
+role = "EXAMPLE_ROLE"
+warehouse = "EXAMPLE_WH"
+# SQLBuild 0.175.0 binds inspected Snowflake source columns as quoted lower-case names, which
+# unquoted references cannot match, so planning fails once the raw tables exist. Ignoring the case
+# of quoted identifiers avoids that; DuckShop's SQL quotes no identifiers whose case matters.
+session_parameters = { QUOTED_IDENTIFIERS_IGNORE_CASE = true }
+
+[targets.dev]
+connection = "warehouse"
+database = "DUCKSHOP"
+schema = "DEV"
+
+[targets.prod]
+connection = "warehouse"
+database = "DUCKSHOP"
+schema = "ANALYTICS"
+
+[settings]
+default_audit_severity = "error"
+unit_test_max_real_models = 6
+test_timeout = "60s"
+scenario_timeout = "10m"
+
+[defaults]
+materialized = "table"
+
+[path_defaults.staging]
+materialized = "view"
+tags = ["staging"]
+
+[path_defaults.intermediate]
+materialized = "table"
+tags = ["intermediate"]
+
+[path_defaults.marts]
+materialized = "table"
+tags = ["marts"]
+
+[path_defaults.snapshots]
+tags = ["snapshots"]
+
+[vars]
+reporting_currency = "USD"
+# Fixed valuation date for balance and liability models, so their output is reproducible.
+valuation_date = "2026-03-31"
+# Customer shown by the order lookup report; override per run with --vars.
+lookup_customer_id = "C000001"
+# Volume multiplier for the synthetic data loaders in python/loaders; 1 is the small default.
+data_scale = "1"
+
+[scenario.local_type_overrides.snowflake]
+"VARIANT" = "JSON"
+"OBJECT" = "JSON"
+"ARRAY" = "JSON"
+
+[rules]
+select = ["SQBRSQL", "SQBRGRAPH", "SQBRCONTRACT", "SQBRTEST", "XSQBRDUCK"]
+# SQBRSQL021: `SELECT * FROM final` and the change-log macro's pass-through CTEs are the house
+#   style; each model's columns block, not its terminal SELECT, owns the output shape.
+# SQBRCONTRACT101: exact contracts are reserved for published dim_ and fct_ models.
+ignore = ["SQBRSQL021", "SQBRCONTRACT101"]
+
+[[rules.rule_exceptions]]
+rule = "SQBRSQL018"
+path = "models/staging/_sqlbuild/macros/sql/cdc_latest.sql"
+reason = """
+The macro cannot see its callers' keys on its own. Every call site is still checked, against the
+unique, non-null _seq that each change-log source declares.
+"""
+
+[[rules.rule_exceptions]]
+rule = "SQBRSQL018"
+path = "models/marts/core/dim_date.sql"
+reason = """
+SEQ4() is distinct for every row of one GENERATOR call, so ordering by it is unique. ROW_NUMBER()
+renumbers it because SEQ4() alone may leave gaps.
+"""
+
+[[rules.rule_exceptions]]
+rule = "SQBRSQL018"
+path = "models/staging/clickstream/stg_app_events.sql"
+reason = """
+Append-only feeds redeliver rows, so the source id repeats across loads and only (id, _loaded_at)
+is unique, which the source's unique_per_delivery audit checks. Rules cannot use a two-column key
+as proof. A redelivered row is identical to the original, so the window picks the same values
+whichever copy ranks first.
+"""
+
+[[rules.rule_exceptions]]
+rule = "SQBRSQL018"
+path = "models/staging/clickstream/stg_email_events.sql"
+reason = """
+Append-only feeds redeliver rows, so the source id repeats across loads and only (id, _loaded_at)
+is unique, which the source's unique_per_delivery audit checks. Rules cannot use a two-column key
+as proof. A redelivered row is identical to the original, so the window picks the same values
+whichever copy ranks first.
+"""
+
+[[rules.rule_exceptions]]
+rule = "SQBRSQL018"
+path = "models/staging/clickstream/stg_experiment_assignments.sql"
+reason = """
+Append-only feeds redeliver rows, so the source id repeats across loads and only (id, _loaded_at)
+is unique, which the source's unique_per_delivery audit checks. Rules cannot use a two-column key
+as proof. A redelivered row is identical to the original, so the window picks the same values
+whichever copy ranks first.
+"""
+
+[[rules.rule_exceptions]]
+rule = "SQBRSQL018"
+path = "models/staging/clickstream/stg_search_queries.sql"
+reason = """
+Append-only feeds redeliver rows, so the source id repeats across loads and only (id, _loaded_at)
+is unique, which the source's unique_per_delivery audit checks. Rules cannot use a two-column key
+as proof. A redelivered row is identical to the original, so the window picks the same values
+whichever copy ranks first.
+"""
+
+[[rules.rule_exceptions]]
+rule = "SQBRSQL018"
+path = "models/staging/clickstream/stg_web_events.sql"
+reason = """
+Append-only feeds redeliver rows, so the source id repeats across loads and only (id, _loaded_at)
+is unique, which the source's unique_per_delivery audit checks. Rules cannot use a two-column key
+as proof. A redelivered row is identical to the original, so the window picks the same values
+whichever copy ranks first.
+"""
+
+[[rules.rule_exceptions]]
+rule = "SQBRSQL018"
+path = "models/staging/finance/stg_settlement_reports.sql"
+reason = """
+Append-only feeds redeliver rows, so the source id repeats across loads and only (id, _loaded_at)
+is unique, which the source's unique_per_delivery audit checks. Rules cannot use a two-column key
+as proof. A redelivered row is identical to the original, so the window picks the same values
+whichever copy ranks first.
+"""
+
+[[rules.rule_exceptions]]
+rule = "SQBRSQL018"
+path = "models/staging/fulfilment/stg_carrier_webhook_errors.sql"
+reason = """
+Append-only feeds redeliver rows, so the source id repeats across loads and only (id, _loaded_at)
+is unique, which the source's unique_per_delivery audit checks. Rules cannot use a two-column key
+as proof. A redelivered row is identical to the original, so the window picks the same values
+whichever copy ranks first.
+"""
+
+[[rules.rule_exceptions]]
+rule = "SQBRSQL018"
+path = "models/staging/fulfilment/stg_carrier_webhooks.sql"
+reason = """
+Append-only feeds redeliver rows, so the source id repeats across loads and only (id, _loaded_at)
+is unique, which the source's unique_per_delivery audit checks. Rules cannot use a two-column key
+as proof. A redelivered row is identical to the original, so the window picks the same values
+whichever copy ranks first.
+"""
+
+[[rules.rule_exceptions]]
+rule = "SQBRSQL018"
+path = "models/staging/inventory/stg_stock_movements.sql"
+reason = """
+Append-only feeds redeliver rows, so the source id repeats across loads and only (id, _loaded_at)
+is unique, which the source's unique_per_delivery audit checks. Rules cannot use a two-column key
+as proof. A redelivered row is identical to the original, so the window picks the same values
+whichever copy ranks first.
+"""
+
+[[rules.rule_exceptions]]
+rule = "SQBRSQL018"
+path = "models/staging/partners/stg_partner_orders.sql"
+reason = """
+Append-only feeds redeliver rows, so the source id repeats across loads and only (id, _loaded_at)
+is unique, which the source's unique_per_delivery audit checks. Rules cannot use a two-column key
+as proof. A redelivered row is identical to the original, so the window picks the same values
+whichever copy ranks first.
+"""
+
+[[rules.rule_exceptions]]
+rule = "SQBRSQL034"
+path = "models/staging/_sqlbuild/macros/sql/load_metadata.sql"
+reason = """
+A column-list macro body is a select list by construction. Its columns are inserted into the
+caller's own CTE, where the rule is checked again.
+"""
+
+[[rules.rule_exceptions]]
+rule = "SQBRSQL034"
+path = "macros/sql/money_columns.sql"
+reason = """
+A column-list macro body is a select list by construction. Its columns are inserted into the
+caller's own CTE, where the rule is checked again.
+"""
+
+[[rules.rule_exceptions]]
+rule = "SQBRSQL028"
+path = "models/intermediate/catalogue/int_category_paths.sql"
+reason = """
+LEVEL and the CONNECT_BY_ROOT operator are hierarchical-query pseudo-columns that cannot be
+qualified with a table alias.
+"""
+
+[[rules.rule_exceptions]]
+rule = "SQBRTEST202"
+path = "models/intermediate/catalogue/int_category_paths.sql"
+reason = """
+Unit-test fixture checking treats the LEVEL pseudo-column as a column the mocked categories
+relation must supply, so no test of this model can compile yet. The
+category_tree__rolls_sales_up_built_paths scenario builds the hierarchy from a source fixture instead.
+"""
+
+[[rules.rule_exceptions]]
+rule = "SQBRTEST202"
+path = "models/intermediate/clickstream/int_cart_funnel.sql"
+reason = """
+Unit-test fixture checking treats the FILTER, TRANSFORM and REDUCE lambda parameters (i, acc, q) as
+columns the mocked relations must supply, so no test of this model can compile yet. The
+cart_funnel__assigns_furthest_stage_per_session scenario covers the funnel instead.
+"""
+
+[[rules.rule_exceptions]]
+rule = "SQBRSQL038"
+path = "models/marts/executive/rpt_executive_kpis_daily.sql"
+relation = "metric_regions"
+reason = """
+The KPI grid is every reporting day for every region and metric pair that has ever had a value, so
+days without activity report zero instead of disappearing. Both sides are small and bounded.
+"""
+
+[[rules.rule_exceptions]]
+rule = "SQBRSQL022"
+path = "tests/unit/staging/storefront/test_stg_wishlist_items__uses_the_mocked_sku_normaliser.sql"
+reason = """
+A macro mock must be a bare SELECT of one string literal, so its projection cannot carry an alias.
+"""
+
+[[rules.rule_exceptions]]
+rule = "SQBRTEST102"
+path = "tests/unit/marts/catalogue/test_rpt_wishlist_conversion__edge_cases.sql"
+reason = """
+This file keeps two related edge cases for one report together as separate TEST blocks. Each block
+has its own name, so the file cannot be named after both.
+"""
