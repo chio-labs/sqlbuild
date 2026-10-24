@@ -42,6 +42,22 @@ _ORDER_TOTALS_MODEL: str = """MODEL (
 
 SELECT order_id, amount AS total FROM __ref("orders")
 """
+_SIZED_TEXT_ORDERS: str = """MODEL (
+  description "Orders whose status is cast to a sized TEXT.",
+  materialized table,
+);
+
+SELECT CAST(1 AS INT) AS order_id, CAST('new' AS TEXT(5)) AS status
+"""
+_SIZED_VARCHAR_STATUSES: str = """MODEL (
+  description "Order statuses contracted as the VARCHAR that a sized TEXT is.",
+  materialized table,
+  contract enforced,
+  columns (status (type VARCHAR(5))),
+);
+
+SELECT status FROM __ref("orders")
+"""
 _IMMEDIATE_PROMOTION_TOML: str = (
     _PROJECT_TOML + '\n[settings]\ntable_promotion_mode = "immediate"\n'
 )
@@ -125,6 +141,16 @@ GROUP BY customer_id
             },
             expected_exit_code=1,
             expected_report_text="inferred as numeric(10,2) but declared type is DECIMAL(12,2)",
+        ),
+        NativeTypeSystemTestCase(
+            description="a sized TEXT satisfies a VARCHAR contract of the same length",
+            project_files={
+                "sqlbuild_project.toml": _PROJECT_TOML,
+                "models/orders.sql": _SIZED_TEXT_ORDERS,
+                "models/order_statuses.sql": _SIZED_VARCHAR_STATUSES,
+            },
+            expected_exit_code=0,
+            expected_report_text='"has_errors": false',
         ),
         NativeTypeSystemTestCase(
             description="every contract family fails alike under immediate promotion",

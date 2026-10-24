@@ -26,10 +26,16 @@ pub(crate) const NORMALIZED_NTZ_INPUT_TYPE_NAMES: &[&str] = &["TIMESTAMP", "TIME
 pub(crate) const NORMALIZED_TZ_INPUT_TYPE_NAME: &str = "TIMESTAMPTZ";
 pub(crate) const TEXT_TYPE_NAME: &str = "TEXT";
 pub(crate) const UNBOUNDED_TEXT_TYPE_NAMES: &[&str] = &["STRING", "TEXT", "VARCHAR"];
+/// Text types spelled `VARCHAR` when they carry a length.
+pub(crate) const SIZED_TEXT_TYPE_NAMES: &[&str] = &["STRING", "TEXT"];
+pub(crate) const VARCHAR_TYPE_NAME: &str = "VARCHAR";
+/// BigQuery's one spelling of every variable-length text type.
+pub(crate) const BIGQUERY_STRING_TYPE_NAME: &str = "STRING";
 /// Polyglot `data_type` tags whose Python spelling drops the word separator.
 pub(crate) const POLYGLOT_TYPE_NAME_ALIASES: &[(&str, &str)] = &[
     ("BIG_INT", "BIGINT"),
     ("SMALL_INT", "SMALLINT"),
+    ("TEXT_WITH_LENGTH", "TEXT"),
     ("TINY_INT", "TINYINT"),
     ("VAR_CHAR", "VARCHAR"),
 ];

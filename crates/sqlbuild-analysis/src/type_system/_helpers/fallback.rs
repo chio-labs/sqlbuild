@@ -7,8 +7,8 @@ use crate::type_system::constants::{
     BIGNUMERIC_TYPE_NAME, BOOLEAN_TYPE_NAMES, DATE_TYPE_NAME, DATETIME_TYPE_NAME,
     DECIMAL_TYPE_NAMES, DEFAULT_TEXT_LENGTH, FLOAT_TYPE_NAMES, INTEGER_PRECISION, INTEGER_SCALE,
     INTEGER_TYPE_NAMES, NORMALIZED_LTZ_INPUT_TYPE_NAME, NORMALIZED_NTZ_INPUT_TYPE_NAMES,
-    NORMALIZED_TZ_INPUT_TYPE_NAME, STRING_TYPE_NAMES, TEXT_TYPE_NAME, TIMESTAMP_TYPE_TOKEN,
-    UNBOUNDED_TEXT_TYPE_NAMES,
+    NORMALIZED_TZ_INPUT_TYPE_NAME, SIZED_TEXT_TYPE_NAMES, STRING_TYPE_NAMES, TEXT_TYPE_NAME,
+    TIMESTAMP_TYPE_TOKEN, UNBOUNDED_TEXT_TYPE_NAMES, VARCHAR_TYPE_NAME,
 };
 use crate::type_system::models::{NormalizedType, PythonInteger, TypeDialect, TypeFamily};
 
@@ -69,8 +69,10 @@ pub(crate) fn normalize_with_fallback(
         let mut length: Option<PythonInteger> = first;
         let base_name: &str = if bigquery {
             "STRING"
-        } else if snowflake && base_type == TEXT_TYPE_NAME {
-            "VARCHAR"
+        } else if snowflake && base_type == TEXT_TYPE_NAME
+            || length.is_some() && SIZED_TEXT_TYPE_NAMES.contains(&base_type)
+        {
+            VARCHAR_TYPE_NAME
         } else {
             base_type
         };
