@@ -44,6 +44,7 @@ from tests.integration.src.sqlbuild.adapters.duckdb._test_types import (
     RecorderWriteTestCase,
     RelationExistsTestCase,
     RenameTestCase,
+    StorageVersionConnectTestCase,
     SwapTestCase,
     TransactionalAtomicityTestCase,
 )
@@ -159,6 +160,36 @@ def test_given_config_when_connecting_then_returns_usable_connection(
 
     assert (connection is not None) == test_case.expected_connects
     adapter.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StorageVersionConnectTestCase(
+            description="an existing default-storage database opens at the latest storage version",
+            storage_version="latest",
+            expected_rows=[(1,)],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_existing_database_when_connecting_at_newer_storage_then_its_tables_read(
+    test_case: StorageVersionConnectTestCase,
+    adapter: DuckDbAdapter,
+    tmp_path: Path,
+) -> None:
+    database: Path = tmp_path / "existing.duckdb"
+    written: duckdb.DuckDBPyConnection = duckdb.connect(str(database))
+    written.execute("CREATE TABLE orders AS SELECT 1 AS order_id")
+    written.close()
+
+    connection: Any = adapter.connect(
+        {"database": str(database), "storage_compatibility_version": test_case.storage_version}
+    )
+    rows: list[tuple[int]] = connection.execute("SELECT order_id FROM orders").fetchall()
+    adapter.close(connection)
+
+    assert rows == test_case.expected_rows
 
 
 @pytest.mark.parametrize(

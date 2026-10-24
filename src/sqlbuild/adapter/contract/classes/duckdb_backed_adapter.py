@@ -43,6 +43,7 @@ from sqlbuild.adapter.contract.constants import (
     DUCKDB_INTERNAL_ERROR_CLASS_NAME,
     DUCKDB_MISSING_OBJECT_MARKER,
     DUCKDB_NOT_FOUND_ERROR_CLASS_NAMES,
+    DUCKDB_STORAGE_VERSION_KEY,
     QUALIFIED_NAME_SEPARATOR,
 )
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
@@ -1070,7 +1071,14 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         import duckdb
 
         database: str = str(config.get("database", ":memory:"))
-        raw_connection: duckdb.DuckDBPyConnection = duckdb.connect(database=database)
+        storage_version: object = config.get(DUCKDB_STORAGE_VERSION_KEY)
+        raw_connection: duckdb.DuckDBPyConnection = (
+            duckdb.connect(database=database)
+            if storage_version is None
+            else duckdb.connect(
+                database=database, config={DUCKDB_STORAGE_VERSION_KEY: str(storage_version)}
+            )
+        )
         connection: ObservedConnection = ObservedConnection(
             raw_connection=raw_connection, adapter=self.adapter_name
         )

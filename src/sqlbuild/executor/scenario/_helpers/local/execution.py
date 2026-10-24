@@ -22,6 +22,7 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.constants import DUCKDB_STORAGE_VERSION_KEY
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.executor.build.models import FunctionExecutionResult
@@ -47,6 +48,7 @@ from sqlbuild.executor.scenario._helpers.snapshots.core import (
     classify_scenario_snapshot_state,
 )
 from sqlbuild.executor.scenario.constants import (
+    LOCAL_SCENARIO_DUCKDB_STORAGE_VERSION,
     SCENARIO_EXEC_ASSERTION_ERRORED,
     SCENARIO_EXEC_ASSERTION_FAILED,
     SCENARIO_EXEC_EXPECTED_ERRORED,
@@ -133,7 +135,12 @@ def execute_local_scenario_load_only_run(
     run_dir.mkdir(parents=True, exist_ok=True)
     duckdb_path: Path = run_dir / "local.duckdb"
     _remove_local_duckdb_files(duckdb_path)
-    connection: Any = adapter.connect({"database": str(duckdb_path)})
+    connection: Any = adapter.connect(
+        {
+            "database": str(duckdb_path),
+            DUCKDB_STORAGE_VERSION_KEY: LOCAL_SCENARIO_DUCKDB_STORAGE_VERSION,
+        }
+    )
     try:
         input_fingerprint: str = build_scenario_snapshot_input_fingerprint(
             scenario_name=scenario_plan.name,

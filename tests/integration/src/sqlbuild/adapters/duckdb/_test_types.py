@@ -242,3 +242,12 @@ class SnapshotTransactionRollbackTestCase:
     description: str
     expected_error_fragment: str
     expected_rows_after_failure: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class StorageVersionConnectTestCase:
+    """A database file written by an earlier storage version, reopened at the latest one."""
+
+    description: str
+    storage_version: str
+    expected_rows: list[tuple[int]]

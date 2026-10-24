@@ -316,3 +316,13 @@ class ScenarioInlineProjectE2ETestCase:
     command: tuple[str, ...]
     expected_exit_code: int
     expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class LocalVariantScenarioTestCase:
+    """A captured scenario whose fixture holds a VARIANT, replayed locally in strict mode."""
+
+    description: str
+    repo_files: dict[str, str]
+    scenario_name: str
+    expected_stdout_fragment: str
