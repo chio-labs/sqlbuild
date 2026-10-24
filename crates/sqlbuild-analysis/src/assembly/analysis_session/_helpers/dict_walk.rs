@@ -547,20 +547,7 @@ fn null_names_by_position(select: &Map<String, Value>) -> Vec<(usize, String)> {
 
 /// Python's recursive `_first_select`, depth first in payload order, without recursion.
 fn first_select(payload: &Value) -> Option<&Map<String, Value>> {
-    let mut pending: Vec<&Value> = vec![payload];
-    while let Some(node) = pending.pop() {
-        match node {
-            Value::Object(map) => {
-                if let Some(Value::Object(select)) = map.get(SELECT_PAYLOAD_KEY) {
-                    return Some(select);
-                }
-                pending.extend(map.values().rev());
-            }
-            Value::Array(items) => pending.extend(items.iter().rev()),
-            _ => {}
-        }
-    }
-    None
+    branch_selects(payload).into_iter().next()
 }
 
 fn collected_facts(select: &Map<String, Value>) -> ProjectionFacts {

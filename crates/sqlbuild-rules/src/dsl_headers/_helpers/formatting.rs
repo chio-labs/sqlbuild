@@ -250,7 +250,10 @@ fn laid_out_string<P: HeaderParser>(
         tail(header_text, end),
     ]
     .concat();
-    Ok(same_values(kind, (&rewritten, header_text), parser)?.then_some(rewritten))
+    if kind != SQL_MACRO_HEADER_KIND && !same_values(kind, (&rewritten, header_text), parser)? {
+        return Ok(None);
+    }
+    Ok(Some(rewritten))
 }
 
 /// `header_text` with its description laid out canonically, or `None` when nothing changes.
@@ -260,32 +263,10 @@ fn laid_out_description<P: HeaderParser>(
     line_width: i64,
     parser: &P,
 ) -> Result<Option<Vec<char>>, P::Error> {
-    let Some((start, end)) = description_string_span(header_text) else {
+    let Some((start, _)) = description_string_span(header_text) else {
         return Ok(None);
     };
-    let Ok(prose) = prose_string(header_text, start) else {
-        return Ok(None);
-    };
-    if header_text[start] == '\'' && keeps_single_quotes(header_text, (start, end), line_width) {
-        return Ok(None);
-    }
-    let Some(rendered) = canonical_prose(&prose.value, header_text, (start, end), line_width)
-    else {
-        return Ok(None);
-    };
-    if chars(&rendered) == slice(header_text, start, end) {
-        return Ok(None);
-    }
-    let rewritten: Vec<char> = [
-        slice(header_text, 0, start),
-        &chars(&rendered),
-        tail(header_text, end),
-    ]
-    .concat();
-    if kind != SQL_MACRO_HEADER_KIND && !same_values(kind, (&rewritten, header_text), parser)? {
-        return Ok(None);
-    }
-    Ok(Some(rewritten))
+    laid_out_string(kind, header_text, start, (line_width, parser))
 }
 
 /// Whether a `'...'` description stays as written: on one line that fits, with no double quote.
