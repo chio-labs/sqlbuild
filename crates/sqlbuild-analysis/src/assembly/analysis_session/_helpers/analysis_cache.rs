@@ -1,7 +1,5 @@
 //! Per-model analysis cache keys over everything an analysis reads, and stored outcomes.
 
-use crate::sql_macros::main::sql_macro_declared_outputs::sql_macro_declared_outputs;
-use crate::sql_macros::models::DeclaredOutput;
 use std::collections::{BTreeSet, HashMap};
 
 use sha2::{Digest, Sha256};
@@ -171,20 +169,6 @@ impl KeyHasher {
         }
         self.text(&model.pivot_sql);
         self.families(&model.dynamic_families);
-        let declared: Vec<DeclaredOutput> = sql_macro_declared_outputs(&model.sql_macro_checks);
-        self.count(declared.len());
-        for output in &declared {
-            match &output.cte {
-                Some(cte) => {
-                    self.flag(true);
-                    self.text(cte);
-                }
-                None => self.flag(false),
-            }
-            self.text(&output.name);
-            self.text(&output.returns);
-            self.count(output.branch);
-        }
     }
 
     fn families(&mut self, families: &[DynamicFamily]) {

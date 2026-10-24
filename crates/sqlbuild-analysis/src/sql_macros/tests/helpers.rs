@@ -5,8 +5,7 @@ use crate::sql_macros::errors::ExpansionFailure;
 use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::main::parse_sql_macro::parse_sql_macro;
 use crate::sql_macros::models::{
-    CallScope, ExpandedText, RenderedDeclarations, SqlMacroCheck, SqlMacroDefinition, TextContext,
-    TextSplice, TypedOutput,
+    ExpandedText, RenderedDeclarations, SqlMacroDefinition, TextContext, TextSplice,
 };
 use crate::sql_macros::tests::test_types::{AsciiArguments, FakeHost};
 use crate::sql_macros::types::{ConstantShape, SqlMacroHost, SqlMacroScope};
@@ -153,21 +152,5 @@ impl sqlbuild_render::macro_arguments::types::ArgumentHost for AsciiArguments {
 
     fn identifier(&self, _text: &str) -> Option<String> {
         None
-    }
-}
-
-/// A check recording output `label` of `shout()`, typed VARCHAR, at `scope`'s `branch`.
-pub(super) fn typed_check(scope: CallScope, branch: usize) -> SqlMacroCheck {
-    SqlMacroCheck {
-        macro_name: "shout".to_owned(),
-        scope,
-        plain_select: true,
-        arguments: Vec::new(),
-        call: None,
-        output: Some(TypedOutput {
-            name: "label".to_owned(),
-            returns: "VARCHAR".to_owned(),
-            branch,
-        }),
     }
 }

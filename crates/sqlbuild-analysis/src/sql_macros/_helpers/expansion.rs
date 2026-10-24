@@ -26,7 +26,7 @@ use crate::sql_macros::models::{
     ArgumentCheck, ArgumentExpectation, ArgumentShape, BodyExpansion, BoundArgument, CallPosition,
     CallScope, ExpandedText, InsertedNames, ParameterKind, RenderedArgument, RenderedDeclarations,
     SqlMacroCall, SqlMacroCheck, SqlMacroDefinition, SqlMacroForm, SqlMacroLocation, TextContext,
-    TypedCall, TypedOutput,
+    TypedCall,
 };
 use crate::sql_macros::types::{ConstantShape, SqlMacroHost, SqlMacroScope};
 
@@ -235,26 +235,14 @@ pub(crate) fn expand_call<H: SqlMacroHost>(
         call.replaced_end,
     );
     if matches!(context.scope, SqlMacroScope::Caller) && context.stack.is_empty() {
-        let output: Option<TypedOutput> = match (definition.form, &definition.returns) {
-            (SqlMacroForm::Expression, Some(returns)) => site
-                .whole_item_alias()
-                .zip(call_branch(context.text, scanned, call.start))
-                .map(|(name, branch)| TypedOutput {
-                    name,
-                    returns: returns.clone(),
-                    branch,
-                }),
-            _ => None,
-        };
         let check: SqlMacroCheck = SqlMacroCheck {
             macro_name: definition.name.clone(),
             scope: call_scope(context.text, scanned, call.start),
             plain_select: plain_select(context.text, scanned, call.start),
             arguments: argument_checks(&definition, &bound, &rendered),
             call: None,
-            output,
         };
-        if !check.arguments.is_empty() || check.output.is_some() {
+        if !check.arguments.is_empty() {
             host.record_check(check, (call.start, call.end));
         }
     }
@@ -660,11 +648,6 @@ fn call_scope(text: &str, scanned: &[Token], offset: usize) -> CallScope {
         Some(parts) => parts.scope_of(offset),
         None => CallScope::Main,
     }
-}
-
-/// The branch of its scope's set operation the call at byte `offset` of `text` stands in.
-fn call_branch(text: &str, scanned: &[Token], offset: usize) -> Option<usize> {
-    top_level_parts(text, scanned)?.branch_of(text, scanned, offset)
 }
 
 /// Whether the call at byte `offset` of `text` stands in its scope's one select.

@@ -202,7 +202,7 @@ def test_given_an_any_argument_misused_when_compiling_then_it_fails(
             unexpected_fragments=_UNPROVEN,
         ),
         SqlMacroCompileTestCase(
-            description="a_call_inside_a_larger_expression_is_typed_from_its_sql",
+            description="a_call_inside_a_larger_expression_is_typed_but_needs_a_cast_for_the_rule",
             files={
                 **_TYPED_RULES_AND_MACROS,
                 **contract_model(
@@ -216,11 +216,10 @@ def test_given_an_any_argument_misused_when_compiling_then_it_fails(
             },
             expected_returncode=1,
             expected_fragments=(
-                "warning[K003]: column 'status_bar' type could not be proven against declared "
-                "VARCHAR",
                 'error[SQBRCONTRACT105]: output "status_bar" is calculated without an outer '
                 "explicit cast",
             ),
+            unexpected_fragments=("K003",),
         ),
         SqlMacroCompileTestCase(
             description="a_time_body_keeps_its_inferred_type",

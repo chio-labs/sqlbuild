@@ -22,3 +22,5 @@ mod native_dialect;
 mod reference_facts;
 #[path = "tests/test_types.rs"]
 mod test_types;
+#[path = "tests/test_typed_markers.rs"]
+mod typed_markers;

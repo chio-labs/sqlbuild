@@ -290,6 +290,7 @@ pub(crate) fn finished_record<'py>(
         enum_columns,
         enum_declarations: declarations(enums)?,
         constant_declarations: declarations(constants)?,
+        typed_calls: finished.typed_calls,
     });
     Ok((record, facts))
 }

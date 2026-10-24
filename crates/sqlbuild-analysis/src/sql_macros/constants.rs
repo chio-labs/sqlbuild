@@ -64,8 +64,6 @@ pub(crate) const CTE_NOUN: &str = "CTE";
 /// Clause keywords a call position reads.
 pub(crate) const WITH_KEYWORD: &str = "WITH";
 pub(crate) const SELECT_KEYWORD: &str = "SELECT";
-/// The keyword before an alias.
-pub(crate) const AS_KEYWORD: &str = "AS";
 /// Punctuation and operators the scans compare against.
 pub(crate) const COMMA: &str = ",";
 pub(crate) const AT_SIGN: &str = "@";

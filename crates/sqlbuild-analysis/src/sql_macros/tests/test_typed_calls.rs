@@ -20,6 +20,10 @@ const SAME: (&str, &str) = (
     "same",
     "MACRO (description \"Same\", arguments (value VARCHAR), returns VARCHAR);\n\n@value\n",
 );
+const NOTHING: (&str, &str) = (
+    "nothing",
+    "MACRO (description \"Nothing\", arguments (value VARCHAR), returns BIGINT);\n\nNULL\n",
+);
 const PLACES: (&str, &str) = (
     "places",
     "MACRO (description \"Places\", arguments (value BIGINT), returns BIGINT);\n\n\
@@ -88,6 +92,13 @@ fn given_expression_macro_calls_when_expanding_then_each_expansion_is_recorded_w
             sql: "SELECT @const(\"price_places\") AS p, @sql.places(o.a) AS a, \
                   @sql.shout(@enum(\"order_status\").OPEN) AS s FROM orders AS o",
             expected_calls: &["places BIGINT: o.a + 2", "shout VARCHAR: UPPER('open')"],
+        },
+        TypedCallTestCase {
+            description: "a call in a later set-operation branch",
+            macros: &[NOTHING],
+            sql: "SELECT CAST(NULL AS BIGINT) AS v FROM __ref(\"stg_orders\") AS o\nUNION ALL\n\
+                  SELECT @sql.nothing(o.status) AS v FROM __ref(\"stg_orders\") AS o",
+            expected_calls: &["nothing BIGINT: NULL"],
         },
         TypedCallTestCase {
             description: "a call inside a Python macro argument is not recorded",
