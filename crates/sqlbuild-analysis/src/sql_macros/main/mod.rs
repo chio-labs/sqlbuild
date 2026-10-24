@@ -13,4 +13,5 @@ pub mod sql_macro_cycle;
 pub mod sql_macro_parameter_spans;
 pub mod typed_analysis_pass;
 pub mod typed_analysis_sql;
+pub mod untyped_call_outputs;
 pub mod with_list_sql_macro_calls;

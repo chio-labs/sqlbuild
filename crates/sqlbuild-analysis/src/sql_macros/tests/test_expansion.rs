@@ -9,7 +9,7 @@ use crate::sql_macros::tests::test_types::{
 
 const CENTS_TO_DOLLARS: (&str, &str) = (
     "cents_to_dollars",
-    "MACRO (\n  description \"Cents to dollars\",\n  arguments (amount_cents BIGINT, places INT CONST DEFAULT 2),\n  returns DECIMAL(18, 2),\n);\n\nROUND(CAST(@amount_cents AS DECIMAL(18, 4)) / 100, @places)\n",
+    "MACRO (\n  description \"Cents to dollars\",\n  arguments (amount_cents BIGINT, places INT CONST DEFAULT 2),\n  returns DECIMAL(18, 2),\n);\n\nCAST(ROUND(@amount_cents / 100, @places) AS DECIMAL(18, 2))\n",
 );
 const NET_AMOUNT: (&str, &str) = (
     "net_amount",
@@ -121,6 +121,22 @@ const ORDER_KEY: (&str, &str) = (
     "order_key",
     "MACRO (description \"Order key\", arguments (store_code VARCHAR, order_number ANY), returns VARCHAR);\n\n@store_code || '::' || CAST(@order_number AS VARCHAR)\n",
 );
+const SHOUTED_WRONG: (&str, &str) = (
+    "shouted",
+    "MACRO (description \"Shouted\", arguments (value VARCHAR), returns BIGINT);\n\nUPPER(@value)\n",
+);
+const SHOUTED_UNTYPED: (&str, &str) = (
+    "shouted",
+    "MACRO (description \"Shouted\", arguments (value VARCHAR));\n\nUPPER(@value)\n",
+);
+const SHOUTED_ANY: (&str, &str) = (
+    "shouted",
+    "MACRO (description \"Shouted\", arguments (value ANY), returns BIGINT);\n\n@value\n",
+);
+const SHOUTED_NESTED: (&str, &str) = (
+    "shouted_twice",
+    "MACRO (description \"Shouted\", arguments (value VARCHAR), returns BIGINT);\n\n@sql.plus_one(LENGTH(@value)) || 'x'\n",
+);
 const ODD: (&str, &str) = (
     "odd",
     "MACRO (description \"Odd\", arguments (v FOO BAR), returns BIGINT);\n\n@v + 1\n",
@@ -134,21 +150,21 @@ fn given_calls_of_each_form_when_expanding_then_the_ticket_examples_compile() {
             adapter: "",
             macros: &[CENTS_TO_DOLLARS],
             sql: "SELECT @sql.cents_to_dollars(o.fee_cents + o.tax_cents, places := 0) AS fees FROM orders AS o",
-            expected_sql: "SELECT ROUND(CAST((o.fee_cents + o.tax_cents) AS DECIMAL(18, 4)) / 100, 0) AS fees FROM orders AS o",
+            expected_sql: "SELECT CAST(ROUND((o.fee_cents + o.tax_cents) / 100, 0) AS DECIMAL(18, 2)) AS fees FROM orders AS o",
         },
         ExpansionTestCase {
             description: "expression stacking another expression macro",
             adapter: "",
             macros: &[CENTS_TO_DOLLARS, NET_AMOUNT],
             sql: "SELECT @sql.net_amount(o.gross_cents, o.refund_cents) AS net FROM orders AS o",
-            expected_sql: "SELECT ROUND(CAST((o.gross_cents - COALESCE(o.refund_cents, 0)) AS DECIMAL(18, 4)) / 100, 2) AS net FROM orders AS o",
+            expected_sql: "SELECT CAST(ROUND((o.gross_cents - COALESCE(o.refund_cents, 0)) / 100, 2) AS DECIMAL(18, 2)) AS net FROM orders AS o",
         },
         ExpansionTestCase {
             description: "a backslash-escaped quote in a BigQuery string is not a call",
             adapter: "bigquery",
             macros: &[NET_AMOUNT, CENTS_TO_DOLLARS],
             sql: "SELECT 'it\\'s @sql.x(' AS note, @sql.net_amount(o.a, o.b) AS net FROM orders AS o",
-            expected_sql: "SELECT 'it\\'s @sql.x(' AS note, ROUND(CAST((o.a - COALESCE(o.b, 0)) AS DECIMAL(18, 4)) / 100, 2) AS net FROM orders AS o",
+            expected_sql: "SELECT 'it\\'s @sql.x(' AS note, CAST(ROUND((o.a - COALESCE(o.b, 0)) / 100, 2) AS DECIMAL(18, 2)) AS net FROM orders AS o",
         },
         ExpansionTestCase {
             description: "an expression call before AT TIME ZONE is parenthesised",
@@ -281,7 +297,7 @@ fn given_calls_of_each_form_when_expanding_then_the_ticket_examples_compile() {
             adapter: "",
             macros: &[CENTS_TO_DOLLARS],
             sql: "SELECT @py.label(@sql.cents_to_dollars(o.fee)) AS fee FROM orders AS o",
-            expected_sql: "SELECT @py.label(\"ROUND(CAST(o.fee AS DECIMAL(18, 4)) / 100, 2)\") AS fee FROM orders AS o",
+            expected_sql: "SELECT @py.label(\"CAST(ROUND(o.fee / 100, 2) AS DECIMAL(18, 2))\") AS fee FROM orders AS o",
         },
         ExpansionTestCase {
             description: "runtime ROUND precision where the adapter allows one",
@@ -388,6 +404,20 @@ fn given_calls_of_each_form_when_expanding_then_the_ticket_examples_compile() {
             sql: "SELECT @sql.odd(1) AS a",
             expected_sql: "SELECT 1 + 1 AS a",
         },
+        ExpansionTestCase {
+            description: "an expression macro without returns",
+            adapter: "duckdb",
+            macros: &[SHOUTED_UNTYPED],
+            sql: "SELECT @sql.shouted(o.status) AS a FROM orders AS o",
+            expected_sql: "SELECT UPPER(o.status) AS a FROM orders AS o",
+        },
+        ExpansionTestCase {
+            description: "an ANY argument leaves the body untyped, so returns is trusted",
+            adapter: "duckdb",
+            macros: &[SHOUTED_ANY],
+            sql: "SELECT @sql.shouted(o.status) AS a FROM orders AS o",
+            expected_sql: "SELECT o.status AS a FROM orders AS o",
+        },
     ];
 
     for test_case in test_cases {
@@ -428,6 +458,22 @@ fn given_invalid_calls_when_expanding_then_each_error_names_the_problem() {
             sql: "SELECT o.created_at, @sql.audit_columns(o) FROM orders AS o",
             expected_code: "P018",
             expected_message: "column \"created_at\" from macro audit_columns() clashes with a column already defined in model:orders_clean",
+        },
+        ExpansionErrorTestCase {
+            description: "a body whose known type is not returns",
+            adapter: "duckdb",
+            macros: &[SHOUTED_WRONG],
+            sql: "SELECT @sql.shouted(o.status) FROM orders AS o",
+            expected_code: "P024",
+            expected_message: "macro shouted() declares returns BIGINT, but its body is VARCHAR",
+        },
+        ExpansionErrorTestCase {
+            description: "a body typed through a nested call",
+            adapter: "duckdb",
+            macros: &[SHOUTED_NESTED, PLUS_ONE],
+            sql: "SELECT @sql.shouted_twice(o.status) FROM orders AS o",
+            expected_code: "P024",
+            expected_message: "macro shouted_twice() declares returns BIGINT, but its body is VARCHAR",
         },
         ExpansionErrorTestCase {
             description: "cycle",

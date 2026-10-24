@@ -187,13 +187,12 @@ impl OutputRule<'_> {
                 .cast_type
                 .as_ref()
                 .is_some_and(|data_type| type_spelling_equal(data_type, &column.data_type));
+            let call: Option<&TypedCall> = (!explicit_cast)
+                .then(|| self.whole_call(expression))
+                .flatten();
             let passes = cast_matches_contract
                 || column.type_proven && direct && !scope.set_branch
-                || column.type_proven
-                    && !explicit_cast
-                    && self
-                        .whole_call(expression)
-                        .is_some_and(|call| call.returns.is_some());
+                || column.type_proven && call.is_some_and(|call| call.returns.is_some());
             if passes {
                 continue;
             }
@@ -213,10 +212,16 @@ impl OutputRule<'_> {
                     "output {:?} {reason}; declared type is {}",
                     name, column.data_type
                 ),
-                format!(
-                    "Wrap the complete expression in CAST(... AS {}) or establish that exact type on a direct upstream column.",
-                    column.data_type
-                ),
+                match call.filter(|call| call.returns.is_none()) {
+                    Some(call) => format!(
+                        "Declare returns {} in SQL macro {}(), or wrap the call in CAST(... AS {}).",
+                        column.data_type, call.macro_name, column.data_type
+                    ),
+                    None => format!(
+                        "Wrap the complete expression in CAST(... AS {}) or establish that exact type on a direct upstream column.",
+                        column.data_type
+                    ),
+                },
             );
         }
     }

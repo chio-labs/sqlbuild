@@ -22,6 +22,8 @@ pub const MISPLACED_CALL_CODE: &str = "P021";
 pub const PARAMETER_REFERENCE_CODE: &str = "P022";
 /// A runtime parameter a SQL macro body uses where SQL requires a literal.
 pub const LITERAL_REQUIRED_CODE: &str = "P023";
+/// An expression macro whose body's known type is not its declared `returns`.
+pub const RETURNS_MISMATCH_CODE: &str = "P024";
 /// A declaration a SQL macro body uses that is not visible from the macro file.
 pub const BODY_SCOPE_CODE: &str = "S026";
 
@@ -100,6 +102,8 @@ pub(crate) const INFERRED_TEXT_TYPE: &str = "TEXT";
 pub(crate) const VARCHAR_TYPE: &str = "VARCHAR";
 pub(crate) const FROM_KEYWORD: &str = "FROM";
 /// The projection name of an unexpanded star in a probe's analysis.
+/// The relation whose columns stand in for a macro's arguments while its body is typed.
+pub(crate) const STAND_IN_RELATION: &str = "__sqlbuild_macro_arguments";
 pub(crate) const STAR_PROJECTION: &str = "*";
 /// The type hint analysis reports for a column whose type it does not know.
 pub(crate) const UNKNOWN_TYPE_HINT: &str = "UNKNOWN";

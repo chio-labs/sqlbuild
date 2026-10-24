@@ -154,19 +154,13 @@ fn body_calls(name: &str, body: &str, in_body: Locate<'_>) -> Result<Vec<String>
     Ok(calls)
 }
 
-/// Rejects an expression macro without `returns` and another form with it.
+/// Rejects `returns` on a CTE-list or column-list macro.
 fn check_returns(
     name: &str,
     (form, returns): (SqlMacroForm, Option<&String>),
     location: SqlMacroLocation,
 ) -> Result<(), SqlMacroError> {
     match (form, returns) {
-        (SqlMacroForm::Expression, None) => Err(SqlMacroError::new(
-            INVALID_DEFINITION_CODE,
-            format!("expression macro {name}() needs returns <type> in its MACRO header"),
-        )
-        .at(location)
-        .helped("declare the type the expression returns, such as returns DECIMAL(18, 2)")),
         (SqlMacroForm::CteList | SqlMacroForm::ColumnList, Some(_)) => Err(SqlMacroError::new(
             INVALID_DEFINITION_CODE,
             format!(
