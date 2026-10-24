@@ -1,9 +1,13 @@
 //! Expression macro calls followed through the edits that move them, and their typed markers.
 
+use std::borrow::Cow;
+
 use polyglot_sql::expressions::{TYPED_EXPRESSION_FUNCTION, TYPED_LIKE_EXPRESSION_FUNCTION};
+use polyglot_sql::{DialectType, Expression, ExpressionWalk};
 
 use crate::compiled_project::models::SplicedSpan;
 use crate::sql_macros::_helpers::parsing::body::with_line_comment_closed;
+use crate::sql_macros::constants::MARKER_PARSE_DIALECTS;
 use crate::sql_macros::models::{TextSplice, TypedCall};
 
 /// `calls` moved `offset` bytes later.
@@ -149,4 +153,62 @@ pub(crate) fn typed_sql(sql: &str, calls: &[TypedCall]) -> (String, Vec<TextSpli
     }
     typed.push_str(&sql[cursor..]);
     (typed, insertions)
+}
+
+/// `calls` without any whose marker would stop `sql` parsing, such as one in a keyword slot.
+pub(crate) fn markable_calls<'c>(sql: &str, calls: &'c [TypedCall]) -> Cow<'c, [TypedCall]> {
+    if !calls.iter().any(|call| in_keyword_slot(sql, call)) {
+        return Cow::Borrowed(calls);
+    }
+    let Some(dialect) = MARKER_PARSE_DIALECTS
+        .into_iter()
+        .find(|dialect| parses_unmarked(sql, *dialect))
+    else {
+        return Cow::Borrowed(calls);
+    };
+    if parses_unmarked(&typed_sql(sql, calls).0, dialect) {
+        return Cow::Borrowed(calls);
+    }
+    let mut kept: Vec<TypedCall> = Vec::with_capacity(calls.len());
+    for call in calls {
+        kept.push(call.clone());
+        let marked: bool = call.returns.is_some() || call.returns_like.is_some();
+        if marked && !parses_unmarked(&typed_sql(sql, &kept).0, dialect) {
+            kept.pop();
+        }
+    }
+    Cow::Owned(kept)
+}
+
+/// Whether `call` may stand where only a keyword or a type can: bare words, or after `AS`.
+fn in_keyword_slot(sql: &str, call: &TypedCall) -> bool {
+    let (Some(text), Some(before)) = (sql.get(call.start..call.end), sql.get(..call.start)) else {
+        return false;
+    };
+    let bare: bool = text.chars().all(|character| {
+        character.is_alphanumeric() || character == '_' || character.is_whitespace()
+    });
+    let previous: &str = before
+        .trim_end()
+        .rsplit(|character: char| !(character.is_alphanumeric() || character == '_'))
+        .next()
+        .unwrap_or_default();
+    bare || previous.eq_ignore_ascii_case("AS")
+}
+
+/// Whether `sql` parses in `dialect` with every typed marker lowered.
+fn parses_unmarked(sql: &str, dialect: DialectType) -> bool {
+    match polyglot_sql::parse(sql, dialect) {
+        Ok(statements) => !statements
+            .iter()
+            .any(|statement| statement.dfs().any(is_unlowered_marker)),
+        Err(_) => false,
+    }
+}
+
+/// Whether `node` is a typed marker the parser left as an ordinary function.
+fn is_unlowered_marker(node: &Expression) -> bool {
+    matches!(node, Expression::Function(function)
+        if function.name.eq_ignore_ascii_case(TYPED_EXPRESSION_FUNCTION)
+            || function.name.eq_ignore_ascii_case(TYPED_LIKE_EXPRESSION_FUNCTION))
 }

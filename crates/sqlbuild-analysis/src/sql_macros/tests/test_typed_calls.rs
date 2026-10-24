@@ -138,15 +138,27 @@ fn given_typed_calls_when_building_the_analysis_text_then_each_call_with_returns
         },
         TypedAnalysisTestCase {
             description: "adjacent calls close before the next opens",
-            sql: "SELECT ab FROM t",
-            calls: &[(7, 8, Some("INT")), (8, 9, Some("INT"))],
-            expected_sql: "SELECT __polyglot_typed(a, 'INT')__polyglot_typed(b, 'INT') FROM t",
+            sql: "SELECT (a)(b) FROM t",
+            calls: &[(7, 10, Some("INT")), (10, 13, Some("INT"))],
+            expected_sql: "SELECT __polyglot_typed((a), 'INT')__polyglot_typed((b), 'INT') FROM t",
         },
         TypedAnalysisTestCase {
             description: "a call ending in a line comment closes it first",
             sql: "SELECT x -- note\nFROM t",
             calls: &[(7, 16, Some("DECIMAL(18, 2)"))],
             expected_sql: "SELECT __polyglot_typed(x -- note\n, 'DECIMAL(18, 2)')\nFROM t",
+        },
+        TypedAnalysisTestCase {
+            description: "a call in a keyword slot is left unmarked",
+            sql: "SELECT EXTRACT(YEAR FROM t.c) AS y FROM t",
+            calls: &[(15, 19, Some("VARCHAR"))],
+            expected_sql: "SELECT EXTRACT(YEAR FROM t.c) AS y FROM t",
+        },
+        TypedAnalysisTestCase {
+            description: "a bare-word call in an expression position is marked",
+            sql: "SELECT YEAR AS y FROM t",
+            calls: &[(7, 11, Some("VARCHAR"))],
+            expected_sql: "SELECT __polyglot_typed(YEAR, 'VARCHAR') AS y FROM t",
         },
         TypedAnalysisTestCase {
             description: "a quote in returns is doubled",
