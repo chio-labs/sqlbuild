@@ -131,12 +131,6 @@ fn given_invalid_macro_files_when_parsing_then_each_is_rejected() {
             expected_message: "macro call @other() in SQL macro m() does not say which kind of macro it calls",
         },
         DefinitionErrorTestCase {
-            description: "expression without returns",
-            source: "MACRO (description \"x\", arguments (a BIGINT));\na + 1",
-            expected_code: "P015",
-            expected_message: "expression macro m() needs returns <type>",
-        },
-        DefinitionErrorTestCase {
             description: "CTE list with returns",
             source: "MACRO (description \"x\", returns BIGINT);\nWITH a AS (SELECT 1)",
             expected_code: "P015",

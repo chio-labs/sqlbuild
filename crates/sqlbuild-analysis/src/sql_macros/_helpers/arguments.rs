@@ -2,6 +2,7 @@
 
 use crate::sql_macros::_helpers::header::{split_top_level, unquoted};
 use crate::sql_macros::_helpers::lexing::{Token, TokenKind, closing_token, tokens};
+use crate::sql_macros::_helpers::returns_check::adapter_dialect;
 use crate::sql_macros::constants::{
     ARGUMENT_CODE, BOOLEAN_WORDS, NAMED_ARGUMENT_MIN_TOKENS, NULL_WORD, REFERENCE_FUNCTIONS,
 };
@@ -493,11 +494,7 @@ pub(crate) fn is_atomic(sql: &str) -> bool {
 /// The family of a declared type, normalized as schema declaration types are for the adapter.
 pub(crate) fn type_family(data_type: &str, adapter: &str) -> TypeFamily {
     use crate::type_system::models::TypeFamily as Normalized;
-    let dialect: &str = match adapter {
-        "motherduck" => "duckdb",
-        "" => "generic",
-        other => other,
-    };
+    let dialect: &str = adapter_dialect(adapter);
     let normalized = normalize_type(data_type, dialect)
         .or_else(|_| normalize_type(data_type, "generic"))
         .map(|normalization| normalization.normalized.family);

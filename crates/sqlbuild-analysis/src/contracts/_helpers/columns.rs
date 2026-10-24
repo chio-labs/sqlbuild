@@ -109,6 +109,7 @@ pub(crate) fn model_contract_diagnostics(
             contract_enforced,
             unchecked: &unchecked,
             types,
+            untyped_calls: &model.untyped_call_outputs,
         };
         diagnostics.extend(column_type(&checked, &check)?);
     }
@@ -120,6 +121,8 @@ struct TypeCheck<'a> {
     contract_enforced: bool,
     unchecked: &'a HashSet<&'a str>,
     types: &'a TypeComparer<'a>,
+    /// Output columns that are one call to a SQL macro without `returns`, and the macro.
+    untyped_calls: &'a [(String, String)],
 }
 
 struct TypedColumn<'a> {
@@ -269,7 +272,17 @@ fn column_type(
                 column_name: name.to_owned(),
                 message: UNPROVEN_TYPE_OUTPUT_MESSAGE.to_owned(),
             }),
-            help: UNKNOWN_TYPE_HELP.to_owned(),
+            help: match check
+                .untyped_calls
+                .iter()
+                .find(|(output, _)| output.eq_ignore_ascii_case(name))
+            {
+                Some((_, macro_name)) => format!(
+                    "declare returns {declared_type} in SQL macro {macro_name}(), or add an \
+                     explicit CAST if this declared type should be checked statically"
+                ),
+                None => UNKNOWN_TYPE_HELP.to_owned(),
+            },
         }));
     };
     if check.types.types_equal(declared_type, inferred_type)? == TypeComparison::Equal {

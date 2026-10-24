@@ -1,4 +1,5 @@
 use crate::sql_macros::main::typed_analysis_sql::typed_analysis_sql;
+use crate::sql_macros::main::untyped_call_outputs::untyped_call_outputs;
 use crate::sql_macros::models::TypedCall;
 use crate::sql_macros::tests::helpers::expanded_text_for;
 use crate::sql_macros::tests::test_types::{TypedAnalysisTestCase, TypedCallTestCase};
@@ -192,5 +193,34 @@ fn given_the_reserved_analysis_function_when_comparing_then_authored_sql_rejects
     assert_eq!(
         sqlbuild_attachments::cursor_intrinsics::constants::RESERVED_ANALYSIS_FUNCTION,
         polyglot_sql::expressions::TYPED_EXPRESSION_FUNCTION
+    );
+}
+
+#[test]
+fn given_calls_without_returns_when_listing_outputs_then_only_whole_named_items_are_named() {
+    let untyped = |start: usize, end: usize| TypedCall {
+        start,
+        end,
+        macro_name: "shout".to_owned(),
+        returns: None,
+    };
+    let sql: &str =
+        "SELECT UPPER(a) AS loud, UPPER(b) quiet, UPPER(c) || 'x' AS joined, UPPER(d) FROM t";
+    let calls: Vec<TypedCall> = ["UPPER(a)", "UPPER(b)", "UPPER(c)", "UPPER(d)"]
+        .iter()
+        .map(|text| {
+            let start: usize = sql.find(text).unwrap_or_default();
+            untyped(start, start + text.len())
+        })
+        .collect();
+
+    let outputs: Vec<(String, String)> = untyped_call_outputs(sql, &calls);
+
+    assert_eq!(
+        outputs,
+        vec![
+            ("loud".to_owned(), "shout".to_owned()),
+            ("quiet".to_owned(), "shout".to_owned()),
+        ]
     );
 }

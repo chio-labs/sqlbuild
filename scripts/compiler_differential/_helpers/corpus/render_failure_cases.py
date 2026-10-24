@@ -787,6 +787,17 @@ def _sql_macro_cases() -> tuple[FailureCase, ...]:
             },
         ),
         failure_case(
+            name="sql-macro-returns-disagrees-with-body",
+            expected_code="P024",
+            expected_message="macro x() declares returns DOUBLE, but its body is VARCHAR",
+            files=_sql_macro_columns(
+                columns="@sql.x(amount) AS amount, status",
+                files=_x_macro(
+                    arguments="v DOUBLE", returns=", returns DOUBLE", body="CAST(@v AS VARCHAR)\n"
+                ),
+            ),
+        ),
+        failure_case(
             name="sql-macro-body-declaration-not-visible",
             expected_code="S026",
             expected_message="constant price_places is not visible from macros/sql/x.sql",

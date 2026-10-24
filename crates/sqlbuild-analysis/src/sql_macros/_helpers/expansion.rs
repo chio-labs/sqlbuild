@@ -15,6 +15,7 @@ use crate::sql_macros::_helpers::literal_positions::{
 use crate::sql_macros::_helpers::parameters::{ParameterReference, parameter_references};
 use crate::sql_macros::_helpers::placement::top_level_parts;
 use crate::sql_macros::_helpers::placement::{CallSite, cte_names, select_names};
+use crate::sql_macros::_helpers::returns_check::check_body_returns;
 use crate::sql_macros::_helpers::typed_calls::{shifted, spliced};
 use crate::sql_macros::constants::{
     ARGUMENT_CODE, CTE_NOUN, CYCLE_CODE, INVALID_DEFINITION_CODE, MISPLACED_CALL_CODE,
@@ -217,6 +218,11 @@ pub(crate) fn expand_call<H: SqlMacroHost>(
         },
     )
     .map_err(|failure| located(failure, &body_location(&definition)))?;
+    check_body_returns(
+        &definition,
+        &body,
+        (host.adapter(), body_location(&definition)),
+    )?;
     let expansion: BodyExpansion = expand_body(&definition, &body, &rendered)
         .map_err(|error| error.at(body_location(&definition)))?;
     if call.in_python {

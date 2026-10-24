@@ -8,4 +8,5 @@ pub(crate) mod literal_positions;
 pub(crate) mod parameters;
 pub(crate) mod placement;
 pub(crate) mod probes;
+pub(crate) mod returns_check;
 pub(crate) mod typed_calls;

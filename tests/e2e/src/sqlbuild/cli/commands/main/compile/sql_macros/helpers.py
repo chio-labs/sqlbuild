@@ -52,7 +52,7 @@ CENTS_TO_DOLLARS: dict[str, str] = {
         'MACRO (\n  description "Cents to dollars",\n'
         "  arguments (amount_cents BIGINT, places INT CONST DEFAULT 2),\n"
         "  returns DECIMAL(18, 2),\n);\n\n"
-        "ROUND(CAST(@amount_cents AS DECIMAL(18, 4)) / 100, @places)\n"
+        "CAST(ROUND(@amount_cents / 100, @places) AS DECIMAL(18, 2))\n"
     )
 }
 NET_AMOUNT: dict[str, str] = {
@@ -232,13 +232,16 @@ def sql_text_macros(folder: str, names: list[str]) -> dict[str, str]:
     }
 
 
-def text_macro(name: str, returns: str, body: str) -> dict[str, str]:
-    """The SQL macro `name` taking one VARCHAR value and declaring `returns`."""
+def text_macro(
+    name: str, returns: str | None, body: str, argument: str = "VARCHAR"
+) -> dict[str, str]:
+    """The SQL macro `name` taking one `argument`-typed value and declaring `returns`, if any."""
 
+    declared: str = "" if returns is None else f"  returns {returns},\n"
     return {
         f"macros/sql/{name}.sql": (
-            f'MACRO (\n  description "Text from a value",\n  arguments (value VARCHAR),\n'
-            f"  returns {returns},\n);\n\n{body}\n"
+            f'MACRO (\n  description "Text from a value",\n  arguments (value {argument}),\n'
+            f"{declared});\n\n{body}\n"
         )
     }
 

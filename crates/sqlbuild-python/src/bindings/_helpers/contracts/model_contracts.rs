@@ -13,6 +13,7 @@ use sqlbuild_analysis::contracts::models::{
     PromotionConflict, PromotionModel, PromotionRequest,
 };
 
+use sqlbuild_analysis::sql_macros::main::untyped_call_outputs::untyped_call_outputs;
 use sqlbuild_analysis::type_system::errors::TypeNormalizationError;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
@@ -80,6 +81,7 @@ fn fact_contract_model(model: &CompiledModelFacts) -> ContractModel {
         unchecked_output_columns: analysis
             .map(|analysis| analysis.unchecked_output_columns.clone())
             .unwrap_or_default(),
+        untyped_call_outputs: untyped_call_outputs(&model.query_sql, &model.typed_calls),
     }
 }
 

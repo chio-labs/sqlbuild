@@ -8,7 +8,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use sqlbuild_analysis::compiled_project::main::text_position::text_position;
 use sqlbuild_analysis::sql_macros::constants::{
-    BARE_MACRO_CALL_CODE, BODY_SCOPE_CODE, MIXED_KIND_CODE,
+    BARE_MACRO_CALL_CODE, BODY_SCOPE_CODE, MIXED_KIND_CODE, RETURNS_MISMATCH_CODE,
 };
 use sqlbuild_analysis::sql_macros::errors::ExpansionFailure;
 use sqlbuild_analysis::sql_macros::errors::SqlMacroError;
@@ -149,6 +149,8 @@ pub(crate) fn expanded_sql_macro_calls<'py>(
             Err(ExpansionFailure::Host(error)) => return Err(error),
             Err(ExpansionFailure::Macro(error)) => {
                 let located: SqlMacroError = match host.call_location((call.start, call.end)) {
+                    // A wrong returns is the macro file's error; the call comes after it.
+                    Some(location) if error.code == RETURNS_MISMATCH_CODE => error.at(location),
                     Some(location) => error.at_call(location),
                     None => error,
                 };
