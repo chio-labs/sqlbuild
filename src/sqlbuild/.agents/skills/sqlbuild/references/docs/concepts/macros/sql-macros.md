@@ -353,8 +353,9 @@ bar(LENGTH(@value), 0, 10)
   `returns BIGINT`, fails with `P024`, as does a partly unknown body of another shape, such as `[]`
   with `returns BIGINT`. A body whose type cannot be inferred, for example because it reads `ANY`
   arguments or calls a function whose type is unknown or only guessed, trusts `returns`.
-- `returns` must be a type the adapter's SQL dialect accepts, including a decimal precision and
-  scale it can hold, such as at most `DECIMAL(38, s)` on DuckDB (`P015`).
+- `returns` and every argument type must be a type the adapter's SQL dialect accepts, including a
+  decimal precision and scale it can hold, such as at most `DECIMAL(38, s)` on DuckDB or
+  `NUMERIC(38, 9)` on BigQuery (`P015`).
 - A call where only a keyword can stand, such as the date part of `EXTRACT`, is typed by inference
   alone.
 - A call inside a Python macro argument, as in `@py.bracket(@sql.status_bar(o.status))`, is typed

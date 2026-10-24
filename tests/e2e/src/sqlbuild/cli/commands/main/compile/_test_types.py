@@ -1279,3 +1279,13 @@ class ParameterisedTestLintTestCase:
     selected_rules: str
     command: tuple[str, ...]
     expected_fragment: str
+
+
+@dataclass(frozen=True)
+class BigQueryStringContractTestCase:
+    """A BigQuery contract column of a STRING type and the cast that fills it."""
+
+    description: str
+    declared_type: str
+    cast_type: str
+    expected_exit_code: int

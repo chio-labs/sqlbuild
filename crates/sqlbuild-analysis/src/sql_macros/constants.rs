@@ -134,3 +134,9 @@ pub(crate) const MARKER_PARSE_DIALECTS: [polyglot_sql::DialectType; 4] = [
 ];
 /// The literal a typed marker still types, though it is one bare word.
 pub(crate) const NULL_KEYWORD: &str = "NULL";
+/// BigQuery's most integer digits and scale of a `NUMERIC`.
+pub(crate) const BIGQUERY_NUMERIC_LIMITS: (u32, u32) = (29, 9);
+/// BigQuery's most integer digits and scale of a `BIGNUMERIC`.
+pub(crate) const BIGQUERY_BIGNUMERIC_LIMITS: (u32, u32) = (38, 38);
+/// BigQuery's spellings of `BIGNUMERIC`.
+pub(crate) const BIGQUERY_BIG_DECIMAL_NAMES: [&str; 2] = ["BIGNUMERIC", "BIGDECIMAL"];

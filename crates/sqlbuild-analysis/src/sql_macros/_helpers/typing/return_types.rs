@@ -4,6 +4,9 @@ use polyglot_sql::expressions::DataType;
 use polyglot_sql::{Dialect, DialectType, Expression};
 
 use crate::sql_macros::_helpers::typing::returns_check::adapter_dialect;
+use crate::sql_macros::constants::{
+    BIGQUERY_BIG_DECIMAL_NAMES, BIGQUERY_BIGNUMERIC_LIMITS, BIGQUERY_NUMERIC_LIMITS,
+};
 
 /// Why `returns` is not a type the adapter's SQL analysis dialect parses and can hold.
 pub(crate) fn returns_type_error(returns: &str, adapter: &str, context: &str) -> Option<String> {
@@ -12,13 +15,48 @@ pub(crate) fn returns_type_error(returns: &str, adapter: &str, context: &str) ->
         return None;
     };
     let reason: String = match polyglot_sql::parse_data_type(returns, dialect) {
-        Ok(parsed) => decimal_error(&parsed, dialect)?,
+        Ok(parsed) => decimal_error(&parsed, dialect)
+            .or_else(|| bigquery_numeric_error(returns, &parsed, dialect))?,
         Err(error) => error.to_string(),
     };
     Some(format!(
         "{context} type '{returns}' is not valid for adapter '{adapter}' SQL analysis dialect \
          '{dialect_name}': {reason}"
     ))
+}
+
+/// Why a BigQuery `NUMERIC(P, S)` or `BIGNUMERIC(P, S)` has more digits than the type holds.
+fn bigquery_numeric_error(
+    type_sql: &str,
+    data_type: &DataType,
+    dialect: DialectType,
+) -> Option<String> {
+    let DataType::Decimal {
+        precision: Some(precision),
+        scale,
+    } = data_type
+    else {
+        return None;
+    };
+    if dialect != DialectType::BigQuery {
+        return None;
+    }
+    let scale: u32 = scale.unwrap_or(0);
+    let big: bool = BIGQUERY_BIG_DECIMAL_NAMES
+        .iter()
+        .any(|name| type_sql.trim_start().to_ascii_uppercase().starts_with(name));
+    let (max_integer_digits, max_scale) = if big {
+        BIGQUERY_BIGNUMERIC_LIMITS
+    } else {
+        BIGQUERY_NUMERIC_LIMITS
+    };
+    let integer_digits: u32 = precision.saturating_sub(scale);
+    (integer_digits > max_integer_digits || scale > max_scale).then(|| {
+        format!(
+            "precision {precision} and scale {scale} exceed BigQuery's limits of {max_integer_digits} \
+             integer digits and scale {max_scale}"
+        )
+    })
 }
 
 /// Why a decimal within `data_type` has a precision or scale `dialect` cannot hold.

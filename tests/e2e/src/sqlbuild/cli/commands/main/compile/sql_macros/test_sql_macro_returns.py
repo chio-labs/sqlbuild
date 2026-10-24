@@ -277,6 +277,51 @@ _ROUNDED: dict[str, str] = {
             ),
         ),
         SqlMacroCompileTestCase(
+            description="an_invalid_argument_type_is_reported_on_postgres",
+            files={
+                **adapter_project("postgres"),
+                **text_macro("m", "BIGINT", "@value", argument="FOO BAR"),
+                **orders_model(
+                    'SELECT @sql.m(o.amount_cents) AS v FROM __ref("stg_orders") AS o\n'
+                ),
+            },
+            expected_returncode=1,
+            expected_fragments=(
+                "error[P015]: argument value of macro m() type 'FOO BAR' is not valid for adapter "
+                "'postgres' SQL analysis dialect 'postgres'",
+            ),
+        ),
+        SqlMacroCompileTestCase(
+            description="an_argument_decimal_wider_than_the_dialect_holds_is_reported",
+            files={
+                **text_macro("m", "BIGINT", "@value", argument="DECIMAL(50, 2)"),
+                **orders_model(
+                    'SELECT @sql.m(o.amount_cents) AS v FROM __ref("stg_orders") AS o\n'
+                ),
+            },
+            expected_returncode=1,
+            expected_fragments=(
+                "error[P015]: argument value of macro m() type 'DECIMAL(50, 2)' is not valid for "
+                "adapter 'duckdb' SQL analysis dialect 'duckdb'",
+            ),
+        ),
+        SqlMacroCompileTestCase(
+            description="a_returns_numeric_wider_than_bigquery_holds_is_reported",
+            files={
+                **adapter_project("bigquery"),
+                **text_macro("m", "NUMERIC(40, 2)", "@value", argument="ANY"),
+                **orders_model(
+                    'SELECT @sql.m(o.amount_cents) AS v FROM __ref("stg_orders") AS o\n'
+                ),
+            },
+            expected_returncode=1,
+            expected_fragments=(
+                "error[P015]: returns of macro m() type 'NUMERIC(40, 2)' is not valid for adapter "
+                "'bigquery' SQL analysis dialect 'bigquery': precision 40 and scale 2 exceed "
+                "BigQuery's limits of 29 integer digits and scale 9",
+            ),
+        ),
+        SqlMacroCompileTestCase(
             description="a_returns_decimal_scale_above_its_precision_is_reported",
             files={
                 **text_macro("m", "DECIMAL(4, 6)", "@value", argument="ANY"),

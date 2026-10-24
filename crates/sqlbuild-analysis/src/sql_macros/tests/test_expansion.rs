@@ -150,6 +150,19 @@ const ODD: (&str, &str) = (
     "MACRO (description \"Odd\", arguments (v FOO BAR), returns BIGINT);\n\n@v + 1\n",
 );
 
+const WIDE: (&str, &str) = (
+    "wide",
+    "MACRO (description \"Wide\", arguments (v DECIMAL(50, 2)), returns BIGINT);\n\n@v + 1\n",
+);
+const NOT_NULL_ARGUMENT: (&str, &str) = (
+    "not_null_argument",
+    "MACRO (description \"Not null\", arguments (v INTEGER NOT NULL), returns BIGINT);\n\n@v + 1\n",
+);
+const WIDE_NUMERIC_RETURNS: (&str, &str) = (
+    "wide_numeric",
+    "MACRO (description \"Wide\", arguments (v INT64), returns NUMERIC(40, 2));\n\n@v + 1\n",
+);
+
 #[test]
 fn given_calls_of_each_form_when_expanding_then_the_ticket_examples_compile() {
     let test_cases = [
@@ -694,6 +707,38 @@ fn given_invalid_calls_when_expanding_then_each_error_names_the_problem() {
             sql: "SELECT @sql.odd(1) AS a",
             expected_code: "P015",
             expected_message: "argument v of macro odd() type 'FOO BAR' is not valid for adapter 'duckdb'",
+        },
+        ExpansionErrorTestCase {
+            description: "an argument type Postgres cannot parse",
+            adapter: "postgres",
+            macros: &[ODD],
+            sql: "SELECT @sql.odd(1) AS a",
+            expected_code: "P015",
+            expected_message: "argument v of macro odd() type 'FOO BAR' is not valid for adapter 'postgres'",
+        },
+        ExpansionErrorTestCase {
+            description: "an argument type MotherDuck reads as DuckDB",
+            adapter: "motherduck",
+            macros: &[NOT_NULL_ARGUMENT],
+            sql: "SELECT @sql.not_null_argument(1) AS a",
+            expected_code: "P015",
+            expected_message: "argument v of macro not_null_argument() type 'INTEGER NOT NULL' is not valid for adapter 'motherduck'",
+        },
+        ExpansionErrorTestCase {
+            description: "a decimal argument wider than DuckDB holds",
+            adapter: "duckdb",
+            macros: &[WIDE],
+            sql: "SELECT @sql.wide(1) AS a",
+            expected_code: "P015",
+            expected_message: "argument v of macro wide() type 'DECIMAL(50, 2)' is not valid for adapter 'duckdb'",
+        },
+        ExpansionErrorTestCase {
+            description: "a NUMERIC returns wider than BigQuery holds",
+            adapter: "bigquery",
+            macros: &[WIDE_NUMERIC_RETURNS],
+            sql: "SELECT @sql.wide_numeric(1) AS a",
+            expected_code: "P015",
+            expected_message: "returns of macro wide_numeric() type 'NUMERIC(40, 2)' is not valid for adapter 'bigquery'",
         },
     ];
 
