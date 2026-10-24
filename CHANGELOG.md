@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.177.0](https://github.com/chio-labs/sqlbuild/compare/v0.176.0...v0.177.0) (2026-10-24)
+
+
+### Features
+
+* **benchmarks:** add the DuckShop 10K generator ([#1248](https://github.com/chio-labs/sqlbuild/issues/1248)) ([3dc8d7f](https://github.com/chio-labs/sqlbuild/commit/3dc8d7f6ac8caac6c601d2ca4f8df548a004f35d))
+* type SQL macro calls everywhere, with optional returns, TYPE OF, ANY families and __cte ([#1247](https://github.com/chio-labs/sqlbuild/issues/1247)) ([4e07586](https://github.com/chio-labs/sqlbuild/commit/4e07586c3c0ac31f2f9a65f6a911d6a5870c65d4))
+
 ## [0.176.0](https://github.com/chio-labs/sqlbuild/compare/v0.175.0...v0.176.0) (2026-10-24)
 
 
