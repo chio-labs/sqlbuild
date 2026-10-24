@@ -1269,3 +1269,13 @@ class ContractCastTypeTestCase:
     projection: str
     expected_exit_code: int
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ParameterisedTestLintTestCase:
+    """A parameterised SQL test linted by SQL rules, and the commands that must succeed on it."""
+
+    description: str
+    selected_rules: str
+    command: tuple[str, ...]
+    expected_fragment: str

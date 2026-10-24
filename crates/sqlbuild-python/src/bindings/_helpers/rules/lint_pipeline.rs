@@ -29,6 +29,7 @@ use sqlbuild_rules::lint_text::main::named_declaration_role_kind::named_declarat
 use sqlbuild_rules::lint_text::main::neutralize_audit_parameters::neutralize_audit_parameters;
 use sqlbuild_rules::lint_text::main::neutralize_context_interpolation::neutralize_context_interpolation;
 use sqlbuild_rules::lint_text::main::neutralize_sql_macro_parameters::neutralize_sql_macro_parameters;
+use sqlbuild_rules::lint_text::main::neutralize_test_parameters::neutralize_test_parameters;
 use sqlbuild_rules::lint_text::main::reject_inline_suppressions::reject_inline_suppressions;
 use sqlbuild_rules::lint_text::models::{
     AuthoredDiagnostic, ExpansionSpan, FramedExpression, InterpolationSite, LintSqlBody,
@@ -64,6 +65,7 @@ const SINGULAR_AUDIT_KIND: &str = "singular_audit";
 const SQL_HOOK_KIND: &str = "sql_hook";
 const CEREMONIAL_KINDS: [&str; 2] = ["TEST", "SCENARIO"];
 const SQL_MACRO_KIND: &str = "MACRO";
+const SQL_TEST_KIND: &str = "TEST";
 const INTERPOLATION_MARKERS: [&str; 2] = ["@", "${"];
 const FAULT_SEVERITY: &str = "FAULT";
 const WARNING_SEVERITY: &str = "WARNING";
@@ -752,8 +754,11 @@ fn plan_bodies(
     if ranges.is_empty() {
         ranges = sql_body_ranges(text, headers);
     }
+    let sql_test: bool = headers.iter().any(|header| header.kind == SQL_TEST_KIND);
     let neutralize: Option<fn(&str) -> Neutralized> = if sql_macro {
         Some(neutralize_sql_macro_parameters)
+    } else if sql_test {
+        Some(neutralize_test_parameters)
     } else {
         neutralizer(&BodyRole {
             kind,

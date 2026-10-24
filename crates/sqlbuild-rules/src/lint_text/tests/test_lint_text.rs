@@ -10,6 +10,7 @@ use crate::lint_text::main::neutralize_audit_parameters::neutralize_audit_parame
 use crate::lint_text::main::neutralize_context_interpolation::neutralize_context_interpolation;
 use crate::lint_text::main::neutralize_interpolation::neutralize_interpolation;
 use crate::lint_text::main::neutralize_sql_macro_parameters::neutralize_sql_macro_parameters;
+use crate::lint_text::main::neutralize_test_parameters::neutralize_test_parameters;
 use crate::lint_text::main::reject_inline_suppressions::reject_inline_suppressions;
 use crate::lint_text::main::restore_interpolation::restore_interpolation;
 use crate::lint_text::models::{ExpansionSpan, FormatFile, LintSqlBody, LintSqlOptions};
@@ -157,6 +158,12 @@ fn given_generated_parameters_when_neutralizing_then_only_bare_parameters_are_re
             body: "@sql.other(@v) + @enum(\"s\").A + LENGTH('@v') + @@x",
             neutralize: neutralize_sql_macro_parameters,
             expected_text: "@sql.other(__sqlbuild_macro_parameter_0__) + @enum(\"s\").A + LENGTH('@v') + @@x",
+        },
+        ParameterTestCase {
+            description: "SQL test parameters, spaced or not, but not a malformed reference",
+            body: "SELECT @param(\"a\") AS a, @param ( \"b\" ) AS b, @param(c) AS c",
+            neutralize: neutralize_test_parameters,
+            expected_text: "SELECT '__sqlbuild_test_parameter_0__' AS a, '__sqlbuild_test_parameter_1__' AS b, @param(c) AS c",
         },
         ParameterTestCase {
             description: "context interpolation in hooks",
