@@ -33,3 +33,6 @@ pub(crate) const TABLE_FUNCTION_STUB_PREFIX: &str = "__sqlbuild_table_function_"
 /// The column name a star projection parses as.
 pub(crate) const STAR: &str = "*";
 pub(crate) const GENERIC_DIALECT: &str = "generic";
+/// Columns a `CONNECT BY` query computes rather than reads from its inputs.
+pub(crate) const HIERARCHY_PSEUDO_COLUMNS: [&str; 3] =
+    ["LEVEL", "CONNECT_BY_ISLEAF", "CONNECT_BY_ISCYCLE"];

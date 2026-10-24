@@ -1100,3 +1100,38 @@ def build_cursor_intrinsic_scenario_project_files() -> dict[str, str]:
             "SELECT 1\n"
         ),
     }
+
+
+def build_connect_by_scenario_project_files() -> dict[str, str]:
+    """Build a Snowflake scenario whose model walks a hierarchy beside a star CTE."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "connect_by_scenario"\nadapter = "snowflake"\ndefault_target = "dev"\n\n'
+            '[targets.dev]\ndatabase = "warehouse"\nschema = "analytics"\n\n'
+            "[scopes]\nenforce_placement = false\n"
+        ),
+        "models/categories.sql": (
+            "MODEL (description 'Test model categories.');\n"
+            "SELECT CAST(1 AS INTEGER) AS category_id, CAST(NULL AS INTEGER) AS parent_id,\n"
+            "  CAST('root' AS VARCHAR) AS name\n"
+        ),
+        "models/category_paths.sql": (
+            "MODEL (description 'Test model category_paths.');\n"
+            'WITH categories AS (SELECT * FROM __ref("categories")),\n'
+            "tree AS (\n"
+            "  SELECT c.category_id, LEVEL AS depth, SYS_CONNECT_BY_PATH(c.name, '/') AS path\n"
+            "  FROM categories AS c\n"
+            "  START WITH c.parent_id IS NULL\n"
+            "  CONNECT BY PRIOR c.category_id = c.parent_id\n"
+            ")\n"
+            "SELECT category_id, depth, path FROM tree\n"
+        ),
+        "tests/scenarios/category_paths_walk.sql": (
+            "SCENARIO (description 'Test scenario category_paths_walk.');\n"
+            "WITH\n__ref__categories AS (\n"
+            "  SELECT 1 AS category_id, CAST(NULL AS INTEGER) AS parent_id, 'root' AS name\n),\n"
+            "__expected__category_paths AS (SELECT 1 AS category_id, 1 AS depth, '/root' AS path)\n"
+            "SELECT 1\n"
+        ),
+    }

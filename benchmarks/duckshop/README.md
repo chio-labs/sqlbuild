@@ -148,9 +148,6 @@ them as expected differences or refusals instead of errors:
 These SQLBuild limitations shape parts of the project; each workaround is a reviewed exception or
 noted here:
 
-- Fixture checking asks for `CONNECT BY` pseudo-columns and lambda parameters as mock columns, so
-  `int_category_paths` and `int_cart_funnel` have no unit test. Scenarios cover both, and the
-  category scenario builds the hierarchy from a source fixture for the same reason.
 - Macro tests can only reach project-wide macros, so folder-scoped staging macros such as
   `cdc_latest` are covered through the models that call them.
 - Scenarios cannot build incremental models that use cursor intrinsics, so scenarios that read

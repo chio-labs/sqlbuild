@@ -17,7 +17,7 @@ use crate::required_columns::_helpers::tree::{
     unwrap_annotations,
 };
 use crate::required_columns::constants::{
-    CLAUSE_NAMES, KIND_COLUMN, KIND_SELECT, KIND_SUBQUERY, KIND_TABLE,
+    CLAUSE_NAMES, HIERARCHY_PSEUDO_COLUMNS, KIND_COLUMN, KIND_SELECT, KIND_SUBQUERY, KIND_TABLE,
     OUTPUT_ALIAS_FALLBACK_CLAUSES, OUTPUT_ALIAS_FIRST_CLAUSES, SET_OPERATION_KINDS,
 };
 use crate::required_columns::models::ColumnRead;
@@ -32,6 +32,8 @@ struct Scope<'a> {
     local: &'a RelationMap,
     outer: &'a RelationMap,
     shared: &'a SharedReads,
+    /// Whether the `SELECT` walks a `CONNECT BY` hierarchy, whose pseudo-columns read no input.
+    hierarchical: bool,
 }
 
 fn shared_get<'a>(shared: &'a SharedReads, name: &str) -> Option<&'a Vec<ColumnRead>> {
@@ -85,6 +87,7 @@ pub(crate) fn query_reads(
         local: &local,
         outer,
         shared: &shared,
+        hierarchical: matches!(query, Expression::Select(select) if select.connect.is_some()),
     };
     let (slots, passthrough, projection_required) = projection_slots(query, &scope);
     required.extend(clause_reads(query, &slots, &scope));
@@ -320,6 +323,13 @@ fn star_modifier_slots(projection: &Expression, scope: &Scope<'_>) -> Slots {
 
 /// `_resolve_unqualified_column_with_presence`.
 fn unqualified_column(column_name: &str, scope: &Scope<'_>) -> (bool, Vec<ColumnRead>) {
+    if scope.hierarchical
+        && HIERARCHY_PSEUDO_COLUMNS
+            .iter()
+            .any(|pseudo| pseudo.eq_ignore_ascii_case(column_name))
+    {
+        return (true, Vec::new());
+    }
     if let Some(reads) = shared_get(scope.shared, &python_casefold(column_name)) {
         return (true, reads.clone());
     }
