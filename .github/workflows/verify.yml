@@ -163,7 +163,7 @@ jobs:
                 performance=true
                 rules_performance=true
                 ;;
-              src/sqlbuild/executor/testing/*|scripts/cold_compile_performance/*|scripts/compile_performance_ratio/*|scripts/compare_compile_performance.py|tests/e2e/src/sqlbuild/cli/commands/main/compile/*)
+              benchmarks/duckshop-10k/*|src/sqlbuild/executor/testing/*|scripts/cold_compile_performance/*|scripts/compile_performance_ratio/*|scripts/compare_compile_performance.py|tests/e2e/src/sqlbuild/cli/commands/main/compile/*)
                 broad=true
                 performance=true
                 ;;
