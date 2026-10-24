@@ -285,3 +285,15 @@ def lineage_edges(printed: str) -> list[str]:
     """The `source -> target` edges a list-format lineage command printed."""
 
     return [edge.strip() for edge in re.findall(r"^.*->.*$", printed, flags=re.MULTILINE)]
+
+
+def adapter_project(adapter: str) -> dict[str, str]:
+    """The orders project configured for `adapter`, compiled without a warehouse."""
+
+    return {
+        "sqlbuild_project.toml": (
+            f'name = "shop"\nadapter = "{adapter}"\ndefault_target = "dev"\n\n'
+            '[targets.dev]\ndatabase = "warehouse"\nschema = "analytics"\n\n'
+            "[scopes]\nenforce_placement = false\n"
+        )
+    }
