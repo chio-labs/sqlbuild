@@ -409,3 +409,17 @@ pub struct SqlMacroFinding {
     pub call_end: (usize, usize),
     pub declared_at: SqlMacroLocation,
 }
+
+/// What type inference knows of an expression macro body over its declared arguments.
+#[derive(Clone, Debug)]
+pub(crate) enum BodyType {
+    /// A completely known type.
+    Known(String),
+    /// A type with unknown components, as shown, and as annotation typed it.
+    PartlyKnown {
+        shown: String,
+        data_type: polyglot_sql::expressions::DataType,
+    },
+    /// Nothing, or only a guess.
+    Unknown,
+}

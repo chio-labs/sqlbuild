@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
+use polyglot_sql::expressions::DataType;
 use polyglot_sql::{DialectType, SchemaValidationOptions, ValidationSchema, validate_with_schema};
 use serde_json::{Value, json};
 
@@ -16,14 +17,16 @@ use crate::sql_macros::constants::{
 };
 use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::models::{
-    ArgumentShape, ExpandedText, ParameterKind, RenderedArgument, SqlMacroDefinition, SqlMacroForm,
-    SqlMacroLocation, TypeFamily,
+    ArgumentShape, BodyType, ExpandedText, ParameterKind, RenderedArgument, SqlMacroDefinition,
+    SqlMacroForm, SqlMacroLocation, TypeFamily,
 };
 use crate::type_system::main::normalize_type::normalize_type;
 use crate::type_system::models::TypeNormalization;
 
-/// Each body check's verdict, by the probe it ran, so a macro is typed once per process.
-static VERDICTS: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
+/// Each body's type, by the probe that typed it, so a macro is typed once per process.
+static BODY_TYPES: OnceLock<Mutex<HashMap<String, BodyType>>> = OnceLock::new();
+/// Each body's first type error, by the probe that found it.
+static TYPE_ERRORS: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
 
 /// The dialect an adapter's SQL is analysed in.
 pub(crate) fn adapter_dialect(adapter: &str) -> &str {
@@ -97,15 +100,40 @@ fn body_probe(
     Some((probe, table))
 }
 
-/// The body's inferred type, when inference knows it completely.
-fn inferred_body_type(probe: &str, table: Value, dialect: &str) -> Option<String> {
+/// What inference knows of the body's type.
+fn inferred_body_type(probe: &str, table: Value, dialect: &str) -> BodyType {
     let Ok(schema) = serde_json::from_value::<ValidationSchema>(json!({ "tables": [table] }))
     else {
-        return None;
+        return BodyType::Unknown;
     };
-    let outputs = annotated_output_types(probe, dialect, &schema)?;
-    let (_, data_type) = outputs.into_iter().next()?;
-    data_type.filter(|inferred| !inferred.to_ascii_uppercase().contains(UNKNOWN_TYPE_HINT))
+    let Some(outputs) = annotated_output_types(probe, dialect, &schema) else {
+        return BodyType::Unknown;
+    };
+    let Some((_, shown, annotated)) = outputs.into_iter().next() else {
+        return BodyType::Unknown;
+    };
+    match (shown, annotated) {
+        (Some(shown), _) if !shown.to_ascii_uppercase().contains(UNKNOWN_TYPE_HINT) => {
+            BodyType::Known(shown)
+        }
+        (Some(shown), Some(data_type))
+            if data_type.contains_unknown() && data_type != DataType::Unknown =>
+        {
+            BodyType::PartlyKnown { shown, data_type }
+        }
+        _ => BodyType::Unknown,
+    }
+}
+
+/// Whether `returns` cannot fill the unknown components of `partial` without changing its shape.
+fn changes_shape(returns: &str, partial: &DataType, dialect: &str) -> bool {
+    let Ok(dialect_type) = dialect.parse::<DialectType>() else {
+        return false;
+    };
+    match polyglot_sql::parse_data_type(returns, dialect_type) {
+        Ok(declared) => !partial.is_refined_by(&declared),
+        Err(_) => false,
+    }
 }
 
 /// Whether body type `inferred` is outside the family of `returns`, or another non-family type.
@@ -135,9 +163,13 @@ fn disagrees(returns: &str, inferred: &str, adapter: &str) -> bool {
     }
 }
 
-/// The verdict cached under `key`, or `compute`'s verdict, cached for the rest of the process.
-fn remembered(key: String, compute: impl FnOnce() -> Option<String>) -> Option<String> {
-    let verdicts = VERDICTS.get_or_init(|| Mutex::new(HashMap::new()));
+/// The verdict `cache` holds under `key`, or `compute`'s verdict, cached for the process.
+fn remembered<T: Clone>(
+    cache: &OnceLock<Mutex<HashMap<String, T>>>,
+    key: String,
+    compute: impl FnOnce() -> T,
+) -> T {
+    let verdicts = cache.get_or_init(|| Mutex::new(HashMap::new()));
     let mut verdicts = match verdicts.lock() {
         Ok(verdicts) => verdicts,
         Err(poisoned) => poisoned.into_inner(),
@@ -145,7 +177,7 @@ fn remembered(key: String, compute: impl FnOnce() -> Option<String>) -> Option<S
     if let Some(known) = verdicts.get(&key) {
         return known.clone();
     }
-    let verdict: Option<String> = compute();
+    let verdict: T = compute();
     verdicts.insert(key, verdict.clone());
     verdict
 }
@@ -167,16 +199,26 @@ pub(crate) fn check_body_returns(
     };
     let dialect: &str = adapter_dialect(adapter);
     let key: String = format!("returns\n{dialect}\n{table}\n{probe}");
-    let inferred: Option<String> = remembered(key, || inferred_body_type(&probe, table, dialect));
-    let Some(inferred) = inferred else {
-        return Ok(());
+    let body_type: BodyType = remembered(&BODY_TYPES, key, || {
+        inferred_body_type(&probe, table, dialect)
+    });
+    let partial: bool = matches!(body_type, BodyType::PartlyKnown { .. });
+    let (shown, wrong): (String, bool) = match body_type {
+        BodyType::Unknown => return Ok(()),
+        BodyType::Known(inferred) if inferred.eq_ignore_ascii_case(INFERRED_TEXT_TYPE) => (
+            VARCHAR_TYPE.to_owned(),
+            disagrees(returns, VARCHAR_TYPE, adapter),
+        ),
+        BodyType::Known(inferred) => {
+            let wrong: bool = disagrees(returns, &inferred, adapter);
+            (inferred, wrong)
+        }
+        BodyType::PartlyKnown { shown, data_type } => {
+            let wrong: bool = changes_shape(returns, &data_type, dialect);
+            (shown, wrong)
+        }
     };
-    let shown: &str = if inferred.eq_ignore_ascii_case(INFERRED_TEXT_TYPE) {
-        VARCHAR_TYPE
-    } else {
-        &inferred
-    };
-    if !disagrees(returns, shown, adapter) {
+    if !wrong {
         return Ok(());
     }
     Err(SqlMacroError::new(
@@ -187,9 +229,15 @@ pub(crate) fn check_body_returns(
         ),
     )
     .at(location)
-    .helped(format!(
-        "declare returns {shown}, CAST the body to {returns}, or remove returns to use the inferred type"
-    )))
+    .helped(if partial {
+        format!(
+            "declare a returns of the body's shape {shown} with its unknown parts filled in, CAST the body to {returns}, or remove returns to use the inferred type"
+        )
+    } else {
+        format!(
+            "declare returns {shown}, CAST the body to {returns}, or remove returns to use the inferred type"
+        )
+    }))
 }
 
 /// The first type error the body's probe shows, as polyglot reports it.
@@ -249,7 +297,9 @@ pub(crate) fn check_body_types(
     };
     let dialect: &str = adapter_dialect(adapter);
     let key: String = format!("types\n{dialect}\n{table}\n{probe}");
-    let found: Option<String> = remembered(key, || body_type_error(&probe, table, dialect));
+    let found: Option<String> = remembered(&TYPE_ERRORS, key, || {
+        body_type_error(&probe, table, dialect)
+    });
     let Some(found) = found else {
         return Ok(());
     };

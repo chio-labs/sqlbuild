@@ -204,6 +204,32 @@ _ROUNDED: dict[str, str] = {
             expected_fragments=("0 errors, 0 warnings",),
         ),
         SqlMacroCompileTestCase(
+            description="a_partly_unknown_body_of_another_shape_is_reported",
+            files={
+                **text_macro("m", "BIGINT", "[]", argument="BIGINT"),
+                **orders_model(
+                    'SELECT @sql.m(o.amount_cents) AS v FROM __ref("stg_orders") AS o\n'
+                ),
+            },
+            expected_returncode=1,
+            expected_fragments=(
+                "error[P024]: macro m() declares returns BIGINT, but its body is UNKNOWN[]",
+            ),
+        ),
+        SqlMacroCompileTestCase(
+            description="a_returns_of_the_body_shape_fills_its_unknown_parts",
+            files={
+                **text_macro("m", "BIGINT[]", "[]", argument="BIGINT"),
+                **contract_model(
+                    "orders",
+                    'v (type "BIGINT[]")',
+                    'SELECT @sql.m(o.amount_cents) AS v FROM __ref("stg_orders") AS o\n',
+                ),
+            },
+            expected_returncode=0,
+            expected_fragments=("0 errors, 0 warnings",),
+        ),
+        SqlMacroCompileTestCase(
             description="an_untyped_call_without_returns_suggests_returns_on_k003",
             files={
                 **untyped_text_macro("m", "@value", argument="ANY"),
