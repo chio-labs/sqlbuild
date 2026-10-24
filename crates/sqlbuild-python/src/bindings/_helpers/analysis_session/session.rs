@@ -186,6 +186,8 @@ pub(crate) struct NativeModelAnalysisSession {
     cache_path: Option<PathBuf>,
     cache_stats: Option<CacheStatsRow>,
     rule_failure: RuleFailure,
+    /// The analysis dialect the session's models were marked and analysed in.
+    dialect: String,
 }
 
 /// What an internal native failure of the session names.
@@ -208,6 +210,10 @@ impl NativeModelAnalysisSession {
     }
 
     /// The running session, or `NativeCompilerError` once it has failed or finished.
+    pub(crate) fn dialect(&self) -> &str {
+        &self.dialect
+    }
+
     fn running(&mut self) -> PyResult<AnalysisSession> {
         self.inner
             .take()
@@ -347,6 +353,7 @@ pub(crate) fn start_model_analysis_session(
             request,
         ))?;
     let rule_failure: RuleFailure = RuleFailure::default();
+    let dialect: String = request.dialect.clone();
     request.nullability_callback = adapter_rules
         .map(|(rules, nullability)| nullability_callback(rules, nullability, rule_failure.clone()));
     let catalog = &catalog.inner;
@@ -381,6 +388,7 @@ pub(crate) fn start_model_analysis_session(
         cache_path,
         cache_stats,
         rule_failure,
+        dialect,
     })
 }
 

@@ -562,10 +562,13 @@ pub(crate) fn input_sql_macro_checks(
 }
 
 /// The analysis text of `model_input`: its compiled query with each typed SQL macro call marked.
-pub(crate) fn input_analysis_sql(model_input: &Bound<'_, PyAny>) -> PyResult<String> {
+pub(crate) fn input_analysis_sql(
+    model_input: &Bound<'_, PyAny>,
+    dialect: &str,
+) -> PyResult<String> {
     if let Ok(native) = model_input.cast::<NativeModelInput>() {
         return native.get().read(model_input.py(), |record, _| {
-            Ok(typed_analysis_sql(&record.query_sql, &record.typed_calls).0)
+            Ok(typed_analysis_sql(&record.query_sql, &record.typed_calls, dialect).0)
         });
     }
     native_field(model_input, "query_sql")?.extract()

@@ -132,3 +132,5 @@ pub(crate) const MARKER_PARSE_DIALECTS: [polyglot_sql::DialectType; 4] = [
     polyglot_sql::DialectType::Snowflake,
     polyglot_sql::DialectType::BigQuery,
 ];
+/// The literal a typed marker still types, though it is one bare word.
+pub(crate) const NULL_KEYWORD: &str = "NULL";

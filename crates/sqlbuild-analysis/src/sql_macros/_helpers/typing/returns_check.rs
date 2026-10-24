@@ -10,7 +10,9 @@ use serde_json::{Value, json};
 use crate::query_analysis::main::annotated_output_types::annotated_output_types;
 use crate::sql_macros::_helpers::parsing::body::expand_body;
 use crate::sql_macros::_helpers::rendering::arguments::type_family;
-use crate::sql_macros::_helpers::typing::typed_calls::{markable_calls, typed_sql};
+use crate::sql_macros::_helpers::typing::typed_calls::{
+    markable_calls, shifted, typed_sql, without_marker_calls,
+};
 use crate::sql_macros::constants::{
     BODY_TYPE_CODE, INFERRED_TEXT_TYPE, RETURNS_MISMATCH_CODE, STAND_IN_RELATION, TYPE_ERROR_CODES,
     TYPE_WARNING_CODES, UNKNOWN_TYPE_HINT, VARCHAR_TYPE,
@@ -18,7 +20,7 @@ use crate::sql_macros::constants::{
 use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::models::{
     ArgumentShape, BodyType, ExpandedText, ParameterKind, RenderedArgument, SqlMacroDefinition,
-    SqlMacroForm, SqlMacroLocation, TypeFamily,
+    SqlMacroForm, SqlMacroLocation, TypeFamily, TypedCall,
 };
 use crate::type_system::main::normalize_type::normalize_type;
 use crate::type_system::models::TypeNormalization;
@@ -63,7 +65,7 @@ fn stand_in_column(index: usize) -> String {
 fn body_probe(
     definition: &SqlMacroDefinition,
     body: &ExpandedText,
-    families: bool,
+    (families, dialect): (bool, &str),
 ) -> Option<(String, Value)> {
     let mut arguments: Vec<RenderedArgument> = Vec::with_capacity(definition.parameters.len());
     let mut columns: Vec<Value> = Vec::with_capacity(definition.parameters.len());
@@ -94,11 +96,10 @@ fn body_probe(
         Ok(expansion) => expansion,
         Err(_) => return None,
     };
-    let (typed, _) = typed_sql(
-        &expansion.sql,
-        &markable_calls(&expansion.sql, &expansion.calls),
-    );
-    let probe: String = format!("SELECT ({typed}) AS b FROM {STAND_IN_RELATION}");
+    let prefix: &str = "SELECT (";
+    let unmarked: String = format!("{prefix}{}) AS b FROM {STAND_IN_RELATION}", expansion.sql);
+    let calls: Vec<TypedCall> = shifted(expansion.calls, prefix.len()).collect();
+    let (probe, _) = typed_sql(&unmarked, &markable_calls(&unmarked, &calls, dialect));
     let table: Value = json!({"name": STAND_IN_RELATION, "columns": columns});
     Some((probe, table))
 }
@@ -197,7 +198,8 @@ pub(crate) fn check_body_returns(
     let Some(returns) = definition.returns.as_deref() else {
         return Ok(());
     };
-    let Some((probe, table)) = body_probe(definition, body, false) else {
+    let Some((probe, table)) = body_probe(definition, body, (false, adapter_dialect(adapter)))
+    else {
         return Ok(());
     };
     let dialect: &str = adapter_dialect(adapter);
@@ -262,7 +264,7 @@ fn body_type_error(probe: &str, table: Value, dialect: &str) -> Option<String> {
         .errors
         .into_iter()
         .find(|error| is_type_code(&error.code))
-        .map(|error| error.message)
+        .map(|error| without_marker_calls(&error.message).into_owned())
 }
 
 /// Whether a polyglot validation code reports an operand or argument of the wrong type.
@@ -295,7 +297,8 @@ pub(crate) fn check_body_types(
     if families.is_empty() {
         return Ok(());
     }
-    let Some((probe, table)) = body_probe(definition, body, true) else {
+    let Some((probe, table)) = body_probe(definition, body, (true, adapter_dialect(adapter)))
+    else {
         return Ok(());
     };
     let dialect: &str = adapter_dialect(adapter);
