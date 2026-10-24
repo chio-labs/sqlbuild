@@ -990,3 +990,44 @@ def build_unmocked_input_scenario_project_files() -> dict[str, str]:
         ),
     }
     return files
+
+
+def build_lambda_scenario_project_files() -> dict[str, str]:
+    """Build a scenario whose model reads list items through lambdas beside a star CTE."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "lambda_scenario"\nadapter = "duckdb"\n\n'
+            '[connection]\ndatabase = "lambda_scenario.duckdb"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_sessions\n    description: Test source raw_sessions.\n"
+            "    schema: main\n    table: raw_sessions\n"
+        ),
+        "models/sessions.sql": (
+            "MODEL (description 'Test model sessions.');\n"
+            'SELECT * FROM __source("raw_sessions")\n'
+        ),
+        "models/carts.sql": (
+            "MODEL (description 'Test model carts.');\n"
+            "SELECT 1 AS session_id, [1, 2, 3] AS quantities\n"
+        ),
+        "models/cart_totals.sql": (
+            "MODEL (description 'Test model cart_totals.');\n"
+            'WITH sess AS (SELECT * FROM __ref("sessions")),\n'
+            'crt AS (SELECT c.session_id, c.quantities FROM __ref("carts") AS c)\n'
+            "SELECT\n  s.session_id,\n"
+            "  list_reduce(list_transform(c.quantities, q -> q * 2), (acc, x) -> acc + x)"
+            " AS total,\n"
+            "  len(list_filter(c.quantities, i -> i > 1)) AS big\n"
+            "FROM sess AS s\nINNER JOIN crt AS c ON s.session_id = c.session_id\n"
+            "WHERE len(list_filter(c.quantities, w -> w < 0)) = 0\n"
+        ),
+        "tests/scenarios/cart_totals_doubled.sql": (
+            "SCENARIO (description 'Test scenario cart_totals_doubled.');\n"
+            "WITH\n__ref__sessions AS (SELECT 1 AS session_id),\n"
+            "__ref__carts AS (SELECT 1 AS session_id, [1, 2, 3] AS quantities),\n"
+            "__expected__cart_totals AS (SELECT 1 AS session_id, 12 AS total, 2 AS big)\n"
+            "SELECT 1\n"
+        ),
+    }

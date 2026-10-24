@@ -305,3 +305,14 @@ class UnmockedInputScenarioE2ETestCase:
     description: str
     expected_fragments: tuple[str, ...]
     unexpected_fragment: str
+
+
+@dataclass(frozen=True)
+class ScenarioInlineProjectE2ETestCase:
+    """One scenario command over an inline project and the output it must print."""
+
+    description: str
+    repo_files: dict[str, str]
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]

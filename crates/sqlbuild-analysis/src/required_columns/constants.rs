@@ -2,6 +2,7 @@
 
 pub(crate) const KIND_ANNOTATED: &str = "annotated";
 pub(crate) const KIND_COLUMN: &str = "column";
+pub(crate) const KIND_LAMBDA: &str = "lambda";
 pub(crate) const KIND_SELECT: &str = "select";
 pub(crate) const KIND_SUBQUERY: &str = "subquery";
 pub(crate) const KIND_TABLE: &str = "table";

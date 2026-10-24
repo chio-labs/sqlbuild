@@ -22,12 +22,7 @@ WITH __ref__int_web_sessions AS (
     NULL AS landing_page_url,
     FALSE AS is_bounce,
     TRUE AS has_add_to_cart,
-    FALSE AS has_order,
-    -- Not real columns: the fixture checker asks for int_cart_funnel's lambda parameters
-    -- (i, q, acc) as mock columns. Remove these once that is fixed.
-    NULL AS acc,
-    NULL AS i,
-    NULL AS q
+    FALSE AS has_order
   UNION ALL
   SELECT
     'S2',
@@ -46,10 +41,7 @@ WITH __ref__int_web_sessions AS (
     NULL,
     FALSE,
     FALSE,
-    TRUE,
-    NULL,
-    NULL,
-    NULL
+    TRUE
   UNION ALL
   SELECT
     'S3',
@@ -68,10 +60,7 @@ WITH __ref__int_web_sessions AS (
     NULL,
     FALSE,
     FALSE,
-    FALSE,
-    NULL,
-    NULL,
-    NULL
+    FALSE
 ),
 
 __ref__stg_web_events AS (
@@ -103,9 +92,7 @@ __ref__stg_web_events AS (
       OBJECT_CONSTRUCT('sku', 'DUCK-2', 'price_minor', 900),
       OBJECT_CONSTRUCT('quantity', 1, 'price_minor', 100),
       OBJECT_CONSTRUCT('sku', 'duck-3', 'quantity', 0)
-    )::ARRAY AS items,
-    -- See the note on int_web_sessions: i is a lambda parameter, not a column.
-    NULL AS i
+    )::ARRAY AS items
   UNION ALL
   SELECT
     'e2',
@@ -125,8 +112,7 @@ __ref__stg_web_events AS (
     NULL,
     ARRAY_CONSTRUCT(
       OBJECT_CONSTRUCT('sku', 'duck-1', 'quantity', 1)
-    )::ARRAY,
-    NULL
+    )::ARRAY
   UNION ALL
   SELECT
     'e3',
@@ -153,8 +139,7 @@ __ref__stg_web_events AS (
         'price_minor',
         500
       )
-    )::ARRAY,
-    NULL
+    )::ARRAY
   UNION ALL
   SELECT
     'e4',
@@ -174,8 +159,7 @@ __ref__stg_web_events AS (
     NULL,
     ARRAY_CONSTRUCT(
       OBJECT_CONSTRUCT('sku', 'DUCK-9', 'price_minor', 9900)
-    )::ARRAY,
-    NULL
+    )::ARRAY
 ),
 
 __ref__stg_web_checkout_steps AS (

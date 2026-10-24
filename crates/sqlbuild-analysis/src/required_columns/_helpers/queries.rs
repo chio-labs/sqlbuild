@@ -7,7 +7,7 @@ use serde_json::{Map, Value};
 use sqlbuild_core::text::main::python_casefold::python_casefold;
 
 use crate::required_columns::_helpers::payload::{
-    arg, column_refs_in_payload, payload_name, plain_value,
+    arg, column_refs_in_payload, payload_name, plain_value, without_lambda_parameters,
 };
 use crate::required_columns::_helpers::relations::{
     RelationMap, RelationReads, either, unique_reads, unique_resources,
@@ -454,6 +454,14 @@ fn direct_column_refs(expression: &Expression) -> Vec<(String, String)> {
         || is_set_operation(expression_kind)
     {
         return Vec::new();
+    }
+    if let Expression::Lambda(lambda) = expression {
+        let parameters: Vec<String> = lambda
+            .parameters
+            .iter()
+            .map(|parameter| python_casefold(&parameter.name))
+            .collect();
+        return without_lambda_parameters(direct_column_refs(&lambda.body), &parameters);
     }
     children(expression)
         .into_iter()

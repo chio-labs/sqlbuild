@@ -2,10 +2,11 @@
 
 use polyglot_sql::{Expression, ast_json};
 use serde_json::{Map, Value};
+use sqlbuild_core::text::main::python_casefold::python_casefold;
 
 use crate::required_columns::_helpers::tree::payload;
 use crate::required_columns::constants::{
-    KIND_COLUMN, KIND_SELECT, KIND_SUBQUERY, SET_OPERATION_KINDS,
+    KIND_COLUMN, KIND_LAMBDA, KIND_SELECT, KIND_SUBQUERY, SET_OPERATION_KINDS,
 };
 
 /// `expression.args.get(key)`, unless the wheel exposed it as expression objects.
@@ -52,6 +53,16 @@ fn object_column_refs(map: &Map<String, Value>) -> Vec<(String, String)> {
     if nested_query {
         return Vec::new();
     }
+    if let Some(Value::Object(lambda)) = map.get(KIND_LAMBDA) {
+        let parameters: Vec<String> = match lambda.get("parameters") {
+            Some(Value::Array(parameters)) => parameters
+                .iter()
+                .map(|parameter| python_casefold(&payload_name(Some(parameter))))
+                .collect(),
+            _ => Vec::new(),
+        };
+        return without_lambda_parameters(column_refs_in_payload(lambda.get("body")), &parameters);
+    }
     if let Some(Value::Object(column)) = map.get(KIND_COLUMN) {
         return vec![(
             payload_name(column.get("name")),
@@ -62,5 +73,15 @@ fn object_column_refs(map: &Map<String, Value>) -> Vec<(String, String)> {
     keys.sort();
     keys.into_iter()
         .flat_map(|key| column_refs_in_payload(map.get(key)))
+        .collect()
+}
+
+/// Column references that are not a lambda's own unqualified parameters.
+pub(crate) fn without_lambda_parameters(
+    refs: Vec<(String, String)>,
+    parameters: &[String],
+) -> Vec<(String, String)> {
+    refs.into_iter()
+        .filter(|(name, table)| !table.is_empty() || !parameters.contains(&python_casefold(name)))
         .collect()
 }

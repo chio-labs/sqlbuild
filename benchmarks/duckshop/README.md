@@ -183,8 +183,6 @@ noted here:
   staging models that keep the latest delivery carry reviewed exceptions.
 - Source fixtures are not cast to the source's declared types, so a typed function over an
   untyped `NULL` fixture column (such as `YEAR(NULL)`) fails on Snowflake; such fixtures cast it.
-- The scenario fixture checker treats lambda parameters (`i -> ...`, `(acc, q) -> ...`) as columns
-  the model reads, so the `cart_funnel` scenario mocks carry placeholder `acc`, `i` and `q` columns.
 - A `relationships` audit with a quoted relation name, `to "fct_orders"`, compiles cleanly but
   queries an unqualified table and does not wait for it; the relation must be `to __ref(...)`.
 - A local scenario snapshot is reported stale (`X602`) straight after capture when a fixture has a
