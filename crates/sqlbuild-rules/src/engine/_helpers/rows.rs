@@ -94,6 +94,7 @@ fn build_model(row: ModelRow, inputs: &ModelInputs<'_, '_>) -> Result<Model, Str
         enum_columns: row.enum_columns,
         enum_declarations: row.enum_declarations,
         constant_declarations: row.constant_declarations,
+        typed_calls: row.typed_calls,
         declared_audit_count: schema_audit_count.max(compiled_audit_count),
         targeting_test_count,
         empty_input_only_test_count: 0,

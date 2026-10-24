@@ -1,5 +1,6 @@
 //! Facts a compile's producers retain about each resource, in production order.
 
+use crate::sql_macros::models::TypedCall;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
@@ -31,6 +32,8 @@ pub struct CompiledModelFacts {
     pub constant_declarations: Vec<DeclarationFact>,
     /// The typed analysis result; `None` until the assembly stage transfers it.
     pub analysis: Option<ModelAnalysisFact>,
+    /// Each expression SQL macro call in `query_sql`, by byte range.
+    pub typed_calls: Vec<TypedCall>,
 }
 
 /// A model's effective config values with sorted keys, as the rules request has always read them.
@@ -212,6 +215,8 @@ pub struct PlainModel {
     pub enum_columns: Vec<String>,
     pub enum_declarations: Vec<DeclarationFact>,
     pub constant_declarations: Vec<DeclarationFact>,
+    /// Each expression SQL macro call in `query_sql`, by byte range.
+    pub typed_calls: Vec<TypedCall>,
 }
 
 /// A one-based line and column, counted in characters.

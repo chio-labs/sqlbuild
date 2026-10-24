@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use sqlbuild_analysis::sql_macros::models::TypedCall;
 
 use crate::errors::RowsError;
 use serde_json::Value;
@@ -569,6 +570,9 @@ pub struct Model {
     pub enum_columns: Vec<String>,
     pub enum_declarations: Vec<Declaration>,
     pub constant_declarations: Vec<Declaration>,
+    /// Each expression SQL macro call in `query_sql`, by byte range.
+    #[serde(default)]
+    pub typed_calls: Vec<TypedCall>,
     pub declared_audit_count: u32,
     pub targeting_test_count: u32,
     #[serde(skip_deserializing)]
@@ -877,6 +881,8 @@ pub struct ModelRow {
     pub enum_columns: Vec<String>,
     pub enum_declarations: Vec<Declaration>,
     pub constant_declarations: Vec<Declaration>,
+    /// Each expression SQL macro call in `query_sql`, by byte range.
+    pub typed_calls: Vec<TypedCall>,
 }
 
 /// A model's declared schema entry.
