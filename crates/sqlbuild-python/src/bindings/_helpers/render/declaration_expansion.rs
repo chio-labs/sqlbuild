@@ -11,7 +11,7 @@ use sqlbuild_analysis::compiled_project::main::splice_declarations::splice_decla
 use sqlbuild_analysis::compiled_project::models::{
     DeclarationSplice, InaccessibleDeclaration, SplicedSql,
 };
-use sqlbuild_analysis::sql_macros::models::SqlMacroCheck;
+use sqlbuild_analysis::sql_macros::models::{ExpandedText, SqlMacroCheck, TypedCall};
 
 use crate::bindings::_helpers::render::declaration_values::ConstantRendering;
 use crate::bindings::_helpers::render::sql_macro_host::{
@@ -82,6 +82,8 @@ pub(crate) struct ExpandedDeclarations<'py> {
     pub(crate) sql_macros: Vec<String>,
     /// What the analysed SQL must show for each top-level call's arguments to fit.
     pub(crate) sql_macro_checks: Vec<SqlMacroCheck>,
+    /// Each expression macro call in the spliced SQL, by byte range.
+    pub(crate) typed_calls: Vec<TypedCall>,
 }
 
 /// Splice each reference in order, raising the attachment's error for the first bad one.
@@ -98,12 +100,17 @@ pub(crate) fn expand_declarations<'py>(
         .map(|reference| reference.start)
         .collect();
     let (mut call_texts, sql_macros, sql_macro_checks) = if call_starts.is_empty() {
-        (Vec::new().into_iter(), Vec::new(), Vec::new())
+        (
+            Vec::<ExpandedText>::new().into_iter(),
+            Vec::new(),
+            Vec::new(),
+        )
     } else {
         let (texts, facts) = expanded_sql_macro_calls(request, &call_starts)?;
         usages.extend(facts.usages);
         (texts.into_iter(), facts.names, facts.checks)
     };
+    let mut call_splices: Vec<(usize, Vec<TypedCall>)> = Vec::new();
     for ScannedReference {
         kind,
         name,
@@ -113,10 +120,14 @@ pub(crate) fn expand_declarations<'py>(
     } in request.references
     {
         if is_sql_macro_reference(*kind) {
+            let expanded: ExpandedText = call_texts.next().unwrap_or_default();
+            if !expanded.calls.is_empty() {
+                call_splices.push((splices.len(), expanded.calls));
+            }
             splices.push(DeclarationSplice {
                 start: *start,
                 end: *end,
-                replacement: call_texts.next().unwrap_or_default(),
+                replacement: expanded.sql,
             });
             continue;
         }
@@ -144,12 +155,52 @@ pub(crate) fn expand_declarations<'py>(
     if let Some(code) = request.stop {
         return Err(compile_error(request, &DeclarationError::ScanStop(code)));
     }
+    let spliced: SplicedSql = splice_declarations(request.sql, &splices);
+    let typed_calls: Vec<TypedCall> = spliced_call_positions(&spliced, call_splices);
     Ok(ExpandedDeclarations {
-        spliced: splice_declarations(request.sql, &splices),
+        spliced,
         usages,
         sql_macros,
         sql_macro_checks,
+        typed_calls,
     })
+}
+
+/// Each call text's typed calls moved to where its splice landed in `spliced`, by byte.
+fn spliced_call_positions(
+    spliced: &SplicedSql,
+    call_splices: Vec<(usize, Vec<TypedCall>)>,
+) -> Vec<TypedCall> {
+    let mut typed: Vec<TypedCall> = Vec::new();
+    if call_splices.is_empty() {
+        return typed;
+    }
+    let ascii: bool = spliced.sql.is_ascii();
+    let mut characters = spliced.sql.char_indices().map(|(offset, _)| offset);
+    let mut seen: usize = 0;
+    let mut last: usize = 0;
+    for (index, calls) in call_splices {
+        let Some(span) = spliced.spans.get(index) else {
+            continue;
+        };
+        let offset: usize = if ascii {
+            span.output_start
+        } else {
+            if span.output_start >= seen {
+                last = characters
+                    .nth(span.output_start - seen)
+                    .unwrap_or(spliced.sql.len());
+                seen = span.output_start + 1;
+            }
+            last
+        };
+        typed.extend(calls.into_iter().map(|call| TypedCall {
+            start: call.start + offset,
+            end: call.end + offset,
+            ..call
+        }));
+    }
+    typed
 }
 
 fn enum_text<'py>(

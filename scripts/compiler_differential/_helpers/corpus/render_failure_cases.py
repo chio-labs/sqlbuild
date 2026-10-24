@@ -683,10 +683,12 @@ def _sql_macro_cases() -> tuple[FailureCase, ...]:
         failure_case(
             name="sql-macro-invalid-definition",
             expected_code="P015",
-            expected_message="expression macro x() needs returns <type> in its MACRO header",
+            expected_message="returns TYPE OF w names no argument of macro x()",
             files=_sql_macro_columns(
                 columns="@sql.x(amount) AS amount, status",
-                files=_x_macro(arguments="v DOUBLE", returns="", body="@v + 1\n"),
+                files=_x_macro(
+                    arguments="v DOUBLE", returns=", returns TYPE OF w", body="@v + 1\n"
+                ),
             ),
         ),
         failure_case(
@@ -785,6 +787,26 @@ def _sql_macro_cases() -> tuple[FailureCase, ...]:
                     "FROM firsts\n"
                 ),
             },
+        ),
+        failure_case(
+            name="sql-macro-returns-disagrees-with-body",
+            expected_code="P024",
+            expected_message="macro x() declares returns DOUBLE, but its body is VARCHAR",
+            files=_sql_macro_columns(
+                columns="@sql.x(amount) AS amount, status",
+                files=_x_macro(
+                    arguments="v DOUBLE", returns=", returns DOUBLE", body="CAST(@v AS VARCHAR)\n"
+                ),
+            ),
+        ),
+        failure_case(
+            name="sql-macro-body-misuses-an-any-family",
+            expected_code="P025",
+            expected_message="body of macro x() does not accept every value of v ANY NUMERIC",
+            files=_sql_macro_columns(
+                columns="@sql.x(amount) AS amount, status",
+                files=_x_macro(arguments="v ANY NUMERIC", returns="", body="UPPER(@v)\n"),
+            ),
         ),
         failure_case(
             name="sql-macro-body-declaration-not-visible",

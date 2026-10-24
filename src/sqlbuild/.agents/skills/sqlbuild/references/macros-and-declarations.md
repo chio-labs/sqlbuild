@@ -28,13 +28,19 @@ MACRO (
   returns DECIMAL(18, 2),
 );
 
-ROUND(CAST(@amount_cents AS DECIMAL(18, 4)) / 100, @places)
+CAST(ROUND(@amount_cents / 100, @places) AS DECIMAL(18, 2))
 ```
 
 ```sql
 SELECT order_id, @sql.cents_to_dollars(amount_cents) AS amount_dollars
 FROM __ref("stg_orders")
 ```
+
+`returns` is optional: a call is typed from its expanded SQL, and `returns` (or
+`returns TYPE OF <argument>`) applies only where that type is unknown. A `returns` whose body has a
+known type of another family fails with `P024`. Narrow `ANY` arguments with `ANY NUMERIC`,
+`ANY TEXT` or `ANY TEMPORAL`, and call a CTE-list macro more than once in a model with
+`__cte := name`.
 
 Full reference: [docs/concepts/macros/sql-macros.md](docs/concepts/macros/sql-macros.md).
 

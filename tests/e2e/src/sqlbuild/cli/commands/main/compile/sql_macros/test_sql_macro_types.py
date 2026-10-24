@@ -202,7 +202,7 @@ def test_given_an_any_argument_misused_when_compiling_then_it_fails(
             unexpected_fragments=_UNPROVEN,
         ),
         SqlMacroCompileTestCase(
-            description="a_call_inside_a_larger_expression_is_typed_from_its_sql",
+            description="a_call_inside_a_larger_expression_is_typed_but_needs_a_cast_for_the_rule",
             files={
                 **_TYPED_RULES_AND_MACROS,
                 **contract_model(
@@ -216,14 +216,13 @@ def test_given_an_any_argument_misused_when_compiling_then_it_fails(
             },
             expected_returncode=1,
             expected_fragments=(
-                "warning[K003]: column 'status_bar' type could not be proven against declared "
-                "VARCHAR",
                 'error[SQBRCONTRACT105]: output "status_bar" is calculated without an outer '
                 "explicit cast",
             ),
+            unexpected_fragments=("K003",),
         ),
         SqlMacroCompileTestCase(
-            description="a_time_body_keeps_its_inferred_type",
+            description="a_time_body_disagrees_with_returns_at_the_macro_file",
             files={
                 **text_macro("m", "VARCHAR", "CAST('10:00:00' AS TIME)"),
                 **contract_model(
@@ -233,10 +232,12 @@ def test_given_an_any_argument_misused_when_compiling_then_it_fails(
                 ),
             },
             expected_returncode=1,
-            expected_fragments=("error[K002]: column 'v' inferred as",),
+            expected_fragments=(
+                "error[P024]: macro m() declares returns VARCHAR, but its body is TIME",
+            ),
         ),
         SqlMacroCompileTestCase(
-            description="an_array_body_keeps_its_inferred_type",
+            description="an_array_body_disagrees_with_returns_at_the_macro_file",
             files={
                 **text_macro("m", "VARCHAR", "[@value]"),
                 **contract_model(
@@ -246,7 +247,9 @@ def test_given_an_any_argument_misused_when_compiling_then_it_fails(
                 ),
             },
             expected_returncode=1,
-            expected_fragments=("error[K002]: column 'v' inferred as",),
+            expected_fragments=(
+                "error[P024]: macro m() declares returns VARCHAR, but its body is",
+            ),
         ),
         SqlMacroCompileTestCase(
             description="a_longer_text_body_keeps_its_inferred_type",
@@ -407,7 +410,7 @@ def test_given_an_any_argument_misused_when_compiling_then_it_fails(
             description="an_untyped_upstream_column_in_a_cte_takes_returns",
             files={
                 **with_rules("SQBRCONTRACT105"),
-                **text_macro("m", "BIGINT", "@value"),
+                **text_macro("m", "BIGINT", "@value", argument="ANY"),
                 "models/marts/up.sql": (
                     'MODEL (description "Up");\n\nSELECT NULL AS s FROM __ref("stg_orders") AS o\n'
                 ),
@@ -439,7 +442,7 @@ def test_given_an_any_argument_misused_when_compiling_then_it_fails(
             unexpected_fragments=_UNPROVEN,
         ),
         SqlMacroCompileTestCase(
-            description="an_inferred_type_of_another_family_still_disagrees_through_a_cte",
+            description="an_inferred_type_of_another_family_disagrees_at_the_macro_file",
             files={
                 **text_macro("shouted", "BIGINT", "UPPER(@value)"),
                 **contract_model(
@@ -451,7 +454,9 @@ def test_given_an_any_argument_misused_when_compiling_then_it_fails(
                 ),
             },
             expected_returncode=1,
-            expected_fragments=("error[K002]: column 'shouted' inferred as",),
+            expected_fragments=(
+                "error[P024]: macro shouted() declares returns BIGINT, but its body is VARCHAR",
+            ),
         ),
     ],
     ids=lambda case: case.description,

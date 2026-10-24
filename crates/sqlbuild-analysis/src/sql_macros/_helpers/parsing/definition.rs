@@ -1,13 +1,15 @@
 //! A SQL macro file parsed into its definition, then checked on its own.
 
-use crate::sql_macros::_helpers::arguments::{ShapeContext, argument_shape, check_shape};
-use crate::sql_macros::_helpers::header::{Header, HeaderParser};
-use crate::sql_macros::_helpers::lexing::{AtConstruct, at_constructs};
-use crate::sql_macros::_helpers::lexing::{Token, TokenKind, line_column, tokens};
-use crate::sql_macros::_helpers::literal_positions::{
+use crate::sql_macros::_helpers::parsing::header::{Header, HeaderParser};
+use crate::sql_macros::_helpers::parsing::lexing::{AtConstruct, at_constructs};
+use crate::sql_macros::_helpers::parsing::lexing::{Token, TokenKind, line_column, tokens};
+use crate::sql_macros::_helpers::parsing::literal_positions::{
     LiteralRules, literal_error, non_literal_use,
 };
-use crate::sql_macros::_helpers::parameters::{ParameterReference, parameter_references};
+use crate::sql_macros::_helpers::parsing::parameters::{ParameterReference, parameter_references};
+use crate::sql_macros::_helpers::rendering::arguments::{
+    ShapeContext, argument_shape, check_shape,
+};
 use crate::sql_macros::constants::{
     BARE_MACRO_CALL_CODE, BODY_REFERENCE_CODE, INVALID_DEFINITION_CODE, MIXED_KIND_CODE,
     PARAMETER_REFERENCE_CODE, REFERENCE_FUNCTIONS, RESERVED_PARAMETER_NAMES, SELECT_KEYWORD,
@@ -15,7 +17,7 @@ use crate::sql_macros::constants::{
 };
 use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::models::{
-    ParameterKind, SqlMacroDefinition, SqlMacroForm, SqlMacroLocation,
+    ParameterKind, SqlMacroDefinition, SqlMacroForm, SqlMacroLocation, SqlMacroParameter,
 };
 
 /// Locates a byte offset of the macro file.
@@ -42,7 +44,17 @@ pub(crate) fn parsed_definition(
     let form: SqlMacroForm = body_form(body, &scanned);
     check_references(name, body, &scanned, &in_body)?;
     let calls: Vec<String> = body_calls(name, body, &in_body)?;
-    check_returns(name, (form, header.returns.as_ref()), at(0))?;
+    check_returns(
+        name,
+        (
+            form,
+            header.returns.is_some() || header.returns_like.is_some(),
+        ),
+        at(0),
+    )?;
+    if let Some((like, offset)) = &header.returns_like {
+        check_returns_like(name, (like, &header.parameters), at(*offset))?;
+    }
     let (body_line, body_column) = line_column(source, body_start);
     let definition: SqlMacroDefinition = SqlMacroDefinition {
         name: name.to_owned(),
@@ -50,6 +62,7 @@ pub(crate) fn parsed_definition(
         description: header.description,
         parameters: header.parameters,
         returns: header.returns,
+        returns_like: header.returns_like.map(|(like, _)| like),
         form,
         body: body.to_owned(),
         body_line,
@@ -154,20 +167,14 @@ fn body_calls(name: &str, body: &str, in_body: Locate<'_>) -> Result<Vec<String>
     Ok(calls)
 }
 
-/// Rejects an expression macro without `returns` and another form with it.
+/// Rejects `returns` on a CTE-list or column-list macro.
 fn check_returns(
     name: &str,
-    (form, returns): (SqlMacroForm, Option<&String>),
+    (form, returns): (SqlMacroForm, bool),
     location: SqlMacroLocation,
 ) -> Result<(), SqlMacroError> {
     match (form, returns) {
-        (SqlMacroForm::Expression, None) => Err(SqlMacroError::new(
-            INVALID_DEFINITION_CODE,
-            format!("expression macro {name}() needs returns <type> in its MACRO header"),
-        )
-        .at(location)
-        .helped("declare the type the expression returns, such as returns DECIMAL(18, 2)")),
-        (SqlMacroForm::CteList | SqlMacroForm::ColumnList, Some(_)) => Err(SqlMacroError::new(
+        (SqlMacroForm::CteList | SqlMacroForm::ColumnList, true) => Err(SqlMacroError::new(
             INVALID_DEFINITION_CODE,
             format!(
                 "{} macro {name}() cannot declare returns; only expression macros return a value",
@@ -176,6 +183,50 @@ fn check_returns(
         )
         .at(location)),
         _ => Ok(()),
+    }
+}
+
+/// Rejects `returns TYPE OF` naming no argument, or an argument with no scalar type.
+fn check_returns_like(
+    name: &str,
+    (like, parameters): (&str, &[SqlMacroParameter]),
+    location: SqlMacroLocation,
+) -> Result<(), SqlMacroError> {
+    let Some(parameter) = parameters
+        .iter()
+        .find(|parameter| parameter.name.eq_ignore_ascii_case(like))
+    else {
+        let names: Vec<&str> = parameters
+            .iter()
+            .map(|parameter| parameter.name.as_str())
+            .collect();
+        return Err(SqlMacroError::new(
+            INVALID_DEFINITION_CODE,
+            format!("returns TYPE OF {like} names no argument of macro {name}()"),
+        )
+        .at(location)
+        .helped(if names.is_empty() {
+            format!("macro {name}() has no arguments; declare returns <type> instead")
+        } else {
+            format!("name one of its arguments: {}", names.join(", "))
+        }));
+    };
+    match parameter.kind {
+        ParameterKind::Expression { .. }
+        | ParameterKind::Any { .. }
+        | ParameterKind::Constant { .. }
+        | ParameterKind::Enum { .. } => Ok(()),
+        ParameterKind::Collection { .. }
+        | ParameterKind::Relation { .. }
+        | ParameterKind::ColumnOf { .. } => Err(SqlMacroError::new(
+            INVALID_DEFINITION_CODE,
+            format!(
+                "returns TYPE OF {} names a {} argument of macro {name}(); only a scalar argument has a type to return",
+                parameter.name,
+                parameter.kind.label()
+            ),
+        )
+        .at(location)),
     }
 }
 
@@ -306,7 +357,9 @@ fn check_references(
         let referenced: String = scanned
             .get(index + 2)
             .filter(|argument| matches!(argument.kind, TokenKind::Quoted | TokenKind::Text))
-            .map(|argument| crate::sql_macros::_helpers::header::unquoted(argument.text(body)))
+            .map(|argument| {
+                crate::sql_macros::_helpers::parsing::header::unquoted(argument.text(body))
+            })
             .unwrap_or_default();
         let kind: &str = match function {
             "__source" => "source",

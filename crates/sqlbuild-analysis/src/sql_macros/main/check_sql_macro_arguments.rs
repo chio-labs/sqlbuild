@@ -1,4 +1,6 @@
-use crate::sql_macros::_helpers::probes::{ProbePlan, analysed_probes, check_findings, probe_plan};
+use crate::sql_macros::_helpers::typing::probes::{
+    ProbePlan, analysed_probes, check_findings, probe_plan,
+};
 use crate::sql_macros::models::SqlMacroFinding;
 use crate::sql_macros::types::{ArgumentCheckInput, ProbeColumns};
 

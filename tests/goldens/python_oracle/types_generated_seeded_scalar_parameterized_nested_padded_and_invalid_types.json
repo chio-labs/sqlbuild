@@ -12497,16 +12497,16 @@
 [
 "type",
 {
-"DuckDB": "9c4e957c3856f1159283313a",
+"DuckDB": "8731ee5ed03816bf6b4a8464",
 "None": "8731ee5ed03816bf6b4a8464",
 "bigquery": "657a69dabb6a9b2c7b834d41",
 "databricks": "606d813c3f1dfcf4921045c8",
-"duckdb": "9c4e957c3856f1159283313a",
+"duckdb": "8731ee5ed03816bf6b4a8464",
 "generic": "8731ee5ed03816bf6b4a8464",
 "motherduck": "901c5133ed47d4769286e860",
 "mysql": "b9f1a78bcda3bc968346cc10",
-"postgres": "9c4e957c3856f1159283313a",
-"postgresql": "9c4e957c3856f1159283313a",
+"postgres": "8731ee5ed03816bf6b4a8464",
+"postgresql": "8731ee5ed03816bf6b4a8464",
 "snowflake": "cd2eb5ae8b54388fde5d5737",
 "tsql": "8619573249fac6f54d0bc771"
 }
@@ -12718,16 +12718,16 @@
 [
 "type",
 {
-"DuckDB": "0da0fad3107f7a26744c9411",
+"DuckDB": "4172129e8d84a0da597bc612",
 "None": "4172129e8d84a0da597bc612",
 "bigquery": "d138b3b3355094a33a14355a",
 "databricks": "4172129e8d84a0da597bc612",
-"duckdb": "0da0fad3107f7a26744c9411",
+"duckdb": "4172129e8d84a0da597bc612",
 "generic": "4172129e8d84a0da597bc612",
 "motherduck": "901c5133ed47d4769286e860",
 "mysql": "6c03a3450ea4742ee7396e3c",
-"postgres": "0da0fad3107f7a26744c9411",
-"postgresql": "0da0fad3107f7a26744c9411",
+"postgres": "4172129e8d84a0da597bc612",
+"postgresql": "4172129e8d84a0da597bc612",
 "snowflake": "e21aafb74f6e5c5e181abd5e",
 "tsql": "2e261f2f5a01e0e0f4a34a7a"
 }
@@ -16458,16 +16458,16 @@
 [
 "type",
 {
-"DuckDB": "e1554f02dea662c971e7b9b9",
+"DuckDB": "6f851103102e7b986535376f",
 "None": "6f851103102e7b986535376f",
 "bigquery": "58b7e0908df666938398205f",
 "databricks": "6f851103102e7b986535376f",
-"duckdb": "e1554f02dea662c971e7b9b9",
+"duckdb": "6f851103102e7b986535376f",
 "generic": "6f851103102e7b986535376f",
 "motherduck": "901c5133ed47d4769286e860",
 "mysql": "1a853242fb56557e2865a86a",
-"postgres": "a0b34c5b4e5ace89b22c6971",
-"postgresql": "a0b34c5b4e5ace89b22c6971",
+"postgres": "6f851103102e7b986535376f",
+"postgresql": "6f851103102e7b986535376f",
 "snowflake": "87800133cac38d9119180c0a",
 "tsql": "0e9ef5373e5d52970e8e1656"
 }

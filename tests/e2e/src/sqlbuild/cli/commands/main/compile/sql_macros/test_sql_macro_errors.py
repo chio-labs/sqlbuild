@@ -339,13 +339,19 @@ _CALL_X: dict[str, str] = orders_model("SELECT @sql.x(1) AS a\n")
             ),
         ),
         SqlMacroErrorTestCase(
-            description="expression_macro_without_returns",
+            description="returns_that_disagrees_with_the_body_is_reported_at_the_macro_file",
             files={
-                "macros/sql/x.sql": _X_HEADER.format(args="v BIGINT", returns="") + "@v + 1\n",
-                **_CALL_X,
+                "macros/sql/x.sql": _X_HEADER.format(args="v VARCHAR", returns=", returns BIGINT")
+                + "UPPER(@v)\n",
+                **orders_model("SELECT @sql.x('a') AS a\n"),
             },
-            expected_code="P015",
-            expected_fragments=("expression macro x() needs returns <type> in its MACRO header",),
+            expected_code="P024",
+            expected_fragments=(
+                "macro x() declares returns BIGINT, but its body is VARCHAR\n"
+                "  model: orders\n"
+                "  --> macros/sql/x.sql:3:1",
+                "declare returns VARCHAR, CAST the body to BIGINT, or remove returns",
+            ),
         ),
         SqlMacroErrorTestCase(
             description="untyped_argument",

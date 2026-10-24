@@ -1,5 +1,5 @@
-use crate::sql_macros::_helpers::lexing::{Token, tokens};
-use crate::sql_macros::_helpers::placement::CallSite;
+use crate::sql_macros::_helpers::parsing::lexing::{Token, tokens};
+use crate::sql_macros::_helpers::rendering::placement::CallSite;
 use crate::sql_macros::main::sql_macro_calls::sql_macro_calls;
 use crate::sql_macros::models::{CallPosition, SqlMacroCall};
 

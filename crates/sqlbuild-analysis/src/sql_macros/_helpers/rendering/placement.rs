@@ -1,8 +1,8 @@
 //! Where a call stands in its caller: its query part, separators and the caller's names.
 
-use crate::sql_macros::_helpers::header::unquoted;
-use crate::sql_macros::_helpers::lexing::{Token, TokenKind, closing_token};
-use crate::sql_macros::constants::{AS_KEYWORD, AT_SIGN, COMMA, SELECT_KEYWORD, WITH_KEYWORD};
+use crate::sql_macros::_helpers::parsing::header::unquoted;
+use crate::sql_macros::_helpers::parsing::lexing::{Token, TokenKind, closing_token};
+use crate::sql_macros::constants::{AT_SIGN, COMMA, SELECT_KEYWORD, WITH_KEYWORD};
 use crate::sql_macros::models::{CallPosition, CallScope};
 
 /// Tokens before the `(` of `DISTINCT ON (...)`.
@@ -11,10 +11,6 @@ const DISTINCT_ON_TOKENS: usize = 2;
 const QUERY_OPENERS: [&str; 4] = ["SELECT", "WITH", "VALUES", "FROM"];
 /// Keywords that combine the selects of a query.
 const SET_OPERATIONS: [&str; 3] = ["UNION", "INTERSECT", "EXCEPT"];
-/// A star, which an `EXCEPT` column list may follow as a modifier, not a set operation.
-const STAR: &str = "*";
-/// The words that may stand between a set operation and its parenthesised right branch.
-const SET_OPERATION_MODIFIERS: [&str; 3] = ["ALL", "DISTINCT", "NAME"];
 /// Tokens from `@` to a macro call's name: `@`, the kind, `.` and the name.
 const CALL_PREFIX_TOKENS: usize = 4;
 /// Keywords that open the clause a call stands in, read backwards from the call.
@@ -256,48 +252,6 @@ impl<'a> CallSite<'a> {
         }
     }
 
-    /// The alias of the select-list item the call is the whole of, as `@sql.m(x) AS name`.
-    pub(crate) fn whole_item_alias(&self) -> Option<String> {
-        let opens_item: bool = self.previous_token().is_some_and(|token| {
-            matches!(
-                token.text(self.sql).to_ascii_uppercase().as_str(),
-                "SELECT" | "DISTINCT" | "ALL" | ","
-            )
-        });
-        if !opens_item || self.position() != CallPosition::SelectList {
-            return None;
-        }
-        let next: usize = self.next?;
-        let alias_index: usize = if self.tokens[next].is_word(self.sql, AS_KEYWORD) {
-            next + 1
-        } else {
-            next
-        };
-        let alias: &Token = self.tokens.get(alias_index)?;
-        let alias_text: String = alias.text(self.sql).to_ascii_uppercase();
-        let named: bool = match alias.kind {
-            TokenKind::Quoted => true,
-            TokenKind::Word => {
-                !SELECT_LIST_ENDS.contains(&alias_text.as_str())
-                    && !EXPRESSION_OPERATOR_WORDS.contains(&alias_text.as_str())
-                    && alias_text != AS_KEYWORD
-            }
-            _ => false,
-        };
-        if !named {
-            return None;
-        }
-        let ends_item: bool = match self.tokens.get(alias_index + 1) {
-            None => true,
-            Some(after) => {
-                let text: String = after.text(self.sql).to_ascii_uppercase();
-                matches!(text.as_str(), "," | ")" | ";")
-                    || (after.kind == TokenKind::Word && SELECT_LIST_ENDS.contains(&text.as_str()))
-            }
-        };
-        ends_item.then(|| unquoted(alias.text(self.sql)))
-    }
-
     /// Whether the token after the call ends a select-list item.
     fn ends_select_item(&self) -> bool {
         let Some(next) = self.next_token() else {
@@ -435,7 +389,7 @@ pub(crate) fn cte_names(sql: &str, tokens: &[Token], with_index: usize) -> Vec<(
         if !matches!(token.kind, TokenKind::Word | TokenKind::Quoted) {
             break;
         }
-        let name: String = crate::sql_macros::_helpers::header::unquoted(token.text(sql));
+        let name: String = crate::sql_macros::_helpers::parsing::header::unquoted(token.text(sql));
         let mut cursor: usize = index + 1;
         if tokens.get(cursor).is_some_and(|after| after.is(sql, "(")) {
             match closing_token(sql, tokens, cursor) {
@@ -534,7 +488,7 @@ fn item_name(sql: &str, item: &[Token]) -> Option<(String, usize)> {
     };
     named.then(|| {
         (
-            crate::sql_macros::_helpers::header::unquoted(last.text(sql)),
+            crate::sql_macros::_helpers::parsing::header::unquoted(last.text(sql)),
             last.start,
         )
     })
@@ -612,74 +566,6 @@ impl QueryParts {
             }
         }
         nested_at_call == Some(false)
-    }
-}
-
-impl QueryParts {
-    /// The set-operation branch byte `offset` stands in; `None` where it cannot be counted.
-    pub(crate) fn branch_of(&self, text: &str, scanned: &[Token], offset: usize) -> Option<usize> {
-        let range: (usize, usize) = match self.scope_of(offset) {
-            CallScope::WithList => return None,
-            CallScope::Cte(name) => self.ctes.iter().find(|cte| cte.name == name)?.body,
-            CallScope::Main => (self.main, text.len()),
-        };
-        let inside: Vec<(usize, &Token)> = scanned
-            .iter()
-            .enumerate()
-            .filter(|(_, token)| range.0 <= token.start && token.end <= range.1)
-            .collect();
-        if inside
-            .first()
-            .is_some_and(|(_, token)| token.is_word(text, WITH_KEYWORD))
-        {
-            return None;
-        }
-        let mut depth: usize = 0;
-        let mut branch: usize = 0;
-        let mut at_call: Option<usize> = None;
-        let mut previous_at_top: Option<&Token> = None;
-        for (index, token) in inside {
-            if at_call.is_none() && token.start >= offset {
-                if depth != 0 {
-                    return None;
-                }
-                at_call = Some(branch);
-            }
-            if token.kind == TokenKind::Punct {
-                match token.text(text) {
-                    "(" | "[" | "{" => {
-                        let query: bool = scanned
-                            .get(index + 1)
-                            .is_some_and(|next| opens_query(text, next));
-                        let branch_start: bool = previous_at_top.is_none_or(|previous| {
-                            let word: &str = previous.text(text);
-                            is_set_operation(word)
-                                || SET_OPERATION_MODIFIERS
-                                    .iter()
-                                    .any(|modifier| word.eq_ignore_ascii_case(modifier))
-                        });
-                        if depth == 0 && query && branch_start {
-                            return None;
-                        }
-                        depth += 1;
-                    }
-                    ")" | "]" | "}" => depth = depth.saturating_sub(1),
-                    _ => {}
-                }
-            }
-            if depth == 0 {
-                let star_modifier: bool =
-                    previous_at_top.is_some_and(|previous| previous.text(text) == STAR);
-                if token.kind == TokenKind::Word
-                    && is_set_operation(token.text(text))
-                    && !star_modifier
-                {
-                    branch += 1;
-                }
-                previous_at_top = Some(token);
-            }
-        }
-        at_call
     }
 }
 

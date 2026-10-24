@@ -1,5 +1,5 @@
-use crate::sql_macros::_helpers::arguments::{collection_items, collection_problem};
-use crate::sql_macros::_helpers::lexing::{Token, tokens};
+use crate::sql_macros::_helpers::parsing::lexing::{Token, tokens};
+use crate::sql_macros::_helpers::rendering::arguments::{collection_items, collection_problem};
 use crate::sql_macros::constants::ARGUMENT_CODE;
 use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::models::TypeFamily;

@@ -144,8 +144,6 @@ pub(crate) struct CachedRun {
     pub(crate) keys: Vec<Option<sqlbuild_cache::digest::types::ContentDigest>>,
     /// Whether each model's outcome came from the cache.
     pub(crate) hits: Vec<bool>,
-    /// Whether each model's outcome still defers its cleaned SQL.
-    pub(crate) deferred: Vec<bool>,
     /// The catalog's schema additions and analysis names, then the sorted fact models.
     pub(crate) catalog: (
         crate::assembly::analysis_session::types::Shapes,
@@ -220,9 +218,15 @@ pub(crate) struct DeltaSessionTestCase {
     pub(crate) expected_whole_session_outcome: bool,
 }
 
-/// Models whose first one declares a SQL macro output, and that output's described column.
-pub(crate) struct DeclaredHitTestCase {
+/// A model query holding typed markers, and the described line of its column `v`.
+pub(crate) struct TypedMarkerTestCase {
     pub(crate) description: &'static str,
-    pub(crate) models: &'static [ModelSpec],
-    pub(crate) expected_label: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) expected_column: &'static str,
+}
+
+pub(crate) struct TypedMarkerCacheTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) expected_hits: &'static [bool],
 }

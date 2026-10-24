@@ -39,5 +39,6 @@ pub(crate) fn plain_model_facts(model: PlainModel) -> CompiledModelFacts {
         enum_declarations: model.enum_declarations,
         constant_declarations: model.constant_declarations,
         analysis: None,
+        typed_calls: model.typed_calls,
     }
 }

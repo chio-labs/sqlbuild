@@ -1,7 +1,7 @@
 //! The byte spans of a SQL macro body's `@name` parameter references, as expansion reads them.
 
-use crate::sql_macros::_helpers::lexing::tokens;
-use crate::sql_macros::_helpers::parameters::parameter_references;
+use crate::sql_macros::_helpers::parsing::lexing::tokens;
+use crate::sql_macros::_helpers::parsing::parameters::parameter_references;
 
 /// The `start..end` byte span of each `@name` in `body` that expansion replaces by an argument.
 #[must_use]

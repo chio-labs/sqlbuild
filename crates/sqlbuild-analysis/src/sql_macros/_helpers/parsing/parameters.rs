@@ -2,7 +2,7 @@
 
 use sqlbuild_render::macro_calls::main::opens_bare_call::opens_bare_call;
 
-use crate::sql_macros::_helpers::lexing::{DECLARATION_WORDS, Token, TokenKind};
+use crate::sql_macros::_helpers::parsing::lexing::{DECLARATION_WORDS, Token, TokenKind};
 
 const PLACEHOLDER_PREFIX: &str = "__sqlbuild_parameter__";
 /// Words that may follow a table reference without being its alias.

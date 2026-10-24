@@ -131,12 +131,6 @@ fn given_invalid_macro_files_when_parsing_then_each_is_rejected() {
             expected_message: "macro call @other() in SQL macro m() does not say which kind of macro it calls",
         },
         DefinitionErrorTestCase {
-            description: "expression without returns",
-            source: "MACRO (description \"x\", arguments (a BIGINT));\na + 1",
-            expected_code: "P015",
-            expected_message: "expression macro m() needs returns <type>",
-        },
-        DefinitionErrorTestCase {
             description: "CTE list with returns",
             source: "MACRO (description \"x\", returns BIGINT);\nWITH a AS (SELECT 1)",
             expected_code: "P015",
@@ -201,6 +195,36 @@ fn given_invalid_macro_files_when_parsing_then_each_is_rejected() {
             source: "MACRO (description \"x\", arguments (n ANY[]), returns BIGINT);\n@n",
             expected_code: "P015",
             expected_message: "argument n ANY takes nothing after it",
+        },
+        DefinitionErrorTestCase {
+            description: "ANY family with CONST",
+            source: "MACRO (description \"x\", arguments (n ANY NUMERIC CONST), returns BIGINT);\n@n",
+            expected_code: "P015",
+            expected_message: "argument n ANY NUMERIC takes nothing after it",
+        },
+        DefinitionErrorTestCase {
+            description: "LIST of an ANY family",
+            source: "MACRO (description \"x\", arguments (codes LIST ANY TEXT), returns BOOLEAN);\n'a' IN @codes",
+            expected_code: "P015",
+            expected_message: "argument codes LIST ANY: ANY is for scalar arguments only",
+        },
+        DefinitionErrorTestCase {
+            description: "returns TYPE OF an unknown argument",
+            source: "MACRO (description \"x\", arguments (v ANY), returns TYPE OF w);\n@v",
+            expected_code: "P015",
+            expected_message: "returns TYPE OF w names no argument of macro m()",
+        },
+        DefinitionErrorTestCase {
+            description: "returns TYPE OF a LIST argument",
+            source: "MACRO (description \"x\", arguments (v LIST VARCHAR), returns TYPE OF v);\n'a' IN @v",
+            expected_code: "P015",
+            expected_message: "returns TYPE OF v names a LIST VARCHAR argument of macro m(); only a scalar argument has a type to return",
+        },
+        DefinitionErrorTestCase {
+            description: "returns TYPE OF on a CTE list",
+            source: "MACRO (description \"x\", arguments (src RELATION (id BIGINT)), returns TYPE OF src);\nWITH a AS (SELECT * FROM @src)",
+            expected_code: "P015",
+            expected_message: "CTE-list macro m() cannot declare returns",
         },
         DefinitionErrorTestCase {
             description: "LIST of ANY",
