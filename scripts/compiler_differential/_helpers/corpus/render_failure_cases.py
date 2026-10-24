@@ -683,10 +683,12 @@ def _sql_macro_cases() -> tuple[FailureCase, ...]:
         failure_case(
             name="sql-macro-invalid-definition",
             expected_code="P015",
-            expected_message="expression macro x() needs returns <type> in its MACRO header",
+            expected_message="returns TYPE OF w names no argument of macro x()",
             files=_sql_macro_columns(
                 columns="@sql.x(amount) AS amount, status",
-                files=_x_macro(arguments="v DOUBLE", returns="", body="@v + 1\n"),
+                files=_x_macro(
+                    arguments="v DOUBLE", returns=", returns TYPE OF w", body="@v + 1\n"
+                ),
             ),
         ),
         failure_case(
