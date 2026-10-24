@@ -52,3 +52,12 @@ class MacroDescriptionTestCase:
     description: str
     header: str
     expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class MetaDescriptionTestCase:
+    """An audit `meta` value under a `description` key, and the meta the build records."""
+
+    description: str
+    meta: str
+    expected_meta: dict[str, str]

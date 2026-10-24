@@ -15,6 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.header_strings._test_types
     HeaderQuoteErrorTestCase,
     ListStringTestCase,
     MacroDescriptionTestCase,
+    MetaDescriptionTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.header_strings.helpers import (
     header_strings_project,
@@ -366,3 +367,39 @@ def test_given_adjacent_strings_outside_descriptions_when_compiling_then_they_re
     assert compiled.returncode == 0, compiled.stdout + compiled.stderr
     manifest: dict[str, Any] = json.loads((project_dir / "target/manifest.json").read_text())
     assert manifest["nodes"]["model.shop.customers"]["tags"] == test_case.expected_tags
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MetaDescriptionTestCase(
+            description="escaped quote then a separator inside a meta description",
+            meta='meta (description "say \\", then", owner "ops")',
+            expected_meta={"description": 'say ", then', "owner": "ops"},
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_meta_description_with_escaped_quote_when_building_then_meta_keeps_its_text(
+    test_case: MetaDescriptionTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = header_strings_project(
+        tmp_path,
+        {
+            "models/customers.sql": (
+                'MODEL (\n  description "Customers.",\n'
+                f"  audits [not_null (column customer_id, {test_case.meta})],\n);\n\n"
+                "SELECT 1 AS customer_id\n"
+            )
+        },
+    )
+
+    built: subprocess.CompletedProcess[str] = run_sqb(
+        project_dir=project_dir, command=("--no-color", "build", "--json")
+    )
+
+    assert built.returncode == 0, built.stdout + built.stderr
+    audit_meta: list[object] = [
+        check.get("audit_meta") for check in json.loads(built.stdout)["checks"]
+    ]
+    assert audit_meta == [test_case.expected_meta]

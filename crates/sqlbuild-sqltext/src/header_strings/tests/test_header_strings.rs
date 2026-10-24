@@ -185,6 +185,18 @@ fn given_description_string_when_finding_its_end_then_prose_rules_decide_it() {
             expected_end: Some(19),
         },
         DescriptionEndTestCase {
+            description: "a description inside meta reads the backslash as an escape",
+            text: r#"meta (owner "ops", description "say \", then"), x"#,
+            start: 31,
+            expected_end: Some(45),
+        },
+        DescriptionEndTestCase {
+            description: "a description after a closed meta value is prose again",
+            text: r#"meta (owner "ops"), description "C:\", x"#,
+            start: 32,
+            expected_end: Some(37),
+        },
+        DescriptionEndTestCase {
             description: "a key that only ends in description is not one",
             text: r#"redescription "C:\", x""#,
             start: 14,

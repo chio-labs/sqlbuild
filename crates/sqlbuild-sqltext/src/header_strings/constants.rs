@@ -8,6 +8,8 @@ pub const TRIPLE_QUOTE_LENGTH: usize = 3;
 pub const LONGEST_CLOSING_RUN: usize = 5;
 /// The header key whose string values are folded prose.
 pub const DESCRIPTION_KEY: &str = "description";
+/// The header key whose free-form values are never prose, even under a `description` key.
+pub const META_KEY: &str = "meta";
 /// The header key whose list items are audits, whose `description` option is prose.
 pub const AUDITS_KEY: &str = "audits";
 /// What a prose value stores for a blank line: a paragraph break.
