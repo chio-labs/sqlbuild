@@ -85,6 +85,18 @@ fn given_sql_cases_when_linting_then_diagnostics_match() -> Result<(), String> {
             expected_anchors: &[("SQBRSQL004", "LIMIT")],
         },
         test_types::LintTestCase {
+            description: "limit zero selects no rows in any order",
+            sql: "SELECT id FROM items LIMIT 0",
+            expected_codes: &[],
+            expected_anchors: &[],
+        },
+        test_types::LintTestCase {
+            description: "limit zero with an offset still selects no rows",
+            sql: "SELECT id FROM items LIMIT 0 OFFSET 5",
+            expected_codes: &[],
+            expected_anchors: &[],
+        },
+        test_types::LintTestCase {
             description: "semi-structured limit and offset keys are not row selection clauses",
             sql: "SELECT payload:Limit::VARCHAR AS order_limit, payload:Offset::NUMBER AS order_offset FROM orders",
             expected_codes: &[],
