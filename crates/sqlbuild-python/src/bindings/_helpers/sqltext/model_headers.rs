@@ -110,6 +110,17 @@ pub(crate) fn header_failure(
         header,
         header_line.unwrap_or(1),
     );
+    if let Some(quote) = sqlbuild_sqltext::header_strings::main::quote_failure::quote_failure(
+        error,
+        header,
+        (header_line.unwrap_or(1), 1),
+    ) {
+        return (
+            quote.message,
+            Some(quote.help),
+            header_line.map(|_| quote.line),
+        );
+    }
     match (nesting, header_line) {
         (Some(nesting), Some(_)) => (nesting.message, Some(nesting.help), Some(nesting.line)),
         (Some(nesting), None) => (error.to_owned(), Some(nesting.help), None),

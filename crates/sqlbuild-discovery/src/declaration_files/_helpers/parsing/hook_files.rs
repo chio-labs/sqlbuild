@@ -1,5 +1,6 @@
 //! Python's `parse_sql_hook_file`: exactly one `HOOK(...);` header and the SQL after it.
 
+use crate::_helpers::header_syntax::header_position;
 use crate::_helpers::statement_headers::{StatementHeader, parse_statement_header};
 use crate::declaration_files::_helpers::checks::python_values::{
     WordRules, failure, get, non_empty_str, python_str,
@@ -9,6 +10,7 @@ use crate::declaration_files::models::{DeclarationFileOptions, HookFile};
 use crate::models::FailureKind;
 use sqlbuild_core::text::main::python_cleandoc::python_cleandoc;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
+use sqlbuild_sqltext::header_strings::main::header_quoted_end::header_quoted_end;
 
 const HOOK_KEYWORD: &str = "HOOK";
 const DESCRIPTION_KEY: &str = "description";
@@ -35,7 +37,7 @@ pub(crate) fn parse_hook_file(
             supported_keys: &options.hook_keys,
         },
         header,
-        contents[..header_start].matches('\n').count() + 1,
+        header_position(&contents, header_start),
     )?;
     let description: Option<String> = match get(&header_values, DESCRIPTION_KEY) {
         Some(value) => {
@@ -81,28 +83,19 @@ fn split_hook_file(contents: &str, file_path: &str) -> Result<(usize, usize, usi
     }
     let header_start: usize = index + 1;
     let mut depth: usize = 1;
-    let mut quote: Option<u8> = None;
     index = header_start;
     while index < bytes.len() {
         let byte: u8 = bytes[index];
-        if let Some(open_quote) = quote {
-            if byte == b'\\' {
-                index += 1 + next_char_len(contents, index + 1);
-                continue;
+        if SQL_QUOTES.contains(&byte) {
+            index = if byte == b'`' {
+                backtick_end(bytes, index)
+            } else {
+                header_quoted_end(bytes, index)
             }
-            if byte == open_quote {
-                if bytes.get(index + 1) == Some(&open_quote) {
-                    index += 2;
-                    continue;
-                }
-                quote = None;
-            }
-            index += 1;
+            .unwrap_or(bytes.len());
             continue;
         }
-        if SQL_QUOTES.contains(&byte) {
-            quote = Some(byte);
-        } else if byte == b'(' {
+        if byte == b'(' {
             depth += 1;
         } else if byte == b')' {
             depth -= 1;
@@ -127,11 +120,18 @@ fn split_hook_file(contents: &str, file_path: &str) -> Result<(usize, usize, usi
     Ok((header_start, header_end, index + 1))
 }
 
-fn next_char_len(contents: &str, index: usize) -> usize {
-    contents
-        .get(index..)
-        .and_then(|rest| rest.chars().next())
-        .map_or(0, char::len_utf8)
+/// The end of the backtick-quoted text at `start`: doubled backticks and backslashes escape.
+fn backtick_end(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut index: usize = start + 1;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\\' => index += 2,
+            b'`' if bytes.get(index + 1) == Some(&b'`') => index += 2,
+            b'`' => return Some(index + 1),
+            _ => index += 1,
+        }
+    }
+    None
 }
 
 fn skip_whitespace(contents: &str, start: usize) -> usize {

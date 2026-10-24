@@ -128,3 +128,11 @@ pub(super) struct HeaderColumnsTestCase {
     pub(super) expected_entries: Vec<(&'static str, [usize; 4])>,
     pub(super) expected_locations: Vec<(&'static str, [usize; 4])>,
 }
+
+pub(crate) struct HeaderStringTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) header: &'static str,
+    /// Map keys, or `[index]` list items, leading to the string value.
+    pub(crate) path: &'static [&'static str],
+    pub(crate) expected_value: Result<&'static str, &'static str>,
+}

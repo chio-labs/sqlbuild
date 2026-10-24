@@ -88,4 +88,12 @@ impl<E> From<SqlMacroError> for ExpansionFailure<E> {
 pub(crate) enum LexError {
     UnclosedQuote(usize),
     UnclosedComment(usize),
+    /// A `"` that ends a `"..."` header string inside its text, at this offset.
+    QuoteInside(usize),
+    /// A `'` that ends a `'...'` header description inside its text, at this offset.
+    SingleQuoteInside(usize),
+    /// A `"""` that ends a `"""..."""` header string inside its text, at this offset.
+    TripleQuoteInside(usize),
+    /// A `"""` header string that opens at this offset and never closes.
+    UnclosedTripleQuote(usize),
 }

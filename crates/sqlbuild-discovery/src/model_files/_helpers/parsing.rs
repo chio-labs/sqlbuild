@@ -1,7 +1,7 @@
 //! Parse one model file: header checks, model-local declaration checks and their messages.
 
 use crate::_helpers::header_keys::{UnsupportedKeys, unsupported_keys_failure};
-use crate::_helpers::header_syntax::{FailedHeader, header_syntax_failure};
+use crate::_helpers::header_syntax::{FailedHeader, header_position, header_syntax_failure};
 use crate::_helpers::locations::header_column_locations;
 use crate::declaration_files::main::bare_number_failure::bare_number_failure;
 use crate::model_files::_helpers::output_columns::output_column_locations;
@@ -29,13 +29,14 @@ pub(crate) fn parse_model_file(
         )));
     };
     let header = &contents[header_start..header_end];
-    let header_line: usize = contents[..header_start].matches('\n').count() + 1;
+    let (header_line, header_column) = header_position(&contents, header_start);
     let failed_header = FailedHeader {
         kind: FailureKind::ModelSql,
         statement_name: "MODEL",
         file_path,
         text: header,
         line: header_line,
+        column: header_column,
     };
     let (header_values, column_offsets) = match parse_one(header) {
         (_, _, Some(error)) => return Err(header_syntax_failure(&failed_header, &error)),

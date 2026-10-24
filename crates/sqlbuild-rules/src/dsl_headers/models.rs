@@ -38,6 +38,8 @@ pub struct HeaderRulesConfig {
 pub struct ParseFailure {
     pub message: String,
     pub help: Option<String>,
+    /// The character offset in the text between the parentheses the error is at, if known.
+    pub position: Option<usize>,
 }
 
 /// One header parse: values, a header syntax error, or another error the caller raised.

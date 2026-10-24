@@ -34,6 +34,7 @@ _EMIT_MACRO: str = (
 )
 _MART_HEADER: str = 'MODEL (\n  description "Order totals per customer",\n);\n\n'
 _QUOTED_NOTE: str = "over 12\\\" boxes, by customer's orders"
+_QUOTED_DESCRIPTION: str = "over 12\" boxes, by customer's orders"
 _NO_SQL_ANALYSIS_CONFIG: str = FAILURE_BASE_CONFIG + "\n[settings]\nsql_analysis = false\n"
 
 
@@ -78,9 +79,9 @@ _NO_SQL_ANALYSIS_CONFIG: str = FAILURE_BASE_CONFIG + "\n[settings]\nsql_analysis
             expected_error_type="CompileInputError",
         ),
         ReferenceScanErrorTestCase(
-            description="header_string_with_an_escaped_quote_and_apostrophe",
+            description="triple_quoted_header_string_with_a_quote_and_apostrophe",
             project_files={
-                FAILURE_MART_PATH: f'MODEL (\n  description "{_QUOTED_NOTE}",\n);\n\n'
+                FAILURE_MART_PATH: f'MODEL (\n  description """{_QUOTED_DESCRIPTION}""",\n);\n\n'
                 'SELECT customer_id, 1 AS total_amount\nFROM __ref("stg_orders")\nWHERE "open = 1\n'
             },
             expected_message=(
@@ -160,7 +161,7 @@ _NO_SQL_ANALYSIS_CONFIG: str = FAILURE_BASE_CONFIG + "\n[settings]\nsql_analysis
             project_files={
                 "sqlbuild_project.toml": _NO_SQL_ANALYSIS_CONFIG,
                 "functions/sql/orders_for.sql": (
-                    f'FUNCTION (\n  description "{_QUOTED_NOTE}",\n'
+                    f'FUNCTION (\n  description """{_QUOTED_DESCRIPTION}""",\n'
                     "  arguments (p_customer_id INTEGER),\n  returns INTEGER\n);\n\n"
                     'SELECT COUNT(*) FROM __ref("stg_orders" WHERE customer_id = p_customer_id\n'
                 ),

@@ -85,10 +85,10 @@ DEFAULT_CONFIG: LintConfig = LintConfig()
             expected_codes=("description-present",),
         ),
         LintNativeTestCase(
-            description="escaped paragraphs fault against canonical formatted length",
+            description="paragraphs fault against canonical formatted length",
             contents=(
                 'MODEL (description "'
-                + "\\n\\n".join(f"paragraph {index}" for index in range(11))
+                + "\n\n".join(f"paragraph {index}" for index in range(11))
                 + '");\nSELECT 1\n'
             ),
             expected_codes=("description-length",),
@@ -247,8 +247,10 @@ def test_given_contents_when_formatting_then_contents_match_expected(
             ),
             line_width=60,
             expected_contents=(
-                'MODEL (\n  description "Builds canonical customer records from every\n'
-                'available source while retaining unmatched customers."\n);\nSELECT 1\n'
+                'MODEL (\n  description """\n'
+                "    Builds canonical customer records from every available\n"
+                "    source while retaining unmatched customers.\n"
+                '  """\n);\nSELECT 1\n'
             ),
         ),
         FormatDescriptionTestCase(
@@ -259,8 +261,10 @@ def test_given_contents_when_formatting_then_contents_match_expected(
             ),
             line_width=60,
             expected_contents=(
-                'MODEL (\n  description "Builds canonical customer records from every\n'
-                'available source while retaining unmatched customers."\n);\nSELECT 1\n'
+                'MODEL (\n  description """\n'
+                "    Builds canonical customer records from every available\n"
+                "    source while retaining unmatched customers.\n"
+                '  """\n);\nSELECT 1\n'
             ),
         ),
         FormatDescriptionTestCase(
@@ -271,32 +275,34 @@ def test_given_contents_when_formatting_then_contents_match_expected(
             ),
             line_width=60,
             expected_contents=(
-                'MODEL (\n  description "Builds canonical customer records from every\n'
-                "source.\n\nRetains unmatched customers for complete downstream\n"
-                'coverage."\n);\nSELECT 1\n'
+                'MODEL (\n  description """\n'
+                "    Builds canonical customer records from every source.\n\n"
+                "    Retains unmatched customers for complete downstream\n"
+                "    coverage.\n"
+                '  """\n);\nSELECT 1\n'
             ),
         ),
         FormatDescriptionTestCase(
-            description="escaped newlines and unicode retain authored meaning",
+            description="backslashes in a description are kept as written",
             contents=(
                 'MODEL (\n  description "Builds order summary.\\nRetains unmatched orders.'
                 '\\n\\nSource \\u2192 canonical orders."\n);\nSELECT 1\n'
             ),
             line_width=100,
             expected_contents=(
-                'MODEL (\n  description "Builds order summary. Retains unmatched orders.\n\n'
-                'Source → canonical orders."\n);\nSELECT 1\n'
+                'MODEL (\n  description "Builds order summary.\\nRetains unmatched orders.'
+                '\\n\\nSource \\u2192 canonical orders."\n);\nSELECT 1\n'
             ),
         ),
         FormatDescriptionTestCase(
-            description="malformed unicode escape is retained losslessly",
+            description="a backslash that is no escape is retained losslessly",
             contents=(
                 'MODEL (\n  description "Builds order summary.\\u-123 retains text."\n);\n'
                 "SELECT 1\n"
             ),
             line_width=100,
             expected_contents=(
-                'MODEL (\n  description "Builds order summary.\\\\u-123 retains text."\n);\n'
+                'MODEL (\n  description "Builds order summary.\\u-123 retains text."\n);\n'
                 "SELECT 1\n"
             ),
         ),
@@ -316,8 +322,9 @@ def test_given_contents_when_formatting_then_contents_match_expected(
             line_width=60,
             expected_contents=(
                 'MODEL (\n  columns (\n    customer_id (type BIGINT, description "A deliberately '
-                'long column description that remains authored text.")\n  ),\n  description "Builds '
-                'canonical customer records from every\navailable source."\n);\nSELECT 1\n'
+                'long column description that remains authored text.")\n  ),\n  description """\n'
+                "    Builds canonical customer records from every available\n"
+                '    source.\n  """\n);\nSELECT 1\n'
             ),
         ),
     ],

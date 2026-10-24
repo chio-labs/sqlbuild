@@ -1,4 +1,4 @@
-"""Generated project helpers for format performance guards."""
+"""Project helpers for format E2E tests and performance guards."""
 
 from __future__ import annotations
 
@@ -178,3 +178,13 @@ def model_tree(*, project_dir: Path) -> dict[str, bytes]:
         str(path.relative_to(project_dir)): path.read_bytes()
         for path in sorted((project_dir / "models").rglob("*.sql"))
     }
+
+
+def stored_descriptions(project_dir: Path) -> dict[str, str]:
+    """The description `sqb dag` reports for each node of the project, by name."""
+
+    dag: subprocess.CompletedProcess[str] = run_sqb(
+        project_dir=project_dir, arguments=("--no-color", "dag", "--json")
+    )
+    assert dag.returncode == 0, dag.stderr
+    return {node["name"]: node["description"] for node in json.loads(dag.stdout)["nodes"]}

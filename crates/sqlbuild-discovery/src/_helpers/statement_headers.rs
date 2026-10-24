@@ -17,20 +17,21 @@ pub(crate) struct StatementHeader<'a> {
     pub(crate) supported_keys: &'a [String],
 }
 
-/// `parse_header_values` then `reject_unsupported_header_keys`; `header_line` is one-based.
+/// `parse_header_values` then `reject_unsupported_header_keys`, locating errors from `header_start`.
 pub(crate) fn parse_statement_header(
     contract: &StatementHeader<'_>,
     header: &str,
-    header_line: usize,
+    header_start: (usize, usize),
 ) -> Result<Vec<(String, AuthoredValue)>, DiscoveryFailure> {
+    let header_line: usize = header_start.0;
     let values: Vec<(String, AuthoredValue)> = match parse_one(header) {
-        (_, _, Some(error)) => return Err(syntax_failure(contract, header, header_line, &error)),
+        (_, _, Some(error)) => return Err(syntax_failure(contract, header, header_start, &error)),
         (Some(AuthoredValue::Map(values)), _, None) => values,
         _ => {
             return Err(syntax_failure(
                 contract,
                 header,
-                header_line,
+                header_start,
                 "Native MODEL header parser returned neither values nor an error",
             ));
         }
@@ -57,7 +58,7 @@ pub(crate) fn parse_statement_header(
 fn syntax_failure(
     contract: &StatementHeader<'_>,
     header: &str,
-    header_line: usize,
+    (line, column): (usize, usize),
     error: &str,
 ) -> DiscoveryFailure {
     header_syntax_failure(
@@ -66,7 +67,8 @@ fn syntax_failure(
             statement_name: contract.statement_name,
             file_path: contract.file_path,
             text: header,
-            line: header_line,
+            line,
+            column,
         },
         error,
     )

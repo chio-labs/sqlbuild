@@ -74,8 +74,27 @@ Format does not render templates, so a templated description that renders empty 
 is reported by `sqb compile`.
 Plain `sqb format` still formats the file and exits non-zero, like any other remaining fault.
 
-Long model and scenario descriptions are reflowed deterministically. Ordinary authored line breaks
-are normalized as spaces, while blank lines preserve paragraph boundaries.
+Descriptions of `MODEL`, `SCENARIO`, `SCHEMA`, `FUNCTION`, `HOOK` and `MACRO` headers have one
+canonical layout, which never changes their words, their quotes or the text they store (see
+[Folded descriptions](../concepts/models/configuration.md#folded-descriptions)):
+
+- A description that fits on its line stays one line: `"..."`, or `"""..."""` when it contains a
+  double quote. A short description wrapped over several lines is joined onto one.
+- A longer description, or one with paragraphs, becomes a `"""` block: its lines are indented one
+  level under the field and wrapped at the line width, with a blank line between paragraphs, and
+  the closing `"""` lines up with the field.
+
+```sql
+MODEL (
+  description """
+    True when a name starts with a woman's title: Mme, Mlle, Miss, Mrs, Ms. Any case, with or
+    without a dot ("MISS ANNA PARKER", "Mrs. C. O'Brien", "Ms.Robinson").
+  """,
+);
+```
+
+A one-line `'...'` description that fits is left as written. Running `sqb format` again changes
+nothing.
 
 Clause layout follows a few fixed rules:
 
@@ -165,6 +184,15 @@ reason, and the run continues. A cycle or the 128-pass limit fails without writi
 | SQBRSQL025 implicit inner join | Applied | A bare `JOIN ... ON` is an inner join. |
 | SQBRSQL030 boolean CASE simplification | Refused | The `COALESCE` rewrite is not proved portable to every supported dialect. |
 | SQBRSQL042 unused CTE output | Applied when row-neutral | Only a column reference or deterministic scalar expression is removed, from a CTE without `DISTINCT`, `DISTINCT ON`, `GROUP BY ALL`, `ORDER BY ALL`, an ungrouped aggregate, or positional `GROUP BY`/`ORDER BY`. Other removals could change the rows and are refused with the reason. |
+
+`--fix` also rewrites a header description that escapes double quotes as `\"` or doubles them as
+`""`, which descriptions do not support, as a `"""..."""` string holding real quotes, and reports
+it as an applied `description-quotes` fix. It rewrites only a description whose sole backslashes
+escape quotes, and only when the new string stores exactly that text. A file that still has header
+syntax errors once its descriptions are rewritten is left as written, and the fix is reported as
+refused. When the project cannot compile
+until the rewritten descriptions are saved, the run skips the compiler-verified Rule fixes with a
+`format-fix-skipped` warning; run `sqb format --fix` again to apply them.
 
 Edits that touch macro or intrinsic expansions are refused, and so are edits outside model SQL
 bodies, because recompiling cannot prove their output contract. Findings without a proposed edit

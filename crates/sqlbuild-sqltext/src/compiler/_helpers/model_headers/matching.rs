@@ -1,4 +1,7 @@
-//! Exact native equivalent of the possessive Python `MODEL(...)` header regular expression.
+//! The possessive `MODEL(...)` header match, with `"""..."""` header strings.
+
+use crate::header_strings::main::header_quoted_end::header_quoted_end;
+use crate::header_strings::main::opens_triple_quote::opens_triple_quote;
 
 /// Offsets of one matched header: header start, header end, and SQL start.
 pub(crate) type HeaderMatchOffsets = (usize, usize, usize);
@@ -50,6 +53,9 @@ fn scan_header_body(text: &str, start: usize) -> usize {
     let mut index = start;
     while let Some(&byte) = bytes.get(index) {
         index = match byte {
+            b'"' if opens_triple_quote(bytes, index) => {
+                header_quoted_end(bytes, index).unwrap_or_else(|| unclosed_quote_end(text, index))
+            }
             b'"' | b'\'' => quoted_string_end(text, index, byte)
                 .unwrap_or_else(|| unclosed_quote_end(text, index)),
             b')' => {

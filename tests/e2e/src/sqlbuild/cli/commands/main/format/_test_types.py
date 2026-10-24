@@ -127,3 +127,42 @@ class FormatCacheEndToEndTestCase:
     edited_model: str
     expected_warm_summary: str
     expected_edited_summary: str
+
+
+@dataclass(frozen=True)
+class DescriptionLayoutTestCase:
+    """One authored model header and the header `sqb format` writes for it."""
+
+    description: str
+    header: str
+    expected_header: str
+
+
+@dataclass(frozen=True)
+class QuoteFixTestCase:
+    """Project files escaping description quotes and what `sqb format --fix` makes of them."""
+
+    description: str
+    files: dict[str, str]
+    expected_fixes: list[tuple[str, str, int, str]]
+    expected_starts: dict[str, str]
+    expected_description: str
+
+
+@dataclass(frozen=True)
+class MacroLayoutTestCase:
+    """One authored SQL macro file and the file `sqb format` writes for it."""
+
+    description: str
+    macro: str
+    expected_macro: str
+
+
+@dataclass(frozen=True)
+class RefusedQuoteFixTestCase:
+    """A file whose quote fix would leave other header errors, and the refused fix reported."""
+
+    description: str
+    path: str
+    contents: str
+    expected_fix: tuple[str, str, int, str]

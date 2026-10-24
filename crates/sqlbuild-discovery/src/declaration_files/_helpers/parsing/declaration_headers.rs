@@ -1,11 +1,12 @@
 //! Python's `_parse_declaration_headers`: split a file into `KIND(...);` headers and parse each.
 
-use crate::_helpers::header_syntax::{FailedHeader, header_syntax_failure};
+use crate::_helpers::header_syntax::{FailedHeader, header_position, header_syntax_failure};
 use crate::declaration_files::_helpers::checks::python_values::failure;
 use crate::declaration_files::_helpers::checks::stops::ParseStop;
 use crate::models::FailureKind;
 use sqlbuild_sqltext::compiler::main::model_header_single_parsing::parse_one;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
+use sqlbuild_sqltext::header_strings::main::header_quoted_end::header_quoted_end;
 
 const DECLARATION_KINDS: [&str; 3] = ["ENUM", "CONSTANT", "SCHEMA"];
 
@@ -55,12 +56,14 @@ pub(crate) fn declaration_headers(
             )));
         }
         let header_start: usize = open_index + 1;
+        let (line, column) = header_position(contents, header_start);
         let header = FailedHeader {
             kind: FailureKind::Declaration,
             statement_name: expected_kind,
             file_path,
             text: &contents[header_start..close_index],
-            line: contents[..header_start].matches('\n').count() + 1,
+            line,
+            column,
         };
         let syntax_failure = |error: &str| ParseStop::Failed(header_syntax_failure(&header, error));
         let (values, column_offsets) = match parse_one(header.text) {
@@ -98,27 +101,18 @@ fn declaration_start(contents: &str, start: usize) -> Option<(&'static str, usiz
     (contents.as_bytes().get(open_index) == Some(&b'(')).then_some((kind, open_index))
 }
 
-/// `_find_closing_parenthesis`: quotes skip backslash escapes; `None` when the header never closes.
+/// `_find_closing_parenthesis`: header strings skipped; `None` when the header never closes.
 fn closing_parenthesis(contents: &str, open_index: usize) -> Option<usize> {
     let bytes: &[u8] = contents.as_bytes();
     let mut depth: usize = 1;
-    let mut quote: Option<u8> = None;
     let mut index: usize = open_index + 1;
     while index < bytes.len() {
         let byte: u8 = bytes[index];
-        if let Some(open_quote) = quote {
-            if byte == b'\\' {
-                index += 1 + next_char_len(contents, index + 1);
+        match byte {
+            b'\'' | b'"' => {
+                index = header_quoted_end(bytes, index)?;
                 continue;
             }
-            if byte == open_quote {
-                quote = None;
-            }
-            index += 1;
-            continue;
-        }
-        match byte {
-            b'\'' | b'"' => quote = Some(byte),
             b'(' => depth += 1,
             b')' => {
                 depth -= 1;
@@ -131,14 +125,6 @@ fn closing_parenthesis(contents: &str, open_index: usize) -> Option<usize> {
         index += 1;
     }
     None
-}
-
-/// The UTF-8 length of the character at `index`, or 0 at the end.
-fn next_char_len(contents: &str, index: usize) -> usize {
-    contents
-        .get(index..)
-        .and_then(|rest| rest.chars().next())
-        .map_or(0, char::len_utf8)
 }
 
 /// The byte offset of the first non-whitespace character at or after `start`.

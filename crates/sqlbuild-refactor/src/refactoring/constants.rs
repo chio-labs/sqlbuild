@@ -88,7 +88,6 @@ pub const CONTRACT_TYPE_KEY: &str = "type";
 pub const CONTRACT_YAML_COLUMNS_KEY: &str = "columns";
 pub const CONTRACT_YAML_LIST_NAME: &str = "- name:";
 pub const CONTRACT_YAML_COMMENT: &str = " #";
-pub const CONTRACT_MODEL_HEADER_ESCAPE: char = '\\';
 pub const CONTRACT_HEADER_WORD_EXTRA: [char; 2] = ['_', '$'];
 pub const CONTRACT_QUOTES: [char; 2] = ['\'', '"'];
 pub const CONTRACT_OPENERS: [char; 3] = ['(', '[', '{'];

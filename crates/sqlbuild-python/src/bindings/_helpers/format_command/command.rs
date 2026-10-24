@@ -4,7 +4,9 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use pyo3::exceptions::PyException;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{
+    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
 use pyo3::types::{PyDict, PyString};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::cli_text::models::CliStyle;
@@ -24,6 +26,7 @@ use crate::bindings::_helpers::format_command::files::FormatChange;
 use crate::bindings::_helpers::format_command::report::lint_report;
 use crate::bindings::_helpers::format_command::run::{FormatOutcome, FormatRequest, run_format};
 use crate::bindings::_helpers::format_command::selection::{LintInputs, resolve_lint_inputs};
+use crate::bindings::_helpers::format_command::stages::quote_fixable_file_count;
 use crate::bindings::_helpers::frontier::encoder::emit_error;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -51,6 +54,8 @@ struct Resolved<'py> {
     selected: Option<std::collections::BTreeSet<PathBuf>>,
     discovered: Option<Bound<'py, PyAny>>,
     has_fixture_candidates: bool,
+    /// Why `--fix` could not discover the project; descriptions that escape quotes may cause it.
+    discovery_error: Option<PyErr>,
 }
 
 fn string_tuple(value: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
@@ -81,6 +86,7 @@ fn resolve_inputs<'py>(
         selected: None,
         discovered: None,
         has_fixture_candidates: false,
+        discovery_error: None,
     };
     if !scoped {
         let directory: PathBuf = project_dir.extract()?;
@@ -109,6 +115,10 @@ fn resolve_inputs<'py>(
                 resolved.selected = selected;
                 resolved.discovered = Some(discovered);
             }
+            Err(error) if fix && !scoped && error.is_instance_of::<PyException>(py) => {
+                resolved.discovery_error = Some(error);
+                return Ok(resolved);
+            }
             Err(error) if scoped || fix || !error.is_instance_of::<PyException>(py) => {
                 return Err(error);
             }
@@ -116,10 +126,17 @@ fn resolve_inputs<'py>(
         }
     }
     if fix {
-        resolved.discovered = Some(discover_project_inputs(
+        match discover_project_inputs(
             py,
             Some(keywords(py, &[("project_dir", project_dir.clone())])?),
-        )?);
+        ) {
+            Ok(discovered) => resolved.discovered = Some(discovered),
+            Err(error) if error.is_instance_of::<PyException>(py) => {
+                resolved.discovered = None;
+                resolved.discovery_error = Some(error);
+            }
+            Err(error) => return Err(error),
+        }
     }
     Ok(resolved)
 }
@@ -213,6 +230,12 @@ fn run_command(
         selectors,
         (flags.fix, &config.settings.dialect),
     )?;
+    if let Some(error) = &resolved.discovery_error {
+        let directory: PathBuf = project_dir.extract()?;
+        if quote_fixable_file_count(&directory).map_err(value_error)? == 0 {
+            return Err(error.clone_ref(py));
+        }
+    }
     let lint: Bound<'_, PyAny> = lint_config(py, &config, &resolved.dialect)?;
     let fixture_discovered: Option<Bound<'_, PyAny>> = if flags.fix {
         resolved.discovered.clone()
@@ -229,6 +252,7 @@ fn run_command(
         write: !(flags.check || flags.diff),
         fix: flags.fix,
         cache: !(flags.no_cache || flags.fix),
+        discovery_error: resolved.discovery_error.as_ref(),
     };
     let (outcome, status, elapsed) = format_with_status(py, &request, flags.use_color)?;
     let root: PathBuf = project_dir.extract()?;

@@ -1,0 +1,19 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P015",
+     "message": "a double quote ends this \"...\" string early; use \"\"\"…\"\"\" for text containing double quotes\n  --> macros/sql/customer_label.sql:3:10",
+     "help": "write the text between triple quotes, where quotes need no escaping: description \"\"\"Matches \"Miss\".\"\"\"; sqb format --fix rewrites a description that escapes its quotes as \\\" or doubles them as \"\""
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}

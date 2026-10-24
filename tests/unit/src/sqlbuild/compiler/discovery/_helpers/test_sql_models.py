@@ -317,11 +317,11 @@ def test_given_deferred_output_locations_when_discovering_models_then_projection
             expected_query="SELECT 1",
         ),
         ParseModelSqlHeaderTestCase(
-            description="accepts double quoted strings and escapes",
+            description="accepts double quoted strings and triple-quoted text",
             contents="""
         MODEL (
           schema "analytics mart",
-          description "Bob said \\"hello\\"",
+          description \"\"\"Bob said "hello\".\"\"\",
           post_hooks [inline_sql("grant select on @@CTX:destination.qualified to role analytics")],
         );
 
@@ -329,7 +329,7 @@ def test_given_deferred_output_locations_when_discovering_models_then_projection
         """,
             expected_header_values={
                 "schema": "analytics mart",
-                "description": 'Bob said "hello"',
+                "description": 'Bob said "hello".',
                 "post_hooks": [
                     SqlHookEntry(
                         statement="grant select on @@CTX:destination.qualified to role analytics"
@@ -599,12 +599,12 @@ def test_given_sql_model_header_variants_when_parsing_then_it_returns_expected_h
         ParseModelSqlErrorTestCase(
             description="reports an unterminated string with escaped quotes before parentheses",
             contents='MODEL (description "' + '\\")' * 20000 + "); SELECT 1",
-            expected_error_fragment="unterminated double-quoted string",
+            expected_error_fragment="unexpected double quote inside bare value",
         ),
         ParseModelSqlErrorTestCase(
             description="reports an unterminated string with many escaped quotes",
             contents='MODEL (description "' + '\\"' * 20000 + "); SELECT 1",
-            expected_error_fragment="unterminated double-quoted string",
+            expected_error_fragment="a double quote ends this",
         ),
         ParseModelSqlErrorTestCase(
             description="raises when the model header is missing",

@@ -83,3 +83,16 @@ pub(super) struct OutputNamesTestCase {
     pub(super) sql: &'static str,
     pub(super) expected_names: &'static [(Option<&'static str>, usize, &'static str)],
 }
+
+pub(super) struct MacroDescriptionTestCase {
+    pub(super) description: &'static str,
+    pub(super) source: &'static str,
+    pub(super) expected_description: &'static str,
+}
+
+pub(super) struct MacroQuoteErrorTestCase {
+    pub(super) description: &'static str,
+    pub(super) source: &'static str,
+    pub(super) expected_message: &'static str,
+    pub(super) expected_location: (usize, usize),
+}

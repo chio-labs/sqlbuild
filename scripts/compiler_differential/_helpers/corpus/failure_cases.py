@@ -39,6 +39,12 @@ from scripts.compiler_differential.models import FailureCase
 
 _MART_HEADER_START: str = 'MODEL (\n  description "Order totals per customer",\n'
 
+_DESCRIPTION_QUOTE_HELP: str = (
+    'write the text between triple quotes, where quotes need no escaping: description """Matches '
+    '"Miss"."""; sqb format --fix rewrites a description that escapes its quotes as \\" '
+    'or doubles them as ""'
+)
+
 _RULES_CONFIG: str = '\n[rules]\nselect = ["{codes}"]\n'
 
 _ENGINE_ERROR_MACROS: str = "macros/python/cents.py"
@@ -667,6 +673,47 @@ def engine_error_cases() -> tuple[FailureCase, ...]:
             expected_help=(
                 'Quote it to keep it as text ("\u0663"), or write the number with ASCII digits 0-9'
             ),
+        ),
+        failure_case(
+            name="engine-error-description-escaped-quote",
+            expected_code="D002",
+            files={
+                FAILURE_MART_PATH: FAILURE_BASE_MART.replace(
+                    'description "Order totals per customer"',
+                    'description "Order totals per \\"customer\\""',
+                    1,
+                )
+            },
+            expected_message=(
+                f"MODEL(...) in '<project>/{FAILURE_MART_PATH}:2:34' contains invalid SQLBuild "
+                'header syntax: a double quote ends this "..." string early; use """…""" for '
+                "text containing double quotes"
+            ),
+            expected_help=_DESCRIPTION_QUOTE_HELP,
+        ),
+        failure_case(
+            name="engine-error-macro-description-escaped-quote",
+            expected_code="P015",
+            files={
+                "macros/sql/customer_label.sql": (
+                    "MACRO (\n"
+                    "  description \"A customer's label,\n"
+                    'quoted (\\"VIP\\").",\n'
+                    "  arguments (customer_id BIGINT),\n"
+                    "  returns VARCHAR,\n"
+                    ");\n\n"
+                    "CAST(@customer_id AS VARCHAR)\n"
+                ),
+                **mart_body_files(
+                    "SELECT customer_id, @sql.customer_label(customer_id) AS label\n"
+                    'FROM __ref("stg_orders")\n'
+                ),
+            },
+            expected_message=(
+                'a double quote ends this "..." string early; use """…""" for text '
+                "containing double quotes\n  --> macros/sql/customer_label.sql:3:10"
+            ),
+            expected_help=_DESCRIPTION_QUOTE_HELP,
         ),
         failure_case(
             name="engine-error-non-ascii-digit-bare-number",

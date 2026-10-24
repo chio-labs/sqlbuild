@@ -4,17 +4,23 @@ use sqlbuild_core::text::main::python_splitlines::python_splitlines;
 use sqlbuild_core::text::main::python_strip::python_strip;
 
 use crate::dsl_headers::_helpers::audits::wrap_header;
-use crate::dsl_headers::_helpers::quoted::{
-    decode_description, description_value_span, escape_quoted, split_outside_quotes,
+use sqlbuild_sqltext::header_strings::constants::TRIPLE_QUOTE;
+use sqlbuild_sqltext::header_strings::main::fold_prose::fold_prose;
+use sqlbuild_sqltext::header_strings::main::prose_string::prose_string;
+
+use crate::dsl_headers::_helpers::macro_header::same_macro;
+use crate::dsl_headers::_helpers::prose_layout::{
+    canonical_prose, closing_width, description_string_span,
 };
+use crate::dsl_headers::_helpers::quoted::split_outside_quotes;
 use crate::dsl_headers::_helpers::rules::violation_at;
 use crate::dsl_headers::_helpers::text::{
-    chars, line_count, line_starts, lstrip, rstrip, slice, string, tail,
+    chars, find, line_count, line_starts, lstrip, rfind_before, rstrip, slice, string, tail,
 };
-use crate::dsl_headers::_helpers::wrap::{wrap_description, wrap_header_description};
+use crate::dsl_headers::_helpers::wrap::wrap_description;
 use crate::dsl_headers::constants::{
-    DESCRIPTION_HEADER_KINDS, DESCRIPTION_KEY, HEADER_INDENT, MODEL_KIND,
-    RULE_LEADING_COMMENT_DESCRIPTION,
+    DESCRIPTION_KEY, HEADER_INDENT, MODEL_KIND, RULE_LEADING_COMMENT_DESCRIPTION,
+    SQL_MACRO_HEADER_KIND,
 };
 use crate::dsl_headers::main::inner_header_text::inner_header_text;
 use crate::dsl_headers::main::scan_headers::scan_headers;
@@ -96,15 +102,20 @@ fn relocated_description(
     (description, vec![fault])
 }
 
-/// The `description "..."` line inserted after a model header's opening parenthesis.
-fn description_insertion(description: &[char]) -> Vec<char> {
-    let escaped: String = string(description)
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace("\r\n", "\n");
-    chars(&format!(
-        "\n{HEADER_INDENT}{DESCRIPTION_KEY} \"{escaped}\","
-    ))
+/// The `description` line inserted after a model header's `(`, if the comment can be quoted.
+fn description_insertion(description: &[char]) -> Option<Vec<char>> {
+    let value: String = fold_prose(&string(description));
+    if value.contains(TRIPLE_QUOTE) {
+        return None;
+    }
+    let quoted: String = if value.contains('"') {
+        format!("{TRIPLE_QUOTE}{value}{TRIPLE_QUOTE}")
+    } else {
+        format!("\"{value}\"")
+    };
+    Some(chars(&format!(
+        "\n{HEADER_INDENT}{DESCRIPTION_KEY} {quoted},"
+    )))
 }
 
 /// A model header's leading comment moved into its description, with any length fault.
@@ -131,7 +142,9 @@ pub(crate) fn relocate_leading_comment<P: HeaderParser>(
         return Ok(unchanged());
     }
     let (description, faults) = relocated_description(&comment, config, (text, header.start));
-    let insertion: Vec<char> = description_insertion(&description);
+    let Some(insertion) = description_insertion(&description) else {
+        return Ok(unchanged());
+    };
     let mut updated: Vec<char> = match header_text.iter().position(|character| *character == '(') {
         Some(open) => [&header_text[..=open], &insertion, &header_text[open + 1..]].concat(),
         None => header_text.to_vec(),
@@ -140,51 +153,86 @@ pub(crate) fn relocate_leading_comment<P: HeaderParser>(
     Ok((updated, faults))
 }
 
+/// Every top-level description of `headers` of the `kinds` in its canonical layout.
 pub(crate) fn wrap_descriptions<P: HeaderParser>(
     text: &[char],
     headers: &[HeaderSpan],
-    line_width: i64,
+    (kinds, line_width): (&[&str], i64),
     parser: &P,
 ) -> Result<Vec<char>, P::Error> {
     let mut updated: Vec<char> = text.to_vec();
     for header in headers.iter().rev() {
-        if !DESCRIPTION_HEADER_KINDS.contains(&header.kind.as_str()) {
+        if !kinds.contains(&header.kind.as_str()) {
             continue;
         }
         let header_text: Vec<char> = slice(&updated, header.start, header.end).to_vec();
-        let Some((start, end)) = description_value_span(&header_text) else {
+        let Some(rewritten) = laid_out_description(&header.kind, &header_text, line_width, parser)?
+        else {
             continue;
         };
-        let values: P::Values =
-            match parser.parse(&header.kind, &string(inner_header_text(&header_text))) {
-                ParseOutcome::Parsed(values) => values,
-                ParseOutcome::Rejected(_) => continue,
-                ParseOutcome::Raised(error, _) => return Err(error),
-            };
-        if parser.description(&values)?.is_none() {
-            continue;
-        }
-        let quote: char = header_text[start - 1];
-        let wrapped: Vec<char> = wrap_header_description(
-            &decode_description(slice(&header_text, start, end), quote),
-            &header_text,
-            (start, end),
-            line_width,
-        );
-        let rewritten: Vec<char> = [
-            slice(&header_text, 0, start),
-            &escape_quoted(&wrapped, quote),
-            tail(&header_text, end),
-        ]
-        .concat();
-        updated = [
+        let candidate: Vec<char> = [
             slice(&updated, 0, header.start),
             &rewritten,
             tail(&updated, header.end),
         ]
         .concat();
+        if header.kind == SQL_MACRO_HEADER_KIND && !same_macro(&updated, &candidate) {
+            continue;
+        }
+        updated = candidate;
     }
     Ok(updated)
+}
+
+/// `header_text` with its description laid out canonically, or `None` when nothing changes.
+fn laid_out_description<P: HeaderParser>(
+    kind: &str,
+    header_text: &[char],
+    line_width: i64,
+    parser: &P,
+) -> Result<Option<Vec<char>>, P::Error> {
+    let Some((start, end)) = description_string_span(header_text) else {
+        return Ok(None);
+    };
+    let Ok(prose) = prose_string(header_text, start) else {
+        return Ok(None);
+    };
+    if header_text[start] == '\'' && keeps_single_quotes(header_text, (start, end), line_width) {
+        return Ok(None);
+    }
+    let Some(rendered) = canonical_prose(&prose.value, header_text, (start, end), line_width)
+    else {
+        return Ok(None);
+    };
+    if chars(&rendered) == slice(header_text, start, end) {
+        return Ok(None);
+    }
+    let rewritten: Vec<char> = [
+        slice(header_text, 0, start),
+        &chars(&rendered),
+        tail(header_text, end),
+    ]
+    .concat();
+    if kind != SQL_MACRO_HEADER_KIND && !same_values(kind, (&rewritten, header_text), parser)? {
+        return Ok(None);
+    }
+    Ok(Some(rewritten))
+}
+
+/// Whether a `'...'` description stays as written: on one line that fits, with no double quote.
+fn keeps_single_quotes(
+    header_text: &[char],
+    (start, end): (usize, usize),
+    line_width: i64,
+) -> bool {
+    let authored: &[char] = slice(header_text, start, end);
+    if authored.contains(&'\n') || authored.contains(&'"') {
+        return false;
+    }
+    let line_start: usize = rfind_before(header_text, '\n', start).map_or(0, |found| found + 1);
+    let line_end: usize = find(header_text, &['\n'], end).unwrap_or(header_text.len());
+    let width: usize = end - line_start + closing_width(slice(header_text, end, line_end));
+    i64::try_from(width).is_ok_and(|width| width <= line_width)
 }
 
 /// Whether two header texts parse to equal values; a header syntax error equals nothing.
