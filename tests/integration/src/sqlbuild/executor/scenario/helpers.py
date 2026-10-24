@@ -333,7 +333,9 @@ def _model_entry(
     )
 
 
-def write_partial_fixture_snowflake_project(*, project_dir: Path, fixture_sql: str) -> None:
+def write_partial_fixture_snowflake_project(
+    *, project_dir: Path, fixture_sql: str, helper_ctes: str = ""
+) -> None:
     """Write a Snowflake project whose scenario mocks a contracted model with ``fixture_sql``."""
 
     files: dict[str, str] = {
@@ -353,7 +355,7 @@ def write_partial_fixture_snowflake_project(*, project_dir: Path, fixture_sql: s
         ),
         "tests/scenarios/downstream_labels.sql": (
             "SCENARIO (description 'Downstream labels.');\n"
-            f"WITH\n__ref__upstream AS ({fixture_sql}),\n"
+            f"WITH\n{helper_ctes}__ref__upstream AS ({fixture_sql}),\n"
             "__expected__downstream AS (SELECT 1 AS id, CAST(NULL AS VARCHAR) AS label)\n"
             "SELECT 1\n"
         ),

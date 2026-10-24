@@ -326,3 +326,17 @@ class LocalVariantScenarioTestCase:
     repo_files: dict[str, str]
     scenario_name: str
     expected_stdout_fragment: str
+
+
+@dataclass(frozen=True)
+class SnapshotHelperEditTestCase:
+    """A captured scenario, one edit to its files, and what strict local replay reports."""
+
+    description: str
+    repo_files: dict[str, str]
+    scenario_name: str
+    edited_path: str
+    edited_from: str
+    edited_to: str
+    expected_exit_code: int
+    expected_stdout_fragment: str

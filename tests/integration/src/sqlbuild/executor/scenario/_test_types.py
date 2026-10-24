@@ -70,5 +70,6 @@ class ScenarioSnapshotCaptureTypesIntegrationTestCase:
 class ScenarioSnapshotFingerprintIntegrationTestCase:
     description: str
     fixture_sql: str
+    helper_ctes: str
     expected_fixture_renderings: int
     expected_fingerprints: int

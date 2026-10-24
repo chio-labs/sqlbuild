@@ -33,6 +33,14 @@ from tests.integration.src.sqlbuild.executor.scenario.helpers import (
         ScenarioSnapshotFingerprintIntegrationTestCase(
             description="partial fixture rendered by capture and local adapters",
             fixture_sql="SELECT 1 AS id, NULL AS label",
+            helper_ctes="",
+            expected_fixture_renderings=2,
+            expected_fingerprints=1,
+        ),
+        ScenarioSnapshotFingerprintIntegrationTestCase(
+            description="fixture reading a helper CTE, rendered by capture and local adapters",
+            fixture_sql="SELECT h.id, NULL AS label FROM helper_ids AS h",
+            helper_ctes="helper_ids AS (SELECT 1 AS id),\n",
             expected_fixture_renderings=2,
             expected_fingerprints=1,
         ),
@@ -42,7 +50,9 @@ from tests.integration.src.sqlbuild.executor.scenario.helpers import (
 def test_given_capture_and_local_adapters_when_fingerprinting_snapshot_then_matches(
     test_case: ScenarioSnapshotFingerprintIntegrationTestCase, tmp_path: Path
 ) -> None:
-    write_partial_fixture_snowflake_project(project_dir=tmp_path, fixture_sql=test_case.fixture_sql)
+    write_partial_fixture_snowflake_project(
+        project_dir=tmp_path, fixture_sql=test_case.fixture_sql, helper_ctes=test_case.helper_ctes
+    )
     pipeline: CompilePipelineResult = compile_offline_snowflake_project(project_dir=tmp_path)
     scenario: CompiledSqlScenario = pipeline.project.sql_scenarios[0]
     capture_adapter: BaseAdapter = builtin_adapter_classes()["snowflake"]()

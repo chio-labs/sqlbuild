@@ -97,7 +97,7 @@ def build_scenario_snapshot_input_specs(
                     logical_name=fixture_plan.logical_name,
                 ),
                 capture_sql=fixture_plan.sql,
-                fingerprint_sql=fixture_plan.authored_sql or None,
+                fingerprint_sql=fixture_plan.fingerprint_sql or None,
             )
         )
 

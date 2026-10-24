@@ -1164,3 +1164,31 @@ def build_local_variant_scenario_project_files() -> dict[str, str]:
             "SELECT 1\n"
         ),
     }
+
+
+def build_helper_fixture_scenario_project_files() -> dict[str, str]:
+    """Build an in-memory DuckDB scenario whose source fixture reads a helper CTE."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "helper_fixture"\nadapter = "duckdb"\n\n[connection]\ndatabase = ":memory:"\n\n'
+            "[scopes]\nenforce_placement = false\n"
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n"
+            "    schema: main\n    table: raw_orders\n    columns:\n"
+            "      - {name: order_id, type: INTEGER}\n"
+        ),
+        "models/stg_orders.sql": (
+            "MODEL (description 'Test model stg_orders.');\n"
+            'SELECT o.order_id FROM __source("raw_orders") AS o\n'
+        ),
+        "tests/scenarios/orders__from_helper.sql": (
+            "SCENARIO (description 'Test scenario orders__from_helper.');\n"
+            "WITH\n"
+            "helper_ids AS (SELECT 1 AS order_id),\n"
+            "__source__raw_orders AS (SELECT h.order_id FROM helper_ids AS h),\n"
+            "__expected__stg_orders AS (SELECT 1 AS order_id)\n"
+            "SELECT 1\n"
+        ),
+    }
