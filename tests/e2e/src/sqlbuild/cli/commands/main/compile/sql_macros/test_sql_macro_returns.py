@@ -262,6 +262,32 @@ _ROUNDED: dict[str, str] = {
             unexpected_fragments=("__polyglot",),
         ),
         SqlMacroCompileTestCase(
+            description="a_returns_decimal_wider_than_the_dialect_holds_is_reported",
+            files={
+                **text_macro("m", "DECIMAL(50, 2)", "@value", argument="ANY"),
+                **orders_model(
+                    'SELECT @sql.m(o.amount_cents) AS v FROM __ref("stg_orders") AS o\n'
+                ),
+            },
+            expected_returncode=1,
+            expected_fragments=(
+                "error[P015]: returns of macro m() type 'DECIMAL(50, 2)' is not valid for adapter "
+                "'duckdb' SQL analysis dialect 'duckdb': DECIMAL precision 50 exceeds the target "
+                "range 1..=38",
+            ),
+        ),
+        SqlMacroCompileTestCase(
+            description="a_returns_decimal_scale_above_its_precision_is_reported",
+            files={
+                **text_macro("m", "DECIMAL(4, 6)", "@value", argument="ANY"),
+                **orders_model(
+                    'SELECT @sql.m(o.amount_cents) AS v FROM __ref("stg_orders") AS o\n'
+                ),
+            },
+            expected_returncode=1,
+            expected_fragments=("DECIMAL scale 6 is larger than its precision 4",),
+        ),
+        SqlMacroCompileTestCase(
             description="an_untyped_call_without_returns_suggests_returns_on_k003",
             files={
                 **untyped_text_macro("m", "@value", argument="ANY"),
