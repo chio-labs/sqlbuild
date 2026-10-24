@@ -254,11 +254,22 @@ pub(crate) fn unwrap_annotations(mut node: Option<&Expression>) -> Option<&Expre
     node
 }
 
+/// What a type assertion asserts: a type, or the type of another expression.
+pub(crate) enum Assertion<'a> {
+    Fixed(&'a DataType),
+    Like(&'a Expression),
+}
+
 /// The first type assertion around `node`, past plain annotations, and the expression it types.
-pub(crate) fn typed_annotation(mut node: Option<&Expression>) -> Option<(&DataType, &Expression)> {
+pub(crate) fn typed_annotation(
+    mut node: Option<&Expression>,
+) -> Option<(Assertion<'_>, &Expression)> {
     while let Some(Expression::Annotated(annotated)) = node {
         if let Some(asserted) = &annotated.type_assertion {
-            return Some((asserted, &annotated.this));
+            return Some((Assertion::Fixed(asserted), &annotated.this));
+        }
+        if let Some(like) = &annotated.type_like {
+            return Some((Assertion::Like(like), &annotated.this));
         }
         node = Some(&annotated.this);
     }

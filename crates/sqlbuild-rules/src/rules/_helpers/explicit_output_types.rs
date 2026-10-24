@@ -192,7 +192,9 @@ impl OutputRule<'_> {
                 .flatten();
             let passes = cast_matches_contract
                 || column.type_proven && direct && !scope.set_branch
-                || column.type_proven && call.is_some_and(|call| call.returns.is_some());
+                || column.type_proven
+                    && call
+                        .is_some_and(|call| call.returns.is_some() || call.returns_like.is_some());
             if passes {
                 continue;
             }
@@ -212,7 +214,7 @@ impl OutputRule<'_> {
                     "output {:?} {reason}; declared type is {}",
                     name, column.data_type
                 ),
-                match call.filter(|call| call.returns.is_none()) {
+                match call.filter(|call| call.returns.is_none() && call.returns_like.is_none()) {
                     Some(call) => format!(
                         "Declare returns {} in SQL macro {}(), or wrap the call in CAST(... AS {}).",
                         column.data_type, call.macro_name, column.data_type

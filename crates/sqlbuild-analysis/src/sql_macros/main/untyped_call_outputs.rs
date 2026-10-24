@@ -9,7 +9,10 @@ const ITEM_ENDS: [&str; 4] = ["FROM", "WHERE", "UNION", "ORDER"];
 /// `(output name, macro name)`.
 #[must_use]
 pub fn untyped_call_outputs(sql: &str, calls: &[TypedCall]) -> Vec<(String, String)> {
-    let untyped: Vec<&TypedCall> = calls.iter().filter(|call| call.returns.is_none()).collect();
+    let untyped: Vec<&TypedCall> = calls
+        .iter()
+        .filter(|call| call.returns.is_none() && call.returns_like.is_none())
+        .collect();
     if untyped.is_empty() {
         return Vec::new();
     }

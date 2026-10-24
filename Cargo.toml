@@ -72,14 +72,14 @@ junction = { version = "2.1.0", default-features = false }
 mimalloc = { version = "0.1", default-features = false, features = ["local_dynamic_tls"] }
 proc-macro2 = { version = "1", features = ["span-locations"] }
 pyo3 = { version = "0.26", features = ["abi3-py312"] }
-polyglot-sql = { git = "https://github.com/chio-labs/polyglot.git", rev = "dadfa5b2ee9b3a7101a4463b1a4c9ca73f0c4b89", default-features = false, features = [
+polyglot-sql = { git = "https://github.com/chio-labs/polyglot.git", rev = "bf017ad89c558f9876d6474e10251b84b539065a", default-features = false, features = [
     "ast-tools",
     "builder",
     "all-dialects",
     "semantic",
     "stacker",
 ] }
-polyglot-sql-function-catalogs = { git = "https://github.com/chio-labs/polyglot.git", rev = "dadfa5b2ee9b3a7101a4463b1a4c9ca73f0c4b89", default-features = false, features = [
+polyglot-sql-function-catalogs = { git = "https://github.com/chio-labs/polyglot.git", rev = "bf017ad89c558f9876d6474e10251b84b539065a", default-features = false, features = [
     "dialect-duckdb",
 ] }
 blake3 = { version = "1", features = ["rayon"] }

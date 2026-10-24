@@ -24,6 +24,8 @@ pub const PARAMETER_REFERENCE_CODE: &str = "P022";
 pub const LITERAL_REQUIRED_CODE: &str = "P023";
 /// An expression macro whose body's known type is not its declared `returns`.
 pub const RETURNS_MISMATCH_CODE: &str = "P024";
+/// An expression macro body that misuses the type of an `ANY` family argument.
+pub const BODY_TYPE_CODE: &str = "P025";
 /// A declaration a SQL macro body uses that is not visible from the macro file.
 pub const BODY_SCOPE_CODE: &str = "S026";
 
@@ -37,6 +39,7 @@ pub(crate) const DEFAULT_KEYWORD: &str = "DEFAULT";
 pub(crate) const RELATION_KEYWORD: &str = "RELATION";
 pub(crate) const COLUMN_KEYWORD: &str = "COLUMN";
 pub(crate) const OF_KEYWORD: &str = "OF";
+pub(crate) const TYPE_KEYWORD: &str = "TYPE";
 pub(crate) const ENUM_KEYWORD: &str = "ENUM";
 pub(crate) const LIST_KEYWORD: &str = "LIST";
 pub(crate) const SET_KEYWORD: &str = "SET";
@@ -109,6 +112,10 @@ pub(crate) const FROM_KEYWORD: &str = "FROM";
 /// The projection name of an unexpanded star in a probe's analysis.
 /// The relation whose columns stand in for a macro's arguments while its body is typed.
 pub(crate) const STAND_IN_RELATION: &str = "__sqlbuild_macro_arguments";
+/// The polyglot validation error codes, by number, of operands and arguments of a wrong type.
+pub(crate) const TYPE_ERROR_CODES: (usize, usize) = (210, 219);
+/// The polyglot validation warning codes, by number, of implicit conversions.
+pub(crate) const TYPE_WARNING_CODES: (usize, usize) = (210, 216);
 pub(crate) const STAR_PROJECTION: &str = "*";
 /// The type hint analysis reports for a column whose type it does not know.
 pub(crate) const UNKNOWN_TYPE_HINT: &str = "UNKNOWN";

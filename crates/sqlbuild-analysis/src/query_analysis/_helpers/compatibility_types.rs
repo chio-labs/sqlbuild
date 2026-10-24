@@ -281,6 +281,7 @@ impl TypeContext<'_> {
 
     fn projection_type(&self, expression: &Expression, aliases: &Sources) -> Option<String> {
         if asserted_expression(expression).is_none()
+            && unresolved_like(expression).is_none()
             && matches!(unwrapped(expression), Expression::Null(_))
         {
             Some(NULL_TYPE.to_string())
@@ -296,6 +297,13 @@ impl TypeContext<'_> {
     }
 
     fn expression(&self, expression: &Expression, aliases: &Sources) -> Option<String> {
+        if let Some((like, inner)) = unresolved_like(expression) {
+            let known = |data_type: &String| !data_type.to_ascii_uppercase().contains("UNKNOWN");
+            return self
+                .expression(inner, aliases)
+                .filter(|inferred| known(inferred) && inferred != NULL_TYPE)
+                .or_else(|| self.expression(like, aliases).filter(known));
+        }
         if let Some((asserted, inner)) = asserted_expression_type(expression) {
             if matches!(unwrapped(inner), Expression::Null(_)) {
                 return self.cast_type(asserted);
@@ -462,6 +470,24 @@ fn asserted_expression_type(mut expression: &Expression) -> Option<(&DataType, &
                     .map(|asserted| (asserted, &annotation.this));
             }
             Expression::Annotated(annotation) => &annotation.this,
+            Expression::Paren(paren) => &paren.this,
+            _ => return None,
+        };
+    }
+}
+
+/// A typed-like assertion around `expression` that annotation has not resolved, past
+/// parentheses and comments: the expression whose type it asserts, and what it types.
+fn unresolved_like(mut expression: &Expression) -> Option<(&Expression, &Expression)> {
+    loop {
+        expression = match expression {
+            Expression::Annotated(annotation) if annotation.type_assertion.is_some() => {
+                return None;
+            }
+            Expression::Annotated(annotation) => match &annotation.type_like {
+                Some(like) => return Some((like, &annotation.this)),
+                None => &annotation.this,
+            },
             Expression::Paren(paren) => &paren.this,
             _ => return None,
         };

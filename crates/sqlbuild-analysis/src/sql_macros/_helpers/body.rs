@@ -216,7 +216,9 @@ fn substituted(
                 _ => argument.sql.clone(),
             }
         }
-        ParameterKind::Expression { .. } | ParameterKind::Any | ParameterKind::Constant { .. }
+        ParameterKind::Expression { .. }
+        | ParameterKind::Any { .. }
+        | ParameterKind::Constant { .. }
             if !is_atomic(&argument.sql) =>
         {
             format!("({})", argument.sql)
@@ -336,6 +338,7 @@ pub(crate) fn expand_body(
         sql: expanded[kept.0..kept.1].to_owned(),
         names,
         calls: within(calls, kept),
+        like: None,
     })
 }
 

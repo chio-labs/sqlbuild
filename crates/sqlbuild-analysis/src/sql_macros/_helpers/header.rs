@@ -5,11 +5,11 @@ use crate::sql_macros::constants::{
     ANY_KEYWORD, ARGUMENTS_KEY, COLUMN_KEYWORD, COMMA, CONST_KEYWORD, DEFAULT_KEYWORD,
     DESCRIPTION_KEY, ENUM_KEYWORD, HEADER_KEYWORD, INVALID_DEFINITION_CODE, LIST_KEYWORD,
     OF_KEYWORD, RAW_TYPE_NAMES, RELATION_COLUMN_MIN_TOKENS, RELATION_KEYWORD, RETURNS_KEY,
-    SET_KEYWORD,
+    SET_KEYWORD, TYPE_KEYWORD,
 };
 use crate::sql_macros::errors::LexError;
 use crate::sql_macros::errors::SqlMacroError;
-use crate::sql_macros::models::{ParameterKind, SqlMacroLocation, SqlMacroParameter};
+use crate::sql_macros::models::{AnyFamily, ParameterKind, SqlMacroLocation, SqlMacroParameter};
 use sqlbuild_sqltext::header_strings::constants::{
     DOUBLE_QUOTE_INSIDE_HELP, DOUBLE_QUOTE_INSIDE_MESSAGE, SINGLE_QUOTE_INSIDE_HELP,
     SINGLE_QUOTE_INSIDE_MESSAGE, TRIPLE_QUOTE_INSIDE_HELP, TRIPLE_QUOTE_INSIDE_MESSAGE,
@@ -22,6 +22,8 @@ pub(crate) struct Header {
     pub(crate) description: Option<String>,
     pub(crate) parameters: Vec<SqlMacroParameter>,
     pub(crate) returns: Option<String>,
+    /// The argument named by `returns TYPE OF <argument>`, and its byte offset.
+    pub(crate) returns_like: Option<(String, usize)>,
     /// Byte offset just past the header and its optional `;`.
     pub(crate) body_start: usize,
 }
@@ -83,6 +85,7 @@ impl HeaderParser<'_> {
             description: None,
             parameters: Vec::new(),
             returns: None,
+            returns_like: None,
             body_start,
         };
         for entry in split_top_level(source, &scanned[2..close]) {
@@ -144,6 +147,19 @@ impl HeaderParser<'_> {
             RETURNS_KEY => {
                 if value.is_empty() {
                     return Err(self.error(key.start, "returns needs a SQL type"));
+                }
+                if let [type_word, of, argument] = value
+                    && type_word.is_word(source, TYPE_KEYWORD)
+                    && of.is_word(source, OF_KEYWORD)
+                {
+                    if argument.kind != TokenKind::Word {
+                        return Err(self.error(
+                            argument.start,
+                            "returns TYPE OF needs an argument name, such as returns TYPE OF value",
+                        ));
+                    }
+                    header.returns_like = Some((argument.text(source).to_owned(), argument.start));
+                    return Ok(header);
                 }
                 header.returns = Some(type_text(source, value));
                 Ok(header)
@@ -288,22 +304,38 @@ impl HeaderParser<'_> {
         }
         if first.is_word(source, ANY_KEYWORD) {
             let Some(after) = tokens.get(1) else {
-                return Ok(ParameterKind::Any);
+                return Ok(ParameterKind::Any { family: None });
             };
+            let family: Option<AnyFamily> = AnyFamily::ALL
+                .into_iter()
+                .find(|family| after.is_word(source, family.keyword()));
+            if let Some(family) = family {
+                let Some(extra) = tokens.get(2) else {
+                    return Ok(ParameterKind::Any {
+                        family: Some(family),
+                    });
+                };
+                return Err(self
+                    .error(extra.start, format!("argument {name} ANY {} takes nothing after it; CONST, LIST and SET are not supported for ANY families", family.keyword()))
+                    .helped(format!("declare it {name} ANY {}, or give it a SQL type", family.keyword())));
+            }
             if after.is_word(source, CONST_KEYWORD) {
                 return Err(self
                     .error(after.start, format!("argument {name} ANY CONST: a CONST argument needs a type its values are checked against"))
                     .helped(format!("declare it with the type of its values, such as {name} VARCHAR CONST")));
             }
             return Err(self
-                .error(after.start, format!("argument {name} ANY takes nothing after it; ANY accepts any scalar expression"))
-                .helped(format!("declare it {name} ANY, or give it a SQL type")));
+                .error(after.start, format!("argument {name} ANY takes nothing after it but NUMERIC, TEXT or TEMPORAL; ANY accepts any scalar expression"))
+                .helped(format!("declare it {name} ANY, or {name} ANY NUMERIC, ANY TEXT or ANY TEMPORAL for one type family, or give it a SQL type")));
         }
         if first.is_word(source, LIST_KEYWORD) || first.is_word(source, SET_KEYWORD) {
             let set: bool = first.is_word(source, SET_KEYWORD);
             let keyword: String = first.text(source).to_ascii_uppercase();
             let element: &[Token] = &tokens[1..];
-            if element.len() == 1 && element[0].is_word(source, ANY_KEYWORD) {
+            if element
+                .first()
+                .is_some_and(|first| first.is_word(source, ANY_KEYWORD))
+            {
                 return Err(self
                     .error(
                         element[0].start,

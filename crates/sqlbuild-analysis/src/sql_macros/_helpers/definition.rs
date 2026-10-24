@@ -15,7 +15,7 @@ use crate::sql_macros::constants::{
 };
 use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::models::{
-    ParameterKind, SqlMacroDefinition, SqlMacroForm, SqlMacroLocation,
+    ParameterKind, SqlMacroDefinition, SqlMacroForm, SqlMacroLocation, SqlMacroParameter,
 };
 
 /// Locates a byte offset of the macro file.
@@ -42,7 +42,17 @@ pub(crate) fn parsed_definition(
     let form: SqlMacroForm = body_form(body, &scanned);
     check_references(name, body, &scanned, &in_body)?;
     let calls: Vec<String> = body_calls(name, body, &in_body)?;
-    check_returns(name, (form, header.returns.as_ref()), at(0))?;
+    check_returns(
+        name,
+        (
+            form,
+            header.returns.is_some() || header.returns_like.is_some(),
+        ),
+        at(0),
+    )?;
+    if let Some((like, offset)) = &header.returns_like {
+        check_returns_like(name, (like, &header.parameters), at(*offset))?;
+    }
     let (body_line, body_column) = line_column(source, body_start);
     let definition: SqlMacroDefinition = SqlMacroDefinition {
         name: name.to_owned(),
@@ -50,6 +60,7 @@ pub(crate) fn parsed_definition(
         description: header.description,
         parameters: header.parameters,
         returns: header.returns,
+        returns_like: header.returns_like.map(|(like, _)| like),
         form,
         body: body.to_owned(),
         body_line,
@@ -157,11 +168,11 @@ fn body_calls(name: &str, body: &str, in_body: Locate<'_>) -> Result<Vec<String>
 /// Rejects `returns` on a CTE-list or column-list macro.
 fn check_returns(
     name: &str,
-    (form, returns): (SqlMacroForm, Option<&String>),
+    (form, returns): (SqlMacroForm, bool),
     location: SqlMacroLocation,
 ) -> Result<(), SqlMacroError> {
     match (form, returns) {
-        (SqlMacroForm::CteList | SqlMacroForm::ColumnList, Some(_)) => Err(SqlMacroError::new(
+        (SqlMacroForm::CteList | SqlMacroForm::ColumnList, true) => Err(SqlMacroError::new(
             INVALID_DEFINITION_CODE,
             format!(
                 "{} macro {name}() cannot declare returns; only expression macros return a value",
@@ -170,6 +181,50 @@ fn check_returns(
         )
         .at(location)),
         _ => Ok(()),
+    }
+}
+
+/// Rejects `returns TYPE OF` naming no argument, or an argument with no scalar type.
+fn check_returns_like(
+    name: &str,
+    (like, parameters): (&str, &[SqlMacroParameter]),
+    location: SqlMacroLocation,
+) -> Result<(), SqlMacroError> {
+    let Some(parameter) = parameters
+        .iter()
+        .find(|parameter| parameter.name.eq_ignore_ascii_case(like))
+    else {
+        let names: Vec<&str> = parameters
+            .iter()
+            .map(|parameter| parameter.name.as_str())
+            .collect();
+        return Err(SqlMacroError::new(
+            INVALID_DEFINITION_CODE,
+            format!("returns TYPE OF {like} names no argument of macro {name}()"),
+        )
+        .at(location)
+        .helped(if names.is_empty() {
+            format!("macro {name}() has no arguments; declare returns <type> instead")
+        } else {
+            format!("name one of its arguments: {}", names.join(", "))
+        }));
+    };
+    match parameter.kind {
+        ParameterKind::Expression { .. }
+        | ParameterKind::Any { .. }
+        | ParameterKind::Constant { .. }
+        | ParameterKind::Enum { .. } => Ok(()),
+        ParameterKind::Collection { .. }
+        | ParameterKind::Relation { .. }
+        | ParameterKind::ColumnOf { .. } => Err(SqlMacroError::new(
+            INVALID_DEFINITION_CODE,
+            format!(
+                "returns TYPE OF {} names a {} argument of macro {name}(); only a scalar argument has a type to return",
+                parameter.name,
+                parameter.kind.label()
+            ),
+        )
+        .at(location)),
     }
 }
 

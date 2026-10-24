@@ -8,10 +8,10 @@ use polyglot_sql::traversal::ExpressionWalk;
 use serde_json::{Map, Value};
 
 use crate::assembly::analysis_session::_helpers::dict_walk::{
-    PyValue, alias_or_name, arg, children, column_table_name, direct_tables, expression_args,
-    find_all, is_star, kind, name, name_payload, output_name, parse_one, projected_expression,
-    py_truthy, python_int, raw_name_payload, set_operation, to_dict, top_level_ctes,
-    typed_annotation, unwrap_annotations, where_clause,
+    Assertion, PyValue, alias_or_name, arg, children, column_table_name, direct_tables,
+    expression_args, find_all, is_star, kind, name, name_payload, output_name, parse_one,
+    projected_expression, py_truthy, python_int, raw_name_payload, set_operation, to_dict,
+    top_level_ctes, typed_annotation, unwrap_annotations, where_clause,
 };
 use crate::assembly::analysis_session::_helpers::mappings::ShapeTable;
 use crate::assembly::analysis_session::constants::{
@@ -705,9 +705,16 @@ impl Context<'_, '_> {
             {
                 return Ok(Some(inferred));
             }
-            let target: Value =
-                serde_json::to_value(asserted).map_err(|error| error.to_string())?;
-            return Ok(target.as_object().and_then(cast_target_type));
+            return match asserted {
+                Assertion::Fixed(asserted) => {
+                    let target: Value =
+                        serde_json::to_value(asserted).map_err(|error| error.to_string())?;
+                    Ok(target.as_object().and_then(cast_target_type))
+                }
+                Assertion::Like(like) => Ok(self
+                    .expression_type_in(Some(like), by_alias)?
+                    .filter(|like| !upper(like).contains(UNKNOWN_TYPE))),
+            };
         }
         let expression: Option<&Expression> = unwrap_annotations(expression);
         let node_kind: &str = kind(expression);
