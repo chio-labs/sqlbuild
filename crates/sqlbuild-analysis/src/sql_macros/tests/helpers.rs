@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use crate::sql_macros::_helpers::expansion::expand_text;
+use crate::sql_macros::_helpers::rendering::expansion::expand_text;
 use crate::sql_macros::errors::ExpansionFailure;
 use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::main::parse_sql_macro::parse_sql_macro;
 use crate::sql_macros::models::{
-    ExpandedText, RenderedDeclarations, SqlMacroDefinition, TextContext, TextSplice,
+    ExpandedText, RenderedDeclarations, SqlMacroDefinition, TextContext, TextSplice, TypedCall,
 };
 use crate::sql_macros::tests::test_types::{AsciiArguments, FakeHost};
 use crate::sql_macros::types::{ConstantShape, SqlMacroHost, SqlMacroScope};
@@ -153,4 +153,36 @@ impl sqlbuild_render::macro_arguments::types::ArgumentHost for AsciiArguments {
     fn identifier(&self, _text: &str) -> Option<String> {
         None
     }
+}
+
+/// Each call as `macro returns: text`.
+pub(super) fn shown_typed_calls(sql: &str, calls: &[TypedCall]) -> Vec<String> {
+    calls
+        .iter()
+        .map(|call| {
+            format!(
+                "{} {}: {}",
+                call.macro_name,
+                call.returns.as_deref().unwrap_or("-"),
+                &sql[call.start..call.end]
+            )
+        })
+        .collect()
+}
+
+/// An untyped `shout` call of each text in `sql`.
+pub(super) fn untyped_calls(sql: &str, texts: &[&str]) -> Vec<TypedCall> {
+    texts
+        .iter()
+        .map(|text| {
+            let start: usize = sql.find(text).unwrap_or_default();
+            TypedCall {
+                returns_like: None,
+                start,
+                end: start + text.len(),
+                macro_name: "shout".to_owned(),
+                returns: None,
+            }
+        })
+        .collect()
 }

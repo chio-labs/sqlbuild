@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
@@ -232,12 +233,21 @@ def sql_text_macros(folder: str, names: list[str]) -> dict[str, str]:
     }
 
 
-def text_macro(
-    name: str, returns: str | None, body: str, argument: str = "VARCHAR"
-) -> dict[str, str]:
-    """The SQL macro `name` taking one `argument`-typed value and declaring `returns`, if any."""
+def text_macro(name: str, returns: str, body: str, argument: str = "VARCHAR") -> dict[str, str]:
+    """The SQL macro `name` taking one `argument`-typed value and declaring `returns`."""
 
-    declared: str = "" if returns is None else f"  returns {returns},\n"
+    return _value_macro(name, f"  returns {returns},\n", body, argument)
+
+
+def untyped_text_macro(name: str, body: str, argument: str = "VARCHAR") -> dict[str, str]:
+    """The SQL macro `name` taking one `argument`-typed value without declaring `returns`."""
+
+    return _value_macro(name, "", body, argument)
+
+
+def _value_macro(name: str, declared: str, body: str, argument: str) -> dict[str, str]:
+    """The SQL macro `name` taking one `argument`-typed value, with its `declared` header lines."""
+
     return {
         f"macros/sql/{name}.sql": (
             f'MACRO (\n  description "Text from a value",\n  arguments (value {argument}),\n'
@@ -255,3 +265,23 @@ def contract_model(name: str, columns: str, sql: str) -> dict[str, str]:
             f"  columns ({columns}),\n);\n\n{sql}"
         )
     }
+
+
+def typed_position_files(shape: str, sql: str, declared: str) -> dict[str, str]:
+    """The `orders` model over `sql`, contracted itself, contracted downstream, or uncontracted."""
+
+    downstream: dict[str, str] = contract_model(
+        "order_x", f"x (type {declared})", 'SELECT b.x FROM __ref("orders") AS b\n'
+    )
+    shapes: dict[str, dict[str, str]] = {
+        "contracted": contract_model("orders", f"x (type {declared})", sql),
+        "downstream": {**orders_model(sql), **downstream},
+        "uncontracted": orders_model(sql),
+    }
+    return shapes[shape]
+
+
+def lineage_edges(printed: str) -> list[str]:
+    """The `source -> target` edges a list-format lineage command printed."""
+
+    return [edge.strip() for edge in re.findall(r"^.*->.*$", printed, flags=re.MULTILINE)]

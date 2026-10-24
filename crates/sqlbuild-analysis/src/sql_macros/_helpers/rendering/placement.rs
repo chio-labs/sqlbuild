@@ -1,7 +1,7 @@
 //! Where a call stands in its caller: its query part, separators and the caller's names.
 
-use crate::sql_macros::_helpers::header::unquoted;
-use crate::sql_macros::_helpers::lexing::{Token, TokenKind, closing_token};
+use crate::sql_macros::_helpers::parsing::header::unquoted;
+use crate::sql_macros::_helpers::parsing::lexing::{Token, TokenKind, closing_token};
 use crate::sql_macros::constants::{AT_SIGN, COMMA, SELECT_KEYWORD, WITH_KEYWORD};
 use crate::sql_macros::models::{CallPosition, CallScope};
 
@@ -389,7 +389,7 @@ pub(crate) fn cte_names(sql: &str, tokens: &[Token], with_index: usize) -> Vec<(
         if !matches!(token.kind, TokenKind::Word | TokenKind::Quoted) {
             break;
         }
-        let name: String = crate::sql_macros::_helpers::header::unquoted(token.text(sql));
+        let name: String = crate::sql_macros::_helpers::parsing::header::unquoted(token.text(sql));
         let mut cursor: usize = index + 1;
         if tokens.get(cursor).is_some_and(|after| after.is(sql, "(")) {
             match closing_token(sql, tokens, cursor) {
@@ -488,7 +488,7 @@ fn item_name(sql: &str, item: &[Token]) -> Option<(String, usize)> {
     };
     named.then(|| {
         (
-            crate::sql_macros::_helpers::header::unquoted(last.text(sql)),
+            crate::sql_macros::_helpers::parsing::header::unquoted(last.text(sql)),
             last.start,
         )
     })

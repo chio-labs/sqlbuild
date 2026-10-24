@@ -91,3 +91,26 @@ pub(super) struct TypedAnalysisTestCase {
     pub(super) calls: &'static [(usize, usize, Option<&'static str>)],
     pub(super) expected_sql: &'static str,
 }
+
+/// Two names that must stay equal.
+pub(super) struct ReservedNameTestCase {
+    pub(super) description: &'static str,
+    pub(super) authored_name: &'static str,
+    pub(super) expected_parsed_name: &'static str,
+}
+
+/// A query and the texts of its untyped calls, with the outputs each whole call names.
+pub(super) struct UntypedOutputsTestCase {
+    pub(super) description: &'static str,
+    pub(super) sql: &'static str,
+    pub(super) call_texts: &'static [&'static str],
+    pub(super) expected_outputs: &'static [(&'static str, &'static str)],
+}
+
+/// A query calling `macros`, with the analysis text its expansion marks.
+pub(super) struct ExpandedAnalysisTestCase {
+    pub(super) description: &'static str,
+    pub(super) macros: &'static [(&'static str, &'static str)],
+    pub(super) sql: &'static str,
+    pub(super) expected_sql: &'static str,
+}

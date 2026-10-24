@@ -3,13 +3,13 @@
 use polyglot_sql::expressions::{Identifier, Select};
 use polyglot_sql::{DialectType, Expression, ExpressionWalk};
 
-use crate::sql_macros::_helpers::arguments::is_atomic;
-use crate::sql_macros::_helpers::lexing::{Token, tokens};
-use crate::sql_macros::_helpers::parameters::{
+use crate::sql_macros::_helpers::parsing::lexing::{Token, tokens};
+use crate::sql_macros::_helpers::parsing::parameters::{
     ParameterReference, alias_follows, parameter_references, placeholder, placeholder_parameter,
     with_placeholders,
 };
-use crate::sql_macros::_helpers::typed_calls::{shifted, spliced};
+use crate::sql_macros::_helpers::rendering::arguments::is_atomic;
+use crate::sql_macros::_helpers::typing::typed_calls::{shifted, spliced};
 use crate::sql_macros::constants::{ARGUMENT_CODE, INVALID_DEFINITION_CODE};
 use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::models::{

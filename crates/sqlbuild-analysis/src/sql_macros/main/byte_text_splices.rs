@@ -1,5 +1,5 @@
 use crate::compiled_project::models::SplicedSpan;
-use crate::sql_macros::_helpers::typed_calls::byte_splices;
+use crate::sql_macros::_helpers::typing::typed_calls::byte_splices;
 use crate::sql_macros::models::TextSplice;
 
 /// Character-offset `spans` from `source` to `output` as byte splices.

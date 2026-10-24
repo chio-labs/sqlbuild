@@ -1,9 +1,8 @@
 use crate::semantic_validation::models::Expansion;
-use crate::sql_macros::_helpers::typed_calls::typed_sql;
+use crate::sql_macros::_helpers::typing::typed_calls::typed_sql;
 use crate::sql_macros::models::TypedCall;
 
-/// `sql` with its typed calls marked, and the pass mapping the marked text's character offsets
-/// back to `sql`, or `None` when no call is marked.
+/// `sql` with its typed calls marked and the pass mapping offsets back, if any call is marked.
 #[must_use]
 pub fn typed_analysis_pass(sql: &str, calls: &[TypedCall]) -> Option<(String, Vec<Expansion>)> {
     let (typed, insertions) = typed_sql(sql, calls);

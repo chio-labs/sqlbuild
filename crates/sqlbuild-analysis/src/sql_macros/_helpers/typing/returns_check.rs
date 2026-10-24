@@ -6,11 +6,10 @@ use std::sync::{Mutex, OnceLock};
 use polyglot_sql::{DialectType, SchemaValidationOptions, ValidationSchema, validate_with_schema};
 use serde_json::{Value, json};
 
-use crate::contracts::_helpers::type_comparison::{TypeComparer, TypeComparison};
-use crate::query_analysis::main::output_types::annotated_output_types;
-use crate::sql_macros::_helpers::arguments::type_family;
-use crate::sql_macros::_helpers::body::expand_body;
-use crate::sql_macros::_helpers::typed_calls::typed_sql;
+use crate::query_analysis::main::annotated_output_types::annotated_output_types;
+use crate::sql_macros::_helpers::parsing::body::expand_body;
+use crate::sql_macros::_helpers::rendering::arguments::type_family;
+use crate::sql_macros::_helpers::typing::typed_calls::typed_sql;
 use crate::sql_macros::constants::{
     BODY_TYPE_CODE, INFERRED_TEXT_TYPE, RETURNS_MISMATCH_CODE, STAND_IN_RELATION, TYPE_ERROR_CODES,
     TYPE_WARNING_CODES, UNKNOWN_TYPE_HINT, VARCHAR_TYPE,
@@ -20,6 +19,8 @@ use crate::sql_macros::models::{
     ArgumentShape, ExpandedText, ParameterKind, RenderedArgument, SqlMacroDefinition, SqlMacroForm,
     SqlMacroLocation, TypeFamily,
 };
+use crate::type_system::main::normalize_type::normalize_type;
+use crate::type_system::models::TypeNormalization;
 
 /// Each body check's verdict, by the probe it ran, so a macro is typed once per process.
 static VERDICTS: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
@@ -33,8 +34,7 @@ pub(crate) fn adapter_dialect(adapter: &str) -> &str {
     }
 }
 
-/// The type a parameter's stand-in column has, or `None` for an untyped stand-in; an `ANY`
-/// family takes its widest member when `families` is set.
+/// A parameter's stand-in column type, with `ANY` families widened only when `families` is set.
 fn stand_in_type(kind: &ParameterKind, families: bool) -> Option<&str> {
     match kind {
         ParameterKind::Expression { data_type } | ParameterKind::Constant { data_type } => {
@@ -56,8 +56,7 @@ fn stand_in_column(index: usize) -> String {
     format!("p{index}")
 }
 
-/// The query selecting the body with stand-ins for its arguments, and the stand-ins' relation,
-/// unless the body reads relations or columns.
+/// The body selected over stand-in arguments, and their relation, unless it reads relations.
 fn body_probe(
     definition: &SqlMacroDefinition,
     body: &ExpandedText,
@@ -88,7 +87,10 @@ fn body_probe(
             calls: Vec::new(),
         });
     }
-    let expansion = expand_body(definition, body, &arguments).ok()?;
+    let expansion = match expand_body(definition, body, &arguments) {
+        Ok(expansion) => expansion,
+        Err(_) => return None,
+    };
     let (typed, _) = typed_sql(&expansion.sql, &expansion.calls);
     let probe: String = format!("SELECT ({typed}) AS b FROM {STAND_IN_RELATION}");
     let table: Value = json!({"name": STAND_IN_RELATION, "columns": columns});
@@ -97,15 +99,16 @@ fn body_probe(
 
 /// The body's inferred type, when inference knows it completely.
 fn inferred_body_type(probe: &str, table: Value, dialect: &str) -> Option<String> {
-    let schema: ValidationSchema = serde_json::from_value(json!({ "tables": [table] })).ok()?;
+    let Ok(schema) = serde_json::from_value::<ValidationSchema>(json!({ "tables": [table] }))
+    else {
+        return None;
+    };
     let outputs = annotated_output_types(probe, dialect, &schema)?;
     let (_, data_type) = outputs.into_iter().next()?;
     data_type.filter(|inferred| !inferred.to_ascii_uppercase().contains(UNKNOWN_TYPE_HINT))
 }
 
-/// Whether a body of type `inferred` disagrees with `returns`: in another type family, or, for
-/// types outside the scalar families, of another type. Within one family the call's own
-/// inference decides, since stand-ins lose what literal arguments tell it.
+/// Whether body type `inferred` is outside the family of `returns`, or another non-family type.
 fn disagrees(returns: &str, inferred: &str, adapter: &str) -> bool {
     let (declared, found) = (
         type_family(returns, adapter),
@@ -114,10 +117,37 @@ fn disagrees(returns: &str, inferred: &str, adapter: &str) -> bool {
     if declared != TypeFamily::Unknown && found != TypeFamily::Unknown {
         return declared != found;
     }
-    matches!(
-        TypeComparer::new(adapter_dialect(adapter)).types_equal(returns, inferred),
-        Ok(TypeComparison::Different)
-    )
+    let dialect: &str = adapter_dialect(adapter);
+    match (
+        normalize_type(returns, dialect),
+        normalize_type(inferred, dialect),
+    ) {
+        (
+            Ok(TypeNormalization {
+                normalized: declared,
+                ..
+            }),
+            Ok(TypeNormalization {
+                normalized: found, ..
+            }),
+        ) => declared != found,
+        _ => false,
+    }
+}
+
+/// The verdict cached under `key`, or `compute`'s verdict, cached for the rest of the process.
+fn remembered(key: String, compute: impl FnOnce() -> Option<String>) -> Option<String> {
+    let verdicts = VERDICTS.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut verdicts = match verdicts.lock() {
+        Ok(verdicts) => verdicts,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if let Some(known) = verdicts.get(&key) {
+        return known.clone();
+    }
+    let verdict: Option<String> = compute();
+    verdicts.insert(key, verdict.clone());
+    verdict
 }
 
 /// Rejects an expression macro whose body's known type is not its declared `returns`.
@@ -137,21 +167,7 @@ pub(crate) fn check_body_returns(
     };
     let dialect: &str = adapter_dialect(adapter);
     let key: String = format!("returns\n{dialect}\n{table}\n{probe}");
-    let verdicts = VERDICTS.get_or_init(|| Mutex::new(HashMap::new()));
-    let known: Option<Option<String>> = verdicts
-        .lock()
-        .ok()
-        .and_then(|verdicts| verdicts.get(&key).cloned());
-    let inferred: Option<String> = match known {
-        Some(inferred) => inferred,
-        None => {
-            let inferred: Option<String> = inferred_body_type(&probe, table, dialect);
-            if let Ok(mut verdicts) = verdicts.lock() {
-                verdicts.insert(key, inferred.clone());
-            }
-            inferred
-        }
-    };
+    let inferred: Option<String> = remembered(key, || inferred_body_type(&probe, table, dialect));
     let Some(inferred) = inferred else {
         return Ok(());
     };
@@ -178,8 +194,14 @@ pub(crate) fn check_body_returns(
 
 /// The first type error the body's probe shows, as polyglot reports it.
 fn body_type_error(probe: &str, table: Value, dialect: &str) -> Option<String> {
-    let schema: ValidationSchema = serde_json::from_value(json!({ "tables": [table] })).ok()?;
-    let dialect_type: DialectType = dialect.parse().ok()?;
+    let Ok(schema) = serde_json::from_value::<ValidationSchema>(json!({ "tables": [table] }))
+    else {
+        return None;
+    };
+    let dialect_type: DialectType = match dialect.parse() {
+        Ok(dialect_type) => dialect_type,
+        Err(_) => return None,
+    };
     let options: SchemaValidationOptions = SchemaValidationOptions {
         check_types: true,
         strict: Some(false),
@@ -194,11 +216,9 @@ fn body_type_error(probe: &str, table: Value, dialect: &str) -> Option<String> {
 
 /// Whether a polyglot validation code reports an operand or argument of the wrong type.
 fn is_type_code(code: &str) -> bool {
-    let Some(number) = code
-        .get(1..)
-        .and_then(|digits| digits.parse::<usize>().ok())
-    else {
-        return false;
+    let number: usize = match code.get(1..).map(str::parse::<usize>) {
+        Some(Ok(number)) => number,
+        _ => return false,
     };
     (code.starts_with('E') && (TYPE_ERROR_CODES.0..=TYPE_ERROR_CODES.1).contains(&number))
         || (code.starts_with('W')
@@ -229,21 +249,7 @@ pub(crate) fn check_body_types(
     };
     let dialect: &str = adapter_dialect(adapter);
     let key: String = format!("types\n{dialect}\n{table}\n{probe}");
-    let verdicts = VERDICTS.get_or_init(|| Mutex::new(HashMap::new()));
-    let known: Option<Option<String>> = verdicts
-        .lock()
-        .ok()
-        .and_then(|verdicts| verdicts.get(&key).cloned());
-    let found: Option<String> = match known {
-        Some(found) => found,
-        None => {
-            let found: Option<String> = body_type_error(&probe, table, dialect);
-            if let Ok(mut verdicts) = verdicts.lock() {
-                verdicts.insert(key, found.clone());
-            }
-            found
-        }
-    };
+    let found: Option<String> = remembered(key, || body_type_error(&probe, table, dialect));
     let Some(found) = found else {
         return Ok(());
     };

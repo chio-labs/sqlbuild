@@ -3,7 +3,7 @@
 use polyglot_sql::expressions::{TYPED_EXPRESSION_FUNCTION, TYPED_LIKE_EXPRESSION_FUNCTION};
 
 use crate::compiled_project::models::SplicedSpan;
-use crate::sql_macros::_helpers::body::with_line_comment_closed;
+use crate::sql_macros::_helpers::parsing::body::with_line_comment_closed;
 use crate::sql_macros::models::{TextSplice, TypedCall};
 
 /// `calls` moved `offset` bytes later.
@@ -28,7 +28,10 @@ fn spliced_position(position: usize, splices: &[TextSplice]) -> Option<usize> {
             break;
         }
     }
-    usize::try_from(position as isize + moved).ok()
+    let Ok(moved_position) = usize::try_from(position as isize + moved) else {
+        return None;
+    };
+    Some(moved_position)
 }
 
 /// `calls` through `splices`, sorted and non-overlapping; a call a splice cuts into is dropped.

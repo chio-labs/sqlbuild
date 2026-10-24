@@ -80,3 +80,26 @@ class SqlMacroCompileTestCase:
     expected_fragments: tuple[str, ...]
     unexpected_fragments: tuple[str, ...] = ()
     inspected_paths: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class SqlMacroLineageTestCase:
+    """A column read through a SQL macro call, and the same column written inline."""
+
+    description: str
+    macro_files: dict[str, str]
+    inline_files: dict[str, str]
+    column: str
+    expected_edge: str
+
+
+@dataclass(frozen=True)
+class SqlMacroWarmCompileTestCase:
+    """A compiled project whose macro file is edited, then compiled warm, and what each prints."""
+
+    description: str
+    files: dict[str, str]
+    edited_path: str
+    replaced_text: tuple[str, str]
+    expected_cold_fragment: str
+    expected_warm_fragment: str

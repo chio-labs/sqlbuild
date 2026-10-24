@@ -1,13 +1,15 @@
 //! A SQL macro file parsed into its definition, then checked on its own.
 
-use crate::sql_macros::_helpers::arguments::{ShapeContext, argument_shape, check_shape};
-use crate::sql_macros::_helpers::header::{Header, HeaderParser};
-use crate::sql_macros::_helpers::lexing::{AtConstruct, at_constructs};
-use crate::sql_macros::_helpers::lexing::{Token, TokenKind, line_column, tokens};
-use crate::sql_macros::_helpers::literal_positions::{
+use crate::sql_macros::_helpers::parsing::header::{Header, HeaderParser};
+use crate::sql_macros::_helpers::parsing::lexing::{AtConstruct, at_constructs};
+use crate::sql_macros::_helpers::parsing::lexing::{Token, TokenKind, line_column, tokens};
+use crate::sql_macros::_helpers::parsing::literal_positions::{
     LiteralRules, literal_error, non_literal_use,
 };
-use crate::sql_macros::_helpers::parameters::{ParameterReference, parameter_references};
+use crate::sql_macros::_helpers::parsing::parameters::{ParameterReference, parameter_references};
+use crate::sql_macros::_helpers::rendering::arguments::{
+    ShapeContext, argument_shape, check_shape,
+};
 use crate::sql_macros::constants::{
     BARE_MACRO_CALL_CODE, BODY_REFERENCE_CODE, INVALID_DEFINITION_CODE, MIXED_KIND_CODE,
     PARAMETER_REFERENCE_CODE, REFERENCE_FUNCTIONS, RESERVED_PARAMETER_NAMES, SELECT_KEYWORD,
@@ -355,7 +357,9 @@ fn check_references(
         let referenced: String = scanned
             .get(index + 2)
             .filter(|argument| matches!(argument.kind, TokenKind::Quoted | TokenKind::Text))
-            .map(|argument| crate::sql_macros::_helpers::header::unquoted(argument.text(body)))
+            .map(|argument| {
+                crate::sql_macros::_helpers::parsing::header::unquoted(argument.text(body))
+            })
             .unwrap_or_default();
         let kind: &str = match function {
             "__source" => "source",

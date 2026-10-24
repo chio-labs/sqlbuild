@@ -697,3 +697,30 @@ pub(crate) fn injected_relations(
     request.forced_order = Some((relations.dependency_ordered, relations.cyclic));
     request
 }
+
+/// The request a fast-lineage contract compile sends for `typed` over `sql`, reading `staged`.
+pub(crate) fn typed_marker_request(sql: &'static str) -> SessionRequest {
+    let staged: ModelSpec = (
+        "staged",
+        "SELECT * FROM __source(\"raw_orders\")",
+        &["raw_orders"],
+        &[],
+    );
+    let mut requests = model_requests(&[("typed", sql, &[], &["staged"]), staged]);
+    requests[0].recover_cte_facts = true;
+    let mut request: SessionRequest = orders_request(requests);
+    request.rich_type_inference = false;
+    let own = shapes(&[("typed", &[("v", "VARCHAR")])]);
+    request.column_types.extend(own.clone());
+    request.complete_schemas.extend(own);
+    request
+}
+
+/// The described line of the first model's column `v`.
+pub(crate) fn described_column_v(lines: &[Vec<String>]) -> String {
+    lines[0]
+        .iter()
+        .find(|line| line.starts_with("v "))
+        .cloned()
+        .unwrap_or_else(|| format!("no v in {:?}", lines[0]))
+}

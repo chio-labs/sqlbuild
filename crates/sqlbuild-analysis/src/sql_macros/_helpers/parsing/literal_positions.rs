@@ -1,7 +1,7 @@
 //! Parameters a SQL macro body uses where SQL requires a literal, such as `LIMIT @n`.
 
-use crate::sql_macros::_helpers::lexing::{Token, TokenKind, closing_token};
-use crate::sql_macros::_helpers::parameters::ParameterReference;
+use crate::sql_macros::_helpers::parsing::lexing::{Token, TokenKind, closing_token};
+use crate::sql_macros::_helpers::parsing::parameters::ParameterReference;
 use crate::sql_macros::constants::{
     LITERAL_REQUIRED_CODE, ROUND_FUNCTION, ROUND_PRECISION_ARGUMENT,
 };

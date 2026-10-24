@@ -1,4 +1,4 @@
-use crate::sql_macros::_helpers::lexing::{Token, tokens};
+use crate::sql_macros::_helpers::parsing::lexing::{Token, tokens};
 use crate::sql_macros::constants::INVALID_DEFINITION_CODE;
 use crate::sql_macros::errors::ExpansionFailure;
 use crate::sql_macros::errors::SqlMacroError;
@@ -18,5 +18,10 @@ pub fn expand_sql_macro_call<H: SqlMacroHost>(
             "SQL has an unclosed quote or comment",
         )
     })?;
-    crate::sql_macros::_helpers::expansion::expand_call(host, context, (&scanned, inserted), call)
+    crate::sql_macros::_helpers::rendering::expansion::expand_call(
+        host,
+        context,
+        (&scanned, inserted),
+        call,
+    )
 }

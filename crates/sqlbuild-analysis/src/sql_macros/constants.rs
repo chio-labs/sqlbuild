@@ -109,7 +109,8 @@ pub(crate) const PROBE_TAIL_ENDS: [&str; 11] = [
 pub(crate) const INFERRED_TEXT_TYPE: &str = "TEXT";
 pub(crate) const VARCHAR_TYPE: &str = "VARCHAR";
 pub(crate) const FROM_KEYWORD: &str = "FROM";
-/// The projection name of an unexpanded star in a probe's analysis.
+/// Words that end a select item rather than alias it.
+pub(crate) const ITEM_ENDS: [&str; 4] = ["FROM", "WHERE", "UNION", "ORDER"];
 /// The relation whose columns stand in for a macro's arguments while its body is typed.
 pub(crate) const STAND_IN_RELATION: &str = "__sqlbuild_macro_arguments";
 /// The polyglot validation error codes, by number, of operands and arguments of a wrong type.

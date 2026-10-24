@@ -1,13 +1,3 @@
-pub(crate) mod arguments;
-pub(crate) mod body;
-pub(crate) mod cte_rename;
-pub(crate) mod definition;
-pub(crate) mod expansion;
-pub(crate) mod header;
-pub(crate) mod lexing;
-pub(crate) mod literal_positions;
-pub(crate) mod parameters;
-pub(crate) mod placement;
-pub(crate) mod probes;
-pub(crate) mod returns_check;
-pub(crate) mod typed_calls;
+pub(crate) mod parsing;
+pub(crate) mod rendering;
+pub(crate) mod typing;
