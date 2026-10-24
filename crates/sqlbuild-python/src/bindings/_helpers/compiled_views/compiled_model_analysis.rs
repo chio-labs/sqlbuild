@@ -18,6 +18,7 @@ use sqlbuild_analysis::binding_locations::models::{
 };
 use sqlbuild_analysis::semantic_validation::models::{DiagnosticRow, Expansion};
 use sqlbuild_analysis::sql_macros::constants::{ARGUMENT_CODE, SUPERSEDED_ANALYSIS_CODE};
+use sqlbuild_analysis::sql_macros::main::typed_analysis_pass::typed_analysis_pass;
 use sqlbuild_analysis::sql_macros::models::SqlMacroFinding;
 
 use sqlbuild_project::models as project_models;
@@ -165,7 +166,13 @@ fn located(input: &ModelInputRecord, outcome: &ModelOutcome) -> PyResult<Vec<Loc
     let authored: &str = model_file.contents_text();
     let query: &str = model_file.query_text();
     let expansion = &input.expansion;
-    let passes: Vec<Vec<Expansion>> = vec![
+    let mut typed_text: Option<String> = None;
+    let typed: Option<(String, Vec<Expansion>)> = if *expansion.expanded_sql == *input.query_sql {
+        typed_analysis_pass(&expansion.expanded_sql, &input.typed_calls)
+    } else {
+        None
+    };
+    let mut passes: Vec<Vec<Expansion>> = vec![
         expansion
             .declaration_spans
             .iter()
@@ -179,13 +186,18 @@ fn located(input: &ModelInputRecord, outcome: &ModelOutcome) -> PyResult<Vec<Loc
             .map(span_expansion)
             .collect(),
     ];
+    let expanded: &str = match typed {
+        Some((typed_sql, pass)) => {
+            passes.push(pass);
+            typed_text.insert(typed_sql)
+        }
+        None => &expansion.expanded_sql,
+    };
     let source: BindingSource<'_> = BindingSource {
         authored,
         query,
         cleaned: &cleaned,
-        expansion: expansion
-            .authored
-            .then_some((&*expansion.expanded_sql, passes.as_slice())),
+        expansion: expansion.authored.then_some((expanded, passes.as_slice())),
     };
     locate_binding_diagnostics(rows, &source).map_err(PyValueError::new_err)
 }
