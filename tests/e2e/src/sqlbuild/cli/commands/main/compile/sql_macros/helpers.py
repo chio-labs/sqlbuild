@@ -297,3 +297,18 @@ def adapter_project(adapter: str) -> dict[str, str]:
             "[scopes]\nenforce_placement = false\n"
         )
     }
+
+
+def picked_orders(body: str) -> dict[str, str]:
+    """The CTE-list macro `pick` over relation `src` with `body`, called once as `__cte := a`."""
+
+    return {
+        "macros/sql/pick.sql": (
+            'MACRO (\n  description "Picked orders",\n'
+            "  arguments (src RELATION (order_id BIGINT)),\n);\n\n" + body + "\n"
+        ),
+        **orders_model(
+            'WITH raw AS (SELECT * FROM __ref("stg_orders")),\n'
+            "@sql.pick(raw, __cte := a)\nSELECT * FROM a\n"
+        ),
+    }

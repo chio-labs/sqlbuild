@@ -19,6 +19,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.sql_macros.helpers import 
     inspected_text,
     orders_model,
     output,
+    picked_orders,
     run_project,
     text_macro,
 )
@@ -65,6 +66,62 @@ _CTE_LIST_TEST: str = (
             files={**CLEAN_ORDERS, **orders_model(_INTERMEDIATE)},
             query="SELECT live_rows FROM orders",
             expected_rows=[(3,)],
+        ),
+        SqlMacroBuildTestCase(
+            description="a_cte_read_under_its_own_name_as_alias",
+            files=picked_orders(
+                "WITH live AS (SELECT * FROM @src),\nlatest AS (SELECT live.order_id FROM live AS live)"
+            ),
+            query="SELECT COUNT(*) FROM orders",
+            expected_rows=[(4,)],
+        ),
+        SqlMacroBuildTestCase(
+            description="an_alias_named_like_a_cte_elsewhere",
+            files=picked_orders(
+                "WITH live AS (SELECT * FROM @src WHERE order_id = 1),\nlatest AS (SELECT live.order_id FROM live JOIN @src AS other ON live.order_id = other.order_id),\nfinal AS (SELECT o.order_id FROM latest AS o JOIN @src AS live ON live.order_id = o.order_id)"
+            ),
+            query="SELECT COUNT(*) FROM orders",
+            expected_rows=[(8,)],
+        ),
+        SqlMacroBuildTestCase(
+            description="a_nested_with_shadowing_a_cte",
+            files=picked_orders(
+                "WITH live AS (SELECT * FROM @src),\nlatest AS (WITH live AS (SELECT 42 AS order_id) SELECT order_id FROM live)"
+            ),
+            query="SELECT order_id FROM orders",
+            expected_rows=[(42,)],
+        ),
+        SqlMacroBuildTestCase(
+            description="a_cte_read_in_a_derived_table",
+            files=picked_orders(
+                "WITH live AS (SELECT * FROM @src WHERE order_id = 2),\nlatest AS (SELECT s.order_id FROM (SELECT live.order_id FROM live) AS s)"
+            ),
+            query="SELECT order_id FROM orders",
+            expected_rows=[(2,)],
+        ),
+        SqlMacroBuildTestCase(
+            description="a_cte_read_in_a_set_operation",
+            files=picked_orders(
+                "WITH live AS (SELECT * FROM @src WHERE order_id = 2),\nlatest AS (SELECT order_id FROM live UNION ALL SELECT live.order_id FROM live)"
+            ),
+            query="SELECT order_id FROM orders",
+            expected_rows=[(2,), (2,)],
+        ),
+        SqlMacroBuildTestCase(
+            description="a_cte_read_in_a_join",
+            files=picked_orders(
+                "WITH live AS (SELECT * FROM @src WHERE order_id = 2),\nlatest AS (SELECT live.order_id FROM @src AS r JOIN live ON live.order_id = r.order_id)"
+            ),
+            query="SELECT order_id FROM orders",
+            expected_rows=[(2,)],
+        ),
+        SqlMacroBuildTestCase(
+            description="a_cte_read_in_a_correlated_subquery",
+            files=picked_orders(
+                "WITH live AS (SELECT * FROM @src WHERE order_id = 2),\nlatest AS (SELECT r.order_id FROM @src AS r WHERE EXISTS (SELECT 1 FROM live WHERE live.order_id = r.order_id))"
+            ),
+            query="SELECT order_id FROM orders",
+            expected_rows=[(2,)],
         ),
     ],
     ids=lambda case: case.description,
