@@ -125,3 +125,10 @@ pub(crate) const ALIAS_PRECEDING_KEYWORDS: [&str; 13] = [
     "FROM", "JOIN", "ON", "AND", "OR", "NOT", "WHERE", "USING", "LATERAL", "IN", "IS", "BY",
     "SELECT",
 ];
+/// Dialects tried in turn to judge whether typed markers keep a query parseable.
+pub(crate) const MARKER_PARSE_DIALECTS: [polyglot_sql::DialectType; 4] = [
+    polyglot_sql::DialectType::Generic,
+    polyglot_sql::DialectType::DuckDB,
+    polyglot_sql::DialectType::Snowflake,
+    polyglot_sql::DialectType::BigQuery,
+];

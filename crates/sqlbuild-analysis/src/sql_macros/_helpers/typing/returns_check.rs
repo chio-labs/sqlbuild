@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use crate::query_analysis::main::annotated_output_types::annotated_output_types;
 use crate::sql_macros::_helpers::parsing::body::expand_body;
 use crate::sql_macros::_helpers::rendering::arguments::type_family;
-use crate::sql_macros::_helpers::typing::typed_calls::typed_sql;
+use crate::sql_macros::_helpers::typing::typed_calls::{markable_calls, typed_sql};
 use crate::sql_macros::constants::{
     BODY_TYPE_CODE, INFERRED_TEXT_TYPE, RETURNS_MISMATCH_CODE, STAND_IN_RELATION, TYPE_ERROR_CODES,
     TYPE_WARNING_CODES, UNKNOWN_TYPE_HINT, VARCHAR_TYPE,
@@ -94,7 +94,10 @@ fn body_probe(
         Ok(expansion) => expansion,
         Err(_) => return None,
     };
-    let (typed, _) = typed_sql(&expansion.sql, &expansion.calls);
+    let (typed, _) = typed_sql(
+        &expansion.sql,
+        &markable_calls(&expansion.sql, &expansion.calls),
+    );
     let probe: String = format!("SELECT ({typed}) AS b FROM {STAND_IN_RELATION}");
     let table: Value = json!({"name": STAND_IN_RELATION, "columns": columns});
     Some((probe, table))

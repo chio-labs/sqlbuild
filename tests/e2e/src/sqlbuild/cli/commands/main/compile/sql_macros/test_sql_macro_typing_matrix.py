@@ -379,6 +379,20 @@ def test_given_a_known_different_body_when_compiling_then_the_inferred_type_stan
             expected_fragments=_CLEAN,
         ),
         SqlMacroCompileTestCase(
+            description="a_call_in_a_keyword_slot_keeps_the_analysis_whole",
+            files={
+                **text_macro("part", "VARCHAR", "YEAR"),
+                **contract_model(
+                    "orders",
+                    "y (type BIGINT)",
+                    f"SELECT EXTRACT(@sql.part(o.status) FROM o.created_at) AS y {_FROM}\n",
+                ),
+            },
+            expected_returncode=0,
+            expected_fragments=_CLEAN,
+            unexpected_fragments=("Semantic checks were partial",),
+        ),
+        SqlMacroCompileTestCase(
             description="the_compiled_sql_has_no_marker",
             files={
                 **_MACROS,
