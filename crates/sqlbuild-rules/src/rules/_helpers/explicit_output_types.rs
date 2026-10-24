@@ -454,7 +454,10 @@ fn same_type(left: &str, right: &str, dialect: &str) -> bool {
     if type_spelling_equal(left, right) {
         return true;
     }
-    match (normalize_type(left, dialect), normalize_type(right, dialect)) {
+    match (
+        normalize_type(left, dialect),
+        normalize_type(right, dialect),
+    ) {
         (Ok(left), Ok(right)) => {
             left.parse_error.is_none()
                 && right.parse_error.is_none()

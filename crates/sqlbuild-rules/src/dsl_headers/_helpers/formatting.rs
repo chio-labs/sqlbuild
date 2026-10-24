@@ -6,13 +6,14 @@ use sqlbuild_core::text::main::python_strip::python_strip;
 use crate::dsl_headers::_helpers::audits::wrap_header;
 use sqlbuild_sqltext::header_strings::constants::TRIPLE_QUOTE;
 use sqlbuild_sqltext::header_strings::main::fold_prose::fold_prose;
+use sqlbuild_sqltext::header_strings::main::follows_description_key::follows_description_key;
 use sqlbuild_sqltext::header_strings::main::prose_string::prose_string;
 
 use crate::dsl_headers::_helpers::macro_header::same_macro;
 use crate::dsl_headers::_helpers::prose_layout::{
     canonical_prose, closing_width, description_string_span,
 };
-use crate::dsl_headers::_helpers::quoted::split_outside_quotes;
+use crate::dsl_headers::_helpers::quoted::{description_value_spans, split_outside_quotes};
 use crate::dsl_headers::_helpers::rules::violation_at;
 use crate::dsl_headers::_helpers::text::{
     chars, find, line_count, line_starts, lstrip, rfind_before, rstrip, slice, string, tail,
@@ -182,6 +183,74 @@ pub(crate) fn wrap_descriptions<P: HeaderParser>(
         updated = candidate;
     }
     Ok(updated)
+}
+
+/// Every column and audit description of `headers` of the `kinds` in its canonical layout.
+pub(crate) fn wrap_nested_descriptions<P: HeaderParser>(
+    text: &[char],
+    headers: &[HeaderSpan],
+    (kinds, line_width): (&[&str], i64),
+    parser: &P,
+) -> Result<Vec<char>, P::Error> {
+    let mut updated: Vec<char> = text.to_vec();
+    for header in headers.iter().rev() {
+        if !kinds.contains(&header.kind.as_str()) {
+            continue;
+        }
+        let mut header_text: Vec<char> = slice(&updated, header.start, header.end).to_vec();
+        let nested: Vec<usize> = description_value_spans(&header_text)
+            .into_iter()
+            .filter(|(_, depth)| *depth > 1)
+            .map(|((value_start, _), _)| value_start - 1)
+            .collect();
+        for start in nested.into_iter().rev() {
+            if let Some(rewritten) =
+                laid_out_string(&header.kind, &header_text, start, (line_width, parser))?
+            {
+                header_text = rewritten;
+            }
+        }
+        updated = [
+            slice(&updated, 0, header.start),
+            &header_text,
+            tail(&updated, header.end),
+        ]
+        .concat();
+    }
+    Ok(updated)
+}
+
+/// `header_text` with the prose string at `start` laid out canonically, or `None` if unchanged.
+fn laid_out_string<P: HeaderParser>(
+    kind: &str,
+    header_text: &[char],
+    start: usize,
+    (line_width, parser): (i64, &P),
+) -> Result<Option<Vec<char>>, P::Error> {
+    if !follows_description_key(header_text, start) {
+        return Ok(None);
+    }
+    let Ok(prose) = prose_string(header_text, start) else {
+        return Ok(None);
+    };
+    let end: usize = prose.end;
+    if header_text[start] == '\'' && keeps_single_quotes(header_text, (start, end), line_width) {
+        return Ok(None);
+    }
+    let Some(rendered) = canonical_prose(&prose.value, header_text, (start, end), line_width)
+    else {
+        return Ok(None);
+    };
+    if chars(&rendered) == slice(header_text, start, end) {
+        return Ok(None);
+    }
+    let rewritten: Vec<char> = [
+        slice(header_text, 0, start),
+        &chars(&rendered),
+        tail(header_text, end),
+    ]
+    .concat();
+    Ok(same_values(kind, (&rewritten, header_text), parser)?.then_some(rewritten))
 }
 
 /// `header_text` with its description laid out canonically, or `None` when nothing changes.
