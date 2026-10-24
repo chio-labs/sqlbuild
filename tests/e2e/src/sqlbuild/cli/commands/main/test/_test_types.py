@@ -571,3 +571,14 @@ class SinceUnwritableCacheE2ETestCase:
     command: tuple[str, ...]
     expected_stderr_fragments: tuple[str, ...]
     expected_test_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FixtureDeclaredTypeE2ETestCase:
+    """A source fixture whose bare NULL column must take the source's declared type."""
+
+    description: str
+    fixture_sql: str
+    expected_sql: str
+    expected_artifact_fragment: str
+    expected_stdout_fragment: str = "PASS=1  FAIL=0  TOTAL=1"

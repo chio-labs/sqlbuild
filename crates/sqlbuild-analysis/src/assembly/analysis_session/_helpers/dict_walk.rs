@@ -12,8 +12,9 @@ use crate::assembly::analysis_session::constants::{
     COLUMN_AST_KIND, CTE_ALIAS_PAYLOAD_KEY, CTE_LIST_PAYLOAD_KEY, DEPENDENCY_FUNCTION_NAMES,
     FUNCTION_AST_KIND, FUNCTION_FIXTURE_TYPES, FUNCTION_PAYLOAD_KIND, HELPER_READS_DIALECT,
     LITERAL_FIXTURE_TYPES, LITERAL_PAYLOAD_KIND, MAX_FUNCTION_CALL_DEPTH, NAME_PAYLOAD_KEY,
-    NULL_PAYLOAD_KIND, RENDERED_TYPE_NAMES, SCHEMA_TABLE_ARG, SELECT_PAYLOAD_KEY, STAR_AST_KIND,
-    STRUCTURED_PAYLOAD_KINDS, TABLE_AST_KIND, VARIANT_FIXTURE_TYPE, WILDCARD,
+    NULL_PAYLOAD_KIND, RENDERED_TYPE_NAMES, SCHEMA_TABLE_ARG, SELECT_PAYLOAD_KEY,
+    SET_OPERATION_PAYLOAD_KEYS, STAR_AST_KIND, STRUCTURED_PAYLOAD_KINDS, TABLE_AST_KIND,
+    VARIANT_FIXTURE_TYPE, WILDCARD,
 };
 
 /// Python's `bool(value)`.
@@ -452,13 +453,17 @@ pub(crate) fn fixture_projection_facts(
         return Ok(ProjectionFacts::default());
     };
     let mut facts: ProjectionFacts = collected_facts(select);
+    let top: Option<&Map<String, Value>> = payload.as_object();
     let direct: bool = matches!(
-        payload
-            .as_object()
-            .and_then(|map| map.get(SELECT_PAYLOAD_KEY)),
+        top.and_then(|map| map.get(SELECT_PAYLOAD_KEY)),
         Some(Value::Object(_))
     );
-    if !direct {
+    let set_operation: bool = top.is_some_and(|map| {
+        SET_OPERATION_PAYLOAD_KEYS
+            .iter()
+            .any(|key| matches!(map.get(*key), Some(Value::Object(_))))
+    });
+    if !direct && !set_operation {
         facts.null_literal_names.clear();
     }
     Ok(facts)

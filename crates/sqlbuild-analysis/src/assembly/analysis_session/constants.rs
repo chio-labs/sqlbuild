@@ -212,6 +212,8 @@ pub(crate) const ARRAY_PAYLOAD_KIND: &str = "array_func";
 pub(crate) const STRUCTURED_PAYLOAD_KINDS: [&str; 2] = ["parse_json", "struct"];
 pub(crate) const FUNCTION_PAYLOAD_KIND: &str = "function";
 pub(crate) const SELECT_PAYLOAD_KEY: &str = "select";
+/// Set operations whose output columns are named and typed by their first branch.
+pub(crate) const SET_OPERATION_PAYLOAD_KEYS: [&str; 3] = ["union", "intersect", "except"];
 /// `{literal_type: type}` Python's `_simple_expression_type` maps a literal to.
 pub(crate) const LITERAL_FIXTURE_TYPES: [(&str, &str); 3] = [
     ("string", "VARCHAR"),
