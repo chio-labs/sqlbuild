@@ -5324,3 +5324,17 @@ def without_compile_timings(*, report: str) -> str:
     """A JSON report without its compile timings, which differ between compiles."""
 
     return _COMPILE_TIMINGS_PATTERN.sub("", report)
+
+
+def run_benchmark_generator(
+    *, generator: Path, arguments: tuple[str, ...]
+) -> subprocess.CompletedProcess[str]:
+    """Run a benchmark project generator script with this interpreter and capture its output."""
+
+    return subprocess.run(
+        (sys.executable, str(generator), *arguments),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=300,
+    )
