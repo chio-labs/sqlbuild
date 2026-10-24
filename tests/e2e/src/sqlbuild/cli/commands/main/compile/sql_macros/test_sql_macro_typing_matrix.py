@@ -313,6 +313,72 @@ def test_given_a_known_different_body_when_compiling_then_the_inferred_type_stan
             expected_fragments=("error[K002]: column 'x' inferred as",),
         ),
         SqlMacroCompileTestCase(
+            description="a_grouping_key_written_through_a_call",
+            files={
+                **text_macro("plus_one", "BIGINT", "@value + 1", argument="BIGINT"),
+                **orders_model(
+                    f"SELECT o.amount_cents + 1 AS k, COUNT(*) AS n {_FROM} GROUP BY @sql.plus_one(o.amount_cents)\n"
+                ),
+            },
+            expected_returncode=0,
+            expected_fragments=_CLEAN,
+        ),
+        SqlMacroCompileTestCase(
+            description="a_call_in_select_and_grouping_key",
+            files={
+                **text_macro("plus_one", "BIGINT", "@value + 1", argument="BIGINT"),
+                **orders_model(
+                    f"SELECT @sql.plus_one(o.amount_cents) AS k, COUNT(*) AS n {_FROM} GROUP BY @sql.plus_one(o.amount_cents)\n"
+                ),
+            },
+            expected_returncode=0,
+            expected_fragments=_CLEAN,
+        ),
+        SqlMacroCompileTestCase(
+            description="a_call_selected_and_grouped_written_out",
+            files={
+                **text_macro("plus_one", "BIGINT", "@value + 1", argument="BIGINT"),
+                **orders_model(
+                    f"SELECT @sql.plus_one(o.amount_cents) AS k, COUNT(*) AS n {_FROM} GROUP BY o.amount_cents + 1\n"
+                ),
+            },
+            expected_returncode=0,
+            expected_fragments=_CLEAN,
+        ),
+        SqlMacroCompileTestCase(
+            description="a_call_in_a_rollup",
+            files={
+                **text_macro("plus_one", "BIGINT", "@value + 1", argument="BIGINT"),
+                **orders_model(
+                    f"SELECT o.amount_cents + 1 AS k, COUNT(*) AS n {_FROM} GROUP BY ROLLUP (@sql.plus_one(o.amount_cents))\n"
+                ),
+            },
+            expected_returncode=0,
+            expected_fragments=_CLEAN,
+        ),
+        SqlMacroCompileTestCase(
+            description="a_having_over_a_called_grouping_key",
+            files={
+                **text_macro("plus_one", "BIGINT", "@value + 1", argument="BIGINT"),
+                **orders_model(
+                    f"SELECT COUNT(*) AS n {_FROM} GROUP BY @sql.plus_one(o.amount_cents) HAVING o.amount_cents + 1 > 0\n"
+                ),
+            },
+            expected_returncode=0,
+            expected_fragments=_CLEAN,
+        ),
+        SqlMacroCompileTestCase(
+            description="a_distinct_ordered_by_a_call",
+            files={
+                **text_macro("plus_one", "BIGINT", "@value + 1", argument="BIGINT"),
+                **orders_model(
+                    f"SELECT DISTINCT o.amount_cents + 1 AS k {_FROM} ORDER BY @sql.plus_one(o.amount_cents)\n"
+                ),
+            },
+            expected_returncode=0,
+            expected_fragments=_CLEAN,
+        ),
+        SqlMacroCompileTestCase(
             description="the_compiled_sql_has_no_marker",
             files={
                 **_MACROS,
