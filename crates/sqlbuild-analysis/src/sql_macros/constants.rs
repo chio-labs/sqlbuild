@@ -41,7 +41,12 @@ pub(crate) const ENUM_KEYWORD: &str = "ENUM";
 pub(crate) const LIST_KEYWORD: &str = "LIST";
 pub(crate) const SET_KEYWORD: &str = "SET";
 /// Names a parameter may not take, because `@name` already means something else.
-pub(crate) const RESERVED_PARAMETER_NAMES: [&str; 5] = ["sql", "py", "const", "enum", "param"];
+pub(crate) const RESERVED_PARAMETER_NAMES: [&str; 6] =
+    ["sql", "py", "const", "enum", "param", CTE_ARGUMENT];
+/// The reserved call argument naming the CTEs a CTE-list macro call inserts.
+pub const CTE_ARGUMENT: &str = "__cte";
+/// What joins a call's `__cte` name to the name of each CTE but the last.
+pub(crate) const CTE_NAME_SEPARATOR: &str = "__";
 /// Type names that would make a parameter raw, untyped text.
 pub(crate) const RAW_TYPE_NAMES: [&str; 3] = ["RAW", "SQL", "EXPRESSION"];
 /// The type of a parameter that takes any scalar expression and checks no type.

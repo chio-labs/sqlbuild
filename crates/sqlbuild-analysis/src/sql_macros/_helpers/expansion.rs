@@ -7,6 +7,7 @@ use crate::sql_macros::_helpers::arguments::{
     ShapeContext, argument_shape, bind_arguments, check_shape, is_atomic, split_arguments,
 };
 use crate::sql_macros::_helpers::body::{expand_body, with_line_comment_closed};
+use crate::sql_macros::_helpers::cte_rename::{renamed_ctes, take_cte_argument};
 use crate::sql_macros::_helpers::lexing::{AtConstruct, at_constructs, outer_sql_calls};
 use crate::sql_macros::_helpers::lexing::{Token, line_column, tokens};
 use crate::sql_macros::_helpers::literal_positions::{
@@ -18,16 +19,16 @@ use crate::sql_macros::_helpers::placement::{CallSite, cte_names, select_names};
 use crate::sql_macros::_helpers::returns_check::check_body_returns;
 use crate::sql_macros::_helpers::typed_calls::{shifted, spliced};
 use crate::sql_macros::constants::{
-    ARGUMENT_CODE, CTE_NOUN, CYCLE_CODE, INVALID_DEFINITION_CODE, MISPLACED_CALL_CODE,
-    NAME_CLASH_CODE,
+    ARGUMENT_CODE, CTE_ARGUMENT, CTE_NOUN, CYCLE_CODE, INVALID_DEFINITION_CODE,
+    MISPLACED_CALL_CODE, NAME_CLASH_CODE,
 };
 use crate::sql_macros::errors::ExpansionFailure;
 use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::models::{
-    ArgumentCheck, ArgumentExpectation, ArgumentShape, BodyExpansion, BoundArgument, CallPosition,
-    CallScope, ExpandedText, InsertedNames, ParameterKind, RenderedArgument, RenderedDeclarations,
-    SqlMacroCall, SqlMacroCheck, SqlMacroDefinition, SqlMacroForm, SqlMacroLocation, TextContext,
-    TypedCall,
+    ArgumentCheck, ArgumentExpectation, ArgumentShape, BodyExpansion, BoundArgument, CallArgument,
+    CallPosition, CallScope, ExpandedText, InsertedNames, ParameterKind, RenderedArgument,
+    RenderedDeclarations, SqlMacroCall, SqlMacroCheck, SqlMacroDefinition, SqlMacroForm,
+    SqlMacroLocation, TextContext, TypedCall,
 };
 use crate::sql_macros::types::{ConstantShape, SqlMacroHost, SqlMacroScope};
 
@@ -188,8 +189,11 @@ pub(crate) fn expand_call<H: SqlMacroHost>(
     }
     check_adapter_rules(&definition, host.adapter())?;
     let arguments_text: &str = &context.text[call.arguments.0..call.arguments.1];
-    let bound: Vec<BoundArgument> = split_arguments(arguments_text)
-        .and_then(|arguments| bind_arguments(&definition, &arguments))
+    let (cte_name, arguments): (Option<String>, Vec<CallArgument>) =
+        split_arguments(arguments_text)
+            .and_then(|arguments| take_cte_argument(&definition, arguments))
+            .map_err(|error| error.at(body_location(&definition)))?;
+    let bound: Vec<BoundArgument> = bind_arguments(&definition, &arguments)
         .map_err(|error| error.at(body_location(&definition)))?;
     let macro_scope: SqlMacroScope = SqlMacroScope::Macro(Arc::clone(&definition));
     let mut rendered: Vec<RenderedArgument> = Vec::with_capacity(bound.len());
@@ -218,6 +222,19 @@ pub(crate) fn expand_call<H: SqlMacroHost>(
         },
     )
     .map_err(|failure| located(failure, &body_location(&definition)))?;
+    let body: ExpandedText = match &cte_name {
+        Some(name) => renamed_ctes(&body, name).map_err(|reason| {
+            SqlMacroError::new(
+                INVALID_DEFINITION_CODE,
+                format!(
+                    "body of macro {}() is not a valid CTE-list macro: {reason}",
+                    definition.name
+                ),
+            )
+            .at(body_location(&definition))
+        })?,
+        None => body,
+    };
     check_body_returns(
         &definition,
         &body,
@@ -498,6 +515,12 @@ fn check_clashes(
         let clash_location: SqlMacroLocation =
             body_offset_location(definition, definition.body.find(name.as_str()).unwrap_or(0));
         let lists_with = |plural: &str| {
+            if definition.form == SqlMacroForm::CteList {
+                return format!(
+                    "pass {CTE_ARGUMENT} := <name> to give the CTEs one call inserts their own names, as in @sql.{}(..., {CTE_ARGUMENT} := first_orders), or rename one of the {plural}",
+                    definition.name
+                );
+            }
             format!(
                 "rename one of the {plural}; a model can't call a {} macro whose {noun} names it already uses",
                 definition.form.label()
