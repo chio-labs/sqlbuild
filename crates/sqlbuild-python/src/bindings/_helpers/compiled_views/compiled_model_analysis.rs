@@ -18,6 +18,7 @@ use sqlbuild_analysis::binding_locations::models::{
 };
 use sqlbuild_analysis::semantic_validation::models::{DiagnosticRow, Expansion};
 use sqlbuild_analysis::sql_macros::constants::{ARGUMENT_CODE, SUPERSEDED_ANALYSIS_CODE};
+use sqlbuild_analysis::sql_macros::main::marker_free_text::marker_free_text;
 use sqlbuild_analysis::sql_macros::main::typed_analysis_pass::typed_analysis_pass;
 use sqlbuild_analysis::sql_macros::models::SqlMacroFinding;
 
@@ -145,7 +146,8 @@ pub(crate) fn analysis_record(
         if let PivotOutcome::Proof(proof) = contract {
             record.proof = Some(proof.clone());
         }
-        record.binding = with_sql_macro_findings(located(input, outcome)?, outcome);
+        record.binding =
+            with_sql_macro_findings(located(input, outcome, session.dialect())?, outcome);
         record.binding_validated = analysed.binding_validated;
     }
     if let Some(proof) = record.proof.as_ref().filter(|proof| proof.output_proven) {
@@ -156,7 +158,11 @@ pub(crate) fn analysis_record(
 }
 
 /// The model's binding diagnostics at their authored locations.
-fn located(input: &ModelInputRecord, outcome: &ModelOutcome) -> PyResult<Vec<LocatedDiagnostic>> {
+fn located(
+    input: &ModelInputRecord,
+    outcome: &ModelOutcome,
+    dialect: &str,
+) -> PyResult<Vec<LocatedDiagnostic>> {
     let rows: &[DiagnosticRow] = &outcome.analysis.binding_diagnostics;
     if rows.is_empty() {
         return Ok(Vec::new());
@@ -168,7 +174,7 @@ fn located(input: &ModelInputRecord, outcome: &ModelOutcome) -> PyResult<Vec<Loc
     let expansion = &input.expansion;
     let mut typed_text: Option<String> = None;
     let typed: Option<(String, Vec<Expansion>)> = if *expansion.expanded_sql == *input.query_sql {
-        typed_analysis_pass(&expansion.expanded_sql, &input.typed_calls)
+        typed_analysis_pass(&expansion.expanded_sql, &input.typed_calls, dialect)
     } else {
         None
     };
@@ -199,7 +205,15 @@ fn located(input: &ModelInputRecord, outcome: &ModelOutcome) -> PyResult<Vec<Loc
         cleaned: &cleaned,
         expansion: expansion.authored.then_some((expanded, passes.as_slice())),
     };
-    locate_binding_diagnostics(rows, &source).map_err(PyValueError::new_err)
+    let mut located: Vec<LocatedDiagnostic> =
+        locate_binding_diagnostics(rows, &source).map_err(PyValueError::new_err)?;
+    for diagnostic in &mut located {
+        diagnostic.message = marker_free_text(&diagnostic.message).into_owned();
+        if let Some(help) = diagnostic.help.as_mut() {
+            *help = marker_free_text(help).into_owned();
+        }
+    }
+    Ok(located)
 }
 
 /// The SQL macro findings, then the binding diagnostics without unknown columns inside a call.

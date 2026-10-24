@@ -7,7 +7,7 @@ use polyglot_sql::{DialectType, Expression, ExpressionWalk};
 
 use crate::compiled_project::models::SplicedSpan;
 use crate::sql_macros::_helpers::parsing::body::with_line_comment_closed;
-use crate::sql_macros::constants::MARKER_PARSE_DIALECTS;
+use crate::sql_macros::constants::{MARKER_PARSE_DIALECTS, NULL_KEYWORD};
 use crate::sql_macros::models::{TextSplice, TypedCall};
 
 /// `calls` moved `offset` bytes later.
@@ -117,6 +117,9 @@ pub(crate) fn typed_sql(sql: &str, calls: &[TypedCall]) -> (String, Vec<TextSpli
             continue;
         }
         let inner: &str = &sql[call.start..call.end];
+        if is_bare_word(inner) {
+            continue;
+        }
         let line_break: &str = if with_line_comment_closed(inner, true).len() > inner.len() {
             "\n"
         } else {
@@ -155,60 +158,139 @@ pub(crate) fn typed_sql(sql: &str, calls: &[TypedCall]) -> (String, Vec<TextSpli
     (typed, insertions)
 }
 
-/// `calls` without any whose marker would stop `sql` parsing, such as one in a keyword slot.
-pub(crate) fn markable_calls<'c>(sql: &str, calls: &'c [TypedCall]) -> Cow<'c, [TypedCall]> {
-    if !calls.iter().any(|call| in_keyword_slot(sql, call)) {
+/// `calls` without any whose marker would change how `sql` parses in `dialect`.
+pub(crate) fn markable_calls<'c>(
+    sql: &str,
+    calls: &'c [TypedCall],
+    dialect: &str,
+) -> Cow<'c, [TypedCall]> {
+    let marked: usize = calls.iter().filter(|call| is_marked(sql, call)).count();
+    if marked == 0 {
         return Cow::Borrowed(calls);
     }
-    let Some(dialect) = MARKER_PARSE_DIALECTS
-        .into_iter()
-        .find(|dialect| parses_unmarked(sql, *dialect))
-    else {
-        return Cow::Borrowed(calls);
+    let parsed_dialect: Option<DialectType> = match dialect.parse::<DialectType>() {
+        Ok(parsed) => Some(parsed),
+        Err(_) => MARKER_PARSE_DIALECTS
+            .into_iter()
+            .find(|candidate| lowered_markers(sql, *candidate).is_some()),
     };
-    if parses_unmarked(&typed_sql(sql, calls).0, dialect) {
+    let Some(parse_dialect) = parsed_dialect else {
+        return Cow::Owned(Vec::new());
+    };
+    if lowered_markers(&typed_sql(sql, calls).0, parse_dialect) == Some(marked) {
         return Cow::Borrowed(calls);
     }
     let mut kept: Vec<TypedCall> = Vec::with_capacity(calls.len());
+    let mut kept_marked: usize = 0;
     for call in calls {
+        if !is_marked(sql, call) {
+            kept.push(call.clone());
+            continue;
+        }
         kept.push(call.clone());
-        let marked: bool = call.returns.is_some() || call.returns_like.is_some();
-        if marked && !parses_unmarked(&typed_sql(sql, &kept).0, dialect) {
+        if lowered_markers(&typed_sql(sql, &kept).0, parse_dialect) == Some(kept_marked + 1) {
+            kept_marked += 1;
+        } else {
             kept.pop();
         }
     }
     Cow::Owned(kept)
 }
 
-/// Whether `call` may stand where only a keyword or a type can: bare words, or after `AS`.
-fn in_keyword_slot(sql: &str, call: &TypedCall) -> bool {
-    let (Some(text), Some(before)) = (sql.get(call.start..call.end), sql.get(..call.start)) else {
+/// Whether `typed_sql` wraps `call` in a marker.
+fn is_marked(sql: &str, call: &TypedCall) -> bool {
+    (call.returns.is_some() || call.returns_like.is_some())
+        && sql
+            .get(call.start..call.end)
+            .is_some_and(|text| !is_bare_word(text))
+}
+
+/// Whether `text` is one identifier or keyword other than `NULL`, which a marker could misplace.
+fn is_bare_word(text: &str) -> bool {
+    let word: &str = text.trim();
+    if word.eq_ignore_ascii_case(NULL_KEYWORD) {
         return false;
-    };
-    let bare: bool = text.chars().all(|character| {
-        character.is_alphanumeric() || character == '_' || character.is_whitespace()
-    });
-    let previous: &str = before
-        .trim_end()
-        .rsplit(|character: char| !(character.is_alphanumeric() || character == '_'))
-        .next()
-        .unwrap_or_default();
-    bare || previous.eq_ignore_ascii_case("AS")
-}
-
-/// Whether `sql` parses in `dialect` with every typed marker lowered.
-fn parses_unmarked(sql: &str, dialect: DialectType) -> bool {
-    match polyglot_sql::parse(sql, dialect) {
-        Ok(statements) => !statements
-            .iter()
-            .any(|statement| statement.dfs().any(is_unlowered_marker)),
-        Err(_) => false,
     }
+    let mut characters = word.chars();
+    characters
+        .next()
+        .is_some_and(|first| first.is_alphabetic() || first == '_')
+        && characters.all(|character| character.is_alphanumeric() || character == '_')
 }
 
-/// Whether `node` is a typed marker the parser left as an ordinary function.
-fn is_unlowered_marker(node: &Expression) -> bool {
-    matches!(node, Expression::Function(function)
-        if function.name.eq_ignore_ascii_case(TYPED_EXPRESSION_FUNCTION)
-            || function.name.eq_ignore_ascii_case(TYPED_LIKE_EXPRESSION_FUNCTION))
+/// How many typed markers `sql` lowers to expression nodes in `dialect`, if it parses.
+fn lowered_markers(sql: &str, dialect: DialectType) -> Option<usize> {
+    let statements: Vec<Expression> = match polyglot_sql::parse(sql, dialect) {
+        Ok(statements) => statements,
+        Err(_) => return None,
+    };
+    let mut lowered: usize = 0;
+    for statement in &statements {
+        lowered += statement
+            .dfs()
+            .filter(|node| is_lowered_marker(node))
+            .count();
+    }
+    Some(lowered)
+}
+
+/// Whether `node` is a typed marker lowered to its expression node.
+fn is_lowered_marker(node: &Expression) -> bool {
+    matches!(node, Expression::Annotated(annotated)
+        if annotated.type_assertion.is_some() || annotated.type_like.is_some())
+}
+
+/// `text` with each typed marker call, as written in a message, replaced by its first argument.
+pub(crate) fn without_marker_calls(text: &str) -> Cow<'_, str> {
+    let lowered: String = text.to_ascii_lowercase();
+    if !lowered.contains(TYPED_EXPRESSION_FUNCTION) {
+        return Cow::Borrowed(text);
+    }
+    let mut current: String = text.to_owned();
+    while let Some(start) = current.to_ascii_lowercase().find(TYPED_EXPRESSION_FUNCTION) {
+        let replaced: Option<String> = marker_argument(&current, start)
+            .map(|(argument, end)| format!("{}{argument}{}", &current[..start], &current[end..]));
+        current = match replaced {
+            Some(replaced) => replaced,
+            None => format!(
+                "{}expression{}",
+                &current[..start],
+                &current[start + TYPED_EXPRESSION_FUNCTION.len()..]
+            ),
+        };
+    }
+    Cow::Owned(current)
+}
+
+/// The first argument of the marker call at byte `start` of `text`, and the byte after the call.
+fn marker_argument(text: &str, start: usize) -> Option<(String, usize)> {
+    let open: usize = start + text[start..].find('(')?;
+    let name: &str = &text[start..open];
+    if !name.eq_ignore_ascii_case(TYPED_EXPRESSION_FUNCTION)
+        && !name.eq_ignore_ascii_case(TYPED_LIKE_EXPRESSION_FUNCTION)
+    {
+        return None;
+    }
+    let mut depth: usize = 0;
+    let mut quote: Option<char> = None;
+    let mut comma: Option<usize> = None;
+    for (offset, character) in text[open..].char_indices() {
+        let position: usize = open + offset;
+        match (quote, character) {
+            (Some(open_quote), _) if character == open_quote => quote = None,
+            (Some(_), _) => {}
+            (None, '\'' | '"') => quote = Some(character),
+            (None, '(') => depth += 1,
+            (None, ',') if depth == 1 && comma.is_none() => comma = Some(position),
+            (None, ')') => {
+                depth -= 1;
+                if depth == 0 {
+                    let argument_end: usize = comma.unwrap_or(position);
+                    return Some((text[open + 1..argument_end].trim().to_owned(), position + 1));
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }

@@ -6,6 +6,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSetMethods, PyList, PyString, PyTuple};
 
 use crate::bindings::_helpers::analysis_session::model_analyses::ModelAnalyses;
+use crate::bindings::_helpers::analysis_session::profile_inputs::profile_dialect;
 use crate::bindings::_helpers::analysis_session::query_columns::ColumnsRow;
 use crate::bindings::_helpers::analysis_session::stage_functions::query_column_rows;
 use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_sql;
@@ -81,7 +82,7 @@ fn compiled_model<'py>(
         py,
         &analysis_cursor_sql(
             py,
-            &input_analysis_sql(model_input)?,
+            &input_analysis_sql(model_input, &profile_dialect(&context.profile)?)?,
             &mapping_get(&config_values, "cursor_type")?,
         )?,
     )

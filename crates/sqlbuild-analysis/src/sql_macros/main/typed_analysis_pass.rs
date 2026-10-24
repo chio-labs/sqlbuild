@@ -4,8 +4,12 @@ use crate::sql_macros::models::TypedCall;
 
 /// `sql` with its typed calls marked and the pass mapping offsets back, if any call is marked.
 #[must_use]
-pub fn typed_analysis_pass(sql: &str, calls: &[TypedCall]) -> Option<(String, Vec<Expansion>)> {
-    let (typed, insertions) = typed_sql(sql, &markable_calls(sql, calls));
+pub fn typed_analysis_pass(
+    sql: &str,
+    calls: &[TypedCall],
+    dialect: &str,
+) -> Option<(String, Vec<Expansion>)> {
+    let (typed, insertions) = typed_sql(sql, &markable_calls(sql, calls, dialect));
     if insertions.is_empty() {
         return None;
     }

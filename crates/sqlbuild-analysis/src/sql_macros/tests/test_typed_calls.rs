@@ -132,21 +132,21 @@ fn given_typed_calls_when_building_the_analysis_text_then_each_call_with_returns
         },
         TypedAnalysisTestCase {
             description: "nested calls with one range, inner recorded first",
-            sql: "SELECT x FROM t",
-            calls: &[(7, 8, Some("INT")), (7, 8, Some("BIGINT"))],
-            expected_sql: "SELECT __polyglot_typed(__polyglot_typed(x, 'INT'), 'BIGINT') FROM t",
+            sql: "SELECT t.x FROM t",
+            calls: &[(7, 10, Some("INT")), (7, 10, Some("BIGINT"))],
+            expected_sql: "SELECT __polyglot_typed(__polyglot_typed(t.x, 'INT'), 'BIGINT') FROM t",
         },
         TypedAnalysisTestCase {
             description: "adjacent calls close before the next opens",
-            sql: "SELECT (a)(b) FROM t",
-            calls: &[(7, 10, Some("INT")), (10, 13, Some("INT"))],
-            expected_sql: "SELECT __polyglot_typed((a), 'INT')__polyglot_typed((b), 'INT') FROM t",
+            sql: "SELECT (t.a)||(t.b) FROM t",
+            calls: &[(7, 12, Some("INT")), (14, 19, Some("INT"))],
+            expected_sql: "SELECT __polyglot_typed((t.a), 'INT')||__polyglot_typed((t.b), 'INT') FROM t",
         },
         TypedAnalysisTestCase {
             description: "a call ending in a line comment closes it first",
-            sql: "SELECT x -- note\nFROM t",
-            calls: &[(7, 16, Some("DECIMAL(18, 2)"))],
-            expected_sql: "SELECT __polyglot_typed(x -- note\n, 'DECIMAL(18, 2)')\nFROM t",
+            sql: "SELECT t.x -- note\nFROM t",
+            calls: &[(7, 18, Some("DECIMAL(18, 2)"))],
+            expected_sql: "SELECT __polyglot_typed(t.x -- note\n, 'DECIMAL(18, 2)')\nFROM t",
         },
         TypedAnalysisTestCase {
             description: "a call in a keyword slot is left unmarked",
@@ -155,16 +155,28 @@ fn given_typed_calls_when_building_the_analysis_text_then_each_call_with_returns
             expected_sql: "SELECT EXTRACT(YEAR FROM t.c) AS y FROM t",
         },
         TypedAnalysisTestCase {
-            description: "a bare-word call in an expression position is marked",
+            description: "a bare-word call is never marked",
             sql: "SELECT YEAR AS y FROM t",
             calls: &[(7, 11, Some("VARCHAR"))],
-            expected_sql: "SELECT __polyglot_typed(YEAR, 'VARCHAR') AS y FROM t",
+            expected_sql: "SELECT YEAR AS y FROM t",
+        },
+        TypedAnalysisTestCase {
+            description: "a call in a type slot is left unmarked",
+            sql: "SELECT CAST(t.x AS DECIMAL(18, 2)) AS y FROM t",
+            calls: &[(19, 33, Some("VARCHAR"))],
+            expected_sql: "SELECT CAST(t.x AS DECIMAL(18, 2)) AS y FROM t",
+        },
+        TypedAnalysisTestCase {
+            description: "a call whose marker would not parse is left unmarked",
+            sql: "SELECT (t.a)(t.b) FROM t",
+            calls: &[(7, 12, Some("INT")), (12, 17, Some("INT"))],
+            expected_sql: "SELECT (t.a)(t.b) FROM t",
         },
         TypedAnalysisTestCase {
             description: "a quote in returns is doubled",
-            sql: "SELECT x FROM t",
-            calls: &[(7, 8, Some("ENUM('a')"))],
-            expected_sql: "SELECT __polyglot_typed(x, 'ENUM(''a'')') FROM t",
+            sql: "SELECT t.x FROM t",
+            calls: &[(7, 10, Some("ENUM('a')"))],
+            expected_sql: "SELECT __polyglot_typed(t.x, 'ENUM(''a'')') FROM t",
         },
     ];
     for test_case in test_cases {
@@ -179,7 +191,7 @@ fn given_typed_calls_when_building_the_analysis_text_then_each_call_with_returns
                 returns: returns.map(str::to_owned),
             })
             .collect();
-        let (typed, insertions) = typed_analysis_sql(test_case.sql, &calls);
+        let (typed, insertions) = typed_analysis_sql(test_case.sql, &calls, "duckdb");
         assert_eq!(typed, test_case.expected_sql, "{}", test_case.description);
         let removed: String = {
             let mut text: String = String::new();
@@ -261,7 +273,7 @@ fn given_a_returns_type_of_call_when_building_the_analysis_text_then_it_asserts_
         let expanded: ExpandedText =
             expanded_text_for("duckdb", test_case.macros, test_case.sql).expect("expands");
 
-        let (typed, _) = typed_analysis_sql(&expanded.sql, &expanded.calls);
+        let (typed, _) = typed_analysis_sql(&expanded.sql, &expanded.calls, "duckdb");
 
         assert_eq!(typed, test_case.expected_sql, "{}", test_case.description);
     }

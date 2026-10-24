@@ -3,6 +3,7 @@ pub mod byte_text_splices;
 pub mod check_sql_macro_arguments;
 pub mod declaration_visible_from_macro;
 pub mod expand_sql_macro_call;
+pub mod marker_free_text;
 pub mod moved_typed_calls;
 pub mod parse_sql_macro;
 pub mod render_inline_collection;

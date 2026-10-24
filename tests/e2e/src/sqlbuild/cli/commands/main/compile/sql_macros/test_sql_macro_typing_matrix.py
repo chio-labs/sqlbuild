@@ -13,6 +13,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.sql_macros._test_types imp
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.sql_macros.helpers import (
     BRACKET,
+    adapter_project,
     contract_model,
     inspected_text,
     lineage_edges,
@@ -391,6 +392,60 @@ def test_given_a_known_different_body_when_compiling_then_the_inferred_type_stan
             expected_returncode=0,
             expected_fragments=_CLEAN,
             unexpected_fragments=("Semantic checks were partial",),
+        ),
+        SqlMacroCompileTestCase(
+            description="a_call_as_a_snowflake_dateadd_part",
+            files={
+                **adapter_project("snowflake"),
+                **text_macro("p", "VARCHAR", "day"),
+                **orders_model(f"SELECT DATEADD(@sql.p(o.status), 1, o.created_at) AS y {_FROM}\n"),
+            },
+            expected_returncode=0,
+            expected_fragments=_CLEAN,
+            unexpected_fragments=("__polyglot", "Semantic checks were partial"),
+        ),
+        SqlMacroCompileTestCase(
+            description="a_call_as_a_snowflake_datediff_part",
+            files={
+                **adapter_project("snowflake"),
+                **text_macro("p", "VARCHAR", "day"),
+                **orders_model(
+                    f"SELECT DATEDIFF(@sql.p(o.status), o.created_at, o.updated_at) AS y {_FROM}\n"
+                ),
+            },
+            expected_returncode=0,
+            expected_fragments=_CLEAN,
+            unexpected_fragments=("__polyglot", "Semantic checks were partial"),
+        ),
+        SqlMacroCompileTestCase(
+            description="a_call_as_an_interval_unit",
+            files={
+                **text_macro("p", "VARCHAR", "DAY"),
+                **orders_model(f"SELECT o.created_at + INTERVAL 1 @sql.p(o.status) AS y {_FROM}\n"),
+            },
+            expected_returncode=0,
+            expected_fragments=_CLEAN,
+            unexpected_fragments=("__polyglot", "Semantic checks were partial"),
+        ),
+        SqlMacroCompileTestCase(
+            description="a_call_as_a_bare_cast_type",
+            files={
+                **text_macro("t", "VARCHAR", "BIGINT"),
+                **orders_model(f"SELECT CAST(o.order_id AS @sql.t(o.status)) AS y {_FROM}\n"),
+            },
+            expected_returncode=0,
+            expected_fragments=_CLEAN,
+            unexpected_fragments=("__polyglot", "Semantic checks were partial"),
+        ),
+        SqlMacroCompileTestCase(
+            description="a_call_as_a_parameterised_cast_type",
+            files={
+                **text_macro("t", "VARCHAR", "DECIMAL(18, 2)"),
+                **orders_model(f"SELECT CAST(o.order_id AS @sql.t(o.status)) AS y {_FROM}\n"),
+            },
+            expected_returncode=0,
+            expected_fragments=_CLEAN,
+            unexpected_fragments=("__polyglot", "Semantic checks were partial"),
         ),
         SqlMacroCompileTestCase(
             description="the_compiled_sql_has_no_marker",
