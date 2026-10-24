@@ -31,7 +31,7 @@ _TYPE_PROOF_FINDINGS: tuple[FindingKey, ...] = (
     (
         "SQBRCONTRACT105",
         "models/orders.sql",
-        1,
+        5,
         18,
         'output "amount" is a passthrough whose type is not proven against the declared '
         "contract; declared type is BIGINT",

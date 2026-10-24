@@ -106,7 +106,9 @@ def run_concurrent_build(
     pipeline_result: CompilePipelineResult = run_compile_pipeline(
         discovered_inputs=discovered,
         adapter=adapter,
-        options=CompilePipelineOptions(no_sql_validation=True, connection_config=config),
+        options=CompilePipelineOptions(
+            no_sql_validation=True, connection_config=config, auto_load_sources=True
+        ),
     )
     plan: PlanOutput = pipeline_result.plan_output
 

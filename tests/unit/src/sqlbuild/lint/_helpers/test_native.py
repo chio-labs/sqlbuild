@@ -313,7 +313,7 @@ def test_given_contents_when_formatting_then_contents_match_expected(
             expected_contents='MODEL (description "Canonical customer records.");\nSELECT 1\n',
         ),
         FormatDescriptionTestCase(
-            description="nested column description is not treated as the model description",
+            description="nested column description is laid out at its own depth",
             contents=(
                 'MODEL (\n  columns (\n    customer_id (type BIGINT, description "A deliberately '
                 'long column description that remains authored text.")\n  ),\n  description "Builds '
@@ -321,8 +321,9 @@ def test_given_contents_when_formatting_then_contents_match_expected(
             ),
             line_width=60,
             expected_contents=(
-                'MODEL (\n  columns (\n    customer_id (type BIGINT, description "A deliberately '
-                'long column description that remains authored text.")\n  ),\n  description """\n'
+                'MODEL (\n  columns (\n    customer_id (type BIGINT, description """\n'
+                "      A deliberately long column description that remains\n"
+                '      authored text.\n    """)\n  ),\n  description """\n'
                 "    Builds canonical customer records from every available\n"
                 '    source.\n  """\n);\nSELECT 1\n'
             ),

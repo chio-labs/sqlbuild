@@ -447,7 +447,7 @@
 "contracts",
 {
 "None": "afb26acda81b184518d6d6f5",
-"bigquery": "afb26acda81b184518d6d6f5",
+"bigquery": "f6dafe38c2aa2436ad17d2e6",
 "databricks": "f6dafe38c2aa2436ad17d2e6",
 "duckdb": "f6dafe38c2aa2436ad17d2e6",
 "postgres": "afb26acda81b184518d6d6f5",
