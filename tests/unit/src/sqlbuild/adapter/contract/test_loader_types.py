@@ -9,6 +9,7 @@ from sqlbuild.adapter.contract.types import BuiltinAdapter, LoaderLogicalType
 from sqlbuild.adapter.discovery.main.builtins import builtin_adapter_classes
 from tests.unit.src.sqlbuild.adapter.contract._test_types import (
     AdapterIdentifierRenderingTestCase,
+    AdapterLoaderJsonRowsTestCase,
     AdapterLoaderRowsEmptySelectTestCase,
     AdapterLoaderRowsSelectTestCase,
     AdapterLoaderTypeMappingTestCase,
@@ -272,6 +273,52 @@ def test_given_builtin_adapter_when_rendering_loader_rows_then_returns_adapter_s
 
     assert all(fragment in sql for fragment in test_case.expected_fragments)
     assert not any(fragment in sql for fragment in test_case.forbidden_fragments)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AdapterLoaderJsonRowsTestCase(
+            description="snowflake parses json in the select list, not inside values",
+            adapter_name=BuiltinAdapter.SNOWFLAKE.value,
+            rows=({"id": 1, "payload": {"sku": "a-1"}}, {"id": 2, "payload": None}),
+            expected_sql=(
+                'SELECT CAST("ID" AS BIGINT) AS "ID", '
+                'CAST(PARSE_JSON("PAYLOAD") AS VARIANT) AS "PAYLOAD" '
+                'FROM (VALUES (1, \'{"sku": "a-1"}\'), (2, NULL)) '
+                'AS __loader_rows("ID", "PAYLOAD")'
+            ),
+        ),
+        AdapterLoaderJsonRowsTestCase(
+            description="snowflake keeps json escapes and backslashes in string constants",
+            adapter_name=BuiltinAdapter.SNOWFLAKE.value,
+            rows=({"id": 1, "payload": {"note": 'say "hi"\\now'}},),
+            expected_sql=(
+                'SELECT CAST("ID" AS BIGINT) AS "ID", '
+                'CAST(PARSE_JSON("PAYLOAD") AS VARIANT) AS "PAYLOAD" '
+                'FROM (VALUES (1, \'{"note": "say \\\\"hi\\\\"\\\\\\\\now"}\')) '
+                'AS __loader_rows("ID", "PAYLOAD")'
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_json_rows_when_rendering_loader_rows_then_values_hold_only_constants(
+    test_case: AdapterLoaderJsonRowsTestCase,
+) -> None:
+    adapter: BaseAdapter = builtin_adapter_classes()[test_case.adapter_name]()
+
+    sql: str = adapter.render_loader_rows_select(
+        rows=test_case.rows,
+        column_names=("id", "payload"),
+        column_sql_types={
+            "id": adapter.render_loader_logical_type(LoaderLogicalType.INTEGER),
+            "payload": adapter.render_loader_logical_type(LoaderLogicalType.JSON),
+        },
+        inferred_types={"id": LoaderLogicalType.INTEGER, "payload": LoaderLogicalType.JSON},
+    )
+
+    assert sql == test_case.expected_sql
 
 
 @pytest.mark.parametrize(

@@ -71,3 +71,11 @@ class AdapterSourceExpressionRenderingTestCase:
     expected_relation: str
     expected_cast_subquery: str
     expected_relation_cast_subquery: str
+
+
+@dataclass(frozen=True)
+class AdapterLoaderJsonRowsTestCase:
+    description: str
+    adapter_name: str
+    rows: tuple[dict[str, object], ...]
+    expected_sql: str
