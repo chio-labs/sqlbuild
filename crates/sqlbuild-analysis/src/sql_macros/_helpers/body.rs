@@ -9,11 +9,12 @@ use crate::sql_macros::_helpers::parameters::{
     ParameterReference, alias_follows, parameter_references, placeholder, placeholder_parameter,
     with_placeholders,
 };
+use crate::sql_macros::_helpers::typed_calls::{shifted, spliced};
 use crate::sql_macros::constants::{ARGUMENT_CODE, INVALID_DEFINITION_CODE};
 use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::models::{
-    ArgumentShape, BodyExpansion, ParameterKind, RenderedArgument, SqlMacroDefinition,
-    SqlMacroForm, SqlMacroParameter,
+    ArgumentShape, BodyExpansion, ExpandedText, ParameterKind, RenderedArgument,
+    SqlMacroDefinition, SqlMacroForm, SqlMacroParameter, TextSplice, TypedCall,
 };
 
 /// Dialects tried in turn to parse a body; the first that parses it locates its references.
@@ -224,13 +225,15 @@ fn substituted(
     }
 }
 
-/// `body` with each `@name` replaced by its argument, token by token.
+/// `body` with each `@name` replaced by its argument, token by token, and the calls it holds.
 fn substituted_body(
     definition: &SqlMacroDefinition,
     (body, scanned, references): (&str, &[Token], &[ParameterReference]),
-    arguments: &[RenderedArgument],
-) -> String {
+    (arguments, body_calls): (&[RenderedArgument], &[TypedCall]),
+) -> (String, Vec<TypedCall>) {
     let mut expanded: String = String::with_capacity(body.len());
+    let mut splices: Vec<TextSplice> = Vec::new();
+    let mut argument_calls: Vec<TypedCall> = Vec::new();
     let mut cursor: usize = 0;
     for reference in references {
         let Some(argument) = arguments.iter().find(|argument| {
@@ -242,24 +245,58 @@ fn substituted_body(
         };
         let parameter = &definition.parameters[argument.parameter];
         expanded.push_str(&body[cursor..reference.start]);
-        expanded.push_str(&substituted(
+        let text: String = substituted(
             &parameter.kind,
             &parameter.name,
             argument,
             (body, scanned, reference.token),
-        ));
+        );
+        let start: usize = expanded.len();
+        if !argument.calls.is_empty() {
+            let inner: Option<usize> = if text == argument.sql {
+                Some(0)
+            } else if text.len() == argument.sql.len() + 2 && text[1..].starts_with(&argument.sql) {
+                Some(1)
+            } else {
+                None
+            };
+            if let Some(inner) = inner {
+                argument_calls.extend(shifted(argument.calls.clone(), start + inner));
+            }
+        }
+        expanded.push_str(&text);
+        splices.push(TextSplice {
+            source: (reference.start, reference.end),
+            output: (start, expanded.len()),
+        });
         cursor = reference.end;
     }
     expanded.push_str(&body[cursor..]);
-    expanded
+    let mut calls: Vec<TypedCall> = argument_calls;
+    calls.extend(spliced(body_calls.to_vec(), &splices));
+    (expanded, calls)
+}
+
+/// `calls` in `text` kept within its `range`, relative to the range's start.
+fn within(calls: Vec<TypedCall>, (start, end): (usize, usize)) -> Vec<TypedCall> {
+    calls
+        .into_iter()
+        .filter(|call| start <= call.start && call.start < end)
+        .map(|call| TypedCall {
+            start: call.start - start,
+            end: call.end.min(end) - start,
+            ..call
+        })
+        .collect()
 }
 
 /// `body` with each parameter replaced by its argument, as the form inserts it at a call.
 pub(crate) fn expand_body(
     definition: &SqlMacroDefinition,
-    body: &str,
+    body: &ExpandedText,
     arguments: &[RenderedArgument],
 ) -> Result<BodyExpansion, SqlMacroError> {
+    let (body, body_calls): (&str, &[TypedCall]) = (&body.sql, &body.calls);
     let invalid = |reason: String| {
         SqlMacroError::new(
             INVALID_DEFINITION_CODE,
@@ -286,12 +323,27 @@ pub(crate) fn expand_body(
             format!("macro {}(): {reason}", definition.name),
         )
     })?;
-    let expanded: String = substituted_body(definition, (body, &scanned, &references), arguments);
-    let sql: String = match definition.form {
-        SqlMacroForm::Expression => expanded.trim().to_owned(),
+    let (expanded, calls) = substituted_body(
+        definition,
+        (body, &scanned, &references),
+        (arguments, body_calls),
+    );
+    let kept: (usize, usize) = match definition.form {
+        SqlMacroForm::Expression => trimmed_range(&expanded, 0),
         SqlMacroForm::CteList | SqlMacroForm::ColumnList => without_leading_keyword(&expanded),
     };
-    Ok(BodyExpansion { sql, names })
+    Ok(BodyExpansion {
+        sql: expanded[kept.0..kept.1].to_owned(),
+        names,
+        calls: within(calls, kept),
+    })
+}
+
+/// The byte range of `text[from..]` trimmed of surrounding whitespace.
+fn trimmed_range(text: &str, from: usize) -> (usize, usize) {
+    let rest: &str = &text[from..];
+    let start: usize = from + rest.len() - rest.trim_start().len();
+    (start, start + rest.trim().len())
 }
 
 /// `sql`, with a line break when it ends in a `--` comment and `followed` text would join that line.
@@ -327,13 +379,13 @@ pub(crate) fn with_line_comment_closed(sql: &str, followed: bool) -> String {
     sql
 }
 
-/// The text after its first token, the body's `WITH` or `SELECT`, trimmed.
-fn without_leading_keyword(text: &str) -> String {
+/// The byte range of the text after its first token, the body's `WITH` or `SELECT`, trimmed.
+fn without_leading_keyword(text: &str) -> (usize, usize) {
     match tokens(text) {
         Ok(scanned) => match scanned.first() {
-            Some(first) => text[first.end..].trim().to_owned(),
-            None => text.trim().to_owned(),
+            Some(first) => trimmed_range(text, first.end),
+            None => trimmed_range(text, 0),
         },
-        Err(_) => text.trim().to_owned(),
+        Err(_) => trimmed_range(text, 0),
     }
 }

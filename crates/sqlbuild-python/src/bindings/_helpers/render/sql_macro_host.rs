@@ -13,13 +13,15 @@ use sqlbuild_analysis::sql_macros::constants::{
 use sqlbuild_analysis::sql_macros::errors::ExpansionFailure;
 use sqlbuild_analysis::sql_macros::errors::SqlMacroError;
 use sqlbuild_analysis::sql_macros::main::bare_macro_calls::bare_macro_calls;
+use sqlbuild_analysis::sql_macros::main::byte_text_splices::byte_text_splices;
 use sqlbuild_analysis::sql_macros::main::declaration_visible_from_macro::declaration_visible_from_macro;
 use sqlbuild_analysis::sql_macros::main::expand_sql_macro_call::expand_sql_macro_call;
 use sqlbuild_analysis::sql_macros::main::parse_sql_macro::parse_sql_macro;
 use sqlbuild_analysis::sql_macros::main::render_inline_collection::render_inline_collection;
 use sqlbuild_analysis::sql_macros::main::sql_macro_calls::sql_macro_calls;
 use sqlbuild_analysis::sql_macros::models::{
-    InsertedNames, SqlMacroCall, SqlMacroCheck, SqlMacroDefinition, SqlMacroLocation, TextContext,
+    ExpandedText, InsertedNames, RenderedDeclarations, SqlMacroCall, SqlMacroCheck,
+    SqlMacroDefinition, SqlMacroLocation, TextContext, TextSplice,
 };
 use sqlbuild_analysis::sql_macros::types::{ConstantShape, SqlMacroHost, SqlMacroScope};
 
@@ -94,11 +96,12 @@ pub(crate) fn is_sql_macro_reference(kind: u8) -> bool {
     kind == SQL_MACRO_REFERENCE_KIND
 }
 
-/// The text replacing each SQL macro call starting at the given character offsets of `request.sql`.
+/// The text replacing each SQL macro call starting at the given character offsets of `request.sql`,
+/// with the expression macro calls each text holds.
 pub(crate) fn expanded_sql_macro_calls<'py>(
     request: &DeclarationExpansion<'_, 'py>,
     starts: &[usize],
-) -> PyResult<(Vec<String>, SqlMacroFacts<'py>)> {
+) -> PyResult<(Vec<ExpandedText>, SqlMacroFacts<'py>)> {
     let sql: &str = request.sql;
     let calls: Vec<SqlMacroCall> =
         sql_macro_calls(sql).map_err(|error| macro_error(request, &error))?;
@@ -125,7 +128,7 @@ pub(crate) fn expanded_sql_macro_calls<'py>(
         owner: &owner,
     };
     let mut inserted: InsertedNames = InsertedNames::default();
-    let mut replacements: Vec<String> = Vec::with_capacity(starts.len());
+    let mut replacements: Vec<ExpandedText> = Vec::with_capacity(starts.len());
     for start in starts {
         let Some(call) = by_char.get(start) else {
             return Err(macro_error(
@@ -471,10 +474,13 @@ impl<'py> SqlMacroHost for PyHost<'_, '_, 'py> {
         &self,
         scope: &SqlMacroScope,
         text: &str,
-    ) -> Result<String, ExpansionFailure<PyErr>> {
+    ) -> Result<RenderedDeclarations, ExpansionFailure<PyErr>> {
         let (references, stop) = declaration_scan(text);
         if references.is_empty() && stop.is_none() {
-            return Ok(text.to_owned());
+            return Ok(RenderedDeclarations {
+                sql: text.to_owned(),
+                splices: Vec::new(),
+            });
         }
         let context: Bound<'py, PyAny> = host(self.scope_context(scope))?;
         if let SqlMacroScope::Macro(definition) = scope {
@@ -548,7 +554,12 @@ impl<'py> SqlMacroHost for PyHost<'_, '_, 'py> {
                 sql_macros: None,
             }))?;
         self.facts.borrow_mut().usages.extend(expanded.usages);
-        Ok(expanded.spliced.sql)
+        let splices: Vec<TextSplice> =
+            byte_text_splices(text, &expanded.spliced.sql, &expanded.spliced.spans);
+        Ok(RenderedDeclarations {
+            sql: expanded.spliced.sql,
+            splices,
+        })
     }
 
     fn constant_shape(
