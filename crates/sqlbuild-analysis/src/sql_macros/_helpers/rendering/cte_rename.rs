@@ -117,40 +117,20 @@ pub(crate) fn renamed_ctes(body: &ExpandedText, name: &str) -> Result<ExpandedTe
         return Err("it is not a WITH list".to_owned());
     };
     let ctes: Vec<String> = with.ctes.iter().map(|cte| cte.alias.name.clone()).collect();
-    let mut aliases: Vec<String> = Vec::new();
-    for node in statement.dfs() {
-        if let Expression::Table(table) = node
-            && let Some(alias) = &table.alias
-        {
-            aliases.push(alias.name.clone());
-        }
-    }
     let mut identifiers: Vec<&Identifier> = with.ctes.iter().map(|cte| &cte.alias).collect();
-    for node in statement.dfs() {
-        match node {
-            Expression::Table(table) if table.schema.is_none() && table.catalog.is_none() => {
-                identifiers.push(&table.name);
-            }
-            Expression::Column(column) => identifiers.extend(column.table.as_ref()),
-            Expression::Star(star) => identifiers.extend(star.table.as_ref()),
-            _ => {}
-        }
-    }
-    let shadowed = |identifier: &Identifier| {
-        aliases
-            .iter()
-            .any(|alias| alias.eq_ignore_ascii_case(&identifier.name))
+    let mut walk = CteReferences {
+        frames: Vec::new(),
+        scopes: Vec::new(),
+        found: Vec::new(),
     };
+    walk.visit(&statement, true);
+    identifiers.extend(walk.found);
     let offsets: CharOffsets = CharOffsets::new(&parsed_text);
     let mut edits: Vec<(usize, usize, String)> = Vec::new();
-    for (position, identifier) in identifiers.into_iter().enumerate() {
-        let is_definition: bool = position < with.ctes.len();
+    for identifier in identifiers {
         let Some(new_name) = renamed(&ctes, name, &identifier.name) else {
             continue;
         };
-        if !is_definition && shadowed(identifier) {
-            continue;
-        }
         let Some(span) = identifier.span else {
             continue;
         };
@@ -186,6 +166,128 @@ pub(crate) fn renamed_ctes(body: &ExpandedText, name: &str) -> Result<ExpandedTe
         calls: spliced(body.calls.clone(), &splices),
         sql: renamed_sql,
     })
+}
+
+/// One relation a query reads by name: the name it is read as, and whether that is the body's CTE.
+struct ScopeSource {
+    name: String,
+    body_cte: bool,
+}
+
+/// The table names and qualifiers that read a body's own CTEs, resolved scope by scope.
+struct CteReferences<'a> {
+    /// The CTE names of each enclosing `WITH`, innermost last, and whether they are the body's.
+    frames: Vec<(Vec<String>, bool)>,
+    /// The relations of each enclosing query, innermost last.
+    scopes: Vec<Vec<ScopeSource>>,
+    found: Vec<&'a Identifier>,
+}
+
+impl<'a> CteReferences<'a> {
+    fn visit(&mut self, node: &'a Expression, top: bool) {
+        let with = match node {
+            Expression::Select(select) => select.with.as_ref(),
+            Expression::Union(union) => union.with.as_ref(),
+            Expression::Intersect(intersect) => intersect.with.as_ref(),
+            Expression::Except(except) => except.with.as_ref(),
+            _ => None,
+        };
+        if let Some(with) = with {
+            let names: Vec<String> = with.ctes.iter().map(|cte| cte.alias.name.clone()).collect();
+            self.frames.push((names, top));
+        }
+        let scoped: bool = if let Expression::Select(select) = node {
+            let sources: Vec<ScopeSource> = select
+                .from
+                .iter()
+                .flat_map(|from| &from.expressions)
+                .chain(select.joins.iter().map(|join| &join.this))
+                .filter_map(|source| self.scope_source(source))
+                .collect();
+            self.scopes.push(sources);
+            true
+        } else {
+            false
+        };
+        match node {
+            Expression::Table(table) if self.is_body_cte(table) => self.found.push(&table.name),
+            Expression::Column(column) => self.qualifier(column.table.as_ref()),
+            Expression::Star(star) => self.qualifier(star.table.as_ref()),
+            _ => {}
+        }
+        for child in node.children() {
+            self.visit(child, false);
+        }
+        if scoped {
+            self.scopes.pop();
+        }
+        if with.is_some() {
+            self.frames.pop();
+        }
+    }
+
+    /// Whether `table` is an unqualified name whose innermost binding is one of the body's CTEs.
+    fn is_body_cte(&self, table: &polyglot_sql::expressions::TableRef) -> bool {
+        if table.schema.is_some() || table.catalog.is_some() {
+            return false;
+        }
+        self.frames
+            .iter()
+            .rev()
+            .find(|(names, _)| includes_name(names, &table.name.name))
+            .is_some_and(|(_, body)| *body)
+    }
+
+    /// The name a FROM or JOIN item is read as, and whether it is an unaliased body CTE.
+    fn scope_source(&self, source: &Expression) -> Option<ScopeSource> {
+        match source {
+            Expression::Table(table) => Some(match &table.alias {
+                Some(alias) => ScopeSource {
+                    name: alias.name.clone(),
+                    body_cte: false,
+                },
+                None => ScopeSource {
+                    name: table.name.name.clone(),
+                    body_cte: self.is_body_cte(table),
+                },
+            }),
+            Expression::Subquery(subquery) => subquery.alias.as_ref().map(|alias| ScopeSource {
+                name: alias.name.clone(),
+                body_cte: false,
+            }),
+            Expression::Paren(paren) => self.scope_source(&paren.this),
+            _ => None,
+        }
+    }
+
+    /// Records `qualifier` when the relation it names, innermost scope first, is a body CTE.
+    fn qualifier(&mut self, qualifier: Option<&'a Identifier>) {
+        let Some(qualifier) = qualifier else {
+            return;
+        };
+        let source: Option<&ScopeSource> = self
+            .scopes
+            .iter()
+            .rev()
+            .find_map(|sources| source_named(sources, &qualifier.name));
+        if source.is_some_and(|source| source.body_cte) {
+            self.found.push(qualifier);
+        }
+    }
+}
+
+/// Whether `names` holds `name`, ignoring case.
+fn includes_name(names: &[String], name: &str) -> bool {
+    names
+        .iter()
+        .any(|defined| defined.eq_ignore_ascii_case(name))
+}
+
+/// The relation of `sources` read as `name`, ignoring case.
+fn source_named<'s>(sources: &'s [ScopeSource], name: &str) -> Option<&'s ScopeSource> {
+    sources
+        .iter()
+        .find(|source| source.name.eq_ignore_ascii_case(name))
 }
 
 /// The one statement `text` parses to, in the first dialect that parses it.
