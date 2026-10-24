@@ -12,6 +12,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.sql_macros._test_types imp
     SqlMacroWarmCompileTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.sql_macros.helpers import (
+    adapter_project,
     contract_model,
     orders_model,
     output,
@@ -166,6 +167,38 @@ _ROUNDED: dict[str, str] = {
                 **_SNOWFLAKE_PROJECT,
                 **text_macro("m", "FLOAT", "COALESCE(TRY_TO_DOUBLE(@value), 0)"),
                 **orders_model('SELECT @sql.m(o.status) AS v FROM __ref("stg_orders") AS o\n'),
+            },
+            expected_returncode=0,
+            expected_fragments=("0 errors, 0 warnings",),
+        ),
+        SqlMacroCompileTestCase(
+            description="a_guessed_date_trunc_type_on_databricks_is_not_checked_against_returns",
+            files={
+                **adapter_project("databricks"),
+                **text_macro("m", "TIMESTAMP", "DATE_TRUNC('DAY', @value)", argument="TIMESTAMP"),
+                **orders_model('SELECT @sql.m(o.created_at) AS v FROM __ref("stg_orders") AS o\n'),
+            },
+            expected_returncode=0,
+            expected_fragments=("0 errors, 0 warnings",),
+        ),
+        SqlMacroCompileTestCase(
+            description="a_guessed_regexp_contains_type_on_bigquery_is_not_checked_against_returns",
+            files={
+                **adapter_project("bigquery"),
+                **text_macro("m", "BOOL", "REGEXP_CONTAINS(@value, 'a')", argument="VARCHAR"),
+                **orders_model('SELECT @sql.m(o.status) AS v FROM __ref("stg_orders") AS o\n'),
+            },
+            expected_returncode=0,
+            expected_fragments=("0 errors, 0 warnings",),
+        ),
+        SqlMacroCompileTestCase(
+            description="a_user_defined_function_on_bigquery_is_not_checked_against_returns",
+            files={
+                **adapter_project("bigquery"),
+                **text_macro("m", "STRING", "my_udf(@value)", argument="BIGINT"),
+                **orders_model(
+                    'SELECT @sql.m(o.amount_cents) AS v FROM __ref("stg_orders") AS o\n'
+                ),
             },
             expected_returncode=0,
             expected_fragments=("0 errors, 0 warnings",),
