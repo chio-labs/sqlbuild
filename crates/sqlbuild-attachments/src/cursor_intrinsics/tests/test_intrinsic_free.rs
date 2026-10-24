@@ -90,6 +90,13 @@ fn given_sql_when_checking_cursor_intrinsics_then_python_acceptance_or_error_is_
             sql: "SELECT ·__cursor_end",
             expected_check: rejected("Audit 'fresh' intrinsic __cursor_end must be called with ()"),
         },
+        IntrinsicCheckTestCase {
+            description: "the reserved analysis function is rejected in any case",
+            sql: "SELECT __Polyglot_Typed(amount, 'BIGINT') FROM orders",
+            expected_check: rejected(
+                "Audit 'fresh' uses __polyglot_typed, a name reserved for SQL analysis; rename it",
+            ),
+        },
     ];
 
     for test_case in test_cases {
