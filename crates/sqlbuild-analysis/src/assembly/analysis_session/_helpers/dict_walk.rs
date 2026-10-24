@@ -466,7 +466,83 @@ pub(crate) fn fixture_projection_facts(
     if !direct && !set_operation {
         facts.null_literal_names.clear();
     }
+    if set_operation {
+        let branches: Vec<&Map<String, Value>> = branch_selects(&payload);
+        let null_in_every_branch = |index: usize| {
+            branches
+                .iter()
+                .all(|branch| null_positions(branch).get(index) == Some(&true))
+        };
+        let kept: Vec<String> = null_names_by_position(select)
+            .into_iter()
+            .filter(|(index, _)| null_in_every_branch(*index))
+            .map(|(_, name)| name)
+            .collect();
+        facts.null_literal_names.retain(|name| kept.contains(name));
+    }
     Ok(facts)
+}
+
+/// Every branch `SELECT` of a set operation, without the selects nested inside them.
+fn branch_selects(payload: &Value) -> Vec<&Map<String, Value>> {
+    let mut branches: Vec<&Map<String, Value>> = Vec::new();
+    let mut pending: Vec<&Value> = vec![payload];
+    while let Some(node) = pending.pop() {
+        match node {
+            Value::Object(map) => {
+                if let Some(Value::Object(select)) = map.get(SELECT_PAYLOAD_KEY) {
+                    branches.push(select);
+                    continue;
+                }
+                pending.extend(map.values().rev());
+            }
+            Value::Array(items) => pending.extend(items.iter().rev()),
+            _ => {}
+        }
+    }
+    branches
+}
+
+/// The projection payloads of a select, each with any alias removed.
+fn projected_values(select: &Map<String, Value>) -> Vec<&Map<String, Value>> {
+    select
+        .get("expressions")
+        .and_then(Value::as_array)
+        .map_or(&[][..], Vec::as_slice)
+        .iter()
+        .filter_map(|expression| {
+            match expression.get("alias").and_then(|alias| alias.get("this")) {
+                Some(Value::Object(value)) => Some(value),
+                _ => expression.as_object(),
+            }
+        })
+        .collect()
+}
+
+/// Whether each projection of a select is a bare `NULL`.
+fn null_positions(select: &Map<String, Value>) -> Vec<bool> {
+    projected_values(select)
+        .into_iter()
+        .map(|value| value.keys().next().map(String::as_str) == Some(NULL_PAYLOAD_KIND))
+        .collect()
+}
+
+/// The folded alias of each bare `NULL` projection of a select, with its position.
+fn null_names_by_position(select: &Map<String, Value>) -> Vec<(usize, String)> {
+    let expressions: &[Value] = select
+        .get("expressions")
+        .and_then(Value::as_array)
+        .map_or(&[], Vec::as_slice);
+    expressions
+        .iter()
+        .enumerate()
+        .filter_map(|(index, expression)| {
+            let alias_payload = expression.get("alias")?;
+            let name: &str = alias_payload.get("alias")?.get("name")?.as_str()?;
+            let kind: &str = alias_payload.get("this")?.as_object()?.keys().next()?;
+            (kind == NULL_PAYLOAD_KIND).then(|| (index, str::to_lowercase(name)))
+        })
+        .collect()
 }
 
 /// Python's recursive `_first_select`, depth first in payload order, without recursion.
