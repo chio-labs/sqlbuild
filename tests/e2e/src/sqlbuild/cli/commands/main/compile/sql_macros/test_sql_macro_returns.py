@@ -161,6 +161,16 @@ _ROUNDED: dict[str, str] = {
             expected_fragments=("0 errors, 0 warnings",),
         ),
         SqlMacroCompileTestCase(
+            description="a_body_with_an_untyped_function_is_not_checked_against_returns",
+            files={
+                **_SNOWFLAKE_PROJECT,
+                **text_macro("m", "FLOAT", "COALESCE(TRY_TO_DOUBLE(@value), 0)"),
+                **orders_model('SELECT @sql.m(o.status) AS v FROM __ref("stg_orders") AS o\n'),
+            },
+            expected_returncode=0,
+            expected_fragments=("0 errors, 0 warnings",),
+        ),
+        SqlMacroCompileTestCase(
             description="an_untyped_call_without_returns_suggests_returns_on_k003",
             files={
                 **untyped_text_macro("m", "@value", argument="ANY"),
@@ -189,6 +199,20 @@ _ROUNDED: dict[str, str] = {
                 'error[SQBRCONTRACT105]: output "v" is calculated without an outer explicit cast',
                 "Declare returns VARCHAR in SQL macro m(), or wrap the call in CAST(... AS VARCHAR).",
             ),
+        ),
+        SqlMacroCompileTestCase(
+            description="a_cast_inside_a_typed_body_is_not_the_outputs_cast",
+            files={
+                **with_rules("SQBRCONTRACT105"),
+                **text_macro("m", "VARCHAR", "CAST(LENGTH(@value) AS TEXT)"),
+                **contract_model(
+                    "orders",
+                    "v (type VARCHAR)",
+                    'SELECT @sql.m(o.status) AS v FROM __ref("stg_orders") AS o\n',
+                ),
+            },
+            expected_returncode=0,
+            expected_fragments=("0 errors, 0 warnings",),
         ),
     ],
     ids=lambda case: case.description,

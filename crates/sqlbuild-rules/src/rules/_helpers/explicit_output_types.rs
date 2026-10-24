@@ -187,9 +187,7 @@ impl OutputRule<'_> {
                 .cast_type
                 .as_ref()
                 .is_some_and(|data_type| type_spelling_equal(data_type, &column.data_type));
-            let call: Option<&TypedCall> = (!explicit_cast)
-                .then(|| self.whole_call(expression))
-                .flatten();
+            let call: Option<&TypedCall> = self.whole_call(expression);
             let passes = cast_matches_contract
                 || column.type_proven && direct && !scope.set_branch
                 || column.type_proven
