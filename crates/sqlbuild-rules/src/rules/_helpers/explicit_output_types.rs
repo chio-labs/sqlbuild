@@ -1,4 +1,5 @@
 use sqlbuild_analysis::sql_macros::models::TypedCall;
+use sqlbuild_analysis::type_system::main::normalize_type::normalize_type;
 
 use crate::constants::ENFORCED_CONTRACT;
 use crate::models::{Column, Fault, Model, RuleMetadata};
@@ -20,9 +21,15 @@ struct OutputRule<'a> {
     model: &'a Model,
     rule: &'a RuleMetadata,
     faults: &'a FaultCollector,
+    dialect: &'a str,
 }
 
-pub(crate) fn evaluate(parsed: &ParsedModel<'_>, rule: &RuleMetadata, faults: &FaultCollector) {
+pub(crate) fn evaluate(
+    parsed: &ParsedModel<'_>,
+    rule: &RuleMetadata,
+    faults: &FaultCollector,
+    dialect: &str,
+) {
     let model = parsed.model;
     let query = parsed.facts;
     if model
@@ -46,6 +53,7 @@ pub(crate) fn evaluate(parsed: &ParsedModel<'_>, rule: &RuleMetadata, faults: &F
         model,
         rule,
         faults,
+        dialect,
     };
     if let Some((boundary, columns)) = final_cte_output_boundary(query, &model.columns) {
         evaluator.evaluate_set(
@@ -182,11 +190,10 @@ impl OutputRule<'_> {
                 continue;
             };
             let direct = expression.direct_column.is_some();
-            let explicit_cast = expression.cast_type.is_some();
             let cast_matches_contract = expression
                 .cast_type
                 .as_ref()
-                .is_some_and(|data_type| type_spelling_equal(data_type, &column.data_type));
+                .is_some_and(|data_type| same_type(data_type, &column.data_type, self.dialect));
             let call: Option<&TypedCall> = self.whole_call(expression);
             let passes = cast_matches_contract
                 || column.type_proven && direct && !scope.set_branch
@@ -197,9 +204,25 @@ impl OutputRule<'_> {
                 continue;
             }
             let name = output_name.unwrap_or_else(|| column.name.clone());
-            let reason = if explicit_cast && !cast_matches_contract {
-                "has an outer cast that does not target its declared contract type"
-            } else if direct && scope.set_branch {
+            if let Some(cast_type) = expression
+                .cast_type
+                .as_ref()
+                .filter(|_| !cast_matches_contract)
+            {
+                self.push(
+                    expression.span.map(|(start, _)| start).or(expression.start),
+                    format!(
+                        "output {name:?} has an outer cast to {cast_type}, which is not its declared contract type {}",
+                        column.data_type
+                    ),
+                    format!(
+                        "Change the outer cast to CAST(... AS {}).",
+                        column.data_type
+                    ),
+                );
+                continue;
+            }
+            let reason = if direct && scope.set_branch {
                 "is in a set-operation branch that must cast each output explicitly"
             } else if direct {
                 "is a passthrough whose type is not proven against the declared contract"
@@ -423,6 +446,21 @@ fn set_expression_output_names_with_missing(set_expr: &SetFacts) -> Option<Vec<O
             Some(names)
         }
         SetFacts::Other => None,
+    }
+}
+
+/// Whether two type spellings name one type in `dialect`, such as Snowflake `VARCHAR` and `STRING`.
+fn same_type(left: &str, right: &str, dialect: &str) -> bool {
+    if type_spelling_equal(left, right) {
+        return true;
+    }
+    match (normalize_type(left, dialect), normalize_type(right, dialect)) {
+        (Ok(left), Ok(right)) => {
+            left.parse_error.is_none()
+                && right.parse_error.is_none()
+                && left.normalized == right.normalized
+        }
+        _ => false,
     }
 }
 

@@ -144,7 +144,7 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
         .as_ref()
         .map_err(|error| unparsed(error))?;
     let quote_policy = rules_quote_policy(&request.dialect);
-    let source = ModelSource::new(&model.query_sql, &shape.offsets);
+    let source = ModelSource::new(&model.query_sql, &shape.offsets, model.query_line_offset);
     let classification = classify_model(facts, model, &shape.calls);
     let parsed = ParsedModel {
         facts,
@@ -194,7 +194,7 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
         typed_contract_columns::evaluate(parsed.model, rule, &faults);
     }
     if let Some(rule) = metadata("SQBRCONTRACT105") {
-        explicit_output_types::evaluate(&parsed, rule, &faults);
+        explicit_output_types::evaluate(&parsed, rule, &faults, &request.dialect);
     }
     evaluate_naming_rules(&parsed, config, selected, &faults);
     evaluate_literal_rules(&parsed, selected, &faults);

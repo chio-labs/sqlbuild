@@ -1259,3 +1259,13 @@ class RelationshipsTargetCompileTestCase:
     target: str
     expected_exit_code: int
     expected_output_fragment: str
+
+
+@dataclass(frozen=True)
+class ContractCastTypeTestCase:
+    """An outer cast on a contracted Snowflake output, compile's exit code and report fragments."""
+
+    description: str
+    projection: str
+    expected_exit_code: int
+    expected_fragments: tuple[str, ...]
