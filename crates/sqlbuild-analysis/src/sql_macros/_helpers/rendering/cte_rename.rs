@@ -194,16 +194,24 @@ impl<'a> CteReferences<'a> {
         };
         if let Some(with) = with {
             let names: Vec<String> = with.ctes.iter().map(|cte| cte.alias.name.clone()).collect();
+            for (index, cte) in with.ctes.iter().enumerate() {
+                let visible: usize = if with.recursive { index + 1 } else { index };
+                self.frames.push((names[..visible].to_vec(), top));
+                self.visit(&cte.this, false);
+                self.frames.pop();
+            }
             self.frames.push((names, top));
         }
         let scoped: bool = if let Expression::Select(select) = node {
-            let sources: Vec<ScopeSource> = select
+            let mut sources: Vec<ScopeSource> = Vec::new();
+            for source in select
                 .from
                 .iter()
                 .flat_map(|from| &from.expressions)
                 .chain(select.joins.iter().map(|join| &join.this))
-                .filter_map(|source| self.scope_source(source))
-                .collect();
+            {
+                sources.extend(self.scope_sources(source));
+            }
             self.scopes.push(sources);
             true
         } else {
@@ -216,7 +224,9 @@ impl<'a> CteReferences<'a> {
             _ => {}
         }
         for child in node.children() {
-            self.visit(child, false);
+            if !is_cte_body(with, child) {
+                self.visit(child, false);
+            }
         }
         if scoped {
             self.scopes.pop();
@@ -238,25 +248,33 @@ impl<'a> CteReferences<'a> {
             .is_some_and(|(_, body)| *body)
     }
 
-    /// The name a FROM or JOIN item is read as, and whether it is an unaliased body CTE.
-    fn scope_source(&self, source: &Expression) -> Option<ScopeSource> {
+    /// Each name a FROM or JOIN item is read as, and whether it is an unaliased body CTE.
+    fn scope_sources(&self, source: &Expression) -> Vec<ScopeSource> {
+        let aliased = |alias: &Identifier| ScopeSource {
+            name: alias.name.clone(),
+            body_cte: false,
+        };
         match source {
-            Expression::Table(table) => Some(match &table.alias {
-                Some(alias) => ScopeSource {
-                    name: alias.name.clone(),
-                    body_cte: false,
-                },
+            Expression::Table(table) => vec![match &table.alias {
+                Some(alias) => aliased(alias),
                 None => ScopeSource {
                     name: table.name.name.clone(),
                     body_cte: self.is_body_cte(table),
                 },
-            }),
-            Expression::Subquery(subquery) => subquery.alias.as_ref().map(|alias| ScopeSource {
-                name: alias.name.clone(),
-                body_cte: false,
-            }),
-            Expression::Paren(paren) => self.scope_source(&paren.this),
-            _ => None,
+            }],
+            Expression::Subquery(subquery) => subquery.alias.iter().map(aliased).collect(),
+            Expression::JoinedTable(joined) => match &joined.alias {
+                Some(alias) => vec![aliased(alias)],
+                None => {
+                    let mut sources: Vec<ScopeSource> = self.scope_sources(&joined.left);
+                    for join in &joined.joins {
+                        sources.extend(self.scope_sources(&join.this));
+                    }
+                    sources
+                }
+            },
+            Expression::Paren(paren) => self.scope_sources(&paren.this),
+            _ => Vec::new(),
         }
     }
 
@@ -274,6 +292,19 @@ impl<'a> CteReferences<'a> {
             self.found.push(qualifier);
         }
     }
+}
+
+/// Whether `child` is the body of one of `with`'s CTEs, which are visited in their own frames.
+fn is_cte_body(with: Option<&polyglot_sql::expressions::With>, child: &Expression) -> bool {
+    let Some(with) = with else {
+        return false;
+    };
+    for cte in &with.ctes {
+        if std::ptr::eq(&cte.this, child) {
+            return true;
+        }
+    }
+    false
 }
 
 /// Whether `names` holds `name`, ignoring case.

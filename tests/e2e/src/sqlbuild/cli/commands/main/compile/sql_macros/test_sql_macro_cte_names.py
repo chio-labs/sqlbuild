@@ -123,6 +123,30 @@ _CTE_LIST_TEST: str = (
             query="SELECT order_id FROM orders",
             expected_rows=[(2,)],
         ),
+        SqlMacroBuildTestCase(
+            description="a_cte_read_in_a_parenthesised_join",
+            files=picked_orders(
+                "WITH live AS (SELECT * FROM @src WHERE order_id = 2),\nlatest AS (SELECT live.order_id FROM (live JOIN @src AS s ON live.order_id = s.order_id))"
+            ),
+            query="SELECT order_id FROM orders",
+            expected_rows=[(2,)],
+        ),
+        SqlMacroBuildTestCase(
+            description="a_cte_read_in_a_nested_parenthesised_join",
+            files=picked_orders(
+                "WITH live AS (SELECT * FROM @src WHERE order_id = 2),\nlatest AS (SELECT live.order_id FROM ((live JOIN @src AS s ON live.order_id = s.order_id) JOIN @src AS t ON t.order_id = live.order_id))"
+            ),
+            query="SELECT order_id FROM orders",
+            expected_rows=[(2,)],
+        ),
+        SqlMacroBuildTestCase(
+            description="a_nested_cte_reading_the_cte_it_shadows",
+            files=picked_orders(
+                "WITH live AS (SELECT * FROM @src WHERE order_id = 2),\nlatest AS (WITH live AS (SELECT * FROM live WHERE order_id > 0) SELECT order_id FROM live)"
+            ),
+            query="SELECT order_id FROM orders",
+            expected_rows=[(2,)],
+        ),
     ],
     ids=lambda case: case.description,
 )
