@@ -5,7 +5,8 @@ use crate::sql_macros::errors::ExpansionFailure;
 use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::main::parse_sql_macro::parse_sql_macro;
 use crate::sql_macros::models::{
-    CallScope, SqlMacroCheck, SqlMacroDefinition, TextContext, TypedOutput,
+    CallScope, ExpandedText, RenderedDeclarations, SqlMacroCheck, SqlMacroDefinition, TextContext,
+    TextSplice, TypedOutput,
 };
 use crate::sql_macros::tests::test_types::{AsciiArguments, FakeHost};
 use crate::sql_macros::types::{ConstantShape, SqlMacroHost, SqlMacroScope};
@@ -53,11 +54,28 @@ impl SqlMacroHost for FakeHost {
         &self,
         _scope: &SqlMacroScope,
         text: &str,
-    ) -> Result<String, ExpansionFailure<String>> {
-        let mut rendered: String = text.to_owned();
-        for (reference, value) in DECLARATIONS {
-            rendered = rendered.replace(reference, value);
+    ) -> Result<RenderedDeclarations, ExpansionFailure<String>> {
+        let mut rendered: RenderedDeclarations = RenderedDeclarations::default();
+        let mut cursor: usize = 0;
+        while let Some((start, reference, value)) = DECLARATIONS
+            .iter()
+            .filter_map(|(reference, value)| {
+                text[cursor..]
+                    .find(reference)
+                    .map(|found| (cursor + found, *reference, *value))
+            })
+            .min_by_key(|(start, _, _)| *start)
+        {
+            rendered.sql.push_str(&text[cursor..start]);
+            let output_start: usize = rendered.sql.len();
+            rendered.sql.push_str(value);
+            rendered.splices.push(TextSplice {
+                source: (start, start + reference.len()),
+                output: (output_start, rendered.sql.len()),
+            });
+            cursor = start + reference.len();
         }
+        rendered.sql.push_str(&text[cursor..]);
         Ok(rendered)
     }
 
@@ -96,6 +114,15 @@ pub(super) fn expanded_for(
     macros: &[(&str, &str)],
     sql: &str,
 ) -> Result<String, SqlMacroError> {
+    expanded_text_for(adapter, macros, sql).map(|expanded| expanded.sql)
+}
+
+/// `sql` expanded with `macros` for `adapter` with its typed calls, or the error it raised.
+pub(super) fn expanded_text_for(
+    adapter: &'static str,
+    macros: &[(&str, &str)],
+    sql: &str,
+) -> Result<ExpandedText, SqlMacroError> {
     let host: FakeHost = FakeHost::new(macros, adapter);
     let context = TextContext {
         text: sql,

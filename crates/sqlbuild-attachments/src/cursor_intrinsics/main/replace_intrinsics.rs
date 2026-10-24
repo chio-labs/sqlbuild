@@ -11,12 +11,23 @@ pub fn replace_intrinsics(
     context: &str,
     replacement: impl Fn(&str) -> String,
 ) -> Result<(String, bool), String> {
+    replace_intrinsics_with_spans(sql, context, replacement)
+        .map(|(replaced, spans)| (replaced, !spans.is_empty()))
+}
+
+/// `sql` with each cursor intrinsic call replaced, and each call's byte range
+/// `(source start, source end, output start, output end)`, or the malformed-call error.
+pub fn replace_intrinsics_with_spans(
+    sql: &str,
+    context: &str,
+    replacement: impl Fn(&str) -> String,
+) -> Result<(String, Vec<(usize, usize, usize, usize)>), String> {
     if !contains_intrinsic_name(sql) {
-        return Ok((sql.to_owned(), false));
+        return Ok((sql.to_owned(), Vec::new()));
     }
     let mut replaced: String = String::with_capacity(sql.len());
     let mut last: usize = 0;
-    let mut found: bool = false;
+    let mut spans: Vec<(usize, usize, usize, usize)> = Vec::new();
     let mut index: usize = 0;
     while index < sql.len() {
         let (name, end): (&str, usize) = match step(sql, index) {
@@ -45,11 +56,12 @@ pub fn replace_intrinsics(
             }
         };
         replaced.push_str(&sql[last..index]);
+        let output_start: usize = replaced.len();
         replaced.push_str(&replacement(name));
+        spans.push((index, close + 1, output_start, replaced.len()));
         last = close + 1;
         index = close + 1;
-        found = true;
     }
     replaced.push_str(&sql[last..]);
-    Ok((replaced, found))
+    Ok((replaced, spans))
 }

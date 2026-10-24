@@ -164,6 +164,8 @@ pub struct RenderedArgument {
     pub parameter: usize,
     pub sql: String,
     pub shape: ArgumentShape,
+    /// The expression macro calls `sql` holds.
+    pub calls: Vec<TypedCall>,
 }
 
 /// One expansion's SQL and the names it defines, for clash checks at the call site.
@@ -173,6 +175,41 @@ pub struct BodyExpansion {
     pub sql: String,
     /// The CTE names a CTE-list macro defines, or the column names a column-list macro outputs.
     pub names: Vec<String>,
+    /// The expression macro calls the SQL holds, from the body and the arguments.
+    pub calls: Vec<TypedCall>,
+}
+
+/// One expression macro call's expansion in a text: its byte range and the macro's `returns`.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct TypedCall {
+    pub start: usize,
+    pub end: usize,
+    pub macro_name: String,
+    /// The macro's declared result type; `None` when it declares none.
+    pub returns: Option<String>,
+}
+
+/// SQL an expansion produced and the expression macro calls it holds.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ExpandedText {
+    pub sql: String,
+    /// Each expression macro call in `sql`, inner calls before the calls holding them.
+    pub calls: Vec<TypedCall>,
+}
+
+/// A replaced byte range of a text, and the byte range its replacement fills in the output.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TextSplice {
+    pub source: (usize, usize),
+    pub output: (usize, usize),
+}
+
+/// A text with its `@const` and `@enum` references rendered, and where each one landed.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RenderedDeclarations {
+    pub sql: String,
+    /// The rendered references in text order.
+    pub splices: Vec<TextSplice>,
 }
 
 /// Where in the caller a call stands, as the text around it shows.

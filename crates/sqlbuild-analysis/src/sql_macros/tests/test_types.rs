@@ -96,3 +96,19 @@ pub(super) struct MacroQuoteErrorTestCase {
     pub(super) expected_message: &'static str,
     pub(super) expected_location: (usize, usize),
 }
+
+/// A text expanded with its typed calls, each shown as `macro returns: text`.
+pub(super) struct TypedCallTestCase {
+    pub(super) description: &'static str,
+    pub(super) macros: &'static [(&'static str, &'static str)],
+    pub(super) sql: &'static str,
+    pub(super) expected_calls: &'static [&'static str],
+}
+
+/// A compiled text and its calls, with the analysis text the markers make of it.
+pub(super) struct TypedAnalysisTestCase {
+    pub(super) description: &'static str,
+    pub(super) sql: &'static str,
+    pub(super) calls: &'static [(usize, usize, Option<&'static str>)],
+    pub(super) expected_sql: &'static str,
+}

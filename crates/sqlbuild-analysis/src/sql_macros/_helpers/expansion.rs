@@ -15,6 +15,7 @@ use crate::sql_macros::_helpers::literal_positions::{
 use crate::sql_macros::_helpers::parameters::{ParameterReference, parameter_references};
 use crate::sql_macros::_helpers::placement::top_level_parts;
 use crate::sql_macros::_helpers::placement::{CallSite, cte_names, select_names};
+use crate::sql_macros::_helpers::typed_calls::{shifted, spliced};
 use crate::sql_macros::constants::{
     ARGUMENT_CODE, CTE_NOUN, CYCLE_CODE, INVALID_DEFINITION_CODE, MISPLACED_CALL_CODE,
     NAME_CLASH_CODE,
@@ -23,8 +24,9 @@ use crate::sql_macros::errors::ExpansionFailure;
 use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::models::{
     ArgumentCheck, ArgumentExpectation, ArgumentShape, BodyExpansion, BoundArgument, CallPosition,
-    CallScope, InsertedNames, ParameterKind, RenderedArgument, SqlMacroCall, SqlMacroCheck,
-    SqlMacroDefinition, SqlMacroForm, SqlMacroLocation, TextContext, TypedOutput,
+    CallScope, ExpandedText, InsertedNames, ParameterKind, RenderedArgument, RenderedDeclarations,
+    SqlMacroCall, SqlMacroCheck, SqlMacroDefinition, SqlMacroForm, SqlMacroLocation, TextContext,
+    TypedCall, TypedOutput,
 };
 use crate::sql_macros::types::{ConstantShape, SqlMacroHost, SqlMacroScope};
 
@@ -123,10 +125,13 @@ fn located<E>(failure: ExpansionFailure<E>, location: &SqlMacroLocation) -> Expa
 pub(crate) fn expand_text<H: SqlMacroHost>(
     host: &H,
     context: &TextContext<'_>,
-) -> Result<String, ExpansionFailure<H::Error>> {
+) -> Result<ExpandedText, ExpansionFailure<H::Error>> {
     let calls: Vec<SqlMacroCall> = sql_macro_calls(context.text)?;
     if calls.is_empty() {
-        return host.render_declarations(context.scope, context.text);
+        return Ok(ExpandedText {
+            sql: host.render_declarations(context.scope, context.text)?.sql,
+            calls: Vec::new(),
+        });
     }
     let scanned: Vec<Token> = tokens(context.text).map_err(|_| {
         SqlMacroError::new(
@@ -135,17 +140,23 @@ pub(crate) fn expand_text<H: SqlMacroHost>(
         )
     })?;
     let mut inserted: InsertedNames = InsertedNames::default();
-    let mut spliced: String = String::with_capacity(context.text.len());
+    let mut spliced_text: String = String::with_capacity(context.text.len());
+    let mut typed: Vec<TypedCall> = Vec::new();
     let mut cursor: usize = 0;
     for call in &calls {
         let (expansion, updated) = expand_call(host, context, (&scanned, inserted), call)?;
         inserted = updated;
-        spliced.push_str(&context.text[cursor..call.start]);
-        spliced.push_str(&expansion);
+        spliced_text.push_str(&context.text[cursor..call.start]);
+        typed.extend(shifted(expansion.calls, spliced_text.len()));
+        spliced_text.push_str(&expansion.sql);
         cursor = call.replaced_end;
     }
-    spliced.push_str(&context.text[cursor..]);
-    host.render_declarations(context.scope, &spliced)
+    spliced_text.push_str(&context.text[cursor..]);
+    let rendered: RenderedDeclarations = host.render_declarations(context.scope, &spliced_text)?;
+    Ok(ExpandedText {
+        calls: spliced(typed, &rendered.splices),
+        sql: rendered.sql,
+    })
 }
 
 /// One call's expansion as it replaces the call text in `context.text`.
@@ -154,7 +165,7 @@ pub(crate) fn expand_call<H: SqlMacroHost>(
     context: &TextContext<'_>,
     caller: (&[Token], InsertedNames),
     call: &SqlMacroCall,
-) -> Result<(String, InsertedNames), ExpansionFailure<H::Error>> {
+) -> Result<(ExpandedText, InsertedNames), ExpansionFailure<H::Error>> {
     let (scanned, inserted) = caller;
     let definition: Arc<SqlMacroDefinition> = host.definition(context.scope, &call.name)?;
     if let Some(position) = context.stack.iter().position(|name| *name == call.name) {
@@ -196,7 +207,7 @@ pub(crate) fn expand_call<H: SqlMacroHost>(
     }
     let mut stack: Vec<String> = context.stack.to_vec();
     stack.push(call.name.clone());
-    let body: String = expand_text(
+    let body: ExpandedText = expand_text(
         host,
         &TextContext {
             text: &definition.body,
@@ -210,7 +221,10 @@ pub(crate) fn expand_call<H: SqlMacroHost>(
         .map_err(|error| error.at(body_location(&definition)))?;
     if call.in_python {
         return Ok((
-            python_string(&with_line_comment_closed(&expansion.sql, true)),
+            ExpandedText {
+                sql: python_string(&with_line_comment_closed(&expansion.sql, true)),
+                calls: Vec::new(),
+            },
             inserted,
         ));
     }
@@ -296,15 +310,19 @@ fn rendered_argument<H: SqlMacroHost>(
         .at(parameter_location.clone())
         .into()
     };
-    let sql: String = match (&parameter.kind, &shape) {
-        (ParameterKind::Collection { .. }, ArgumentShape::InlineCollection) => {
-            host.render_collection(text)?
-        }
+    let rendered: ExpandedText = match (&parameter.kind, &shape) {
+        (ParameterKind::Collection { .. }, ArgumentShape::InlineCollection) => ExpandedText {
+            sql: host.render_collection(text)?,
+            calls: Vec::new(),
+        },
         (ParameterKind::Collection { .. }, ArgumentShape::ConstantReference { name }) => {
             if host.constant_shape(scope, name)? != ConstantShape::Collection {
                 return Err(expects("a list or set constant"));
             }
-            host.render_declarations(scope, text)?
+            ExpandedText {
+                sql: host.render_declarations(scope, text)?.sql,
+                calls: Vec::new(),
+            }
         }
         (
             ParameterKind::Constant { .. } | ParameterKind::Any,
@@ -313,9 +331,15 @@ fn rendered_argument<H: SqlMacroHost>(
             if host.constant_shape(scope, name)? != ConstantShape::Scalar {
                 return Err(expects("a scalar constant"));
             }
-            host.render_declarations(scope, text)?
+            ExpandedText {
+                sql: host.render_declarations(scope, text)?.sql,
+                calls: Vec::new(),
+            }
         }
-        (ParameterKind::Relation { .. } | ParameterKind::ColumnOf { .. }, _) => text.to_owned(),
+        (ParameterKind::Relation { .. } | ParameterKind::ColumnOf { .. }, _) => ExpandedText {
+            sql: text.to_owned(),
+            calls: Vec::new(),
+        },
         _ => expand_text(
             host,
             &TextContext {
@@ -328,8 +352,9 @@ fn rendered_argument<H: SqlMacroHost>(
     };
     Ok(RenderedArgument {
         parameter: argument.parameter,
-        sql,
+        sql: rendered.sql,
         shape,
+        calls: rendered.calls,
     })
 }
 
@@ -351,13 +376,39 @@ fn python_string(sql: &str) -> String {
     quoted
 }
 
-/// The expansion placed at the call, or why it cannot stand there or clashes.
+/// The expansion placed at the call with the calls it holds, or why it cannot stand there.
 fn placed(
     definition: &SqlMacroDefinition,
     (site, inserted, line_continues): (&CallSite<'_>, InsertedNames, bool),
     expansion: &BodyExpansion,
     owner: &str,
-) -> Result<(String, InsertedNames), SqlMacroError> {
+) -> Result<(ExpandedText, InsertedNames), SqlMacroError> {
+    let (text, inserted, prefix) = placed_text(
+        definition,
+        (site, inserted, line_continues),
+        expansion,
+        owner,
+    )?;
+    let mut calls: Vec<TypedCall> = shifted(expansion.calls.clone(), prefix).collect();
+    if definition.form == SqlMacroForm::Expression {
+        let comma: usize = site.expression_separator().len();
+        calls.push(TypedCall {
+            start: 0,
+            end: text.len() - comma,
+            macro_name: definition.name.clone(),
+            returns: definition.returns.clone(),
+        });
+    }
+    Ok((ExpandedText { sql: text, calls }, inserted))
+}
+
+/// The expansion's text placed at the call, and where the expansion starts in it.
+fn placed_text(
+    definition: &SqlMacroDefinition,
+    (site, inserted, line_continues): (&CallSite<'_>, InsertedNames, bool),
+    expansion: &BodyExpansion,
+    owner: &str,
+) -> Result<(String, InsertedNames, usize), SqlMacroError> {
     let closed = |after: &str| {
         let followed: bool = match after.chars().next() {
             None => line_continues,
@@ -375,9 +426,9 @@ fn placed(
             }
             let comma: &str = site.expression_separator();
             if site.expression_needs_parentheses() && !is_atomic(&expansion.sql) {
-                Ok((format!("({}){comma}", closed(")")), inserted))
+                Ok((format!("({}){comma}", closed(")")), inserted, 1))
             } else {
-                Ok((format!("{}{comma}", closed(comma)), inserted))
+                Ok((format!("{}{comma}", closed(comma)), inserted, 0))
             }
         }
         SqlMacroForm::CteList => {
@@ -399,7 +450,11 @@ fn placed(
                 ("CTE", owner),
             )?;
             let (before, after) = site.cte_separators();
-            Ok((format!("{before}{}{after}", closed(after)), inserted))
+            Ok((
+                format!("{before}{}{after}", closed(after)),
+                inserted,
+                before.len(),
+            ))
         }
         SqlMacroForm::ColumnList => {
             if position != CallPosition::SelectList {
@@ -429,7 +484,11 @@ fn placed(
                 ("column", owner),
             )?;
             let (before, after) = site.column_separators();
-            Ok((format!("{before}{}{after}", closed(after)), inserted))
+            Ok((
+                format!("{before}{}{after}", closed(after)),
+                inserted,
+                before.len(),
+            ))
         }
     }
 }
