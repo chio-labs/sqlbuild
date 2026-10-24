@@ -36,7 +36,7 @@ fn column_v(lines: &[Vec<String>]) -> String {
         .unwrap_or_else(|| format!("no v in {:?}", lines[0]))
 }
 
-const CASES: [TypedMarkerTestCase; 6] = [
+const CASES: [TypedMarkerTestCase; 7] = [
     TypedMarkerTestCase {
         description: "an unknown body takes the asserted type",
         sql: "SELECT __polyglot_typed(bar(amount, 0, 10), 'VARCHAR') AS v FROM __ref(\"staged\")",
@@ -45,6 +45,11 @@ const CASES: [TypedMarkerTestCase; 6] = [
     TypedMarkerTestCase {
         description: "a known body keeps its inferred type",
         sql: "SELECT __polyglot_typed(order_id, 'VARCHAR') AS v FROM __ref(\"staged\")",
+        expected_column: "v INT ",
+    },
+    TypedMarkerTestCase {
+        description: "a known aliased column keeps its inferred type",
+        sql: "SELECT __polyglot_typed(o.order_id, 'VARCHAR') AS v FROM __ref(\"staged\") AS o",
         expected_column: "v INT ",
     },
     TypedMarkerTestCase {

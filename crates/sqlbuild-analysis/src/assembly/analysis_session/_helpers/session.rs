@@ -410,14 +410,27 @@ impl AnalysisSession {
                 .iter()
                 .flatten()
                 .any(|column| column.data_type.is_none());
-            if !required.is_empty() && (untyped || star_pending) && !has_set_operation {
+            // A typed marker asserts its type before upstream star columns are typed, so its
+            // model is re-typed once every input is known.
+            let marked: bool = inputs_known
+                && self.request.models[model]
+                    .query_sql
+                    .contains(polyglot_sql::expressions::TYPED_EXPRESSION_FUNCTION);
+            let analysis: &ModelAnalysis = &self.outcome_mut(model)?.analysis;
+            if !required.is_empty()
+                && (untyped || star_pending || marked && analysis.analysis_succeeded)
+                && !has_set_operation
+            {
                 candidates.push((model, input_schemas, star_pending));
             }
         }
         let enrichments: Vec<Enrichment> = self.native_enrichments(&candidates)?;
         for ((model, _, star_pending), native) in candidates.into_iter().zip(enrichments) {
+            let marked: bool = self.request.models[model]
+                .query_sql
+                .contains(polyglot_sql::expressions::TYPED_EXPRESSION_FUNCTION);
             let outcome: &mut ModelOutcome = self.outcome_mut(model)?;
-            outcome.analysis = enriched_analysis(&outcome.analysis, native, star_pending);
+            outcome.analysis = enriched_analysis(&outcome.analysis, native, (star_pending, marked));
         }
         Ok(())
     }
@@ -813,7 +826,7 @@ fn legacy_outcome(
 fn enriched_analysis(
     analysis: &ModelAnalysis,
     enriched: Enrichment,
-    star_pending: bool,
+    (star_pending, marked): (bool, bool),
 ) -> ModelAnalysis {
     let mut recovered: HashMap<String, String> = HashMap::new();
     for column in enriched
@@ -826,6 +839,17 @@ fn enriched_analysis(
             recovered.insert(column.name.clone(), data_type.clone());
         }
     }
+    // A marked model's enrichment knows every input, so its types replace earlier assertions.
+    let retyped: HashMap<String, String> = if marked && enriched.analysis_succeeded {
+        enriched
+            .columns
+            .iter()
+            .flatten()
+            .filter_map(|column| Some((column.name.clone(), column.data_type.clone()?)))
+            .collect()
+    } else {
+        HashMap::new()
+    };
     let star_expanded: bool = star_pending && enriched.analysis_succeeded;
     let replaced: bool =
         (!has_columns(analysis.columns.as_ref()) || star_expanded) && enriched.analysis_succeeded;
@@ -844,7 +868,9 @@ fn enriched_analysis(
     };
     let mut columns: Vec<ColumnFact> = merged.columns.take().unwrap_or_default();
     for column in &mut columns {
-        if column.data_type.as_deref().is_none_or(str::is_empty) {
+        if let Some(data_type) = retyped.get(&column.name) {
+            column.data_type = Some(data_type.clone());
+        } else if column.data_type.as_deref().is_none_or(str::is_empty) {
             column.data_type = recovered.get(&column.name).cloned();
         }
     }
