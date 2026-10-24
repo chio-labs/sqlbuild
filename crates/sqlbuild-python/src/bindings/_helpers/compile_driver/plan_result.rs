@@ -13,6 +13,8 @@ use crate::bindings::_helpers::compile_driver::python_plan_entries::{
 use crate::bindings::_helpers::planner_entries::execution_plan::build_execution_plan;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::records::construct::new_record_with;
+use std::collections::HashSet;
+
 use pyo3::exceptions::PyException;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet};
@@ -36,6 +38,29 @@ pub(crate) struct PlanningInputs<'a, 'py> {
     pub(crate) discovered_inputs: &'a Bound<'py, PyAny>,
     pub(crate) adapter: &'a Bound<'py, PyAny>,
     pub(crate) connection: &'a Bound<'py, PyAny>,
+}
+
+/// The selected Python nodes, without source loaders when loading is off and nothing is selected.
+fn runnable_python_nodes<'py>(
+    names: &Bound<'py, PyAny>,
+    (options, select): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    discovered: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    if native_field(options, "auto_load_sources")?.is_truthy()? || select.is_truthy()? {
+        return Ok(names.clone());
+    }
+    let mut loaders: HashSet<String> = HashSet::new();
+    for loader in native_field(discovered, "loader_functions")?.try_iter()? {
+        loaders.insert(native_field(&loader?, "name")?.extract()?);
+    }
+    let mut runnable: Vec<String> = Vec::new();
+    for name in names.try_iter()? {
+        let name: String = name?.extract()?;
+        if !loaders.contains(&name) {
+            runnable.push(name);
+        }
+    }
+    Ok(PyFrozenSet::new(names.py(), runnable)?.into_any())
 }
 
 /// Plan the compiled project over an open connection and attach Python node plans.
@@ -67,7 +92,11 @@ pub(crate) fn pipeline_result<'py>(
         run_selection =
             run_selection_from_inputs((select.extract()?, exclude.extract()?), &graph, discovered)?;
         selected_sql_keys = native_field(&run_selection, "sql_keys")?;
-        selected_python_node_names = native_field(&run_selection, "python_node_names")?;
+        selected_python_node_names = runnable_python_nodes(
+            &native_field(&run_selection, "python_node_names")?,
+            (options, &select),
+            discovered,
+        )?;
         python_read_source_names = python_read_source_names_for(
             py,
             Some(keywords(

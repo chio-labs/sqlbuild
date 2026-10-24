@@ -1419,3 +1419,13 @@ class UnbuiltDependencyBuildE2ETestCase:
     repo_files: dict[str, str]
     expected_stdout_fragments: tuple[str, ...]
     unexpected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class NoLoadBuildE2ETestCase:
+    """A second build that must not reload a managed source, and how it is asked not to."""
+
+    description: str
+    second_build: tuple[str, ...]
+    project_settings: str = ""
+    expected_order_rows: int = 1
