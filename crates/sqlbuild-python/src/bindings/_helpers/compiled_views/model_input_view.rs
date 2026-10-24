@@ -9,6 +9,7 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{FromPyObject, IntoPyObject, pyclass, pymethods};
 use sqlbuild_analysis::compiled_project::models::SchemaColumnFact;
+use sqlbuild_analysis::sql_macros::main::typed_analysis_sql::typed_analysis_sql;
 use sqlbuild_analysis::sql_macros::models::SqlMacroCheck;
 
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
@@ -548,16 +549,6 @@ pub(crate) fn input_model_name(model_input: &Bound<'_, PyAny>) -> PyResult<Strin
         .extract()
 }
 
-/// The compiled query of `model_input`; a native input answers from its record.
-pub(crate) fn input_query_sql(model_input: &Bound<'_, PyAny>) -> PyResult<String> {
-    if let Ok(native) = model_input.cast::<NativeModelInput>() {
-        return native.get().read(model_input.py(), |record, _| {
-            Ok(record.query_sql.to_string())
-        });
-    }
-    native_field(model_input, "query_sql")?.extract()
-}
-
 /// What the analysed SQL of a native model input must show for its SQL macro calls to fit.
 pub(crate) fn input_sql_macro_checks(
     model_input: &Bound<'_, PyAny>,
@@ -568,6 +559,19 @@ pub(crate) fn input_sql_macro_checks(
         });
     }
     Ok(Vec::new())
+}
+
+/// The analysis text of `model_input`: its compiled query with each typed SQL macro call marked.
+pub(crate) fn input_analysis_sql(
+    model_input: &Bound<'_, PyAny>,
+    dialect: &str,
+) -> PyResult<String> {
+    if let Ok(native) = model_input.cast::<NativeModelInput>() {
+        return native.get().read(model_input.py(), |record, _| {
+            Ok(typed_analysis_sql(&record.query_sql, &record.typed_calls, dialect).0)
+        });
+    }
+    native_field(model_input, "query_sql")?.extract()
 }
 
 /// Each reference of `model_input` as `(kind, name, package, call argument count)`.

@@ -76,11 +76,14 @@ fn orders_by_all(select: &Select) -> bool {
         .order_by
         .iter()
         .flat_map(|order| order.expressions.iter())
-        .any(|ordered| {
-            matches!(&ordered.this, Expression::Column(column)
-                if column.table.is_none()
+        .any(|ordered| match &ordered.this {
+            Expression::Column(column) => {
+                column.table.is_none()
                     && !column.name.quoted
-                    && column.name.name.eq_ignore_ascii_case(ORDER_BY_ALL))
+                    && column.name.name.eq_ignore_ascii_case(ORDER_BY_ALL)
+            }
+            Expression::Var(var) => var.this.eq_ignore_ascii_case(ORDER_BY_ALL),
+            _ => false,
         })
 }
 

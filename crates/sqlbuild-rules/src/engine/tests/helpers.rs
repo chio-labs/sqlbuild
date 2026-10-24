@@ -710,6 +710,7 @@ pub(crate) fn every_field_model() -> Model {
         enum_columns: vec!["status".to_owned()],
         enum_declarations: vec![declaration.clone()],
         constant_declarations: vec![declaration],
+        typed_calls: Vec::new(),
         declared_audit_count: 3,
         targeting_test_count: 4,
         empty_input_only_test_count: 0,

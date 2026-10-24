@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use crate::sql_macros::_helpers::expansion::expand_text;
+use crate::sql_macros::_helpers::rendering::expansion::expand_text;
 use crate::sql_macros::errors::ExpansionFailure;
 use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::main::parse_sql_macro::parse_sql_macro;
 use crate::sql_macros::models::{
-    CallScope, SqlMacroCheck, SqlMacroDefinition, TextContext, TypedOutput,
+    ExpandedText, RenderedDeclarations, SqlMacroDefinition, TextContext, TextSplice, TypedCall,
 };
 use crate::sql_macros::tests::test_types::{AsciiArguments, FakeHost};
 use crate::sql_macros::types::{ConstantShape, SqlMacroHost, SqlMacroScope};
@@ -53,11 +53,28 @@ impl SqlMacroHost for FakeHost {
         &self,
         _scope: &SqlMacroScope,
         text: &str,
-    ) -> Result<String, ExpansionFailure<String>> {
-        let mut rendered: String = text.to_owned();
-        for (reference, value) in DECLARATIONS {
-            rendered = rendered.replace(reference, value);
+    ) -> Result<RenderedDeclarations, ExpansionFailure<String>> {
+        let mut rendered: RenderedDeclarations = RenderedDeclarations::default();
+        let mut cursor: usize = 0;
+        while let Some((start, reference, value)) = DECLARATIONS
+            .iter()
+            .filter_map(|(reference, value)| {
+                text[cursor..]
+                    .find(reference)
+                    .map(|found| (cursor + found, *reference, *value))
+            })
+            .min_by_key(|(start, _, _)| *start)
+        {
+            rendered.sql.push_str(&text[cursor..start]);
+            let output_start: usize = rendered.sql.len();
+            rendered.sql.push_str(value);
+            rendered.splices.push(TextSplice {
+                source: (start, start + reference.len()),
+                output: (output_start, rendered.sql.len()),
+            });
+            cursor = start + reference.len();
         }
+        rendered.sql.push_str(&text[cursor..]);
         Ok(rendered)
     }
 
@@ -96,6 +113,15 @@ pub(super) fn expanded_for(
     macros: &[(&str, &str)],
     sql: &str,
 ) -> Result<String, SqlMacroError> {
+    expanded_text_for(adapter, macros, sql).map(|expanded| expanded.sql)
+}
+
+/// `sql` expanded with `macros` for `adapter` with its typed calls, or the error it raised.
+pub(super) fn expanded_text_for(
+    adapter: &'static str,
+    macros: &[(&str, &str)],
+    sql: &str,
+) -> Result<ExpandedText, SqlMacroError> {
     let host: FakeHost = FakeHost::new(macros, adapter);
     let context = TextContext {
         text: sql,
@@ -129,18 +155,34 @@ impl sqlbuild_render::macro_arguments::types::ArgumentHost for AsciiArguments {
     }
 }
 
-/// A check recording output `label` of `shout()`, typed VARCHAR, at `scope`'s `branch`.
-pub(super) fn typed_check(scope: CallScope, branch: usize) -> SqlMacroCheck {
-    SqlMacroCheck {
-        macro_name: "shout".to_owned(),
-        scope,
-        plain_select: true,
-        arguments: Vec::new(),
-        call: None,
-        output: Some(TypedOutput {
-            name: "label".to_owned(),
-            returns: "VARCHAR".to_owned(),
-            branch,
-        }),
-    }
+/// Each call as `macro returns: text`.
+pub(super) fn shown_typed_calls(sql: &str, calls: &[TypedCall]) -> Vec<String> {
+    calls
+        .iter()
+        .map(|call| {
+            format!(
+                "{} {}: {}",
+                call.macro_name,
+                call.returns.as_deref().unwrap_or("-"),
+                &sql[call.start..call.end]
+            )
+        })
+        .collect()
+}
+
+/// An untyped `shout` call of each text in `sql`.
+pub(super) fn untyped_calls(sql: &str, texts: &[&str]) -> Vec<TypedCall> {
+    texts
+        .iter()
+        .map(|text| {
+            let start: usize = sql.find(text).unwrap_or_default();
+            TypedCall {
+                returns_like: None,
+                start,
+                end: start + text.len(),
+                macro_name: "shout".to_owned(),
+                returns: None,
+            }
+        })
+        .collect()
 }

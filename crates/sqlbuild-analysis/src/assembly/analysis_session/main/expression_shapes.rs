@@ -66,7 +66,6 @@ pub fn expression_shapes(
                             function_return_types: &request.function_return_types,
                             rules: request.nullability_rules.as_ref(),
                             callback: request.nullability_callback.as_ref(),
-                            declared: &[],
                         },
                     })
                 })?;

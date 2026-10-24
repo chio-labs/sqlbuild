@@ -23,6 +23,8 @@ pub struct ContractModel {
     pub fast_lineage_has_star: bool,
     pub dynamic_proof: Option<DynamicContractProof>,
     pub unchecked_output_columns: Vec<String>,
+    /// Output columns that are one call to a SQL macro without `returns`, with the macro's name.
+    pub untyped_call_outputs: Vec<(String, String)>,
 }
 
 /// The declared shape of one model.

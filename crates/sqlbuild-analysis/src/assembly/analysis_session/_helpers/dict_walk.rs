@@ -2,7 +2,7 @@
 
 use polyglot_sql::expressions::Cte;
 use polyglot_sql::traversal::ExpressionWalk;
-use polyglot_sql::{ComplexityGuardOptions, Dialect, Expression, ParseOptions, ast_json};
+use polyglot_sql::{ComplexityGuardOptions, DataType, Dialect, Expression, ParseOptions, ast_json};
 use serde_json::{Map, Value, json};
 
 use crate::assembly::analysis_session::models::ProjectionFacts;
@@ -252,6 +252,28 @@ pub(crate) fn unwrap_annotations(mut node: Option<&Expression>) -> Option<&Expre
         node = node.and_then(Expression::get_this);
     }
     node
+}
+
+/// What a type assertion asserts: a type, or the type of another expression.
+pub(crate) enum Assertion<'a> {
+    Fixed(&'a DataType),
+    Like(&'a Expression),
+}
+
+/// The first type assertion around `node`, past plain annotations, and the expression it types.
+pub(crate) fn typed_annotation(
+    mut node: Option<&Expression>,
+) -> Option<(Assertion<'_>, &Expression)> {
+    while let Some(Expression::Annotated(annotated)) = node {
+        if let Some(asserted) = &annotated.type_assertion {
+            return Some((Assertion::Fixed(asserted), &annotated.this));
+        }
+        if let Some(like) = &annotated.type_like {
+            return Some((Assertion::Like(like), &annotated.this));
+        }
+        node = Some(&annotated.this);
+    }
+    None
 }
 
 /// A projection's expression: an alias's `this`, otherwise the projection.

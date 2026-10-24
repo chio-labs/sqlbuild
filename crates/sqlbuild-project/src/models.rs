@@ -7,7 +7,7 @@ use sqlbuild_sqltext::compiler::models::CharSpan;
 use sqlbuild_analysis::assembly::analysis_session::models::{ContractProof, LineageFacts};
 use sqlbuild_analysis::binding_locations::models::LocatedDiagnostic;
 use sqlbuild_analysis::compiled_project::models::CompiledProjectFacts;
-use sqlbuild_analysis::sql_macros::models::SqlMacroCheck;
+use sqlbuild_analysis::sql_macros::models::{SqlMacroCheck, TypedCall};
 
 use sqlbuild_core::json::models::JsonValue;
 
@@ -80,6 +80,8 @@ pub struct ModelInputRecord<H: ProjectHost> {
     pub expansion: ExpansionRecord,
     /// What the analysed SQL must show for the model's SQL macro call arguments to fit.
     pub sql_macro_checks: Vec<SqlMacroCheck>,
+    /// Each expression macro call in `query_sql`, by byte range.
+    pub typed_calls: Vec<TypedCall>,
     /// What assembly and the semantic checks finished, once the model is assembled.
     pub compiled: Option<CompiledRecord<H>>,
     pub host: H::ModelInput,

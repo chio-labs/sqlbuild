@@ -29,8 +29,8 @@ impl SqlMacroForm {
 pub enum ParameterKind {
     /// Any SQL expression of a compatible type.
     Expression { data_type: String },
-    /// Any scalar SQL expression, whatever its type.
-    Any,
+    /// Any scalar SQL expression, whatever its type, or any of one type family.
+    Any { family: Option<AnyFamily> },
     /// A literal or a scalar constant.
     Constant { data_type: String },
     /// An inline list or set, or a list or set constant; `set` for `SET`.
@@ -48,7 +48,10 @@ impl ParameterKind {
     pub fn label(&self) -> String {
         match self {
             Self::Expression { data_type } => data_type.clone(),
-            Self::Any => "ANY".to_owned(),
+            Self::Any { family: None } => "ANY".to_owned(),
+            Self::Any {
+                family: Some(family),
+            } => format!("ANY {}", family.keyword()),
             Self::Constant { data_type } => format!("{data_type} CONST"),
             Self::Collection { set, data_type } => {
                 format!("{} {data_type}", if *set { "SET" } else { "LIST" })
@@ -63,6 +66,66 @@ impl ParameterKind {
             }
             Self::ColumnOf { relation } => format!("COLUMN OF {relation}"),
         }
+    }
+}
+
+/// A type family an `ANY` parameter may be narrowed to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AnyFamily {
+    /// Integer, decimal and float types.
+    Numeric,
+    /// String types.
+    Text,
+    /// Date, time and timestamp types.
+    Temporal,
+}
+
+impl AnyFamily {
+    /// Every family, in the order messages list them.
+    pub const ALL: [Self; 3] = [Self::Numeric, Self::Text, Self::Temporal];
+
+    /// The word after `ANY` that declares the family.
+    pub fn keyword(self) -> &'static str {
+        match self {
+            Self::Numeric => "NUMERIC",
+            Self::Text => "TEXT",
+            Self::Temporal => "TEMPORAL",
+        }
+    }
+
+    /// The family's widest member, which a macro body is type-checked against.
+    pub fn widest(self) -> &'static str {
+        match self {
+            Self::Numeric => "DOUBLE",
+            Self::Text => "VARCHAR",
+            Self::Temporal => "TIMESTAMP",
+        }
+    }
+
+    /// What the family's values are, as messages name them.
+    pub fn noun(self) -> &'static str {
+        match self {
+            Self::Numeric => "a number",
+            Self::Text => "text",
+            Self::Temporal => "a date, time or timestamp",
+        }
+    }
+
+    /// Whether a value of `family` belongs to this family; unknown and NULL values do.
+    pub(crate) fn admits(self, family: TypeFamily) -> bool {
+        matches!(
+            (self, family),
+            (_, TypeFamily::Unknown | TypeFamily::Null)
+                | (
+                    Self::Numeric,
+                    TypeFamily::Integer | TypeFamily::Decimal | TypeFamily::Float
+                )
+                | (Self::Text, TypeFamily::Text)
+                | (
+                    Self::Temporal,
+                    TypeFamily::Date | TypeFamily::Timestamp | TypeFamily::Time
+                )
+        )
     }
 }
 
@@ -88,6 +151,8 @@ pub struct SqlMacroDefinition {
     pub parameters: Vec<SqlMacroParameter>,
     /// The declared result type of an expression macro.
     pub returns: Option<String>,
+    /// The parameter whose argument's type an expression macro returns, by `returns TYPE OF`.
+    pub returns_like: Option<String>,
     pub form: SqlMacroForm,
     /// The body as written, after the header.
     pub body: String,
@@ -164,6 +229,8 @@ pub struct RenderedArgument {
     pub parameter: usize,
     pub sql: String,
     pub shape: ArgumentShape,
+    /// The expression macro calls `sql` holds.
+    pub calls: Vec<TypedCall>,
 }
 
 /// One expansion's SQL and the names it defines, for clash checks at the call site.
@@ -173,6 +240,46 @@ pub struct BodyExpansion {
     pub sql: String,
     /// The CTE names a CTE-list macro defines, or the column names a column-list macro outputs.
     pub names: Vec<String>,
+    /// The expression macro calls the SQL holds, from the body and the arguments.
+    pub calls: Vec<TypedCall>,
+    /// The SQL of the argument whose type an expression macro call returns, by `returns TYPE OF`.
+    pub like: Option<String>,
+}
+
+/// One expression macro call's expansion in a text: its byte range and the macro's `returns`.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct TypedCall {
+    pub start: usize,
+    pub end: usize,
+    pub macro_name: String,
+    /// The macro's declared result type; `None` when it declares none.
+    pub returns: Option<String>,
+    /// The SQL of the argument whose type the call returns, by `returns TYPE OF`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub returns_like: Option<String>,
+}
+
+/// SQL an expansion produced and the expression macro calls it holds.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ExpandedText {
+    pub sql: String,
+    /// Each expression macro call in `sql`, inner calls before the calls holding them.
+    pub calls: Vec<TypedCall>,
+}
+
+/// A replaced byte range of a text, and the byte range its replacement fills in the output.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TextSplice {
+    pub source: (usize, usize),
+    pub output: (usize, usize),
+}
+
+/// A text with its `@const` and `@enum` references rendered, and where each one landed.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RenderedDeclarations {
+    pub sql: String,
+    /// The rendered references in text order.
+    pub splices: Vec<TextSplice>,
 }
 
 /// Where in the caller a call stands, as the text around it shows.
@@ -256,31 +363,6 @@ pub struct SqlMacroCheck {
     pub arguments: Vec<ArgumentCheck>,
     /// The call's authored file location and where its text ends, when the host knows them.
     pub call: Option<(SqlMacroLocation, (usize, usize))>,
-    /// The output column an expression call is the whole select-list item of, and its type.
-    pub output: Option<TypedOutput>,
-}
-
-/// A select item that is one expression macro call, typed by the macro's `returns`.
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct DeclaredOutput {
-    /// The top-level CTE the item is in, or `None` for the main query.
-    pub cte: Option<String>,
-    /// The item's alias, unquoted.
-    pub name: String,
-    pub returns: String,
-    /// The select it stands in: 0, or its branch of a set operation, left to right.
-    pub branch: usize,
-}
-
-/// A select-list item that is one expression macro call under an alias, as `@sql.m(x) AS name`.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TypedOutput {
-    /// The alias, unquoted.
-    pub name: String,
-    /// The macro's declared `returns` type.
-    pub returns: String,
-    /// The select the item stands in: 0, or its branch of a set operation, left to right.
-    pub branch: usize,
 }
 
 /// The top-level part of the caller's query a call stands in.
@@ -314,6 +396,8 @@ pub enum ArgumentExpectation {
     ColumnOf { relation: String },
     /// An expression of a type compatible with this one.
     Typed { data_type: String },
+    /// An expression of a type in this family.
+    Family { family: AnyFamily },
 }
 
 /// A call argument the caller's analysed SQL shows does not fit its parameter.
@@ -324,4 +408,18 @@ pub struct SqlMacroFinding {
     pub call: SqlMacroLocation,
     pub call_end: (usize, usize),
     pub declared_at: SqlMacroLocation,
+}
+
+/// What type inference knows of an expression macro body over its declared arguments.
+#[derive(Clone, Debug)]
+pub(crate) enum BodyType {
+    /// A completely known type.
+    Known(String),
+    /// A type with unknown components, as shown, and as annotation typed it.
+    PartlyKnown {
+        shown: String,
+        data_type: polyglot_sql::expressions::DataType,
+    },
+    /// Nothing, or only a guess.
+    Unknown,
 }

@@ -280,7 +280,10 @@ impl TypeContext<'_> {
     }
 
     fn projection_type(&self, expression: &Expression, aliases: &Sources) -> Option<String> {
-        if matches!(unwrapped(expression), Expression::Null(_)) {
+        if asserted_expression(expression).is_none()
+            && unresolved_like(expression).is_none()
+            && matches!(unwrapped(expression), Expression::Null(_))
+        {
             Some(NULL_TYPE.to_string())
         } else {
             self.expression(expression, aliases).or_else(|| {
@@ -294,6 +297,21 @@ impl TypeContext<'_> {
     }
 
     fn expression(&self, expression: &Expression, aliases: &Sources) -> Option<String> {
+        if let Some((like, inner)) = unresolved_like(expression) {
+            let known = |data_type: &String| !data_type.to_ascii_uppercase().contains("UNKNOWN");
+            return self
+                .expression(inner, aliases)
+                .filter(|inferred| known(inferred) && inferred != NULL_TYPE)
+                .or_else(|| self.expression(like, aliases).filter(known));
+        }
+        if let Some((asserted, inner)) = asserted_expression_type(expression) {
+            if matches!(unwrapped(inner), Expression::Null(_)) {
+                return self.cast_type(asserted);
+            }
+            return self
+                .expression(inner, aliases)
+                .filter(|inferred| !inferred.to_ascii_uppercase().contains("UNKNOWN"));
+        }
         let expression = unwrapped(expression);
         let function_name = match expression {
             Expression::Function(function) => function.name.as_str(),
@@ -432,6 +450,45 @@ fn query_with(expression: &Expression) -> Option<&With> {
         Expression::Intersect(query) => query.with.as_ref(),
         Expression::Except(query) => query.with.as_ref(),
         _ => None,
+    }
+}
+
+/// The expression a type assertion around `expression` types, past parentheses and comments.
+fn asserted_expression(expression: &Expression) -> Option<&Expression> {
+    asserted_expression_type(expression).map(|(_, inner)| inner)
+}
+
+/// The type assertion around `expression`, past parentheses and comments, and what it types.
+fn asserted_expression_type(mut expression: &Expression) -> Option<(&DataType, &Expression)> {
+    loop {
+        expression = match expression {
+            Expression::Annotated(annotation) if annotation.type_assertion.is_some() => {
+                return annotation
+                    .type_assertion
+                    .as_ref()
+                    .map(|asserted| (asserted, &annotation.this));
+            }
+            Expression::Annotated(annotation) => &annotation.this,
+            Expression::Paren(paren) => &paren.this,
+            _ => return None,
+        };
+    }
+}
+
+/// The like and typed expressions of an unresolved typed-like assertion wrapping `expression`.
+fn unresolved_like(mut expression: &Expression) -> Option<(&Expression, &Expression)> {
+    loop {
+        expression = match expression {
+            Expression::Annotated(annotation) if annotation.type_assertion.is_some() => {
+                return None;
+            }
+            Expression::Annotated(annotation) => match &annotation.type_like {
+                Some(like) => return Some((like, &annotation.this)),
+                None => &annotation.this,
+            },
+            Expression::Paren(paren) => &paren.this,
+            _ => return None,
+        };
     }
 }
 

@@ -6,5 +6,5 @@ pub fn sql_macro_calls(text: &str) -> Result<Vec<SqlMacroCall>, SqlMacroError> {
     if !text.contains(crate::sql_macros::constants::SQL_CALL_PREFIX) {
         return Ok(Vec::new());
     }
-    crate::sql_macros::_helpers::expansion::sql_macro_calls(text)
+    crate::sql_macros::_helpers::rendering::expansion::sql_macro_calls(text)
 }

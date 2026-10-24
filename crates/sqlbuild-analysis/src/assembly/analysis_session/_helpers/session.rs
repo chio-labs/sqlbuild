@@ -19,7 +19,7 @@ use crate::assembly::analysis_session::_helpers::compact_batch::{
     Batch, BatchMember, MemberAnalysis, MemberResult,
 };
 use crate::assembly::analysis_session::_helpers::cte_facts::{
-    LegacyAnalysis, LegacyInput, RecoveryProfile, declared_output_types, legacy_analysis,
+    LegacyAnalysis, LegacyInput, RecoveryProfile, legacy_analysis,
 };
 use crate::assembly::analysis_session::_helpers::dynamic_pivot::{PivotFacts, pivot_outcome};
 use crate::assembly::analysis_session::_helpers::enrichment::{
@@ -40,9 +40,7 @@ use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::models::DiagnosticRow;
 use crate::semantic_validation::models::ProjectCatalog;
 use crate::sql_macros::main::check_sql_macro_arguments::check_sql_macro_arguments;
-use crate::sql_macros::main::sql_macro_declared_outputs::sql_macro_declared_outputs;
-use crate::sql_macros::main::sql_macro_declared_type::sql_macro_declared_type;
-use crate::sql_macros::models::{DeclaredOutput, SqlMacroCheck, SqlMacroFinding};
+use crate::sql_macros::models::SqlMacroFinding;
 use crate::sql_macros::types::ArgumentCheckInput;
 
 /// What an internal native failure of the session names.
@@ -296,76 +294,6 @@ impl AnalysisSession {
         self.check_sql_macros(models)
     }
 
-    /// Type the outputs SQL macro call items reach by the macros' `returns`, through CTEs.
-    fn type_sql_macro_outputs(&mut self, models: &[usize]) -> Result<(), String> {
-        for model in models {
-            let declared: Vec<DeclaredOutput> =
-                sql_macro_declared_outputs(&self.request.models[*model].sql_macro_checks);
-            if declared.is_empty() || self.cache_hit(*model) {
-                continue;
-            }
-            self.ensure_cleaned(&[*model])?;
-            let Some(outcome) = self.outcomes[*model].as_ref() else {
-                continue;
-            };
-            let Ok(cleaned) = resolved_cleaned_sql(outcome) else {
-                continue;
-            };
-            let profile = RecoveryProfile {
-                dialect: &self.request.dialect,
-                function_return_types: &self.request.function_return_types,
-                rules: self.request.nullability_rules.as_ref(),
-                callback: self.request.nullability_callback.as_ref(),
-                declared: &declared,
-            };
-            let propagated: Result<Vec<(String, String)>, String> = catch_compiler_panic(|| {
-                Ok(declared_output_types(
-                    &cleaned,
-                    &self.available_types,
-                    &profile,
-                ))
-            })
-            .map_err(|reason| {
-                native_failure(&model_context(&self.request.models[*model]), &reason)
-            })?;
-            let Ok(typed) = propagated else {
-                continue;
-            };
-            let dialect: String = self.request.dialect.clone();
-            let Some(columns) = self.outcome_mut(*model)?.analysis.columns.as_mut() else {
-                continue;
-            };
-            for column in columns {
-                let Some((name, returns)) = typed
-                    .iter()
-                    .find(|(name, _)| name.eq_ignore_ascii_case(&column.name))
-                else {
-                    continue;
-                };
-                let reached: [DeclaredOutput; 1] = [DeclaredOutput {
-                    cte: None,
-                    name: name.clone(),
-                    returns: returns.clone(),
-                    branch: 0,
-                }];
-                if let Some(data_type) = sql_macro_declared_type(
-                    &reached,
-                    (None, 0, &column.name),
-                    column.data_type.as_deref(),
-                    &dialect,
-                ) {
-                    column.data_type = Some(data_type);
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// Whether the cache answered `model` with an outcome that already holds its declared types.
-    fn cache_hit(&self, model: usize) -> bool {
-        self.cache.as_ref().is_some_and(|cache| cache.hits[model])
-    }
-
     /// Each model's SQL macro call arguments checked against its analysed types, cache hits too.
     fn check_sql_macros(&mut self, models: &[usize]) -> Result<(), String> {
         let checked: Vec<usize> = models
@@ -373,7 +301,7 @@ impl AnalysisSession {
             .copied()
             .filter(|model| {
                 let request: &ModelRequest = &self.request.models[*model];
-                checks_arguments(&request.sql_macro_checks) && request.placeholders.is_empty()
+                !request.sql_macro_checks.is_empty() && request.placeholders.is_empty()
             })
             .collect();
         self.ensure_cleaned(&checked)?;
@@ -427,7 +355,6 @@ impl AnalysisSession {
                     function_return_types: &self.request.function_return_types,
                     rules: self.request.nullability_rules.as_ref(),
                     callback: self.request.nullability_callback.as_ref(),
-                    declared: &[],
                 },
             })
         })
@@ -459,7 +386,10 @@ impl AnalysisSession {
             }
             let request: &ModelRequest = &self.request.models[model];
             let required: Vec<String> = request.required_names.clone();
-            let has_set_operation: bool = request.has_set_operation;
+            let unmarked_set_operation: bool = request.has_set_operation
+                && !request
+                    .query_sql
+                    .contains(polyglot_sql::expressions::TYPED_EXPRESSION_FUNCTION);
             let inputs_known: bool = !required.is_empty()
                 && required
                     .iter()
@@ -479,14 +409,25 @@ impl AnalysisSession {
                 .iter()
                 .flatten()
                 .any(|column| column.data_type.is_none());
-            if !required.is_empty() && (untyped || star_pending) && !has_set_operation {
+            let marked: bool = inputs_known
+                && self.request.models[model]
+                    .query_sql
+                    .contains(polyglot_sql::expressions::TYPED_EXPRESSION_FUNCTION);
+            let analysis: &ModelAnalysis = &self.outcome_mut(model)?.analysis;
+            if !required.is_empty()
+                && (untyped || star_pending || marked && analysis.analysis_succeeded)
+                && !unmarked_set_operation
+            {
                 candidates.push((model, input_schemas, star_pending));
             }
         }
         let enrichments: Vec<Enrichment> = self.native_enrichments(&candidates)?;
         for ((model, _, star_pending), native) in candidates.into_iter().zip(enrichments) {
+            let marked: bool = self.request.models[model]
+                .query_sql
+                .contains(polyglot_sql::expressions::TYPED_EXPRESSION_FUNCTION);
             let outcome: &mut ModelOutcome = self.outcome_mut(model)?;
-            outcome.analysis = enriched_analysis(&outcome.analysis, native, star_pending);
+            outcome.analysis = enriched_analysis(&outcome.analysis, native, (star_pending, marked));
         }
         Ok(())
     }
@@ -549,7 +490,6 @@ impl AnalysisSession {
     /// Python's deferred binding validation, then the dataflow's shape publication.
     fn finish_wave(&mut self, wave: usize) -> Result<(), String> {
         let models: Vec<usize> = self.waves[wave].clone();
-        self.type_sql_macro_outputs(&models)?;
         let validated: &[usize] = if self.cyclic { &[] } else { &models };
         let mut revalidated: Vec<(usize, Shapes)> = Vec::new();
         for model in validated {
@@ -795,11 +735,6 @@ impl AnalysisSession {
     }
 }
 
-/// Whether any of the checks has arguments the analysed SQL must show fit.
-fn checks_arguments(checks: &[SqlMacroCheck]) -> bool {
-    checks.iter().any(|check| !check.arguments.is_empty())
-}
-
 fn batch_member<'a>(model: &'a ModelRequest, schema: &'a Shapes) -> BatchMember<'a> {
     BatchMember {
         query_sql: &model.query_sql,
@@ -888,7 +823,7 @@ fn legacy_outcome(
 fn enriched_analysis(
     analysis: &ModelAnalysis,
     enriched: Enrichment,
-    star_pending: bool,
+    (star_pending, marked): (bool, bool),
 ) -> ModelAnalysis {
     let mut recovered: HashMap<String, String> = HashMap::new();
     for column in enriched
@@ -901,6 +836,16 @@ fn enriched_analysis(
             recovered.insert(column.name.clone(), data_type.clone());
         }
     }
+    let retyped: HashMap<String, String> = if marked && enriched.analysis_succeeded {
+        enriched
+            .columns
+            .iter()
+            .flatten()
+            .filter_map(|column| Some((column.name.clone(), column.data_type.clone()?)))
+            .collect()
+    } else {
+        HashMap::new()
+    };
     let star_expanded: bool = star_pending && enriched.analysis_succeeded;
     let replaced: bool =
         (!has_columns(analysis.columns.as_ref()) || star_expanded) && enriched.analysis_succeeded;
@@ -919,7 +864,9 @@ fn enriched_analysis(
     };
     let mut columns: Vec<ColumnFact> = merged.columns.take().unwrap_or_default();
     for column in &mut columns {
-        if column.data_type.as_deref().is_none_or(str::is_empty) {
+        if let Some(data_type) = retyped.get(&column.name) {
+            column.data_type = Some(data_type.clone());
+        } else if column.data_type.as_deref().is_none_or(str::is_empty) {
             column.data_type = recovered.get(&column.name).cloned();
         }
     }

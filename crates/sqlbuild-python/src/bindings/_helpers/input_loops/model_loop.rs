@@ -14,6 +14,10 @@ use sqlbuild_analysis::compiled_project::main::merge_call_site_references::merge
 use sqlbuild_analysis::compiled_project::models::{
     AnalysisGate, ModelLoopSettings, ScanFaultOrigin, SplicedSpan,
 };
+use sqlbuild_analysis::sql_macros::main::moved_typed_calls::moved_typed_calls;
+use sqlbuild_analysis::sql_macros::main::spliced_typed_calls::spliced_typed_calls;
+use sqlbuild_analysis::sql_macros::models::{TextSplice, TypedCall};
+use sqlbuild_attachments::cursor_intrinsics::main::replace_intrinsics_with_spans::replace_intrinsics_with_spans;
 use sqlbuild_attachments::cursor_intrinsics::main::validated_model_intrinsics::validated_model_intrinsics;
 use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicModel;
 use sqlbuild_attachments::functions::models::KnownResources;
@@ -681,6 +685,11 @@ impl NativeModelLoop {
         let query_sql: String = self
             .canonical_query(name, &macro_sql, &values)?
             .map_err(|message| compile_error(context.classes, &message, None))?;
+        let typed_calls: Vec<TypedCall> = query_typed_calls(
+            std::mem::take(&mut declarations.typed_calls),
+            (&declarations.spliced.sql, &macro_sql, &query_sql),
+            &macro_spans,
+        );
         let opt_out_model: OptOutModel<'_, 'py> = OptOutModel {
             name,
             file_path,
@@ -784,6 +793,7 @@ impl NativeModelLoop {
             analysis,
             named_usages,
             macros: macros.map(|macros| macros.output),
+            typed_calls,
         })
     }
 
@@ -971,6 +981,41 @@ pub(crate) fn config_error(error: &Bound<'_, PyAny>, values: Option<&Bound<'_, P
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeModelLoop>()
+}
+
+/// The spliced SQL's expression macro calls moved through macro expansion into the query's bytes.
+fn query_typed_calls(
+    calls: Vec<TypedCall>,
+    (spliced, expanded, query): (&str, &str, &str),
+    macro_spans: &[SpanRow],
+) -> Vec<TypedCall> {
+    if calls.is_empty() {
+        return calls;
+    }
+    let calls: Vec<TypedCall> = if macro_spans.is_empty() {
+        calls
+    } else {
+        spliced_typed_calls(calls, (spliced, expanded), &spliced_spans(macro_spans))
+    };
+    if expanded == query {
+        return calls;
+    }
+    let Ok((canonical, spans)) =
+        replace_intrinsics_with_spans(expanded, "", |name| format!("{name}()"))
+    else {
+        return Vec::new();
+    };
+    if canonical != query {
+        return Vec::new();
+    }
+    let splices: Vec<TextSplice> = spans
+        .into_iter()
+        .map(|span| TextSplice {
+            source: (span.source_start, span.source_end),
+            output: (span.output_start, span.output_end),
+        })
+        .collect();
+    moved_typed_calls(calls, &splices)
 }
 
 /// Span rows as the spliced spans the scan-fault locator maps through.

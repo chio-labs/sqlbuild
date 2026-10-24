@@ -295,10 +295,10 @@ pub(super) fn cte_macro_indices(tokens: &[Token]) -> HashSet<usize> {
         } else if token.text.starts_with(LINT_SENTINEL_PREFIX)
             && scopes.contains(&depths[index])
             && index > 0
-            && matches!(
+            && (matches!(
                 tokens[index - 1].token_type,
                 TokenType::With | TokenType::Comma
-            )
+            ) || indices.contains(&(index - 1)))
             && tokens.get(index + 1).is_some_and(|next| {
                 matches!(next.token_type, TokenType::Comma | TokenType::Select)
                     || starts_cte(tokens, index + 1)

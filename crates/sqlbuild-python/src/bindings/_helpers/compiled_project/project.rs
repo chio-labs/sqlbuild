@@ -586,6 +586,7 @@ pub(crate) fn model_facts(model: ModelInputPy<'_>) -> PyResult<CompiledModelFact
         enum_declarations: declarations(enum_declarations)?,
         constant_declarations: declarations(constant_declarations)?,
         analysis: None,
+        typed_calls: Vec::new(),
     })
 }
 

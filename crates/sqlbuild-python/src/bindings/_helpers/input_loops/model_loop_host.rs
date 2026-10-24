@@ -9,6 +9,7 @@ use sqlbuild_analysis::compiled_project::main::plain_model_facts::plain_model_fa
 use sqlbuild_analysis::compiled_project::models::{
     CompiledModelFacts, ModelConfigFacts, PlainModel,
 };
+use sqlbuild_analysis::sql_macros::models::TypedCall;
 use sqlbuild_discovery::model_files::models::HeaderFacts;
 
 use crate::bindings::_helpers::compiled_project::project::{
@@ -100,6 +101,8 @@ pub(crate) struct FinishedModel<'py> {
     pub(crate) named_usages: Vec<Bound<'py, PyAny>>,
     /// The query's macro expansion, when it calls macros.
     pub(crate) macros: Option<ExpansionOutput>,
+    /// Each expression macro call in the query, by byte range.
+    pub(crate) typed_calls: Vec<TypedCall>,
 }
 
 /// The Python classes a finished model's record is built with.
@@ -235,6 +238,7 @@ pub(crate) fn finished_record<'py>(
         sql_validation_enabled: finished.analysis.0,
         macro_deps,
         sql_macro_checks: finished.declarations.sql_macro_checks.clone(),
+        typed_calls: finished.typed_calls.clone(),
         expansion: ExpansionRecord {
             authored: *interpolated_sql == *authored_query_sql,
             authored_sql: authored,
@@ -286,6 +290,7 @@ pub(crate) fn finished_record<'py>(
         enum_columns,
         enum_declarations: declarations(enums)?,
         constant_declarations: declarations(constants)?,
+        typed_calls: finished.typed_calls,
     });
     Ok((record, facts))
 }

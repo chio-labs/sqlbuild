@@ -101,6 +101,15 @@ def test_given_generated_types_when_normalizing_then_every_known_dialect_answers
             expected_parse_error_logged=False,
         ),
         TypeNormalizationTestCase(
+            description="a decimal wider than the dialect holds keeps its precision",
+            type_sql="DECIMAL(39, 2)",
+            dialect="duckdb",
+            expected_type=NormalizedType(
+                normalized_name="DECIMAL(39,2)", family=TypeFamily.DECIMAL, precision=39, scale=2
+            ),
+            expected_parse_error_logged=False,
+        ),
+        TypeNormalizationTestCase(
             description="spaced decimal parameters",
             type_sql=" decimal( 10 , 2 ) ",
             dialect="duckdb",

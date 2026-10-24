@@ -8,8 +8,8 @@
      "phase": "compile",
      "severity": "error",
      "code": "P015",
-     "message": "expression macro x() needs returns <type> in its MACRO header\n  --> models/staging/_sqlbuild/_macros/sql/x.sql:1:1",
-     "help": "declare the type the expression returns, such as returns DECIMAL(18, 2)"
+     "message": "returns TYPE OF w names no argument of macro x()\n  --> models/staging/_sqlbuild/_macros/sql/x.sql:1:63",
+     "help": "name one of its arguments: v"
     }
    ]
   }

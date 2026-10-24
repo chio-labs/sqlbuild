@@ -12,6 +12,7 @@ pub(crate) fn model(contract: Option<&str>, schema: Option<ContractSchema>) -> C
         fast_lineage_has_star: false,
         dynamic_proof: None,
         unchecked_output_columns: Vec::new(),
+        untyped_call_outputs: Vec::new(),
     }
 }
 

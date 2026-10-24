@@ -24,7 +24,7 @@ use crate::bindings::_helpers::compile_driver::analysis_cache::{
     AnalysisCacheCounts, record_analysis_cache_metrics,
 };
 use crate::bindings::_helpers::compiled_views::model_input_view::{
-    AttachedSchema, NativeModelInput, attached_schema, input_model_name, input_query_sql,
+    AttachedSchema, NativeModelInput, attached_schema, input_analysis_sql, input_model_name,
     input_reference_rows, input_sql_macro_checks,
 };
 use crate::bindings::_helpers::native_host::host;
@@ -132,7 +132,11 @@ fn session_request<'py>(
         complete_schemas: shapes.complete,
         catalog_schemas: shapes.schemas,
         dynamic_families_by_table: families,
-        models: model_rows(profile.py(), &request.model_inputs)?,
+        models: model_rows(
+            profile.py(),
+            &request.model_inputs,
+            &profile_dialect(profile)?,
+        )?,
     })
 }
 
@@ -323,15 +327,22 @@ fn record_metrics((hits, misses, bypasses): (usize, usize, usize)) -> PyResult<(
 }
 
 /// Each model's native request row, in analysis order.
-fn model_rows<'py>(py: Python<'py>, model_inputs: &[Bound<'py, PyAny>]) -> PyResult<Vec<ModelRow>> {
+fn model_rows<'py>(
+    py: Python<'py>,
+    model_inputs: &[Bound<'py, PyAny>],
+    dialect: &str,
+) -> PyResult<Vec<ModelRow>> {
     let enforced: Bound<'py, PyAny> = enum_member(py, RecordId::ContractPolicy, "ENFORCED")?;
     let snapshot: Bound<'py, PyAny> = enum_member(py, RecordId::MaterializationType, "SNAPSHOT")?;
     let mut rows: Vec<ModelRow> = Vec::with_capacity(model_inputs.len());
     for model_input in model_inputs {
         let values: Bound<'py, PyAny> = native_field(model_input, "config")?.getattr("values")?;
         let get = |key: &str| mapping_get(&values, key);
-        let query_sql: String =
-            analysis_cursor_sql(py, &input_query_sql(model_input)?, &get("cursor_type")?)?;
+        let query_sql: String = analysis_cursor_sql(
+            py,
+            &input_analysis_sql(model_input, dialect)?,
+            &get("cursor_type")?,
+        )?;
         let mut placeholders: Vec<(String, String)> = Vec::new();
         let raw: Bound<'py, PyAny> = get("placeholders")?;
         if raw.is_instance_of::<PyDict>() {
