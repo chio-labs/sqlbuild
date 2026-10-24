@@ -1031,3 +1031,41 @@ def build_lambda_scenario_project_files() -> dict[str, str]:
             "SELECT 1\n"
         ),
     }
+
+
+def build_contracted_star_empty_fixture_project_files() -> dict[str, str]:
+    """Build a scenario that empties a contract-enforced model whose query selects a star."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "contracted_star"\nadapter = "duckdb"\n\n'
+            '[connection]\ndatabase = "contracted_star.duckdb"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_customers\n    description: Test source raw_customers.\n"
+            "    schema: main\n    table: raw_customers\n"
+        ),
+        "models/customers.sql": (
+            "MODEL (description 'Test model customers.', contract enforced,\n"
+            "  columns (id (type INTEGER), name (type VARCHAR)));\n"
+            'SELECT * FROM __source("raw_customers")\n'
+        ),
+        "models/orders.sql": (
+            "MODEL (description 'Test model orders.');\nSELECT 1 AS id, 7 AS customer_id\n"
+        ),
+        "models/customer_orders.sql": (
+            "MODEL (description 'Test model customer_orders.');\n"
+            "SELECT o.id AS order_id, c.name AS customer_name\n"
+            'FROM __ref("orders") AS o\nJOIN __ref("customers") AS c ON c.id = o.customer_id\n'
+        ),
+        "tests/scenarios/orders_without_customers.sql": (
+            "SCENARIO (description 'Test scenario orders_without_customers.');\n"
+            "WITH\n__ref__orders AS (SELECT 1 AS id, 7 AS customer_id),\n"
+            "__ref__customers AS (SELECT * FROM __empty_fixture()),\n"
+            "__expected__customer_orders AS (\n"
+            "  SELECT CAST(NULL AS INTEGER) AS order_id, CAST(NULL AS VARCHAR) AS customer_name\n"
+            "  WHERE FALSE\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }

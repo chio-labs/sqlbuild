@@ -151,7 +151,18 @@ def test_given_commented_lateral_alias_when_formatting_then_canonical_sql_is_wri
         FormatCompileIntegrationTestCase(
             description="canonical empty input fixture remains compiler-compatible",
             expected_literal="SELECT * FROM __empty_fixture()",
-        )
+        ),
+        FormatCompileIntegrationTestCase(
+            description="contracted star model accepts the canonical empty fixture",
+            expected_literal="SELECT * FROM __empty_fixture()",
+            upstream_sql=(
+                "WITH staged AS (\n"
+                "  SELECT CAST(1 AS INTEGER) AS order_id, CAST('new' AS VARCHAR) AS order_label\n"
+                ")\n"
+                "SELECT * FROM staged\n"
+            ),
+            selected_rules="[]",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -161,7 +172,8 @@ def test_given_typed_null_input_when_fixture_formatting_then_canonical_empty_fix
 ) -> None:
     """Prove formatter output remains valid with uncontrolled-star lint selected."""
     (tmp_path / "sqlbuild_project.toml").write_text(
-        'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRSQL021"]\n',
+        f'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = {test_case.selected_rules}\n'
+        '\n[connection]\ndatabase = "orders.duckdb"\n',
         encoding="utf-8",
     )
     models: Path = tmp_path / "models"
@@ -174,8 +186,7 @@ def test_given_typed_null_input_when_fixture_formatting_then_canonical_empty_fix
         "    order_id (type INTEGER, nullable true),\n"
         "    order_label (type VARCHAR, nullable true),\n"
         "  ),\n"
-        ");\n\n"
-        "SELECT CAST(1 AS INTEGER) AS order_id, CAST('new' AS VARCHAR) AS order_label\n",
+        ");\n\n" + test_case.upstream_sql,
         encoding="utf-8",
     )
     (models / "orders.sql").write_text(
@@ -193,16 +204,21 @@ def test_given_typed_null_input_when_fixture_formatting_then_canonical_empty_fix
         "    CAST(NULL AS VARCHAR) AS order_label\n"
         "  WHERE FALSE\n"
         "),\n"
-        "__expected__orders AS (SELECT 1 AS order_id, 'new' AS order_label)\n"
+        "__expected__orders AS (\n"
+        "  SELECT CAST(NULL AS INTEGER) AS order_id, CAST(NULL AS VARCHAR) AS order_label\n"
+        "  WHERE FALSE\n"
+        ")\n"
         "SELECT 1\n",
         encoding="utf-8",
     )
 
     format_exit: int = main(["--project-dir", str(tmp_path), "format", "--fixtures-only"])
     compile_exit: int = main(["--project-dir", str(tmp_path), "compile", "--no-cache"])
+    test_exit: int = main(["--project-dir", str(tmp_path), "test"])
 
     assert format_exit == 0
     assert compile_exit == 0
+    assert test_exit == 0
     assert test_case.expected_literal in test_file.read_text(encoding="utf-8")
 
 

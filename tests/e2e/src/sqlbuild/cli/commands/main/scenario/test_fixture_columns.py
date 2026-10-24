@@ -11,6 +11,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.scenario._test_types import (
     ScenarioInlineProjectE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
+    build_contracted_star_empty_fixture_project_files,
     build_lambda_scenario_project_files,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
@@ -22,6 +23,13 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_pr
         ScenarioInlineProjectE2ETestCase(
             description="lambda parameters are not mock columns",
             repo_files=build_lambda_scenario_project_files(),
+            command=("--no-color", "scenario", "test"),
+            expected_exit_code=0,
+            expected_stdout_fragments=("PASS=1  FAIL=0  TOTAL=1",),
+        ),
+        ScenarioInlineProjectE2ETestCase(
+            description="contract enforced star model accepts an empty fixture",
+            repo_files=build_contracted_star_empty_fixture_project_files(),
             command=("--no-color", "scenario", "test"),
             expected_exit_code=0,
             expected_stdout_fragments=("PASS=1  FAIL=0  TOTAL=1",),
