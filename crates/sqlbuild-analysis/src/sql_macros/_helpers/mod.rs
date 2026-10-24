@@ -1,5 +1,6 @@
 pub(crate) mod arguments;
 pub(crate) mod body;
+pub(crate) mod cte_rename;
 pub(crate) mod definition;
 pub(crate) mod expansion;
 pub(crate) mod header;
