@@ -1249,3 +1249,13 @@ class BenchmarkProjectCompileTestCase:
     project_dir: Path
     expected_errors: int
     expected_warnings: int
+
+
+@dataclass(frozen=True)
+class RelationshipsTargetCompileTestCase:
+    """A relationships audit target and how compiling it must end."""
+
+    description: str
+    target: str
+    expected_exit_code: int
+    expected_output_fragment: str

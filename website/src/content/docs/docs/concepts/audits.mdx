@@ -135,7 +135,7 @@ SQLBuild includes four generic audits out of the box. You do not need to define 
 | `not_null` | Fails if any row has a NULL value in the column | Column-level only |
 | `unique` | Fails if any non-NULL value appears more than once | Column-level only |
 | `accepted_values` | Fails if any non-NULL value is not in the allowed list | `values` - list of allowed values |
-| `relationships` | Fails if any non-NULL value does not exist in the referenced column | `to` - target relation, `field` - target column |
+| `relationships` | Fails if any non-NULL value does not exist in the referenced column | `to` - target relation as `__ref(...)`, `__source(...)` or `__seed(...)`, `field` - target column |
 
 ### Using built-in audits
 
@@ -156,7 +156,7 @@ MODEL (
     ),
     payment_method (
       audits [
-        relationships (to "stg_payments", field "method"),
+        relationships (to __ref("stg_payments"), field "method"),
       ],
     ),
   ),

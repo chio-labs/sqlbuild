@@ -183,8 +183,6 @@ noted here:
   staging models that keep the latest delivery carry reviewed exceptions.
 - Source fixtures are not cast to the source's declared types, so a typed function over an
   untyped `NULL` fixture column (such as `YEAR(NULL)`) fails on Snowflake; such fixtures cast it.
-- A `relationships` audit with a quoted relation name, `to "fct_orders"`, compiles cleanly but
-  queries an unqualified table and does not wait for it; the relation must be `to __ref(...)`.
 - A local scenario snapshot is reported stale (`X602`) straight after capture when a fixture has a
   bare `NULL` column, which SQLBuild wraps in a typed `__sqlbuild_partial_fixture` subquery. The
   snapshot fingerprint hashes that adapter-rendered SQL: capture renders the alias in Snowflake's
