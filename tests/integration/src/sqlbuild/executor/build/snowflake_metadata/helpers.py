@@ -522,6 +522,66 @@ _PROJECT_FILES: dict[str, str] = {
 }
 
 
+def write_bundles_project(*, project_dir: Path, select: str) -> None:
+    """Write one table model selecting ``select`` from a source without declared columns."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": (
+            'name = "catalog"\nadapter = "snowflake"\n\n[connection]\n'
+            'account = "example"\nuser = "example"\ndatabase = "analytics"\nschema = "marts"\n\n'
+            '[defaults]\ndatabase = "analytics"\nschema = "marts"\nmaterialized = "table"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_bundles\n    description: Test source raw_bundles.\n"
+            "    database: analytics\n    schema: raw\n    table: bundles\n"
+        ),
+        "models/bundle_report.sql": (
+            "MODEL (description 'Test model bundle_report.');\n"
+            f'SELECT {select} FROM __source("raw_bundles")\n'
+        ),
+    }
+    relative: str
+    content: str
+    for relative, content in files.items():
+        path: Path = project_dir / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_text(content, encoding="utf-8")
+
+
+def bundles_warehouse() -> SimulatedSnowflakeWarehouse:
+    """Return a simulated warehouse holding the raw bundles source with upper-case columns."""
+
+    return SimulatedSnowflakeWarehouse(
+        relations=(
+            FakeRelation(
+                database="ANALYTICS",
+                schema="RAW",
+                name="BUNDLES",
+                columns=(
+                    FakeColumn(name="BUNDLE_SKU", data_type="TEXT"),
+                    FakeColumn(name="QUANTITY", data_type="NUMBER"),
+                ),
+            ),
+        )
+    )
+
+
+def plan_offline_snowflake_project(
+    *, project_dir: Path, warehouse: SimulatedSnowflakeWarehouse
+) -> CompilePipelineResult:
+    """Compile and plan ``project_dir`` with SQL validation against the offline warehouse."""
+
+    inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
+    return run_compile_pipeline(
+        discovered_inputs=inputs,
+        adapter=OfflineSnowflakeAdapter(warehouse=warehouse),
+        options=CompilePipelineOptions(
+            no_cache=True, connection_config=dict(inputs.project_config.connection)
+        ),
+        hooks=ConnectionHooks(),
+    )
+
+
 def write_orders_project(*, project_dir: Path) -> None:
     """Write a table, a view, a merge incremental, and a three-day microbatch model."""
 
