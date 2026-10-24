@@ -1249,3 +1249,14 @@ class BenchmarkProjectCompileTestCase:
     project_dir: Path
     expected_errors: int
     expected_warnings: int
+
+
+@dataclass(frozen=True)
+class GeneratedBenchmarkCompileTestCase:
+    """A generated benchmark project, its recorded checksum and its cold compile budget."""
+
+    description: str
+    generator: Path
+    expected_min_models: int
+    expected_max_wall_seconds: float
+    expected_max_rss_bytes: int
