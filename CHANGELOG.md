@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.176.0](https://github.com/chio-labs/sqlbuild/compare/v0.175.0...v0.176.0) (2026-10-24)
+
+
+### Features
+
+* **benchmarks:** add DuckShop, a dense Snowflake example project ([#1245](https://github.com/chio-labs/sqlbuild/issues/1245)) ([e68476e](https://github.com/chio-labs/sqlbuild/commit/e68476e646c0e56446f03038c77fdd68deca4b3a))
+
 ## [0.175.0](https://github.com/chio-labs/sqlbuild/compare/v0.174.0...v0.175.0) (2026-10-24)
 
 
