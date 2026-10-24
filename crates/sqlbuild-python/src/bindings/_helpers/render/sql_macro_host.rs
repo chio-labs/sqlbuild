@@ -96,8 +96,7 @@ pub(crate) fn is_sql_macro_reference(kind: u8) -> bool {
     kind == SQL_MACRO_REFERENCE_KIND
 }
 
-/// The text replacing each SQL macro call starting at the given character offsets of `request.sql`,
-/// with the expression macro calls each text holds.
+/// The replacement text, with its expression macro calls, of each SQL macro call at `starts`.
 pub(crate) fn expanded_sql_macro_calls<'py>(
     request: &DeclarationExpansion<'_, 'py>,
     starts: &[usize],
@@ -149,12 +148,7 @@ pub(crate) fn expanded_sql_macro_calls<'py>(
             Err(ExpansionFailure::Host(error)) => return Err(error),
             Err(ExpansionFailure::Macro(error)) => {
                 let located: SqlMacroError = match host.call_location((call.start, call.end)) {
-                    // A body that disagrees with its types is the macro file's error.
-                    Some(location)
-                        if [RETURNS_MISMATCH_CODE, BODY_TYPE_CODE].contains(&error.code) =>
-                    {
-                        error.at(location)
-                    }
+                    Some(location) if is_macro_file_error(&error) => error.at(location),
                     Some(location) => error.at_call(location),
                     None => error,
                 };
@@ -636,4 +630,9 @@ fn declaration_path(
         return Ok(Some(Some(native_field(&record, "path")?.extract()?)));
     }
     Ok(None)
+}
+
+/// Whether `error` reports the macro's own body rather than one call of it.
+fn is_macro_file_error(error: &SqlMacroError) -> bool {
+    [RETURNS_MISMATCH_CODE, BODY_TYPE_CODE].contains(&error.code)
 }

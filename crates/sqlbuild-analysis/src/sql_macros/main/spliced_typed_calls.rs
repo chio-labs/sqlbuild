@@ -1,5 +1,5 @@
 use crate::compiled_project::models::SplicedSpan;
-use crate::sql_macros::_helpers::typed_calls::{byte_splices, spliced};
+use crate::sql_macros::_helpers::typing::typed_calls::{byte_splices, spliced};
 use crate::sql_macros::models::{TextSplice, TypedCall};
 
 /// `calls` in `source` moved to `output` by character-offset `spans`; a call a span cuts is dropped.

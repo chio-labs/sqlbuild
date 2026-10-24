@@ -9,6 +9,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.sql_macros._test_types import (
     SqlMacroCompileTestCase,
+    SqlMacroWarmCompileTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.sql_macros.helpers import (
     contract_model,
@@ -16,6 +17,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.sql_macros.helpers import 
     output,
     run_project,
     text_macro,
+    untyped_text_macro,
     with_rules,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
@@ -26,6 +28,66 @@ _UNTYPED_UPSTREAM: dict[str, str] = {
     ),
 }
 _UNTYPED_CALL: str = 'SELECT @sql.m(u.s) AS v FROM __ref("up") AS u\n'
+_FIRST_OF: dict[str, str] = {
+    "macros/sql/first_of.sql": (
+        'MACRO (\n  description "The first of two values",\n'
+        "  arguments (value ANY, other ANY),\n  returns TYPE OF value,\n);\n\n"
+        "list_extract([@value, @other], 1)\n"
+    )
+}
+_FIRST_OF_UNTYPED: dict[str, str] = {
+    "macros/sql/first_of.sql": _FIRST_OF["macros/sql/first_of.sql"].replace(
+        "  returns TYPE OF value,\n", ""
+    )
+}
+_DAY: str = "CAST(o.{column} AS DATE)"
+_DAYS: str = f"{_DAY.format(column='created_at')}, {_DAY.format(column='updated_at')}"
+_TYPE_OF_POSITIONS: str = (
+    "WITH c AS (\n"
+    f"  SELECT o.order_id, @sql.first_of({_DAYS}) AS in_cte\n"
+    '  FROM __ref("stg_orders") AS o\n'
+    ")\n"
+    "SELECT\n"
+    "  @sql.first_of(o.status, o.country_code) AS text_value,\n"
+    f"  @sql.first_of({_DAYS}) AS day_value,\n"
+    "  c.in_cte,\n"
+    f"  COALESCE(@sql.first_of({_DAYS}), {_DAY.format(column='created_at')}) AS nested\n"
+    'FROM __ref("stg_orders") AS o\nJOIN c ON c.order_id = o.order_id\n'
+)
+_TYPE_OF_COLUMNS: str = (
+    "text_value (type VARCHAR), day_value (type DATE), in_cte (type DATE), nested (type DATE)"
+)
+_TYPE_OF_UNION: str = (
+    'SELECT CAST(NULL AS DATE) AS day_value FROM __ref("stg_orders") AS o\n'
+    "UNION ALL\n"
+    f'SELECT @sql.first_of({_DAYS}) AS day_value FROM __ref("stg_orders") AS o\n'
+)
+_VARIANT_PATHS: str = (
+    "WITH raw AS (SELECT PARSE_JSON('{{\"a\": 1}}') AS payload)\n"
+    "SELECT @sql.payload_value({path}) AS v FROM raw\n"
+)
+_SNOWFLAKE_PROJECT: dict[str, str] = {
+    "sqlbuild_project.toml": (
+        'name = "shop"\nadapter = "snowflake"\ndefault_target = "dev"\n\n'
+        '[targets.dev]\ndatabase = "warehouse"\nschema = "analytics"\n\n'
+        "[scopes]\nenforce_placement = false\n"
+    )
+}
+_ROUNDED: dict[str, str] = {
+    "macros/sql/rounded.sql": (
+        'MACRO (\n  description "Rounded to places",\n'
+        "  arguments (value ANY NUMERIC, places INT CONST DEFAULT 2),\n"
+        "  returns TYPE OF value,\n);\n\nROUND(@value, @places)\n"
+    ),
+    "macros/sql/shouted.sql": (
+        'MACRO (\n  description "Shouted",\n  arguments (value ANY TEXT),\n'
+        "  returns TYPE OF value,\n);\n\nUPPER(@value)\n"
+    ),
+    "macros/sql/month_of.sql": (
+        'MACRO (\n  description "Month start",\n  arguments (value ANY TEMPORAL),\n'
+        "  returns TYPE OF value,\n);\n\nDATE_TRUNC('month', @value)\n"
+    ),
+}
 
 
 @pytest.mark.parametrize(
@@ -34,7 +96,7 @@ _UNTYPED_CALL: str = 'SELECT @sql.m(u.s) AS v FROM __ref("up") AS u\n'
         SqlMacroCompileTestCase(
             description="a_macro_without_returns_is_typed_from_its_body",
             files={
-                **text_macro("m", None, "UPPER(@value)"),
+                **untyped_text_macro("m", "UPPER(@value)"),
                 **contract_model(
                     "orders",
                     "v (type VARCHAR)",
@@ -47,7 +109,7 @@ _UNTYPED_CALL: str = 'SELECT @sql.m(u.s) AS v FROM __ref("up") AS u\n'
         SqlMacroCompileTestCase(
             description="a_macro_without_returns_keeps_a_known_body_type_that_disagrees",
             files={
-                **text_macro("m", None, "LENGTH(@value)"),
+                **untyped_text_macro("m", "LENGTH(@value)"),
                 **contract_model(
                     "orders",
                     "v (type VARCHAR)",
@@ -101,7 +163,7 @@ _UNTYPED_CALL: str = 'SELECT @sql.m(u.s) AS v FROM __ref("up") AS u\n'
         SqlMacroCompileTestCase(
             description="an_untyped_call_without_returns_suggests_returns_on_k003",
             files={
-                **text_macro("m", None, "@value", argument="ANY"),
+                **untyped_text_macro("m", "@value", argument="ANY"),
                 **_UNTYPED_UPSTREAM,
                 **contract_model("orders", "v (type BIGINT)", _UNTYPED_CALL),
             },
@@ -115,7 +177,7 @@ _UNTYPED_CALL: str = 'SELECT @sql.m(u.s) AS v FROM __ref("up") AS u\n'
             description="an_untyped_call_without_returns_suggests_returns_on_the_cast_rule",
             files={
                 **with_rules("SQBRCONTRACT105"),
-                **text_macro("m", None, "UPPER(@value)"),
+                **untyped_text_macro("m", "UPPER(@value)"),
                 **contract_model(
                     "orders",
                     "v (type VARCHAR)",
@@ -143,53 +205,6 @@ def test_given_optional_returns_when_compiling_then_calls_are_typed_and_checked(
         assert fragment in output(result), output(result)
     for fragment in test_case.unexpected_fragments:
         assert fragment not in output(result), output(result)
-
-
-_FIRST_OF: dict[str, str] = {
-    "macros/sql/first_of.sql": (
-        'MACRO (\n  description "The first of two values",\n'
-        "  arguments (value ANY, other ANY),\n  returns TYPE OF value,\n);\n\n"
-        "list_extract([@value, @other], 1)\n"
-    )
-}
-_FIRST_OF_UNTYPED: dict[str, str] = {
-    "macros/sql/first_of.sql": _FIRST_OF["macros/sql/first_of.sql"].replace(
-        "  returns TYPE OF value,\n", ""
-    )
-}
-_DAY: str = "CAST(o.{column} AS DATE)"
-_DAYS: str = f"{_DAY.format(column='created_at')}, {_DAY.format(column='updated_at')}"
-_TYPE_OF_POSITIONS: str = (
-    "WITH c AS (\n"
-    f"  SELECT o.order_id, @sql.first_of({_DAYS}) AS in_cte\n"
-    '  FROM __ref("stg_orders") AS o\n'
-    ")\n"
-    "SELECT\n"
-    "  @sql.first_of(o.status, o.country_code) AS text_value,\n"
-    f"  @sql.first_of({_DAYS}) AS day_value,\n"
-    "  c.in_cte,\n"
-    f"  COALESCE(@sql.first_of({_DAYS}), {_DAY.format(column='created_at')}) AS nested\n"
-    'FROM __ref("stg_orders") AS o\nJOIN c ON c.order_id = o.order_id\n'
-)
-_TYPE_OF_COLUMNS: str = (
-    "text_value (type VARCHAR), day_value (type DATE), in_cte (type DATE), nested (type DATE)"
-)
-_TYPE_OF_UNION: str = (
-    'SELECT CAST(NULL AS DATE) AS day_value FROM __ref("stg_orders") AS o\n'
-    "UNION ALL\n"
-    f'SELECT @sql.first_of({_DAYS}) AS day_value FROM __ref("stg_orders") AS o\n'
-)
-_VARIANT_PATHS: str = (
-    "WITH raw AS (SELECT PARSE_JSON('{{\"a\": 1}}') AS payload)\n"
-    "SELECT @sql.payload_value({path}) AS v FROM raw\n"
-)
-_SNOWFLAKE_PROJECT: dict[str, str] = {
-    "sqlbuild_project.toml": (
-        'name = "shop"\nadapter = "snowflake"\ndefault_target = "dev"\n\n'
-        '[targets.dev]\ndatabase = "warehouse"\nschema = "analytics"\n\n'
-        "[scopes]\nenforce_placement = false\n"
-    )
-}
 
 
 @pytest.mark.parametrize(
@@ -335,23 +350,6 @@ def test_given_returns_type_of_when_compiling_then_each_call_has_its_argument_ty
         assert fragment in output(result), output(result)
 
 
-_ROUNDED: dict[str, str] = {
-    "macros/sql/rounded.sql": (
-        'MACRO (\n  description "Rounded to places",\n'
-        "  arguments (value ANY NUMERIC, places INT CONST DEFAULT 2),\n"
-        "  returns TYPE OF value,\n);\n\nROUND(@value, @places)\n"
-    ),
-    "macros/sql/shouted.sql": (
-        'MACRO (\n  description "Shouted",\n  arguments (value ANY TEXT),\n'
-        "  returns TYPE OF value,\n);\n\nUPPER(@value)\n"
-    ),
-    "macros/sql/month_of.sql": (
-        'MACRO (\n  description "Month start",\n  arguments (value ANY TEMPORAL),\n'
-        "  returns TYPE OF value,\n);\n\nDATE_TRUNC('month', @value)\n"
-    ),
-}
-
-
 @pytest.mark.parametrize(
     "test_case",
     [
@@ -445,22 +443,33 @@ def test_given_any_type_families_when_compiling_then_calls_and_bodies_are_checke
         assert fragment in output(result), output(result)
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlMacroWarmCompileTestCase(
+            description="removing_returns_type_of",
+            files={
+                **_FIRST_OF,
+                **contract_model("orders", "day_value (type DATE)", _TYPE_OF_UNION),
+            },
+            edited_path="macros/sql/first_of.sql",
+            replaced_text=("  returns TYPE OF value,\n", ""),
+            expected_cold_fragment="0 errors, 0 warnings",
+            expected_warm_fragment="warning[K003]: column 'day_value'",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
 def test_given_a_changed_returns_form_when_compiling_warm_then_the_cache_is_not_reused(
-    tmp_path: Path,
+    test_case: SqlMacroWarmCompileTestCase, tmp_path: Path
 ) -> None:
-    project_dir, cold = run_project(
-        tmp_path=tmp_path,
-        files={
-            **_FIRST_OF,
-            **contract_model("orders", "day_value (type DATE)", _TYPE_OF_UNION),
-        },
-        command=("compile",),
-    )
-    macro: Path = project_dir / "macros/sql/first_of.sql"
-    macro.write_text(_FIRST_OF_UNTYPED["macros/sql/first_of.sql"], encoding="utf-8")
+    project_dir, cold = run_project(tmp_path=tmp_path, files=test_case.files, command=("compile",))
+    macro: Path = project_dir / test_case.edited_path
+    old, new = test_case.replaced_text
+    macro.write_text(macro.read_text(encoding="utf-8").replace(old, new), encoding="utf-8")
     warm: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "compile"), project_dir=project_dir
     )
 
-    assert "0 errors, 0 warnings" in output(cold), output(cold)
-    assert "warning[K003]: column 'day_value'" in output(warm), output(warm)
+    assert test_case.expected_cold_fragment in output(cold), output(cold)
+    assert test_case.expected_warm_fragment in output(warm), output(warm)

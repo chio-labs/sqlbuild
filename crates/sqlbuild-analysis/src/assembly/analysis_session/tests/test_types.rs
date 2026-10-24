@@ -224,3 +224,9 @@ pub(crate) struct TypedMarkerTestCase {
     pub(crate) sql: &'static str,
     pub(crate) expected_column: &'static str,
 }
+
+pub(crate) struct TypedMarkerCacheTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) expected_hits: &'static [bool],
+}

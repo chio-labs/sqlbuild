@@ -4,10 +4,10 @@ use polyglot_sql::ValidationSchema;
 use serde_json::{Value, json};
 
 use crate::query_analysis::main::output_types::output_types;
-use crate::sql_macros::_helpers::arguments::{fits, type_family};
-use crate::sql_macros::_helpers::header::unquoted;
-use crate::sql_macros::_helpers::lexing::{Token, TokenKind, tokens};
-use crate::sql_macros::_helpers::placement::{QueryParts, top_level_parts};
+use crate::sql_macros::_helpers::parsing::header::unquoted;
+use crate::sql_macros::_helpers::parsing::lexing::{Token, TokenKind, tokens};
+use crate::sql_macros::_helpers::rendering::arguments::{fits, type_family};
+use crate::sql_macros::_helpers::rendering::placement::{QueryParts, top_level_parts};
 use crate::sql_macros::constants::{
     ALIAS_PRECEDING_KEYWORDS, FROM_KEYWORD, INFERRED_TEXT_TYPE, PROBE_COLUMN_PREFIX,
     PROBE_TAIL_ENDS, STAR_PROJECTION, UNKNOWN_TYPE_HINT, VARCHAR_TYPE,

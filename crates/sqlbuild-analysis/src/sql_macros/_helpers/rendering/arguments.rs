@@ -1,8 +1,8 @@
 //! A call's argument list: split, bound to parameters and checked against their types.
 
-use crate::sql_macros::_helpers::header::{split_top_level, unquoted};
-use crate::sql_macros::_helpers::lexing::{Token, TokenKind, closing_token, tokens};
-use crate::sql_macros::_helpers::returns_check::adapter_dialect;
+use crate::sql_macros::_helpers::parsing::header::{split_top_level, unquoted};
+use crate::sql_macros::_helpers::parsing::lexing::{Token, TokenKind, closing_token, tokens};
+use crate::sql_macros::_helpers::typing::returns_check::adapter_dialect;
 use crate::sql_macros::constants::{
     ARGUMENT_CODE, BOOLEAN_WORDS, NAMED_ARGUMENT_MIN_TOKENS, NULL_WORD, REFERENCE_FUNCTIONS,
 };
@@ -239,7 +239,7 @@ pub(crate) fn argument_shape(text: &str) -> ArgumentShape {
 }
 
 fn unquote(text: &str) -> String {
-    crate::sql_macros::_helpers::header::unquoted(text)
+    crate::sql_macros::_helpers::parsing::header::unquoted(text)
 }
 
 /// The type family of a SQL literal argument.

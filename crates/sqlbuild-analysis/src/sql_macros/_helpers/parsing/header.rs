@@ -1,6 +1,8 @@
 //! The `MACRO (...)` header of a SQL macro file: description, typed arguments and result type.
 
-use crate::sql_macros::_helpers::lexing::{Token, TokenKind, closing_token, line_column, tokens};
+use crate::sql_macros::_helpers::parsing::lexing::{
+    Token, TokenKind, closing_token, line_column, tokens,
+};
 use crate::sql_macros::constants::{
     ANY_KEYWORD, ARGUMENTS_KEY, COLUMN_KEYWORD, COMMA, CONST_KEYWORD, DEFAULT_KEYWORD,
     DESCRIPTION_KEY, ENUM_KEYWORD, HEADER_KEYWORD, INVALID_DEFINITION_CODE, LIST_KEYWORD,

@@ -17,7 +17,7 @@ use sqlbuild_analysis::compiled_project::models::{
 use sqlbuild_analysis::sql_macros::main::moved_typed_calls::moved_typed_calls;
 use sqlbuild_analysis::sql_macros::main::spliced_typed_calls::spliced_typed_calls;
 use sqlbuild_analysis::sql_macros::models::{TextSplice, TypedCall};
-use sqlbuild_attachments::cursor_intrinsics::main::replace_intrinsics::replace_intrinsics_with_spans;
+use sqlbuild_attachments::cursor_intrinsics::main::replace_intrinsics_with_spans::replace_intrinsics_with_spans;
 use sqlbuild_attachments::cursor_intrinsics::main::validated_model_intrinsics::validated_model_intrinsics;
 use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicModel;
 use sqlbuild_attachments::functions::models::KnownResources;
@@ -983,9 +983,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeModelLoop>()
 }
 
-/// Span rows as the spliced spans the scan-fault locator maps through.
-/// The expression macro calls of the spliced SQL moved through the Python macro expansion and the
-/// cursor intrinsic canonicalisation into the query's byte coordinates.
+/// The spliced SQL's expression macro calls moved through macro expansion into the query's bytes.
 fn query_typed_calls(
     calls: Vec<TypedCall>,
     (spliced, expanded, query): (&str, &str, &str),
@@ -1012,16 +1010,15 @@ fn query_typed_calls(
     }
     let splices: Vec<TextSplice> = spans
         .into_iter()
-        .map(
-            |(source_start, source_end, output_start, output_end)| TextSplice {
-                source: (source_start, source_end),
-                output: (output_start, output_end),
-            },
-        )
+        .map(|span| TextSplice {
+            source: (span.source_start, span.source_end),
+            output: (span.output_start, span.output_end),
+        })
         .collect();
     moved_typed_calls(calls, &splices)
 }
 
+/// Span rows as the spliced spans the scan-fault locator maps through.
 fn spliced_spans(rows: &[SpanRow]) -> Vec<SplicedSpan> {
     rows.iter()
         .map(|row| SplicedSpan {

@@ -308,7 +308,6 @@ impl TypeContext<'_> {
             if matches!(unwrapped(inner), Expression::Null(_)) {
                 return self.cast_type(asserted);
             }
-            // An unknown inferred type leaves the assertion to the annotation fallback.
             return self
                 .expression(inner, aliases)
                 .filter(|inferred| !inferred.to_ascii_uppercase().contains("UNKNOWN"));
@@ -476,8 +475,7 @@ fn asserted_expression_type(mut expression: &Expression) -> Option<(&DataType, &
     }
 }
 
-/// A typed-like assertion around `expression` that annotation has not resolved, past
-/// parentheses and comments: the expression whose type it asserts, and what it types.
+/// The like and typed expressions of an unresolved typed-like assertion wrapping `expression`.
 fn unresolved_like(mut expression: &Expression) -> Option<(&Expression, &Expression)> {
     loop {
         expression = match expression {

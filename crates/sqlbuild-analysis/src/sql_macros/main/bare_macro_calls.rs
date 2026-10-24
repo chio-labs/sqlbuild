@@ -1,4 +1,4 @@
-use crate::sql_macros::_helpers::lexing::{AtConstruct, at_constructs};
+use crate::sql_macros::_helpers::parsing::lexing::{AtConstruct, at_constructs};
 use crate::sql_macros::constants::NON_ASCII_BYTE;
 use sqlbuild_render::macro_calls::main::opens_bare_call::opens_bare_call;
 

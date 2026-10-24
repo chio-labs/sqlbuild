@@ -386,8 +386,7 @@ impl AnalysisSession {
             }
             let request: &ModelRequest = &self.request.models[model];
             let required: Vec<String> = request.required_names.clone();
-            // A set operation is enriched only to type its SQL macro calls by their markers.
-            let has_set_operation: bool = request.has_set_operation
+            let unmarked_set_operation: bool = request.has_set_operation
                 && !request
                     .query_sql
                     .contains(polyglot_sql::expressions::TYPED_EXPRESSION_FUNCTION);
@@ -410,8 +409,6 @@ impl AnalysisSession {
                 .iter()
                 .flatten()
                 .any(|column| column.data_type.is_none());
-            // A typed marker asserts its type before upstream star columns are typed, so its
-            // model is re-typed once every input is known.
             let marked: bool = inputs_known
                 && self.request.models[model]
                     .query_sql
@@ -419,7 +416,7 @@ impl AnalysisSession {
             let analysis: &ModelAnalysis = &self.outcome_mut(model)?.analysis;
             if !required.is_empty()
                 && (untyped || star_pending || marked && analysis.analysis_succeeded)
-                && !has_set_operation
+                && !unmarked_set_operation
             {
                 candidates.push((model, input_schemas, star_pending));
             }
@@ -839,7 +836,6 @@ fn enriched_analysis(
             recovered.insert(column.name.clone(), data_type.clone());
         }
     }
-    // A marked model's enrichment knows every input, so its types replace earlier assertions.
     let retyped: HashMap<String, String> = if marked && enriched.analysis_succeeded {
         enriched
             .columns

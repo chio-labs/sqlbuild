@@ -3,21 +3,21 @@
 use std::sync::Arc;
 
 use crate::compiler::main::function_type_validation::function_type_error;
-use crate::sql_macros::_helpers::arguments::{
-    ShapeContext, argument_shape, bind_arguments, check_shape, is_atomic, split_arguments,
-};
-use crate::sql_macros::_helpers::body::{expand_body, with_line_comment_closed};
-use crate::sql_macros::_helpers::cte_rename::{renamed_ctes, take_cte_argument};
-use crate::sql_macros::_helpers::lexing::{AtConstruct, at_constructs, outer_sql_calls};
-use crate::sql_macros::_helpers::lexing::{Token, line_column, tokens};
-use crate::sql_macros::_helpers::literal_positions::{
+use crate::sql_macros::_helpers::parsing::body::{expand_body, with_line_comment_closed};
+use crate::sql_macros::_helpers::parsing::lexing::{AtConstruct, at_constructs, outer_sql_calls};
+use crate::sql_macros::_helpers::parsing::lexing::{Token, line_column, tokens};
+use crate::sql_macros::_helpers::parsing::literal_positions::{
     LiteralRules, literal_error, non_literal_use,
 };
-use crate::sql_macros::_helpers::parameters::{ParameterReference, parameter_references};
-use crate::sql_macros::_helpers::placement::top_level_parts;
-use crate::sql_macros::_helpers::placement::{CallSite, cte_names, select_names};
-use crate::sql_macros::_helpers::returns_check::{check_body_returns, check_body_types};
-use crate::sql_macros::_helpers::typed_calls::{shifted, spliced};
+use crate::sql_macros::_helpers::parsing::parameters::{ParameterReference, parameter_references};
+use crate::sql_macros::_helpers::rendering::arguments::{
+    ShapeContext, argument_shape, bind_arguments, check_shape, is_atomic, split_arguments,
+};
+use crate::sql_macros::_helpers::rendering::cte_rename::{renamed_ctes, take_cte_argument};
+use crate::sql_macros::_helpers::rendering::placement::top_level_parts;
+use crate::sql_macros::_helpers::rendering::placement::{CallSite, cte_names, select_names};
+use crate::sql_macros::_helpers::typing::returns_check::{check_body_returns, check_body_types};
+use crate::sql_macros::_helpers::typing::typed_calls::{shifted, spliced};
 use crate::sql_macros::constants::{
     ARGUMENT_CODE, CTE_ARGUMENT, CTE_NOUN, CYCLE_CODE, INVALID_DEFINITION_CODE,
     MISPLACED_CALL_CODE, NAME_CLASH_CODE,

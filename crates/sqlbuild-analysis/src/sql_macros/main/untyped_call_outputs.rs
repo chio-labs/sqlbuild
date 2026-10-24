@@ -1,12 +1,9 @@
-use crate::sql_macros::_helpers::header::unquoted;
-use crate::sql_macros::_helpers::lexing::{Token, TokenKind, tokens};
+use crate::sql_macros::_helpers::parsing::header::unquoted;
+use crate::sql_macros::_helpers::parsing::lexing::{Token, TokenKind, tokens};
+use crate::sql_macros::constants::ITEM_ENDS;
 use crate::sql_macros::models::TypedCall;
 
-/// Words that end a select item rather than alias it.
-const ITEM_ENDS: [&str; 4] = ["FROM", "WHERE", "UNION", "ORDER"];
-
-/// Each named select item of `sql` that is exactly one call to a macro without `returns`, as
-/// `(output name, macro name)`.
+/// The `(output name, macro name)` of each select item that is one untyped macro call.
 #[must_use]
 pub fn untyped_call_outputs(sql: &str, calls: &[TypedCall]) -> Vec<(String, String)> {
     let untyped: Vec<&TypedCall> = calls
@@ -40,8 +37,7 @@ pub fn untyped_call_outputs(sql: &str, calls: &[TypedCall]) -> Vec<(String, Stri
             after
         };
         let Some(name) = scanned.get(alias).filter(|token| {
-            matches!(token.kind, TokenKind::Word | TokenKind::Quoted)
-                && !ITEM_ENDS.iter().any(|word| token.is_word(sql, word))
+            matches!(token.kind, TokenKind::Word | TokenKind::Quoted) && !ends_item(token, sql)
         }) else {
             continue;
         };
@@ -53,4 +49,9 @@ pub fn untyped_call_outputs(sql: &str, calls: &[TypedCall]) -> Vec<(String, Stri
         }
     }
     outputs
+}
+
+/// Whether `token` is a word that ends a select item rather than aliases it.
+fn ends_item(token: &Token, sql: &str) -> bool {
+    ITEM_ENDS.iter().any(|word| token.is_word(sql, word))
 }

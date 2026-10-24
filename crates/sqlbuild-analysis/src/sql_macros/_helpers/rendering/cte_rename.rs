@@ -3,11 +3,11 @@
 use polyglot_sql::expressions::Identifier;
 use polyglot_sql::{DialectType, Expression, ExpressionWalk};
 
-use crate::sql_macros::_helpers::lexing::{Token, tokens};
-use crate::sql_macros::_helpers::parameters::{
+use crate::sql_macros::_helpers::parsing::lexing::{Token, tokens};
+use crate::sql_macros::_helpers::parsing::parameters::{
     ParameterReference, parameter_references, placeholder, with_placeholders,
 };
-use crate::sql_macros::_helpers::typed_calls::spliced;
+use crate::sql_macros::_helpers::typing::typed_calls::spliced;
 use crate::sql_macros::constants::{ARGUMENT_CODE, CTE_ARGUMENT, CTE_NAME_SEPARATOR};
 use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::models::{
@@ -117,13 +117,14 @@ pub(crate) fn renamed_ctes(body: &ExpandedText, name: &str) -> Result<ExpandedTe
         return Err("it is not a WITH list".to_owned());
     };
     let ctes: Vec<String> = with.ctes.iter().map(|cte| cte.alias.name.clone()).collect();
-    let aliases: Vec<String> = statement
-        .dfs()
-        .filter_map(|node| match node {
-            Expression::Table(table) => table.alias.as_ref().map(|alias| alias.name.clone()),
-            _ => None,
-        })
-        .collect();
+    let mut aliases: Vec<String> = Vec::new();
+    for node in statement.dfs() {
+        if let Expression::Table(table) = node
+            && let Some(alias) = &table.alias
+        {
+            aliases.push(alias.name.clone());
+        }
+    }
     let mut identifiers: Vec<&Identifier> = with.ctes.iter().map(|cte| &cte.alias).collect();
     for node in statement.dfs() {
         match node {

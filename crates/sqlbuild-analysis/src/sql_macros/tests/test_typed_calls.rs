@@ -1,8 +1,11 @@
 use crate::sql_macros::main::typed_analysis_sql::typed_analysis_sql;
 use crate::sql_macros::main::untyped_call_outputs::untyped_call_outputs;
 use crate::sql_macros::models::{ExpandedText, TypedCall};
-use crate::sql_macros::tests::helpers::expanded_text_for;
-use crate::sql_macros::tests::test_types::{TypedAnalysisTestCase, TypedCallTestCase};
+use crate::sql_macros::tests::helpers::{expanded_text_for, shown_typed_calls, untyped_calls};
+use crate::sql_macros::tests::test_types::{
+    ExpandedAnalysisTestCase, ReservedNameTestCase, TypedAnalysisTestCase, TypedCallTestCase,
+    UntypedOutputsTestCase,
+};
 
 const SHOUT: (&str, &str) = (
     "shout",
@@ -30,20 +33,11 @@ const PLACES: (&str, &str) = (
     "MACRO (description \"Places\", arguments (value BIGINT), returns BIGINT);\n\n\
      @value + @const(\"price_places\")\n",
 );
-
-fn shown(sql: &str, calls: &[TypedCall]) -> Vec<String> {
-    calls
-        .iter()
-        .map(|call| {
-            format!(
-                "{} {}: {}",
-                call.macro_name,
-                call.returns.as_deref().unwrap_or("-"),
-                &sql[call.start..call.end]
-            )
-        })
-        .collect()
-}
+const LIKE_VALUE: (&str, &str) = (
+    "like_value",
+    "MACRO (description \"Like\", arguments (value ANY, fallback ANY DEFAULT NULL), \
+     returns TYPE OF value);\n\nCOALESCE(@value, @fallback)\n",
+);
 
 #[test]
 fn given_expression_macro_calls_when_expanding_then_each_expansion_is_recorded_where_it_lands() {
@@ -112,7 +106,7 @@ fn given_expression_macro_calls_when_expanding_then_each_expansion_is_recorded_w
         let expanded = expanded_text_for("duckdb", test_case.macros, test_case.sql)
             .unwrap_or_else(|error| panic!("{}: {error:?}", test_case.description));
         assert_eq!(
-            shown(&expanded.sql, &expanded.calls),
+            shown_typed_calls(&expanded.sql, &expanded.calls),
             test_case.expected_calls,
             "{}: {}",
             test_case.description,
@@ -191,62 +185,72 @@ fn given_typed_calls_when_building_the_analysis_text_then_each_call_with_returns
 
 #[test]
 fn given_the_reserved_analysis_function_when_comparing_then_authored_sql_rejects_the_parsed_name() {
-    assert_eq!(
-        sqlbuild_attachments::cursor_intrinsics::constants::RESERVED_ANALYSIS_FUNCTION,
-        polyglot_sql::expressions::TYPED_EXPRESSION_FUNCTION
-    );
+    let test_cases = [ReservedNameTestCase {
+        description: "the typed marker",
+        authored_name:
+            sqlbuild_attachments::cursor_intrinsics::constants::RESERVED_ANALYSIS_FUNCTION,
+        expected_parsed_name: polyglot_sql::expressions::TYPED_EXPRESSION_FUNCTION,
+    }];
+
+    for test_case in test_cases {
+        assert_eq!(
+            test_case.authored_name, test_case.expected_parsed_name,
+            "{}",
+            test_case.description
+        );
+    }
 }
 
 #[test]
 fn given_calls_without_returns_when_listing_outputs_then_only_whole_named_items_are_named() {
-    let untyped = |start: usize, end: usize| TypedCall {
-        returns_like: None,
-        start,
-        end,
-        macro_name: "shout".to_owned(),
-        returns: None,
-    };
-    let sql: &str =
-        "SELECT UPPER(a) AS loud, UPPER(b) quiet, UPPER(c) || 'x' AS joined, UPPER(d) FROM t";
-    let calls: Vec<TypedCall> = ["UPPER(a)", "UPPER(b)", "UPPER(c)", "UPPER(d)"]
-        .iter()
-        .map(|text| {
-            let start: usize = sql.find(text).unwrap_or_default();
-            untyped(start, start + text.len())
-        })
-        .collect();
+    let test_cases = [
+        UntypedOutputsTestCase {
+            description: "aliased whole calls are named, operands and unnamed items are not",
+            sql: "SELECT UPPER(a) AS loud, UPPER(b) quiet, UPPER(c) || 'x' AS joined, UPPER(d) FROM t",
+            call_texts: &["UPPER(a)", "UPPER(b)", "UPPER(c)", "UPPER(d)"],
+            expected_outputs: &[("loud", "shout"), ("quiet", "shout")],
+        },
+        UntypedOutputsTestCase {
+            description: "a keyword after a call is not its alias",
+            sql: "SELECT id, UPPER(a) FROM t",
+            call_texts: &["UPPER(a)"],
+            expected_outputs: &[],
+        },
+    ];
 
-    let outputs: Vec<(String, String)> = untyped_call_outputs(sql, &calls);
+    for test_case in test_cases {
+        let calls: Vec<TypedCall> = untyped_calls(test_case.sql, test_case.call_texts);
 
-    assert_eq!(
-        outputs,
-        vec![
-            ("loud".to_owned(), "shout".to_owned()),
-            ("quiet".to_owned(), "shout".to_owned()),
-        ]
-    );
+        let outputs: Vec<(String, String)> = untyped_call_outputs(test_case.sql, &calls);
+
+        let named: Vec<(&str, &str)> = outputs
+            .iter()
+            .map(|(output, name)| (output.as_str(), name.as_str()))
+            .collect();
+        assert_eq!(
+            named, test_case.expected_outputs,
+            "{}",
+            test_case.description
+        );
+    }
 }
-
-const LIKE_VALUE: (&str, &str) = (
-    "like_value",
-    "MACRO (description \"Like\", arguments (value ANY, fallback ANY DEFAULT NULL), \
-     returns TYPE OF value);\n\nCOALESCE(@value, @fallback)\n",
-);
 
 #[test]
 fn given_a_returns_type_of_call_when_building_the_analysis_text_then_it_asserts_its_argument() {
-    let expanded: ExpandedText = expanded_text_for(
-        "duckdb",
-        &[LIKE_VALUE],
-        "SELECT @sql.like_value(o.created_at + 1) AS v FROM orders AS o",
-    )
-    .expect("expands");
+    let test_cases = [ExpandedAnalysisTestCase {
+        description: "the call is typed like its argument",
+        macros: &[LIKE_VALUE],
+        sql: "SELECT @sql.like_value(o.created_at + 1) AS v FROM orders AS o",
+        expected_sql: "SELECT __polyglot_typed_like(COALESCE((o.created_at + 1), NULL), \
+                       o.created_at + 1) AS v FROM orders AS o",
+    }];
 
-    let (typed, _) = typed_analysis_sql(&expanded.sql, &expanded.calls);
+    for test_case in test_cases {
+        let expanded: ExpandedText =
+            expanded_text_for("duckdb", test_case.macros, test_case.sql).expect("expands");
 
-    assert_eq!(
-        typed,
-        "SELECT __polyglot_typed_like(COALESCE((o.created_at + 1), NULL), o.created_at + 1) \
-         AS v FROM orders AS o"
-    );
+        let (typed, _) = typed_analysis_sql(&expanded.sql, &expanded.calls);
+
+        assert_eq!(typed, test_case.expected_sql, "{}", test_case.description);
+    }
 }
