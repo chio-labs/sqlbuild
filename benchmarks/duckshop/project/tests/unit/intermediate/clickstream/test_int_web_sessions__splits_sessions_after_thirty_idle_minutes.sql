@@ -1,0 +1,176 @@
+TEST (name "int_web_sessions__splits_sessions_after_thirty_idle_minutes");
+
+WITH __ref__stg_web_events AS (
+  SELECT
+    'e1' AS event_id,
+    '2026-03-10 10:00:00'::TIMESTAMP_NTZ AS received_at,
+    'page_view' AS event_type,
+    '2026-03-10 10:00:00'::TIMESTAMP_NTZ AS event_at_utc,
+    'V1' AS anonymous_id,
+    NULL AS customer_id,
+    NULL AS user_email,
+    'https://shop.example.com/home' AS page_url,
+    '/home' AS page_path,
+    'search.example.com' AS referrer_host,
+    NULL AS user_agent,
+    NULL AS locale,
+    'Europe/Berlin' AS client_timezone,
+    FALSE AS is_bot,
+    NULL AS properties,
+    NULL AS items
+  UNION ALL
+  SELECT
+    'e2',
+    '2026-03-10 10:10:00'::TIMESTAMP_NTZ,
+    'add_to_cart',
+    '2026-03-10 10:10:00'::TIMESTAMP_NTZ,
+    'V1',
+    'C1',
+    NULL,
+    'https://shop.example.com/p/duck-1',
+    '/p/duck-1',
+    NULL,
+    NULL,
+    NULL,
+    'Europe/Berlin',
+    FALSE,
+    NULL,
+    NULL
+  UNION ALL
+  SELECT
+    'e3',
+    '2026-03-10 10:40:00'::TIMESTAMP_NTZ,
+    'page_view',
+    '2026-03-10 10:40:00'::TIMESTAMP_NTZ,
+    'V1',
+    NULL,
+    NULL,
+    'https://shop.example.com/cart',
+    '/cart',
+    NULL,
+    NULL,
+    NULL,
+    'Europe/Berlin',
+    FALSE,
+    NULL,
+    NULL
+  UNION ALL
+  SELECT
+    'e4',
+    '2026-03-10 11:20:00'::TIMESTAMP_NTZ,
+    'page_view',
+    '2026-03-10 11:20:00'::TIMESTAMP_NTZ,
+    'V1',
+    NULL,
+    NULL,
+    'https://shop.example.com/home',
+    '/home',
+    NULL,
+    NULL,
+    NULL,
+    'Europe/Berlin',
+    FALSE,
+    NULL,
+    NULL
+  UNION ALL
+  SELECT
+    'e5',
+    '2026-03-10 10:05:00'::TIMESTAMP_NTZ,
+    'page_view',
+    '2026-03-10 10:05:00'::TIMESTAMP_NTZ,
+    'V1',
+    NULL,
+    NULL,
+    'https://shop.example.com/robots',
+    '/robots',
+    NULL,
+    NULL,
+    NULL,
+    'Europe/Berlin',
+    TRUE,
+    NULL,
+    NULL
+  UNION ALL
+  SELECT
+    'e6',
+    '2026-03-29 01:30:00'::TIMESTAMP_NTZ,
+    'page_view',
+    '2026-03-29 01:30:00'::TIMESTAMP_NTZ,
+    'V2',
+    NULL,
+    NULL,
+    'https://shop.example.com/sale',
+    '/sale',
+    NULL,
+    NULL,
+    NULL,
+    'Europe/Berlin',
+    FALSE,
+    NULL,
+    NULL
+  UNION ALL
+  SELECT
+    'e7',
+    '2026-03-10 10:00:00'::TIMESTAMP_NTZ,
+    'page_view',
+    '2026-03-10 10:00:00'::TIMESTAMP_NTZ,
+    NULL,
+    NULL,
+    NULL,
+    'https://shop.example.com/home',
+    '/home',
+    NULL,
+    NULL,
+    NULL,
+    'Europe/Berlin',
+    FALSE,
+    NULL,
+    NULL
+),
+
+__expected__int_web_sessions AS (
+  SELECT
+    'V1:20260310100000' AS session_id,
+    'C1' AS customer_id,
+    '2026-03-10 00:00:00'::TIMESTAMPNTZ AS session_day,
+    '2026-03-10 11:00:00'::TIMESTAMPNTZ AS session_start_visitor_local,
+    2400 AS duration_seconds,
+    3 AS event_count,
+    2 AS page_view_count,
+    '/home' AS landing_page_path,
+    '/cart' AS exit_page_path,
+    'search.example.com' AS referrer_host,
+    FALSE AS is_bounce,
+    TRUE AS has_add_to_cart,
+    FALSE AS has_order
+  UNION ALL
+  SELECT
+    'V1:20260310112000' AS session_id,
+    CAST(NULL AS VARCHAR) AS customer_id,
+    '2026-03-10 00:00:00'::TIMESTAMPNTZ AS session_day,
+    '2026-03-10 12:20:00'::TIMESTAMPNTZ AS session_start_visitor_local,
+    0 AS duration_seconds,
+    1 AS event_count,
+    1 AS page_view_count,
+    '/home' AS landing_page_path,
+    '/home' AS exit_page_path,
+    CAST(NULL AS VARCHAR) AS referrer_host,
+    TRUE AS is_bounce,
+    FALSE AS has_add_to_cart,
+    FALSE AS has_order
+  UNION ALL
+  SELECT
+    'V2:20260329013000' AS session_id,
+    CAST(NULL AS VARCHAR) AS customer_id,
+    '2026-03-29 00:00:00'::TIMESTAMPNTZ AS session_day,
+    '2026-03-29 03:30:00'::TIMESTAMPNTZ AS session_start_visitor_local,
+    0 AS duration_seconds,
+    1 AS event_count,
+    1 AS page_view_count,
+    '/sale' AS landing_page_path,
+    '/sale' AS exit_page_path,
+    CAST(NULL AS VARCHAR) AS referrer_host,
+    TRUE AS is_bounce,
+    FALSE AS has_add_to_cart,
+    FALSE AS has_order
+)

@@ -1,0 +1,7 @@
+currency_code,currency_name,minor_unit_exponent,symbol
+USD,US dollar,2,$
+EUR,Euro,2,€
+GBP,Pound sterling,2,£
+JPY,Japanese yen,0,¥
+AUD,Australian dollar,2,A$
+KWD,Kuwaiti dinar,3,KD

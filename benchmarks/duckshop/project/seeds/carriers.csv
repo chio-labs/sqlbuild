@@ -1,0 +1,5 @@
+carrier_code,carrier_name,tracking_url_template,is_express
+FLAPWING,Flapwing Parcels,https://track.example.com/flapwing/{tracking_number},false
+WINGBEAT,Wingbeat Couriers,https://track.example.com/wingbeat/{tracking_number},true
+POSTAL,National Postal Service,https://track.example.com/postal/{tracking_number},false
+WEBFOOT,Webfoot Freight,,false

@@ -1,0 +1,275 @@
+{
+  "capture_adapter": "snowflake",
+  "capture_dialect": "snowflake",
+  "captured_at": "2026-10-24T13:09:48Z",
+  "format": "jsonl",
+  "input_fingerprint": "3d8dfd7f6ce287ebb4869b275702bd79783ff074ed1da1126c1356438ed964d5",
+  "relations": [
+    {
+      "bytes": 231,
+      "columns": [
+        {
+          "local_type": "TEXT(2)",
+          "name": "exception_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(2)",
+          "name": "shipment_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "carrier_code",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "exception_code",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "responsibility",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TIMESTAMPTZ",
+          "name": "occurred_at",
+          "warehouse_type": "TIMESTAMP_TZ(9)"
+        },
+        {
+          "local_type": "DECIMAL(10, 2)",
+          "name": "hours_to_resolve",
+          "warehouse_type": "NUMBER(10,2)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "resolution_type",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "DECIMAL(18, 2)",
+          "name": "compensation_usd",
+          "warehouse_type": "NUMBER(18,2)"
+        },
+        {
+          "local_type": "DECIMAL(38, 0)",
+          "name": "exception_rank_in_shipment",
+          "warehouse_type": "NUMBER(38,0)"
+        }
+      ],
+      "file": "refs/int_delivery_exceptions_classified.jsonl",
+      "kind": "ref",
+      "logical_name": "int_delivery_exceptions_classified",
+      "row_count": 1
+    },
+    {
+      "bytes": 1282,
+      "columns": [
+        {
+          "local_type": "TEXT(2)",
+          "name": "shipment_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "order_id",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "warehouse_code",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "carrier_code",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "placed_at_local",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "shipped_at_local",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "calendar_days_to_ship",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "business_days_to_ship",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "holidays_in_window",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "dispatch_business_minutes",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "BOOLEAN",
+          "name": "is_dispatch_on_time",
+          "warehouse_type": "BOOLEAN"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "delivered_at_utc",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "DECIMAL(10, 2)",
+          "name": "hours_to_deliver",
+          "warehouse_type": "NUMBER(10,2)"
+        }
+      ],
+      "file": "refs/int_fulfilment_sla.jsonl",
+      "kind": "ref",
+      "logical_name": "int_fulfilment_sla",
+      "row_count": 4
+    },
+    {
+      "bytes": 210,
+      "columns": [
+        {
+          "local_type": "TEXT(3)",
+          "name": "package_id",
+          "warehouse_type": "VARCHAR(3)"
+        },
+        {
+          "local_type": "TEXT(2)",
+          "name": "shipment_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "carrier_code",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "service_level",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "DECIMAL(10, 3)",
+          "name": "chargeable_weight_kg",
+          "warehouse_type": "NUMBER(10,3)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "weight_basis",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "DECIMAL(10, 3)",
+          "name": "band_max_kg",
+          "warehouse_type": "NUMBER(10,3)"
+        },
+        {
+          "local_type": "DECIMAL(3, 0)",
+          "name": "rate_minor",
+          "warehouse_type": "NUMBER(3,0)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "rate_currency_code",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "BOOLEAN",
+          "name": "has_rate",
+          "warehouse_type": "BOOLEAN"
+        }
+      ],
+      "file": "refs/int_shipment_costs.jsonl",
+      "kind": "ref",
+      "logical_name": "int_shipment_costs",
+      "row_count": 1
+    },
+    {
+      "bytes": 1427,
+      "columns": [
+        {
+          "local_type": "TEXT(2)",
+          "name": "shipment_id",
+          "warehouse_type": "VARCHAR(2)"
+        },
+        {
+          "local_type": "TEXT(4)",
+          "name": "order_id",
+          "warehouse_type": "VARCHAR(4)"
+        },
+        {
+          "local_type": "TEXT(4)",
+          "name": "warehouse_code",
+          "warehouse_type": "VARCHAR(4)"
+        },
+        {
+          "local_type": "TEXT(8)",
+          "name": "carrier_code",
+          "warehouse_type": "VARCHAR(8)"
+        },
+        {
+          "local_type": "TEXT(8)",
+          "name": "service_level",
+          "warehouse_type": "VARCHAR(8)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "tracking_number",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TIMESTAMPTZ",
+          "name": "shipped_at",
+          "warehouse_type": "TIMESTAMP_TZ(9)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "delivered_at",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "DECIMAL(1, 0)",
+          "name": "tracking_event_count",
+          "warehouse_type": "NUMBER(1,0)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "tracking_events",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "source_seq",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "source_loaded_at",
+          "warehouse_type": "VARCHAR(16777216)"
+        }
+      ],
+      "file": "refs/stg_shipments.jsonl",
+      "kind": "ref",
+      "logical_name": "stg_shipments",
+      "row_count": 5
+    }
+  ],
+  "scenario_name": "carrier_performance__weekly_rates_from_shipment_facts",
+  "sqlbuild_version": "0.175.0",
+  "total_bytes": 3150,
+  "total_rows": 11,
+  "version": 1
+}

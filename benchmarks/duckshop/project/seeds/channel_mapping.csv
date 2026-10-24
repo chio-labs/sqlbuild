@@ -1,0 +1,8 @@
+utm_source,utm_medium,channel_code,is_paid
+search_ads,cpc,PAID_SEARCH,true
+social_ads,paid_social,PAID_SOCIAL,true
+newsletter,email,EMAIL,false
+partner_site,affiliate,AFFILIATE,true
+creator,influencer,INFLUENCER,true
+-,organic,ORGANIC,false
+-,referral,REFERRAL,false

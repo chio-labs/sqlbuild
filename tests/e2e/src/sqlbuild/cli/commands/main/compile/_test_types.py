@@ -1239,3 +1239,13 @@ class UndecodableSelectorTestCase:
     output_flags: tuple[str, ...]
     expected_code: str
     expected_escaped_selector: str
+
+
+@dataclass(frozen=True)
+class BenchmarkProjectCompileTestCase:
+    """A benchmark project in the repository and the diagnostics its compile may report."""
+
+    description: str
+    project_dir: Path
+    expected_errors: int
+    expected_warnings: int

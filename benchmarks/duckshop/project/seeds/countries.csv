@@ -1,0 +1,10 @@
+country_code,country_name,region_code,default_timezone,currency_code,vat_registered
+DE,Germany,EU,Europe/Berlin,EUR,true
+FR,France,EU,Europe/Paris,EUR,true
+NL,Netherlands,EU,Europe/Amsterdam,EUR,true
+GB,United Kingdom,EU,Europe/London,GBP,true
+US,United States,US,America/New_York,USD,false
+CA,Canada,US,America/Toronto,USD,n/a
+JP,Japan,APAC,Asia/Tokyo,JPY,true
+AU,Australia,APAC,Australia/Sydney,AUD,true
+KW,Kuwait,MENA,Asia/Kuwait,KWD,false

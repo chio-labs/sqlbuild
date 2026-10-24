@@ -1,0 +1,15 @@
+# Copy to sqlbuild_local.toml (gitignored) and fill in your own values.
+# Never commit real account names, users, roles, warehouses or schemas.
+target = "dev"
+
+[connections.warehouse]
+account = "<account-identifier>"
+user = "<user>"
+authenticator = "<authenticator>"
+role = "<role>"
+warehouse = "<warehouse>"
+
+[targets.dev]
+connection = "warehouse"
+database = "<database>"
+schema = "<schema>"

@@ -1,0 +1,73 @@
+{
+  "capture_adapter": "snowflake",
+  "capture_dialect": "snowflake",
+  "captured_at": "2026-10-24T13:09:48Z",
+  "format": "jsonl",
+  "input_fingerprint": "b0fa60906be6b5a2f6977ba5af76608a3047bfed6fb8cb089181a8fe5ffaf9fe",
+  "relations": [
+    {
+      "bytes": 1697,
+      "columns": [
+        {
+          "local_type": "TEXT(22)",
+          "name": "stock_day_key",
+          "warehouse_type": "VARCHAR(22)"
+        },
+        {
+          "local_type": "TEXT(6)",
+          "name": "sku",
+          "warehouse_type": "VARCHAR(6)"
+        },
+        {
+          "local_type": "TEXT(4)",
+          "name": "warehouse_code",
+          "warehouse_type": "VARCHAR(4)"
+        },
+        {
+          "local_type": "DATE",
+          "name": "calendar_date",
+          "warehouse_type": "DATE"
+        },
+        {
+          "local_type": "DECIMAL(1, 0)",
+          "name": "on_hand_qty",
+          "warehouse_type": "NUMBER(1,0)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "unit_cost_usd",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "stock_value_usd",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "BOOLEAN",
+          "name": "is_stocked_out",
+          "warehouse_type": "BOOLEAN"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "days_since_count",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "BOOLEAN",
+          "name": "is_count_overdue",
+          "warehouse_type": "BOOLEAN"
+        }
+      ],
+      "file": "refs/fct_inventory_daily.jsonl",
+      "kind": "ref",
+      "logical_name": "fct_inventory_daily",
+      "row_count": 7
+    }
+  ],
+  "scenario_name": "stock_outs__finds_longest_run_per_week",
+  "sqlbuild_version": "0.175.0",
+  "total_bytes": 1697,
+  "total_rows": 7,
+  "version": 1
+}

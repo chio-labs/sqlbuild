@@ -1,0 +1,221 @@
+# DuckShop
+
+DuckShop is the online shop of Mallard & Co., a fictional company that sells duck-themed home goods:
+rubber ducks (collectible series and limited editions), duck-print textiles, decoys, pond and garden
+supplies, and bath goods. It is written as a dense SQLBuild project in Snowflake SQL, and is a
+realistic corpus for exercising the SQLBuild compiler, Rules, unit tests and scenarios, and for
+testing translation from Snowflake SQL to other dialects.
+
+The theme lives only in the data and descriptions: product lines named after duck species
+(Mallard, Pintail, Teal, Eider, Merganser), warehouses such as The Pond and The Nest, and loyalty
+tiers from Duckling to Golden Duck. Model, column and source names stay conventional, and the
+business mechanics are those of any multi-region online shop.
+
+Everything in it is synthetic: order references use a `DS-O-` prefix, email addresses use
+`example.com`-style domains, and every brand, carrier and product name is invented.
+
+## Layout
+
+```text
+benchmarks/duckshop/
+├── project/      the SQLBuild project (Snowflake adapter), with its data loaders in python/loaders/
+├── scripts/      tooling that is not part of the project: the construct census and cleanup SQL
+├── tests/        offline checks for the synthetic data loaders
+└── RUNBOOK.md    loading, building, testing and capturing on Snowflake, and cleaning up
+```
+
+## Domain
+
+- Storefront regions: EU (GBP and EUR), US (USD), APAC (JPY and AUD) and MENA (KWD), so currencies
+  with 0, 2 and 3 minor-unit digits all occur. Warehouses: The Pond (`Europe/London`), The Nest
+  (`America/New_York`) and The Marsh (`Australia/Sydney`).
+- Raw tables are append-only change logs with `_op`, `_seq` and `_loaded_at`. Staging keeps the
+  latest surviving version of each key with `QUALIFY ROW_NUMBER()`, through the `cdc_latest`
+  CTE-list macro.
+- Payloads arrive as `VARIANT`, `OBJECT` and `ARRAY` columns, plus raw JSON text that needs
+  `TRY_PARSE_JSON`. Money is in integer minor units with an ISO currency. Timestamps arrive as
+  `TIMESTAMP_TZ` with offsets, epoch milliseconds in JSON, warehouse-local `TIMESTAMP_NTZ` with an
+  IANA zone, and one deliberately session-dependent `TIMESTAMP_LTZ`.
+
+## Project shape
+
+- 252 models: 99 staging, 81 intermediate, 66 marts and 6 snapshots. Marts are grouped by area:
+  core, orders, customers, catalogue, inventory, fulfilment, support, clickstream, growth,
+  finance, partners and executive.
+- 5 seeds, 2 SQL functions (a scalar UDF and a table function) and a Python UDF.
+- SQL and Python macros, folder-scoped constants and enums, generic and singular audits, model
+  schemas, hooks, incremental models with cursor windows, and snapshots with both strategies.
+- Rules select `SQBRSQL`, `SQBRGRAPH`, `SQBRCONTRACT`, `SQBRTEST` and the project's own
+  `XSQBRDUCK` rules, with reviewed exceptions in `sqlbuild_project.toml`. Every model must have at least one unit test (`SQBRTEST202`).
+
+## Tests and scenarios
+
+`tests/unit/` mirrors `models/` and holds 266 unit tests:
+
+- 260 model tests, including cursor-window tests on incremental models, a table-function mock, a
+  macro mock, a fixture built by a test-only Python macro, an empty fixture for a contracted
+  source, and a file with two `TEST` blocks;
+- 3 macro tests, 2 UDF tests and 1 table-function test, most driven by `VALUES` case tables;
+- assertions in 98 tests, including a key check on every mart.
+
+`tests/scenarios/` holds 8 scenarios: one each for catalogue, clickstream, orders, fulfilment,
+support and inventory, and two that cross areas (a regional scorecard, and campaign return on ad
+spend). Two use `expected_columns "all"`. Expected values are derived by hand from the fixtures,
+and every test and scenario passes on Snowflake (see [Status](#status)); the scenarios' captured
+snapshots are in `tests/_scenario_snapshots/`. Unit tests and scenarios read only their own fixtures, so they do not depend on the
+synthetic data, and capturing a scenario snapshots its fixtures rather than loaded tables.
+
+```bash
+cd benchmarks/duckshop/project
+sqb test --inspect
+```
+
+## Synthetic data
+
+Every raw source is a managed source with a Python loader in `project/python/loaders/`, run by
+`sqb load` (or automatically by `sqb build`). The loaders generate one coherent world: about 300
+customers, 120 SKUs and 1,200 orders between January and March 2026, with the payments, refunds,
+shipments, returns, stock movements, clickstream sessions, support tickets, campaigns and partner
+messages that follow from them, about 60,000 rows in all.
+
+- Generation is deterministic: every table draws from its own stream seeded from a fixed seed, so
+  the same code version always produces the same rows. The `data_scale` project variable
+  multiplies volume (`"1"` by default).
+- Change logs carry inserts, updates and deletes with `_op`, `_seq` and `_loaded_at`. Some versions
+  arrive days late or out of order, and some are delivered twice.
+- JSON payloads have missing keys, JSON nulls next to SQL NULLs, nested arrays, numbers sent as
+  strings and odd precision. Partner order messages come in two payload versions, some with a
+  JSON-null order id and the id nested elsewhere.
+- Timestamps carry offsets from nine time zones, with orders, stock movements and delivery slots on
+  the 2026 daylight-saving changes, including wall-clock times that do not exist. Web sessions run
+  past midnight, and a few events arrive a day or two late.
+- Support tickets and comments contain order references, phone numbers, email addresses and
+  contact reasons for the regular-expression models to find.
+
+`tests/test_synthetic_data.py` checks the loaders offline: determinism, the declared column shape
+of every managed source, staging keys and audited columns, references between tables, and the edge
+cases above. It needs only `pytest` and `pyyaml`:
+
+```bash
+uv run --isolated --no-project --with pytest --with pyyaml pytest benchmarks/duckshop/tests
+```
+
+See [RUNBOOK.md](RUNBOOK.md) for loading, building and testing on Snowflake.
+
+## Status
+
+Last verified on Snowflake with SQLBuild 0.175.0 at `data_scale = "1"`:
+
+| Step | Result |
+|------|--------|
+| `sqb load` | All 76 managed sources load |
+| `sqb build` | Passes; one warn-severity audit (`orders_balance_to_payments`) reports findings |
+| `sqb test` | 266 of 266 pass |
+| `sqb scenario test` | 8 of 8 pass |
+| `sqb scenario capture` | Captures all 8; snapshots are in `project/tests/_scenario_snapshots/` |
+| `sqb scenario test --local --strict` | 0 of 8 pass: 5 fail in translation, 3 report a stale snapshot |
+
+Local replay translates each scenario's Snowflake SQL to DuckDB on a best-effort basis. These five
+failures are the baseline that better translation should remove:
+
+| Scenario | Model | Construct that fails |
+|----------|-------|----------------------|
+| `category_tree__rolls_sales_up_built_paths` | `stg_categories` | `OBJECT_KEYS` is passed through unchanged |
+| `cart_funnel__assigns_furthest_stage_per_session` | `int_cart_funnel` | `::ARRAY` cast of a lambda result becomes an untyped `CAST(... AS ARRAY)` |
+| `region_scorecard__combines_sales_and_recognised_revenue` | `rpt_daily_sales_by_region` | `TO_VARCHAR` is passed through unchanged |
+| `support_sla__weekly_breaches_and_monthly_reasons` | `rpt_contact_reasons_monthly` | `TO_VARCHAR` is passed through unchanged |
+| `stock_outs__finds_longest_run_per_week` | `rpt_stock_outs_weekly` | `DATEADD('day', <window function>, ...)` becomes an invalid `(...) DAY` interval |
+
+The other three scenarios (`campaign_roas__attributes_orders_to_channel_spend`,
+`carrier_performance__weekly_rates_from_shipment_facts` and
+`payments__fully_refunded_orders_collect_nothing`) never reach translation: their snapshots are
+reported stale straight after capture, a SQLBuild issue described under known limitations.
+
+## Expected divergences
+
+Nine models use constructs whose results depend on the engine or the session. They are tagged
+`known_divergence` and say so in their descriptions, so translation and replay tools can report
+them as expected differences or refusals instead of errors:
+
+| Construct | Models |
+|-----------|--------|
+| `HASH` | `int_customer_identity`, `dim_customers`, `fct_web_sessions` |
+| `TIMESTAMP_LTZ` | `stg_tickets`, `int_ticket_first_response`, `rpt_customer_order_lookup` |
+| `CURRENT_TIMESTAMP()` | `int_promotion_performance`, `int_ticket_sla_breaches`, `rpt_customer_order_lookup` |
+
+## Known limitations
+
+These SQLBuild limitations shape parts of the project; each workaround is a reviewed exception or
+noted here:
+
+- Fixture checking asks for `CONNECT BY` pseudo-columns and lambda parameters as mock columns, so
+  `int_category_paths` and `int_cart_funnel` have no unit test. Scenarios cover both, and the
+  category scenario builds the hierarchy from a source fixture for the same reason.
+- Parameterised tests (`parameters` and `cases`) fail with `L005` while `SQBRSQL` is selected, so
+  repeated cases use multi-row fixtures or `VALUES` case tables instead.
+- Macro tests can only reach project-wide macros, so folder-scoped staging macros such as
+  `cdc_latest` are covered through the models that call them.
+- Scenarios cannot build incremental models that use cursor intrinsics, so scenarios that read
+  them provide the incremental model as a fixture.
+- `sqb format` rewrites a typed `WHERE FALSE` fixture into `__empty_fixture()` even where the
+  relation's schema is not authoritative, so the empty fixtures here use `WHERE 1 = 0`.
+- A macro mock must be an unaliased `SELECT` of one string literal, which `SQBRSQL022` rejects.
+- A file with several `TEST` blocks cannot satisfy `SQBRTEST102`, which names the file after each
+  block.
+- Loaders that return rows write JSON values as `PARSE_JSON(...)` inside a `VALUES` list, which
+  Snowflake rejects because `VALUES` accepts only constants. The DuckShop loaders therefore write
+  their own tables, parsing JSON in the select list of each `INSERT` (`python/loaders/_writer.py`).
+- Once a source table exists, Snowflake planning rebinds models to the table's inspected columns.
+  SQLBuild reads those names in lower case and then quotes them, so they only match quoted
+  lower-case references, and every unquoted column reference fails with `B002`. The connection
+  therefore sets `QUOTED_IDENTIFIERS_IGNORE_CASE = true` in `session_parameters`, which the binder
+  honours. DuckShop quotes no identifier whose case matters, so the setting changes no results.
+- Snowflake does not support concurrent microbatch `delete_insert` batches (`P001`), so
+  `int_web_sessions` runs its batches one at a time.
+- `sqb build --no-load` and `auto_load_sources = false` still load managed sources when the build
+  has no `--select`, because the default selection includes the sources.
+- Self-managed loaders always report `rows=0`, since SQLBuild does not see the rows they insert.
+- Compilation accepts SQL that Snowflake rejects: `CONNECT_BY_ISLEAF`, which Snowflake does not
+  have, and a CTE whose body is a bare `VALUES` list. `int_category_paths` finds leaf categories
+  with a join instead, and test case tables use `SELECT ... FROM VALUES ... AS v(...)`.
+- `SQBRSQL018` can only take proof from single-column keys. Append-only feeds redeliver rows, so
+  their id is unique only together with `_loaded_at` (the `unique_per_delivery` audit), and the
+  staging models that keep the latest delivery carry reviewed exceptions.
+- Source fixtures are not cast to the source's declared types, so a typed function over an
+  untyped `NULL` fixture column (such as `YEAR(NULL)`) fails on Snowflake; such fixtures cast it.
+- The scenario fixture checker treats lambda parameters (`i -> ...`, `(acc, q) -> ...`) as columns
+  the model reads, so the `cart_funnel` scenario mocks carry placeholder `acc`, `i` and `q` columns.
+- A `relationships` audit with a quoted relation name, `to "fct_orders"`, compiles cleanly but
+  queries an unqualified table and does not wait for it; the relation must be `to __ref(...)`.
+- A local scenario snapshot is reported stale (`X602`) straight after capture when a fixture has a
+  bare `NULL` column, which SQLBuild wraps in a typed `__sqlbuild_partial_fixture` subquery. The
+  snapshot fingerprint hashes that adapter-rendered SQL: capture renders the alias in Snowflake's
+  upper case and local replay in DuckDB's lower case, and capture can also cast columns whose types
+  it only knows from the warehouse. The fingerprint can never match, so the snapshot cannot be
+  replayed. Three of the eight scenarios are affected.
+- A unit test of a table function, and an end-of-build audit, still run when the function or the
+  relation they read was skipped, and then fail with a missing-object error.
+
+## Compile
+
+Compiling needs no warehouse connection:
+
+```bash
+cd benchmarks/duckshop/project
+sqb compile
+sqb format --check
+```
+
+CI compiles a copy of the project with the SQLBuild built from the same pull request and fails on
+any error or warning (`tests/e2e/src/sqlbuild/cli/commands/main/compile/test_duckshop_benchmark_compile.py`).
+
+`sqlbuild_project.toml` holds placeholder connection values only. To run against a warehouse, copy
+`sqlbuild_local.toml.example` to `sqlbuild_local.toml` (gitignored) and fill in your own details.
+
+## Construct census
+
+After compiling, measure how often each construct family occurs, per layer:
+
+```bash
+python benchmarks/duckshop/scripts/census.py
+```

@@ -1,0 +1,185 @@
+TEST (name "int_promotion_performance__measures_redemptions_against_baseline");
+
+WITH __ref__stg_promotions AS (
+  SELECT
+    'SPRING' AS promo_code,
+    'Spring sale' AS promo_name,
+    '2026-03-01 00:00:00 +00:00'::TIMESTAMPTZ AS starts_at,
+    NULL AS ends_at,
+    NULL AS is_stackable,
+    PARSE_JSON('{"tiers": [{"threshold_minor": 5000}, {"threshold_minor": 10000}]}')::OBJECT AS rules,
+    NULL AS min_order_minor,
+    ARRAY_CONSTRUCT('EU', 'US')::ARRAY AS eligible_regions,
+    NULL AS tier_count,
+    NULL AS max_discount_pct,
+    NULL AS source_seq,
+    NULL AS source_loaded_at
+  UNION ALL
+  SELECT
+    'UNUSED',
+    'Never used',
+    '2026-03-01 00:00:00 +00:00'::TIMESTAMPTZ,
+    NULL,
+    NULL,
+    PARSE_JSON('{}')::OBJECT,
+    NULL,
+    ARRAY_CONSTRUCT()::ARRAY,
+    NULL,
+    NULL,
+    NULL,
+    NULL
+),
+
+__ref__stg_promotion_redemptions AS (
+  SELECT
+    'R1' AS redemption_id,
+    'SPRING' AS promo_code,
+    'O1' AS order_id,
+    NULL AS discount_minor,
+    NULL AS redeemed_at,
+    NULL AS entry_method,
+    NULL AS redemption_context,
+    NULL AS source_seq,
+    NULL AS source_loaded_at
+  UNION ALL
+  SELECT
+    'R2',
+    'SPRING',
+    'O2',
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL
+),
+
+__ref__int_orders_usd AS (
+  SELECT
+    'O1' AS order_id,
+    'C1' AS customer_id,
+    NULL AS region_code,
+    NULL AS currency_code,
+    NULL AS placed_at,
+    NULL AS placed_date_local,
+    NULL AS order_status,
+    NULL AS sales_channel,
+    NULL AS units,
+    NULL AS amount,
+    120.0::DECIMAL(18, 2) AS amount_usd,
+    NULL AS gross_amount_usd,
+    20.0::DECIMAL(18, 2) AS discount_amount_usd,
+    NULL AS tax_amount_usd,
+    NULL AS rate_to_usd,
+    NULL AS rate_date,
+    NULL AS rate_age_days,
+    NULL AS is_rate_stale,
+    'SPRING' AS promo_code,
+    NULL AS utm_source,
+    NULL AS utm_medium,
+    NULL AS utm_campaign,
+    NULL AS basket_size
+  UNION ALL
+  SELECT
+    'O2',
+    'C1',
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    80.0::DECIMAL(18, 2),
+    NULL,
+    10.0::DECIMAL(18, 2),
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    'SPRING',
+    NULL,
+    NULL,
+    NULL,
+    NULL
+  UNION ALL
+  SELECT
+    'O3',
+    'C2',
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    50.0::DECIMAL(18, 2),
+    NULL,
+    0.0::DECIMAL(18, 2),
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL
+  UNION ALL
+  SELECT
+    'O4',
+    'C3',
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    150.0::DECIMAL(18, 2),
+    NULL,
+    0.0::DECIMAL(18, 2),
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL
+),
+
+__expected__int_promotion_performance AS (
+  SELECT
+    'SPRING' AS promo_code,
+    2 AS redemption_count,
+    1 AS redeeming_customers,
+    200.0::DECIMAL(18, 2) AS revenue_usd,
+    30.0::DECIMAL(18, 2) AS discount_usd,
+    0.130435::DECIMAL(9, 6) AS discount_rate,
+    100.0::DECIMAL(18, 2) AS avg_order_usd,
+    100.0::DECIMAL(18, 2) AS baseline_avg_order_usd,
+    0.0::DECIMAL(9, 2) AS basket_uplift_pct,
+    10000 AS top_tier_threshold_minor,
+    2 AS eligible_region_count
+  UNION ALL
+  SELECT
+    'UNUSED' AS promo_code,
+    0 AS redemption_count,
+    0 AS redeeming_customers,
+    0.0::DECIMAL(18, 2) AS revenue_usd,
+    0.0::DECIMAL(18, 2) AS discount_usd,
+    CAST(NULL AS DECIMAL(9, 6)) AS discount_rate,
+    CAST(NULL AS DECIMAL(18, 2)) AS avg_order_usd,
+    100.0::DECIMAL(18, 2) AS baseline_avg_order_usd,
+    CAST(NULL AS DECIMAL(9, 2)) AS basket_uplift_pct,
+    CAST(NULL AS INT) AS top_tier_threshold_minor,
+    0 AS eligible_region_count
+)
