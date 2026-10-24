@@ -565,6 +565,7 @@ RENDER_RAISED_CODES: frozenset[str] = frozenset(
         "P022",
         "P023",
         "P024",
+        "P025",
         "S026",
     }
 )

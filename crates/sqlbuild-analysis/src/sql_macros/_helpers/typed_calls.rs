@@ -1,6 +1,6 @@
 //! Expression macro calls followed through the edits that move them, and their typed markers.
 
-use polyglot_sql::expressions::TYPED_EXPRESSION_FUNCTION;
+use polyglot_sql::expressions::{TYPED_EXPRESSION_FUNCTION, TYPED_LIKE_EXPRESSION_FUNCTION};
 
 use crate::compiled_project::models::SplicedSpan;
 use crate::sql_macros::_helpers::body::with_line_comment_closed;
@@ -97,8 +97,13 @@ fn quoted(returns: &str) -> String {
 pub(crate) fn typed_sql(sql: &str, calls: &[TypedCall]) -> (String, Vec<TextSplice>) {
     let mut edits: Vec<MarkerEdit> = Vec::new();
     for (index, call) in calls.iter().enumerate() {
-        let Some(returns) = &call.returns else {
-            continue;
+        let (function, asserted): (&str, String) = match (&call.returns, &call.returns_like) {
+            (Some(returns), _) => (TYPED_EXPRESSION_FUNCTION, quoted(returns)),
+            (None, Some(like)) => (
+                TYPED_LIKE_EXPRESSION_FUNCTION,
+                with_line_comment_closed(like, true),
+            ),
+            (None, None) => continue,
         };
         let valid = |position: usize| position <= sql.len() && sql.is_char_boundary(position);
         if call.start >= call.end || !valid(call.start) || !valid(call.end) {
@@ -114,13 +119,13 @@ pub(crate) fn typed_sql(sql: &str, calls: &[TypedCall]) -> (String, Vec<TextSpli
             position: call.start,
             opening: true,
             order: (usize::MAX - call.end, usize::MAX - index),
-            text: format!("{TYPED_EXPRESSION_FUNCTION}("),
+            text: format!("{function}("),
         });
         edits.push(MarkerEdit {
             position: call.end,
             opening: false,
             order: (usize::MAX - call.start, index),
-            text: format!("{line_break}, {})", quoted(returns)),
+            text: format!("{line_break}, {asserted})"),
         });
     }
     if edits.is_empty() {

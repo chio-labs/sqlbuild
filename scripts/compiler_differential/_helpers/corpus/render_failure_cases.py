@@ -798,6 +798,15 @@ def _sql_macro_cases() -> tuple[FailureCase, ...]:
             ),
         ),
         failure_case(
+            name="sql-macro-body-misuses-an-any-family",
+            expected_code="P025",
+            expected_message="body of macro x() does not accept every value of v ANY NUMERIC",
+            files=_sql_macro_columns(
+                columns="@sql.x(amount) AS amount, status",
+                files=_x_macro(arguments="v ANY NUMERIC", returns="", body="UPPER(@v)\n"),
+            ),
+        ),
+        failure_case(
             name="sql-macro-body-declaration-not-visible",
             expected_code="S026",
             expected_message="constant price_places is not visible from macros/sql/x.sql",

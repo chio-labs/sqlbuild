@@ -137,6 +137,14 @@ const SHOUTED_NESTED: (&str, &str) = (
     "shouted_twice",
     "MACRO (description \"Shouted\", arguments (value VARCHAR), returns BIGINT);\n\n@sql.plus_one(LENGTH(@value)) || 'x'\n",
 );
+const ROUND_ANY: (&str, &str) = (
+    "round_any",
+    "MACRO (description \"Rounded\", arguments (v ANY NUMERIC, places INT CONST DEFAULT 2), returns TYPE OF v);\n\nROUND(@v, @places)\n",
+);
+const SHOUT_NUMBER: (&str, &str) = (
+    "shout_number",
+    "MACRO (description \"Shouted\", arguments (v ANY NUMERIC));\n\nUPPER(@v)\n",
+);
 const ODD: (&str, &str) = (
     "odd",
     "MACRO (description \"Odd\", arguments (v FOO BAR), returns BIGINT);\n\n@v + 1\n",
@@ -426,6 +434,13 @@ fn given_calls_of_each_form_when_expanding_then_the_ticket_examples_compile() {
             expected_sql: "SELECT 1 + 1 AS a",
         },
         ExpansionTestCase {
+            description: "an ANY family argument of its family",
+            adapter: "duckdb",
+            macros: &[ROUND_ANY],
+            sql: "SELECT @sql.round_any(o.amount, 1) AS a FROM orders AS o",
+            expected_sql: "SELECT ROUND(o.amount, 1) AS a FROM orders AS o",
+        },
+        ExpansionTestCase {
             description: "an expression macro without returns",
             adapter: "duckdb",
             macros: &[SHOUTED_UNTYPED],
@@ -527,6 +542,22 @@ fn given_invalid_calls_when_expanding_then_each_error_names_the_problem() {
             sql: "SELECT @sql.shouted_twice(o.status) FROM orders AS o",
             expected_code: "P024",
             expected_message: "macro shouted_twice() declares returns BIGINT, but its body is VARCHAR",
+        },
+        ExpansionErrorTestCase {
+            description: "a literal outside an ANY family",
+            adapter: "duckdb",
+            macros: &[ROUND_ANY],
+            sql: "SELECT @sql.round_any('ten')",
+            expected_code: "P017",
+            expected_message: "argument v of macro round_any() expects a number; 'ten' is a string",
+        },
+        ExpansionErrorTestCase {
+            description: "a body that misuses an ANY family argument",
+            adapter: "duckdb",
+            macros: &[SHOUT_NUMBER],
+            sql: "SELECT @sql.shout_number(o.amount) FROM orders AS o",
+            expected_code: "P025",
+            expected_message: "body of macro shout_number() does not accept every value of v ANY NUMERIC",
         },
         ExpansionErrorTestCase {
             description: "cycle",

@@ -789,6 +789,42 @@ def test_given_unwritable_cache_when_testing_since_then_warns_and_succeeds(
             git_after_edits=("commit", "--quiet", "--all", "-m", "edit"),
         ),
         SinceSelectionE2ETestCase(
+            description="changing a sql macro's returns form selects the test of its caller",
+            edits={
+                _OUTER_SQL_MACRO: _SQL_MACROS[_OUTER_SQL_MACRO].replace(
+                    "returns DOUBLE", "returns TYPE OF cents"
+                )
+            },
+            command=_EXPLAINED_TESTS,
+            expected_exit_code=0,
+            expected_fragments=(
+                "Changed since main: 1 macro changed",
+                "test_order_net\n    executes macro net_dollars (changed)",
+                "PASS=1  FAIL=0  TOTAL=1",
+            ),
+            unexpected_fragments=("test_stg_orders", "test_order_totals", "test_open_orders"),
+        ),
+        SinceSelectionE2ETestCase(
+            description="naming the CTEs of a CTE-list sql macro call selects the caller's test",
+            edits={
+                "models/_macros/sql/live_orders.sql": (
+                    "MACRO (\n  description 'Orders still open.',\n"
+                    "  arguments (src RELATION (order_id INTEGER, status VARCHAR)),\n);\n\n"
+                    "WITH live AS (SELECT * FROM @src WHERE status = 'open')\n"
+                ),
+                "models/order_live.sql": (
+                    "MODEL (description 'Live orders.');\n\n"
+                    'WITH raw AS (SELECT * FROM __ref("stg_orders")),\n'
+                    "@sql.live_orders(raw, __cte := open_orders)\n"
+                    "SELECT order_id FROM open_orders\n"
+                ),
+            },
+            command=_TEST_COMMAND,
+            expected_exit_code=0,
+            expected_fragments=("Changed since main: 1 model, 1 macro added",),
+            unexpected_fragments=("FAIL=1",),
+        ),
+        SinceSelectionE2ETestCase(
             description="reformatting, commenting and redescribing a sql macro changes nothing",
             edits={
                 _OUTER_SQL_MACRO: (

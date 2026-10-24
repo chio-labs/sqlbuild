@@ -193,7 +193,7 @@ pub(crate) fn probe_plan(sql: &str, checks: &[SqlMacroCheck]) -> ProbePlan {
                         evidence[index] = Some(Evidence::Columns(plan.probes.len() - 1));
                     }
                 }
-                ArgumentExpectation::Typed { .. } => {
+                ArgumentExpectation::Typed { .. } | ArgumentExpectation::Family { .. } => {
                     let group: usize = match typed_probe_index(&scopes, &check.scope) {
                         Some(group) => group,
                         None => {
@@ -345,7 +345,7 @@ pub(crate) fn check_findings(
                     ));
                 }
             }
-            ArgumentExpectation::Typed { data_type } => {
+            ArgumentExpectation::Typed { .. } | ArgumentExpectation::Family { .. } => {
                 let Some(Some(Evidence::Column(probe, column))) = evidence.get(index) else {
                     continue;
                 };
@@ -354,6 +354,28 @@ pub(crate) fn check_findings(
                 };
                 let Some(Some(actual)) = column_type(found, column) else {
                     continue;
+                };
+                let data_type: &str = match &argument.expected {
+                    ArgumentExpectation::Family { family } => {
+                        if !family.admits(type_family(actual, dialect)) {
+                            findings.push(finding(
+                                argument,
+                                format!(
+                                    "argument {parameter} of macro {name}() expects {}; {} is {}",
+                                    family.noun(),
+                                    argument.text,
+                                    shown_type(actual)
+                                ),
+                                Some(format!(
+                                    "pass {} or declare {parameter} with a wider type",
+                                    family.noun()
+                                )),
+                            ));
+                        }
+                        continue;
+                    }
+                    ArgumentExpectation::Typed { data_type } => data_type,
+                    _ => continue,
                 };
                 if !compatible(Some(actual), data_type, dialect) {
                     findings.push(finding(

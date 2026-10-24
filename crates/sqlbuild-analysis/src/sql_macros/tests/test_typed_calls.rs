@@ -1,6 +1,6 @@
 use crate::sql_macros::main::typed_analysis_sql::typed_analysis_sql;
 use crate::sql_macros::main::untyped_call_outputs::untyped_call_outputs;
-use crate::sql_macros::models::TypedCall;
+use crate::sql_macros::models::{ExpandedText, TypedCall};
 use crate::sql_macros::tests::helpers::expanded_text_for;
 use crate::sql_macros::tests::test_types::{TypedAnalysisTestCase, TypedCallTestCase};
 
@@ -166,6 +166,7 @@ fn given_typed_calls_when_building_the_analysis_text_then_each_call_with_returns
             .calls
             .iter()
             .map(|(start, end, returns)| TypedCall {
+                returns_like: None,
                 start: *start,
                 end: *end,
                 macro_name: "m".to_owned(),
@@ -199,6 +200,7 @@ fn given_the_reserved_analysis_function_when_comparing_then_authored_sql_rejects
 #[test]
 fn given_calls_without_returns_when_listing_outputs_then_only_whole_named_items_are_named() {
     let untyped = |start: usize, end: usize| TypedCall {
+        returns_like: None,
         start,
         end,
         macro_name: "shout".to_owned(),
@@ -222,5 +224,29 @@ fn given_calls_without_returns_when_listing_outputs_then_only_whole_named_items_
             ("loud".to_owned(), "shout".to_owned()),
             ("quiet".to_owned(), "shout".to_owned()),
         ]
+    );
+}
+
+const LIKE_VALUE: (&str, &str) = (
+    "like_value",
+    "MACRO (description \"Like\", arguments (value ANY, fallback ANY DEFAULT NULL), \
+     returns TYPE OF value);\n\nCOALESCE(@value, @fallback)\n",
+);
+
+#[test]
+fn given_a_returns_type_of_call_when_building_the_analysis_text_then_it_asserts_its_argument() {
+    let expanded: ExpandedText = expanded_text_for(
+        "duckdb",
+        &[LIKE_VALUE],
+        "SELECT @sql.like_value(o.created_at + 1) AS v FROM orders AS o",
+    )
+    .expect("expands");
+
+    let (typed, _) = typed_analysis_sql(&expanded.sql, &expanded.calls);
+
+    assert_eq!(
+        typed,
+        "SELECT __polyglot_typed_like(COALESCE((o.created_at + 1), NULL), o.created_at + 1) \
+         AS v FROM orders AS o"
     );
 }

@@ -16,7 +16,7 @@ use crate::sql_macros::_helpers::literal_positions::{
 use crate::sql_macros::_helpers::parameters::{ParameterReference, parameter_references};
 use crate::sql_macros::_helpers::placement::top_level_parts;
 use crate::sql_macros::_helpers::placement::{CallSite, cte_names, select_names};
-use crate::sql_macros::_helpers::returns_check::check_body_returns;
+use crate::sql_macros::_helpers::returns_check::{check_body_returns, check_body_types};
 use crate::sql_macros::_helpers::typed_calls::{shifted, spliced};
 use crate::sql_macros::constants::{
     ARGUMENT_CODE, CTE_ARGUMENT, CTE_NOUN, CYCLE_CODE, INVALID_DEFINITION_CODE,
@@ -240,8 +240,23 @@ pub(crate) fn expand_call<H: SqlMacroHost>(
         &body,
         (host.adapter(), body_location(&definition)),
     )?;
-    let expansion: BodyExpansion = expand_body(&definition, &body, &rendered)
+    check_body_types(
+        &definition,
+        &body,
+        (host.adapter(), body_location(&definition)),
+    )?;
+    let mut expansion: BodyExpansion = expand_body(&definition, &body, &rendered)
         .map_err(|error| error.at(body_location(&definition)))?;
+    expansion.like = definition.returns_like.as_deref().and_then(|name| {
+        rendered
+            .iter()
+            .find(|argument| {
+                definition.parameters[argument.parameter]
+                    .name
+                    .eq_ignore_ascii_case(name)
+            })
+            .map(|argument| argument.sql.clone())
+    });
     if call.in_python {
         return Ok((
             ExpandedText {
@@ -336,7 +351,7 @@ fn rendered_argument<H: SqlMacroHost>(
             }
         }
         (
-            ParameterKind::Constant { .. } | ParameterKind::Any,
+            ParameterKind::Constant { .. } | ParameterKind::Any { .. },
             ArgumentShape::ConstantReference { name },
         ) => {
             if host.constant_shape(scope, name)? != ConstantShape::Scalar {
@@ -408,6 +423,7 @@ fn placed(
             end: text.len() - comma,
             macro_name: definition.name.clone(),
             returns: definition.returns.clone(),
+            returns_like: expansion.like.clone(),
         });
     }
     Ok((ExpandedText { sql: text, calls }, inserted))
@@ -607,9 +623,9 @@ fn check_adapter_types(
                 .iter()
                 .map(|(_, data_type)| data_type.as_str())
                 .collect(),
-            ParameterKind::Any | ParameterKind::Enum { .. } | ParameterKind::ColumnOf { .. } => {
-                Vec::new()
-            }
+            ParameterKind::Any { .. }
+            | ParameterKind::Enum { .. }
+            | ParameterKind::ColumnOf { .. } => Vec::new(),
         };
         for data_type in types {
             if let Some(error) = invalid(
@@ -658,6 +674,14 @@ fn argument_checks(
                 ArgumentExpectation::Typed {
                     data_type: data_type.clone(),
                 }
+            }
+            (
+                ParameterKind::Any {
+                    family: Some(family),
+                },
+                ArgumentShape::Expression | ArgumentShape::Identifier { .. },
+            ) if !rendered.sql.contains('@') && !rendered.sql.contains("__") => {
+                ArgumentExpectation::Family { family: *family }
             }
             _ => continue,
         };
