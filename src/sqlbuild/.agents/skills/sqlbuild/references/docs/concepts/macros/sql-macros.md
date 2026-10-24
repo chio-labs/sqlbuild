@@ -13,7 +13,9 @@ Online: https://sqlbuild.com/docs/concepts/macros/sql-macros/
 - Parameter types
 - Parameters in the body
 - Compose macros
-- Checks and tools
+- Checks
+- Result types
+- Tools
 
 A SQL macro is a reusable piece of SQL with typed parameters. Unlike a
 [Python macro](python-macros.md), it holds no logic: its body is SQL, so the compiler checks
@@ -64,10 +66,11 @@ MACRO (
   returns DECIMAL(18, 2),
 );
 
-ROUND(CAST(@amount_cents AS DECIMAL(18, 4)) / 100, @places)
+CAST(ROUND(@amount_cents / 100, @places) AS DECIMAL(18, 2))
 ```
 
-`returns` is required for expression macros and not allowed for the other forms.
+`returns` is optional for expression macros and not allowed for the other forms. See
+[Result types](#result-types) for what it does.
 
 The description follows the same rules as every header string: write text that contains double
 quotes as `"""..."""`, and a wrapped description is stored folded into one flowing text (see
@@ -93,7 +96,7 @@ compiles to:
 ```sql
 SELECT
   o.order_id,
-  ROUND(CAST((o.fee_cents + o.tax_cents) AS DECIMAL(18, 4)) / 100, 0) AS fees
+  CAST(ROUND((o.fee_cents + o.tax_cents) / 100, 0) AS DECIMAL(18, 2)) AS fees
 FROM analytics.stg_orders AS o
 ```
 
@@ -131,6 +134,27 @@ The compiled model holds `orders_raw`, `live`, `ranked`, `latest` and `final`, f
 order, and later CTEs may read any of the macro's CTEs. Commas around the call are optional;
 `sqb format` normalises them.
 
+The last CTE of a CTE-list macro is its result. To call one macro more than once in a model, name
+each call's CTEs with the reserved `__cte` argument:
+
+```sql
+WITH eu_raw AS (SELECT * FROM __ref("stg_orders_eu")),
+us_raw AS (SELECT * FROM __ref("stg_orders_us")),
+@sql.clean_orders(eu_raw, __cte := eu_orders)
+@sql.clean_orders(us_raw, __cte := us_orders)
+final AS (SELECT * FROM eu_orders UNION ALL SELECT * FROM us_orders)
+SELECT * FROM final
+```
+
+The macro's last CTE takes exactly the `__cte` name, and its other CTEs become `<name>__<cte>`, so
+this model holds `eu_raw`, `us_raw`, `eu_orders__live`, `eu_orders__ranked`, `eu_orders`,
+`us_orders__live`, `us_orders__ranked`, `us_orders` and `final`. References inside the body are
+renamed with them; arguments are never renamed, even one named like a macro CTE. Later CTEs may read
+the prefixed ones too.
+
+`__cte` takes a bare name, is only for CTE-list calls (`P017` otherwise), and is not declared in
+`arguments`. A call without it keeps the macro's own names.
+
 ### Column lists
 
 A column-list macro inserts its columns into the caller's select list. Every column needs a name:
@@ -152,7 +176,8 @@ Use a column list when the same ordered set of columns repeats, for example in e
 `UNION ALL`. The call takes no alias (`P021`): each inserted column is named in the macro.
 
 A CTE or column name a macro inserts that the caller already defines fails with `P018`, which names
-both. Nothing is renamed, so a model cannot call the same CTE-list macro twice.
+both. Calling the same CTE-list macro twice without `__cte` fails the same way, and the error
+suggests `__cte`.
 
 ## Parameter types
 
@@ -162,6 +187,7 @@ Every parameter has a type, and may have a `DEFAULT`:
 |---|---|
 | `BIGINT`, `VARCHAR`, `TIMESTAMP`, ... | Any SQL expression of a compatible type, evaluated per row: a column, arithmetic, a function call, a literal or a constant. |
 | `ANY` | Any scalar SQL expression, whatever its type: a column, a literal, an expression or a scalar constant. Its type is not checked. Lists and relations fail with `P017`. |
+| `ANY NUMERIC`, `ANY TEXT`, `ANY TEMPORAL` | Like `ANY`, but only values of one family: integer, decimal and float types; string types; or date, time and timestamp types. |
 | `<type> CONST` | Only a value known at compile time: a literal, a scalar constant, an enum value, or a `CONST` parameter of a calling macro. A column or expression fails with `P017`. Scalar types only. |
 | `LIST <type>`, `SET <type>` | An inline list or set, or a list or set constant. Always compile-time, so they take no `CONST`. They render like constants. |
 | `ENUM <name>` | A member of that enum, such as `@enum("order_status").OPEN`. |
@@ -178,6 +204,19 @@ still checked, and the argument's type counts as unknown there. `ANY` is not `VA
 `VARIANT` parameter says the macro takes semi-structured data, while `ANY` says it takes a plain
 value of any type. `ANY` takes a `DEFAULT` but not `CONST`, which needs a type to check values
 against, and it cannot be a `LIST` or `SET` element type.
+
+### Choosing an argument type
+
+- A fixed type, such as `BIGINT`, when the body needs that type. Callers may pass any compatible
+  value, and the body is checked with that type.
+- A family, such as `ANY NUMERIC`, when the body works for every type of the family, such as
+  `ROUND(@value, @places)`. A call whose argument has a known type outside the family fails with
+  `P017` at the argument. The body is checked as if the argument had the family's widest type
+  (`DOUBLE`, `VARCHAR` or `TIMESTAMP`), so `UPPER(@value)` on `ANY NUMERIC` fails with `P025` at the
+  macro file. Pair a family with `returns TYPE OF value` to return the caller's own type.
+- `ANY` when the body works for values of any type, typically because it casts the argument itself.
+
+Families take a `DEFAULT` but not `CONST`, and are not `LIST` or `SET` element types.
 
 Leave `CONST` off unless the body needs a literal. `CONST` is part of the macro's contract: callers
 can no longer pass a column.
@@ -207,7 +246,7 @@ These fail with `P022`:
 - a relation parameter written bare where it would read a table, such as `FROM src` or
   `src.created_at`; the error says `src is a parameter of macro clean_orders(); write @src`
 
-Parameters may not be named `sql`, `py`, `const`, `enum` or `param`.
+Parameters may not be named `sql`, `py`, `const`, `enum`, `param` or `__cte`.
 
 ### Positions that need a literal
 
@@ -256,7 +295,7 @@ isn't visible from there fails with `S026`; to use a caller's value, make it an 
 `@const(...)` at the call site. SQL macros a body calls resolve the same way, so a macro can call a
 folder-local macro beside it that its callers cannot see.
 
-## Checks and tools
+## Checks
 
 Each macro is checked on its own when the project compiles, and each call is checked against the
 caller's column types, inferred like the rest of the model:
@@ -282,18 +321,42 @@ parameters of a calling macro, and calls in models with runtime placeholders; th
 column checks still run on the expanded SQL. All other errors also point at the call and at the
 macro file.
 
-A select-list item that is one expression macro call under an alias, as in
-`@sql.cents_to_dollars(o.amount_cents) AS amount`, has the macro's `returns` type wherever the
-compiler infers no type for the expanded SQL, or exactly that type. This holds in the main query
-and in any top-level CTE, including each branch of their `UNION`, `INTERSECT` or `EXCEPT`, and the
-type flows on as an inferred type would: through `SELECT * FROM final`, pass-through columns and
-joins, to contract checks (`K002`, `K003`), `SQBRCONTRACT105` and models that read the column. A
-set operation's column combines its branches as usual, so a sibling branch of another type still
-leaves it unproven, and a CTE holding one is read by column name, since `SELECT *` over it is not
-typed. Such a call needs no `CAST` to satisfy a matching contract column. Any other
-inferred type stands, even a close one such as `VARCHAR(100)` for `returns VARCHAR(5)`, and `K002`
-reports the mismatch. A call inside a larger expression, a subquery, a nested `WITH` or a set
-operation with a parenthesised branch is typed from the expanded SQL as before.
+## Result types
+
+An expression macro call is typed wherever it stands, from its expanded SQL, as if the SQL were
+written there. `returns` declares the type for when that SQL's type is unknown:
+
+```sql
+MACRO (description "Status bar", arguments (value VARCHAR), returns VARCHAR);
+
+bar(LENGTH(@value), 0, 10)
+```
+
+- The declared type applies only where the expanded SQL's type is unknown, or partly unknown, such
+  as an array of unknown elements. A known type stands, even a close one such as `VARCHAR(100)` for
+  `returns VARCHAR(5)`, and contract checks report a mismatch with `K002`.
+- The type flows on as an inferred type would: through CTEs, `SELECT *`, subqueries, joins and each
+  branch of a set operation, through operators and functions around the call, to contract checks
+  (`K002`, `K003`), `SQBRCONTRACT105` and models that read the column. A select-list item that is
+  one call to a macro with `returns` needs no `CAST` for `SQBRCONTRACT105`; a call inside a larger
+  expression still does.
+- Without `returns`, the call is typed by inference alone. When an output is one call whose type is
+  unknown, `K003` and `SQBRCONTRACT105` suggest declaring `returns` on the macro.
+- `returns TYPE OF <argument>` declares the type of that argument at each call, under the same
+  rule: `arguments (value ANY NUMERIC, places INT CONST DEFAULT 2), returns TYPE OF value`. If the
+  argument's own type is unknown, so is the call's. The argument must be a scalar argument of the
+  macro (`P015`).
+- A fixed `returns` is checked against the body at the macro file. The body is typed from the
+  declared argument types; a known type of another family, such as `UPPER(@value)` with
+  `returns BIGINT`, fails with `P024`. A body whose type cannot be inferred, for example because it
+  reads `ANY` arguments or calls a function of unknown type, trusts `returns`.
+- A call inside a Python macro argument, as in `@py.bracket(@sql.status_bar(o.status))`, is typed
+  by inference alone.
+- `returns` never changes the compiled SQL.
+
+A `* REPLACE` item takes its source column's type rather than the call's.
+
+## Tools
 
 - `sqb format` formats SQL macro files, bodies of every form and the `MACRO` header, and
   normalises the commas around CTE-list and column-list calls.

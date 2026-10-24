@@ -590,7 +590,9 @@ __macro_actual__ AS (SELECT order_id, updated_at FROM latest),
 __macro_expected__ AS (SELECT 1 AS order_id, TIMESTAMP '2026-01-02' AS updated_at)
 ```
 
-Other test modes may not call a CTE-list macro in their `WITH` list.
+These calls may pass `__cte := name`, as in a model, to call the macro more than once or to give
+its CTEs names of the test's own. Other test modes may not call a CTE-list macro in their `WITH`
+list.
 
 ### UDF tests
 
