@@ -14,6 +14,7 @@ use crate::bindings::_helpers::compile_driver::assembly_analysis::{
     AnalysisContext, model_stem, selected_for_analysis,
 };
 use crate::bindings::_helpers::compiled_views::model_input_view::NativeModelInput;
+use crate::bindings::_helpers::compiled_views::model_input_view::input_analysis_sql;
 use crate::bindings::_helpers::hand_built::compiled_model::compiled_model as hand_built_model;
 use crate::bindings::_helpers::project_assembly::syntax_checks::model_placeholders;
 use crate::bindings::_helpers::project_assembly::syntax_validation::{
@@ -80,7 +81,7 @@ fn compiled_model<'py>(
         py,
         &analysis_cursor_sql(
             py,
-            &native_field(model_input, "query_sql")?.extract::<String>()?,
+            &input_analysis_sql(model_input)?,
             &mapping_get(&config_values, "cursor_type")?,
         )?,
     )
