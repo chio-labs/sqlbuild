@@ -1409,3 +1409,13 @@ class DeferredMigrationOriginE2ETestCase:
     prod_sql: str
     expected_order_ids: tuple[int, ...]
     expect_note: bool
+
+
+@dataclass(frozen=True)
+class UnbuiltDependencyBuildE2ETestCase:
+    """A build whose failed model leaves a reader that must be skipped, not run."""
+
+    description: str
+    repo_files: dict[str, str]
+    expected_stdout_fragments: tuple[str, ...]
+    unexpected_stdout_fragments: tuple[str, ...]

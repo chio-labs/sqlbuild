@@ -233,6 +233,7 @@ class BuildScheduler:
         )
         self._max_concurrency: int = len(connections)
         self._blocked_keys: set[CompiledObjectKey] = set()
+        self._unbuilt_keys: set[CompiledObjectKey] = set(initial_state.initial_failed_keys)
         self._completed_keys: set[CompiledObjectKey] = set(initial_state.precompleted_keys)
         self._initial_failed_keys: frozenset[CompiledObjectKey] = initial_state.initial_failed_keys
         self._in_flight: set[CompiledObjectKey] = set()
@@ -299,9 +300,14 @@ class BuildScheduler:
         self._skip_remaining()
 
         end_audit_results: tuple[AuditExecutionResult, ...] = ()
-        if self._run_audits and self._indexes.end_audits:
+        runnable_end_audits: tuple[AuditPlanEntry, ...] = tuple(
+            audit
+            for audit in self._indexes.end_audits
+            if self._unbuilt_keys.isdisjoint(audit.scope_deps)
+        )
+        if self._run_audits and runnable_end_audits:
             end_audit_results = run_end_audits(
-                end_audits=self._indexes.end_audits,
+                end_audits=runnable_end_audits,
                 adapter=self._adapter,
                 connection=self._scheduler_connection,
                 model_locations=self._plan.model_locations,
@@ -386,7 +392,7 @@ class BuildScheduler:
                 downstream_blocked_keys(
                     failed_key=key,
                     downstream_deps=self._plan.downstream_deps,
-                    selected_keys=self._plan.selected_keys,
+                    selected_keys=self._selected_execution_keys,
                 )
             )
         if self._fail_fast and self._initial_failed_keys:
@@ -1271,7 +1277,7 @@ class BuildScheduler:
                             downstream_blocked_keys(
                                 failed_key=dep_key,
                                 downstream_deps=self._plan.downstream_deps,
-                                selected_keys=self._plan.selected_keys,
+                                selected_keys=self._selected_execution_keys,
                             )
                         )
 
@@ -1295,11 +1301,12 @@ class BuildScheduler:
             failed = result.status in {ExecutionStatus.FAILED, ExecutionStatus.SKIPPED}
 
         if failed:
+            self._unbuilt_keys.add(key)
             self._blocked_keys.update(
                 downstream_blocked_keys(
                     failed_key=key,
                     downstream_deps=self._plan.downstream_deps,
-                    selected_keys=self._plan.selected_keys,
+                    selected_keys=self._selected_execution_keys,
                 )
             )
             if self._fail_fast:
@@ -1400,6 +1407,7 @@ class BuildScheduler:
             run_id=self._run_id,
         ) as lifecycle:
             skip_mode: object = getattr(result, "skip_mode", None)
+            self._unbuilt_keys.add(key)
             lifecycle.skipped(
                 skip_code="scheduler",
                 skip_mode=getattr(skip_mode, "value", None),
