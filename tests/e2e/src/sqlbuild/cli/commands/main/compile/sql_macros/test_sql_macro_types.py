@@ -37,8 +37,8 @@ _UNPROVEN: tuple[str, ...] = ("K003", "SQBRCONTRACT105")
 _TYPED_COLUMNS: str = "order_id (type BIGINT), shouted (type VARCHAR), status_bar (type VARCHAR)"
 _TYPED_RULES_AND_MACROS: dict[str, str] = {
     **with_rules("SQBRCONTRACT105"),
-    **text_macro("shouted", "VARCHAR", "UPPER(@value)"),
-    **text_macro("status_bar", "VARCHAR", "bar(LENGTH(@value), 0, 10)"),
+    **text_macro("shouted", "VARCHAR", "UPPER(@value)::VARCHAR"),
+    **text_macro("status_bar", "VARCHAR", "CAST(bar(LENGTH(@value), 0, 10) AS VARCHAR)"),
 }
 _TYPED_CALLS: dict[str, str] = {
     **_TYPED_RULES_AND_MACROS,
@@ -428,7 +428,7 @@ def test_given_an_any_argument_misused_when_compiling_then_it_fails(
             description="a_call_in_a_later_main_query_branch_matching_its_sibling_is_typed",
             files={
                 **with_rules("SQBRCONTRACT105"),
-                **text_macro("m", "BIGINT", "NULL"),
+                **text_macro("m", "BIGINT", "CAST(NULL AS BIGINT)"),
                 **contract_model(
                     "orders",
                     "v (type BIGINT)",

@@ -195,11 +195,7 @@ impl OutputRule<'_> {
                 .as_ref()
                 .is_some_and(|data_type| same_type(data_type, &column.data_type, self.dialect));
             let call: Option<&TypedCall> = self.whole_call(expression);
-            let passes = cast_matches_contract
-                || column.type_proven && direct && !scope.set_branch
-                || column.type_proven
-                    && call
-                        .is_some_and(|call| call.returns.is_some() || call.returns_like.is_some());
+            let passes = cast_matches_contract || column.type_proven && direct && !scope.set_branch;
             if passes {
                 continue;
             }
@@ -218,6 +214,20 @@ impl OutputRule<'_> {
                     format!(
                         "Change the outer cast to CAST(... AS {}).",
                         column.data_type
+                    ),
+                );
+                continue;
+            }
+            if let Some(call) =
+                call.filter(|call| call.returns.is_some() || call.returns_like.is_some())
+            {
+                self.push(
+                    expression.start,
+                    typed_call_message(&name, call, &column.data_type),
+                    format!(
+                        "Cast the result in the macro or at the call, as CAST(... AS {}); returns \
+                         types the call for checks but does not change the column's physical type.",
+                        call.returns.as_deref().unwrap_or(&column.data_type)
                     ),
                 );
                 continue;
@@ -272,6 +282,22 @@ impl OutputRule<'_> {
             message,
             remediation,
         });
+    }
+}
+
+/// Why one call to a typed SQL macro does not establish its output's contract type.
+fn typed_call_message(name: &str, call: &TypedCall, declared: &str) -> String {
+    let macro_name: &str = &call.macro_name;
+    match call.returns.as_deref() {
+        Some(returns) => format!(
+            "output {name:?} is a call to SQL macro {macro_name}(), which declares returns \
+             {returns}, but its body isn't cast to it, so the column's physical type may differ; \
+             declared type is {declared}"
+        ),
+        None => format!(
+            "output {name:?} is a call to SQL macro {macro_name}(), whose returns TYPE OF does \
+             not set the column's physical type; declared type is {declared}"
+        ),
     }
 }
 

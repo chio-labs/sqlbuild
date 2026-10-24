@@ -408,7 +408,6 @@ def test_given_optional_returns_when_compiling_then_calls_are_typed_and_checked(
         SqlMacroCompileTestCase(
             description="returns_type_of_types_a_later_union_branch",
             files={
-                **with_rules("SQBRCONTRACT105"),
                 **_FIRST_OF,
                 **contract_model("orders", "day_value (type DATE)", _TYPE_OF_UNION),
             },

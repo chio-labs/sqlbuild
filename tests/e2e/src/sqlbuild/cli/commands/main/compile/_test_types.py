@@ -1300,3 +1300,15 @@ class BigQueryStringContractTestCase:
     declared_type: str
     cast_type: str
     expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class TypedCallContractTestCase:
+    """A typed SQL macro filling a Snowflake contract column, and how SQBRCONTRACT105 judges it."""
+
+    description: str
+    returns: str
+    body: str
+    projection: str
+    expected_exit_code: int
+    expected_fragments: tuple[str, ...]
