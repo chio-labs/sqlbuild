@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.175.0](https://github.com/chio-labs/sqlbuild/compare/v0.174.0...v0.175.0) (2026-10-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* fold header descriptions and accept triple-quoted strings ([#1242](https://github.com/chio-labs/sqlbuild/issues/1242))
+
+### Features
+
+* fold header descriptions and accept triple-quoted strings ([#1242](https://github.com/chio-labs/sqlbuild/issues/1242)) ([4fcdd05](https://github.com/chio-labs/sqlbuild/commit/4fcdd05ea05eb2ec8d725e071f7139dd8203ed8e))
+
 ## [0.174.0](https://github.com/chio-labs/sqlbuild/compare/v0.173.0...v0.174.0) (2026-10-23)
 
 
