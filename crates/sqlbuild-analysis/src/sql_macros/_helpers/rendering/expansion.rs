@@ -16,6 +16,7 @@ use crate::sql_macros::_helpers::rendering::arguments::{
 use crate::sql_macros::_helpers::rendering::cte_rename::{renamed_ctes, take_cte_argument};
 use crate::sql_macros::_helpers::rendering::placement::top_level_parts;
 use crate::sql_macros::_helpers::rendering::placement::{CallSite, cte_names, select_names};
+use crate::sql_macros::_helpers::typing::return_types::returns_type_error;
 use crate::sql_macros::_helpers::typing::returns_check::{check_body_returns, check_body_types};
 use crate::sql_macros::_helpers::typing::typed_calls::{shifted, spliced};
 use crate::sql_macros::constants::{
@@ -637,9 +638,15 @@ fn check_adapter_types(
         }
     }
     if let Some(returns) = &definition.returns
-        && let Some(error) = invalid(returns, format!("returns of macro {}()", definition.name))
+        && let Some(message) = returns_type_error(
+            returns,
+            adapter,
+            &format!("returns of macro {}()", definition.name),
+        )
     {
-        return Err(error.at(macro_location(definition, 1, 1)));
+        return Err(SqlMacroError::new(INVALID_DEFINITION_CODE, message)
+            .helped("use a SQL type the warehouse accepts, as in schema declarations")
+            .at(macro_location(definition, 1, 1)));
     }
     Ok(())
 }
