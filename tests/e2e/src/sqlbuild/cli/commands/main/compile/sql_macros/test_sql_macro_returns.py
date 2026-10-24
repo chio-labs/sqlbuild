@@ -230,6 +230,38 @@ _ROUNDED: dict[str, str] = {
             expected_fragments=("0 errors, 0 warnings",),
         ),
         SqlMacroCompileTestCase(
+            description="an_invalid_returns_is_reported_on_postgres",
+            files={
+                **adapter_project("postgres"),
+                **text_macro("m", "FOO BAR", "@value", argument="ANY"),
+                **orders_model(
+                    'SELECT @sql.m(o.amount_cents) AS v FROM __ref("stg_orders") AS o\n'
+                ),
+            },
+            expected_returncode=1,
+            expected_fragments=(
+                "error[P015]: returns of macro m() type 'FOO BAR' is not valid for adapter "
+                "'postgres' SQL analysis dialect 'postgres'",
+            ),
+            unexpected_fragments=("__polyglot",),
+        ),
+        SqlMacroCompileTestCase(
+            description="an_invalid_returns_is_reported_on_motherduck",
+            files={
+                **adapter_project("motherduck"),
+                **text_macro("m", "FOO BAR", "@value", argument="ANY"),
+                **orders_model(
+                    'SELECT @sql.m(o.amount_cents) AS v FROM __ref("stg_orders") AS o\n'
+                ),
+            },
+            expected_returncode=1,
+            expected_fragments=(
+                "error[P015]: returns of macro m() type 'FOO BAR' is not valid for adapter "
+                "'motherduck' SQL analysis dialect 'duckdb'",
+            ),
+            unexpected_fragments=("__polyglot",),
+        ),
+        SqlMacroCompileTestCase(
             description="an_untyped_call_without_returns_suggests_returns_on_k003",
             files={
                 **untyped_text_macro("m", "@value", argument="ANY"),
