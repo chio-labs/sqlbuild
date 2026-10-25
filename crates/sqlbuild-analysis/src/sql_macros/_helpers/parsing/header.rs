@@ -4,7 +4,7 @@ use crate::sql_macros::_helpers::parsing::lexing::{
     Token, TokenKind, closing_token, line_column, tokens,
 };
 use crate::sql_macros::constants::{
-    ANY_KEYWORD, ARGUMENTS_KEY, COLUMN_KEYWORD, COMMA, CONST_KEYWORD, DEFAULT_KEYWORD,
+    ANY_KEYWORD, ARGUMENTS_KEY, COLUMNS_KEYWORD, COMMA, CONST_KEYWORD, DEFAULT_KEYWORD,
     DESCRIPTION_KEY, ENUM_KEYWORD, HEADER_KEYWORD, INVALID_DEFINITION_CODE, LIST_KEYWORD,
     OF_KEYWORD, RAW_TYPE_NAMES, RELATION_COLUMN_MIN_TOKENS, RELATION_KEYWORD, RETURNS_KEY,
     SET_KEYWORD, TYPE_KEYWORD,
@@ -244,7 +244,7 @@ impl HeaderParser<'_> {
                 name_token.start,
                 format!("argument {name} of macro {}() has no type", self.name),
             )
-            .helped("give every argument a type, such as amount BIGINT, places INT CONST, src RELATION (id BIGINT) or key COLUMN OF src")
+            .helped("give every argument a type, such as amount BIGINT, places INT CONST or src RELATION (id BIGINT, keys COLUMNS)")
         };
         let Some(first) = tokens.first() else {
             return Err(untyped());
@@ -258,6 +258,7 @@ impl HeaderParser<'_> {
                 return Err(self.error(first.start, format!("argument {name} RELATION needs a parenthesised column list, such as RELATION (id BIGINT)")));
             };
             let mut columns: Vec<(String, String)> = Vec::new();
+            let mut groups: Vec<String> = Vec::new();
             for column in split_top_level(source, &tokens[2..close]) {
                 let column_name: &Token = &column[0];
                 if !matches!(column_name.kind, TokenKind::Word | TokenKind::Quoted)
@@ -265,31 +266,39 @@ impl HeaderParser<'_> {
                 {
                     return Err(self.error(
                         column_name.start,
-                        format!("each column of RELATION argument {name} needs a name and a type"),
+                        format!("each slot of RELATION argument {name} needs a name and a type or COLUMNS"),
                     ));
                 }
-                columns.push((
-                    unquoted(column_name.text(source)),
-                    self.sql_type(name, &column[1..], column_name)?,
-                ));
+                let slot: String = unquoted(column_name.text(source));
+                if columns
+                    .iter()
+                    .map(|(known, _)| known)
+                    .chain(groups.iter())
+                    .any(|known| known.eq_ignore_ascii_case(&slot))
+                {
+                    return Err(self.error(
+                        column_name.start,
+                        format!("RELATION argument {name} declares slot {slot} twice"),
+                    ));
+                }
+                if column[1].is_word(source, COLUMNS_KEYWORD) {
+                    if let Some(extra) = column.get(2) {
+                        return Err(self
+                            .error(extra.start, format!("slot {name}.{slot} COLUMNS takes nothing after it; a COLUMNS slot is untyped and each passed column keeps its own type"))
+                            .helped(format!("declare it {slot} COLUMNS")));
+                    }
+                    groups.push(slot);
+                    continue;
+                }
+                columns.push((slot, self.sql_type(name, &column[1..], column_name)?));
             }
-            if columns.is_empty() {
+            if columns.is_empty() && groups.is_empty() {
                 return Err(self.error(
                     first.start,
                     format!("RELATION argument {name} declares no columns"),
                 ));
             }
-            return Ok(ParameterKind::Relation { columns });
-        }
-        if first.is_word(source, COLUMN_KEYWORD) {
-            return match tokens {
-                [_, of, relation] if of.is_word(source, OF_KEYWORD) && relation.kind == TokenKind::Word => {
-                    Ok(ParameterKind::ColumnOf {
-                        relation: relation.text(source).to_owned(),
-                    })
-                }
-                _ => Err(self.error(first.start, format!("argument {name} COLUMN needs OF and a RELATION argument, such as COLUMN OF src"))),
-            };
+            return Ok(ParameterKind::Relation { columns, groups });
         }
         if first.is_word(source, ENUM_KEYWORD) {
             return match tokens {
@@ -400,7 +409,7 @@ impl HeaderParser<'_> {
         {
             return Err(self
                 .error(first.start, format!("argument {name} of macro {}() is raw text; SQL macro arguments are typed SQL", self.name))
-                .helped("use a SQL type such as BIGINT, a CONST type, an ENUM, a RELATION or a COLUMN OF"));
+                .helped("use a SQL type such as BIGINT, a CONST type, an ENUM or a RELATION"));
         }
         Ok(type_text(source, tokens))
     }

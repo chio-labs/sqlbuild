@@ -39,9 +39,7 @@ pub(crate) fn non_literal_use<'r>(
         let parameter = definition.parameter(&reference.name)?;
         if !matches!(
             parameter.kind,
-            ParameterKind::Expression { .. }
-                | ParameterKind::Any { .. }
-                | ParameterKind::ColumnOf { .. }
+            ParameterKind::Expression { .. } | ParameterKind::Any { .. }
         ) {
             return None;
         }

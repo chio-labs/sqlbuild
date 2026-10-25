@@ -51,6 +51,31 @@ _EXPLAINED_SCENARIOS: tuple[str, ...] = (*_SCENARIO_COMMAND, "--explain")
 _SQL_MACROS: dict[str, str] = build_since_sql_macro_files()
 _INNER_SQL_MACRO: str = "models/_macros/sql/round_cents.sql"
 _OUTER_SQL_MACRO: str = "models/_macros/sql/net_dollars.sql"
+_SLOT_MACRO: str = "models/_macros/sql/status_totals.sql"
+_SLOT_MODEL: str = "models/order_status_totals.sql"
+_SLOT_FILES: dict[str, str] = {
+    _SLOT_MACRO: (
+        "MACRO (\n  description 'Order totals per grain.',\n"
+        "  arguments (src RELATION (keys COLUMNS, amount_cents INTEGER)),\n);\n\n"
+        "WITH totals AS (\n"
+        "  SELECT @src.keys, SUM(@src.amount_cents) AS total_cents\n"
+        "  FROM @src\n"
+        "  GROUP BY @src.keys\n"
+        ")\n"
+    ),
+    _SLOT_MODEL: (
+        "MODEL (description 'Order totals per status.');\n\n"
+        'WITH raw AS (SELECT * FROM __ref("stg_orders")),\n'
+        "@sql.status_totals(raw, src.keys := (status))\n"
+        "SELECT * FROM totals\n"
+    ),
+    "tests/unit/test_order_status_totals.sql": (
+        "TEST ();\n\nWITH\n"
+        "__ref__stg_orders AS (SELECT 1 AS order_id, 'open' AS status, 250 AS amount_cents),\n"
+        "__expected__order_status_totals AS (SELECT 'open' AS status, 250 AS total_cents)\n"
+        "SELECT 1\n"
+    ),
+}
 
 
 @pytest.mark.parametrize(
@@ -848,6 +873,77 @@ def test_given_sql_macro_changes_since_ref_when_testing_then_selects_tests_of_th
     tmp_path: Path, test_case: SinceSelectionE2ETestCase
 ) -> None:
     project: Path = prepare_since_repository(tmp_path=tmp_path, extra_files=_SQL_MACROS)
+    write_project_files(project_dir=project, files=test_case.edits)
+    run_git(repository=project, arguments=test_case.git_after_edits)
+
+    result: CompletedProcess[str] = run_sqb(command=test_case.command, project_dir=project)
+
+    output: str = result.stdout + result.stderr
+    assert result.returncode == test_case.expected_exit_code, output
+    for fragment in test_case.expected_fragments:
+        assert fragment in output, output
+    for fragment in test_case.unexpected_fragments:
+        assert fragment not in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SinceSelectionE2ETestCase(
+            description="a changed slot mapping changes the calling model",
+            edits={
+                _SLOT_MODEL: _SLOT_FILES[_SLOT_MODEL].replace(
+                    "src.keys := (status)", "src.keys := (status, order_id)"
+                )
+            },
+            command=_EXPLAINED_TESTS,
+            expected_exit_code=0,
+            expected_fragments=(
+                "Changed since main: 1 model changed",
+                "test_order_status_totals\n    executes order_status_totals (model SQL changed)",
+                "PASS=1  FAIL=0  TOTAL=1",
+            ),
+            unexpected_fragments=("test_stg_orders", "test_order_totals", "test_open_orders"),
+        ),
+        SinceSelectionE2ETestCase(
+            description="a changed slot declaration changes the macro",
+            edits={
+                _SLOT_MACRO: _SLOT_FILES[_SLOT_MACRO].replace(
+                    "amount_cents INTEGER", "amount_cents BIGINT"
+                )
+            },
+            command=_EXPLAINED_TESTS,
+            expected_exit_code=0,
+            expected_fragments=(
+                "Changed since main: 1 macro changed",
+                "test_order_status_totals\n    executes macro status_totals (changed)",
+            ),
+            unexpected_fragments=("test_stg_orders", "test_order_totals", "test_open_orders"),
+        ),
+        SinceSelectionE2ETestCase(
+            description="a reformatted slot mapping and slot read change nothing",
+            edits={
+                _SLOT_MODEL: _SLOT_FILES[_SLOT_MODEL].replace(
+                    "src.keys := (status)", "src.keys := ( status )"
+                ),
+                _SLOT_MACRO: _SLOT_FILES[_SLOT_MACRO].replace(
+                    "  GROUP BY @src.keys\n", "  -- one row per grain\n  GROUP BY   @src.keys\n"
+                ),
+            },
+            command=_TEST_COMMAND,
+            expected_exit_code=0,
+            expected_fragments=(
+                "Changed since main: no definition changes",
+                "No tests are affected by the changes since main",
+            ),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_slot_changes_since_ref_when_testing_then_selects_tests_like_column_changes(
+    tmp_path: Path, test_case: SinceSelectionE2ETestCase
+) -> None:
+    project: Path = prepare_since_repository(tmp_path=tmp_path, extra_files=_SLOT_FILES)
     write_project_files(project_dir=project, files=test_case.edits)
     run_git(repository=project, arguments=test_case.git_after_edits)
 

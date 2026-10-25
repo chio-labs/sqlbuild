@@ -7,6 +7,7 @@ use crate::sql_macros::_helpers::parsing::literal_positions::{
     LiteralRules, literal_error, non_literal_use,
 };
 use crate::sql_macros::_helpers::parsing::parameters::{ParameterReference, parameter_references};
+use crate::sql_macros::_helpers::parsing::slots::{SlotRead, check_group_positions, slot_reads};
 use crate::sql_macros::_helpers::rendering::arguments::{
     ShapeContext, argument_shape, check_shape,
 };
@@ -81,6 +82,10 @@ fn checked_definition(
     check_parameters(&definition)?;
     check_parameter_references(&definition, scanned, in_body)?;
     let references: Vec<ParameterReference> = parameter_references(&definition.body, scanned);
+    let reads: Vec<SlotRead> = slot_reads(&definition, (&definition.body, scanned, &references))
+        .map_err(|(offset, error)| error.at(in_body(offset)))?;
+    check_group_positions(&definition, (&definition.body, scanned), &reads)
+        .map_err(|(offset, error)| error.at(in_body(offset)))?;
     if let Some(found) = non_literal_use(&definition, scanned, &references, LiteralRules::Universal)
     {
         return Err(literal_error(&definition, &found).at(in_body(found.reference.start)));
@@ -217,8 +222,7 @@ fn check_returns_like(
         | ParameterKind::Constant { .. }
         | ParameterKind::Enum { .. } => Ok(()),
         ParameterKind::Collection { .. }
-        | ParameterKind::Relation { .. }
-        | ParameterKind::ColumnOf { .. } => Err(SqlMacroError::new(
+        | ParameterKind::Relation { .. } => Err(SqlMacroError::new(
             INVALID_DEFINITION_CODE,
             format!(
                 "returns TYPE OF {} names a {} argument of macro {name}(); only a scalar argument has a type to return",
@@ -286,10 +290,14 @@ fn check_parameter_references(
         {
             continue;
         }
+        let slot_mapping: bool = scanned
+            .get(index + 3)
+            .is_some_and(|assign| assign.is(body, ":="));
         let qualifier: bool = scanned
             .get(index + 1)
             .is_some_and(|dot| dot.is(body, ".") && dot.start == token.end)
-            && !(index > 0 && scanned[index - 1].is(body, "."));
+            && !(index > 0 && scanned[index - 1].is(body, "."))
+            && !slot_mapping;
         let table: bool = index > 0
             && (scanned[index - 1].is_word(body, "FROM")
                 || scanned[index - 1].is_word(body, "JOIN"));
@@ -378,7 +386,7 @@ fn check_references(
     Ok(())
 }
 
-/// Rejects defaults the parameter does not accept and `COLUMN OF` naming no relation argument.
+/// Rejects reserved names and defaults the parameter does not accept.
 fn check_parameters(definition: &SqlMacroDefinition) -> Result<(), SqlMacroError> {
     for parameter in &definition.parameters {
         let location = SqlMacroLocation {
@@ -399,19 +407,6 @@ fn check_parameters(definition: &SqlMacroDefinition) -> Result<(), SqlMacroError
             )
             .at(location)
             .helped(format!("rename it; {} are built-in names", RESERVED_PARAMETER_NAMES.join(", "))));
-        }
-        if let ParameterKind::ColumnOf { relation } = &parameter.kind {
-            let named: bool = definition.parameters.iter().any(|candidate| {
-                candidate.name.eq_ignore_ascii_case(relation)
-                    && matches!(candidate.kind, ParameterKind::Relation { .. })
-            });
-            if !named {
-                return Err(SqlMacroError::new(
-                    INVALID_DEFINITION_CODE,
-                    format!("argument {} of macro {}() is COLUMN OF {relation}, but {relation} is not a RELATION argument", parameter.name, definition.name),
-                )
-                .at(location));
-            }
         }
         if let Some(default) = &parameter.default {
             check_shape(

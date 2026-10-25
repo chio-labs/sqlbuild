@@ -27,8 +27,8 @@ use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::models::{
     ArgumentCheck, ArgumentExpectation, ArgumentShape, BodyExpansion, BoundArgument, CallArgument,
     CallPosition, CallScope, ExpandedText, InsertedNames, ParameterKind, RenderedArgument,
-    RenderedDeclarations, SqlMacroCall, SqlMacroCheck, SqlMacroDefinition, SqlMacroForm,
-    SqlMacroLocation, TextContext, TypedCall,
+    RenderedDeclarations, SlotCapture, SqlMacroCall, SqlMacroCheck, SqlMacroDefinition,
+    SqlMacroForm, SqlMacroLocation, TextContext, TypedCall,
 };
 use crate::sql_macros::types::{ConstantShape, SqlMacroHost, SqlMacroScope};
 
@@ -245,7 +245,11 @@ pub(crate) fn expand_call<H: SqlMacroHost>(
         &body,
         (host.adapter(), body_location(&definition)),
     )?;
-    let mut expansion: BodyExpansion = expand_body(&definition, &body, &rendered)
+    let outer: Option<&SqlMacroDefinition> = match context.scope {
+        SqlMacroScope::Macro(outer) => Some(outer.as_ref()),
+        SqlMacroScope::Caller => None,
+    };
+    let mut expansion: BodyExpansion = expand_body((&definition, outer), &body, &rendered)
         .map_err(|error| error.at(body_location(&definition)))?;
     expansion.like = definition.returns_like.as_deref().and_then(|name| {
         rendered
@@ -272,12 +276,29 @@ pub(crate) fn expand_call<H: SqlMacroHost>(
         (call.start, call.end),
         call.replaced_end,
     );
-    if matches!(context.scope, SqlMacroScope::Caller) && context.stack.is_empty() {
+    let checked: bool = matches!(context.scope, SqlMacroScope::Caller) && context.stack.is_empty();
+    if let Some(capture) = expansion.captures.first()
+        && !checked
+    {
+        return Err(SqlMacroError::new(
+            ARGUMENT_CODE,
+            format!(
+                "slot {}.{} is read plainly in a subquery of macro {}(), called from another macro, where its bare columns cannot be checked; write alias.@{}.{}",
+                capture.relation, capture.slot, definition.name, capture.relation, capture.slot
+            ),
+        )
+        .at(body_location(&definition))
+        .helped("qualify the read with the alias of the relation it reads")
+        .into());
+    }
+    if checked {
+        let mut arguments: Vec<ArgumentCheck> = argument_checks(&definition, &bound, &rendered);
+        arguments.extend(capture_checks(&definition, &expansion.captures));
         let check: SqlMacroCheck = SqlMacroCheck {
             macro_name: definition.name.clone(),
             scope: call_scope(context.text, scanned, call.start),
             plain_select: plain_select(context.text, scanned, call.start),
-            arguments: argument_checks(&definition, &bound, &rendered),
+            arguments,
             call: None,
         };
         if !check.arguments.is_empty() {
@@ -362,7 +383,7 @@ fn rendered_argument<H: SqlMacroHost>(
                 calls: Vec::new(),
             }
         }
-        (ParameterKind::Relation { .. } | ParameterKind::ColumnOf { .. }, _) => ExpandedText {
+        (ParameterKind::Relation { .. }, _) => ExpandedText {
             sql: text.to_owned(),
             calls: Vec::new(),
         },
@@ -381,6 +402,7 @@ fn rendered_argument<H: SqlMacroHost>(
         sql: rendered.sql,
         shape,
         calls: rendered.calls,
+        slots: argument.slots.clone(),
     })
 }
 
@@ -619,13 +641,11 @@ fn check_adapter_types(
             ParameterKind::Expression { data_type }
             | ParameterKind::Constant { data_type }
             | ParameterKind::Collection { data_type, .. } => vec![data_type.as_str()],
-            ParameterKind::Relation { columns } => columns
+            ParameterKind::Relation { columns, .. } => columns
                 .iter()
                 .map(|(_, data_type)| data_type.as_str())
                 .collect(),
-            ParameterKind::Any { .. }
-            | ParameterKind::Enum { .. }
-            | ParameterKind::ColumnOf { .. } => Vec::new(),
+            ParameterKind::Any { .. } | ParameterKind::Enum { .. } => Vec::new(),
         };
         for data_type in types {
             if let Some(error) = invalid(
@@ -663,14 +683,10 @@ fn argument_checks(
         }
         let parameter = &definition.parameters[argument.parameter];
         let expected: ArgumentExpectation = match (&parameter.kind, &rendered.shape) {
-            (ParameterKind::Relation { columns }, ArgumentShape::Identifier { .. }) => {
+            (ParameterKind::Relation { columns, .. }, ArgumentShape::Identifier { .. }) => {
                 ArgumentExpectation::Relation {
                     columns: columns.clone(),
-                }
-            }
-            (ParameterKind::ColumnOf { relation }, ArgumentShape::Identifier { .. }) => {
-                ArgumentExpectation::ColumnOf {
-                    relation: relation.clone(),
+                    slots: rendered.slots.clone(),
                 }
             }
             (
@@ -697,6 +713,29 @@ fn argument_checks(
             expected,
             declared_at: macro_location(definition, parameter.line, parameter.column),
         });
+    }
+    checks
+}
+
+/// One check per relation a plain group read in a subquery meets, that it holds none of its columns.
+fn capture_checks(definition: &SqlMacroDefinition, captures: &[SlotCapture]) -> Vec<ArgumentCheck> {
+    let mut checks: Vec<ArgumentCheck> = Vec::new();
+    for capture in captures {
+        let Some(parameter) = definition.parameter(&capture.relation) else {
+            continue;
+        };
+        for source in &capture.sources {
+            checks.push(ArgumentCheck {
+                parameter: parameter.name.clone(),
+                text: source.clone().unwrap_or_default(),
+                expected: ArgumentExpectation::Capture {
+                    slot: capture.slot.clone(),
+                    columns: capture.columns.clone(),
+                    source: source.clone(),
+                },
+                declared_at: macro_location(definition, parameter.line, parameter.column),
+            });
+        }
     }
     checks
 }

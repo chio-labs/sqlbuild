@@ -93,9 +93,9 @@ fn given_sql_macro_headers_when_formatting_then_each_is_laid_out_canonically_and
         },
         FormatTestCase {
             description: "a multi-line header puts one item per line and breaks a list too wide",
-            text: "MACRO (description \"Latest row per key\",\n arguments (src RELATION (updated_at TIMESTAMP), key COLUMN OF src));\n\nWITH x AS (SELECT 1)\n",
+            text: "MACRO (description \"Latest row per key\",\n arguments (src RELATION (updated_at TIMESTAMP, keys COLUMNS), places INT));\n\nWITH x AS (SELECT 1)\n",
             line_width: 50,
-            expected_text: "MACRO (\n  description \"Latest row per key\",\n  arguments (\n    src RELATION (updated_at TIMESTAMP),\n    key COLUMN OF src,\n  ),\n);\n\nWITH x AS (SELECT 1)\n",
+            expected_text: "MACRO (\n  description \"Latest row per key\",\n  arguments (\n    src RELATION (\n      updated_at TIMESTAMP,\n      keys COLUMNS,\n    ),\n    places INT,\n  ),\n);\n\nWITH x AS (SELECT 1)\n",
         },
         FormatTestCase {
             description: "a header with a comment is left as authored",

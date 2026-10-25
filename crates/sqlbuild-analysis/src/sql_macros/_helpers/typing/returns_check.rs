@@ -49,10 +49,9 @@ fn stand_in_type(kind: &ParameterKind, families: bool) -> Option<&str> {
         ParameterKind::Any {
             family: Some(family),
         } if families => Some(family.widest()),
-        ParameterKind::Any { .. }
-        | ParameterKind::Enum { .. }
-        | ParameterKind::Relation { .. }
-        | ParameterKind::ColumnOf { .. } => None,
+        ParameterKind::Any { .. } | ParameterKind::Enum { .. } | ParameterKind::Relation { .. } => {
+            None
+        }
     }
 }
 
@@ -70,10 +69,7 @@ fn body_probe(
     let mut arguments: Vec<RenderedArgument> = Vec::with_capacity(definition.parameters.len());
     let mut columns: Vec<Value> = Vec::with_capacity(definition.parameters.len());
     for (index, parameter) in definition.parameters.iter().enumerate() {
-        if matches!(
-            parameter.kind,
-            ParameterKind::Relation { .. } | ParameterKind::ColumnOf { .. }
-        ) {
+        if matches!(parameter.kind, ParameterKind::Relation { .. }) {
             return None;
         }
         let column: String = stand_in_column(index);
@@ -90,9 +86,10 @@ fn body_probe(
             sql,
             shape: ArgumentShape::Expression,
             calls: Vec::new(),
+            slots: Vec::new(),
         });
     }
-    let expansion = match expand_body(definition, body, &arguments) {
+    let expansion = match expand_body((definition, None), body, &arguments) {
         Ok(expansion) => expansion,
         Err(_) => return None,
     };

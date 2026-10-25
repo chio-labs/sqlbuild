@@ -2,13 +2,14 @@
 
 use crate::sql_macros::_helpers::parsing::header::{split_top_level, unquoted};
 use crate::sql_macros::_helpers::parsing::lexing::{Token, TokenKind, closing_token, tokens};
+use crate::sql_macros::_helpers::rendering::slot_mappings::slot_mappings;
 use crate::sql_macros::_helpers::typing::returns_check::adapter_dialect;
 use crate::sql_macros::constants::{
     ARGUMENT_CODE, BOOLEAN_WORDS, NAMED_ARGUMENT_MIN_TOKENS, NULL_WORD, REFERENCE_FUNCTIONS,
 };
 use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::models::{
-    ArgumentShape, BoundArgument, CallArgument, ParameterKind, SqlMacroDefinition,
+    ArgumentShape, BoundArgument, CallArgument, ParameterKind, SlotMapping, SqlMacroDefinition,
     SqlMacroParameter, TypeFamily,
 };
 use crate::type_system::main::normalize_type::normalize_type;
@@ -29,10 +30,21 @@ pub(crate) fn split_arguments(arguments: &str) -> Result<Vec<CallArgument>, SqlM
         let named: bool = part.len() >= NAMED_ARGUMENT_MIN_TOKENS
             && part[0].kind == TokenKind::Word
             && part[1].is(arguments, ":=");
-        let (name, value): (Option<String>, &[Token]) = if named {
-            (Some(part[0].text(arguments).to_owned()), &part[2..])
+        let slot: bool = part.len() >= NAMED_ARGUMENT_MIN_TOKENS + 2
+            && part[0].kind == TokenKind::Word
+            && part[1].is(arguments, ".")
+            && matches!(part[2].kind, TokenKind::Word | TokenKind::Quoted)
+            && part[3].is(arguments, ":=");
+        let (name, slot, value): (Option<String>, Option<String>, &[Token]) = if named {
+            (Some(part[0].text(arguments).to_owned()), None, &part[2..])
+        } else if slot {
+            (
+                Some(part[0].text(arguments).to_owned()),
+                Some(unquoted(part[2].text(arguments))),
+                &part[4..],
+            )
         } else {
-            (None, part)
+            (None, None, part)
         };
         let (Some(first), Some(last)) = (value.first(), value.last()) else {
             return Err(SqlMacroError::new(
@@ -42,6 +54,7 @@ pub(crate) fn split_arguments(arguments: &str) -> Result<Vec<CallArgument>, SqlM
         };
         found.push(CallArgument {
             name,
+            slot,
             text: arguments[first.start..last.end].to_owned(),
             offset: first.start,
         });
@@ -57,7 +70,13 @@ pub(crate) fn bind_arguments(
     let name: &str = &definition.name;
     let mut bound: Vec<Option<BoundArgument>> = vec![None; definition.parameters.len()];
     let mut seen_named: bool = false;
+    let mut slot_arguments: Vec<&CallArgument> = Vec::new();
     for (position, argument) in arguments.iter().enumerate() {
+        if argument.slot.is_some() {
+            seen_named = true;
+            slot_arguments.push(argument);
+            continue;
+        }
         let index: usize = match &argument.name {
             Some(argument_name) => {
                 seen_named = true;
@@ -114,18 +133,22 @@ pub(crate) fn bind_arguments(
             text: argument.text.clone(),
             from_default: false,
             offset: Some(argument.offset),
+            slots: Vec::new(),
         });
     }
+    let mut mappings: Vec<Vec<SlotMapping>> = slot_mappings(definition, &slot_arguments)?;
     let mut complete: Vec<BoundArgument> = Vec::with_capacity(bound.len());
     for (index, argument) in bound.into_iter().enumerate() {
         let parameter: &SqlMacroParameter = &definition.parameters[index];
+        let slots: Vec<SlotMapping> = std::mem::take(&mut mappings[index]);
         match (argument, &parameter.default) {
-            (Some(argument), _) => complete.push(argument),
+            (Some(argument), _) => complete.push(BoundArgument { slots, ..argument }),
             (None, Some(default)) => complete.push(BoundArgument {
                 parameter: index,
                 text: default.clone(),
                 from_default: true,
                 offset: None,
+                slots,
             }),
             (None, None) => {
                 return Err(SqlMacroError::new(
@@ -142,7 +165,7 @@ pub(crate) fn bind_arguments(
     Ok(complete)
 }
 
-fn parameter_names(definition: &SqlMacroDefinition) -> String {
+pub(crate) fn parameter_names(definition: &SqlMacroDefinition) -> String {
     if definition.parameters.is_empty() {
         return "none".to_owned();
     }
@@ -405,10 +428,6 @@ pub(crate) fn check_shape(
         (ParameterKind::Relation { .. }, _) => Err(expects(
             "a CTE name, a table alias, or __ref(), __source() or __seed()",
         )),
-        (ParameterKind::ColumnOf { .. }, ArgumentShape::Identifier { .. }) => Ok(()),
-        (ParameterKind::ColumnOf { relation }, _) => {
-            Err(expects(&format!("a column name of {relation}")))
-        }
     }
 }
 
@@ -421,7 +440,6 @@ fn forwards(outer: &ParameterKind, inner: &ParameterKind) -> bool {
                 | ParameterKind::Any { .. }
                 | ParameterKind::Constant { .. }
                 | ParameterKind::Enum { .. }
-                | ParameterKind::ColumnOf { .. }
         ),
         ParameterKind::Constant { .. } => {
             matches!(
@@ -434,7 +452,6 @@ fn forwards(outer: &ParameterKind, inner: &ParameterKind) -> bool {
             matches!(outer, ParameterKind::Enum { name: outer_name } if outer_name == name)
         }
         ParameterKind::Relation { .. } => matches!(outer, ParameterKind::Relation { .. }),
-        ParameterKind::ColumnOf { .. } => matches!(outer, ParameterKind::ColumnOf { .. }),
     }
 }
 

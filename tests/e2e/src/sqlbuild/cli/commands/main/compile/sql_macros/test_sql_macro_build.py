@@ -165,13 +165,13 @@ _NESTED_LOCAL: dict[str, str] = {
             expected_rows=[(1, "2026-01-03 00:00:00", True)],
         ),
         SqlMacroBuildTestCase(
-            description="column_of_argument_and_list_default",
+            description="columns_slot_and_list_default",
             files={
                 **LATEST_PER_KEY,
                 **IN_SUPPORTED_COUNTRY,
                 **orders_model(
                     'WITH orders_raw AS (SELECT * FROM __ref("stg_orders")),\n'
-                    "@sql.latest_per_key(orders_raw, key := status),\n"
+                    "@sql.latest_per_key(orders_raw, src.keys := (status)),\n"
                     "final AS (SELECT status, order_id FROM latest_rows "
                     "WHERE @sql.in_supported_country(country_code))\n"
                     "SELECT * FROM final\n"
