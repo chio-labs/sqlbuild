@@ -152,3 +152,12 @@ class DagsterAuditAttachmentChecksE2ETestCase:
     description: str
     command: tuple[str, ...]
     expected_checked_assets: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True)
+class DagsterSkippedAuditCheckE2ETestCase:
+    """A green build whose end audit is skipped, and the check Dagster must not report as failed."""
+
+    description: str
+    skipped_check_name: str
+    expected_log_line: str
