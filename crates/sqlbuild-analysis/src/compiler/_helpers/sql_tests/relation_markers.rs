@@ -24,7 +24,20 @@ fn node_marker_calls(mut calls: Vec<MarkerCall>, node: &Expression) -> Vec<Marke
         ),
         Expression::From(from) => calls.extend(from_markers(from)),
         Expression::Delete(delete) => calls.extend(join_markers(&delete.joins)),
-        Expression::JoinedTable(table) => calls.extend(join_markers(&table.joins)),
+        Expression::JoinedTable(table) => {
+            calls.extend(
+                marker(&table.left)
+                    .into_iter()
+                    .chain(join_markers(&table.joins)),
+            );
+        }
+        Expression::Update(update) => calls.extend(
+            update
+                .from_clause
+                .iter()
+                .flat_map(from_markers)
+                .chain(join_markers(&update.from_joins)),
+        ),
         Expression::DataDeletionProperty(property) => {
             return property.on.dfs().fold(calls, node_marker_calls);
         }
