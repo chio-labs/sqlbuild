@@ -587,6 +587,7 @@ pub(crate) fn model_facts(model: ModelInputPy<'_>) -> PyResult<CompiledModelFact
         constant_declarations: declarations(constant_declarations)?,
         analysis: None,
         typed_calls: Vec::new(),
+        expansion_passes: Vec::new(),
     })
 }
 

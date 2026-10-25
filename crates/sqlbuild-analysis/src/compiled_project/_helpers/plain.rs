@@ -40,5 +40,6 @@ pub(crate) fn plain_model_facts(model: PlainModel) -> CompiledModelFacts {
         constant_declarations: model.constant_declarations,
         analysis: None,
         typed_calls: model.typed_calls,
+        expansion_passes: model.expansion_passes,
     }
 }

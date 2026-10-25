@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use serde_json::Value;
+use sqlbuild_sqltext::compiler::models::CharSpan;
 
 /// One compile's project facts; models keep the order the compile-input stage produced them.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -34,6 +35,8 @@ pub struct CompiledModelFacts {
     pub analysis: Option<ModelAnalysisFact>,
     /// Each expression SQL macro call in `query_sql`, by byte range.
     pub typed_calls: Vec<TypedCall>,
+    /// The expansion passes from `authored_query_sql` to `query_sql`; empty when unknown.
+    pub expansion_passes: Vec<Vec<CharSpan>>,
 }
 
 /// A model's effective config values with sorted keys, as the rules request has always read them.
@@ -217,6 +220,8 @@ pub struct PlainModel {
     pub constant_declarations: Vec<DeclarationFact>,
     /// Each expression SQL macro call in `query_sql`, by byte range.
     pub typed_calls: Vec<TypedCall>,
+    /// The expansion passes from `authored_query_sql` to `query_sql`; empty when unknown.
+    pub expansion_passes: Vec<Vec<CharSpan>>,
 }
 
 /// A one-based line and column, counted in characters.

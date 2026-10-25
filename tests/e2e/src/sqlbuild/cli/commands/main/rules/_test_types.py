@@ -1,7 +1,7 @@
 """Test case types for Rules performance guards."""
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -340,11 +340,13 @@ class ModuleStateAttributionCase:
 
 @dataclass(frozen=True)
 class RulePositionE2ETestCase:
-    """A model file whose query starts somewhere on a line, and where a rule must point."""
+    """A model file whose query starts somewhere or expands macros, and where a rule must point."""
 
     description: str
     model_sql: str
     expected_location: str
+    rule: str = "SQBRMODEL102"
+    macro_files: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
