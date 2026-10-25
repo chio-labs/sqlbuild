@@ -1574,17 +1574,18 @@ type MarkerCalls = Option<Vec<(String, String)>>;
 
 /// The original JSON-tree walk, kept as the oracle the direct relation walk must match.
 fn json_relation_marker_calls(value: &Value) -> Vec<(String, String)> {
-    let from_markers = value
-        .get("from")
-        .and_then(|from| from.get("expressions"))
-        .and_then(Value::as_array)
+    let from_markers = ["from", "from_clause"]
         .into_iter()
+        .filter_map(|key| value.get(key))
+        .filter_map(|from| from.get("expressions"))
+        .filter_map(Value::as_array)
         .flatten()
+        .chain(value.get("left").filter(|_| value.get("joins").is_some()))
         .filter_map(json_marker);
-    let join_markers = value
-        .get("joins")
-        .and_then(Value::as_array)
+    let join_markers = ["joins", "from_joins"]
         .into_iter()
+        .filter_map(|key| value.get(key))
+        .filter_map(Value::as_array)
         .flatten()
         .filter_map(|join| join.get("this"))
         .filter_map(json_marker);

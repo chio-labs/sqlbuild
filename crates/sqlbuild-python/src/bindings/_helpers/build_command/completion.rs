@@ -19,7 +19,8 @@ use crate::bindings::_helpers::build_command::invocation::BuildContext;
 use crate::bindings::_helpers::build_command::support::{
     boolean, emit, joined, none, text, utc_now,
 };
-use crate::bindings::_helpers::build_progress::footer::format_build_footer;
+use crate::bindings::_helpers::build_progress::footer::format_build_footer_with;
+use crate::bindings::_helpers::check::check_results::check_result_text;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::plan_has_executable_work;
 use crate::bindings::_helpers::compile_outputs::runtime_target::{
     write_python_check_runtime_target, write_runtime_target,
@@ -35,8 +36,12 @@ use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::result_output::documents::format_build_execution_json;
 use crate::bindings::_helpers::result_output::documents::format_degradable_build_execution_json;
 use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
+use sqlbuild_core::build_progress::models::PythonNodeText;
+use sqlbuild_core::check_command::models::{CheckResultText, CheckStatus};
 
 const SUCCESS_STATUS: &str = "success";
+const CHECK_KIND: &str = "check";
+const CHECK_WARNED: &str = "check warned";
 const PENDING_MESSAGE: &str = "Build cost collection has not completed.";
 const INTERRUPTED_MESSAGE: &str = "Build was interrupted before cost collection completed.";
 
@@ -313,6 +318,30 @@ fn any_failed(
     Ok(false)
 }
 
+/// A Python check result as the footer counts it: a failure fails the build, a warning warns.
+fn check_node_text(check: &CheckResultText) -> PythonNodeText {
+    let message: Option<String> = check
+        .error_message
+        .clone()
+        .or_else(|| check.message.clone());
+    PythonNodeText {
+        name: check.name.clone(),
+        kind: CHECK_KIND.to_owned(),
+        status: if check.status == CheckStatus::Fail {
+            "failed"
+        } else {
+            SUCCESS_STATUS
+        }
+        .to_owned(),
+        warnings: if check.status == CheckStatus::Warn {
+            vec![message.clone().unwrap_or_else(|| CHECK_WARNED.to_owned())]
+        } else {
+            Vec::new()
+        },
+        error_message: message,
+    }
+}
+
 /// Persist and render a completed direct build and return its exit code.
 pub(crate) fn complete_direct_build<'py>(
     context: &BuildContext<'py>,
@@ -356,14 +385,19 @@ pub(crate) fn complete_direct_build<'py>(
     );
     let cost_seconds: f64 = finish_cost_timing(context, cost_started);
     let record: Bound<'py, PyAny> = record?;
-    let footer: String = format_build_footer(
+    let checks: Vec<PythonNodeText> = check_results
+        .try_iter()?
+        .map(|check| Ok(check_node_text(&check_result_text(&check?)?)))
+        .collect::<PyResult<_>>()?;
+    let footer: String = format_build_footer_with(
         &result.clone(),
-        native_field(&preparation.callbacks, "elapsed")?.extract::<f64>()?,
-        boolean(py, context.use_color).extract::<bool>()?,
+        (
+            native_field(&preparation.callbacks, "elapsed")?.extract::<f64>()?,
+            context.use_color,
+        ),
         Some(&outcome.python_results.clone()).filter(|value| !value.is_none()),
-    )
-    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
-    .extract()?;
+        checks,
+    )?;
     emit(&context.stream, &format!("\n{footer}\n"))?;
     let payload: Bound<'py, PyAny> = format_degradable_build_execution_json(
         py,

@@ -17,12 +17,28 @@ pub(crate) fn format_build_footer(
     use_color: bool,
     python_node_results: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<String> {
+    format_build_footer_with(
+        result,
+        (elapsed, use_color),
+        python_node_results,
+        Vec::new(),
+    )
+}
+
+/// The build footer, counting `checks` (Python check results) with the Python node results.
+pub(crate) fn format_build_footer_with(
+    result: &Bound<'_, PyAny>,
+    (elapsed, use_color): (f64, bool),
+    python_node_results: Option<&Bound<'_, PyAny>>,
+    checks: Vec<PythonNodeText>,
+) -> PyResult<String> {
     let mut python: Vec<PythonNodeText> = Vec::new();
     if let Some(results) = python_node_results {
         for node in results.try_iter()? {
             python.push(python_node_text(&node?)?);
         }
     }
+    python.extend(checks);
     Ok(footer(
         &build_text(result)?,
         &python,

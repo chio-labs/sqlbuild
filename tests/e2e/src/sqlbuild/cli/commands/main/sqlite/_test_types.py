@@ -96,3 +96,24 @@ class SqliteLoaderE2ETestCase:
     relations: tuple[str, ...]
     expected_rows: tuple[tuple[object, ...], ...]
     expected_declared_types: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class TextTimestampCursorE2ETestCase:
+    """A daily model whose timestamp cursor is a text expression, on one adapter."""
+
+    description: str
+    adapter: str
+    connection: str
+    day_expression: str
+    expected_exit_code: int
+    expected_fragment: str
+
+
+@dataclass(frozen=True)
+class SqliteTemporalCastE2ETestCase:
+    """A SQLite model selecting one expression, and the B104 warnings compile reports for it."""
+
+    description: str
+    expression: str
+    expected_warning_count: int

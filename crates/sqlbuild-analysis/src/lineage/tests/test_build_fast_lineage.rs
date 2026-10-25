@@ -196,16 +196,15 @@ fn given_models_without_compact_facts_when_building_then_matches_python_lineage(
             expected_detail: Some("Expected 1 statement, found 2"),
         },
         ParsedLineageTestCase {
-            description: "a parser panic on truncated T-SQL fails as an internal error",
+            description: "truncated T-SQL reports its parse error",
             sql: "SELECT IF(region > 1, re",
             dialect: Some("tsql"),
             inferred_columns: &[],
-            expected_status: "error",
+            expected_status: "unparsed",
             expected_lines: &[],
             expected_has_star: false,
             expected_detail: Some(
-                "NativeCompilerError: native SQL compilation panicked \
-                 (native fast lineage of request model 0)",
+                "Parse error at line 1, column 25: Expected ')' to close the IF condition",
             ),
         },
         ParsedLineageTestCase {

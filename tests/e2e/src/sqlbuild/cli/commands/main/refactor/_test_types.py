@@ -289,3 +289,13 @@ class LayoutRepairDryRunE2ETestCase:
     files: dict[str, str]
     arguments: tuple[str, ...]
     expected_lines: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PythonNamedMoveE2ETestCase:
+    """A move of a model a Python check names, and whether `sqb mv` carries it out."""
+
+    description: str
+    destination: str
+    expected_exit_code: int
+    expected_model_path: str

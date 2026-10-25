@@ -712,6 +712,8 @@ pub(crate) fn every_field_model() -> Model {
         constant_declarations: vec![declaration],
         typed_calls: Vec::new(),
         query_line_offset: 0,
+        query_column_offset: 0,
+        authored_query: None,
         declared_audit_count: 3,
         targeting_test_count: 4,
         empty_input_only_test_count: 0,

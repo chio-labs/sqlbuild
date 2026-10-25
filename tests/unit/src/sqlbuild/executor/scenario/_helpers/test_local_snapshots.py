@@ -21,6 +21,7 @@ from sqlbuild.executor.scenario.models import (
 from tests.unit.src.sqlbuild.executor.scenario._helpers._test_types import (
     ScenarioLocalSnapshotLoadErrorTestCase,
     ScenarioLocalSnapshotLoadTestCase,
+    ScenarioLocalVariantLoadTestCase,
 )
 from tests.unit.src.sqlbuild.executor.scenario._helpers.helpers import (
     build_local_snapshot_load_manifest,
@@ -178,3 +179,58 @@ def test_given_invalid_local_snapshot_when_loading_then_raises_coded_error(
     expected_fragment: str
     for expected_fragment in test_case.expected_error_fragments:
         assert expected_fragment in error_text
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ScenarioLocalVariantLoadTestCase(
+            description="driver JSON text of an object loads as that object",
+            value='{\n  "qty": 2\n}',
+            expected_variant_type="OBJECT(qty)",
+            expected_matches_parsed_json=True,
+        ),
+        ScenarioLocalVariantLoadTestCase(
+            description="driver JSON text of a string loads as the string",
+            value='"placed"',
+            expected_variant_type="VARCHAR",
+            expected_matches_parsed_json=False,
+        ),
+        ScenarioLocalVariantLoadTestCase(
+            description="text that is not JSON loads as a string",
+            value="placed",
+            expected_variant_type="VARCHAR",
+            expected_matches_parsed_json=False,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_snowflake_variant_text_when_loading_into_duckdb_then_it_loads_as_parsed_json(
+    tmp_path: Path,
+    test_case: ScenarioLocalVariantLoadTestCase,
+) -> None:
+    manifest: ScenarioSnapshotManifest = build_local_snapshot_load_manifest(
+        input_fingerprint=INPUT_FINGERPRINT,
+        columns=(("payload", "VARIANT", "VARIANT"),),
+    )
+    write_local_snapshot_load_test_files(
+        project_dir=tmp_path, manifest=manifest, rows=({"PAYLOAD": test_case.value},)
+    )
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(":memory:")
+
+    result: ScenarioLocalSnapshotLoadResult = load_scenario_snapshot_into_duckdb(
+        project_dir=tmp_path,
+        scenario_name=SCENARIO_NAME,
+        current_input_fingerprint=INPUT_FINGERPRINT,
+        connection=connection,
+    )
+    loaded: tuple[object, ...] | None = connection.execute(
+        "SELECT variant_typeof(payload), "
+        "payload IN (SELECT CAST(CAST('{\"qty\": 2}' AS JSON) AS VARIANT)) "
+        f'FROM "{result.relations[0].table_name}"'
+    ).fetchone()
+
+    assert loaded == (
+        test_case.expected_variant_type,
+        test_case.expected_matches_parsed_json,
+    ), test_case.description

@@ -17,12 +17,12 @@ from tests.integration.src.sqlbuild.adapters.duckdb._helpers._test_types import 
         BuildAttachSqlTestCase(
             description="attaches database with path only",
             attach_entry={"path": "/tmp/other.duckdb"},
-            expected_sql="ATTACH '/tmp/other.duckdb'",
+            expected_sql="ATTACH IF NOT EXISTS '/tmp/other.duckdb'",
         ),
         BuildAttachSqlTestCase(
             description="attaches database with alias",
             attach_entry={"path": "/tmp/other.duckdb", "alias": "other"},
-            expected_sql="ATTACH '/tmp/other.duckdb' AS other",
+            expected_sql="ATTACH IF NOT EXISTS '/tmp/other.duckdb' AS other",
         ),
         BuildAttachSqlTestCase(
             description="attaches database with type and read_only",
@@ -32,17 +32,17 @@ from tests.integration.src.sqlbuild.adapters.duckdb._helpers._test_types import 
                 "type": "sqlite",
                 "read_only": True,
             },
-            expected_sql="ATTACH 'sqlite.db' AS sqlite_db (TYPE sqlite, READ_ONLY)",
+            expected_sql="ATTACH IF NOT EXISTS 'sqlite.db' AS sqlite_db (TYPE sqlite, READ_ONLY)",
         ),
         BuildAttachSqlTestCase(
             description="attaches database with read_only false omits option",
             attach_entry={"path": "/tmp/data.duckdb", "read_only": False},
-            expected_sql="ATTACH '/tmp/data.duckdb'",
+            expected_sql="ATTACH IF NOT EXISTS '/tmp/data.duckdb'",
         ),
         BuildAttachSqlTestCase(
             description="attaches database with type only",
             attach_entry={"path": "pg.db", "type": "postgres"},
-            expected_sql="ATTACH 'pg.db' (TYPE postgres)",
+            expected_sql="ATTACH IF NOT EXISTS 'pg.db' (TYPE postgres)",
         ),
     ],
     ids=lambda case: case.description,

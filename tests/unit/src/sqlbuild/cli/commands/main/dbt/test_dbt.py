@@ -100,11 +100,11 @@ def test_given_dbt_plan_when_running_then_writes_progress_to_expected_stream(
     "test_case",
     [
         DbtExecutionWrapperTestCase(
-            description="dbt run strips local json and verbose flags before execution",
+            description="dbt run strips the local verbose flag before execution",
             command_name="run",
-            args=("--json", "--verbose", "--select", "tag:nightly"),
+            args=("--verbose", "--select", "tag:nightly"),
             expected_forwarded_args=("--select", "tag:nightly"),
-            expected_progress_stream=sys.stderr,
+            expected_progress_stream=sys.stdout,
         ),
         DbtExecutionWrapperTestCase(
             description="dbt build keeps human output on stdout",

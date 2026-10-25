@@ -480,9 +480,6 @@ def test_given_a_typed_call_case_when_compiling_then_it_reports_as_expected(
         assert fragment not in printed, printed
 
 
-@pytest.mark.xfail(
-    reason="a * REPLACE item takes its source column's type; a known polyglot gap", strict=True
-)
 @pytest.mark.parametrize(
     "test_case",
     [

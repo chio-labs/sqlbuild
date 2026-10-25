@@ -62,6 +62,13 @@ Do not compare development-profile timings with release benchmarks. Dependency o
 changes still require `uv sync --all-extras`; `--skip-install` does not refresh installed metadata,
 dependencies or console scripts.
 
+Always pass `--skip-install` to `maturin develop`, or use `make dev-native` or `make fast-native`.
+Without it, maturin installs the `sqlbuild-cli` version that `pyproject.toml` pins from the package
+index, not this checkout's `crates/sqlbuild-cli`: the `sqb` executable is then a released build,
+and between a release commit and its publication the install fails because that version does not
+exist yet. `uv sync` and `uv run` install the workspace `sqlbuild-cli` and rebuild the extension
+when Rust sources change.
+
 Before opening a pull request, run:
 
 ```bash

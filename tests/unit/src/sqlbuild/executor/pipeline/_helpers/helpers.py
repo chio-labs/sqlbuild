@@ -409,3 +409,14 @@ def order_status_callee_test_plan(*, callee_body_sql: str, test_count: int) -> P
         ),
         function_locations={**plan.function_locations, "status_matches": callee_destination},
     )
+
+
+def describe_lifecycle_events(events: list[LifecycleEvent]) -> list[str]:
+    """Describe events for an assertion message, with the invocation and run that produced them."""
+
+    return [
+        f"{event.event_type} invocation={event.invocation_id} run={event.run_id} "
+        f"adapter={event.payload.get('adapter')} purpose={event.payload.get('purpose')} "
+        f"kind={event.payload.get('statement_kind')} resource={event.resource_id}"
+        for event in events
+    ]

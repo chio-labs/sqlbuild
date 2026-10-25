@@ -95,7 +95,7 @@ pub(crate) struct PreparedBody {
 }
 
 /// One substitution of an expansion pass: authored source range and generated output range.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct ExpansionSpan {
     pub source_start: i64,
     pub source_end: i64,

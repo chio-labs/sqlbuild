@@ -72,7 +72,12 @@ pub(crate) fn model_contract_diagnostics(
         .map(|column| (column.name.as_str(), column))
         .collect();
     if contract_enforced {
-        diagnostics.extend(extra_columns(model, schema, inferred_columns));
+        diagnostics.extend(extra_columns(
+            model,
+            schema,
+            inferred_columns,
+            types.folds_upper(),
+        ));
     }
     let unchecked: HashSet<&str> = model
         .unchecked_output_columns
@@ -80,7 +85,12 @@ pub(crate) fn model_contract_diagnostics(
         .map(String::as_str)
         .collect();
     for (index, declared) in schema.columns.iter().enumerate() {
-        let Some(inferred) = inferred_by_name.get(declared.name.as_str()) else {
+        let Some(inferred) = inferred_by_name.get(declared.name.as_str()).or_else(|| {
+            types
+                .folds_upper()
+                .then(|| inferred_by_name.get(declared.name.to_uppercase().as_str()))
+                .flatten()
+        }) else {
             if validate_declared_shape && !model.fast_lineage_has_star {
                 diagnostics.push(missing_column(model, index, declared, contract_enforced));
             }
@@ -147,15 +157,20 @@ fn missing_declarations(model: &ContractModel) -> ContractDiagnostic {
     }
 }
 
+/// Inferred columns no declared column names; a folded `order_id` also names a star's `ORDER_ID`.
 fn extra_columns(
     model: &ContractModel,
     schema: &ContractSchema,
     inferred_columns: &[InferredOutputColumn],
+    folds_upper: bool,
 ) -> Vec<ContractDiagnostic> {
-    let declared_names: HashSet<&str> = schema
+    let declared_names: HashSet<String> = schema
         .columns
         .iter()
-        .map(|column| column.name.as_str())
+        .flat_map(|column| {
+            let folded: Option<String> = folds_upper.then(|| column.name.to_uppercase());
+            std::iter::once(column.name.clone()).chain(folded)
+        })
         .collect();
     let help: &str = if schema.named_schema {
         EXTRA_COLUMN_NAMED_SCHEMA_HELP

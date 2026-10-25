@@ -30,6 +30,8 @@ static SQL_TEST_CTE: LazyLock<Result<Regex, String>> =
     LazyLock::new(|| compiled(SQL_TEST_CTE_PATTERN));
 
 const INTEGER_CURSOR_FAMILIES: &[TypeFamily] = &[TypeFamily::Integer, TypeFamily::Decimal];
+/// The dialect that stores timestamps as ISO-8601 text, so a text column is a timestamp cursor.
+const TEXT_TIMESTAMP_DIALECT: &str = "sqlite";
 const TEMPORAL_CURSOR_FAMILIES: &[TypeFamily] = &[
     TypeFamily::Timestamp,
     TypeFamily::Datetime,
@@ -170,7 +172,7 @@ fn reference_errors(
             )?);
         }
     }
-    if let Some(error) = cursor_error(model, shape, context.families)? {
+    if let Some(error) = cursor_error(model, shape, (context.families, context.dialect))? {
         errors.push(error);
     }
     Ok(errors)
@@ -180,7 +182,7 @@ fn reference_errors(
 fn cursor_error(
     model: &MetadataModel,
     shape: &[(String, String)],
-    families: &Families,
+    (families, dialect): (&Families, Option<&str>),
 ) -> Result<Option<MetadataFinding>, SemanticFailure> {
     let (Some(cursor), Some(cursor_type)) = (model.cursor.as_deref(), model.cursor_type.as_deref())
     else {
@@ -201,6 +203,12 @@ fn cursor_error(
     };
     let family: TypeFamily = families.family(actual)?;
     if family == TypeFamily::Other || allowed.contains(&family) {
+        return Ok(None);
+    }
+    if family == TypeFamily::String
+        && allowed == TEMPORAL_CURSOR_FAMILIES
+        && dialect == Some(TEXT_TIMESTAMP_DIALECT)
+    {
         return Ok(None);
     }
     let message =

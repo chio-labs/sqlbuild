@@ -2,7 +2,9 @@
 
 use crate::dlt_destination::_helpers::credentials::{adapter_call, credentials, required};
 use crate::dlt_destination::_helpers::request::{check_dataset_name, check_destination_keys};
-use crate::dlt_destination::constants::{DUCKDB_ADAPTER, DUCKDB_DEFAULT_DATASET};
+use crate::dlt_destination::constants::{
+    DUCKDB_ADAPTER, DUCKDB_DEFAULT_DATASET, SQLALCHEMY_FACTORY, SQLITE_ADAPTER, SQLITE_MAIN_DATASET,
+};
 use crate::dlt_destination::errors::DltDestinationError;
 use crate::dlt_destination::models::{
     DltDataset, DltDestinationPlan, DltDestinationRequest, DltValue,
@@ -23,6 +25,18 @@ pub fn dlt_destination_plan(
                 DltDataset::Given
             } else {
                 DltDataset::Default(DUCKDB_DEFAULT_DATASET)
+            },
+        });
+    }
+    if adapter == SQLITE_ADAPTER {
+        let path: &str = required(request.connection, "path", SQLITE_ADAPTER)?;
+        return Ok(DltDestinationPlan {
+            factory: SQLALCHEMY_FACTORY,
+            arguments: credentials(DltValue::Text(format!("sqlite:///{path}"))),
+            dataset: if request.dataset_name.truthy {
+                DltDataset::Given
+            } else {
+                DltDataset::Default(SQLITE_MAIN_DATASET)
             },
         });
     }

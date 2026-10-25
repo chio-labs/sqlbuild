@@ -3,10 +3,12 @@
 use sqlbuild_analysis::compiled_project::models::{
     CompiledModelFacts, DeclarationFact, ModelSchemaFact,
 };
+use sqlbuild_sqltext::compiler::models::CharSpan;
 
+use crate::lint_text::models::ExpansionSpan;
 use crate::models::{
-    Declaration, DeclarationMember, DynamicFamilyRow, DynamicProofRow, ModelRow, Reference,
-    SchemaColumnRow, SchemaRow,
+    AuthoredQueryMap, Declaration, DeclarationMember, DynamicFamilyRow, DynamicProofRow, ModelRow,
+    Reference, SchemaColumnRow, SchemaRow,
 };
 
 /// The row the rules builder reads for one model; the authored query wins over the whole file.
@@ -29,6 +31,12 @@ pub(crate) fn model_row(facts: &CompiledModelFacts) -> Result<ModelRow, String> 
             &facts.authored_query_sql,
             &facts.query_sql,
         ),
+        query_column_offset: query_column_offset(
+            &facts.authored_sql,
+            &facts.authored_query_sql,
+            &facts.query_sql,
+        ),
+        authored_query: authored_query_map(facts),
         config: facts.config.values.clone(),
         authored_config_keys: facts.config.header_keys.clone(),
         logical_schema: facts.config.layer_schema.clone(),
@@ -105,6 +113,60 @@ pub(crate) fn declaration(fact: &DeclarationFact) -> Declaration {
         value_type: fact.value_type.clone(),
         render_as: fact.render_as.clone(),
     }
+}
+
+/// The expansion passes back to the authored query and where that query starts in the file.
+fn authored_query_map(facts: &CompiledModelFacts) -> Option<AuthoredQueryMap> {
+    let span = |span: &CharSpan| ExpansionSpan {
+        source_start: character_offset(span.source_start),
+        source_end: character_offset(span.source_end),
+        output_start: character_offset(span.output_start),
+        output_end: character_offset(span.output_end),
+    };
+    if facts.authored_query_sql.is_empty() || facts.expansion_passes.iter().all(Vec::is_empty) {
+        return None;
+    }
+    let start: usize = facts.authored_sql.rfind(&*facts.authored_query_sql)?;
+    let above: &str = &facts.authored_sql[..start];
+    Some(AuthoredQueryMap {
+        passes: facts
+            .expansion_passes
+            .iter()
+            .map(|pass| pass.iter().map(span).collect())
+            .collect(),
+        line_offset: above.matches('\n').count() as u64,
+        column_offset: above
+            .rsplit('\n')
+            .next()
+            .unwrap_or_default()
+            .chars()
+            .count() as u64,
+    })
+}
+
+fn character_offset(offset: usize) -> i64 {
+    i64::try_from(offset).unwrap_or(i64::MAX)
+}
+
+/// The file-line characters before the query's first content that the query itself lacks.
+fn query_column_offset(file: &str, authored_query: &str, query: &str) -> u64 {
+    let line_prefix = |text: &str, at: usize| {
+        text[..at]
+            .rsplit('\n')
+            .next()
+            .unwrap_or_default()
+            .chars()
+            .count()
+    };
+    let content_start = |text: &str| text.len() - text.trim_start().len();
+    if authored_query.is_empty() {
+        return 0;
+    }
+    file.rfind(authored_query).map_or(0, |start| {
+        let in_file: usize = line_prefix(file, start + content_start(authored_query));
+        let in_query: usize = line_prefix(query, content_start(query));
+        in_file.saturating_sub(in_query) as u64
+    })
 }
 
 /// The lines of `file` above `query`, the rendered form of its `authored_query`; 0 if unknown.

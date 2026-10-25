@@ -1,6 +1,6 @@
 //! Write compiled project output to `target/`: models, functions, audits, SQL tests, manifest.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 use pyo3::exceptions::PyValueError;
@@ -11,7 +11,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
 use pyo3::{IntoPyObjectExt, pyclass, pyfunction, wrap_pyfunction};
 use sqlbuild_cache::artifacts::main::new_sql_test_record::new_sql_test_record;
 use sqlbuild_cache::artifacts::main::reusable_sql_test_record::reusable_sql_test_record;
-use sqlbuild_cache::artifacts::models::SqlTestArtifactRecord;
+use sqlbuild_cache::artifacts::models::{SqlTestArtifactRecord, SqlTestRecordMiss};
 use sqlbuild_host::compile_context::main::record_compile_timing::record_compile_timing;
 use sqlbuild_host::entries::models::ExecutorHost;
 
@@ -58,6 +58,9 @@ const MANIFEST_FILE: &str = "manifest.json";
 /// The compile cache file stamping the compiled tree the last stale-file walk left.
 const COMPILED_TREE_STAMP_FILE: &str = "compiled-tree.bin";
 const SQL_FILE_SUFFIX: &str = ".sql";
+const SQL_TEST_CACHE_LOGGER: &str = "sqlbuild.compile.reuse";
+/// The miss reason of a SQL test the cache file holds no record for.
+const NOT_RECORDED: &str = "not_recorded";
 /// `functions/<language>` path components that already lead a function's path.
 const LANGUAGE_DIR_DEPTH: usize = 2;
 const PUBLISHED_STAGING_CHANGED: &str = "changed";
@@ -448,6 +451,20 @@ fn test_identities<'py>(
     Ok(identities)
 }
 
+/// Log why a warm SQL test artifact cache could not keep some artifacts, by reason.
+fn log_cache_misses(py: Python<'_>, misses: &BTreeMap<&'static str, usize>) -> PyResult<()> {
+    let reasons: String = misses
+        .iter()
+        .map(|(reason, count)| format!("{reason}={count}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    host::log_debug_message(
+        py,
+        SQL_TEST_CACHE_LOGGER,
+        &format!("SQL test artifact cache missed: {reasons}"),
+    )
+}
+
 /// Plan every SQL test whose cached artifact under `target_dir` cannot be reused.
 fn plan_tests<'py>(
     target_dir: &Bound<'py, PyAny>,
@@ -483,15 +500,23 @@ fn plan_tests<'py>(
     let mut pending: Vec<PendingTest> = Vec::new();
     let mut cached_paths: Vec<Py<PyAny>> = Vec::new();
     let mut cached_records: Vec<(String, SqlTestArtifactRecord)> = Vec::new();
+    let mut misses: BTreeMap<&'static str, usize> = BTreeMap::new();
     for (index, (test, identity)) in tests.into_iter().zip(identities).enumerate() {
         let Some((record_key, identity)) = identity else {
             pending.push((test.unbind(), None, None));
             continue;
         };
-        let reusable: Option<SqlTestArtifactRecord> = cached
+        let reusable: Result<SqlTestArtifactRecord, &'static str> = cached
             .get(&record_key)
-            .and_then(|record| reusable_sql_test_record(&tests_root_path, record, &identity));
-        if let Some(record) = reusable {
+            .ok_or(NOT_RECORDED)
+            .and_then(|record| {
+                reusable_sql_test_record(&tests_root_path, record, &identity)
+                    .map_err(SqlTestRecordMiss::label)
+            });
+        if let Err(reason) = reusable {
+            *misses.entry(reason).or_default() += 1;
+        }
+        if let Ok(record) = reusable {
             let path: Bound<'py, PyAny> = tests_root.div(&record.relative_path)?;
             artifact_kept(recorder, &path, (record.size, record.mtime_ns))?;
             cached_paths.push(path.unbind());
@@ -500,6 +525,9 @@ fn plan_tests<'py>(
             pending.push((test.unbind(), Some(record_key), Some(identity)));
         }
         yield_interpreter(py, index);
+    }
+    if !cached.is_empty() && !misses.is_empty() {
+        log_cache_misses(py, &misses)?;
     }
     let pending_tests: Vec<Bound<'py, PyAny>> = pending
         .iter()

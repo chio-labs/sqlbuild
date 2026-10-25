@@ -34,6 +34,9 @@ Build dbt models first (including dbt tests), then SQLBuild models with audits.
 sqb dbt build [--select <selector>...] [--exclude <selector>...]
 ```
 
+`sqb dbt run` and `sqb dbt build` have no JSON output: they reject `--json` with `C238` before
+dbt starts. Use `sqb dbt plan --json` for a machine-readable preview of the combined work.
+
 ### Plan safety policies
 
 After dbt finishes, `sqb dbt run` and `sqb dbt build` apply the same plan safety policies as

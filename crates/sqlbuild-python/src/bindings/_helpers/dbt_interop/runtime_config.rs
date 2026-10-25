@@ -28,6 +28,10 @@ const UNRECOGNIZED_HELP: &str = "SQLBuild flags go before `--`; pass raw dbt fla
 const PARSER_HELP: &str = "Run `-h` to list supported flags; pass raw dbt flags after `--`.";
 const EXECUTION_COMMANDS: [&str; 3] = ["plan", "run", "build"];
 const DISPLAY_FLAGS: [&str; 3] = ["--json", "--verbose", "-v"];
+const PLAN_COMMAND: &str = "plan";
+const JSON_FLAG: &str = "--json";
+const JSON_HELP: &str =
+    "Use sqb dbt plan --json for a machine-readable preview of the combined work.";
 const DEFER_FLAG: &str = "--defer";
 const VARS_FLAG: &str = "--vars";
 const STATE_FLAG: &str = "--state";
@@ -173,7 +177,15 @@ pub(crate) fn validate_dbt_execution_args(
     if !EXECUTION_COMMANDS.contains(&name.as_str()) {
         return Ok(());
     }
-    let display_free: Vec<String> = texts(args)?
+    let given: Vec<String> = texts(args)?;
+    if name != PLAN_COMMAND && given.iter().any(|arg| arg == JSON_FLAG) {
+        return Err(argument_error(
+            command.py(),
+            format!("sqb dbt {name} does not support --json"),
+            JSON_HELP,
+        ));
+    }
+    let display_free: Vec<String> = given
         .into_iter()
         .filter(|arg| !DISPLAY_FLAGS.contains(&arg.as_str()))
         .collect();

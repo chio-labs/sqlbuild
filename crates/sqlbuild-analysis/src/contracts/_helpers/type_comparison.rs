@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
+use crate::contracts::constants::UPPER_FOLDING_DIALECT;
 use crate::type_system::errors::TypeNormalizationError;
 use crate::type_system::main::normalize_type::normalize_type;
 use crate::type_system::models::{NormalizedType, TypeNormalization};
@@ -21,6 +22,11 @@ pub(crate) struct TypeComparer<'a> {
 }
 
 impl<'a> TypeComparer<'a> {
+    /// Whether the dialect folds unquoted identifiers to upper case, as star expansion names them.
+    pub(crate) fn folds_upper(&self) -> bool {
+        self.dialect == UPPER_FOLDING_DIALECT
+    }
+
     pub(crate) fn new(dialect: &'a str) -> Self {
         Self {
             dialect,

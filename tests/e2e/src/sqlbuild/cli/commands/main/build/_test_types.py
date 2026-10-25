@@ -1461,3 +1461,25 @@ class SourceEndAuditBuildE2ETestCase:
     build_arguments: tuple[str, ...]
     expected_exit_code: int
     expected_audit_reported: bool
+
+
+@dataclass(frozen=True)
+class PythonCheckBuildE2ETestCase:
+    """A build whose Python check returns `check_body`, and the footer and exit it must end with."""
+
+    description: str
+    check_decorator: str
+    check_body: str
+    expected_exit_code: int
+    expected_footer_fragment: str
+
+
+@dataclass(frozen=True)
+class DuckDbAttachE2ETestCase:
+    """A DuckDB project attaching a second database file, built with some connections."""
+
+    description: str
+    concurrency: int
+    expected_archived_rows: list[tuple[object, ...]]
+    attach_path: str = "archive.duckdb"
+    expected_archive_root: str = "project"

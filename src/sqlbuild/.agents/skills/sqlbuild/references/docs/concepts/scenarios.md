@@ -393,5 +393,9 @@ See the [CLI reference](../cli/scenario.md) for full command documentation.
 ## Limitations
 
 - Custom materializations are not supported in scenarios yet. Scenario models using custom materializations will fail with a clear error.
+- Local replay compares VARIANT and JSON output columns by their JSON value, not their type: key
+  order, whitespace and number spelling do not matter, so a Snowflake capture's pretty-printed
+  JSON equals an expected `PARSE_JSON(...)`. Values of non-JSON types with the same JSON text also
+  compare equal, for example `DATE '2024-01-01'::VARIANT` and `'2024-01-01'::VARIANT`.
 - Local replay transpiles SQL from the project adapter dialect to DuckDB. Adapter-specific SQL that cannot be translated will produce a clear error with the failing resource name and reason.
 - Outside local replay, scenario fixture, expected and assertion SQL runs as authored: SQLBuild replaces `__ref`, `__source`, `__seed` and `__dbt_ref` calls with relation names and may wrap a partial fixture to add its missing columns, but never regenerates the query. Calls inside comments and quoted text are left unchanged. Quoted text and comments follow the project adapter's rules, including with `--local`: backslash escapes on Snowflake, BigQuery and Databricks, `E'...'` strings on DuckDB and Postgres, nested block comments on DuckDB, Postgres, Databricks and SQL Server, `#` line comments on BigQuery, and `//` line comments on Snowflake. A call naming a relation the scenario does not provide, or SQL with an unclosed string or comment, fails planning with `S511` naming the scenario file.

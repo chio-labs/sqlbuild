@@ -593,3 +593,23 @@ class MacroMockAliasTestCase:
     command: tuple[str, ...]
     expected_exit_code: int
     expected_fragment: str
+
+
+@dataclass(frozen=True)
+class ParenthesisedJoinMockTestCase:
+    """A model reading mocked references through a parenthesised join, and the test outcome."""
+
+    description: str
+    model_from: str
+    expected_exit_code: int
+    expected_fragment: str
+
+
+@dataclass(frozen=True)
+class PythonUdfConnectionsE2ETestCase:
+    """Unit tests calling a DuckDB Python UDF over several test connections to one database."""
+
+    description: str
+    database: str
+    concurrency: int
+    expected_stdout_fragment: str

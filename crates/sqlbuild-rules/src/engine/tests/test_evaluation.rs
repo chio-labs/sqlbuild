@@ -1227,7 +1227,7 @@ fn given_model_sql_when_stubbing_shape_then_offsets_map_back_to_source_positions
             .sql
             .find(test_case.expected_fragment)
             .ok_or("fragment missing from the model SQL")?;
-        let source = ModelSource::new(test_case.sql, &shape.offsets, 0);
+        let source = ModelSource::new(test_case.sql, &shape.offsets, (0, 0));
         let end = normalized_start + test_case.expected_fragment.chars().count();
         assert_eq!(
             source.text(normalized_start, end),

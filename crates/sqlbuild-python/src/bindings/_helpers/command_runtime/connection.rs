@@ -1,12 +1,14 @@
 //! Connection config resolution for CLI commands.
 
+use std::path::PathBuf;
+
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
 use pyo3::types::{PyDict, PyDictMethods, PyString};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_config::command_connection::constants::{
-    CONNECTION_SOURCE_KEY, DBT_PROFILE_CONNECTION_SOURCE, DBT_PROFILE_ROUTING_KEYS,
+    CONNECTION_SOURCE_KEY, DBT_PROFILE_CONNECTION_SOURCE, DBT_PROFILE_ROUTING_KEYS, DUCKDB_ADAPTER,
     DUCKDB_MEMORY_DATABASE, LOCAL_DATABASE_PATH_KEYS,
 };
 use sqlbuild_config::command_connection::main::missing_connection_error::missing_connection_error;
@@ -24,6 +26,18 @@ use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::dbt_interop::profile_connection::resolve_raw_dbt_profile_connection;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
+
+const ATTACH_KEY: &str = "attach";
+const ATTACH_PATH_KEY: &str = "path";
+const ATTACH_TYPE_KEY: &str = "type";
+/// `ATTACH ... (TYPE ...)` values whose path is a local database file.
+const LOCAL_ATTACH_TYPES: [&str; 2] = ["duckdb", "sqlite"];
+const URL_SCHEME_SEPARATOR: &str = "://";
+const MOTHERDUCK_PATH_PREFIX: &str = "md:";
+/// A path naming the home directory, which DuckDB expands from `HOME`.
+const HOME_PREFIX: &str = "~";
+const HOME_DIRECTORY_PREFIX: &str = "~/";
+const HOME_VARIABLE: &str = "HOME";
 
 const CONNECTION_OPTIONS: (&[&str], &[&str]) = (
     &["raw_config", "project_dir", "adapter_name"],
@@ -108,28 +122,92 @@ pub(crate) fn anchor_local_database_path(
     config: &Bound<'_, PyDict>,
     (project_dir, adapter_name): (&Bound<'_, PyAny>, &str),
 ) -> PyResult<()> {
-    let py: Python<'_> = config.py();
     let Some((_, path_key)) = LOCAL_DATABASE_PATH_KEYS
         .iter()
         .find(|(adapter, _)| *adapter == adapter_name)
     else {
         return Ok(());
     };
+    if adapter_name == DUCKDB_ADAPTER {
+        anchor_attach_paths(config, project_dir)?;
+    }
     let Some(database) = config.get_item(*path_key)? else {
         return Ok(());
     };
-    if !database.is_instance_of::<PyString>() {
-        return Ok(());
+    if let Some(anchored) = anchored_file_path(&database, project_dir)? {
+        config.set_item(*path_key, anchored)?;
     }
-    if path(py, &database)?
-        .call_method0("is_absolute")?
-        .is_truthy()?
-        || database.extract::<String>()? == DUCKDB_MEMORY_DATABASE
-    {
-        return Ok(());
+    Ok(())
+}
+
+/// The file a local path names: `~` expanded, then `project_dir / path` when still relative.
+fn anchored_file_path<'py>(
+    value: &Bound<'py, PyAny>,
+    project_dir: &Bound<'py, PyAny>,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let py: Python<'py> = value.py();
+    if !value.is_instance_of::<PyString>() {
+        return Ok(None);
     }
-    let anchored: Bound<'_, PyAny> = path(py, project_dir)?.div(&database)?.str()?.into_any();
-    config.set_item(*path_key, anchored)
+    let text: String = value.extract()?;
+    if text == DUCKDB_MEMORY_DATABASE {
+        return Ok(None);
+    }
+    if let Some(rest) = home_relative_rest(&text) {
+        return Ok(std::env::var_os(HOME_VARIABLE).map(|home| {
+            let file: PathBuf = PathBuf::from(home).join(rest);
+            PyString::new(py, &file.to_string_lossy()).into_any()
+        }));
+    }
+    if path(py, value)?.call_method0("is_absolute")?.is_truthy()? {
+        return Ok(None);
+    }
+    Ok(Some(path(py, project_dir)?.div(value)?.str()?.into_any()))
+}
+
+/// What follows `~` or `~/`, the home directory DuckDB expands a path from.
+fn home_relative_rest(text: &str) -> Option<&str> {
+    if text == HOME_PREFIX {
+        return Some("");
+    }
+    text.strip_prefix(HOME_DIRECTORY_PREFIX)
+}
+
+/// Anchor each relative DuckDB or SQLite file an `attach` entry names; other paths are DSNs or URLs.
+fn anchor_attach_paths(config: &Bound<'_, PyDict>, project_dir: &Bound<'_, PyAny>) -> PyResult<()> {
+    let py: Python<'_> = config.py();
+    let Some(entries) = config.get_item(ATTACH_KEY)? else {
+        return Ok(());
+    };
+    let Ok(entries) = entries.try_iter() else {
+        return Ok(());
+    };
+    let mut anchored: Vec<Bound<'_, PyAny>> = Vec::new();
+    for entry in entries {
+        let entry: Bound<'_, PyAny> = entry?;
+        let Ok(mapping) = entry.cast::<PyDict>() else {
+            anchored.push(entry);
+            continue;
+        };
+        let local_file: bool = match mapping.get_item(ATTACH_TYPE_KEY)? {
+            None => true,
+            Some(kind) => kind
+                .extract::<String>()
+                .is_ok_and(|kind| LOCAL_ATTACH_TYPES.contains(&kind.to_ascii_lowercase().as_str())),
+        };
+        let copy: Bound<'_, PyDict> = mapping.copy()?;
+        if let Some(path_value) = mapping.get_item(ATTACH_PATH_KEY)?
+            && local_file
+            && !path_value.extract::<String>().is_ok_and(|text| {
+                text.contains(URL_SCHEME_SEPARATOR) || text.starts_with(MOTHERDUCK_PATH_PREFIX)
+            })
+            && let Some(file) = anchored_file_path(&path_value, project_dir)?
+        {
+            copy.set_item(ATTACH_PATH_KEY, file)?;
+        }
+        anchored.push(copy.into_any());
+    }
+    config.set_item(ATTACH_KEY, pyo3::types::PyList::new(py, anchored)?)
 }
 
 /// Resolve dbt profiles, relative DuckDB paths, and the command group's warehouse.

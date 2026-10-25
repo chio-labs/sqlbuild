@@ -11,7 +11,6 @@ from typing import cast
 
 import pytest
 
-import sqlbuild._native as native_module
 from sqlbuild._native import (
     ProjectColumnLineage,
     compiled_model_record,
@@ -29,7 +28,7 @@ from tests.integration.src.sqlbuild.compiler.helpers import (
 from tests.integration.src.sqlbuild.compiler.lineage._test_types import (
     FormerlyDeferredLineageTestCase,
     GeneratedLineageParityTestCase,
-    ParserPanicLineageTestCase,
+    TruncatedSqlLineageTestCase,
     UnparsedLineageTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.lineage.helpers import (
@@ -241,20 +240,17 @@ def test_given_unknown_dialect_when_building_fast_lineage_then_python_error_rais
 @pytest.mark.parametrize(
     "test_case",
     [
-        ParserPanicLineageTestCase(
-            description="truncated T-SQL the parser panics on, which crashes the wheel's process",
+        TruncatedSqlLineageTestCase(
+            description="truncated T-SQL the parser once panicked on is left out",
             dialect="tsql",
             query_sql="SELECT IF(region > 1, re",
-            expected_message=(
-                "NativeCompilerError: native SQL compilation panicked "
-                "(native fast lineage of request model 0)"
-            ),
+            expected_has_model=False,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_parser_panic_when_building_fast_lineage_then_raises_native_compiler_error(
-    test_case: ParserPanicLineageTestCase, tmp_path: Path
+def test_given_truncated_sql_when_building_fast_lineage_then_omits_the_model(
+    test_case: TruncatedSqlLineageTestCase, tmp_path: Path
 ) -> None:
     project: CompiledProjectView = compiled_project(
         project_dir=tmp_path / "project",
@@ -272,10 +268,12 @@ def test_given_parser_panic_when_building_fast_lineage_then_raises_native_compil
         ),
     )
 
-    with pytest.raises(native_module.NativeCompilerError) as raised:
-        _ = fast_column_lineage(project=broken, dialect=test_case.dialect, model_names=None)
+    native: ProjectColumnLineage | None = fast_column_lineage(
+        project=broken, dialect=test_case.dialect, model_names=None
+    )
 
-    assert str(raised.value) == test_case.expected_message
+    assert native is not None
+    assert native.has_model(project.models[0].name) is test_case.expected_has_model
 
 
 if __name__ == "__main__":

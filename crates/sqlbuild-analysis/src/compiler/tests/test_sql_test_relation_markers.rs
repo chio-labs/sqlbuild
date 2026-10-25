@@ -64,6 +64,18 @@ fn given_parsed_statements_when_collecting_relation_markers_then_json_walk_order
             expected_calls: &[],
         },
         RelationMarkersTestCase {
+            description: "a parenthesised join keeps its left side",
+            dialect: "duckdb",
+            sql: "SELECT * FROM (__ref(\"orders\") JOIN __ref(\"customers\") ON TRUE)",
+            expected_calls: &[("__ref", "orders"), ("__ref", "customers")],
+        },
+        RelationMarkersTestCase {
+            description: "update from relations are collected",
+            dialect: "postgres",
+            sql: "UPDATE t SET x = 1 FROM __ref(\"orders\") JOIN __ref(\"customers\") ON TRUE",
+            expected_calls: &[("__ref", "orders"), ("__ref", "customers")],
+        },
+        RelationMarkersTestCase {
             description: "set operations walk each branch",
             dialect: "postgres",
             sql: "SELECT id FROM __ref(\"orders\") UNION ALL SELECT id FROM __ref(\"archived_orders\")",

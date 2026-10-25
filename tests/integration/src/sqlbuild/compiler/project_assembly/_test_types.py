@@ -53,10 +53,10 @@ class OptOutTestCase:
 
 
 @dataclass(frozen=True)
-class NativePanicTestCase:
-    """A project whose native assembly panics in the parser."""
+class TruncatedHookTestCase:
+    """A project whose hook SQL ends mid-expression, which assembly reports as invalid input."""
 
     description: str
     files: dict[str, str]
     dialect: str
-    expected_message: str
+    expected_message_fragment: str
