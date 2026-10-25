@@ -118,6 +118,32 @@ _CONNECTIONS: dict[str, str] = {
             expected_column_counts={},
         ),
         DialectSyntaxCompileE2ETestCase(
+            description="Snowflake rejects a CTE whose body is a bare VALUES list",
+            adapter="snowflake",
+            models={
+                "codes": dialect_syntax_model(
+                    "Codes.", "WITH v AS (VALUES (1), (2)) SELECT v.column1 AS code FROM v"
+                ),
+            },
+            expected_exit_code=1,
+            expected_codes=("P001",),
+            expected_column_counts={},
+        ),
+        DialectSyntaxCompileE2ETestCase(
+            description="Snowflake accepts VALUES in FROM inside a CTE",
+            adapter="snowflake",
+            models={
+                "codes": dialect_syntax_model(
+                    "Codes.",
+                    "WITH v AS (SELECT t.code FROM (VALUES (1), (2)) AS t(code)) "
+                    "SELECT v.code FROM v",
+                ),
+            },
+            expected_exit_code=0,
+            expected_codes=(),
+            expected_column_counts={"codes": 1},
+        ),
+        DialectSyntaxCompileE2ETestCase(
             description="a ClickHouse DATE_TRUNC timestamp cursor keeps its timestamp type",
             adapter="clickhouse",
             models={
@@ -171,7 +197,8 @@ def test_given_dialect_syntax_when_compiling_then_analysis_parses_and_types_it(
 
     report: dict[str, Any] = json.loads(compiled.stdout)
     column_counts: dict[str, int] = {
-        model["name"]: model["column_count"] for model in report["resources"]["models"]
+        model["name"]: model["column_count"]
+        for model in report.get("resources", {}).get("models", [])
     }
     assert compiled.returncode == test_case.expected_exit_code, compiled.stdout + compiled.stderr
     assert tuple(item["code"] for item in report["diagnostics"]) == test_case.expected_codes
