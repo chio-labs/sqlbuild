@@ -1,7 +1,7 @@
 //! The ingestr destination URI for a SQLBuild warehouse connection.
 
 use crate::ingestr_command::_helpers::destinations::{
-    bigquery, databricks, duckdb, motherduck, postgres, snowflake, sqlserver,
+    bigquery, databricks, duckdb, motherduck, postgres, snowflake, sqlite, sqlserver,
 };
 use crate::ingestr_command::errors::IngestrCommandError;
 use crate::loader_connection::models::LoaderConnection;
@@ -13,6 +13,7 @@ pub fn ingestr_destination_uri(
 ) -> Result<String, IngestrCommandError> {
     match adapter_name {
         "duckdb" => duckdb(connection),
+        "sqlite" => sqlite(connection),
         "motherduck" => Ok(motherduck(connection)),
         "postgres" => postgres(connection),
         "bigquery" => bigquery(connection),

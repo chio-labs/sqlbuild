@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import sqlite3
 import subprocess
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -77,6 +79,57 @@ def test_given_postgres_source_when_loading_with_ingestr_then_duckdb_target_has_
         )
         == test_case.expected_rows
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        IngestrE2ETestCase(
+            description="loads a sqlite source into a sqlite destination",
+            expected_rows=((1, "new"), (2, "paid")),
+            expected_stdout_fragments=("ingestr execution", "raw_sqlite_orders", "OK"),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_sqlite_project_when_loading_with_ingestr_then_target_has_rows(
+    tmp_path: Path,
+    test_case: IngestrE2ETestCase,
+) -> None:
+    source_path: Path = tmp_path / "source.db"
+    with closing(sqlite3.connect(source_path)) as source, source:
+        source.execute("CREATE TABLE orders (order_id INTEGER, status TEXT)")
+        source.execute("INSERT INTO orders VALUES (1, 'new'), (2, 'paid')")
+    project_dir: Path = tmp_path / "sqlite_to_sqlite"
+    write_project_files(
+        project_dir=project_dir,
+        files={
+            "sqlbuild_project.toml": (
+                'name = "sqlite_to_sqlite"\nadapter = "sqlite"\n\n'
+                '[connection]\npath = "target.sqlite"\n'
+            ),
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_sqlite_orders\n    description: Test source raw_sqlite_orders.\n"
+                "    ingestr:\n"
+                f'      source_uri: "sqlite:///{source_path}"\n'
+                "      source_table: orders\n"
+            ),
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb_with_ingestr(
+        command=("--no-color", "load"), project_dir=project_dir
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    for fragment in test_case.expected_stdout_fragments:
+        assert fragment in result.stdout
+    with closing(sqlite3.connect(project_dir / "target.sqlite")) as target:
+        rows: list[tuple[object, ...]] = target.execute(
+            "SELECT order_id, status FROM raw_sqlite_orders ORDER BY order_id"
+        ).fetchall()
+    assert tuple(rows) == test_case.expected_rows
 
 
 @pytest.mark.parametrize(
