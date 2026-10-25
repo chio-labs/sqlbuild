@@ -1137,7 +1137,11 @@ def build_connect_by_scenario_project_files() -> dict[str, str]:
     }
 
 
-def build_local_variant_scenario_project_files() -> dict[str, str]:
+def build_local_variant_scenario_project_files(
+    *,
+    output: str = "o.payload IS NOT NULL AS has_payload",
+    expected: str = "TRUE AS has_payload",
+) -> dict[str, str]:
     """Build an in-memory DuckDB scenario whose source fixture holds a VARIANT column."""
 
     return {
@@ -1152,15 +1156,16 @@ def build_local_variant_scenario_project_files() -> dict[str, str]:
         ),
         "models/stg_orders.sql": (
             "MODEL (description 'Test model stg_orders.');\n"
-            "SELECT o.order_id, o.payload IS NOT NULL AS has_payload\n"
+            f"SELECT o.order_id, {output}\n"
             'FROM __source("raw_orders") AS o\n'
         ),
         "tests/scenarios/orders__keep_payload.sql": (
             "SCENARIO (description 'Test scenario orders__keep_payload.');\n"
             "WITH\n"
             "__source__raw_orders AS (\n"
-            "  SELECT 1 AS order_id, '{\"qty\": 2}'::JSON::VARIANT AS payload\n),\n"
-            "__expected__stg_orders AS (SELECT 1 AS order_id, TRUE AS has_payload)\n"
+            "  SELECT 1 AS order_id,\n"
+            '  \'{"qty": 2, "tags": ["a"]}\'::JSON::VARIANT AS payload\n),\n'
+            f"__expected__stg_orders AS (SELECT 1 AS order_id, {expected})\n"
             "SELECT 1\n"
         ),
     }

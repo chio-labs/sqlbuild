@@ -25,6 +25,15 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_pr
             scenario_name="orders__keep_payload",
             expected_stdout_fragment="PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
         ),
+        LocalVariantScenarioTestCase(
+            description="an expected VARIANT object compares equal to the replayed fixture",
+            repo_files=build_local_variant_scenario_project_files(
+                output="o.payload",
+                expected='\'{"qty": 2, "tags": ["a"]}\'::JSON::VARIANT AS payload',
+            ),
+            scenario_name="orders__keep_payload",
+            expected_stdout_fragment="PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+        ),
     ],
     ids=lambda case: case.description,
 )
