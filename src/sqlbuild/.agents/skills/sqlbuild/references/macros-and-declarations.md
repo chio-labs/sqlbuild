@@ -42,6 +42,20 @@ known type of another family fails with `P024`. Narrow `ANY` arguments with `ANY
 `ANY TEXT` or `ANY TEMPORAL`, and call a CTE-list macro more than once in a model with
 `__cte := name`.
 
+A `RELATION` argument declares everything the macro reads from it as slots: typed single columns
+and `COLUMNS` groups of caller-chosen columns. Read them as `@src.slot` or `alias.@src.slot` (a
+group's prefix applies to every column) and map them at the call, so one macro serves every grain:
+
+```sql
+-- arguments (weekly RELATION (keys COLUMNS, order_count BIGINT))
+@sql.weekly_rates(w, weekly.keys := (product_id, region), weekly.order_count := orders_placed)
+```
+
+A group stands only as a whole item of a select list, `PARTITION BY`, `GROUP BY`, `ORDER BY` or
+`USING (...)`, and a mapped single-column slot read in a select list needs `AS`. A plain group read
+stands as bare column names, so later CTEs need no alias; inside a subquery it fails if a subquery
+relation has one of its columns. A plain single-slot read goes through the passed relation.
+
 Full reference: [docs/concepts/macros/sql-macros.md](docs/concepts/macros/sql-macros.md).
 
 **Python macros** live in `macros/python/` and are plain Python functions that return final SQL
