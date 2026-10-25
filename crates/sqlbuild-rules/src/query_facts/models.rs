@@ -227,10 +227,18 @@ pub(crate) struct ModelSource<'a> {
     offsets: &'a [usize],
     /// The lines of the model file above this SQL.
     line_offset: u64,
+    /// The characters before this SQL's first content line on its file line.
+    column_offset: u64,
+    /// The 1-based line of this SQL's first content.
+    first_content_line: usize,
 }
 
 impl<'a> ModelSource<'a> {
-    pub(crate) fn new(sql: &'a str, offsets: &'a [usize], line_offset: u64) -> Self {
+    pub(crate) fn new(
+        sql: &'a str,
+        offsets: &'a [usize],
+        (line_offset, column_offset): (u64, u64),
+    ) -> Self {
         let mut bytes: Vec<usize> = Vec::with_capacity(sql.len() + 1);
         let mut lines: Vec<usize> = vec![0];
         for (character, (byte, value)) in sql.char_indices().enumerate() {
@@ -246,6 +254,11 @@ impl<'a> ModelSource<'a> {
             lines,
             offsets,
             line_offset,
+            column_offset,
+            first_content_line: sql[..sql.len() - sql.trim_start().len()]
+                .matches('\n')
+                .count()
+                + 1,
         }
     }
 
@@ -269,7 +282,12 @@ impl<'a> ModelSource<'a> {
         let character = self.original(offset);
         let line = self.lines.partition_point(|start| *start <= character);
         let column = character - self.lines[line - 1] + 1;
-        (line as u64 + self.line_offset, column as u64)
+        let shifted: u64 = if line == self.first_content_line {
+            self.column_offset
+        } else {
+            0
+        };
+        (line as u64 + self.line_offset, column as u64 + shifted)
     }
 
     /// The model's own text between normalized characters `start` and `end`.

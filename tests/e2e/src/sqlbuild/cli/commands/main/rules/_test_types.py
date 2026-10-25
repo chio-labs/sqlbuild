@@ -336,3 +336,12 @@ class ModuleStateAttributionCase:
     files: tuple[tuple[str, str], ...]
     edited_model: str
     expected_misses_after_edit: dict[str, int]
+
+
+@dataclass(frozen=True)
+class RulePositionE2ETestCase:
+    """A model file whose query starts somewhere on a line, and where a rule must point."""
+
+    description: str
+    model_sql: str
+    expected_location: str

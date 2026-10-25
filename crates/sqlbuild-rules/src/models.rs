@@ -562,6 +562,9 @@ pub struct Model {
     /// The lines of the model file above `query_sql`, which locations inside it skip.
     #[serde(default)]
     pub query_line_offset: u64,
+    /// The characters before `query_sql`'s first line on its file line, when it shares one.
+    #[serde(default)]
+    pub query_column_offset: u64,
     pub config: BTreeMap<String, Value>,
     pub authored_config_keys: Vec<String>,
     pub logical_schema: Option<String>,
@@ -875,6 +878,8 @@ pub struct ModelRow {
     pub authored_sql: String,
     /// The lines of the model file above `query_sql`.
     pub query_line_offset: u64,
+    /// The characters before `query_sql`'s first line on its file line.
+    pub query_column_offset: u64,
     pub config: BTreeMap<String, Value>,
     pub authored_config_keys: Vec<String>,
     pub logical_schema: Option<String>,

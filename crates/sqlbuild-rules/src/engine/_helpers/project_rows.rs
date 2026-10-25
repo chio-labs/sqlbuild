@@ -29,6 +29,11 @@ pub(crate) fn model_row(facts: &CompiledModelFacts) -> Result<ModelRow, String> 
             &facts.authored_query_sql,
             &facts.query_sql,
         ),
+        query_column_offset: query_column_offset(
+            &facts.authored_sql,
+            &facts.authored_query_sql,
+            &facts.query_sql,
+        ),
         config: facts.config.values.clone(),
         authored_config_keys: facts.config.header_keys.clone(),
         logical_schema: facts.config.layer_schema.clone(),
@@ -105,6 +110,27 @@ pub(crate) fn declaration(fact: &DeclarationFact) -> Declaration {
         value_type: fact.value_type.clone(),
         render_as: fact.render_as.clone(),
     }
+}
+
+/// The file-line characters before the query's first content that the query itself lacks.
+fn query_column_offset(file: &str, authored_query: &str, query: &str) -> u64 {
+    let line_prefix = |text: &str, at: usize| {
+        text[..at]
+            .rsplit('\n')
+            .next()
+            .unwrap_or_default()
+            .chars()
+            .count()
+    };
+    let content_start = |text: &str| text.len() - text.trim_start().len();
+    if authored_query.is_empty() {
+        return 0;
+    }
+    file.rfind(authored_query).map_or(0, |start| {
+        let in_file: usize = line_prefix(file, start + content_start(authored_query));
+        let in_query: usize = line_prefix(query, content_start(query));
+        in_file.saturating_sub(in_query) as u64
+    })
 }
 
 /// The lines of `file` above `query`, the rendered form of its `authored_query`; 0 if unknown.

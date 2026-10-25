@@ -133,6 +133,7 @@ impl RowWriter {
             query_sql: _,
             authored_sql: _,
             query_line_offset: _,
+            query_column_offset: _,
             typed_calls: _,
             config,
             authored_config_keys,
@@ -351,6 +352,7 @@ impl RowReader<'_> {
             query_sql: String::new(),
             authored_sql: String::new(),
             query_line_offset: 0,
+            query_column_offset: 0,
             typed_calls: Vec::new(),
             config: {
                 let count: usize = self.count()?;

@@ -144,7 +144,11 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
         .as_ref()
         .map_err(|error| unparsed(error))?;
     let quote_policy = rules_quote_policy(&request.dialect);
-    let source = ModelSource::new(&model.query_sql, &shape.offsets, model.query_line_offset);
+    let source = ModelSource::new(
+        &model.query_sql,
+        &shape.offsets,
+        (model.query_line_offset, model.query_column_offset),
+    );
     let classification = classify_model(facts, model, &shape.calls);
     let parsed = ParsedModel {
         facts,
