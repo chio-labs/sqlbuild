@@ -9,6 +9,9 @@ from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
+from sqlbuild.executor.scenario._helpers.lifecycle.variant_comparison import (
+    variant_compared_columns,
+)
 from sqlbuild.executor.scenario.constants import (
     SCENARIO_EXEC_EXPECTED_ERRORED,
     SCENARIO_EXEC_EXPECTED_FAILED,
@@ -30,13 +33,18 @@ def execute_scenario_expected_expectation(
     actual_relation: str = resolve_relation_location_qualified_name(
         adapter=adapter, location=expectation.actual_destination
     )
-    comparison_sql: str = build_scenario_expected_comparison_sql(
-        actual_sql=f"SELECT * FROM {actual_relation}",
-        expected_sql=expectation.expected_sql,
-        set_difference_operator=adapter.render_set_difference_operator(),
-        compared_columns=expectation.compared_columns,
-    )
     try:
+        comparison_sql: str = build_scenario_expected_comparison_sql(
+            actual_sql=f"SELECT * FROM {actual_relation}",
+            expected_sql=expectation.expected_sql,
+            set_difference_operator=adapter.render_set_difference_operator(),
+            compared_columns=variant_compared_columns(
+                adapter=adapter,
+                connection=connection,
+                location=expectation.actual_destination,
+                compared_columns=expectation.compared_columns,
+            ),
+        )
         cursor: Any = adapter.execute(connection=connection, sql=comparison_sql)
         row: Any | None = cursor.fetchone()
     except Exception as exc:

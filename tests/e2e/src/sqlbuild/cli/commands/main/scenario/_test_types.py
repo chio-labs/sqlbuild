@@ -340,3 +340,14 @@ class SnapshotHelperEditTestCase:
     edited_to: str
     expected_exit_code: int
     expected_stdout_fragment: str
+
+
+@dataclass(frozen=True)
+class CapturedVariantTextScenarioTestCase:
+    """A Snowflake-captured VARIANT stored as JSON text, compared with a PARSE_JSON expected."""
+
+    description: str
+    captured_payload_text: str
+    expected_payload_json: str
+    expected_returncode: int
+    expected_stdout_fragment: str
