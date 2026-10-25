@@ -45,10 +45,14 @@ use sqlbuild_analysis::planner_warehouse::main::cursor_query_groups::cursor_quer
 use sqlbuild_analysis::planner_warehouse::main::cursor_query_identity::cursor_query_identity;
 use sqlbuild_analysis::planner_warehouse::main::cursor_query_sql::cursor_query_sql;
 use sqlbuild_analysis::planner_warehouse::models::{CursorTagRequest, PhysicalCursorQuery};
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
+
+/// The adapter method that renders one cursor bound expression as text.
+const CURSOR_TEXT_METHOD: &str = "render_cursor_text";
 
 /// Selection and policy inputs for cursor warehouse inspection.
 pub(crate) struct CursorInputs<'py> {
@@ -692,6 +696,34 @@ fn fan_out<'py>(query: &PhysicalCursorQuery, row: &Bound<'py, PyAny>) -> PyResul
     Ok(values)
 }
 
+/// The query's MIN/MAX statement, each bound read as text the way the adapter renders it.
+fn adapter_cursor_sql(
+    request: &SnapshotRequest<'_>,
+    query: &PhysicalCursorQuery,
+) -> PyResult<String> {
+    let py = request.adapter.py();
+    let render = native_field(&request.adapter, CURSOR_TEXT_METHOD)?;
+    let failure: RefCell<Option<PyErr>> = RefCell::new(None);
+    let sql: String = cursor_query_sql(query, &|expression: &str| {
+        call_with(
+            &render,
+            &[
+                ("expression", text(py, expression)),
+                ("cursor_type", text(py, &query.cursor_type)),
+            ],
+        )
+        .and_then(|rendered| rendered.extract::<String>())
+        .unwrap_or_else(|error| {
+            failure.replace(Some(error));
+            String::new()
+        })
+    });
+    match failure.into_inner() {
+        Some(error) => Err(error),
+        None => Ok(sql),
+    }
+}
+
 fn execute_queries<'py>(
     request: &SnapshotRequest<'py>,
     queries: &[PhysicalCursorQuery],
@@ -708,7 +740,7 @@ fn execute_queries<'py>(
             if !on_progress.is_none() {
                 on_progress.call1((format!("Inspecting cursor bounds {identity}..."),))?;
             }
-            let outcome = read_cursor_query(py, &cursor_query_sql(query), handles)?;
+            let outcome = read_cursor_query(py, &adapter_cursor_sql(request, query)?, handles)?;
             report_cursor_query(py, query, (&outcome, &identity), on_progress)?;
             outcomes.push(outcome);
         }
@@ -722,7 +754,11 @@ fn execute_queries<'py>(
         }
         let mut tasks: Vec<_> = Vec::new();
         for query in queries {
-            tasks.push(bound_task(py, cursor_query_sql(query), handles)?);
+            tasks.push(bound_task(
+                py,
+                adapter_cursor_sql(request, query)?,
+                handles,
+            )?);
         }
         call_with(
             &host::entry(py, RUN_BOUNDED)?,
