@@ -1332,3 +1332,15 @@ class SnowflakeStarContractE2ETestCase:
     upstream_columns: str
     expected_exit_code: int
     expected_k005_columns: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DialectSyntaxCompileE2ETestCase:
+    """A project using dialect syntax the SQL parser must analyse, and the compile outcome."""
+
+    description: str
+    adapter: str
+    models: dict[str, str]
+    expected_exit_code: int
+    expected_codes: tuple[str, ...]
+    expected_column_counts: dict[str, int]

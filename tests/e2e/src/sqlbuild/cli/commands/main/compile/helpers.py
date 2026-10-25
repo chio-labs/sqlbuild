@@ -5338,3 +5338,9 @@ def run_benchmark_generator(
         check=False,
         timeout=300,
     )
+
+
+def dialect_syntax_model(description: str, sql: str, config: str = "") -> str:
+    """Build a model file with a description, optional extra header config and its query."""
+
+    return f"MODEL (description '{description}'{config});\n{sql}\n"

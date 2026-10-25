@@ -37,10 +37,10 @@ class UnparsedLineageTestCase:
 
 
 @dataclass(frozen=True)
-class ParserPanicLineageTestCase:
-    """A model whose SQL panics the native parser, failing lineage as an internal error."""
+class TruncatedSqlLineageTestCase:
+    """A model whose SQL ends mid-expression, which fast lineage leaves out."""
 
     description: str
     dialect: str
     query_sql: str
-    expected_message: str
+    expected_has_model: bool
