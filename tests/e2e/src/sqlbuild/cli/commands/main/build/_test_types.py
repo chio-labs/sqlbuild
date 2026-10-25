@@ -1461,3 +1461,14 @@ class SourceEndAuditBuildE2ETestCase:
     build_arguments: tuple[str, ...]
     expected_exit_code: int
     expected_audit_reported: bool
+
+
+@dataclass(frozen=True)
+class PythonCheckBuildE2ETestCase:
+    """A build whose Python check returns `check_body`, and the footer and exit it must end with."""
+
+    description: str
+    check_decorator: str
+    check_body: str
+    expected_exit_code: int
+    expected_footer_fragment: str

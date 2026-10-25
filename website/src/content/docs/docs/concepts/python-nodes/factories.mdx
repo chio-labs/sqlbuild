@@ -68,7 +68,7 @@ def orders_pipeline():
     @check(depends_on=export)
     def orders_export_check(ctx):
         """Check that the orders export is ready."""
-        return ctx.pass_("export ready")
+        return ctx.pass_(message="export ready")
 
     return [load, export, orders_export_check]
 ```
