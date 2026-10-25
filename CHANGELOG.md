@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.178.0](https://github.com/chio-labs/sqlbuild/compare/v0.177.0...v0.178.0) (2026-10-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* on Snowflake without QUOTED_IDENTIFIERS_IGNORE_CASE, a quoted lowercase reference such as "bundle_sku" to a listed source column now reports B002 during planning, as Snowflake would reject it against an upper-case column. The listing cannot tell a column really created with a quoted lowercase name apart, so such columns now bind as unquoted names.
+
+### Bug Fixes
+
+* Snowflake, scenario, rule and type correctness batch ([#1250](https://github.com/chio-labs/sqlbuild/issues/1250)) ([d2b4ce2](https://github.com/chio-labs/sqlbuild/commit/d2b4ce287353c24ffbdc6aaf4ed72d17359dffc2))
+
 ## [0.177.0](https://github.com/chio-labs/sqlbuild/compare/v0.176.0...v0.177.0) (2026-10-24)
 
 
