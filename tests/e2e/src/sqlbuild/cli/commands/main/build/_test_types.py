@@ -1472,3 +1472,12 @@ class PythonCheckBuildE2ETestCase:
     check_body: str
     expected_exit_code: int
     expected_footer_fragment: str
+
+
+@dataclass(frozen=True)
+class DuckDbAttachE2ETestCase:
+    """A DuckDB project attaching a second database file, built with some connections."""
+
+    description: str
+    concurrency: int
+    expected_archived_rows: list[tuple[object, ...]]

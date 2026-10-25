@@ -114,6 +114,7 @@ E2E_DUCKDB_BUILD_CORE_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_duckdb_storage_key.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_source_end_audits.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_python_check_outcomes.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_duckdb_attach.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_unbuilt_dependencies.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_validation_failures.py
 
