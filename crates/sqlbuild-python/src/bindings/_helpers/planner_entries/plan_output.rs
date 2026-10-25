@@ -578,15 +578,19 @@ pub(crate) fn plan_output_fields<'py>(
     let execution_order = native_field(&scope, "execution_order")?;
     let source_map = native_field(&relations, "source_map")?;
     let seeds = seed_entries(&project, &snapshot, &selected_keys, &extras)?;
-    let source_load_entries = object(
-        py,
-        build_source_load_entries(
-            &execution_order,
-            &selected_keys,
-            source_map.downcast::<PyDict>()?,
-            reload_sources.is_truthy()?,
-        )?,
-    )?;
+    let source_load_entries = if native_field(&scope, "load_sources")?.is_truthy()? {
+        object(
+            py,
+            build_source_load_entries(
+                &execution_order,
+                &selected_keys,
+                source_map.downcast::<PyDict>()?,
+                reload_sources.is_truthy()?,
+            )?,
+        )?
+    } else {
+        PyTuple::empty(py).into_any()
+    };
     require_intermediate_loader_targets(&project, &snapshot, &source_map, &source_load_entries)?;
     let functions = function_entries(
         (&project, &adapter, &snapshot),

@@ -329,6 +329,11 @@ sqb build --no-load
 sqb build --reload
 ```
 
+With loading off, through `--no-load` or `auto_load_sources = false`, no loader runs, even for a
+source selected by name such as `sqb build --no-load --select raw_orders`. Managed sources in the
+selection stay in the plan, and their audits check the data they already hold. A source outside
+the selection is neither loaded nor audited.
+
 When `--reload` is passed, `ctx.is_reload` is `True` in the loader function. This lets loaders implement different behavior for full reloads versus normal incremental loads.
 
 ## Source deferral

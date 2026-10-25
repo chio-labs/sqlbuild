@@ -51,6 +51,7 @@ const R_PLANNER_SCOPE: RecordSpec = RecordSpec {
             "sql_test_selection",
             FieldDefault::NativeCall(RecordId::SqlTestSelection),
         ),
+        FieldSpec::new("load_sources", FieldDefault::True),
     ],
 };
 const R_SQL_TEST_ASSERTION_STEP: RecordSpec = RecordSpec {

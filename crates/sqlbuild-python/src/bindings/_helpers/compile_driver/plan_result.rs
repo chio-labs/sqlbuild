@@ -10,9 +10,12 @@ use crate::bindings::_helpers::compile_driver::pipeline_entries::build_project_g
 use crate::bindings::_helpers::compile_driver::python_plan_entries::{
     build_python_run_plan_outputs, python_read_source_names_for,
 };
+use crate::bindings::_helpers::compiled_views::{project_reads, source_reads};
+use crate::bindings::_helpers::graph::keys::{KeyCache, native_key};
 use crate::bindings::_helpers::planner_entries::execution_plan::build_execution_plan;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::records::construct::new_record_with;
+use sqlbuild_analysis::planner_scope::constants::SOURCE;
 use std::collections::HashSet;
 
 use pyo3::exceptions::PyException;
@@ -40,27 +43,48 @@ pub(crate) struct PlanningInputs<'a, 'py> {
     pub(crate) connection: &'a Bound<'py, PyAny>,
 }
 
-/// The selected Python nodes, without source loaders when loading is off and nothing is selected.
-fn runnable_python_nodes<'py>(
-    names: &Bound<'py, PyAny>,
-    (options, select): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
-    discovered: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    if native_field(options, "auto_load_sources")?.is_truthy()? || select.is_truthy()? {
-        return Ok(names.clone());
+/// The selected Python nodes and SQL keys when loading is off: loaders out, their sources in.
+fn without_loaders<'py>(
+    (names, sql_keys): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    (options, discovered, project): (&Bound<'py, PyAny>, &Bound<'py, PyAny>, &Bound<'py, PyAny>),
+) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
+    let py: Python<'py> = names.py();
+    if native_field(options, "auto_load_sources")?.is_truthy()? {
+        return Ok((names.clone(), sql_keys.clone()));
     }
     let mut loaders: HashSet<String> = HashSet::new();
     for loader in native_field(discovered, "loader_functions")?.try_iter()? {
         loaders.insert(native_field(&loader?, "name")?.extract()?);
     }
     let mut runnable: Vec<String> = Vec::new();
+    let mut dropped: HashSet<String> = HashSet::new();
     for name in names.try_iter()? {
         let name: String = name?.extract()?;
-        if !loaders.contains(&name) {
+        if loaders.contains(&name) {
+            dropped.insert(name);
+        } else {
             runnable.push(name);
         }
     }
-    Ok(PyFrozenSet::new(names.py(), runnable)?.into_any())
+    let mut sources: Vec<(String, String)> = Vec::new();
+    for source in project_reads::sources(project)?.try_iter()? {
+        let source = source?;
+        let loader: Option<String> =
+            native_field(&source_reads::source_entry(&source)?, "loader")?.extract()?;
+        if loader.is_some_and(|loader| dropped.contains(&loader)) {
+            sources.push((SOURCE.to_owned(), source_reads::name(&source)?.extract()?));
+        }
+    }
+    let mut selected: Vec<(String, String)> = sql_keys
+        .try_iter()?
+        .map(|key| native_key(&key?))
+        .collect::<PyResult<_>>()?;
+    selected.extend(sources);
+    let selected_keys = PyFrozenSet::new(py, KeyCache::new(py)?.keys(&selected)?)?;
+    Ok((
+        PyFrozenSet::new(py, runnable)?.into_any(),
+        selected_keys.into_any(),
+    ))
 }
 
 /// Plan the compiled project over an open connection and attach Python node plans.
@@ -91,11 +115,12 @@ pub(crate) fn pipeline_result<'py>(
         )?;
         run_selection =
             run_selection_from_inputs((select.extract()?, exclude.extract()?), &graph, discovered)?;
-        selected_sql_keys = native_field(&run_selection, "sql_keys")?;
-        selected_python_node_names = runnable_python_nodes(
-            &native_field(&run_selection, "python_node_names")?,
-            (options, &select),
-            discovered,
+        (selected_python_node_names, selected_sql_keys) = without_loaders(
+            (
+                &native_field(&run_selection, "python_node_names")?,
+                &native_field(&run_selection, "sql_keys")?,
+            ),
+            (options, discovered, project),
         )?;
         python_read_source_names = python_read_source_names_for(
             py,

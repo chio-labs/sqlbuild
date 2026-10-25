@@ -21,31 +21,12 @@ use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyDictMethods;
-use pyo3::types::{PyDict, PyFrozenSet, PyTuple};
+use pyo3::types::{PyBool, PyDict, PyFrozenSet, PyTuple};
 use sqlbuild_analysis::planner_scope::constants::SOURCE;
 use sqlbuild_analysis::planner_scope::main::{
     managed_sources::managed_sources, source_selectors::source_selectors,
 };
 use std::collections::HashSet;
-
-/// `selected` without the sources a loader manages.
-fn without_managed_sources<'py>(
-    selected: &Bound<'py, PyAny>,
-    project: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let mut managed: HashSet<String> = HashSet::new();
-    for source in project_reads::sources(project)?.try_iter()? {
-        let source = source?;
-        if !native_field(&source_reads::source_entry(&source)?, "loader")?.is_none() {
-            managed.insert(source_reads::name(&source)?.extract()?);
-        }
-    }
-    let kept: Vec<_> = keys(selected)?
-        .into_iter()
-        .filter(|key| key.0 != SOURCE || !managed.contains(&key.1))
-        .collect();
-    Ok(PyFrozenSet::new(project.py(), KeyCache::new(project.py())?.keys(&kept)?)?.into_any())
-}
 
 pub(crate) fn managed_source_upstream_keys<'py>(
     selected_keys: &Bound<'py, PyAny>,
@@ -121,8 +102,8 @@ pub(crate) fn build_planner_scope<'py>(
         cache.keys(&source_keys.into_iter().collect::<Vec<_>>())?,
     )?
     .into_any();
-    if !auto_load && texts.is_empty() {
-        selected = without_managed_sources(&selected, &project)?;
+    if !auto_load {
+        executable = PyFrozenSet::empty(py)?.into_any();
     }
     if auto_load {
         let loaded = managed_source_upstream_keys(&selected, &upstream, &project)?;
@@ -165,6 +146,10 @@ pub(crate) fn build_planner_scope<'py>(
             ("user_selected_keys", selected),
             ("python_read_source_names", reads),
             ("sql_test_selection", tests),
+            (
+                "load_sources",
+                PyBool::new(py, auto_load).to_owned().into_any(),
+            ),
         ],
     )
 }

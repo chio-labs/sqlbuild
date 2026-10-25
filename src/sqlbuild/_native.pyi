@@ -10172,6 +10172,7 @@ class PlannerScope(NativeRecord):
     user_selected_keys: frozenset[CompiledObjectKey]
     python_read_source_names: frozenset[str]
     sql_test_selection: SqlTestSelection
+    load_sources: bool
     def __init__(
         self,
         upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
@@ -10183,6 +10184,7 @@ class PlannerScope(NativeRecord):
         user_selected_keys: frozenset[CompiledObjectKey] = ...,
         python_read_source_names: frozenset[str] = ...,
         sql_test_selection: SqlTestSelection = ...,
+        load_sources: bool = ...,
     ) -> None: ...
 
 class PlannerRelationsContext:

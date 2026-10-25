@@ -1423,9 +1423,11 @@ class UnbuiltDependencyBuildE2ETestCase:
 
 @dataclass(frozen=True)
 class NoLoadBuildE2ETestCase:
-    """A second build that must not reload a managed source, and how it is asked not to."""
+    """A build with loading off over a managed source holding a NULL, and what it must do."""
 
     description: str
     second_build: tuple[str, ...]
-    project_settings: str = ""
-    expected_order_rows: int = 1
+    project_settings: str
+    expected_exit_code: int
+    expected_audit_reported: bool
+    expected_order_rows: int = 2

@@ -298,6 +298,8 @@ class BuildScheduler:
 
         enforce_execution_deadline()
         self._skip_remaining()
+        if self._run_audits and not self._stop:
+            _ = self._run_source_audits(source_keys=self._unloaded_selected_sources())
 
         end_audit_results: tuple[AuditExecutionResult, ...] = ()
         runnable_end_audits: tuple[AuditPlanEntry, ...] = tuple(
@@ -735,22 +737,7 @@ class BuildScheduler:
             model_entry: ModelPlanEntry | None = self._indexes.model_entries_by_key.get(key)
             if model_entry is None:
                 return False
-            audit_run: SourceAuditRunResult = run_pending_source_audits(
-                model_key=key,
-                plan=self._plan,
-                source_audits_by_source=self._indexes.source_audits_by_source,
-                executed_source_audits=frozenset(self._executed_source_audits),
-                failed_sources=frozenset(self._failed_sources),
-                adapter=self._adapter,
-                connection=self._scheduler_connection,
-                fail_fast=self._fail_fast,
-                run_id=self._run_id,
-            )
-            self._executed_source_audits.update(audit_run.executed_source_names)
-            self._failed_sources.update(audit_run.failed_source_names)
-            self._blocked_keys.update(audit_run.newly_blocked_keys)
-            self._source_audit_results.extend(audit_run.audit_results)
-            if audit_run.blocked:
+            if self._run_source_audits(source_keys=self._plan.upstream_deps.get(key, ())):
                 self._blocked_keys.add(key)
                 self._record_skipped_result(
                     key=key,
@@ -763,6 +750,36 @@ class BuildScheduler:
                 return False
 
         return True
+
+    def _unloaded_selected_sources(self) -> tuple[CompiledObjectKey, ...]:
+        """Selected sources that load nothing this run, whose audits no reader has run yet."""
+
+        return tuple(
+            key
+            for key in self._plan.execution_order
+            if key.resource_type == CompiledResourceType.SOURCE
+            and key not in self._indexes.source_load_entries_by_key
+        )
+
+    def _run_source_audits(self, *, source_keys: tuple[CompiledObjectKey, ...]) -> bool:
+        """Run the audits of sources that have not run them yet; whether one blocks its readers."""
+
+        audit_run: SourceAuditRunResult = run_pending_source_audits(
+            source_keys=source_keys,
+            plan=self._plan,
+            source_audits_by_source=self._indexes.source_audits_by_source,
+            executed_source_audits=frozenset(self._executed_source_audits),
+            failed_sources=frozenset(self._failed_sources),
+            adapter=self._adapter,
+            connection=self._scheduler_connection,
+            fail_fast=self._fail_fast,
+            run_id=self._run_id,
+        )
+        self._executed_source_audits.update(audit_run.executed_source_names)
+        self._failed_sources.update(audit_run.failed_source_names)
+        self._blocked_keys.update(audit_run.newly_blocked_keys)
+        self._source_audit_results.extend(audit_run.audit_results)
+        return audit_run.blocked
 
     def _execute_node(
         self, *, key: CompiledObjectKey, connection: Any
