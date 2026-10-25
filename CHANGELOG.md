@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.179.0](https://github.com/chio-labs/sqlbuild/compare/v0.178.0...v0.179.0) (2026-10-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* resolve relative DuckDB and SQLite attach paths from the project directory
+* reject Snowflake constructs Snowflake does not support
+* on Snowflake, CONNECT_BY_ISLEAF and CONNECT_BY_ISCYCLE now raise E201, and a bare VALUES list as a CTE body, including in SQL-test fixtures, now fails with P001.
+
+### Features
+
+* add a Postgres option to turn off temporary test functions ([b91e2f3](https://github.com/chio-labs/sqlbuild/commit/b91e2f3b615943d7219e970903dae60e1b462823))
+
+
+### Bug Fixes
+
+* compare scenario VARIANT and JSON columns by JSON value in local replay ([b91e2f3](https://github.com/chio-labs/sqlbuild/commit/b91e2f3b615943d7219e970903dae60e1b462823))
+* count Python checks in the build completion line, find mocked references on both sides of parenthesised joins, and support sqb mv with Python references ([b91e2f3](https://github.com/chio-labs/sqlbuild/commit/b91e2f3b615943d7219e970903dae60e1b462823))
+* keep make skills out of HOME ([b91e2f3](https://github.com/chio-labs/sqlbuild/commit/b91e2f3b615943d7219e970903dae60e1b462823))
+* map rule positions back through macro expansion ([b91e2f3](https://github.com/chio-labs/sqlbuild/commit/b91e2f3b615943d7219e970903dae60e1b462823))
+* match Snowflake star outputs against lowercase contract columns ([b91e2f3](https://github.com/chio-labs/sqlbuild/commit/b91e2f3b615943d7219e970903dae60e1b462823))
+* Polyglot star expansion with EXCLUDE, REPLACE and RENAME, column alias lists, Snowflake typed lambdas and subscript paths, nested set operation grouping, ClickHouse DATE_TRUNC and BigQuery RANGE types ([b91e2f3](https://github.com/chio-labs/sqlbuild/commit/b91e2f3b615943d7219e970903dae60e1b462823))
+* register DuckDB UDFs on every test connection and attach each database once ([b91e2f3](https://github.com/chio-labs/sqlbuild/commit/b91e2f3b615943d7219e970903dae60e1b462823))
+* reject --json on sqb dbt run and sqb dbt build ([b91e2f3](https://github.com/chio-labs/sqlbuild/commit/b91e2f3b615943d7219e970903dae60e1b462823))
+* reject Snowflake constructs Snowflake does not support ([b91e2f3](https://github.com/chio-labs/sqlbuild/commit/b91e2f3b615943d7219e970903dae60e1b462823))
+* resolve relative DuckDB and SQLite attach paths from the project directory ([b91e2f3](https://github.com/chio-labs/sqlbuild/commit/b91e2f3b615943d7219e970903dae60e1b462823))
+* SQL Server ISO cursor bounds, Databricks schema checks without a catalog, and ClickHouse line comments ([b91e2f3](https://github.com/chio-labs/sqlbuild/commit/b91e2f3b615943d7219e970903dae60e1b462823))
+* SQLite text timestamp cursors, temporal cast warnings, and dlt and ingestr loading ([b91e2f3](https://github.com/chio-labs/sqlbuild/commit/b91e2f3b615943d7219e970903dae60e1b462823))
+
 ## [0.178.0](https://github.com/chio-labs/sqlbuild/compare/v0.177.0...v0.178.0) (2026-10-25)
 
 
