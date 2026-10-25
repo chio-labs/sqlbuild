@@ -77,7 +77,7 @@ This replaces the former `sqb run` command. The full lifecycle (tests + audits) 
 
 1. Managed sources are loaded (unless `--no-load`, which audits their existing data instead)
 2. Selected seeds are loaded
-3. Source audits run before their dependent models (unless `--no-audits`)
+3. Source audits run before their dependent models (unless `--no-audits`); with `--no-load`, or for a source selected by name, a source no model reads is audited at the end
 4. SQL unit tests run before their target model (unless `--no-tests`)
 5. Models are materialized in DAG topological order
 6. Error-severity audits run against the staging table before promotion to the target (unless `--no-audits`)

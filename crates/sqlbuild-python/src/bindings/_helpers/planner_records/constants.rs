@@ -52,6 +52,7 @@ const R_PLANNER_SCOPE: RecordSpec = RecordSpec {
             FieldDefault::NativeCall(RecordId::SqlTestSelection),
         ),
         FieldSpec::new("load_sources", FieldDefault::True),
+        FieldSpec::new("end_audit_source_keys", FieldDefault::EmptyFrozenset),
     ],
 };
 const R_SQL_TEST_ASSERTION_STEP: RecordSpec = RecordSpec {
@@ -926,6 +927,8 @@ const R_PLAN_OUTPUT: RecordSpec = RecordSpec {
         FieldSpec::new("python_identity_fingerprints", FieldDefault::EmptyDict),
         FieldSpec::new("metadata", FieldDefault::EmptyDict),
         FieldSpec::new("cursor_overrides", FieldDefault::None),
+        FieldSpec::new("existing_model_names", FieldDefault::EmptyFrozenset),
+        FieldSpec::new("end_audit_source_keys", FieldDefault::EmptyFrozenset),
     ],
 };
 

@@ -10173,6 +10173,7 @@ class PlannerScope(NativeRecord):
     python_read_source_names: frozenset[str]
     sql_test_selection: SqlTestSelection
     load_sources: bool
+    end_audit_source_keys: frozenset[CompiledObjectKey]
     def __init__(
         self,
         upstream_deps: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]],
@@ -10185,6 +10186,7 @@ class PlannerScope(NativeRecord):
         python_read_source_names: frozenset[str] = ...,
         sql_test_selection: SqlTestSelection = ...,
         load_sources: bool = ...,
+        end_audit_source_keys: frozenset[CompiledObjectKey] = ...,
     ) -> None: ...
 
 class PlannerRelationsContext:
@@ -14299,6 +14301,8 @@ class PlanOutput(NativeRecord):
     python_identity_fingerprints: dict[tuple[str, str], Fingerprint]
     metadata: dict[str, object]
     cursor_overrides: CursorOverrides | None
+    existing_model_names: frozenset[str]
+    end_audit_source_keys: frozenset[CompiledObjectKey]
     def __init__(
         self,
         execution_order: tuple[CompiledObjectKey, ...] = ...,
@@ -14332,6 +14336,8 @@ class PlanOutput(NativeRecord):
         python_identity_fingerprints: dict[tuple[str, str], Fingerprint] = ...,
         metadata: dict[str, object] = ...,
         cursor_overrides: CursorOverrides | None = ...,
+        existing_model_names: frozenset[str] = ...,
+        end_audit_source_keys: frozenset[CompiledObjectKey] = ...,
     ) -> None: ...
     @property
     def python_source_entries(self) -> dict[str, SourceEntry]: ...

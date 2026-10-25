@@ -61,6 +61,25 @@ _CUSTOMERS_SQL: str = "SELECT 1 AS customer_id\n"
             unexpected_stdout_fragments=("does not exist",),
         ),
         UnbuiltDependencyBuildE2ETestCase(
+            description="full refresh on a fresh warehouse skips the audit over a failed model",
+            repo_files={
+                **_BASE_FILES,
+                "audits/singular/orders_have_customers.sql": (
+                    "AUDIT ();\n"
+                    'SELECT o.order_id FROM __ref("broken_orders") AS o\n'
+                    'LEFT JOIN __ref("customers") AS c ON c.customer_id = o.order_id\n'
+                    "WHERE c.customer_id IS NULL\n"
+                ),
+            },
+            expected_stdout_fragments=(
+                "audit     orders_have_customers SKIP",
+                "Skipped (1): orders_have_customers (audit, reads broken_orders, which was not "
+                "built)",
+            ),
+            unexpected_stdout_fragments=("does not exist",),
+            build_arguments=("--full-refresh",),
+        ),
+        UnbuiltDependencyBuildE2ETestCase(
             description="test calling a skipped table function is skipped",
             repo_files={
                 **_BASE_FILES,
@@ -96,7 +115,7 @@ def test_given_failed_model_when_building_then_skips_readers_of_unbuilt_resource
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
-        command=("--no-color", "build"), project_dir=project_dir
+        command=("--no-color", "build", *test_case.build_arguments), project_dir=project_dir
     )
 
     assert result.returncode == 1, result.stdout + result.stderr

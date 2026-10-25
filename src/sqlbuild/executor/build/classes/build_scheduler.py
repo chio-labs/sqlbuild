@@ -27,7 +27,6 @@ from sqlbuild._native import (
     ModelPlanEntry,
     PlanAction,
     PlanOutput,
-    PlanReason,
     SeedPlanEntry,
     SnapshotsConfig,
     SourceEntry,
@@ -766,8 +765,10 @@ class BuildScheduler:
     def _mark_unbuilt(self, *, key: CompiledObjectKey) -> None:
         """Record that `key` was not built, unless it is a model whose relation already exists."""
 
-        entry: ModelPlanEntry | None = self._indexes.model_entries_by_key.get(key)
-        if entry is not None and entry.reason != PlanReason.FIRST_RUN:
+        if (
+            key.resource_type == CompiledResourceType.MODEL
+            and key.name in self._plan.existing_model_names
+        ):
             return
         self._unbuilt_keys.add(key)
 
@@ -811,12 +812,12 @@ class BuildScheduler:
         return result
 
     def _unloaded_selected_sources(self) -> tuple[CompiledObjectKey, ...]:
-        """Selected sources that load nothing this run, whose audits no reader has run yet."""
+        """Sources audited at the end: all of them with loading off, else only explicit ones."""
 
         return tuple(
             key
             for key in self._plan.execution_order
-            if key.resource_type == CompiledResourceType.SOURCE
+            if key in self._plan.end_audit_source_keys
             and key not in self._indexes.source_load_entries_by_key
         )
 

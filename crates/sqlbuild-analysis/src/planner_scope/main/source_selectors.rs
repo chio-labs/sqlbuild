@@ -7,11 +7,12 @@ use crate::graph::models::ParsedSelector;
 use crate::planner_scope::constants::{NAME, SOURCE};
 use std::collections::HashSet;
 
-/// Find selected sources explicitly named by upstream source or bare-name selectors.
+/// Selected sources named by a `name` or `source` selector, only `+`-prefixed ones if `upstream_only`.
 pub fn source_selectors(
     select: &[String],
     names: &[(String, ObjectKey)],
     selected: &[ObjectKey],
+    upstream_only: bool,
 ) -> Result<HashSet<ObjectKey>, SelectorError> {
     let mut keys: HashSet<ObjectKey> = HashSet::new();
     for part in select
@@ -22,12 +23,15 @@ pub fn source_selectors(
         let ParsedSelector::Kind {
             kind,
             value,
-            upstream: true,
+            upstream,
             ..
         } = parse_selector(part)?
         else {
             continue;
         };
+        if upstream_only && !upstream {
+            continue;
+        }
         if kind != NAME && kind != SOURCE {
             continue;
         }

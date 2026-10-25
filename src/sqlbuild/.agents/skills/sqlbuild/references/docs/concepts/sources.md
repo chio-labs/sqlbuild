@@ -76,6 +76,11 @@ sources:
 
 If a source audit with `error` severity fails, all downstream models that depend on that source are blocked.
 
+A source's audits run before the first model in the build that reads it. A source no selected model
+reads is audited at the end of the build only when loading is off (`--no-load` or
+`auto_load_sources = false`) or when the source is selected by name, such as
+`sqb build --select raw_orders`; otherwise its audits do not run.
+
 A source audit may also read other resources; SQLBuild builds them first. See
 [Audits that read other resources](audits.md#audits-that-read-other-resources).
 

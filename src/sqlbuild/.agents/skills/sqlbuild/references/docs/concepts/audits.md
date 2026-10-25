@@ -379,6 +379,11 @@ sources:
 
 If a source audit with `error` severity fails, all downstream models that depend on that source are blocked. This lets you catch data quality issues at the source before any transformations run.
 
+A source's audits run before the first model in the build that reads it. A source no selected model
+reads is audited at the end of the build only when loading is off (`--no-load` or
+`auto_load_sources = false`) or when the source is selected by name, such as
+`sqb build --select raw_orders`; otherwise its audits do not run.
+
 A source audit that reads other resources waits for them before any model that depends on the
 source is built. It may read a model that is not built from the source; reading one that is fails
 with `P005`. See [Audits that read other resources](#audits-that-read-other-resources).

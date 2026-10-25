@@ -1419,6 +1419,7 @@ class UnbuiltDependencyBuildE2ETestCase:
     repo_files: dict[str, str]
     expected_stdout_fragments: tuple[str, ...]
     unexpected_stdout_fragments: tuple[str, ...]
+    build_arguments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1450,3 +1451,13 @@ class ConnectionStorageKeyBuildE2ETestCase:
     description: str
     connection_key: str
     expected_storage_version: str
+
+
+@dataclass(frozen=True)
+class SourceEndAuditBuildE2ETestCase:
+    """A build over an unread source whose table is missing, and whether its audit runs."""
+
+    description: str
+    build_arguments: tuple[str, ...]
+    expected_exit_code: int
+    expected_audit_reported: bool

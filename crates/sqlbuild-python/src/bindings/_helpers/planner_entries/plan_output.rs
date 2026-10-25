@@ -552,6 +552,21 @@ fn planned_sql_tests<'py>(
     )
 }
 
+/// The names of the planned models whose relation the inspected warehouse already holds.
+fn existing_model_names<'py>(
+    model_entries: &Bound<'py, PyAny>,
+    existing_relations: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let mut names: Vec<Bound<'py, PyAny>> = Vec::new();
+    for entry in model_entries.try_iter()? {
+        let name = native_field(&entry?, "name")?;
+        if existing_relations.contains(&name)? {
+            names.push(name);
+        }
+    }
+    Ok(PyFrozenSet::new(model_entries.py(), names)?.into_any())
+}
+
 /// The plan output's fields from planned entries and resolved relation inputs.
 pub(crate) fn plan_output_fields<'py>(
     inputs: PlanOutputInputs<'py>,
@@ -669,6 +684,17 @@ pub(crate) fn plan_output_fields<'py>(
         ),
         ("selected_keys", selected_keys),
         ("warnings", tuple_of(py, warnings)?),
+        (
+            "existing_model_names",
+            existing_model_names(
+                &model_entries,
+                &native_field(&snapshot, "existing_relations")?,
+            )?,
+        ),
+        (
+            "end_audit_source_keys",
+            native_field(&scope, "end_audit_source_keys")?,
+        ),
         ("upstream_deps", native_field(&scope, "upstream_deps")?),
         ("downstream_deps", native_field(&scope, "downstream_deps")?),
         (
