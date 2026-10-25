@@ -603,3 +603,13 @@ class ParenthesisedJoinMockTestCase:
     model_from: str
     expected_exit_code: int
     expected_fragment: str
+
+
+@dataclass(frozen=True)
+class PythonUdfConnectionsE2ETestCase:
+    """Unit tests calling a DuckDB Python UDF over several test connections to one database."""
+
+    description: str
+    database: str
+    concurrency: int
+    expected_stdout_fragment: str

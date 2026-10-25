@@ -8,7 +8,7 @@ import time
 from collections.abc import Callable, Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextvars import copy_context
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, cast
 from uuid import uuid4
 
@@ -36,6 +36,7 @@ from sqlbuild.executor.pipeline._helpers.temporary_functions import (
     install_temporary_test_functions,
     rewrite_test_entry,
 )
+from sqlbuild.executor.pipeline.exceptions import TemporaryTestFunctionError
 from sqlbuild.executor.pipeline.main.raise_warehouse_connection_failure import (
     raise_warehouse_connection_failure,
 )
@@ -132,11 +133,18 @@ def run_test_pipeline(
                     connection=connections[0],
                 )
                 for ordinal, connection in enumerate(connections[1:], start=2):
+                    label: str = f"test connection {ordinal} of {len(connections)}"
                     install_temporary_test_functions(
                         adapter=adapter,
                         connection=connection,
                         functions=temporary_functions,
-                        connection_label=f"test connection {ordinal} of {len(connections)}",
+                        connection_label=label,
+                    )
+                    _install_python_test_functions(
+                        adapter=adapter,
+                        connection=connection,
+                        functions=temporary_functions,
+                        connection_label=label,
                     )
                 installed_functions.append(temporary_functions)
                 entries = tuple(
@@ -330,6 +338,12 @@ def _connect_test_connection(
                 functions=functions,
                 connection_label="a replacement test connection",
             )
+            _install_python_test_functions(
+                adapter=adapter,
+                connection=connection,
+                functions=functions,
+                connection_label="a replacement test connection",
+            )
     except BaseException:
         adapter.close(connection)
         raise
@@ -407,12 +421,13 @@ def _prepare_test_functions(
                 name=key.name, reason=temporary_functions.failures.get(key)
             )
 
-    _register_connection_scoped_python_functions(
+    registered: tuple[FunctionPlanEntry, ...] = _register_connection_scoped_python_functions(
         missing_by_key=missing_by_key,
         function_entries=function_entries,
         adapter=adapter,
         connection=connection,
     )
+    temporary_functions = replace(temporary_functions, python_functions=registered)
 
     missing_by_test: dict[CompiledObjectKey, tuple[str, ...]] = {}
     for test_entry in plan.test_entries:
@@ -445,24 +460,76 @@ def _register_connection_scoped_python_functions(
     function_entries: dict[CompiledObjectKey, FunctionPlanEntry],
     adapter: BaseAdapter,
     connection: Any,
-) -> None:
+) -> tuple[FunctionPlanEntry, ...]:
     if adapter.persists_python_functions():
-        return
+        return ()
+    registered: list[FunctionPlanEntry] = []
     key: CompiledObjectKey
     for key in tuple(missing_by_key):
         function_entry: FunctionPlanEntry | None = function_entries.get(key)
         if function_entry is None or function_entry.language != FunctionLanguage.PYTHON:
             continue
-        result: FunctionExecutionResult = execute_function(
-            function_entry=function_entry,
-            adapter=adapter,
-            connection=connection,
-            statement_recorder=StatementRecorder(),
-            run_id="test",
-            query_change_tracking=False,
+        result: FunctionExecutionResult = _register_python_function(
+            adapter=adapter, connection=connection, function_entry=function_entry
         )
         if result.status == ExecutionStatus.SUCCESS:
             del missing_by_key[key]
+            registered.append(function_entry)
+    return tuple(registered)
+
+
+def _register_python_function(
+    *, adapter: BaseAdapter, connection: Any, function_entry: FunctionPlanEntry
+) -> FunctionExecutionResult:
+    return execute_function(
+        function_entry=function_entry,
+        adapter=adapter,
+        connection=connection,
+        statement_recorder=StatementRecorder(),
+        run_id="test",
+        query_change_tracking=False,
+    )
+
+
+def _install_python_test_functions(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    functions: TemporaryTestFunctions,
+    connection_label: str,
+) -> None:
+    """Register the first connection's Python functions on another, or fail with T006."""
+
+    function_entry: FunctionPlanEntry
+    for function_entry in functions.python_functions:
+        result: FunctionExecutionResult = _register_python_function(
+            adapter=adapter, connection=connection, function_entry=function_entry
+        )
+        if result.status == ExecutionStatus.SUCCESS or _function_exists(
+            adapter=adapter, connection=connection, function_entry=function_entry
+        ):
+            continue
+        raise TemporaryTestFunctionError(
+            function_name=function_entry.name,
+            connection=connection_label,
+            reason=result.error_message or result.status.value,
+        )
+
+
+def _function_exists(
+    *, adapter: BaseAdapter, connection: Any, function_entry: FunctionPlanEntry
+) -> bool:
+    """Whether the connection already sees the function, as connections to one database file do."""
+
+    destination: CompiledRelationLocation = function_entry.destination
+    return bool(
+        adapter.list_functions(
+            connection=connection,
+            database=destination.database,
+            schemas=(destination.schema,) if destination.schema is not None else None,
+            names=(destination.name,),
+        )
+    )
 
 
 def _group_function_names(
