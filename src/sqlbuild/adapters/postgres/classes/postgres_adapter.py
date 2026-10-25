@@ -111,6 +111,7 @@ from sqlbuild.adapters.postgres.classes.postgres_connection import _PostgresConn
 from sqlbuild.adapters.postgres.constants import (
     ROW_COUNT_RELATION_KINDS,
     TABLE_FUNCTION_RETURN_TYPE,
+    TEMPORARY_TEST_FUNCTIONS_KEY,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.diagnostics.main.log_sql import log_sql
@@ -140,6 +141,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         escape_string_prefix=True, nested_block_comments=True
     )
     max_identifier_length: ClassVar[int] = 63
+    temporary_test_functions: bool = True
     _snapshot_sql_dialect: ClassVar[SnapshotSqlDialect] = SnapshotSqlDialect(
         timestamp_type="TIMESTAMP",
         distinct_condition=render_is_distinct_from,
@@ -564,7 +566,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     ) -> TemporaryFunction | None:
         """Copy a SQL function into the session's `pg_temp` schema, called schema-qualified."""
 
-        if definition.language != FunctionLanguage.SQL:
+        if definition.language != FunctionLanguage.SQL or not self.temporary_test_functions:
             return None
         target: str = f"pg_temp.{self.render_identifier(name)}"
         return TemporaryFunction(
@@ -2088,7 +2090,11 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 code="A401",
             ) from error
 
-        raw_connection: Any = psycopg.connect(**config, autocommit=True)
+        connect_config: dict[str, Any] = dict(config)
+        self.temporary_test_functions = bool(
+            connect_config.pop(TEMPORARY_TEST_FUNCTIONS_KEY, self.temporary_test_functions)
+        )
+        raw_connection: Any = psycopg.connect(**connect_config, autocommit=True)
         return _PostgresConnection(raw_connection)
 
     def _execute(self, *, connection: _PostgresConnection, sql: str) -> Any:
