@@ -43,6 +43,7 @@ from tests.unit.src.sqlbuild.executor.pipeline._helpers.helpers import (
     ScenarioPipelinePlanBuilder,
     ScenarioPipelineTestAdapter,
     build_scenario_pipeline_result,
+    describe_lifecycle_events,
     local_snapshot_loader_for_test_case,
 )
 
@@ -139,7 +140,7 @@ def test_given_selected_scenarios_when_running_scenario_test_pipeline_then_orche
         "resource_attempt_completed",
         "resource_attempt_started",
         "resource_attempt_failed",
-    )
+    ), describe_lifecycle_events(lifecycle_events)
     assert tuple(event.resource_id for event in resource_events) == (
         "sql_scenario:passing_scenario",
         "sql_scenario:passing_scenario",
