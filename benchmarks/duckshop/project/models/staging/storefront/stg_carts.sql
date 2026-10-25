@@ -18,7 +18,7 @@ WITH src AS (
   FROM __source("storefront__carts")
 ),
 
-@sql.cdc_latest(src, cart_id)
+@sql.cdc_latest(src, src.key := (cart_id))
 
 final AS (
   SELECT

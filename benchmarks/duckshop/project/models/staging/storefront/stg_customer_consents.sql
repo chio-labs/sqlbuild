@@ -26,7 +26,7 @@ customers AS (
   FROM __source("storefront__customers")
 ),
 
-@sql.cdc_latest(src, consent_id)
+@sql.cdc_latest(src, src.key := (consent_id))
 
 explicit_consents AS (
   SELECT

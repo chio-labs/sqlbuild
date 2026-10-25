@@ -16,7 +16,7 @@ WITH src AS (
   FROM __source("storefront__loyalty_accounts")
 ),
 
-@sql.cdc_latest(src, loyalty_account_id)
+@sql.cdc_latest(src, src.key := (loyalty_account_id))
 
 final AS (
   SELECT

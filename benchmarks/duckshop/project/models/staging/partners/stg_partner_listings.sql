@@ -17,7 +17,7 @@ WITH src AS (
   FROM __source("partners__partner_listings")
 ),
 
-@sql.cdc_latest(src, listing_id)
+@sql.cdc_latest(src, src.key := (listing_id))
 
 final AS (
   SELECT

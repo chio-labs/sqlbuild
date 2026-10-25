@@ -20,7 +20,7 @@ WITH src AS (
   FROM __source("finance__chargebacks")
 ),
 
-@sql.cdc_latest(src, chargeback_id)
+@sql.cdc_latest(src, src.key := (chargeback_id))
 
 final AS (
   SELECT

@@ -17,7 +17,7 @@ WITH src AS (
   FROM __source("growth__referral_invites")
 ),
 
-@sql.cdc_latest(src, invite_id)
+@sql.cdc_latest(src, src.key := (invite_id))
 
 final AS (
   SELECT

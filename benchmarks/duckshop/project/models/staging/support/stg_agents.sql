@@ -17,7 +17,7 @@ WITH src AS (
   FROM __source("support__agents")
 ),
 
-@sql.cdc_latest(src, agent_id)
+@sql.cdc_latest(src, src.key := (agent_id))
 
 final AS (
   SELECT

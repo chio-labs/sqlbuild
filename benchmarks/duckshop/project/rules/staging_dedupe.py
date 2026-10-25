@@ -23,9 +23,9 @@ def _change_log_sources(ctx: RuleContext) -> set[str]:
     code="XSQBRDUCK001",
     message="Staging models over a change-log source must deduplicate it with @sql.cdc_latest",
     remediation=(
-        "Read the source in an import CTE and follow it with @sql.cdc_latest(<cte>, <key>), then "
-        "select from cdc_latest so deletes and superseded versions are handled the same way "
-        "everywhere."
+        "Read the source in an import CTE and follow it with "
+        "@sql.cdc_latest(<cte>, src.key := (<key>)), then select from cdc_latest so deletes and "
+        "superseded versions are handled the same way everywhere."
     ),
 )
 def staging_uses_cdc_latest(*, model: Model, ctx: RuleContext) -> list[Finding]:

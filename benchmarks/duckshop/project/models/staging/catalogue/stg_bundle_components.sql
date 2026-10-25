@@ -15,7 +15,7 @@ WITH src AS (
   FROM __source("catalogue__bundle_components")
 ),
 
-@sql.cdc_latest(src, component_id)
+@sql.cdc_latest(src, src.key := (component_id))
 
 final AS (
   SELECT

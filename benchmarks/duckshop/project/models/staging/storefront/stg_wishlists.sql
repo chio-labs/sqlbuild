@@ -14,7 +14,7 @@ WITH src AS (
   FROM __source("storefront__wishlists")
 ),
 
-@sql.cdc_latest(src, wishlist_id)
+@sql.cdc_latest(src, src.key := (wishlist_id))
 
 final AS (
   SELECT

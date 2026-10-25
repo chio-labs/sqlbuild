@@ -19,7 +19,7 @@ WITH src AS (
   FROM __source("finance__ledger_entries")
 ),
 
-@sql.cdc_latest(src, entry_id)
+@sql.cdc_latest(src, src.key := (entry_id))
 
 final AS (
   SELECT

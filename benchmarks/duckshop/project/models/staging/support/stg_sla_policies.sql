@@ -16,7 +16,7 @@ WITH src AS (
   FROM __source("support__sla_policies")
 ),
 
-@sql.cdc_latest(src, policy_id)
+@sql.cdc_latest(src, src.key := (policy_id))
 
 final AS (
   SELECT

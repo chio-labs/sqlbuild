@@ -18,7 +18,7 @@ WITH src AS (
   FROM __source("storefront__customer_addresses")
 ),
 
-@sql.cdc_latest(src, address_id)
+@sql.cdc_latest(src, src.key := (address_id))
 
 final AS (
   SELECT

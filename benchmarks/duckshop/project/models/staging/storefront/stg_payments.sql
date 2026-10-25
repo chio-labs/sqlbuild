@@ -24,7 +24,7 @@ WITH src AS (
   FROM __source("storefront__payments")
 ),
 
-@sql.cdc_latest(src, payment_id)
+@sql.cdc_latest(src, src.key := (payment_id))
 
 final AS (
   SELECT

@@ -19,7 +19,7 @@ WITH src AS (
   FROM __source("finance__invoices")
 ),
 
-@sql.cdc_latest(src, invoice_id)
+@sql.cdc_latest(src, src.key := (invoice_id))
 
 final AS (
   SELECT

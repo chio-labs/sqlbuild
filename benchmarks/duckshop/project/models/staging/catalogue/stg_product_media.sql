@@ -19,7 +19,7 @@ WITH src AS (
   FROM __source("catalogue__product_media")
 ),
 
-@sql.cdc_latest(src, media_id)
+@sql.cdc_latest(src, src.key := (media_id))
 
 final AS (
   SELECT

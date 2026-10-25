@@ -15,7 +15,7 @@ WITH src AS (
   FROM __source("support__chat_transcripts")
 ),
 
-@sql.cdc_latest(src, chat_id)
+@sql.cdc_latest(src, src.key := (chat_id))
 
 final AS (
   SELECT

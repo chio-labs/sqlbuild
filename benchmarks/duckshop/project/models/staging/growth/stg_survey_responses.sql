@@ -16,7 +16,7 @@ WITH src AS (
   FROM __source("growth__survey_responses")
 ),
 
-@sql.cdc_latest(src, response_id)
+@sql.cdc_latest(src, src.key := (response_id))
 
 final AS (
   SELECT

@@ -19,7 +19,7 @@ WITH src AS (
   FROM __source("storefront__gift_card_transactions")
 ),
 
-@sql.cdc_latest(src, transaction_id)
+@sql.cdc_latest(src, src.key := (transaction_id))
 
 final AS (
   SELECT

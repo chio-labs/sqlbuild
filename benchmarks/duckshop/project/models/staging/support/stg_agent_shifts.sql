@@ -17,7 +17,7 @@ WITH src AS (
   FROM __source("support__agent_shifts")
 ),
 
-@sql.cdc_latest(src, shift_id)
+@sql.cdc_latest(src, src.key := (shift_id))
 
 breaks AS (
   SELECT

@@ -17,7 +17,7 @@ WITH src AS (
   FROM __source("catalogue__suppliers")
 ),
 
-@sql.cdc_latest(src, supplier_code)
+@sql.cdc_latest(src, src.key := (supplier_code))
 
 contacts AS (
   SELECT

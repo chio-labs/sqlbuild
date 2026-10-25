@@ -18,7 +18,7 @@ WITH src AS (
   FROM __source("inventory__bin_locations")
 ),
 
-@sql.cdc_latest(src, bin_id)
+@sql.cdc_latest(src, src.key := (bin_id))
 
 final AS (
   SELECT

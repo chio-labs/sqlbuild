@@ -19,7 +19,7 @@ WITH src AS (
   FROM __source("inventory__stock_reservations")
 ),
 
-@sql.cdc_latest(src, reservation_id)
+@sql.cdc_latest(src, src.key := (reservation_id))
 
 final AS (
   SELECT

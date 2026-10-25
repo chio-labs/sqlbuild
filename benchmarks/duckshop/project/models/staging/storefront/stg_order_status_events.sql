@@ -17,7 +17,7 @@ WITH src AS (
   FROM __source("storefront__order_status_events")
 ),
 
-@sql.cdc_latest(src, event_id)
+@sql.cdc_latest(src, src.key := (event_id))
 
 final AS (
   SELECT

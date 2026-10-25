@@ -18,7 +18,7 @@ WITH src AS (
   FROM __source("fulfilment__delivery_exceptions")
 ),
 
-@sql.cdc_latest(src, exception_id)
+@sql.cdc_latest(src, src.key := (exception_id))
 
 final AS (
   SELECT

@@ -18,7 +18,7 @@ WITH src AS (
   FROM __source("catalogue__categories")
 ),
 
-@sql.cdc_latest(src, category_id)
+@sql.cdc_latest(src, src.key := (category_id))
 
 final AS (
   SELECT

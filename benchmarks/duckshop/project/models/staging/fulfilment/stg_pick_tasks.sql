@@ -18,7 +18,7 @@ WITH src AS (
   FROM __source("fulfilment__pick_tasks")
 ),
 
-@sql.cdc_latest(src, task_id)
+@sql.cdc_latest(src, src.key := (task_id))
 
 final AS (
   SELECT
