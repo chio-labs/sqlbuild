@@ -44,6 +44,7 @@ from sqlbuild.adapter.contract.constants import (
     DUCKDB_MISSING_OBJECT_MARKER,
     DUCKDB_NOT_FOUND_ERROR_CLASS_NAMES,
     DUCKDB_STORAGE_VERSION_KEY,
+    LATEST_DUCKDB_STORAGE_VERSION,
     QUALIFIED_NAME_SEPARATOR,
 )
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
@@ -1071,14 +1072,23 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         import duckdb
 
         database: str = str(config.get("database", ":memory:"))
-        storage_version: object = config.get(DUCKDB_STORAGE_VERSION_KEY)
-        raw_connection: duckdb.DuckDBPyConnection = (
-            duckdb.connect(database=database)
-            if storage_version is None
-            else duckdb.connect(
-                database=database, config={DUCKDB_STORAGE_VERSION_KEY: str(storage_version)}
-            )
+        raw_connection: duckdb.DuckDBPyConnection = duckdb.connect(database=database)
+        return self._configured_connection(raw_connection=raw_connection, config=config)
+
+    def connect_local_replay(self, database: Path) -> Any:
+        """Open sqlbuild's own local replay database at the latest DuckDB storage version."""
+
+        import duckdb
+
+        raw_connection: duckdb.DuckDBPyConnection = duckdb.connect(
+            database=str(database),
+            config={DUCKDB_STORAGE_VERSION_KEY: LATEST_DUCKDB_STORAGE_VERSION},
         )
+        return self._configured_connection(raw_connection=raw_connection, config={})
+
+    def _configured_connection(self, *, raw_connection: Any, config: dict[str, Any]) -> Any:
+        """Wrap a DuckDB connection and apply the config's extensions, settings and attachments."""
+
         connection: ObservedConnection = ObservedConnection(
             raw_connection=raw_connection, adapter=self.adapter_name
         )

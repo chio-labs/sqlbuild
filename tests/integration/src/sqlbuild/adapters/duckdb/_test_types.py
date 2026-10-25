@@ -246,8 +246,16 @@ class SnapshotTransactionRollbackTestCase:
 
 @dataclass(frozen=True)
 class StorageVersionConnectTestCase:
-    """A database file written by an earlier storage version, reopened at the latest one."""
+    """A database file written by an earlier storage version, reopened for local replay."""
 
     description: str
-    storage_version: str
     expected_rows: list[tuple[int]]
+
+
+@dataclass(frozen=True)
+class UserStorageVersionKeyTestCase:
+    """A user connection config naming a DuckDB storage version, and the storage files get."""
+
+    description: str
+    config_key: str
+    expected_storage_version: str

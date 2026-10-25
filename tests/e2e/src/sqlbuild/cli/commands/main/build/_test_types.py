@@ -1441,3 +1441,12 @@ class HookSkippedAuditBuildE2ETestCase:
     hooked_model: str
     expected_exit_code: int
     expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ConnectionStorageKeyBuildE2ETestCase:
+    """A DuckDB connection key in the project config, and the storage the warehouse file gets."""
+
+    description: str
+    connection_key: str
+    expected_storage_version: str
