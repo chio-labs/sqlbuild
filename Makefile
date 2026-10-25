@@ -372,8 +372,12 @@ planner-differential:
 
 skills:
 	uv run python -m scripts.generate_docs_skill
-	uv run sqb skills --global --target opencode
 	uv run fensu skills
+
+# Installs this checkout's development skill into your user-level OpenCode skills; never run by CI.
+.PHONY: install-global-skill
+install-global-skill:
+	uv run sqb skills --global --target opencode
 
 
 DBT_EXECUTABLE ?= dbt
