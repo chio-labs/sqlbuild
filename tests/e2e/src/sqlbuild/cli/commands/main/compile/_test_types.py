@@ -1312,3 +1312,13 @@ class TypedCallContractTestCase:
     projection: str
     expected_exit_code: int
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MacroDictKeyCompileE2ETestCase:
+    """A macro call whose dict argument has a key, and the compile outcome it must give."""
+
+    description: str
+    argument: str
+    expected_exit_code: int
+    expected_fragments: tuple[str, ...]

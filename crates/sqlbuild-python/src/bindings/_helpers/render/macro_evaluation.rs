@@ -26,6 +26,7 @@ const SURROGATE_HELP: &str = "Return valid Unicode text from the macro; lone sur
                               come from bytes decoded with errors='surrogateescape'";
 const UNARY_HELP: &str =
     "Return a number from the nested macro, or apply the sign inside the macro";
+const NESTED_KEY_HELP: &str = "Return a string, number, True, False, None, or a tuple of them from a macro used as a dict key";
 
 /// Text addressed by code point offsets, as the native scan reports them.
 pub(crate) struct CallText<'a> {
@@ -344,8 +345,11 @@ impl<'py> ArgumentSource<'_, 'py> {
             ArgumentValue::Dict(pairs) => {
                 let mapping: Bound<'py, PyDict> = PyDict::new(py);
                 for (key, item) in pairs {
-                    let key: Bound<'py, PyAny> = self.built(key)?;
-                    mapping.set_item(key, self.built(item)?)?;
+                    let built_key: Bound<'py, PyAny> = self.built(key)?;
+                    if let Err(error) = built_key.hash() {
+                        return Err(self.unhashable_key(key, error));
+                    }
+                    mapping.set_item(built_key, self.built(item)?)?;
                 }
                 mapping.into_any()
             }
@@ -384,6 +388,23 @@ impl<'py> ArgumentSource<'_, 'py> {
         Err(self.argument_error(self.nested[call].0, &detail, UNARY_HELP))
     }
 
+    /// The error for a dict key a nested macro call made unhashable, at that call.
+    fn unhashable_key(&self, key: &ArgumentValue, error: PyErr) -> PyErr {
+        let Some(call) = nested_calls(key)
+            .into_iter()
+            .find(|call| self.values[*call].hash().is_err())
+        else {
+            return error;
+        };
+        let type_name: String = match self.values[call].get_type().name() {
+            Ok(name) => name.to_string(),
+            Err(failure) => return failure,
+        };
+        let detail: String =
+            format!("use the value of a nested macro call, which is a {type_name}, as a dict key");
+        self.argument_error(self.nested[call].0, &detail, NESTED_KEY_HELP)
+    }
+
     /// The `MacroArgumentError` for a native parse error at its line and column.
     fn parse_error(&self, error: &ArgumentError) -> PyErr {
         let mut offset: usize = 0;
@@ -407,6 +428,22 @@ impl<'py> ArgumentSource<'_, 'py> {
             (self.name, offset),
             (detail, help),
         )
+    }
+}
+
+/// The nested macro calls inside `value`, in authored order.
+fn nested_calls(value: &ArgumentValue) -> Vec<usize> {
+    match value {
+        ArgumentValue::NestedCall(index) => vec![*index],
+        ArgumentValue::List(items) | ArgumentValue::Tuple(items) => {
+            items.iter().flat_map(nested_calls).collect()
+        }
+        ArgumentValue::Dict(pairs) => pairs
+            .iter()
+            .flat_map(|(key, item)| nested_calls(key).into_iter().chain(nested_calls(item)))
+            .collect(),
+        ArgumentValue::Negative(inner) | ArgumentValue::Positive(inner) => nested_calls(inner),
+        _ => Vec::new(),
     }
 }
 
