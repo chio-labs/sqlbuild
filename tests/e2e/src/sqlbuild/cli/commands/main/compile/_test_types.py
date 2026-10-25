@@ -1344,3 +1344,12 @@ class DialectSyntaxCompileE2ETestCase:
     expected_exit_code: int
     expected_codes: tuple[str, ...]
     expected_column_counts: dict[str, int]
+
+
+@dataclass(frozen=True)
+class SqlTestCacheMissE2ETestCase:
+    """A change to compiled SQL test artifacts and the miss reasons a warm compile logs."""
+
+    description: str
+    change: Callable[[Path], None]
+    expected_debug_line: str

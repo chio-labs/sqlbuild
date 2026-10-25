@@ -47,3 +47,13 @@ pub(crate) fn linked_compiled_root(target: &Path) {
     std::fs::create_dir_all(target.join("elsewhere")).expect("linked folder");
     std::os::unix::fs::symlink(target.join("elsewhere"), target.join("compiled")).expect("link");
 }
+
+/// Move `root/t.sql`'s mtime five seconds ahead without changing its bytes.
+pub(crate) fn bump_mtime(root: &Path) {
+    let file = std::fs::File::options()
+        .write(true)
+        .open(root.join("t.sql"))
+        .expect("artifact");
+    let later = std::time::SystemTime::now() + std::time::Duration::from_secs(5);
+    file.set_modified(later).expect("mtime");
+}
