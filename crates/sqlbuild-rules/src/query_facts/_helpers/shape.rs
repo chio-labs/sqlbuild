@@ -96,7 +96,7 @@ fn lexical_syntax(dialect: &str) -> LexicalSyntax {
         },
         "clickhouse" => LexicalSyntax {
             backslash_escape_quotes: strings(&["'"]),
-            line_comment_prefixes: lines(&["--"]),
+            line_comment_prefixes: lines(&["--", "#", "//"]),
             ..LexicalSyntax::default()
         },
         "databricks" | "duckdb" => LexicalSyntax {

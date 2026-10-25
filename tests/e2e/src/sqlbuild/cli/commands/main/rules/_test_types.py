@@ -345,3 +345,12 @@ class RulePositionE2ETestCase:
     description: str
     model_sql: str
     expected_location: str
+
+
+@dataclass(frozen=True)
+class ClickHouseCommentE2ETestCase:
+    """A ClickHouse model with a line comment holding a quote, and the finding rules report."""
+
+    description: str
+    comment: str
+    expected_location: str
