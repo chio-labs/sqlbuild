@@ -84,6 +84,9 @@ SQLite stores values by type affinity, so SQLBuild keeps column types explicitly
   or a UTC offset fall in the right window. A value with an offset belongs to the window of its UTC
   time; DuckDB's `TIMESTAMP` instead drops the offset. Comparisons you write yourself against
   `__cursor_start()` and `__cursor_end()` compare the stored text as is.
+- A `cursor_type timestamp` column may be text, such as
+  `strftime('%Y-%m-%d 00:00:00', ordered_at)`, because SQLite stores timestamps as text. Other
+  adapters reject a text timestamp cursor with `B301`.
 - Booleans are stored as `0` and `1`.
 - JSON, arrays and objects are stored as JSON text.
 - `DECIMAL(p, s)` means exact canonical text. A column whose `DECIMAL(p, s)` or `NUMERIC(p, s)`
