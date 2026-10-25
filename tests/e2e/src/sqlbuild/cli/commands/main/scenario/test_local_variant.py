@@ -37,6 +37,35 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_pr
             scenario_name="orders__keep_payload",
             expected_stdout_fragment="PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
         ),
+        LocalVariantScenarioTestCase(
+            description="a cast-built VARIANT object compares equal to the replayed fixture",
+            repo_files=build_local_variant_scenario_project_files(
+                fixture="{'qty': 2, 'note': 'x'}::VARIANT",
+                output="o.payload",
+                expected="{'note': 'x', 'qty': 2}::VARIANT AS payload",
+            ),
+            scenario_name="orders__keep_payload",
+            expected_stdout_fragment="PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+        ),
+        LocalVariantScenarioTestCase(
+            description="a cast-built VARIANT scalar compares equal to the replayed fixture",
+            repo_files=build_local_variant_scenario_project_files(
+                fixture="2::VARIANT", output="o.payload", expected="2::VARIANT AS payload"
+            ),
+            scenario_name="orders__keep_payload",
+            expected_stdout_fragment="PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+        ),
+        LocalVariantScenarioTestCase(
+            description="a different cast-built VARIANT value still fails the comparison",
+            repo_files=build_local_variant_scenario_project_files(
+                fixture="{'qty': 2}::VARIANT",
+                output="o.payload",
+                expected="{'qty': 3}::VARIANT AS payload",
+            ),
+            scenario_name="orders__keep_payload",
+            expected_stdout_fragment="mismatched=1 missing=1",
+            expected_returncode=1,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -64,7 +93,7 @@ def test_given_captured_variant_fixture_when_replaying_locally_then_the_scenario
         project_dir=project_dir,
     )
 
-    assert replayed.returncode == 0, replayed.stdout + replayed.stderr
+    assert replayed.returncode == test_case.expected_returncode, replayed.stdout + replayed.stderr
     assert "X699" not in replayed.stdout
     assert test_case.expected_stdout_fragment in replayed.stdout
 

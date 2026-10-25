@@ -289,7 +289,8 @@ def _insert_rows(
         return
     column_names: tuple[str, ...] = tuple(column.name for column in relation.columns)
     variant_columns: tuple[bool, ...] = tuple(
-        column.local_type.strip().upper() == LOCAL_TYPE_VARIANT for column in relation.columns
+        not native_values and column.local_type.strip().upper() == LOCAL_TYPE_VARIANT
+        for column in relation.columns
     )
     insert_sql: str = _build_insert_sql(
         table_name=table_name, column_names=column_names, variant_columns=variant_columns
@@ -299,9 +300,7 @@ def _insert_rows(
         values: list[object] = []
         for column_name, variant in zip(column_names, variant_columns, strict=True):
             value: object = _row_value(row=row, column_name=column_name)
-            values.append(
-                _variant_json_text(value=value, native_values=native_values) if variant else value
-            )
+            values.append(_variant_json_text(value=value) if variant else value)
         row_values.append(tuple(values))
     try:
         connection.executemany(insert_sql, row_values)
@@ -356,12 +355,12 @@ def _build_create_table_sql(*, table_name: str, columns: tuple[ScenarioSnapshotC
     return f"CREATE TABLE {_quote_identifier(table_name)} ({column_defs})"
 
 
-def _variant_json_text(*, value: object, native_values: bool) -> str | None:
-    """A VARIANT value as JSON text; another adapter's string that parses is already JSON text."""
+def _variant_json_text(*, value: object) -> str | None:
+    """Another adapter's VARIANT value as JSON text; a string that parses is already JSON text."""
 
     if value is None:
         return None
-    if isinstance(value, str) and not native_values:
+    if isinstance(value, str):
         try:
             json.loads(value)
         except ValueError:

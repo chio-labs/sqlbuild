@@ -326,6 +326,7 @@ class LocalVariantScenarioTestCase:
     repo_files: dict[str, str]
     scenario_name: str
     expected_stdout_fragment: str
+    expected_returncode: int = 0
 
 
 @dataclass(frozen=True)
