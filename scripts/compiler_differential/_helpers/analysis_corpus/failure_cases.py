@@ -38,6 +38,9 @@ _SNOWFLAKE_CONFIG: str = (
     'name = "failure_corpus"\nadapter = "snowflake"\n\n'
     '[connection]\naccount = "example"\nuser = "builder"\n'
 )
+_SQLITE_CONFIG: str = (
+    'name = "failure_corpus"\nadapter = "sqlite"\n\n[connection]\npath = "failure.sqlite"\n'
+)
 _POSTGRES_CONFIG: str = (
     'name = "failure_corpus"\nadapter = "postgres"\n\n'
     '[connection]\nhost = "localhost"\ndatabase = "failure"\nschema = "public"\n'
@@ -151,6 +154,19 @@ def _binding_cases() -> tuple[FailureCase, ...]:
                 **_mart(
                     f"SELECT customer_id, amount AS total_amount\nFROM {_ORDERS}\n"
                     "WHERE (amount > 1) IS NOT TRUE\n"
+                ),
+            },
+        ),
+        failure_case(
+            name="analysis-sqlite-temporal-cast",
+            expected_code="B002",
+            expected_warning_code="B104",
+            expected_codes=("B002", "B104"),
+            files={
+                FAILURE_CONFIG_PATH: _SQLITE_CONFIG,
+                **_mart(
+                    "SELECT customer_id, CAST(amount AS TIMESTAMP) AS total_amount, missing\n"
+                    f"FROM {_ORDERS}\n"
                 ),
             },
         ),

@@ -73,3 +73,15 @@ pub(crate) struct LocatedTruthTestDiagnosticTestCase {
     pub(crate) expected_location: (Option<usize>, Option<usize>),
     pub(crate) expected_span: (Option<usize>, Option<usize>),
 }
+
+pub(crate) struct TemporalCastScanTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) expected_casts: &'static [(usize, usize, &'static str)],
+}
+
+pub(crate) struct TemporalCastDialectTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: polyglot_sql::DialectType,
+    pub(crate) expected_warnings: usize,
+}

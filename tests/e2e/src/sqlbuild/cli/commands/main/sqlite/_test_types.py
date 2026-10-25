@@ -108,3 +108,12 @@ class TextTimestampCursorE2ETestCase:
     day_expression: str
     expected_exit_code: int
     expected_fragment: str
+
+
+@dataclass(frozen=True)
+class SqliteTemporalCastE2ETestCase:
+    """A SQLite model selecting one expression, and the B104 warnings compile reports for it."""
+
+    description: str
+    expression: str
+    expected_warning_count: int

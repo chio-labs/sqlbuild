@@ -2,7 +2,9 @@
 
 use std::collections::HashSet;
 
-use crate::binding_locations::constants::{ERROR_SEVERITY, UNKNOWN_TABLE_INTERNAL_CODE};
+use crate::binding_locations::constants::{
+    ERROR_SEVERITY, SQLITE_TEMPORAL_CAST_CODE, UNKNOWN_TABLE_INTERNAL_CODE,
+};
 use crate::binding_locations::models::{
     AuthoredSpan, BindingSource, LocatedDiagnostic, SeenDiagnostic,
 };
@@ -56,7 +58,10 @@ pub fn locate_binding_diagnostics(
             line,
             column,
         };
-        if seen.contains(&key) && start.is_some() && severity == ERROR_SEVERITY {
+        if seen.contains(&key)
+            && start.is_some()
+            && (severity == ERROR_SEVERITY || code == SQLITE_TEMPORAL_CAST_CODE)
+        {
             continue;
         }
         seen.insert(key);
