@@ -2,7 +2,6 @@
 
 use std::sync::Arc;
 
-use crate::compiler::main::function_type_validation::function_type_error;
 use crate::sql_macros::_helpers::parsing::body::{expand_body, with_line_comment_closed};
 use crate::sql_macros::_helpers::parsing::lexing::{AtConstruct, at_constructs, outer_sql_calls};
 use crate::sql_macros::_helpers::parsing::lexing::{Token, line_column, tokens};
@@ -607,13 +606,13 @@ fn check_adapter_types(
     adapter: &str,
 ) -> Result<(), SqlMacroError> {
     let invalid = |data_type: &str, context: String| -> Option<SqlMacroError> {
-        match function_type_error(data_type, adapter, &context) {
-            Ok(Some(message)) => Some(
-                SqlMacroError::new(INVALID_DEFINITION_CODE, message)
-                    .helped("use a SQL type the warehouse accepts, as in schema declarations"),
-            ),
-            Ok(None) | Err(_) => None,
+        if adapter.is_empty() {
+            return None;
         }
+        returns_type_error(data_type, adapter, &context).map(|message| {
+            SqlMacroError::new(INVALID_DEFINITION_CODE, message)
+                .helped("use a SQL type the warehouse accepts, as in schema declarations")
+        })
     };
     for parameter in &definition.parameters {
         let types: Vec<&str> = match &parameter.kind {

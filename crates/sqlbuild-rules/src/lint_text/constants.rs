@@ -7,6 +7,8 @@ pub(crate) const AUDIT_PARAMETER_SENTINEL_PREFIX: &str = "__sqlbuild_audit_param
 pub(crate) const CONTEXT_SENTINEL_PREFIX: &str = "__sqlbuild_context_parameter_";
 pub(crate) const SQL_MACRO_PARAMETER_SENTINEL_PREFIX: &str = "__sqlbuild_macro_parameter_";
 pub(crate) const CONTEXT_INTERPOLATION_TOKEN: &str = "@@CTX:";
+pub(crate) const TEST_PARAMETER_SENTINEL_PREFIX: &str = "__sqlbuild_test_parameter_";
+pub(crate) const TEST_PARAMETER_TOKEN: &str = "@param";
 
 /// Every SQLBuild intrinsic call protected while formatting.
 pub(crate) const FUNCTION_NAMES: [&str; 9] = [

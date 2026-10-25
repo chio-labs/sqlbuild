@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
 _CHECK_RESULT: str = "check"
 _ASSET_MATERIALIZATION: str = "materialization"
+_SKIPPED_CHECK_STATUS: str = "skipped"
 
 
 def _log_invocation(*, context: Any, invocation: SqlBuildCliInvocation) -> None:
@@ -40,6 +41,21 @@ def _log_invocation(*, context: Any, invocation: SqlBuildCliInvocation) -> None:
         logger.info("SQLBuild selected assets from Dagster (%s):", len(invocation.selection))
         for line in dagster_selector_log_lines(selectors=list(invocation.selection)):
             logger.info("  %s", line)
+
+
+def _log_skipped_checks(*, context: Any, payload: Mapping[str, Any]) -> None:
+    """Log each audit that did not run and why; Dagster gets no check result for it."""
+
+    logger: Any = getattr(context, "log", None)
+    if logger is None:
+        return
+    for check in payload.get("checks", ()):
+        if check.get("status") == _SKIPPED_CHECK_STATUS:
+            logger.info(
+                "SQLBuild audit %s did not run: %s",
+                check.get("name"),
+                check.get("skip_reason") or "skipped",
+            )
 
 
 def _start_stream_future(
@@ -178,6 +194,7 @@ def _build_results_from_execution_payload(
     command: tuple[str, ...],
     context: Any,
 ) -> tuple[Any, ...]:
+    _log_skipped_checks(context=context, payload=payload)
     return _dagster_events(
         dg=dg,
         plans=dagster_payload_results(

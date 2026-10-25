@@ -15,7 +15,10 @@ from tests.e2e.src.sqlbuild.cli.commands.main.format._test_types import (
     QuoteFixTestCase,
     RefusedQuoteFixTestCase,
 )
-from tests.e2e.src.sqlbuild.cli.commands.main.format.helpers import stored_descriptions
+from tests.e2e.src.sqlbuild.cli.commands.main.format.helpers import (
+    stored_column_descriptions,
+    stored_descriptions,
+)
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
 
 _PROJECT_FILE: str = (
@@ -75,6 +78,69 @@ _BODY: str = "\nSELECT 1 AS customer_id\n"
                 ");\n"
             ),
         ),
+        DescriptionLayoutTestCase(
+            description="a_long_column_description_becomes_a_block_at_its_depth",
+            header=(
+                "MODEL (\n"
+                '  description "Customers.",\n'
+                "  columns (\n"
+                '    customer_id (type INTEGER, description "The customer key, unique across '
+                'every channel the shop sells through, assigned at sign-up."),\n'
+                "  ),\n"
+                ");\n"
+            ),
+            expected_header=(
+                "MODEL (\n"
+                '  description "Customers.",\n'
+                "  columns (\n"
+                '    customer_id (type INTEGER, description """\n'
+                "      The customer key, unique across every channel the shop sells through, "
+                "assigned at sign-up.\n"
+                '    """),\n'
+                "  ),\n"
+                ");\n"
+            ),
+        ),
+        DescriptionLayoutTestCase(
+            description="a_short_wrapped_column_description_is_joined",
+            header=(
+                "MODEL (\n"
+                '  description "Customers.",\n'
+                '  columns (customer_id (type INTEGER, description """The customer\n'
+                '    key.""")),\n'
+                ");\n"
+            ),
+            expected_header=(
+                "MODEL (\n"
+                '  description "Customers.",\n'
+                '  columns (customer_id (type INTEGER, description "The customer key.")),\n'
+                ");\n"
+            ),
+        ),
+        DescriptionLayoutTestCase(
+            description="a_long_audit_description_becomes_a_block_at_its_depth",
+            header=(
+                "MODEL (\n"
+                '  description "Customers.",\n'
+                '  audits [not_null (column customer_id, description "Every customer must have '
+                'a key, otherwise downstream joins silently drop rows from reports.")],\n'
+                ");\n"
+            ),
+            expected_header=(
+                "MODEL (\n"
+                '  description "Customers.",\n'
+                "  audits [\n"
+                "    not_null (\n"
+                "      column customer_id,\n"
+                '      description """\n'
+                "        Every customer must have a key, otherwise downstream joins silently drop "
+                "rows from reports.\n"
+                '      """,\n'
+                "    ),\n"
+                "  ],\n"
+                ");\n"
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -90,6 +156,7 @@ def test_given_model_description_when_formatting_then_layout_is_canonical_and_te
         },
     )
     before: dict[str, str] = stored_descriptions(project_dir)
+    columns_before: dict[str, str] = stored_column_descriptions(project_dir)
 
     formatted: subprocess.CompletedProcess[str] = run_sqb(
         project_dir=project_dir, command=("--no-color", "format")
@@ -104,6 +171,7 @@ def test_given_model_description_when_formatting_then_layout_is_canonical_and_te
     model: str = (project_dir / "models/customers.sql").read_text()
     assert model == test_case.expected_header + _BODY
     assert stored_descriptions(project_dir) == before
+    assert stored_column_descriptions(project_dir) == columns_before
 
 
 @pytest.mark.parametrize(

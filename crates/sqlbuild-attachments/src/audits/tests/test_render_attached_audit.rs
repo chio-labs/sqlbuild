@@ -103,6 +103,48 @@ fn given_attached_audits_when_rendering_then_python_rendering_is_returned() {
             ),
         },
         AttachedAuditTestCase {
+            description: "a relationships target named as text is told to use a reference",
+            attachment: AuditAttachment {
+                definition_name: "relationships".to_owned(),
+                sql_body: "SELECT * FROM t WHERE status NOT IN (SELECT @field FROM @to)".to_owned(),
+                ..attachment(
+                    vec![
+                        ("to".to_owned(), ArgumentValue::Text("customers".to_owned())),
+                        ("field".to_owned(), ArgumentValue::Text("id".to_owned())),
+                    ],
+                    None,
+                    None,
+                )
+            },
+            expected_rendering: failed(
+                "models/schema.yml audit 'relationships' argument 'to' is customers, not a \
+                 relation reference; write to __ref(\"customers\") (or __source or __seed) so \
+                 the audit reads the built relation and runs after it",
+            ),
+        },
+        AttachedAuditTestCase {
+            description: "a relationships target written as a reference renders",
+            attachment: AuditAttachment {
+                definition_name: "relationships".to_owned(),
+                sql_body: "SELECT * FROM t WHERE status NOT IN (SELECT @field FROM @to)".to_owned(),
+                ..attachment(
+                    vec![
+                        (
+                            "to".to_owned(),
+                            ArgumentValue::Text("__ref(\"customers\")".to_owned()),
+                        ),
+                        ("field".to_owned(), ArgumentValue::Text("id".to_owned())),
+                    ],
+                    None,
+                    None,
+                )
+            },
+            expected_rendering: rendered(
+                "SELECT * FROM t WHERE status NOT IN (SELECT id FROM __ref(\"customers\"))",
+                Ok(("error", PolicySource::Fallback)),
+            ),
+        },
+        AttachedAuditTestCase {
             description: "a missing argument is Python's error before the policies",
             attachment: attachment(Vec::new(), Some("fatal"), None),
             expected_rendering: failed(

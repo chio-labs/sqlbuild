@@ -990,3 +990,205 @@ def build_unmocked_input_scenario_project_files() -> dict[str, str]:
         ),
     }
     return files
+
+
+def build_lambda_scenario_project_files() -> dict[str, str]:
+    """Build a scenario whose model reads list items through lambdas beside a star CTE."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "lambda_scenario"\nadapter = "duckdb"\n\n'
+            '[connection]\ndatabase = "lambda_scenario.duckdb"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_sessions\n    description: Test source raw_sessions.\n"
+            "    schema: main\n    table: raw_sessions\n"
+        ),
+        "models/sessions.sql": (
+            "MODEL (description 'Test model sessions.');\n"
+            'SELECT * FROM __source("raw_sessions")\n'
+        ),
+        "models/carts.sql": (
+            "MODEL (description 'Test model carts.');\n"
+            "SELECT 1 AS session_id, [1, 2, 3] AS quantities\n"
+        ),
+        "models/cart_totals.sql": (
+            "MODEL (description 'Test model cart_totals.');\n"
+            'WITH sess AS (SELECT * FROM __ref("sessions")),\n'
+            'crt AS (SELECT c.session_id, c.quantities FROM __ref("carts") AS c)\n'
+            "SELECT\n  s.session_id,\n"
+            "  list_reduce(list_transform(c.quantities, q -> q * 2), (acc, x) -> acc + x)"
+            " AS total,\n"
+            "  len(list_filter(c.quantities, i -> i > 1)) AS big\n"
+            "FROM sess AS s\nINNER JOIN crt AS c ON s.session_id = c.session_id\n"
+            "WHERE len(list_filter(c.quantities, w -> w < 0)) = 0\n"
+        ),
+        "tests/scenarios/cart_totals_doubled.sql": (
+            "SCENARIO (description 'Test scenario cart_totals_doubled.');\n"
+            "WITH\n__ref__sessions AS (SELECT 1 AS session_id),\n"
+            "__ref__carts AS (SELECT 1 AS session_id, [1, 2, 3] AS quantities),\n"
+            "__expected__cart_totals AS (SELECT 1 AS session_id, 12 AS total, 2 AS big)\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+def build_contracted_star_empty_fixture_project_files() -> dict[str, str]:
+    """Build a scenario that empties a contract-enforced model whose query selects a star."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "contracted_star"\nadapter = "duckdb"\n\n'
+            '[connection]\ndatabase = "contracted_star.duckdb"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_customers\n    description: Test source raw_customers.\n"
+            "    schema: main\n    table: raw_customers\n"
+        ),
+        "models/customers.sql": (
+            "MODEL (description 'Test model customers.', contract enforced,\n"
+            "  columns (id (type INTEGER), name (type VARCHAR)));\n"
+            'SELECT * FROM __source("raw_customers")\n'
+        ),
+        "models/orders.sql": (
+            "MODEL (description 'Test model orders.');\nSELECT 1 AS id, 7 AS customer_id\n"
+        ),
+        "models/customer_orders.sql": (
+            "MODEL (description 'Test model customer_orders.');\n"
+            "SELECT o.id AS order_id, c.name AS customer_name\n"
+            'FROM __ref("orders") AS o\nJOIN __ref("customers") AS c ON c.id = o.customer_id\n'
+        ),
+        "tests/scenarios/orders_without_customers.sql": (
+            "SCENARIO (description 'Test scenario orders_without_customers.');\n"
+            "WITH\n__ref__orders AS (SELECT 1 AS id, 7 AS customer_id),\n"
+            "__ref__customers AS (SELECT * FROM __empty_fixture()),\n"
+            "__expected__customer_orders AS (\n"
+            "  SELECT CAST(NULL AS INTEGER) AS order_id, CAST(NULL AS VARCHAR) AS customer_name\n"
+            "  WHERE FALSE\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+def build_cursor_intrinsic_scenario_project_files() -> dict[str, str]:
+    """Build a scenario over a non-microbatch incremental model that reads cursor intrinsics."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "cursor_scenario"\nadapter = "duckdb"\n\n'
+            '[connection]\ndatabase = "cursor_scenario.duckdb"\n'
+        ),
+        "models/orders.sql": (
+            "MODEL (description 'Test model orders.');\n"
+            "SELECT 1 AS order_id, TIMESTAMP '2026-01-02 10:00:00' AS ordered_at\n"
+        ),
+        "models/hourly_orders.sql": (
+            "MODEL (\n  description 'Test model hourly_orders.',\n  materialized incremental,\n"
+            "  incremental_strategy delete_insert,\n  cursor ordered_at,\n"
+            "  cursor_type timestamp,\n  cursor_grain hour,\n  cursor_inputs (orders ordered_at),\n"
+            ");\n"
+            'SELECT o.order_id, o.ordered_at FROM __ref("orders") AS o\n'
+            "WHERE o.ordered_at >= __cursor_start() AND o.ordered_at < __cursor_end()\n"
+        ),
+        "tests/scenarios/hourly_orders_window.sql": (
+            "SCENARIO (description 'Test scenario hourly_orders_window.');\n"
+            "WITH\n__ref__orders AS (\n"
+            "  SELECT 1 AS order_id, TIMESTAMP '2026-01-02 10:00:00' AS ordered_at\n),\n"
+            "__expected__hourly_orders AS (\n"
+            "  SELECT 1 AS order_id, TIMESTAMP '2026-01-02 10:00:00' AS ordered_at\n)\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+def build_connect_by_scenario_project_files() -> dict[str, str]:
+    """Build a Snowflake scenario whose model walks a hierarchy beside a star CTE."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "connect_by_scenario"\nadapter = "snowflake"\ndefault_target = "dev"\n\n'
+            '[targets.dev]\ndatabase = "warehouse"\nschema = "analytics"\n\n'
+            "[scopes]\nenforce_placement = false\n"
+        ),
+        "models/categories.sql": (
+            "MODEL (description 'Test model categories.');\n"
+            "SELECT CAST(1 AS INTEGER) AS category_id, CAST(NULL AS INTEGER) AS parent_id,\n"
+            "  CAST('root' AS VARCHAR) AS name\n"
+        ),
+        "models/category_paths.sql": (
+            "MODEL (description 'Test model category_paths.');\n"
+            'WITH categories AS (SELECT * FROM __ref("categories")),\n'
+            "tree AS (\n"
+            "  SELECT c.category_id, LEVEL AS depth, SYS_CONNECT_BY_PATH(c.name, '/') AS path\n"
+            "  FROM categories AS c\n"
+            "  START WITH c.parent_id IS NULL\n"
+            "  CONNECT BY PRIOR c.category_id = c.parent_id\n"
+            ")\n"
+            "SELECT category_id, depth, path FROM tree\n"
+        ),
+        "tests/scenarios/category_paths_walk.sql": (
+            "SCENARIO (description 'Test scenario category_paths_walk.');\n"
+            "WITH\n__ref__categories AS (\n"
+            "  SELECT 1 AS category_id, CAST(NULL AS INTEGER) AS parent_id, 'root' AS name\n),\n"
+            "__expected__category_paths AS (SELECT 1 AS category_id, 1 AS depth, '/root' AS path)\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+def build_local_variant_scenario_project_files() -> dict[str, str]:
+    """Build an in-memory DuckDB scenario whose source fixture holds a VARIANT column."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "local_variant"\nadapter = "duckdb"\n\n[connection]\ndatabase = ":memory:"\n\n'
+            "[scopes]\nenforce_placement = false\n"
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n"
+            "    schema: main\n    table: raw_orders\n    columns:\n"
+            "      - {name: order_id, type: INTEGER}\n      - {name: payload, type: VARIANT}\n"
+        ),
+        "models/stg_orders.sql": (
+            "MODEL (description 'Test model stg_orders.');\n"
+            "SELECT o.order_id, o.payload IS NOT NULL AS has_payload\n"
+            'FROM __source("raw_orders") AS o\n'
+        ),
+        "tests/scenarios/orders__keep_payload.sql": (
+            "SCENARIO (description 'Test scenario orders__keep_payload.');\n"
+            "WITH\n"
+            "__source__raw_orders AS (\n"
+            "  SELECT 1 AS order_id, '{\"qty\": 2}'::JSON::VARIANT AS payload\n),\n"
+            "__expected__stg_orders AS (SELECT 1 AS order_id, TRUE AS has_payload)\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+def build_helper_fixture_scenario_project_files() -> dict[str, str]:
+    """Build an in-memory DuckDB scenario whose source fixture reads a helper CTE."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "helper_fixture"\nadapter = "duckdb"\n\n[connection]\ndatabase = ":memory:"\n\n'
+            "[scopes]\nenforce_placement = false\n"
+        ),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_orders\n    description: Test source raw_orders.\n"
+            "    schema: main\n    table: raw_orders\n    columns:\n"
+            "      - {name: order_id, type: INTEGER}\n"
+        ),
+        "models/stg_orders.sql": (
+            "MODEL (description 'Test model stg_orders.');\n"
+            'SELECT o.order_id FROM __source("raw_orders") AS o\n'
+        ),
+        "tests/scenarios/orders__from_helper.sql": (
+            "SCENARIO (description 'Test scenario orders__from_helper.');\n"
+            "WITH\n"
+            "helper_ids AS (SELECT 1 AS order_id),\n"
+            "__source__raw_orders AS (SELECT h.order_id FROM helper_ids AS h),\n"
+            "__expected__stg_orders AS (SELECT 1 AS order_id)\n"
+            "SELECT 1\n"
+        ),
+    }

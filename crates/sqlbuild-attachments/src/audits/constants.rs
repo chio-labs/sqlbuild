@@ -9,6 +9,11 @@ pub(crate) const MODEL_RESOURCE: &str = "model";
 pub(crate) const SOURCE_RESOURCE: &str = "source";
 pub(crate) const SEED_RESOURCE: &str = "seed";
 pub(crate) const FUNCTION_RESOURCE: &str = "function";
+pub(crate) const RELATIONSHIPS_AUDIT: &str = "relationships";
+pub(crate) const RELATIONSHIPS_TARGET_ARGUMENT: &str = "to";
+/// The calls that make a `relationships` target a dependency on a built relation.
+pub(crate) const RELATION_REFERENCE_CALLS: [&str; 4] =
+    ["__ref(", "__source(", "__seed(", "__dbt_ref("];
 /// Singular audits reading fewer models must also read a companion resource.
 pub(crate) const CROSS_MODEL_MINIMUM: usize = 2;
 /// The run scope Python falls back to without an instance or project value.

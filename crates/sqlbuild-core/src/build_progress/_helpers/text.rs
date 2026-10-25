@@ -90,6 +90,7 @@ pub(crate) fn audit_outcome_display(outcome: &str) -> String {
         WARN => "WARN".to_owned(),
         ERROR => "FAIL".to_owned(),
         INSUFFICIENT => "INSUFFICIENT".to_owned(),
+        SKIPPED => "SKIP".to_owned(),
         other => other.to_owned(),
     }
 }

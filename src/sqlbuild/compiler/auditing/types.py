@@ -38,3 +38,4 @@ class AuditOutcome(StrEnum):
     WARN = "warn"
     ERROR = "error"
     INSUFFICIENT = "insufficient"
+    SKIPPED = "skipped"

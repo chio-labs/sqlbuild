@@ -12,8 +12,9 @@ use crate::assembly::analysis_session::constants::{
     COLUMN_AST_KIND, CTE_ALIAS_PAYLOAD_KEY, CTE_LIST_PAYLOAD_KEY, DEPENDENCY_FUNCTION_NAMES,
     FUNCTION_AST_KIND, FUNCTION_FIXTURE_TYPES, FUNCTION_PAYLOAD_KIND, HELPER_READS_DIALECT,
     LITERAL_FIXTURE_TYPES, LITERAL_PAYLOAD_KIND, MAX_FUNCTION_CALL_DEPTH, NAME_PAYLOAD_KEY,
-    NULL_PAYLOAD_KIND, RENDERED_TYPE_NAMES, SCHEMA_TABLE_ARG, SELECT_PAYLOAD_KEY, STAR_AST_KIND,
-    STRUCTURED_PAYLOAD_KINDS, TABLE_AST_KIND, VARIANT_FIXTURE_TYPE, WILDCARD,
+    NULL_PAYLOAD_KIND, RENDERED_TYPE_NAMES, SCHEMA_TABLE_ARG, SELECT_PAYLOAD_KEY,
+    SET_OPERATION_PAYLOAD_KEYS, STAR_AST_KIND, STRUCTURED_PAYLOAD_KINDS, TABLE_AST_KIND,
+    VARIANT_FIXTURE_TYPE, WILDCARD,
 };
 
 /// Python's `bool(value)`.
@@ -452,26 +453,46 @@ pub(crate) fn fixture_projection_facts(
         return Ok(ProjectionFacts::default());
     };
     let mut facts: ProjectionFacts = collected_facts(select);
+    let top: Option<&Map<String, Value>> = payload.as_object();
     let direct: bool = matches!(
-        payload
-            .as_object()
-            .and_then(|map| map.get(SELECT_PAYLOAD_KEY)),
+        top.and_then(|map| map.get(SELECT_PAYLOAD_KEY)),
         Some(Value::Object(_))
     );
-    if !direct {
+    let set_operation: bool = top.is_some_and(|map| {
+        SET_OPERATION_PAYLOAD_KEYS
+            .iter()
+            .any(|key| matches!(map.get(*key), Some(Value::Object(_))))
+    });
+    if !direct && !set_operation {
         facts.null_literal_names.clear();
+    }
+    if set_operation {
+        let branches: Vec<&Map<String, Value>> = branch_selects(&payload);
+        let null_in_every_branch = |index: usize| {
+            branches
+                .iter()
+                .all(|branch| null_positions(branch).get(index) == Some(&true))
+        };
+        let kept: Vec<String> = null_names_by_position(select)
+            .into_iter()
+            .filter(|(index, _)| null_in_every_branch(*index))
+            .map(|(_, name)| name)
+            .collect();
+        facts.null_literal_names.retain(|name| kept.contains(name));
     }
     Ok(facts)
 }
 
-/// Python's recursive `_first_select`, depth first in payload order, without recursion.
-fn first_select(payload: &Value) -> Option<&Map<String, Value>> {
+/// Every branch `SELECT` of a set operation, without the selects nested inside them.
+fn branch_selects(payload: &Value) -> Vec<&Map<String, Value>> {
+    let mut branches: Vec<&Map<String, Value>> = Vec::new();
     let mut pending: Vec<&Value> = vec![payload];
     while let Some(node) = pending.pop() {
         match node {
             Value::Object(map) => {
                 if let Some(Value::Object(select)) = map.get(SELECT_PAYLOAD_KEY) {
-                    return Some(select);
+                    branches.push(select);
+                    continue;
                 }
                 pending.extend(map.values().rev());
             }
@@ -479,7 +500,54 @@ fn first_select(payload: &Value) -> Option<&Map<String, Value>> {
             _ => {}
         }
     }
-    None
+    branches
+}
+
+/// The projection payloads of a select, each with any alias removed.
+fn projected_values(select: &Map<String, Value>) -> Vec<&Map<String, Value>> {
+    select
+        .get("expressions")
+        .and_then(Value::as_array)
+        .map_or(&[][..], Vec::as_slice)
+        .iter()
+        .filter_map(|expression| {
+            match expression.get("alias").and_then(|alias| alias.get("this")) {
+                Some(Value::Object(value)) => Some(value),
+                _ => expression.as_object(),
+            }
+        })
+        .collect()
+}
+
+/// Whether each projection of a select is a bare `NULL`.
+fn null_positions(select: &Map<String, Value>) -> Vec<bool> {
+    projected_values(select)
+        .into_iter()
+        .map(|value| value.keys().next().map(String::as_str) == Some(NULL_PAYLOAD_KIND))
+        .collect()
+}
+
+/// The folded alias of each bare `NULL` projection of a select, with its position.
+fn null_names_by_position(select: &Map<String, Value>) -> Vec<(usize, String)> {
+    let expressions: &[Value] = select
+        .get("expressions")
+        .and_then(Value::as_array)
+        .map_or(&[], Vec::as_slice);
+    expressions
+        .iter()
+        .enumerate()
+        .filter_map(|(index, expression)| {
+            let alias_payload = expression.get("alias")?;
+            let name: &str = alias_payload.get("alias")?.get("name")?.as_str()?;
+            let kind: &str = alias_payload.get("this")?.as_object()?.keys().next()?;
+            (kind == NULL_PAYLOAD_KIND).then(|| (index, str::to_lowercase(name)))
+        })
+        .collect()
+}
+
+/// Python's recursive `_first_select`, depth first in payload order, without recursion.
+fn first_select(payload: &Value) -> Option<&Map<String, Value>> {
+    branch_selects(payload).into_iter().next()
 }
 
 fn collected_facts(select: &Map<String, Value>) -> ProjectionFacts {

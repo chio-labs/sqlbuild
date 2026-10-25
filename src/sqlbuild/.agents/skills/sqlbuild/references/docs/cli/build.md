@@ -68,7 +68,7 @@ own option. `--version` works only directly after `sqb`, as in `sqb --version`:
 | `--start-cursor-int` | Override start cursor for integer incremental models |
 | `--end-cursor-int` | Override end cursor for integer incremental models |
 | `--load` | Explicitly load managed sources before building |
-| `--no-load` | Skip automatic source loading |
+| `--no-load` | Run no source loaders; selected managed sources are still audited |
 | `--reload` | Reload managed sources (passes `is_reload=True` to loaders) |
 | `--selection-diagnostics` | Warn when a selected model will build on changed upstream models that are not selected; see [Selection and staleness](../concepts/planning/selection-and-staleness.md) |
 | `--manifest` | Generate `target/manifest.json` with plan-aware project metadata |
@@ -89,9 +89,9 @@ This replaces the former `sqb run` command. The full lifecycle (tests + audits) 
 
 ## Execution order
 
-1. Managed sources are loaded (unless `--no-load`)
+1. Managed sources are loaded (unless `--no-load`, which audits their existing data instead)
 2. Selected seeds are loaded
-3. Source audits run before their dependent models (unless `--no-audits`)
+3. Source audits run before their dependent models (unless `--no-audits`); with `--no-load`, or for a source selected by name, a source no model reads is audited at the end
 4. SQL unit tests run before their target model (unless `--no-tests`)
 5. Models are materialized in DAG topological order
 6. Error-severity audits run against the staging table before promotion to the target (unless `--no-audits`)

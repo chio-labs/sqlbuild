@@ -131,7 +131,12 @@ fn given_dialect_sql_when_reading_query_facts_then_findings_match_the_authored_s
             select: OUTPUT_TYPE_RULE,
             enum_columns: &[],
             columns: json!([{"name": "amount", "type": "INTEGER", "type_proven": true}]),
-            expected_faults: &[("SQBRCONTRACT105", 3, 13, "outer cast that does not target")],
+            expected_faults: &[(
+                "SQBRCONTRACT105",
+                3,
+                8,
+                "which is not its declared contract type",
+            )],
         },
         QueryFactsTestCase {
             description: "nested parenthesized set operations keep each branch position",
@@ -154,7 +159,12 @@ fn given_dialect_sql_when_reading_query_facts_then_findings_match_the_authored_s
             select: OUTPUT_TYPE_RULE,
             enum_columns: &[],
             columns: json!([{"name": "amount", "type": "INTEGER", "type_proven": true}]),
-            expected_faults: &[("SQBRCONTRACT105", 3, 13, "outer cast that does not target")],
+            expected_faults: &[(
+                "SQBRCONTRACT105",
+                3,
+                8,
+                "which is not its declared contract type",
+            )],
         },
         QueryFactsTestCase {
             description: "unaliased union branches inside a final CTE keep their positions",

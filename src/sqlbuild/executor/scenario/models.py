@@ -107,6 +107,7 @@ class ScenarioSnapshotInputSpec:
     logical_name: str
     file_path: Path
     capture_sql: str
+    fingerprint_sql: str | None = None
 
 
 @dataclass(frozen=True)

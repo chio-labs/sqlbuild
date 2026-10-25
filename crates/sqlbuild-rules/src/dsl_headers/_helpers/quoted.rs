@@ -15,6 +15,15 @@ pub(crate) fn quoted_value_end(text: &[char], start: usize) -> usize {
 
 /// The span of the top-level `description` string value inside the header parentheses.
 pub(crate) fn description_value_span(text: &[char]) -> Option<(usize, usize)> {
+    description_value_spans(text)
+        .into_iter()
+        .find(|(_, depth)| *depth == 1)
+        .map(|(span, _)| span)
+}
+
+/// The span and bracket depth of every `description` string value, the header's own at depth 1.
+pub(crate) fn description_value_spans(text: &[char]) -> Vec<((usize, usize), usize)> {
+    let mut spans: Vec<((usize, usize), usize)> = Vec::new();
     let mut delimiters: Vec<char> = Vec::new();
     let mut index: usize = 0;
     while index < text.len() {
@@ -39,7 +48,7 @@ pub(crate) fn description_value_span(text: &[char]) -> Option<(usize, usize)> {
             index += 1;
             continue;
         }
-        if delimiters == [')'] && (is_alpha(character) || character == '_') {
+        if !delimiters.is_empty() && (is_alpha(character) || character == '_') {
             let mut word_end: usize = index + 1;
             while word_end < text.len() && (python_isalnum(text[word_end]) || text[word_end] == '_')
             {
@@ -52,7 +61,9 @@ pub(crate) fn description_value_span(text: &[char]) -> Option<(usize, usize)> {
                 }
                 if quote_start < text.len() && QUOTES.contains(&text[quote_start]) {
                     let quote_end: usize = quoted_value_end(text, quote_start);
-                    return Some((quote_start + 1, quote_end - 1));
+                    spans.push(((quote_start + 1, quote_end - 1), delimiters.len()));
+                    index = quote_end;
+                    continue;
                 }
             }
             index = word_end;
@@ -60,7 +71,7 @@ pub(crate) fn description_value_span(text: &[char]) -> Option<(usize, usize)> {
         }
         index += 1;
     }
-    None
+    spans
 }
 
 /// `text` split on newlines that are outside quoted values.

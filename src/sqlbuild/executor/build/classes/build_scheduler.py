@@ -32,6 +32,7 @@ from sqlbuild._native import (
     SourceEntry,
     SqlTestPlanEntry,
     TableTypePlanEntry,
+    audit_resource_id,
     sql_test_resource_id,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -43,6 +44,9 @@ from sqlbuild.cost.models import StatementExecutionTelemetry
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.auditing.main._record_audit_progress_outcome import (
+    record_audit_progress_outcome,
+)
 from sqlbuild.executor.auditing.main.publish_completed_audit_results import (
     publish_completed_audit_results,
 )
@@ -233,6 +237,7 @@ class BuildScheduler:
         )
         self._max_concurrency: int = len(connections)
         self._blocked_keys: set[CompiledObjectKey] = set()
+        self._unbuilt_keys: set[CompiledObjectKey] = set(initial_state.initial_failed_keys)
         self._completed_keys: set[CompiledObjectKey] = set(initial_state.precompleted_keys)
         self._initial_failed_keys: frozenset[CompiledObjectKey] = initial_state.initial_failed_keys
         self._in_flight: set[CompiledObjectKey] = set()
@@ -297,11 +302,25 @@ class BuildScheduler:
 
         enforce_execution_deadline()
         self._skip_remaining()
+        if self._run_audits and not self._stop:
+            _ = self._run_source_audits(source_keys=self._unloaded_selected_sources())
 
         end_audit_results: tuple[AuditExecutionResult, ...] = ()
-        if self._run_audits and self._indexes.end_audits:
+        runnable_end_audits: tuple[AuditPlanEntry, ...] = tuple(
+            audit
+            for audit in self._indexes.end_audits
+            if self._unbuilt_keys.isdisjoint(audit.scope_deps)
+        )
+        skipped_end_audits: tuple[AuditExecutionResult, ...] = ()
+        if self._run_audits:
+            skipped_end_audits = tuple(
+                self._skipped_end_audit(audit=audit)
+                for audit in self._indexes.end_audits
+                if not self._unbuilt_keys.isdisjoint(audit.scope_deps)
+            )
+        if self._run_audits and runnable_end_audits:
             end_audit_results = run_end_audits(
-                end_audits=self._indexes.end_audits,
+                end_audits=runnable_end_audits,
                 adapter=self._adapter,
                 connection=self._scheduler_connection,
                 model_locations=self._plan.model_locations,
@@ -317,7 +336,7 @@ class BuildScheduler:
             tuple(self._load_results),
             tuple(sorted(self._test_results, key=self._test_result_order)),
             tuple(self._source_audit_results),
-            end_audit_results,
+            (*end_audit_results, *skipped_end_audits),
         )
 
     def _test_result_order(self, result: SqlTestExecutionResult) -> int:
@@ -386,7 +405,7 @@ class BuildScheduler:
                 downstream_blocked_keys(
                     failed_key=key,
                     downstream_deps=self._plan.downstream_deps,
-                    selected_keys=self._plan.selected_keys,
+                    selected_keys=self._selected_execution_keys,
                 )
             )
         if self._fail_fast and self._initial_failed_keys:
@@ -729,22 +748,7 @@ class BuildScheduler:
             model_entry: ModelPlanEntry | None = self._indexes.model_entries_by_key.get(key)
             if model_entry is None:
                 return False
-            audit_run: SourceAuditRunResult = run_pending_source_audits(
-                model_key=key,
-                plan=self._plan,
-                source_audits_by_source=self._indexes.source_audits_by_source,
-                executed_source_audits=frozenset(self._executed_source_audits),
-                failed_sources=frozenset(self._failed_sources),
-                adapter=self._adapter,
-                connection=self._scheduler_connection,
-                fail_fast=self._fail_fast,
-                run_id=self._run_id,
-            )
-            self._executed_source_audits.update(audit_run.executed_source_names)
-            self._failed_sources.update(audit_run.failed_source_names)
-            self._blocked_keys.update(audit_run.newly_blocked_keys)
-            self._source_audit_results.extend(audit_run.audit_results)
-            if audit_run.blocked:
+            if self._run_source_audits(source_keys=self._plan.upstream_deps.get(key, ())):
                 self._blocked_keys.add(key)
                 self._record_skipped_result(
                     key=key,
@@ -757,6 +761,85 @@ class BuildScheduler:
                 return False
 
         return True
+
+    def _mark_unbuilt(self, *, key: CompiledObjectKey) -> None:
+        """Record that `key` was not built, unless it is a model whose relation already exists."""
+
+        if (
+            key.resource_type == CompiledResourceType.MODEL
+            and key.name in self._plan.existing_model_names
+        ):
+            return
+        self._unbuilt_keys.add(key)
+
+    def _skipped_end_audit(self, *, audit: AuditPlanEntry) -> AuditExecutionResult:
+        """The SKIPPED result of an end-of-build audit that reads a resource not built this run."""
+
+        unbuilt: CompiledObjectKey = next(
+            key for key in audit.scope_deps if key in self._unbuilt_keys
+        )
+        result: AuditExecutionResult = AuditExecutionResult(
+            audit_name=audit.name,
+            audit_definition_name=audit.definition_name,
+            attachment_kind=audit.attachment_kind,
+            severity=audit.severity,
+            outcome=AuditOutcome.SKIPPED,
+            row_count=0,
+            executed_sql="",
+            attached_target_kind=audit.attached_target_kind,
+            attached_target_name=audit.attached_target_name,
+            attached_column_name=audit.attached_column_name,
+            audit_description=audit.description,
+            audit_meta=audit.meta,
+            skip_reason=f"reads {unbuilt.name}, which was not built",
+        )
+        with ResourceAttemptLifecycle(
+            resource_id=audit_resource_id(
+                audit_name=audit.name,
+                attachment_kind=audit.attachment_kind,
+                attached_target_kind=audit.attached_target_kind,
+                attached_target_name=audit.attached_target_name,
+                attached_column_name=audit.attached_column_name,
+            ),
+            resource_kind="audit",
+            resource_name=audit.name,
+            run_id=self._run_id,
+        ) as lifecycle:
+            record_audit_progress_outcome(
+                resource_attempt_id=lifecycle.resource_attempt_id, result=result
+            )
+            lifecycle.skipped(skip_code="scheduler")
+        return result
+
+    def _unloaded_selected_sources(self) -> tuple[CompiledObjectKey, ...]:
+        """Sources audited at the end: all of them with loading off, else only explicit ones."""
+
+        return tuple(
+            key
+            for key in self._plan.execution_order
+            if key in self._plan.end_audit_source_keys
+            and key not in self._indexes.source_load_entries_by_key
+        )
+
+    def _run_source_audits(self, *, source_keys: tuple[CompiledObjectKey, ...]) -> bool:
+        """Run the audits of sources that have not run them yet; whether one blocks its readers."""
+
+        audit_run: SourceAuditRunResult = run_pending_source_audits(
+            source_keys=source_keys,
+            plan=self._plan,
+            source_audits_by_source=self._indexes.source_audits_by_source,
+            executed_source_audits=frozenset(self._executed_source_audits),
+            failed_sources=frozenset(self._failed_sources),
+            adapter=self._adapter,
+            connection=self._scheduler_connection,
+            fail_fast=self._fail_fast,
+            run_id=self._run_id,
+        )
+        self._executed_source_audits.update(audit_run.executed_source_names)
+        self._failed_sources.update(audit_run.failed_source_names)
+        self._blocked_keys.update(audit_run.newly_blocked_keys)
+        self._source_audit_results.extend(audit_run.audit_results)
+        return audit_run.blocked
 
     def _execute_node(
         self, *, key: CompiledObjectKey, connection: Any
@@ -1271,7 +1354,7 @@ class BuildScheduler:
                             downstream_blocked_keys(
                                 failed_key=dep_key,
                                 downstream_deps=self._plan.downstream_deps,
-                                selected_keys=self._plan.selected_keys,
+                                selected_keys=self._selected_execution_keys,
                             )
                         )
 
@@ -1295,11 +1378,12 @@ class BuildScheduler:
             failed = result.status in {ExecutionStatus.FAILED, ExecutionStatus.SKIPPED}
 
         if failed:
+            self._mark_unbuilt(key=key)
             self._blocked_keys.update(
                 downstream_blocked_keys(
                     failed_key=key,
                     downstream_deps=self._plan.downstream_deps,
-                    selected_keys=self._plan.selected_keys,
+                    selected_keys=self._selected_execution_keys,
                 )
             )
             if self._fail_fast:
@@ -1400,6 +1484,7 @@ class BuildScheduler:
             run_id=self._run_id,
         ) as lifecycle:
             skip_mode: object = getattr(result, "skip_mode", None)
+            self._mark_unbuilt(key=key)
             lifecycle.skipped(
                 skip_code="scheduler",
                 skip_mode=getattr(skip_mode, "value", None),

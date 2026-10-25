@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from scripts.format_performance._helpers.model_project import write_model_format_project
 from sqlbuild._native import compute_query_hash
@@ -188,3 +189,25 @@ def stored_descriptions(project_dir: Path) -> dict[str, str]:
     )
     assert dag.returncode == 0, dag.stderr
     return {node["name"]: node["description"] for node in json.loads(dag.stdout)["nodes"]}
+
+
+def stored_column_descriptions(project_dir: Path) -> dict[str, str]:
+    """The description `sqb dag` reports for each column of the project's models, by node.column."""
+
+    dag: subprocess.CompletedProcess[str] = run_sqb(
+        project_dir=project_dir, arguments=("--no-color", "dag", "--json")
+    )
+    assert dag.returncode == 0, dag.stderr
+    descriptions: dict[str, str] = {}
+    for node in json.loads(dag.stdout)["nodes"]:
+        descriptions.update(_node_column_descriptions(node))
+    return descriptions
+
+
+def _node_column_descriptions(node: dict[str, Any]) -> dict[str, str]:
+    """One `sqb dag` node's column descriptions, by node.column."""
+
+    return {
+        f"{node['name']}.{column['name']}": column.get("description", "")
+        for column in node["columns"]
+    }

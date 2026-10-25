@@ -12,11 +12,12 @@ use crate::type_system::_helpers::fallback::{
 use crate::type_system::_helpers::python_text::{python_int, split_type_and_params, upper};
 use crate::type_system::_helpers::shallow_args::shallow_args;
 use crate::type_system::constants::{
-    BIGNUMERIC_TYPE_NAME, BOOLEAN_TYPE_NAMES, CUSTOM_NORMALIZATION_TYPE_NAMES, DATE_TYPE_NAME,
-    DATETIME_TYPE_NAME, DECIMAL_TYPE_NAMES, FLOAT_TYPE_NAMES, FLOAT_WIRE_TYPE_NAME,
-    INTEGER_PARSE_TYPE_NAMES, INTEGER_PRECISION, INTEGER_SCALE, INTEGER_TYPE_NAMES,
-    MAX_FUNCTION_CALL_DEPTH, POLYGLOT_CUSTOM_TYPE_NAME, POLYGLOT_TYPE_NAME_ALIASES,
-    STRING_TYPE_NAMES, TIMESTAMP_TYPE_NAMES, UNBOUNDED_TEXT_TYPE_NAMES,
+    BIGNUMERIC_TYPE_NAME, BIGQUERY_STRING_TYPE_NAME, BOOLEAN_TYPE_NAMES,
+    CUSTOM_NORMALIZATION_TYPE_NAMES, DATE_TYPE_NAME, DATETIME_TYPE_NAME, DECIMAL_TYPE_NAMES,
+    FLOAT_TYPE_NAMES, FLOAT_WIRE_TYPE_NAME, INTEGER_PARSE_TYPE_NAMES, INTEGER_PRECISION,
+    INTEGER_SCALE, INTEGER_TYPE_NAMES, MAX_FUNCTION_CALL_DEPTH, POLYGLOT_CUSTOM_TYPE_NAME,
+    POLYGLOT_TYPE_NAME_ALIASES, SIZED_TEXT_TYPE_NAMES, STRING_TYPE_NAMES, TIMESTAMP_TYPE_NAMES,
+    UNBOUNDED_TEXT_TYPE_NAMES, VARCHAR_TYPE_NAME,
 };
 use crate::type_system::errors::TypeNormalizationError;
 use crate::type_system::models::{NormalizedType, PythonInteger, TypeDialect, TypeFamily};
@@ -120,6 +121,10 @@ pub(crate) fn normalize_parsed(
             let bounded: PythonInteger = python_or_default(length);
             name = format!("VARCHAR({bounded})");
             length = Some(bounded);
+        } else if bigquery && UNBOUNDED_TEXT_TYPE_NAMES.contains(&base_name) {
+            name = name.replacen(base_name, BIGQUERY_STRING_TYPE_NAME, 1);
+        } else if length.is_some() && SIZED_TEXT_TYPE_NAMES.contains(&base_name) {
+            name = name.replacen(base_name, VARCHAR_TYPE_NAME, 1);
         }
         return Ok(NormalizedType {
             normalized_name: name,

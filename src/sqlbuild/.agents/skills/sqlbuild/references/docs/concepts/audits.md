@@ -154,7 +154,7 @@ SQLBuild includes four generic audits out of the box. You do not need to define 
 | `not_null` | Fails if any row has a NULL value in the column | Column-level only |
 | `unique` | Fails if any non-NULL value appears more than once | Column-level only |
 | `accepted_values` | Fails if any non-NULL value is not in the allowed list | `values` - list of allowed values |
-| `relationships` | Fails if any non-NULL value does not exist in the referenced column | `to` - target relation, `field` - target column |
+| `relationships` | Fails if any non-NULL value does not exist in the referenced column | `to` - target relation as `__ref(...)`, `__source(...)` or `__seed(...)`, `field` - target column |
 
 ### Using built-in audits
 
@@ -175,7 +175,7 @@ MODEL (
     ),
     payment_method (
       audits [
-        relationships (to "stg_payments", field "method"),
+        relationships (to __ref("stg_payments"), field "method"),
       ],
     ),
   ),
@@ -378,6 +378,11 @@ sources:
 ```
 
 If a source audit with `error` severity fails, all downstream models that depend on that source are blocked. This lets you catch data quality issues at the source before any transformations run.
+
+A source's audits run before the first model in the build that reads it. A source no selected model
+reads is audited at the end of the build only when loading is off (`--no-load` or
+`auto_load_sources = false`) or when the source is selected by name, such as
+`sqb build --select raw_orders`; otherwise its audits do not run.
 
 A source audit that reads other resources waits for them before any model that depends on the
 source is built. It may read a model that is not built from the source; reading one that is fails

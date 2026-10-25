@@ -323,6 +323,10 @@ class FormatCompileIntegrationTestCase:
 
     description: str
     expected_literal: str
+    upstream_sql: str = (
+        "SELECT CAST(1 AS INTEGER) AS order_id, CAST('new' AS VARCHAR) AS order_label\n"
+    )
+    selected_rules: str = '["SQBRSQL021"]'
 
 
 @dataclass(frozen=True)

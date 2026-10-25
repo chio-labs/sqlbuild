@@ -110,6 +110,10 @@ E2E_DUCKDB_BUILD_CORE_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_target_concurrency.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_template_expressions.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_terminal_failure.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_no_load_sources.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_duckdb_storage_key.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_source_end_audits.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_unbuilt_dependencies.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_validation_failures.py
 
 E2E_DUCKDB_BUILD_INCREMENTAL_PATHS := \
@@ -147,6 +151,9 @@ E2E_DUCKDB_CLI_DATA_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_empty_fixture.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_expected_columns.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_helper_ctes.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_fixture_columns.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_local_variant.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_snapshot_staleness.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_unmocked_inputs.py
 
 E2E_DUCKDB_CLI_PATHS := \

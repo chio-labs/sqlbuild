@@ -153,6 +153,50 @@ def test_given_catalog_when_rebinding_physical_shapes_then_does_not_reuse_stale_
 @pytest.mark.parametrize(
     "test_case",
     [
+        NativeCatalogCase("unquoted reference", 'SELECT bundle_sku FROM __source("orders")'),
+        NativeCatalogCase("uppercase reference", 'SELECT BUNDLE_SKU FROM __source("orders")'),
+        NativeCatalogCase(
+            "quoted uppercase reference", 'SELECT "BUNDLE_SKU" FROM __source("orders")'
+        ),
+        NativeCatalogCase(
+            "quoted lowercase reference", 'SELECT "bundle_sku" FROM __source("orders")', ("B002",)
+        ),
+        NativeCatalogCase(
+            "unknown column", 'SELECT missing_sku FROM __source("orders")', ("B002",)
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_case_sensitive_snowflake_when_rebinding_listed_columns_then_unquoted_names_bind(
+    test_case: NativeCatalogCase, tmp_path: Path
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "snowflake"\n[rules]\nselect = []\n'
+    )
+    (tmp_path / "models").mkdir()
+    (tmp_path / "sources").mkdir()
+    (tmp_path / "sources/orders.yml").write_text(
+        "sources:\n  - name: orders\n    description: Test source orders.\n    table: orders\n"
+    )
+    (tmp_path / "models/report.sql").write_text(
+        "MODEL (description 'Test model report.', database warehouse, schema analytics);\n"
+        + test_case.sql
+    )
+    project: CompiledProjectView = build_compiled_project(
+        discovered_inputs=discover_project_inputs(project_dir=tmp_path), adapter=SnowflakeAdapter()
+    )
+    diagnostics: tuple[CompilerDiagnostic, ...] = source_binding_diagnostics(
+        project=project,
+        columns={"orders": (ColumnInfo("bundle_sku", "VARCHAR"),)},
+        profile=ExpressionInferenceProfile(sql_analysis_dialect="snowflake"),
+        selected_keys=frozenset(model.key for model in project.models),
+    )
+    assert tuple(item.code for item in diagnostics) == test_case.expected_codes
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
         NativeCatalogCase(
             "unquoted type error with quoted-case policy", "SELECT SUM(TRUE) AS total", ("B213",)
         ),

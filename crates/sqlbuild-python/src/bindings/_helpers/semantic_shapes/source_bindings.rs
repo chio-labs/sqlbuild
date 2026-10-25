@@ -37,6 +37,8 @@ const UNKNOWN: &str = "UNKNOWN";
 const GENERIC_DIALECT: &str = "generic";
 /// Dialects whose unquoted identifiers already bind with their exact case.
 const EXACT_UNQUOTED_DIALECTS: [&str; 1] = ["clickhouse"];
+/// The dialect whose unquoted identifiers resolve as upper case; the adapter lists them lowercased.
+const UPPERCASE_FOLDING_DIALECT: &str = "snowflake";
 
 type Object<'py> = Bound<'py, PyAny>;
 
@@ -84,6 +86,8 @@ pub(crate) fn source_binding_diagnostics<'py>(
         && !ignore_case.is_truthy()?;
     let exact_unquoted: bool = !dialect.is_none()
         && EXACT_UNQUOTED_DIALECTS.contains(&dialect.extract::<String>()?.as_str());
+    let folds_upper: bool =
+        !dialect.is_none() && dialect.extract::<String>()?.as_str() == UPPERCASE_FOLDING_DIALECT;
     let mut changed: HashSet<String> = HashSet::new();
     for item in mapping_items(&columns)?.try_iter()? {
         let (name, value): (String, Object<'py>) = item?.extract()?;
@@ -105,7 +109,7 @@ pub(crate) fn source_binding_diagnostics<'py>(
         }
         let quoted: Bound<'py, PyDict> = PyDict::new(py);
         for (column, column_type) in physical {
-            let name: String = if exact_unquoted {
+            let name: String = if exact_unquoted || (folds_upper && is_folded_identifier(&column)) {
                 column
             } else {
                 format!("\"{}\"", column.replace('"', "\"\""))
@@ -449,6 +453,17 @@ fn placeholders<'py>(model: &Object<'py>) -> PyResult<Object<'py>> {
         placeholders.set_item(key.str()?, value.str()?)?;
     }
     Ok(placeholders.into_any())
+}
+
+/// Whether a listed column is a plain identifier in one case, so it binds as an unquoted name.
+fn is_folded_identifier(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+        && (!name.chars().any(|c| c.is_ascii_uppercase())
+            || !name.chars().any(|c| c.is_ascii_lowercase()))
 }
 
 fn ignores_quoted_case<'py>(project: &Object<'py>, dialect: &Object<'py>) -> PyResult<Object<'py>> {

@@ -548,6 +548,7 @@ fn collect_token_query_facts(
         let limit = first_row_selection_clause(tokens, &direct);
         if order.is_none()
             && let Some(index) = limit
+            && !limits_to_no_rows(tokens, index)
         {
             facts.unordered_limits.push(tokens[index].span);
         }
@@ -730,6 +731,14 @@ fn first_row_selection_clause(tokens: &[Token], direct: &[usize]) -> Option<usiz
                 )
             })
     })
+}
+
+/// Whether a row-selection clause is `LIMIT 0`, which selects no rows in any order.
+fn limits_to_no_rows(tokens: &[Token], index: usize) -> bool {
+    tokens[index].token_type == TokenType::Limit
+        && tokens.get(index + 1).is_some_and(|count| {
+            count.token_type == TokenType::Number && count.text.parse::<u64>() == Ok(0)
+        })
 }
 
 pub(super) fn is_query_from(tokens: &[Token], index: usize) -> bool {

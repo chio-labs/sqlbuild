@@ -44,7 +44,8 @@ pub(crate) const FAILED_PHASES: [&str; 12] = [
     "staging",
     "type_enforcement",
 ];
-pub(crate) const CHECK_STATUSES: [&str; 5] = ["error", "fail", "insufficient", "pass", "warn"];
+pub(crate) const CHECK_STATUSES: [&str; 6] =
+    ["error", "fail", "insufficient", "pass", "skipped", "warn"];
 pub(crate) const CHECK_NON_FAIL_STATUSES: [&str; 2] = ["insufficient", "pass"];
 /// `AuditSeverity` values, in declaration order.
 pub(crate) const AUDIT_SEVERITIES: [&str; 2] = ["warn", "error"];

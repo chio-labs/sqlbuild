@@ -64,3 +64,12 @@ class ScenarioSnapshotCaptureTypesIntegrationTestCase:
     description: str
     expected_local_types: dict[str, str]
     expected_replay_summary_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ScenarioSnapshotFingerprintIntegrationTestCase:
+    description: str
+    fixture_sql: str
+    helper_ctes: str
+    expected_fixture_renderings: int
+    expected_fingerprints: int

@@ -43,6 +43,24 @@ fn given_type_strings_when_normalizing_then_python_normalization_is_returned() {
             expected_normalization: Ok("VARCHAR(16777216) | string | - | - | 16777216 | -"),
         },
         NormalizeTypeTestCase {
+            description: "a sized TEXT is a VARCHAR of that length",
+            type_sql: "TEXT(5)",
+            dialect: "duckdb",
+            expected_normalization: Ok("VARCHAR(5) | string | - | - | 5 | -"),
+        },
+        NormalizeTypeTestCase {
+            description: "a sized STRING is a VARCHAR of that length on Snowflake",
+            type_sql: "STRING(5)",
+            dialect: "snowflake",
+            expected_normalization: Ok("VARCHAR(5) | string | - | - | 5 | -"),
+        },
+        NormalizeTypeTestCase {
+            description: "BigQuery spells every variable-length text type STRING",
+            type_sql: "VARCHAR(5)",
+            dialect: "bigquery",
+            expected_normalization: Ok("STRING(5) | string | - | - | 5 | -"),
+        },
+        NormalizeTypeTestCase {
             description: "Snowflake timestamp aliases",
             type_sql: "TIMESTAMP_NTZ",
             dialect: "snowflake",

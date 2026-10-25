@@ -24,6 +24,11 @@ pub(crate) fn model_row(facts: &CompiledModelFacts) -> Result<ModelRow, String> 
         } else {
             facts.authored_query_sql.to_string()
         },
+        query_line_offset: query_line_offset(
+            &facts.authored_sql,
+            &facts.authored_query_sql,
+            &facts.query_sql,
+        ),
         config: facts.config.values.clone(),
         authored_config_keys: facts.config.header_keys.clone(),
         logical_schema: facts.config.layer_schema.clone(),
@@ -100,4 +105,19 @@ pub(crate) fn declaration(fact: &DeclarationFact) -> Declaration {
         value_type: fact.value_type.clone(),
         render_as: fact.render_as.clone(),
     }
+}
+
+/// The lines of `file` above `query`, the rendered form of its `authored_query`; 0 if unknown.
+fn query_line_offset(file: &str, authored_query: &str, query: &str) -> u64 {
+    let leading_lines = |text: &str| {
+        let body: &str = text.trim_start();
+        text[..text.len() - body.len()].matches('\n').count()
+    };
+    if authored_query.is_empty() {
+        return 0;
+    }
+    file.rfind(authored_query).map_or(0, |start| {
+        (file[..start].matches('\n').count() + leading_lines(authored_query))
+            .saturating_sub(leading_lines(query)) as u64
+    })
 }

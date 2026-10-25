@@ -1,7 +1,7 @@
 //! Aggregate counts and overall status of one build.
 
 use crate::build_aggregate::constants::{
-    AUDIT_ERROR, AUDIT_INSUFFICIENT, AUDIT_WARN, FAILED, ITEM_TIMEOUT_CODE, SKIPPED,
+    AUDIT_ERROR, AUDIT_INSUFFICIENT, AUDIT_SKIPPED, AUDIT_WARN, FAILED, ITEM_TIMEOUT_CODE, SKIPPED,
     SOURCE_FRESHNESS_BLOCKED_CODE, SUCCESS, TEST_PASS, TEST_TIMEOUT,
 };
 use crate::build_aggregate::models::{BuildCounts, BuildResultFacts};
@@ -60,6 +60,8 @@ pub fn aggregate_build_counts(facts: &BuildResultFacts) -> BuildCounts {
         .chain(model_audits)
         .filter(|outcome| *outcome == AUDIT_INSUFFICIENT)
         .count();
+    counts.skipped += matching(&facts.source_audit_outcomes, AUDIT_SKIPPED)
+        + matching(&facts.end_audit_outcomes, AUDIT_SKIPPED);
     counts.failure += matching(&facts.source_audit_outcomes, AUDIT_ERROR);
     counts.warning += matching(&facts.source_audit_outcomes, AUDIT_WARN)
         + matching(&facts.end_audit_outcomes, AUDIT_WARN);

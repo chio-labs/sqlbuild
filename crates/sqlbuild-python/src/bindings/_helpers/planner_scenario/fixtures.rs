@@ -12,9 +12,16 @@ use crate::bindings::_helpers::records::construct::{enum_from_value, new_record_
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use sqlbuild_analysis::compiler::main::scenario_reader_ctes::scenario_reader_ctes;
 use sqlbuild_analysis::compiler::main::scenario_reader_sql::scenario_reader_sql;
+use sqlbuild_analysis::compiler::models::ScenarioHelperScope;
+use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
+use sqlbuild_sqltext::sql_references::models::ReferenceExtraction;
+use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) fn extract_fixtures<'py>(
     scenario: &Bound<'py, PyAny>,
@@ -60,7 +67,7 @@ pub(super) fn fixture_plans<'py>(
         for name in native_field(graph, names)?.try_iter()? {
             let name: String = name?.extract()?;
             let target = required_target(&context.relations, locations, &name, kind)?;
-            let Some(mut sql) = fixtures.get_item(&name)? else {
+            let Some(authored) = fixtures.get_item(&name)? else {
                 return Err(error(
                     py,
                     &format!("Scenario is missing {kind} fixture SQL '{name}'"),
@@ -68,6 +75,7 @@ pub(super) fn fixture_plans<'py>(
                     None,
                 )?);
             };
+            let mut sql = authored.clone();
             if kind != super::constants::DBT_REF && !overrides.is_none() {
                 sql = mapping_get_or(overrides, (resource, &name), sql)?;
             }
@@ -76,6 +84,8 @@ pub(super) fn fixture_plans<'py>(
                 &scenario_reader_sql(&scope, &sql.extract::<String>()?, false),
                 true,
             )?;
+            let fingerprint: String =
+                fingerprint_sql(scenario, (&scope, context), &authored.extract::<String>()?)?;
             result.push(new_record_with(
                 py,
                 RecordId::ScenarioFixturePlan,
@@ -87,11 +97,61 @@ pub(super) fn fixture_plans<'py>(
                     ("logical_name", string(py, &name)),
                     ("destination", target),
                     ("sql", string(py, &sql)),
+                    ("fingerprint_sql", string(py, &fingerprint)),
                 ],
             )?);
         }
     }
     PyTuple::new(py, result)
+}
+
+/// The authored fixture, its helper CTEs, transitively, and each reference's fixture-or-relation target.
+fn fingerprint_sql(
+    scenario: &Bound<'_, PyAny>,
+    (scope, context): (&ScenarioHelperScope, &SqlContext<'_>),
+    authored: &str,
+) -> PyResult<String> {
+    let mut bodies: BTreeMap<String, String> = BTreeMap::new();
+    for cte in native_field(scenario, "authored_ctes")?.try_iter()? {
+        let cte = cte?;
+        bodies.insert(
+            native_field(&cte, "name")?.extract()?,
+            native_field(&cte, "sql_body")?.extract()?,
+        );
+    }
+    let mut text: String = authored.to_owned();
+    let mut read: Vec<String> = vec![authored.to_owned()];
+    for (name, _) in scenario_reader_ctes(scope, authored, false) {
+        let body: &str = bodies.get(&name).map_or("", String::as_str);
+        text.push_str(&format!("\n-- helper {name}\n{body}"));
+        read.push(body.to_owned());
+    }
+    let syntax: LexicalSyntax = native_field(&context.syntax, "native_mapping")?
+        .extract::<LexicalSyntaxInput>()?
+        .into();
+    let mut references: BTreeSet<String> = BTreeSet::new();
+    for sql in &read {
+        let ReferenceExtraction::Extracted(scan) = extract_sql_references(sql, &syntax) else {
+            continue;
+        };
+        for reference in scan.references {
+            let package: &str = reference.package.as_deref().unwrap_or("");
+            let target: &str =
+                if bodies.contains_key(&format!("__{}__{}", reference.kind, reference.name)) {
+                    "fixture"
+                } else {
+                    "relation"
+                };
+            references.insert(format!(
+                "{}:{package}:{} -> {target}",
+                reference.kind, reference.name
+            ));
+        }
+    }
+    for reference in references {
+        text.push_str(&format!("\n-- reads {reference}"));
+    }
+    Ok(text)
 }
 
 #[pyfunction]

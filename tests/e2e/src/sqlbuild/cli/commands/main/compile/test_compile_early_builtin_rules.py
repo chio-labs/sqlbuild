@@ -40,7 +40,7 @@ _LONG_NAME_RULE: str = (
     "        return []\n"
     "    return [ctx.finding(subject=model)]\n"
 )
-_STAR_FINDING: tuple[str, str, int, int] = ("SQBRMODEL102", "models/order_totals.sql", 1, 8)
+_STAR_FINDING: tuple[str, str, int, int] = ("SQBRMODEL102", "models/order_totals.sql", 2, 8)
 
 
 @pytest.mark.parametrize(

@@ -21,7 +21,7 @@ use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyDictMethods;
-use pyo3::types::{PyDict, PyFrozenSet, PyTuple};
+use pyo3::types::{PyBool, PyDict, PyFrozenSet, PyTuple};
 use sqlbuild_analysis::planner_scope::constants::SOURCE;
 use sqlbuild_analysis::planner_scope::main::{
     managed_sources::managed_sources, source_selectors::source_selectors,
@@ -94,14 +94,18 @@ pub(crate) fn build_planner_scope<'py>(
     let carrier = Carrier::new(py, &texts, || {
         Ok(names.iter().map(|(name, _)| name.clone()).collect())
     })?;
-    let source_keys = source_selectors(&carrier.send_all(&texts)?, &names, &keys(&selected)?)
+    let sent = carrier.send_all(&texts)?;
+    let selected_names = keys(&selected)?;
+    let source_keys = source_selectors(&sent, &names, &selected_names, true)
+        .map_err(|error| carrier.error(error))?;
+    let named_sources = source_selectors(&sent, &names, &selected_names, false)
         .map_err(|error| carrier.error(error))?;
     let cache = KeyCache::new(py)?;
-    let mut executable = PyFrozenSet::new(
-        py,
-        cache.keys(&source_keys.into_iter().collect::<Vec<_>>())?,
-    )?
-    .into_any();
+    let explicit_sources: Vec<(String, String)> = source_keys.into_iter().collect();
+    let mut executable = PyFrozenSet::new(py, cache.keys(&explicit_sources)?)?.into_any();
+    if !auto_load {
+        executable = PyFrozenSet::empty(py)?.into_any();
+    }
     if auto_load {
         let loaded = managed_source_upstream_keys(&selected, &upstream, &project)?;
         selected = selected.call_method1("union", (&loaded,))?;
@@ -115,6 +119,11 @@ pub(crate) fn build_planner_scope<'py>(
         upstream = deps.into_any();
         downstream = build_downstream_deps(&upstream)?.into_any();
     }
+    let end_audit_sources: Vec<(String, String)> = keys(&selected)?
+        .into_iter()
+        .filter(|key| key.0 == SOURCE && (!auto_load || named_sources.contains(key)))
+        .collect();
+    let end_audit_sources = PyFrozenSet::new(py, cache.keys(&end_audit_sources)?)?.into_any();
     let origins = build_execution_edge_origins(&project)?.into_any();
     let order = topologically_order_keys(&upstream, Some(origins))?.into_any();
     let models = PyDict::new(py);
@@ -143,6 +152,11 @@ pub(crate) fn build_planner_scope<'py>(
             ("user_selected_keys", selected),
             ("python_read_source_names", reads),
             ("sql_test_selection", tests),
+            (
+                "load_sources",
+                PyBool::new(py, auto_load).to_owned().into_any(),
+            ),
+            ("end_audit_source_keys", end_audit_sources),
         ],
     )
 }

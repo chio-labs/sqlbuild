@@ -2,6 +2,7 @@
 
 use crate::dsl_headers::_helpers::formatting::{
     relocate_leading_comment, without_trailing_whitespace, wrap_audits, wrap_descriptions,
+    wrap_nested_descriptions,
 };
 use crate::dsl_headers::_helpers::macro_header::changes_macro;
 use crate::dsl_headers::_helpers::macro_header::layout_macro_headers;
@@ -30,7 +31,14 @@ pub fn format_headers<P: HeaderParser>(
         (&PROSE_LAYOUT_HEADER_KINDS, config.line_width),
         parser,
     )?;
-    let audited: Vec<char> = wrap_audits(&wrapped, config.line_width, parser)?;
+    let audits_wrapped: Vec<char> = wrap_audits(&wrapped, config.line_width, parser)?;
+    let audits_wrapped_headers: Vec<HeaderSpan> = scan_headers(&audits_wrapped, false);
+    let audited: Vec<char> = wrap_nested_descriptions(
+        &audits_wrapped,
+        &audits_wrapped_headers,
+        (&PROSE_LAYOUT_HEADER_KINDS, config.line_width),
+        parser,
+    )?;
     let macro_headers: Vec<HeaderSpan> = scan_headers(&audited, false);
     let mut laid_out: Vec<char> = layout_macro_headers(&audited, &macro_headers, config.line_width);
     let defines_macro: bool = macro_headers

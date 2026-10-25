@@ -171,6 +171,15 @@ sources:
 
 Existing rows matching the unique key are updated; new rows are inserted.
 
+### String values on Snowflake
+
+Snowflake reads a backslash inside a string literal as an escape, so SQLBuild doubles every
+backslash in the values a loader returns. A value such as `C:\orders\2026` is stored exactly as
+returned. Earlier releases wrote those backslashes unescaped, so Snowflake dropped them or read them
+as escapes. If a `merge` or `delete_insert` unique key, or a value an `append` load is
+deduplicated by, contains a backslash, rows loaded by an earlier release will not match newly
+loaded rows. Rewrite or delete those rows before relying on the key.
+
 ## Self-managed loaders
 
 If a loader returns `None`, SQLBuild skips its row-writing pipeline. The loader is responsible for writing data to the target itself, using whatever approach makes sense - `ctx.execute_sql()`, an external library, a subprocess, or anything else:
@@ -328,6 +337,11 @@ sqb build --no-load
 # Reload sources (passes is_reload=True to loaders)
 sqb build --reload
 ```
+
+With loading off, through `--no-load` or `auto_load_sources = false`, no loader runs, even for a
+source selected by name such as `sqb build --no-load --select raw_orders`. Managed sources in the
+selection stay in the plan, and their audits check the data they already hold, at the end of the
+build if no model reads them. A source outside the selection is neither loaded nor audited.
 
 When `--reload` is passed, `ctx.is_reload` is `True` in the loader function. This lets loaders implement different behavior for full reloads versus normal incremental loads.
 

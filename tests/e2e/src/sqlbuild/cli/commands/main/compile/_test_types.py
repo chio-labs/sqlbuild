@@ -1260,3 +1260,55 @@ class GeneratedBenchmarkCompileTestCase:
     expected_min_models: int
     expected_max_wall_seconds: float
     expected_max_rss_bytes: int
+
+
+@dataclass(frozen=True)
+class RelationshipsTargetCompileTestCase:
+    """A relationships audit target and how compiling it must end."""
+
+    description: str
+    target: str
+    expected_exit_code: int
+    expected_output_fragment: str
+
+
+@dataclass(frozen=True)
+class ContractCastTypeTestCase:
+    """An outer cast on a contracted Snowflake output, compile's exit code and report fragments."""
+
+    description: str
+    projection: str
+    expected_exit_code: int
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ParameterisedTestLintTestCase:
+    """A parameterised SQL test linted by SQL rules, and the commands that must succeed on it."""
+
+    description: str
+    selected_rules: str
+    command: tuple[str, ...]
+    expected_fragment: str
+
+
+@dataclass(frozen=True)
+class BigQueryStringContractTestCase:
+    """A BigQuery contract column of a STRING type and the cast that fills it."""
+
+    description: str
+    declared_type: str
+    cast_type: str
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class TypedCallContractTestCase:
+    """A typed SQL macro filling a Snowflake contract column, and how SQBRCONTRACT105 judges it."""
+
+    description: str
+    returns: str
+    body: str
+    projection: str
+    expected_exit_code: int
+    expected_fragments: tuple[str, ...]

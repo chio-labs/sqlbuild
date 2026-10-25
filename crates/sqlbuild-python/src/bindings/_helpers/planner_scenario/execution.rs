@@ -5,6 +5,7 @@ use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::compiled_views::records::compiled_model_record;
+use crate::bindings::_helpers::model_config::typed_config::{config_value, model_values};
 use crate::bindings::_helpers::planner_entries::model_entries::plan_model;
 use crate::bindings::_helpers::planner_entries::models::ModelPlanContext;
 use crate::bindings::_helpers::planner_identity::graph::build_execution_upstream_deps;
@@ -12,7 +13,9 @@ use crate::bindings::_helpers::planner_identity::graph::topologically_order_keys
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_resolution::locations::build_function_locations;
 use crate::bindings::_helpers::planner_scenario::constants::{
-    SCENARIO_EXPECTED_COLUMNS_HELP, SCENARIO_PLAN_EXPECTED_COLUMNS, SCENARIO_PLAN_INVALID_FIXTURE,
+    CURSOR_INTRINSIC_NAMES, CURSOR_TYPE_KEY, INCREMENTAL_MODE_KEY, INTEGER_CURSOR_TYPE,
+    MICROBATCH_INCREMENTAL_MODE, SCENARIO_EXPECTED_COLUMNS_HELP, SCENARIO_PLAN_EXPECTED_COLUMNS,
+    SCENARIO_PLAN_INVALID_FIXTURE,
 };
 use crate::bindings::_helpers::planner_scenario::helper_scope::scenario_helper_scope;
 use crate::bindings::_helpers::planner_scenario::{
@@ -30,6 +33,9 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::sql_test_glue::constants::{
+    DEFAULT_INTEGER_END, DEFAULT_INTEGER_START, DEFAULT_TIMESTAMP_END, DEFAULT_TIMESTAMP_START,
+};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PyTuple};
 use sqlbuild_analysis::compiler::main::scenario_expected_column_message::scenario_expected_column_message;
@@ -136,6 +142,7 @@ pub(crate) fn build_scenario_execution_plan<'py>(
             &model_reads::query_sql(&model)?.extract::<String>()?,
             &context.relations,
         )?;
+        let cursor_window = scenario_cursor_window(&model)?;
         let record = compiled_model_record(&model)?;
         let changes = PyDict::new(py);
         changes.set_item("destination", destination)?;
@@ -162,10 +169,7 @@ pub(crate) fn build_scenario_execution_plan<'py>(
                             PyBool::new(py, false).to_owned().into_any(),
                         ),
                         ("full_refresh", PyBool::new(py, true).to_owned().into_any()),
-                        (
-                            "cursor_overrides",
-                            new_record(py, RecordId::CursorOverridePair, (), None)?,
-                        ),
+                        ("cursor_overrides", cursor_window),
                     ],
                 )?),
             )?,
@@ -391,4 +395,34 @@ fn expectations<'py>(
         PyTuple::new(py, expected)?.into_any(),
         PyTuple::new(py, assertions)?.into_any(),
     ))
+}
+
+/// The SQL-test wide window for a non-microbatch model whose SQL reads the cursor intrinsics.
+fn scenario_cursor_window<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py = model.py();
+    let query: String = model_reads::query_sql(model)?.extract()?;
+    let values = model_values(model)?;
+    let microbatch: bool =
+        config_value(py, &values, INCREMENTAL_MODE_KEY)?.eq(MICROBATCH_INCREMENTAL_MODE)?;
+    if microbatch
+        || !CURSOR_INTRINSIC_NAMES
+            .iter()
+            .any(|name| query.contains(name))
+    {
+        return new_record(py, RecordId::CursorOverridePair, (), None);
+    }
+    let integer: bool = config_value(py, &values, CURSOR_TYPE_KEY)?.eq(INTEGER_CURSOR_TYPE)?;
+    let (start, end) = if integer {
+        (DEFAULT_INTEGER_START, DEFAULT_INTEGER_END)
+    } else {
+        (DEFAULT_TIMESTAMP_START, DEFAULT_TIMESTAMP_END)
+    };
+    new_record_with(
+        py,
+        RecordId::CursorOverridePair,
+        &[
+            ("start_cursor_override", string(py, start)),
+            ("end_cursor_override", string(py, end)),
+        ],
+    )
 }

@@ -159,11 +159,15 @@ fn filenames(
         let stem = file_stem(&test.source_path);
         let allowed = allowed_subjects(evaluation, test);
         let valid = stem.strip_prefix("test_").is_some_and(valid_unit_filename);
-        let behavior_matches = test.explicit_name.as_deref().is_none_or(|name| {
-            filename_behavior(stem, &allowed)
-                .zip(structured_name(name, &allowed).map(|(_, behavior)| behavior))
-                .is_none_or(|(slug, behavior)| behavior_slug_matches(slug, behavior))
+        let shares_file: bool = tests.iter().any(|other| {
+            other.source_path == test.source_path && other.block_index != test.block_index
         });
+        let behavior_matches = shares_file
+            || test.explicit_name.as_deref().is_none_or(|name| {
+                filename_behavior(stem, &allowed)
+                    .zip(structured_name(name, &allowed).map(|(_, behavior)| behavior))
+                    .is_none_or(|(slug, behavior)| behavior_slug_matches(slug, behavior))
+            });
         if !valid || !behavior_matches {
             faults.push(path_fault(
                 rule,

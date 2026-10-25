@@ -108,7 +108,7 @@ fn given_result_enums_when_read_by_value_then_they_match_the_python_members() {
             description: "AuditOutcome round-trips its Python values",
             values: values::<AuditOutcome>(),
             parsed: parsed::<AuditOutcome>(),
-            expected_values: vec!["pass", "warn", "error", "insufficient"],
+            expected_values: vec!["pass", "warn", "error", "insufficient", "skipped"],
         },
         EnumValueTestCase {
             description: "AuditRunScope round-trips its Python values",

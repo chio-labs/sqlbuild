@@ -129,7 +129,8 @@ failures are the baseline that better translation should remove:
 The other three scenarios (`campaign_roas__attributes_orders_to_channel_spend`,
 `carrier_performance__weekly_rates_from_shipment_facts` and
 `payments__fully_refunded_orders_collect_nothing`) never reach translation: their snapshots are
-reported stale straight after capture, a SQLBuild issue described under known limitations.
+reported stale straight after capture. The snapshot fingerprint now hashes the authored fixture
+SQL, so these results predate that fix; recapture the snapshots to replay them.
 
 ## Expected divergences
 
@@ -148,32 +149,8 @@ them as expected differences or refusals instead of errors:
 These SQLBuild limitations shape parts of the project; each workaround is a reviewed exception or
 noted here:
 
-- Fixture checking asks for `CONNECT BY` pseudo-columns and lambda parameters as mock columns, so
-  `int_category_paths` and `int_cart_funnel` have no unit test. Scenarios cover both, and the
-  category scenario builds the hierarchy from a source fixture for the same reason.
-- Parameterised tests (`parameters` and `cases`) fail with `L005` while `SQBRSQL` is selected, so
-  repeated cases use multi-row fixtures or `VALUES` case tables instead.
-- Macro tests can only reach project-wide macros, so folder-scoped staging macros such as
-  `cdc_latest` are covered through the models that call them.
-- Scenarios cannot build incremental models that use cursor intrinsics, so scenarios that read
-  them provide the incremental model as a fixture.
-- `sqb format` rewrites a typed `WHERE FALSE` fixture into `__empty_fixture()` even where the
-  relation's schema is not authoritative, so the empty fixtures here use `WHERE 1 = 0`.
-- A macro mock must be an unaliased `SELECT` of one string literal, which `SQBRSQL022` rejects.
-- A file with several `TEST` blocks cannot satisfy `SQBRTEST102`, which names the file after each
-  block.
-- Loaders that return rows write JSON values as `PARSE_JSON(...)` inside a `VALUES` list, which
-  Snowflake rejects because `VALUES` accepts only constants. The DuckShop loaders therefore write
-  their own tables, parsing JSON in the select list of each `INSERT` (`python/loaders/_writer.py`).
-- Once a source table exists, Snowflake planning rebinds models to the table's inspected columns.
-  SQLBuild reads those names in lower case and then quotes them, so they only match quoted
-  lower-case references, and every unquoted column reference fails with `B002`. The connection
-  therefore sets `QUOTED_IDENTIFIERS_IGNORE_CASE = true` in `session_parameters`, which the binder
-  honours. DuckShop quotes no identifier whose case matters, so the setting changes no results.
 - Snowflake does not support concurrent microbatch `delete_insert` batches (`P001`), so
   `int_web_sessions` runs its batches one at a time.
-- `sqb build --no-load` and `auto_load_sources = false` still load managed sources when the build
-  has no `--select`, because the default selection includes the sources.
 - Self-managed loaders always report `rows=0`, since SQLBuild does not see the rows they insert.
 - Compilation accepts SQL that Snowflake rejects: `CONNECT_BY_ISLEAF`, which Snowflake does not
   have, and a CTE whose body is a bare `VALUES` list. `int_category_paths` finds leaf categories
@@ -181,20 +158,6 @@ noted here:
 - `SQBRSQL018` can only take proof from single-column keys. Append-only feeds redeliver rows, so
   their id is unique only together with `_loaded_at` (the `unique_per_delivery` audit), and the
   staging models that keep the latest delivery carry reviewed exceptions.
-- Source fixtures are not cast to the source's declared types, so a typed function over an
-  untyped `NULL` fixture column (such as `YEAR(NULL)`) fails on Snowflake; such fixtures cast it.
-- The scenario fixture checker treats lambda parameters (`i -> ...`, `(acc, q) -> ...`) as columns
-  the model reads, so the `cart_funnel` scenario mocks carry placeholder `acc`, `i` and `q` columns.
-- A `relationships` audit with a quoted relation name, `to "fct_orders"`, compiles cleanly but
-  queries an unqualified table and does not wait for it; the relation must be `to __ref(...)`.
-- A local scenario snapshot is reported stale (`X602`) straight after capture when a fixture has a
-  bare `NULL` column, which SQLBuild wraps in a typed `__sqlbuild_partial_fixture` subquery. The
-  snapshot fingerprint hashes that adapter-rendered SQL: capture renders the alias in Snowflake's
-  upper case and local replay in DuckDB's lower case, and capture can also cast columns whose types
-  it only knows from the warehouse. The fingerprint can never match, so the snapshot cannot be
-  replayed. Three of the eight scenarios are affected.
-- A unit test of a table function, and an end-of-build audit, still run when the function or the
-  relation they read was skipped, and then fail with a missing-object error.
 
 ## Compile
 

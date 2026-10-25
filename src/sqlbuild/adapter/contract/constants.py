@@ -20,3 +20,6 @@ DUCKDB_MISSING_OBJECT_MARKER: str = "does not exist"
 DUCKDB_INTERNAL_ERROR_CLASS_NAME: str = "InternalException"
 CANCELLABLE_DURATION_LIMIT_SECONDS: int = 2_147_483
 UNSUPPORTED_RELATION_USAGE_REASON: str = "unsupported adapter"
+
+DUCKDB_STORAGE_VERSION_KEY: str = "storage_compatibility_version"
+LATEST_DUCKDB_STORAGE_VERSION: str = "latest"

@@ -31,3 +31,13 @@ class StateTableRetentionTestCase:
     max_retention_days: int
     expected_first_retention_days: str
     expected_later_retention_days: frozenset[str]
+
+
+@dataclass(frozen=True)
+class SourceBindingCaseTestCase:
+    """A select list over an existing source and the binding error planning should report."""
+
+    description: str
+    select: str
+    expected_error: str | None = None
+    expected_models: tuple[str, ...] = ()

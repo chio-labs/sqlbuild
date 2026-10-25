@@ -28,6 +28,8 @@ const MATERIALIZE: &str = "materialize";
 const MATERIALIZATION: &str = "materialization";
 const CHECK: &str = "check";
 const AUDIT_CHECK_KIND: &str = "audit";
+/// The status of an audit that did not run; Dagster gets no check result for it.
+const SKIPPED_CHECK_STATUS: &str = "skipped";
 
 /// DAG nodes upstream first, or in artifact order when edges form a cycle.
 pub(crate) fn sorted_nodes<'py>(dag: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {
@@ -283,6 +285,9 @@ fn check_plans<'py>(
 ) -> PyResult<(Vec<Bound<'py, PyAny>>, HashSet<CheckKey>)> {
     let mut seen: HashSet<CheckKey> = seen;
     let py: Python<'py> = dag.py();
+    if get(check, "status")?.eq(SKIPPED_CHECK_STATUS)? {
+        return Ok((Vec::new(), seen));
+    }
     let dag_check: Option<Bound<'py, PyAny>> = dag_check_for(dag, check)?;
     let (asset_ids, check_name): (Vec<String>, String) = match &dag_check {
         Some(dag_check) if !check_enabled(dag_check)? => return Ok((Vec::new(), seen)),

@@ -4,7 +4,10 @@ use crate::audits::_helpers::parameters::{
     RenderStop, parameter_matches, render_parameterized_sql,
 };
 use crate::audits::_helpers::policies::{resolve_run_scope, resolve_severity};
-use crate::audits::constants::{MODEL_RESOURCE, SEED_RESOURCE, SOURCE_RESOURCE};
+use crate::audits::constants::{
+    MODEL_RESOURCE, RELATION_REFERENCE_CALLS, RELATIONSHIPS_AUDIT, RELATIONSHIPS_TARGET_ARGUMENT,
+    SEED_RESOURCE, SOURCE_RESOURCE,
+};
 use crate::audits::models::{ArgumentValue, AuditAttachment, PolicySource};
 
 /// Severity first, then run scope, as Python resolves them after expanding the SQL.
@@ -127,5 +130,35 @@ pub(crate) fn unused_argument(attachment: &AuditAttachment) -> Option<String> {
         "{} audit '{}' passes argument '{name}', which the audit's SQL in {definition} never \
          uses; remove '{name}' from the attachment",
         attachment.owner_label, attachment.definition_name
+    ))
+}
+
+/// The error for a built-in `relationships` audit whose `to` is not a relation reference call.
+pub(crate) fn unreferenced_relationship_target(attachment: &AuditAttachment) -> Option<String> {
+    if attachment.definition_path.is_some() || attachment.definition_name != RELATIONSHIPS_AUDIT {
+        return None;
+    }
+    let target: &str =
+        attachment
+            .explicit_arguments
+            .iter()
+            .find_map(|(name, value)| match value {
+                ArgumentValue::Text(text) if name == RELATIONSHIPS_TARGET_ARGUMENT => {
+                    Some(text.as_str())
+                }
+                _ => None,
+            })?;
+    if RELATION_REFERENCE_CALLS
+        .iter()
+        .any(|call| target.contains(call))
+    {
+        return None;
+    }
+    let name: &str = target.trim().trim_matches(['"', '\'', '`']);
+    Some(format!(
+        "{} audit 'relationships' argument 'to' is {target}, not a relation reference; write \
+         to __ref(\"{name}\") (or __source or __seed) so the audit reads the built relation and \
+         runs after it",
+        attachment.owner_label
     ))
 }

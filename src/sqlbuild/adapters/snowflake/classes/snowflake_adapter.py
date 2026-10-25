@@ -1514,14 +1514,21 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 for column_name in column_names
             )
             return f"SELECT {projections} WHERE 1 = 0"
+        json_columns: frozenset[str] = frozenset(
+            column_name
+            for column_name in column_names
+            if inferred_types.get(column_name) == LoaderLogicalType.JSON
+        )
         value_rows: list[str] = []
         for row in rows:
             row_values: list[str] = []
             for column_name in column_names:
+                value: object = row.get(column_name)
                 row_values.append(
-                    self.render_loader_value_literal(
-                        value=row.get(column_name),
-                        logical_type=inferred_types.get(column_name),
+                    self._quote_sql_string(json.dumps(value, sort_keys=True))
+                    if column_name in json_columns and value is not None
+                    else self.render_loader_value_literal(
+                        value=value, logical_type=inferred_types.get(column_name)
                     )
                 )
             value_rows.append(f"({', '.join(row_values)})")
@@ -1529,20 +1536,24 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         column_sql: str = ", ".join(
             self.render_identifier(column_name) for column_name in column_names
         )
-        select_sql: str = ", ".join(
-            (
-                self.render_identifier(column_name)
-                if column_name not in column_sql_types
-                else "CAST("
-                f"{self.render_identifier(column_name)} AS {column_sql_types[column_name]}) "
-                f"AS {self.render_identifier(column_name)}"
+        projections: list[str] = []
+        for column_name in column_names:
+            identifier: str = self.render_identifier(column_name)
+            value_sql: str = (
+                f"PARSE_JSON({identifier})" if column_name in json_columns else identifier
             )
-            for column_name in column_names
-        )
+            projections.append(
+                f"CAST({value_sql} AS {column_sql_types[column_name]}) AS {identifier}"
+                if column_name in column_sql_types
+                else f"{value_sql} AS {identifier}"
+                if column_name in json_columns
+                else identifier
+            )
+        select_sql: str = ", ".join(projections)
         return f"SELECT {select_sql} FROM (VALUES {values_sql}) AS __loader_rows({column_sql})"
 
     def _quote_sql_string(self, value: str) -> str:
-        return "'" + value.replace("'", "''") + "'"
+        return "'" + value.replace("\\", "\\\\").replace("'", "''") + "'"
 
     def render_create_initial_snapshot_destination(
         self,

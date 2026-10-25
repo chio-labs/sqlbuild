@@ -73,3 +73,4 @@ class AuditExecutionResult:
     audit_description: str | None = None
     execution_error: str | None = None
     audit_meta: Mapping[str, object] | None = None
+    skip_reason: str | None = None

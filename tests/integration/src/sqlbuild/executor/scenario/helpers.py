@@ -7,7 +7,10 @@ from sqlbuild._native import (
     CompiledObjectKey,
     CompiledRelationLocation,
     CompiledResourceType,
+    CompilePipelineOptions,
+    CompilePipelineResult,
     DiscoveredHookFunction,
+    DiscoveredProjectInputs,
     MaterializationType,
     ModelPlanEntry,
     PlanAction,
@@ -20,8 +23,19 @@ from sqlbuild._native import (
     ScenarioGraphPlan,
     ScenarioRelationMap,
     ScenarioRelationPlan,
+    discover_project_inputs,
+    run_compile_pipeline,
 )
 from sqlbuild.executor.run.models import HookContext
+from sqlbuild.runtime.contracts.models import ConnectionHooks
+from tests.integration.src.sqlbuild.executor.build.snowflake_metadata.helpers import (
+    SimulatedSnowflakeWarehouse,
+)
+from tests.unit.src.sqlbuild.adapters.snowflake.inspection.helpers import (
+    FakeColumn,
+    FakeRelation,
+    OfflineSnowflakeAdapter,
+)
 
 SCENARIO_NAME: str = "revenue__customer_refund"
 SCHEMA_NAME: str = "scenario_schema"
@@ -316,4 +330,63 @@ def _model_entry(
         logical_ddl="",
         pre_hooks=pre_hooks,
         post_hooks=post_hooks,
+    )
+
+
+def write_partial_fixture_snowflake_project(
+    *, project_dir: Path, fixture_sql: str, helper_ctes: str = ""
+) -> None:
+    """Write a Snowflake project whose scenario mocks a contracted model with ``fixture_sql``."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": (
+            'name = "shop"\nadapter = "snowflake"\n\n[connection]\naccount = "example"\n'
+            'user = "example"\ndatabase = "analytics"\nschema = "marts"\n\n'
+            '[defaults]\ndatabase = "analytics"\nschema = "marts"\nmaterialized = "table"\n'
+        ),
+        "models/upstream.sql": (
+            "MODEL (description 'Upstream.', contract enforced,\n"
+            "  columns (id (type INT), label (type VARCHAR)));\n"
+            "SELECT 1 AS id, CAST('a' AS VARCHAR) AS label\n"
+        ),
+        "models/downstream.sql": (
+            "MODEL (description 'Downstream.');\n"
+            'SELECT u.id, u.label FROM __ref("upstream") AS u\n'
+        ),
+        "tests/scenarios/downstream_labels.sql": (
+            "SCENARIO (description 'Downstream labels.');\n"
+            f"WITH\n{helper_ctes}__ref__upstream AS ({fixture_sql}),\n"
+            "__expected__downstream AS (SELECT 1 AS id, CAST(NULL AS VARCHAR) AS label)\n"
+            "SELECT 1\n"
+        ),
+    }
+    relative: str
+    content: str
+    for relative, content in files.items():
+        path: Path = project_dir / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_text(content, encoding="utf-8")
+
+
+def compile_offline_snowflake_project(*, project_dir: Path) -> CompilePipelineResult:
+    """Compile and plan a Snowflake project against an offline warehouse."""
+
+    inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
+    warehouse: SimulatedSnowflakeWarehouse = SimulatedSnowflakeWarehouse(
+        relations=(
+            FakeRelation(
+                database="ANALYTICS",
+                schema="MARTS",
+                name="UNRELATED",
+                columns=(FakeColumn(name="ID", data_type="NUMBER"),),
+            ),
+        )
+    )
+    return run_compile_pipeline(
+        discovered_inputs=inputs,
+        adapter=OfflineSnowflakeAdapter(warehouse=warehouse),
+        options=CompilePipelineOptions(
+            no_cache=True, connection_config=dict(inputs.project_config.connection)
+        ),
+        hooks=ConnectionHooks(),
     )

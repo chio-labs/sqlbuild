@@ -559,6 +559,9 @@ pub struct Model {
     pub relative_path: String,
     pub query_sql: String,
     pub authored_sql: String,
+    /// The lines of the model file above `query_sql`, which locations inside it skip.
+    #[serde(default)]
+    pub query_line_offset: u64,
     pub config: BTreeMap<String, Value>,
     pub authored_config_keys: Vec<String>,
     pub logical_schema: Option<String>,
@@ -870,6 +873,8 @@ pub struct ModelRow {
     pub relative_path: String,
     pub query_sql: String,
     pub authored_sql: String,
+    /// The lines of the model file above `query_sql`.
+    pub query_line_offset: u64,
     pub config: BTreeMap<String, Value>,
     pub authored_config_keys: Vec<String>,
     pub logical_schema: Option<String>,

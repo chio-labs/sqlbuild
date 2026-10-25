@@ -339,9 +339,15 @@ bar(LENGTH(@value), 0, 10)
   `returns VARCHAR(5)`, and contract checks report a mismatch with `K002`.
 - The type flows on as an inferred type would: through CTEs, `SELECT *`, subqueries, joins and each
   branch of a set operation, through operators and functions around the call, to contract checks
-  (`K002`, `K003`), `SQBRCONTRACT105` and models that read the column. A select-list item that is
-  one call to a macro with `returns` needs no `CAST` for `SQBRCONTRACT105`; a call inside a larger
-  expression still does.
+  (`K002`, `K003`), `SQBRCONTRACT105` and models that read the column.
+- `returns` is used only for analysis. It doesn't appear in the generated SQL, so on its own it doesn't
+  change the column's physical type. A body of `'ACTIVE'` still creates `VARCHAR(6)` on Snowflake.
+  For `SQBRCONTRACT105`, a select-list item that is one call needs no `CAST` at the call only when
+  the macro body's outermost expression is a `CAST(... AS type)` or `...::type` to the column's
+  contract type, compared as the dialect does, such as `CAST(LEFT(@value, 3) AS VARCHAR)` for a
+  `VARCHAR` column. Otherwise the rule asks for a cast in the macro or at the call, whether the
+  macro declares a fixed `returns` or `returns TYPE OF`. A call inside a larger expression always
+  needs an outer cast.
 - Without `returns`, the call is typed by inference alone. When an output is one call whose type is
   unknown, `K003` and `SQBRCONTRACT105` suggest declaring `returns` on the macro.
 - `returns TYPE OF <argument>` declares the type of that argument at each call, under the same
@@ -353,8 +359,9 @@ bar(LENGTH(@value), 0, 10)
   `returns BIGINT`, fails with `P024`, as does a partly unknown body of another shape, such as `[]`
   with `returns BIGINT`. A body whose type cannot be inferred, for example because it reads `ANY`
   arguments or calls a function whose type is unknown or only guessed, trusts `returns`.
-- `returns` must be a type the adapter's SQL dialect accepts, including a decimal precision and
-  scale it can hold, such as at most `DECIMAL(38, s)` on DuckDB (`P015`).
+- `returns` and every argument type must be a type the adapter's SQL dialect accepts, including a
+  decimal precision and scale it can hold, such as at most `DECIMAL(38, s)` on DuckDB or
+  `NUMERIC(38, 9)` on BigQuery (`P015`).
 - A call where only a keyword can stand, such as the date part of `EXTRACT`, is typed by inference
   alone.
 - A call inside a Python macro argument, as in `@py.bracket(@sql.status_bar(o.status))`, is typed

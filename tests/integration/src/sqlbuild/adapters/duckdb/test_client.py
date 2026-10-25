@@ -44,8 +44,10 @@ from tests.integration.src.sqlbuild.adapters.duckdb._test_types import (
     RecorderWriteTestCase,
     RelationExistsTestCase,
     RenameTestCase,
+    StorageVersionConnectTestCase,
     SwapTestCase,
     TransactionalAtomicityTestCase,
+    UserStorageVersionKeyTestCase,
 )
 from tests.integration.src.sqlbuild.adapters.duckdb.helpers import count_relation_rows
 
@@ -159,6 +161,65 @@ def test_given_config_when_connecting_then_returns_usable_connection(
 
     assert (connection is not None) == test_case.expected_connects
     adapter.close(connection)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StorageVersionConnectTestCase(
+            description="an existing default-storage database opens for local replay",
+            expected_rows=[(1,)],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_existing_database_when_opening_for_local_replay_then_its_tables_read(
+    test_case: StorageVersionConnectTestCase,
+    adapter: DuckDbAdapter,
+    tmp_path: Path,
+) -> None:
+    database: Path = tmp_path / "existing.duckdb"
+    written: duckdb.DuckDBPyConnection = duckdb.connect(str(database))
+    written.execute("CREATE TABLE orders AS SELECT 1 AS order_id")
+    written.close()
+
+    connection: Any = adapter.connect_local_replay(database)
+    rows: list[tuple[int]] = connection.execute("SELECT order_id FROM orders").fetchall()
+    adapter.close(connection)
+
+    assert rows == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        UserStorageVersionKeyTestCase(
+            description="a storage version in user config is ignored like any unknown key",
+            config_key="storage_compatibility_version",
+            expected_storage_version="v1.0.0+",
+        ),
+        UserStorageVersionKeyTestCase(
+            description="an unknown connection key is ignored",
+            config_key="unknown_option",
+            expected_storage_version="v1.0.0+",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_user_config_with_storage_version_when_connecting_then_it_is_ignored(
+    test_case: UserStorageVersionKeyTestCase,
+    adapter: DuckDbAdapter,
+    tmp_path: Path,
+) -> None:
+    database: Path = tmp_path / "warehouse.duckdb"
+
+    connection: Any = adapter.connect({"database": str(database), test_case.config_key: "latest"})
+    tags: list[tuple[dict[str, str]]] = connection.execute(
+        "SELECT tags FROM duckdb_databases() WHERE database_name = 'warehouse'"
+    ).fetchall()
+    adapter.close(connection)
+
+    assert tags == [({"storage_version": test_case.expected_storage_version},)]
 
 
 @pytest.mark.parametrize(

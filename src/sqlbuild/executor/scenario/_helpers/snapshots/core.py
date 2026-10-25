@@ -97,6 +97,7 @@ def build_scenario_snapshot_input_specs(
                     logical_name=fixture_plan.logical_name,
                 ),
                 capture_sql=fixture_plan.sql,
+                fingerprint_sql=fixture_plan.fingerprint_sql or None,
             )
         )
 
@@ -135,7 +136,7 @@ def build_scenario_snapshot_input_fingerprint(
                 "kind": spec.kind.value,
                 "logical_name": spec.logical_name,
                 "file_path": spec.file_path.as_posix(),
-                "capture_sql": _normalize_sql(spec.capture_sql),
+                "capture_sql": _normalize_sql(spec.fingerprint_sql or spec.capture_sql),
             }
             for spec in sorted(input_specs, key=_input_spec_sort_key)
         ],

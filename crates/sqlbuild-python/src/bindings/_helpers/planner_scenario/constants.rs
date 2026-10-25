@@ -16,3 +16,9 @@ pub(super) const SCENARIO_PLAN_UNRESOLVED_RELATION_MARKER: &str = "S511";
 pub(super) const SCENARIO_PLAN_EXPECTED_COLUMNS: &str = "S512";
 pub(super) const SCENARIO_EXPECTED_COLUMNS_HELP: &str = "list every column the model outputs in the expected CTE, and remove columns it does not output";
 pub(super) const SCENARIO_PLAN_INTERNAL: &str = "S599";
+/// The zero-argument cursor intrinsics a model query can call.
+pub(super) const CURSOR_INTRINSIC_NAMES: [&str; 2] = ["__cursor_start", "__cursor_end"];
+pub(super) const INCREMENTAL_MODE_KEY: &str = "incremental_mode";
+pub(super) const MICROBATCH_INCREMENTAL_MODE: &str = "microbatch";
+pub(super) const CURSOR_TYPE_KEY: &str = "cursor_type";
+pub(super) const INTEGER_CURSOR_TYPE: &str = "integer";

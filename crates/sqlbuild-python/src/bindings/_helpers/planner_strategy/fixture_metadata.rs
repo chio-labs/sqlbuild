@@ -34,10 +34,9 @@ pub(crate) fn model_fixture_relation(model: &Bound<'_, PyAny>) -> PyResult<Fixtu
             nullable: None,
         });
     }
-    let authoritative = !star_flags(model)?.0
-        && (config_value(model.py(), &model_values(model)?, CONTRACT_KEY)?
-            .eq(ENFORCED_CONTRACT)?
-            || inferred.is_some());
+    let enforced: bool =
+        config_value(model.py(), &model_values(model)?, CONTRACT_KEY)?.eq(ENFORCED_CONTRACT)?;
+    let authoritative = enforced || (!star_flags(model)?.0 && inferred.is_some());
     Ok(FixtureRelation {
         columns: merge_metadata(inferred_columns, declared),
         authoritative,

@@ -453,7 +453,7 @@ replaces every `@sql.net_amount(...)` call written in the model SQL with the moc
 inside another SQL macro's body is expanded as usual. Macro names are unique across both kinds, so
 the mock name never needs the `sql.` or `py.` prefix.
 
-The mock value must be a single `SELECT` with one string literal. Use doubled single quotes for quotes within the value (standard SQL escaping).
+The mock value must be a single `SELECT` with one string literal, which may be named with `AS`, such as `SELECT 'country_code = ''US''' AS country_filter`. Use doubled single quotes for quotes within the value (standard SQL escaping).
 
 This is useful for:
 - Testing models that use target-specific macros without depending on target config

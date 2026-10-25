@@ -32,7 +32,7 @@ from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
 
 def run_pending_source_audits(
     *,
-    model_key: CompiledObjectKey,
+    source_keys: tuple[CompiledObjectKey, ...],
     plan: PlanOutput,
     source_audits_by_source: dict[str, tuple[AuditPlanEntry, ...]],
     executed_source_audits: frozenset[str],
@@ -50,7 +50,7 @@ def run_pending_source_audits(
     newly_blocked: set[CompiledObjectKey] = set()
     audit_results: list[AuditExecutionResult] = []
     dep_key: CompiledObjectKey
-    for dep_key in plan.upstream_deps.get(model_key, ()):
+    for dep_key in source_keys:
         if dep_key.resource_type != CompiledResourceType.SOURCE:
             continue
         source_name: str = dep_key.name

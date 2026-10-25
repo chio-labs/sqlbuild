@@ -1409,3 +1409,55 @@ class DeferredMigrationOriginE2ETestCase:
     prod_sql: str
     expected_order_ids: tuple[int, ...]
     expect_note: bool
+
+
+@dataclass(frozen=True)
+class UnbuiltDependencyBuildE2ETestCase:
+    """A build whose failed model leaves a reader that must be skipped, not run."""
+
+    description: str
+    repo_files: dict[str, str]
+    expected_stdout_fragments: tuple[str, ...]
+    unexpected_stdout_fragments: tuple[str, ...]
+    build_arguments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class NoLoadBuildE2ETestCase:
+    """A build with loading off over a managed source holding a NULL, and what it must do."""
+
+    description: str
+    second_build: tuple[str, ...]
+    project_settings: str
+    expected_exit_code: int
+    expected_audit_reported: bool
+    expected_order_rows: int = 2
+
+
+@dataclass(frozen=True)
+class HookSkippedAuditBuildE2ETestCase:
+    """A rebuild where a hook skips a model that already exists, and its end audit's outcome."""
+
+    description: str
+    hooked_model: str
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ConnectionStorageKeyBuildE2ETestCase:
+    """A DuckDB connection key in the project config, and the storage the warehouse file gets."""
+
+    description: str
+    connection_key: str
+    expected_storage_version: str
+
+
+@dataclass(frozen=True)
+class SourceEndAuditBuildE2ETestCase:
+    """A build over an unread source whose table is missing, and whether its audit runs."""
+
+    description: str
+    build_arguments: tuple[str, ...]
+    expected_exit_code: int
+    expected_audit_reported: bool

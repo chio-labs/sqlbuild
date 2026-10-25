@@ -552,6 +552,21 @@ fn planned_sql_tests<'py>(
     )
 }
 
+/// The names of the planned models whose relation the inspected warehouse already holds.
+fn existing_model_names<'py>(
+    model_entries: &Bound<'py, PyAny>,
+    existing_relations: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let mut names: Vec<Bound<'py, PyAny>> = Vec::new();
+    for entry in model_entries.try_iter()? {
+        let name = native_field(&entry?, "name")?;
+        if existing_relations.contains(&name)? {
+            names.push(name);
+        }
+    }
+    Ok(PyFrozenSet::new(model_entries.py(), names)?.into_any())
+}
+
 /// The plan output's fields from planned entries and resolved relation inputs.
 pub(crate) fn plan_output_fields<'py>(
     inputs: PlanOutputInputs<'py>,
@@ -578,15 +593,19 @@ pub(crate) fn plan_output_fields<'py>(
     let execution_order = native_field(&scope, "execution_order")?;
     let source_map = native_field(&relations, "source_map")?;
     let seeds = seed_entries(&project, &snapshot, &selected_keys, &extras)?;
-    let source_load_entries = object(
-        py,
-        build_source_load_entries(
-            &execution_order,
-            &selected_keys,
-            source_map.downcast::<PyDict>()?,
-            reload_sources.is_truthy()?,
-        )?,
-    )?;
+    let source_load_entries = if native_field(&scope, "load_sources")?.is_truthy()? {
+        object(
+            py,
+            build_source_load_entries(
+                &execution_order,
+                &selected_keys,
+                source_map.downcast::<PyDict>()?,
+                reload_sources.is_truthy()?,
+            )?,
+        )?
+    } else {
+        PyTuple::empty(py).into_any()
+    };
     require_intermediate_loader_targets(&project, &snapshot, &source_map, &source_load_entries)?;
     let functions = function_entries(
         (&project, &adapter, &snapshot),
@@ -665,6 +684,17 @@ pub(crate) fn plan_output_fields<'py>(
         ),
         ("selected_keys", selected_keys),
         ("warnings", tuple_of(py, warnings)?),
+        (
+            "existing_model_names",
+            existing_model_names(
+                &model_entries,
+                &native_field(&snapshot, "existing_relations")?,
+            )?,
+        ),
+        (
+            "end_audit_source_keys",
+            native_field(&scope, "end_audit_source_keys")?,
+        ),
         ("upstream_deps", native_field(&scope, "upstream_deps")?),
         ("downstream_deps", native_field(&scope, "downstream_deps")?),
         (
