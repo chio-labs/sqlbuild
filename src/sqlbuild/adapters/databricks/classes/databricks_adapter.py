@@ -121,6 +121,7 @@ from sqlbuild.adapters.databricks._helpers.grants import (
 from sqlbuild.adapters.databricks._helpers.relation_usage import read_relation_usage
 from sqlbuild.adapters.databricks.classes.databricks_connection import _DatabricksConnection
 from sqlbuild.adapters.databricks.constants import (
+    CURRENT_CATALOG_INFORMATION_SCHEMA,
     DELTA_COLUMN_MAPPING_NAME_MODE,
     DELTA_COLUMN_MAPPING_PROPERTY,
     DELTA_DEFAULT_DELETED_FILE_RETENTION_DAYS,
@@ -3126,11 +3127,13 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         database: str | None,
         schema: str,
     ) -> bool:
-        if database is None:
-            return False
+        schemata: str = (
+            CURRENT_CATALOG_INFORMATION_SCHEMA
+            if database is None
+            else self._information_schema(database)
+        )
         query: str = (
-            f"SELECT 1 FROM {self._information_schema(database)}.schemata "
-            f"WHERE schema_name = {self._string_literal(schema)}"
+            f"SELECT 1 FROM {schemata}.schemata WHERE schema_name = {self._string_literal(schema)}"
         )
         cursor: Any = connection.cursor()
         try:

@@ -27,6 +27,7 @@ from tests.unit.src.sqlbuild.adapters.databricks._test_types import (
     DatabricksRenderDurableCloneTestCase,
     DatabricksRenderPythonFunctionTestCase,
     DatabricksRenderTableFunctionTestCase,
+    DatabricksSchemaExistsTestCase,
     DatabricksStringTypeCastRenderingTestCase,
     DatabricksTableFreshnessBatchTestCase,
     DatabricksTableFreshnessFallbackTestCase,
@@ -752,3 +753,46 @@ def test_given_candidate_relations_when_adding_age_metadata_then_databricks_read
         str(enriched[0].created_at),
         str(enriched[0].last_altered_at),
     ) == test_case.expected_timestamps
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DatabricksSchemaExistsTestCase(
+            description="a schema in the session's current catalog is found without a catalog",
+            database=None,
+            rows=[(1,)],
+            expected_exists=True,
+            expected_query_fragment="SELECT 1 FROM information_schema.schemata",
+        ),
+        DatabricksSchemaExistsTestCase(
+            description="a schema missing from the current catalog is reported missing",
+            database=None,
+            rows=[],
+            expected_exists=False,
+            expected_query_fragment="SELECT 1 FROM information_schema.schemata",
+        ),
+        DatabricksSchemaExistsTestCase(
+            description="an explicit catalog is queried through its information schema",
+            database="main",
+            rows=[(1,)],
+            expected_exists=True,
+            expected_query_fragment="SELECT 1 FROM `main`.information_schema.schemata",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_databricks_schema_when_checking_existence_then_current_catalog_is_used_without_one(
+    test_case: DatabricksSchemaExistsTestCase,
+) -> None:
+    cursor: FakeDatabricksMetadataCursor = FakeDatabricksMetadataCursor(rows=test_case.rows)
+
+    exists: bool = DatabricksAdapter().schema_exists(
+        connection=cast(Any, FakeDatabricksMetadataConnection((cursor,))),
+        database=test_case.database,
+        schema="analytics",
+    )
+
+    assert exists is test_case.expected_exists, test_case.description
+    assert cursor.executed_sql is not None
+    assert test_case.expected_query_fragment in cursor.executed_sql, test_case.description
