@@ -17,7 +17,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
 
 _PROJECT_TOML: str = (
     'name = "shop"\nadapter = "duckdb"\n\n[connection]\ndatabase = "shop.duckdb"\n\n'
-    '[[connection.attach]]\npath = "archive.duckdb"\nalias = "archive"\n\n'
+    '[[connection.attach]]\npath = "{attach_path}"\nalias = "archive"\n\n'
     "[scopes]\nenforce_placement = false\n"
 )
 
@@ -35,6 +35,13 @@ _PROJECT_TOML: str = (
             concurrency=2,
             expected_archived_rows=[(1,)],
         ),
+        DuckDbAttachE2ETestCase(
+            description="a home-relative path attaches the file in the home directory",
+            concurrency=1,
+            expected_archived_rows=[(1,)],
+            attach_path="~/archive.duckdb",
+            expected_archive_root="home",
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -45,7 +52,7 @@ def test_given_attached_duckdb_file_when_building_then_models_land_in_it(
         tmp_path=tmp_path,
         project_name="shop",
         repo_files={
-            "sqlbuild_project.toml": _PROJECT_TOML,
+            "sqlbuild_project.toml": _PROJECT_TOML.format(attach_path=test_case.attach_path),
             "models/archived_orders.sql": (
                 "MODEL (description 'Test model archived_orders.', materialized table, "
                 "database archive, schema main);\nSELECT 1 AS order_id\n"
@@ -60,16 +67,21 @@ def test_given_attached_duckdb_file_when_building_then_models_land_in_it(
             ),
         },
     )
+    home: Path = tmp_path / "home"
+    home.mkdir()
     built: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "build", "--concurrency", str(test_case.concurrency)),
         project_dir=project_dir,
+        env={"HOME": str(home)},
     )
+    archive_root: Path = {"project": project_dir, "home": home}[test_case.expected_archive_root]
 
     assert built.returncode == 0, built.stdout + built.stderr
     assert (
         query_duckdb(
-            db_path=project_dir / "archive.duckdb", sql="SELECT order_id FROM archived_orders"
+            db_path=archive_root / "archive.duckdb", sql="SELECT order_id FROM archived_orders"
         )
         == test_case.expected_archived_rows
     ), test_case.description
     assert not (REPO_ROOT / "archive.duckdb").exists()
+    assert not (project_dir / "~").exists()

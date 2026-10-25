@@ -1,5 +1,7 @@
 //! Connection config resolution for CLI commands.
 
+use std::path::PathBuf;
+
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -32,6 +34,10 @@ const ATTACH_TYPE_KEY: &str = "type";
 const LOCAL_ATTACH_TYPES: [&str; 2] = ["duckdb", "sqlite"];
 const URL_SCHEME_SEPARATOR: &str = "://";
 const MOTHERDUCK_PATH_PREFIX: &str = "md:";
+/// A path naming the home directory, which DuckDB expands from `HOME`.
+const HOME_PREFIX: &str = "~";
+const HOME_DIRECTORY_PREFIX: &str = "~/";
+const HOME_VARIABLE: &str = "HOME";
 
 const CONNECTION_OPTIONS: (&[&str], &[&str]) = (
     &["raw_config", "project_dir", "adapter_name"],
@@ -134,7 +140,7 @@ pub(crate) fn anchor_local_database_path(
     Ok(())
 }
 
-/// `project_dir / value` for a relative local file path, else None.
+/// The file a local path names: `~` expanded, then `project_dir / path` when still relative.
 fn anchored_file_path<'py>(
     value: &Bound<'py, PyAny>,
     project_dir: &Bound<'py, PyAny>,
@@ -143,12 +149,28 @@ fn anchored_file_path<'py>(
     if !value.is_instance_of::<PyString>() {
         return Ok(None);
     }
-    if path(py, value)?.call_method0("is_absolute")?.is_truthy()?
-        || value.extract::<String>()? == DUCKDB_MEMORY_DATABASE
-    {
+    let text: String = value.extract()?;
+    if text == DUCKDB_MEMORY_DATABASE {
+        return Ok(None);
+    }
+    if let Some(rest) = home_relative_rest(&text) {
+        return Ok(std::env::var_os(HOME_VARIABLE).map(|home| {
+            let file: PathBuf = PathBuf::from(home).join(rest);
+            PyString::new(py, &file.to_string_lossy()).into_any()
+        }));
+    }
+    if path(py, value)?.call_method0("is_absolute")?.is_truthy()? {
         return Ok(None);
     }
     Ok(Some(path(py, project_dir)?.div(value)?.str()?.into_any()))
+}
+
+/// What follows `~` or `~/`, the home directory DuckDB expands a path from.
+fn home_relative_rest(text: &str) -> Option<&str> {
+    if text == HOME_PREFIX {
+        return Some("");
+    }
+    text.strip_prefix(HOME_DIRECTORY_PREFIX)
 }
 
 /// Anchor each relative DuckDB or SQLite file an `attach` entry names; other paths are DSNs or URLs.

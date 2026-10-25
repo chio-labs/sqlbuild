@@ -1481,3 +1481,5 @@ class DuckDbAttachE2ETestCase:
     description: str
     concurrency: int
     expected_archived_rows: list[tuple[object, ...]]
+    attach_path: str = "archive.duckdb"
+    expected_archive_root: str = "project"

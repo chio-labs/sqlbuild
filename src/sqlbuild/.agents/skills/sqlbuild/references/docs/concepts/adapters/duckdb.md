@@ -52,7 +52,10 @@ alias = "external"
 read_only = true
 ```
 
-A relative `path` of a DuckDB or SQLite file is relative to the project directory, like `database`.
+A relative `path` of a DuckDB or SQLite file is relative to the project directory, like `database`,
+and a path starting with `~/` is relative to your home directory. This also applies to `attach`
+entries that come from a dbt profile: they resolve from the SQLBuild project directory, not from
+the dbt project or the working directory.
 Every connection of a command attaches it once: connections to the same project database share the
 attachment.
 
