@@ -56,6 +56,16 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_pr
             expected_stdout_fragment="PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
         ),
         LocalVariantScenarioTestCase(
+            description="a quoted VARIANT output column compares by its JSON value",
+            repo_files=build_local_variant_scenario_project_files(
+                fixture="{'qty': 2, 'note': 'x'}::VARIANT",
+                output='o.payload AS "Payload"',
+                expected='\'{"note": "x", "qty": 2}\'::JSON::VARIANT AS "Payload"',
+            ),
+            scenario_name="orders__keep_payload",
+            expected_stdout_fragment="PASS=1  FAIL=0  ERROR=0  SKIP=0  TOTAL=1",
+        ),
+        LocalVariantScenarioTestCase(
             description="a different cast-built VARIANT value still fails the comparison",
             repo_files=build_local_variant_scenario_project_files(
                 fixture="{'qty': 2}::VARIANT",
