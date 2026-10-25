@@ -94,6 +94,7 @@ pub(crate) fn audit_text(audit: &Bound<'_, PyAny>) -> PyResult<AuditResultText> 
         measurement: text(audit, "evaluation_mode")? == MEASUREMENT,
         measured_value: text(audit, "measured_value")?,
         execution_error: optional(audit, "execution_error")?,
+        skip_reason: optional(audit, "skip_reason")?,
     })
 }
 

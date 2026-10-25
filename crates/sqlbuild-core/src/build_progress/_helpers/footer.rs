@@ -54,6 +54,7 @@ pub(crate) fn count_results(result: &BuildResultText, python: &[PythonNodeText])
             PASS => counts.pass += 1,
             WARN => counts.warn += 1,
             ERROR => counts.fail += 1,
+            SKIPPED => counts.skip += 1,
             _ => {}
         }
     }
@@ -295,6 +296,14 @@ pub(crate) fn python_failure_details(python: &[PythonNodeText], style: CliStyle)
     lines
 }
 
+/// A skipped audit's rollup entry: its name and why it did not run.
+fn skipped_audit_label(audit: &AuditResultText) -> String {
+    match &audit.skip_reason {
+        Some(reason) => format!("{} (audit, {reason})", audit.audit_name),
+        None => format!("{} (audit)", audit.audit_name),
+    }
+}
+
 pub(crate) fn skipped_rollup(
     result: &BuildResultText,
     python: &[PythonNodeText],
@@ -333,10 +342,25 @@ pub(crate) fn skipped_rollup(
                 .map(|node| node.name.as_str()),
         )
         .collect();
+    let names: Vec<String> = names
+        .into_iter()
+        .map(str::to_owned)
+        .chain(
+            result
+                .end_audits
+                .iter()
+                .filter(|audit| audit.outcome == SKIPPED)
+                .map(skipped_audit_label),
+        )
+        .collect();
     if names.is_empty() {
         return Vec::new();
     }
-    let visible: Vec<&str> = names.iter().take(SKIPPED_ROLLUP_CAP).copied().collect();
+    let visible: Vec<&str> = names
+        .iter()
+        .take(SKIPPED_ROLLUP_CAP)
+        .map(String::as_str)
+        .collect();
     let remaining: usize = names.len() - visible.len();
     let mut rendered: String = visible.join(", ");
     if remaining > 0 {

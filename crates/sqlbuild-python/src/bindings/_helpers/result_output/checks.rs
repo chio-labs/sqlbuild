@@ -335,7 +335,7 @@ pub(crate) fn audit_checks<'py>(
         ));
         entries.push(("evidence_count", evidence_count));
         entries.push(("evidence_truncated", evidence_truncated));
-        entries.push(("execution_error", native_field(&result, "execution_error")?));
+        entries.extend(fields(&result, &["execution_error", "skip_reason"])?);
         checks.push(without_none(py, entries)?);
     }
     Ok(checks)

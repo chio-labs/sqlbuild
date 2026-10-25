@@ -317,10 +317,17 @@ pub enum AuditOutcome {
     Warn,
     Error,
     Insufficient,
+    Skipped,
 }
 
 impl ResultEnum for AuditOutcome {
-    const ALL: &'static [Self] = &[Self::Pass, Self::Warn, Self::Error, Self::Insufficient];
+    const ALL: &'static [Self] = &[
+        Self::Pass,
+        Self::Warn,
+        Self::Error,
+        Self::Insufficient,
+        Self::Skipped,
+    ];
 
     fn value(self) -> &'static str {
         match self {
@@ -328,6 +335,7 @@ impl ResultEnum for AuditOutcome {
             Self::Warn => "warn",
             Self::Error => "error",
             Self::Insufficient => "insufficient",
+            Self::Skipped => "skipped",
         }
     }
 }
@@ -474,6 +482,7 @@ pub struct AuditExecutionResult<V> {
     pub audit_description: Option<String>,
     pub execution_error: Option<String>,
     pub audit_meta: Option<Vec<(String, V)>>,
+    pub skip_reason: Option<String>,
 }
 
 /// One executed model. Mirrors `sqlbuild.executor.run.models.ModelExecutionResult`; `V` is a host value.

@@ -27,11 +27,13 @@ from sqlbuild._native import (
     ModelPlanEntry,
     PlanAction,
     PlanOutput,
+    PlanReason,
     SeedPlanEntry,
     SnapshotsConfig,
     SourceEntry,
     SqlTestPlanEntry,
     TableTypePlanEntry,
+    audit_resource_id,
     sql_test_resource_id,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
@@ -43,6 +45,9 @@ from sqlbuild.cost.models import StatementExecutionTelemetry
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
+from sqlbuild.executor.auditing.main._record_audit_progress_outcome import (
+    record_audit_progress_outcome,
+)
 from sqlbuild.executor.auditing.main.publish_completed_audit_results import (
     publish_completed_audit_results,
 )
@@ -307,6 +312,13 @@ class BuildScheduler:
             for audit in self._indexes.end_audits
             if self._unbuilt_keys.isdisjoint(audit.scope_deps)
         )
+        skipped_end_audits: tuple[AuditExecutionResult, ...] = ()
+        if self._run_audits:
+            skipped_end_audits = tuple(
+                self._skipped_end_audit(audit=audit)
+                for audit in self._indexes.end_audits
+                if not self._unbuilt_keys.isdisjoint(audit.scope_deps)
+            )
         if self._run_audits and runnable_end_audits:
             end_audit_results = run_end_audits(
                 end_audits=runnable_end_audits,
@@ -325,7 +337,7 @@ class BuildScheduler:
             tuple(self._load_results),
             tuple(sorted(self._test_results, key=self._test_result_order)),
             tuple(self._source_audit_results),
-            end_audit_results,
+            (*end_audit_results, *skipped_end_audits),
         )
 
     def _test_result_order(self, result: SqlTestExecutionResult) -> int:
@@ -750,6 +762,53 @@ class BuildScheduler:
                 return False
 
         return True
+
+    def _mark_unbuilt(self, *, key: CompiledObjectKey) -> None:
+        """Record that `key` was not built, unless it is a model whose relation already exists."""
+
+        entry: ModelPlanEntry | None = self._indexes.model_entries_by_key.get(key)
+        if entry is not None and entry.reason != PlanReason.FIRST_RUN:
+            return
+        self._unbuilt_keys.add(key)
+
+    def _skipped_end_audit(self, *, audit: AuditPlanEntry) -> AuditExecutionResult:
+        """The SKIPPED result of an end-of-build audit that reads a resource not built this run."""
+
+        unbuilt: CompiledObjectKey = next(
+            key for key in audit.scope_deps if key in self._unbuilt_keys
+        )
+        result: AuditExecutionResult = AuditExecutionResult(
+            audit_name=audit.name,
+            audit_definition_name=audit.definition_name,
+            attachment_kind=audit.attachment_kind,
+            severity=audit.severity,
+            outcome=AuditOutcome.SKIPPED,
+            row_count=0,
+            executed_sql="",
+            attached_target_kind=audit.attached_target_kind,
+            attached_target_name=audit.attached_target_name,
+            attached_column_name=audit.attached_column_name,
+            audit_description=audit.description,
+            audit_meta=audit.meta,
+            skip_reason=f"reads {unbuilt.name}, which was not built",
+        )
+        with ResourceAttemptLifecycle(
+            resource_id=audit_resource_id(
+                audit_name=audit.name,
+                attachment_kind=audit.attachment_kind,
+                attached_target_kind=audit.attached_target_kind,
+                attached_target_name=audit.attached_target_name,
+                attached_column_name=audit.attached_column_name,
+            ),
+            resource_kind="audit",
+            resource_name=audit.name,
+            run_id=self._run_id,
+        ) as lifecycle:
+            record_audit_progress_outcome(
+                resource_attempt_id=lifecycle.resource_attempt_id, result=result
+            )
+            lifecycle.skipped(skip_code="scheduler")
+        return result
 
     def _unloaded_selected_sources(self) -> tuple[CompiledObjectKey, ...]:
         """Selected sources that load nothing this run, whose audits no reader has run yet."""
@@ -1318,7 +1377,7 @@ class BuildScheduler:
             failed = result.status in {ExecutionStatus.FAILED, ExecutionStatus.SKIPPED}
 
         if failed:
-            self._unbuilt_keys.add(key)
+            self._mark_unbuilt(key=key)
             self._blocked_keys.update(
                 downstream_blocked_keys(
                     failed_key=key,
@@ -1424,7 +1483,7 @@ class BuildScheduler:
             run_id=self._run_id,
         ) as lifecycle:
             skip_mode: object = getattr(result, "skip_mode", None)
-            self._unbuilt_keys.add(key)
+            self._mark_unbuilt(key=key)
             lifecycle.skipped(
                 skip_code="scheduler",
                 skip_mode=getattr(skip_mode, "value", None),

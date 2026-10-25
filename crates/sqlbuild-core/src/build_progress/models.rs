@@ -38,6 +38,8 @@ pub struct AuditResultText {
     /// `str(measured_value)`.
     pub measured_value: String,
     pub execution_error: Option<String>,
+    /// Why the audit did not run, when its outcome is `skipped`.
+    pub skip_reason: Option<String>,
 }
 
 /// One pre- or post-hook result.

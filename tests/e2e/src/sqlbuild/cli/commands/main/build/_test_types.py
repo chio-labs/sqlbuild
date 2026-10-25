@@ -1431,3 +1431,13 @@ class NoLoadBuildE2ETestCase:
     expected_exit_code: int
     expected_audit_reported: bool
     expected_order_rows: int = 2
+
+
+@dataclass(frozen=True)
+class HookSkippedAuditBuildE2ETestCase:
+    """A rebuild where a hook skips a model that already exists, and its end audit's outcome."""
+
+    description: str
+    hooked_model: str
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
