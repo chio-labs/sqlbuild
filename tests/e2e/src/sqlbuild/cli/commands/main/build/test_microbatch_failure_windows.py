@@ -114,17 +114,25 @@ def test_given_completion_write_failure_during_rebuild_when_retried_then_live_ta
             "AND partition_end = '2026-01-01T02:00:00'"
         ),
     )[0][0]
+    state_after_failure: list[tuple[object, ...]] = query_duckdb(
+        db_path=db_path,
+        sql=(
+            "SELECT record_type, partition_start, partition_end FROM main._sqlbuild_microbatches "
+            "ORDER BY partition_start, record_type"
+        ),
+    )
     recovered: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "build"),
         project_dir=project_dir,
         working_dir=project_dir,
     )
+    failure_evidence: str = f"state={state_after_failure}\n{failed.stdout}{failed.stderr}"
 
     assert initial.returncode == test_case.expected_exit_code, initial.stdout + initial.stderr
-    assert failed.returncode != test_case.expected_exit_code
+    assert failed.returncode != test_case.expected_exit_code, failure_evidence
     assert "simulated completion write failure" in failed.stdout + failed.stderr
-    assert target_after_failed_state_write == [(1, "a")]
-    assert completion_count_after_failure == 0
+    assert target_after_failed_state_write == [(1, "a")], failure_evidence
+    assert completion_count_after_failure == 0, failure_evidence
     assert recovered.returncode == test_case.expected_exit_code, recovered.stdout + recovered.stderr
     assert (
         query_duckdb(
