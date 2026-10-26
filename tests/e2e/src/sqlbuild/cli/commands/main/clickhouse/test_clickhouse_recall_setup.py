@@ -15,6 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse._test_types import (
     ClickHouseRecallStaleViewsTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse.helpers import (
+    RECALL_SCHEMA_VERSION,
     apply_printed_ddl,
     create_previous_views,
     drop_database,
@@ -197,7 +198,7 @@ def test_given_a_missing_database_when_the_writer_may_not_create_it_then_the_sta
             writer_privileges="ALL",
             expected_notices=0,
             expected_stale_views=((0,),),
-            expected_version=((4,),),
+            expected_version=((RECALL_SCHEMA_VERSION,),),
         ),
         ClickHouseRecallStaleViewsTestCase(
             description="previous views recorded as current are replaced by an administrator",
@@ -205,7 +206,7 @@ def test_given_a_missing_database_when_the_writer_may_not_create_it_then_the_sta
             writer_privileges="ALL",
             expected_notices=0,
             expected_stale_views=((0,),),
-            expected_version=((4,),),
+            expected_version=((RECALL_SCHEMA_VERSION,),),
         ),
         ClickHouseRecallStaleViewsTestCase(
             description="previous views without a version row make a SELECT, INSERT writer warn",
@@ -374,7 +375,7 @@ def test_given_a_writer_that_may_create_only_the_database_when_building_then_bot
             dropped_column=("recall_invocations", "argv_digest"),
             expected_columns=((1,),),
             expected_stale_views=((0,),),
-            expected_version=((4,),),
+            expected_version=((RECALL_SCHEMA_VERSION,),),
         ),
     ],
     ids=lambda case: case.description,
