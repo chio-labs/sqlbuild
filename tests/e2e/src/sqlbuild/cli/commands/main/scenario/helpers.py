@@ -1017,11 +1017,11 @@ def build_lambda_scenario_project_files() -> dict[str, str]:
             'WITH sess AS (SELECT * FROM __ref("sessions")),\n'
             'crt AS (SELECT c.session_id, c.quantities FROM __ref("carts") AS c)\n'
             "SELECT\n  s.session_id,\n"
-            "  list_reduce(list_transform(c.quantities, q -> q * 2), (acc, x) -> acc + x)"
+            "  list_reduce(list_transform(c.quantities, lambda q: q * 2), lambda acc, x: acc + x)"
             " AS total,\n"
-            "  len(list_filter(c.quantities, i -> i > 1)) AS big\n"
+            "  len(list_filter(c.quantities, lambda i: i > 1)) AS big\n"
             "FROM sess AS s\nINNER JOIN crt AS c ON s.session_id = c.session_id\n"
-            "WHERE len(list_filter(c.quantities, w -> w < 0)) = 0\n"
+            "WHERE len(list_filter(c.quantities, lambda w: w < 0)) = 0\n"
         ),
         "tests/scenarios/cart_totals_doubled.sql": (
             "SCENARIO (description 'Test scenario cart_totals_doubled.');\n"
