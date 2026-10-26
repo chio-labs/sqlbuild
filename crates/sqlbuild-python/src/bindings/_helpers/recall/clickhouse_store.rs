@@ -43,8 +43,9 @@ use sqlbuild_recall::schema::models::{
     ColumnSpec, DdlOptions, Dialect, ObservedSchema, SchemaAge, StoreVersion, Table, VersionPlan,
 };
 use sqlbuild_recall::settings::constants::CLICKHOUSE_DATABASE_KEY;
-use sqlbuild_recall::store::constants::LAST_INVOCATION_SELECTOR;
+use sqlbuild_recall::store::constants::{LAST_INVOCATION_SELECTOR, LISTED_INVOCATION_CANDIDATES};
 use sqlbuild_recall::store::errors::{StoreError, StoreErrorKind};
+use sqlbuild_recall::store::main::chosen_invocation::chosen_invocation;
 use sqlbuild_recall::store::models::{
     DescribedColumn, DescribedRelation, InsertOutcome, OutputTranscript, QueryResult,
 };
@@ -897,34 +898,14 @@ impl ClickHouseReader {
         } else {
             format!(
                 "SELECT DISTINCT invocation_id FROM {started} \
-                 WHERE startsWith(invocation_id, {}) ORDER BY invocation_id LIMIT 3",
-                literal(selector)
+                 WHERE startsWith(invocation_id, {}) ORDER BY invocation_id LIMIT {}",
+                literal(selector),
+                LISTED_INVOCATION_CANDIDATES + 1
             )
         };
         let found = self.store.query(py, &sql, "find the invocation")?;
         let candidates: Vec<String> = found.rows.iter().map(|row| text(row.first())).collect();
-        if let Some(exact) = candidates.iter().find(|candidate| *candidate == selector) {
-            return Ok(exact.clone());
-        }
-        match candidates.as_slice() {
-            [] => Err(StoreError {
-                kind: StoreErrorKind::NotFound,
-                message: if selector == LAST_INVOCATION_SELECTOR {
-                    "no invocations are recorded yet".to_owned()
-                } else {
-                    format!("no recorded invocation matches '{selector}'")
-                },
-            }),
-            [only] => Ok(only.clone()),
-            several => Err(StoreError {
-                kind: StoreErrorKind::Ambiguous,
-                message: format!(
-                    "'{selector}' matches several invocations: {}{}",
-                    several[..2].join(", "),
-                    if several.len() > 2 { ", …" } else { "" }
-                ),
-            }),
-        }
+        chosen_invocation(selector, &candidates)
     }
 
     /// One invocation's exact output bytes, deduplicated by sequence, and its completeness.

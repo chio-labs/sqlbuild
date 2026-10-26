@@ -45,6 +45,33 @@ pub(crate) const MARCH_BASED_JANUARY_INDEX: i64 = 10;
 pub const DROPPED_BEFORE_COLUMN: &str = "dropped_before";
 /// Initial capacity of the buffer a row's content hash is computed over.
 pub(crate) const CONTENT_HASH_BUFFER_BYTES: usize = 1_024;
+/// The origin of an invocation an integration such as Dagster started.
+pub const INTEGRATION_ORIGIN: &str = "integration";
+/// The origin of an invocation a CI system ran.
+pub const CI_ORIGIN: &str = "ci";
+/// The origin of every other invocation.
+pub const LOCAL_ORIGIN: &str = "local";
+/// Environment variables a CI system sets; any non-empty value other than `false` or `0` marks a CI run.
+pub const CI_ENVIRONMENT_VARIABLES: [&str; 10] = [
+    "CI",
+    "GITHUB_ACTIONS",
+    "GITLAB_CI",
+    "BUILDKITE",
+    "JENKINS_URL",
+    "CIRCLECI",
+    "TF_BUILD",
+    "TEAMCITY_VERSION",
+    "BITBUCKET_BUILD_NUMBER",
+    "CODEBUILD_BUILD_ID",
+];
+/// Values of a CI variable that do not mark a CI run, besides an empty one.
+pub const CI_DISABLED_VALUES: [&str; 2] = ["false", "0"];
+/// The `command_mode` of `sqb debug --no-connection`: configuration checks only.
+pub const CONFIG_ONLY_MODE: &str = "config_only";
+/// The `command_mode` of `sqb debug`: configuration checks and a connection test.
+pub const CONFIG_AND_CONNECTION_MODE: &str = "config_and_connection";
+/// The command whose mode Recall records.
+pub(crate) const DEBUG_COMMAND: &str = "debug";
 /// The output column holding the bytes a truncation gap replaces.
 pub const OMITTED_BYTES_COLUMN: &str = "omitted_bytes";
 /// The output column holding the sequences a truncation gap accounts for.

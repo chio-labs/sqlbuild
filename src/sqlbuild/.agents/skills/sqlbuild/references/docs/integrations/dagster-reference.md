@@ -119,6 +119,46 @@ A running or completed SQLBuild CLI subprocess.
 5. If the DAG artifact is available, results are matched to the correct Dagster asset keys
 6. Raises `Failure` if the process exited non-zero and `raise_on_error` is set
 
+### Logs
+
+The command is logged at INFO. When Dagster selected a subset of assets, the selection is logged
+as a count at INFO, with the selector file path when SQLBuild read the selection from one; the
+full list of selectors is logged at DEBUG. Each check that did not pass is logged at ERROR, or at
+WARNING for a warn-severity check, with its failing row count when the check reports one, so it
+shows in the default run log view.
+
+### Failure output
+
+The `Failure` that `get_error()` returns, and that `wait()` and `stream()` raise, starts its
+description with what failed: up to 10 failed checks and assets, each with its name, model and
+failing row count (or status), followed by "and N more" when there are more. The command and its
+exit code follow, then the details of each failed asset.
+
+```
+Failed: 1 check
+  audit not_null on orders.order_id: 2 failing rows
+
+SQLBuild CLI command failed with exit code 1: sqb audit --json-output ...
+```
+
+Checks that only warned are not listed; they do not fail the command. The failure metadata holds:
+
+| Key | Description |
+|-----|-------------|
+| `command` | The command that ran |
+| `project_dir` | The project directory |
+| `selection_count` | How many selectors Dagster passed to SQLBuild |
+| `selector_file` | The selector file the selection was passed in, or empty |
+| `execution_status` | The status of the execution JSON |
+| `incomplete_assets` | Assets that did not complete, as `kind:name (status)` |
+| `failed_checks` | Up to 100 failed checks, each with `kind`, `name`, `asset`, `column`, `status` and `failing_rows` |
+| `failed_check_count` | How many checks failed |
+| `microbatch_limits` | Microbatch limit evidence of incomplete assets, when there is any |
+
+The metadata no longer lists the selection itself: `selection` was replaced by `selection_count`
+and `selector_file`. Without an execution JSON, the metadata holds the non-empty `stdout_tail` and
+`stderr_tail` instead of the execution keys.
+
 ## sqlbuild_assets
 
 Decorator that creates a Dagster multi-asset definition from a SQLBuild DAG artifact.

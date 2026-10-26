@@ -161,7 +161,9 @@ pub(crate) fn render_result(
 fn relation_note(name: &str) -> &'static str {
     match name {
         "invocations" => {
-            "one row per invocation; status is completed, failed, running, abandoned or unknown"
+            "one row per invocation; status is completed, failed, running, abandoned or unknown; \
+             origin is integration, ci or local; integration, integration_job, \
+             integration_run_id and integration_retry come from external_context"
         }
         "statements" => "one row per statement; outcome no_terminal means no terminal fact arrived",
         "audit_results" => "one row per evaluated audit",

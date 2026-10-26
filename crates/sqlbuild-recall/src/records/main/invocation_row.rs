@@ -69,6 +69,11 @@ pub fn invocation_row(envelope: &RowEnvelope, context: &InvocationContext) -> Re
                 boolean(context.recall_filter_active),
             ),
             ("argv_digest", optional_text(context.argv_digest.as_deref())),
+            ("origin", optional_text(context.origin.as_deref())),
+            (
+                "command_mode",
+                optional_text(context.command_mode.as_deref()),
+            ),
         ],
     )
 }

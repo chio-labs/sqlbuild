@@ -77,6 +77,11 @@ impl ParameterKind {
         groups.iter().any(|group| group.eq_ignore_ascii_case(slot))
     }
 
+    /// Whether this is a `RELATION`.
+    pub fn declares_relation(&self) -> bool {
+        matches!(self, Self::Relation { .. })
+    }
+
     /// Whether this is a `RELATION` that declares a slot called `slot`.
     pub fn declares_slot(&self, slot: &str) -> bool {
         let Self::Relation { columns, groups } = self else {
@@ -466,6 +471,15 @@ pub struct SqlMacroFinding {
     pub call: SqlMacroLocation,
     pub call_end: (usize, usize),
     pub declared_at: SqlMacroLocation,
+}
+
+/// The byte span of one parameter reference a SQL macro body's lint replaces.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ParameterSpan {
+    pub start: usize,
+    pub end: usize,
+    /// The `RELATION` parameter this span names as a relation, as `@weekly` in `FROM @weekly`.
+    pub relation: Option<String>,
 }
 
 /// What type inference knows of an expression macro body over its declared arguments.

@@ -3,7 +3,7 @@
 use crate::schema::models::{ColumnSpec, ColumnType, Table, TableSpec};
 
 /// The Recall schema version this build writes. Raise it when a column or view is added.
-pub const RECALL_SCHEMA_VERSION: i64 = 3;
+pub const RECALL_SCHEMA_VERSION: i64 = 4;
 /// Text that only older schema versions wrote into ClickHouse view definitions, with the last version that wrote it. Version 3 changed only view bodies, so view columns cannot tell version 2 views, which set `join_use_nulls`, from current ones.
 pub const SUPERSEDED_CLICKHOUSE_VIEW_MARKERS: [(&str, i64); 1] = [("join_use_nulls", 2)];
 /// The oldest SQLite library the store's views run on (ordered `group_concat`).
@@ -39,7 +39,7 @@ const CORRELATIONS: [ColumnSpec; 5] = [
     ColumnSpec::optional("statement_id", ColumnType::Text),
 ];
 
-const INVOCATION_COLUMNS: [ColumnSpec; 19] = [
+const INVOCATION_COLUMNS: [ColumnSpec; 21] = [
     ColumnSpec::optional("command", ColumnType::Text),
     ColumnSpec::optional("subcommand", ColumnType::Text),
     ColumnSpec::optional("selection", ColumnType::Json),
@@ -59,6 +59,8 @@ const INVOCATION_COLUMNS: [ColumnSpec; 19] = [
     ColumnSpec::optional("external_context", ColumnType::Json),
     ColumnSpec::optional("recall_filter_active", ColumnType::Boolean),
     ColumnSpec::optional("argv_digest", ColumnType::Text),
+    ColumnSpec::optional("origin", ColumnType::Text),
+    ColumnSpec::optional("command_mode", ColumnType::Text),
 ];
 
 const OUTPUT_COLUMNS: [ColumnSpec; 11] = [

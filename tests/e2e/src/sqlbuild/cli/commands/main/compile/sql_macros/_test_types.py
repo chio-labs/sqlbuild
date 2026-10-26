@@ -125,3 +125,14 @@ class SqlMacroFormatPairTestCase:
     slot_text: str
     hand_text: str
     expected_check_returncode: int
+
+
+@dataclass(frozen=True)
+class SqlMacroBodyRulesTestCase:
+    """One project linting a SQL macro body, and the findings it must and must not print."""
+
+    description: str
+    files: dict[str, str]
+    expected_returncode: int
+    expected_fragments: tuple[str, ...]
+    expected_absent_fragments: tuple[str, ...]

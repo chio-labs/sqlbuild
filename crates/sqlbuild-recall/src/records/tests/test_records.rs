@@ -3,15 +3,18 @@ use std::time::{Duration, UNIX_EPOCH};
 use crate::records::_helpers::ids::content_hash;
 use crate::records::_helpers::ids::diagnostic_record_id;
 use crate::records::_helpers::ids::output_record_id;
+use crate::records::main::command_mode::command_mode;
 use crate::records::main::diagnostic_input_from_json::diagnostic_input_from_json;
 use crate::records::main::format_timestamp::format_timestamp;
+use crate::records::main::invocation_origin::invocation_origin;
 use crate::records::main::output_row::output_row;
 use crate::records::main::parse_timestamp::parse_timestamp;
 use crate::records::models::{OutputChunk, OutputStream, RecallValue};
 use crate::records::tests::helpers::{envelope, event_row, present, row_columns, text};
 use crate::records::tests::test_types::{
-    ContentHashTestCase, DiagnosticTestCase, ParseTimestampTestCase, RecordIdTestCase,
-    RejectedInputTestCase, RowColumnsTestCase, TimestampTestCase,
+    CommandModeTestCase, ContentHashTestCase, DiagnosticTestCase, OriginTestCase,
+    ParseTimestampTestCase, RecordIdTestCase, RejectedInputTestCase, RowColumnsTestCase,
+    TimestampTestCase,
 };
 
 #[test]
@@ -269,6 +272,89 @@ fn given_incomplete_diagnostic_json_when_parsed_then_it_is_rejected() {
         assert_eq!(
             diagnostic_input_from_json(test_case.json, 0).is_err(),
             test_case.expected_rejected,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_context_and_environment_when_classifying_then_the_origin_is_named() {
+    let test_cases = [
+        OriginTestCase {
+            description: "external context wins over CI",
+            has_external_context: true,
+            environment: vec![("CI", "true")],
+            expected_origin: "integration",
+        },
+        OriginTestCase {
+            description: "a CI system's variable marks CI",
+            environment: vec![("GITHUB_ACTIONS", "true")],
+            has_external_context: false,
+            expected_origin: "ci",
+        },
+        OriginTestCase {
+            description: "a URL value marks CI",
+            environment: vec![("JENKINS_URL", "https://ci.example.com/")],
+            has_external_context: false,
+            expected_origin: "ci",
+        },
+        OriginTestCase {
+            description: "false, 0 and empty values are not CI",
+            environment: vec![("CI", "false"), ("GITLAB_CI", "0"), ("BUILDKITE", " ")],
+            has_external_context: false,
+            expected_origin: "local",
+        },
+        OriginTestCase {
+            description: "no variables is local",
+            environment: Vec::new(),
+            has_external_context: false,
+            expected_origin: "local",
+        },
+    ];
+    for test_case in test_cases {
+        let environment = |name: &str| {
+            test_case
+                .environment
+                .iter()
+                .find(|(key, _)| *key == name)
+                .map(|(_, value)| (*value).to_owned())
+        };
+        assert_eq!(
+            invocation_origin(test_case.has_external_context, environment),
+            test_case.expected_origin,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_a_command_and_its_flags_when_naming_its_mode_then_only_debug_has_one() {
+    let test_cases = [
+        CommandModeTestCase {
+            description: "debug without a connection checks configuration only",
+            command: Some("debug"),
+            no_connection: true,
+            expected_mode: Some("config_only"),
+        },
+        CommandModeTestCase {
+            description: "debug also tests the connection",
+            command: Some("debug"),
+            no_connection: false,
+            expected_mode: Some("config_and_connection"),
+        },
+        CommandModeTestCase {
+            description: "other commands record no mode",
+            command: Some("build"),
+            no_connection: false,
+            expected_mode: None,
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            command_mode(test_case.command, test_case.no_connection),
+            test_case.expected_mode,
             "{}",
             test_case.description
         );

@@ -92,6 +92,8 @@ For every recorded invocation, Recall keeps:
   `error_message`, also when the command reported the failure only through its exit code (for
   example `sqb debug` failing to connect records `ConnectionError` and `C980`);
 - the commit it ran from (`git_revision`), see [Git revision](#git-revision);
+- where it came from (`origin`) and, for an orchestrated run, the job and run that started it, see
+  [Where a run came from](#where-a-run-came-from);
 - its [lifecycle events](/docs/concepts/observability): runs, resource attempts, statements,
   retries, and audit results;
 - the SQL text of every executed statement, stored once per distinct statement and shared across
@@ -128,6 +130,29 @@ export SQLBUILD_GIT_DIRTY=false                        # optional: recorded as g
 
 `SQLBUILD_GIT_REVISION` takes precedence over the repository. Without `SQLBUILD_GIT_DIRTY`,
 `git_dirty` is `NULL`.
+
+## Where a run came from
+
+Every command is recorded in the store of the target it ran against, including a quick
+`sqb debug --target prod --no-connection` on a laptop. Each invocation therefore says where it came
+from, so a local check reads differently from a failed scheduled build:
+
+- `origin` is `integration` when an integration such as Dagster started the command (it records
+  `external_context`), `ci` when the command ran in CI, and `local` otherwise. CI is detected from
+  the variables CI systems set: `CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `BUILDKITE`, `JENKINS_URL`,
+  `CIRCLECI`, `TF_BUILD`, `TEAMCITY_VERSION`, `BITBUCKET_BUILD_NUMBER` and `CODEBUILD_BUILD_ID`
+  (any value other than empty, `false` or `0`).
+- `command_mode` says what a diagnostic command checked: `sqb debug` records `config_only` with
+  `--no-connection` and `config_and_connection` otherwise. Recall never stores a command's raw
+  arguments, which can hold secrets.
+- `external_context` is the JSON object the integration supplied. The `invocations` view exposes
+  its common fields as columns: `integration` (for example `dagster`), `integration_job`,
+  `integration_run_id` and `integration_retry`. The Dagster integration also records `step_key`
+  and `partition_key`, which you read from `external_context` with the store's JSON functions.
+
+Invocations recorded by an older SQLBuild version have `origin` and `command_mode` set to `NULL`.
+Older versions also stored `external_context` in a form that is not JSON; for those runs the
+`integration_*` columns are `NULL` and the query does not fail.
 
 ## Settings
 
@@ -378,6 +403,11 @@ in the store's SQL dialect, against these views:
 | `output_tail` | Recent output chunk |
 | `conflicts` | Record written twice with different content |
 
+Output shows an invocation ID by its first eight characters, such as `38ecc95e`. Any unique prefix
+names the invocation: `sqb recall output 38ecc95e` works, and a prefix that matches more than one
+invocation fails and lists the matches. In SQL, match a prefix with
+`invocation_id LIKE '38ecc95e%'` on SQLite or `startsWith(invocation_id, '38ecc95e')` on ClickHouse.
+
 Run `sqb recall schema` for every column, and check the values a column holds before filtering on
 it, for example `SELECT DISTINCT resource_kind, purpose FROM statements`: a model's
 `resource_kind` is its materialization, such as `table` or `view`, and its build statements have
@@ -389,19 +419,24 @@ the last day reads that part of the store instead of folding the whole retention
 
 ### Common questions
 
-These run as written on the local SQLite store; on ClickHouse, read JSON with
-`JSONExtractString(external_context, 'integration', 'job_name')`.
+These run as written on the local SQLite store and on a ClickHouse store.
 
-The latest runs of an orchestrated job, by the context its integration records (the Dagster
-integration records `run_id`, `job_name`, `step_key`, `retry_number` and `partition_key`). Runs
-recorded before this context was stored as JSON hold it in a form the JSON functions cannot read,
-so this query skips them without an error:
+The latest runs of an orchestrated job, by the job name its integration records:
 
 ```bash
-sqb recall query "SELECT invocation_id, invocation_started_at, status, duration_ms
-  FROM invocations
-  WHERE json_extract(external_context, '$.integration.job_name') = 'daily_models'
+sqb recall query "SELECT invocation_id, invocation_started_at, status, duration_ms,
+    integration_run_id, integration_retry
+  FROM invocations WHERE integration_job = 'orders_job'
   ORDER BY invocation_started_at DESC LIMIT 5"
+```
+
+The latest scheduled and CI builds, leaving out local diagnostics such as `sqb debug`:
+
+```bash
+sqb recall query "SELECT invocation_id, invocation_started_at, command, origin, status
+  FROM invocations
+  WHERE command IN ('build', 'run', 'test', 'audit', 'seed') AND origin IN ('integration', 'ci')
+  ORDER BY invocation_started_at DESC LIMIT 10"
 ```
 
 The slowest models in a run:

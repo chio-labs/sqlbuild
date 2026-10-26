@@ -268,6 +268,7 @@ class ClickHouseRecallViewEquivalenceTestCase:
     replaced_views: tuple[str, ...]
     all_views: tuple[str, ...]
     expected_statuses: list[list[object]]
+    expected_added_columns: tuple[tuple[tuple[object, ...], ...], ...]
 
 
 @dataclass(frozen=True)

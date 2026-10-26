@@ -114,3 +114,7 @@ pub(crate) const RECORD_PARAMETER: &str = "record";
 /// How Recall timestamps mark UTC, and the offset `datetime.fromisoformat` reads.
 pub(crate) const UTC_SUFFIX: &str = "Z";
 pub(crate) const UTC_OFFSET: &str = "+00:00";
+/// The command whose flags name its Recall `command_mode`.
+pub(crate) const DEBUG_COMMAND: &str = "debug";
+/// The namespace attribute of `sqb debug --no-connection`.
+pub(crate) const NO_CONNECTION_ATTRIBUTE: &str = "no_connection";

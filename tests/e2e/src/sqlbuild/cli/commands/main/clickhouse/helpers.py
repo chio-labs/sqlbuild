@@ -14,6 +14,7 @@ from typing import Any, cast
 
 from sqlbuild.adapters.clickhouse.classes.clickhouse_adapter import ClickHouseAdapter
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
+    REPO_ROOT,
     prepare_inline_project,
     prepare_waffle_shop,
     run_sqb,
@@ -28,6 +29,22 @@ from tests.integration.src.sqlbuild.cli.recall.helpers import (
 )
 
 CLICKHOUSE_IMAGE: str = "clickhouse/clickhouse-server:26.1"
+_RECALL_SCHEMA_CONSTANTS: Path = REPO_ROOT / "crates/sqlbuild-recall/src/schema/constants.rs"
+_RECALL_SCHEMA_VERSION_PATTERN: re.Pattern[str] = re.compile(
+    r"pub const RECALL_SCHEMA_VERSION: i64 = (\d+);"
+)
+
+
+def _recall_schema_version() -> int:
+    """The Recall schema version this build writes, as `RECALL_SCHEMA_VERSION` declares it."""
+
+    (version,) = _RECALL_SCHEMA_VERSION_PATTERN.findall(
+        _RECALL_SCHEMA_CONSTANTS.read_text(encoding="utf-8")
+    )
+    return int(version)
+
+
+RECALL_SCHEMA_VERSION: int = _recall_schema_version()
 
 
 def build_unique_schema_name(*, prefix: str) -> str:
@@ -915,16 +932,23 @@ def fetch_with_settings(
 
 
 def differing_rows(
-    *, config: dict[str, object], left: str, right: str, settings: dict[str, object]
+    *,
+    config: dict[str, object],
+    left: str,
+    right: str,
+    settings: dict[str, object],
+    columns: tuple[str, ...] = (),
 ) -> int:
-    """Rows of `left` missing from `right` plus rows of `right` missing from `left`."""
+    """Rows of `left` missing from `right` plus rows of `right` missing from `left`, over `columns`
+    when given, else over every column."""
 
+    selected: str = ", ".join(f"`{column}`" for column in columns) or "*"
     rows: tuple[tuple[object, ...], ...] = fetch_with_settings(
         config=config,
         sql=(
-            f"SELECT (SELECT count() FROM (SELECT * FROM {left} EXCEPT DISTINCT "
-            f"SELECT * FROM {right})) + (SELECT count() FROM (SELECT * FROM {right} "
-            f"EXCEPT DISTINCT SELECT * FROM {left}))"
+            f"SELECT (SELECT count() FROM (SELECT {selected} FROM {left} EXCEPT DISTINCT "
+            f"SELECT {selected} FROM {right})) + (SELECT count() FROM (SELECT {selected} "
+            f"FROM {right} EXCEPT DISTINCT SELECT {selected} FROM {left}))"
         ),
         settings=settings,
     )
@@ -937,6 +961,30 @@ def described(*, config: dict[str, object], relation: str) -> tuple[tuple[object
     return tuple(
         (row[0], row[1])
         for row in fetch_clickhouse_rows(config=config, sql=f"DESCRIBE TABLE {relation}")
+    )
+
+
+def column_names(*, config: dict[str, object], relation: str) -> tuple[str, ...]:
+    """Each column's name, in order."""
+
+    return tuple(str(name) for name, _ in described(config=config, relation=relation))
+
+
+def described_except(
+    *, config: dict[str, object], relation: str, previous: str
+) -> tuple[tuple[tuple[object, ...], ...], tuple[tuple[object, ...], ...]]:
+    """`relation`'s columns and types that `previous` also has, and those it adds, in order."""
+
+    columns: dict[object, object] = {
+        column[0]: column[1] for column in described(config=config, relation=relation)
+    }
+    kept: tuple[str, ...] = column_names(config=config, relation=previous)
+    added: dict[object, object] = dict(columns)
+    for name in kept:
+        del added[name]
+    return (
+        tuple((name, columns[name]) for name in kept),
+        tuple(added.items()),
     )
 
 

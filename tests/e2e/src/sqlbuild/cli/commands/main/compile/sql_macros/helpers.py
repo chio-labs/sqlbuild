@@ -554,3 +554,43 @@ def scoped_model(macros: dict[str, str], body: str) -> dict[str, str]:
             f"{body}\n"
         ),
     }
+
+
+SQL_RULES: dict[str, str] = {
+    "sqlbuild_project.toml": BASE_FILES["sqlbuild_project.toml"]
+    + '\n[rules]\nselect = ["SQBRSQL028", "SQBRSQL029"]\n'
+}
+
+
+def rates_with_middle_cte(middle: str) -> dict[str, str]:
+    """The docs' weekly refund rates macro with `middle` as a CTE between its two, and a model."""
+
+    return {
+        "macros/sql/weekly_rates.sql": (
+            'MACRO (\n  description "Weekly refund rate per grain",\n'
+            "  arguments (weekly RELATION (keys COLUMNS, order_count BIGINT, refund_count BIGINT)),"
+            "\n);\n\n"
+            "WITH counted AS (\n"
+            "  SELECT\n"
+            "    s.@weekly.keys,\n"
+            "    s.@weekly.order_count AS orders,\n"
+            "    s.@weekly.refund_count AS refunds\n"
+            "  FROM @weekly AS s\n"
+            "),\n\n"
+            f"{middle},\n\n"
+            "rated AS (\n"
+            "  SELECT\n"
+            "    @weekly.keys,\n"
+            "    SUM(refunds) / NULLIF(SUM(orders), 0) AS refund_rate\n"
+            "  FROM plain\n"
+            "  GROUP BY @weekly.keys\n"
+            ")\n"
+        ),
+        "models/marts/rates.sql": (
+            'MODEL (description "Refund rates");\n\n'
+            'WITH weekly AS (SELECT * FROM __seed("weekly_orders")),\n'
+            "@sql.weekly_rates(weekly, weekly.keys := (product_id, region), "
+            "weekly.order_count := orders_placed)\n"
+            "SELECT * FROM rated\n"
+        ),
+    }

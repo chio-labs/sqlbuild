@@ -102,6 +102,8 @@ further processing, not just to print rows more compactly.
 Every command except `sqb recall` is recorded in the store of the target it runs against,
 including `sqb debug` and failed commands. To check a shared target, prefer `sqb recall` reads:
 anything else you run from your machine with `--target <shared>` appears in that target's history.
+`invocations.origin` (`integration`, `ci` or `local`) and `command_mode` tell such local checks
+from scheduled runs; filter on them or on `command` when looking for scheduled runs.
 
 Recall creates and upgrades its own store (database, tables, views and schema version) on the first
 write, so there is usually nothing to set up, even for a new shared store. Run the statements from

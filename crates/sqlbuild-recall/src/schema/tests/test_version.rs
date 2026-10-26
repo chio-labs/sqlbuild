@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 
 use crate::schema::_helpers::clickhouse_views::clickhouse_view_bodies;
-use crate::schema::constants::{RECALL_SCHEMA_VERSION, VIEW_NAMES};
+use crate::schema::constants::{
+    RECALL_SCHEMA_VERSION, SUPERSEDED_CLICKHOUSE_VIEW_MARKERS, VIEW_NAMES,
+};
 use crate::schema::main::create_database_statement::create_database_statement;
 use crate::schema::main::schema_age::schema_age;
 use crate::schema::main::store_version_with_views::store_version_with_views;
@@ -270,10 +272,10 @@ fn given_view_definitions_when_versioned_then_views_an_older_version_wrote_make_
             expected_store: StoreVersion::Unrecorded(SchemaAge::Older),
         },
         ViewDefinitionsTestCase {
-            description: "previous views recorded as current count as the previous version",
+            description: "views that set join_use_nulls count as the version that wrote them",
             store: recorded(RECALL_SCHEMA_VERSION),
             definitions: vec![PREVIOUS_VIEW.to_owned()],
-            expected_store: recorded(RECALL_SCHEMA_VERSION - 1),
+            expected_store: recorded(SUPERSEDED_CLICKHOUSE_VIEW_MARKERS[0].1),
         },
         ViewDefinitionsTestCase {
             description: "current views keep the recorded version",

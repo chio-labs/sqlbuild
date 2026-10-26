@@ -17,9 +17,12 @@ from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse._test_types import (
     ClickHouseRecallViewEquivalenceTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse.helpers import (
+    RECALL_SCHEMA_VERSION,
     RECALL_VIEWS,
+    column_names,
     create_previous_views,
     described,
+    described_except,
     differing_rows,
     duplicate_recall_rows,
     execute_clickhouse_sql,
@@ -206,6 +209,19 @@ def test_given_a_reader_when_querying_then_pinned_settings_apply_unless_it_may_n
                 ["failed"],
                 ["running"],
             ],
+            expected_added_columns=(
+                (
+                    ("origin", "Nullable(String)"),
+                    ("command_mode", "Nullable(String)"),
+                    ("integration", "Nullable(String)"),
+                    ("integration_job", "Nullable(String)"),
+                    ("integration_run_id", "Nullable(String)"),
+                    ("integration_retry", "Nullable(Int64)"),
+                ),
+                (),
+                (),
+                (),
+            ),
         ),
     ],
     ids=lambda case: case.description,
@@ -230,22 +246,40 @@ def test_given_representative_invocations_when_views_are_rewritten_then_rows_and
         statuses: list[list[object]] = recall_rows(
             project_dir, "SELECT status FROM invocations ORDER BY status"
         )
+        previous_columns: list[tuple[str, ...]] = [
+            column_names(
+                config=clickhouse_e2e_config, relation=f"{recall_database}.previous_{view}"
+            )
+            for view in test_case.replaced_views
+        ]
         against_previous: list[int] = [
             differing_rows(
                 config=clickhouse_e2e_config,
                 left=f"{recall_database}.{view}",
                 right=f"{recall_database}.previous_{view}",
                 settings={"join_use_nulls": 1},
+                columns=columns,
+            )
+            for view, columns in zip(test_case.replaced_views, previous_columns, strict=True)
+        ]
+        compared: list[tuple[tuple[tuple[object, ...], ...], tuple[tuple[object, ...], ...]]] = [
+            described_except(
+                config=clickhouse_e2e_config,
+                relation=f"{recall_database}.{view}",
+                previous=f"{recall_database}.previous_{view}",
             )
             for view in test_case.replaced_views
         ]
         types: list[bool] = [
-            described(config=clickhouse_e2e_config, relation=f"{recall_database}.{view}")
+            kept
             == described(
                 config=clickhouse_e2e_config, relation=f"{recall_database}.previous_{view}"
             )
-            for view in test_case.replaced_views
+            for view, (kept, _) in zip(test_case.replaced_views, compared, strict=True)
         ]
+        added: tuple[tuple[tuple[object, ...], ...], ...] = tuple(
+            added_columns for _, added_columns in compared
+        )
     finally:
         os.killpg(running.pid, signal.SIGKILL)
         _ = running.wait(timeout=30)
@@ -277,8 +311,9 @@ def test_given_representative_invocations_when_views_are_rewritten_then_rows_and
             left=f"{recall_database}.{view}",
             right=f"{recall_database}.previous_{view}",
             settings={"join_use_nulls": 1},
+            columns=columns,
         )
-        for view in test_case.replaced_views
+        for view, columns in zip(test_case.replaced_views, previous_columns, strict=True)
     ]
     counts_with_duplicates: list[bool] = [
         fetch_clickhouse_rows(
@@ -293,6 +328,7 @@ def test_given_representative_invocations_when_views_are_rewritten_then_rows_and
     assert statuses == test_case.expected_statuses
     assert against_previous == [0 for _ in test_case.replaced_views]
     assert types == [True for _ in test_case.replaced_views]
+    assert added == test_case.expected_added_columns
     assert without_join_nulls == [0 for _ in test_case.all_views]
     assert with_duplicates == [0 for _ in test_case.all_views]
     assert previous_with_duplicates == [0 for _ in test_case.replaced_views]
@@ -354,9 +390,9 @@ def test_given_one_invocation_lookup_when_planned_then_each_table_is_read_once_b
             expected_ddl_fragments=(
                 "CREATE OR REPLACE VIEW `{database}`.`invocations`",
                 "CREATE OR REPLACE VIEW `{database}`.`statements`",
-                "SELECT 'schema', 'schema_version', '3'",
+                f"SELECT 'schema', 'schema_version', '{RECALL_SCHEMA_VERSION}'",
             ),
-            expected_version=((3,),),
+            expected_version=((RECALL_SCHEMA_VERSION,),),
         ),
     ],
     ids=lambda case: case.description,

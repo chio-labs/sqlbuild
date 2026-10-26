@@ -370,10 +370,10 @@ def test_given_dagster_asset_selection_when_executing_sqlbuild_then_uses_select_
     rendered_logs: str = capsys.readouterr().err
     assert "SQLBuild command:" in rendered_logs
     assert "build --select-file" in rendered_logs
-    assert "SQLBuild selector file:" in rendered_logs
-    assert f"SQLBuild selected assets from Dagster ({len(test_case.selected_asset_keys)}):" in (
-        rendered_logs
-    )
+    assert (
+        f"SQLBuild selected assets from Dagster: {len(test_case.selected_asset_keys)} "
+        "(selector file: "
+    ) in rendered_logs
     assert test_case.expected_selector_log_line in rendered_logs
     for table_name in test_case.expected_table_names:
         assert table_exists(db_path=project_dir / "waffle_shop.duckdb", table_name=table_name)

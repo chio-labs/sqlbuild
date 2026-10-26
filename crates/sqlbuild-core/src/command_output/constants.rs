@@ -14,6 +14,8 @@ pub const RECALL_REPLACEMENT_SCHEMA_VERSION: i64 = 2;
 pub const MAX_INVOCATION_CONTEXT_BYTES: usize = 16 * 1024;
 pub const MAX_INVOCATION_CONTEXT_DEPTH: usize = 8;
 pub const INVOCATION_CONTEXT_ENV: &str = "SQLBUILD_INVOCATION_CONTEXT_JSON";
+/// Characters of an invocation ID that output shows; any unique prefix names the invocation.
+pub const SHORT_INVOCATION_ID_LENGTH: usize = 8;
 pub(crate) const ESCAPE: u8 = 0x1b;
 pub(crate) const BELL: u8 = 0x07;
 pub(crate) const OSC_INTRODUCER: u8 = b']';

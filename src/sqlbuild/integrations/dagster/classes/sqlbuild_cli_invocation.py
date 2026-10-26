@@ -24,6 +24,7 @@ from sqlbuild.integrations.dagster._helpers.invocation import (
     _build_results_from_integration_result,
     _load_execution_payload,
     _load_execution_payload_from_path,
+    _log_failed_check,
     _log_invocation,
     _start_stream_future,
 )
@@ -163,13 +164,16 @@ class SqlBuildCliInvocation:
                 execution_payload = _load_execution_payload(self.stdout)
             if execution_payload is not None:
                 self.execution_payload = execution_payload
-                yield from _build_results_from_execution_payload(
+                for result in _build_results_from_execution_payload(
                     dg=dg,
                     dag=self.dag,
                     payload=execution_payload,
                     command=self.command,
                     context=self.context,
-                )
+                ):
+                    if isinstance(result, dg.AssetCheckResult):
+                        _log_failed_check(context=self.context, dg=dg, result=result)
+                    yield result
                 error: Exception | None = self.get_error()
                 if error is not None and self.raise_on_error:
                     raise error
@@ -229,6 +233,7 @@ class SqlBuildCliInvocation:
                                 if check_key in emitted_check_keys:
                                     continue
                                 emitted_check_keys.add(check_key)
+                                _log_failed_check(context=self.context, dg=dg, result=result)
                             else:
                                 asset_key: tuple[str, ...] = tuple(result.asset_key.path)
                                 if asset_key in emitted_asset_keys:
@@ -258,6 +263,7 @@ class SqlBuildCliInvocation:
                         if check_key in emitted_check_keys:
                             continue
                         emitted_check_keys.add(check_key)
+                        _log_failed_check(context=self.context, dg=dg, result=result)
                         yield result
                         continue
                     if isinstance(result, (dg.AssetMaterialization, dg.MaterializeResult)):
