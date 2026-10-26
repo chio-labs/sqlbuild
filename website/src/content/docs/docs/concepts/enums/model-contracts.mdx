@@ -41,6 +41,40 @@ audits. Its severity and timing follow the model's ordinary audit and materializ
 With `contract none`, SQLBuild still resolves the enum to its portable scalar column type but does
 not generate the domain audit.
 
+## Literals checked at compile time
+
+With `contract enforced`, `sqb compile` also checks every constant string literal that fills an
+enum-typed column of a string enum, so a missing member fails before the build rather than in the
+audit afterwards. A literal counts when it is the column's whole expression, when it fills the
+column in any `UNION` or `UNION ALL` branch, or when the column passes it through unfiltered from a
+CTE or derived table:
+
+```sql
+MODEL (
+  description "Orders from every channel",
+  contract enforced,
+  columns (
+    fulfillment_method (type fulfillment_method),
+  ),
+);
+
+SELECT order_id, 'DELIVERY' AS fulfillment_method FROM __ref("stg_web_orders")
+UNION ALL
+SELECT order_id, 'COURIER' FROM __ref("stg_partner_orders")
+```
+
+```
+error[K013]: value 'COURIER' in column 'fulfillment_method' of model 'orders' is not a member of enum fulfillment_method
+```
+
+The error points at the literal in the model file. Computed values, such as a `CASE` expression or
+a function call, are not checked at compile time, and neither is a column read from a CTE or
+derived table through a filter, join or row limit that could remove the literal's rows; the
+generated `accepted_values` audit still checks them when the model builds.
+
+SQL Server compares strings ignoring case and trailing spaces under its default collation, so the
+compile-time check is skipped on the SQL Server adapter and the audit alone checks the column.
+
 This behavior is the same on adapters with and without native enum support. The physical warehouse
 column remains an ordinary string or integer column.
 

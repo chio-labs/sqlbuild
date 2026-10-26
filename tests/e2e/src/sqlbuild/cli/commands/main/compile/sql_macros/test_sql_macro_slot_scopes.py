@@ -109,6 +109,29 @@ _SCOPED_ARGUMENTS: str = (
             inspected_paths=_COMPILED,
         ),
         SqlMacroCompileTestCase(
+            description="forwarded_aliased_read_of_a_slot_the_outer_does_not_declare",
+            files=scoped_model(
+                {
+                    **macro_file(
+                        "counted_weeks",
+                        "r RELATION (order_count BIGINT, week BIGINT)",
+                        "WITH counted AS (SELECT s.@r.week, s.@r.order_count AS orders "
+                        "FROM @r AS s)",
+                    ),
+                    **macro_file(
+                        "outer_counted",
+                        "w RELATION (placed BIGINT)",
+                        "WITH @sql.counted_weeks(r := @w, r.order_count := placed)",
+                    ),
+                },
+                "@sql.outer_counted(weekly, w.placed := orders_placed)\nSELECT * FROM counted",
+            ),
+            expected_returncode=0,
+            expected_fragments=("SELECT s.week, s.orders_placed AS orders FROM weekly AS s",),
+            unexpected_fragments=("P022",),
+            inspected_paths=_COMPILED,
+        ),
+        SqlMacroCompileTestCase(
             description="forwarded_group_mapped_to_a_single_column_outer_slot",
             files=scoped_model(
                 {
@@ -309,6 +332,42 @@ _SCOPED_ARGUMENTS: str = (
             expected_fragments=(
                 "error[P018]: column week of slot weekly.keys clashes with column week that "
                 "macro listed_weeks() defines",
+            ),
+        ),
+        SqlMacroCompileTestCase(
+            description="relation_read_of_a_column_beside_a_group_holding_it",
+            files=scoped_model(
+                macro_file(
+                    "listed_regions",
+                    "weekly RELATION (keys COLUMNS)",
+                    "WITH listed AS (SELECT @weekly.keys, @weekly.region FROM @weekly)",
+                ),
+                "@sql.listed_regions(weekly, weekly.keys := (product_id, region))\n"
+                "SELECT * FROM listed",
+            ),
+            expected_returncode=1,
+            expected_fragments=(
+                "error[P018]: column region of slot weekly.keys clashes with column region that "
+                "macro listed_regions() defines",
+            ),
+        ),
+        SqlMacroCompileTestCase(
+            description="mapped_slot_without_as_in_a_lateral_subquery",
+            files=scoped_model(
+                macro_file(
+                    "lateral_orders",
+                    "weekly RELATION (order_count BIGINT, week BIGINT), refunds RELATION (week BIGINT)",
+                    "WITH latest AS (SELECT r.week, l.* FROM @refunds AS r,\n"
+                    "LATERAL (SELECT w.@weekly.order_count FROM @weekly AS w "
+                    "WHERE w.week = r.week) AS l)",
+                ),
+                "@sql.lateral_orders(weekly, refunds, weekly.order_count := orders_placed)\n"
+                "SELECT * FROM latest",
+            ),
+            expected_returncode=1,
+            expected_fragments=(
+                "error[P017]: slot weekly.order_count of macro lateral_orders() is mapped to "
+                "orders_placed, but the macro reads it in a select list without AS",
             ),
         ),
     ],

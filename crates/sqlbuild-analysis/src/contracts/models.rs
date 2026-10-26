@@ -165,3 +165,47 @@ pub struct PromotionConflict {
     pub message: String,
     pub help: String,
 }
+
+/// One model whose enum-typed output columns are checked against the literals that fill them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumLiteralModel<'a> {
+    pub name: &'a str,
+    /// The dialect name of the project's adapter.
+    pub dialect: &'a str,
+    /// SQL after variable, declaration and macro expansion.
+    pub query_sql: &'a str,
+    /// The whole authored model file.
+    pub authored_sql: &'a str,
+    /// The authored query below the `MODEL (...)` header.
+    pub authored_query_sql: &'a str,
+    pub columns: Vec<EnumColumn>,
+}
+
+/// One output column declared with an enum type, and the enum's string members.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumColumn {
+    pub name: String,
+    pub enum_name: String,
+    pub members: Vec<String>,
+}
+
+/// A constant string literal that fills an enum-typed output column but is not a member.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumLiteralViolation {
+    pub code: &'static str,
+    pub column_name: String,
+    pub value: String,
+    pub message: String,
+    pub help: String,
+    /// The literal in the authored model file, when it is written there.
+    pub location: Option<LiteralLocation>,
+}
+
+/// One-based line and column of a literal in the authored file; the end is exclusive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LiteralLocation {
+    pub line: usize,
+    pub column: usize,
+    pub end_line: usize,
+    pub end_column: usize,
+}

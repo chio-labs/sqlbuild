@@ -33,3 +33,10 @@ class AuthoringImportTestCase:
     imported_module: str
     checked_modules: tuple[str, ...]
     expected_loaded_modules: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class EnumTypesRuleTestCase:
+    description: str
+    status_type: str
+    expected_finding_count: int

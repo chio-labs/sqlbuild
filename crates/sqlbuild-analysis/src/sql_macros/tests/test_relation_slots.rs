@@ -98,6 +98,16 @@ fn given_relation_slots_when_expanding_then_each_read_becomes_the_mapped_columns
             expected_sql: "SELECT w.orders_placed AS orders, w.region FROM weekly_orders AS w",
         },
         ExpansionTestCase {
+            description: "a mapped single-column slot read with AS in a LATERAL subquery",
+            adapter: "",
+            macros: &[(
+                "lateral_named_counts",
+                "MACRO (description \"Latest order count per customer\", arguments (weekly RELATION (order_count BIGINT)));\n\nWITH latest AS (SELECT c.customer_id, l.* FROM customers AS c, LATERAL (SELECT @weekly.order_count AS orders FROM @weekly) AS l)\n",
+            )],
+            sql: "WITH w AS (SELECT 2 AS orders_placed), @sql.lateral_named_counts(w, weekly.order_count := orders_placed) SELECT * FROM latest",
+            expected_sql: "WITH w AS (SELECT 2 AS orders_placed), latest AS (SELECT c.customer_id, l.* FROM customers AS c, LATERAL (SELECT w.orders_placed AS orders FROM w) AS l) SELECT * FROM latest",
+        },
+        ExpansionTestCase {
             description: "an expression macro reads mapped single-column slots",
             adapter: "",
             macros: &[RATE_TOTAL],
@@ -270,6 +280,39 @@ fn given_wrong_slot_mappings_when_expanding_then_each_call_fails_with_its_messag
             sql: "SELECT w.region, @sql.rate_columns(w, weekly.keys := (product_id, region)) FROM weekly_rates AS w",
             expected_code: "P018",
             expected_message: "column \"region\" from macro rate_columns() clashes with a column already defined in model:orders_clean",
+        },
+        ExpansionErrorTestCase {
+            description: "a grouped column read through the relation beside its group in a column list",
+            adapter: "",
+            macros: &[(
+                "region_columns",
+                "MACRO (description \"Grain and region columns\", arguments (weekly RELATION (keys COLUMNS)));\n\nSELECT @weekly.keys, @weekly.region",
+            )],
+            sql: "SELECT @sql.region_columns(w, weekly.keys := (product_id, region)) FROM weekly_rates AS w",
+            expected_code: "P018",
+            expected_message: "column region of slot weekly.keys clashes with column region that macro region_columns() defines",
+        },
+        ExpansionErrorTestCase {
+            description: "a grouped column read through the relation beside its group in a CTE",
+            adapter: "",
+            macros: &[(
+                "region_totals",
+                "MACRO (description \"Totals per grain with region\", arguments (weekly RELATION (keys COLUMNS)));\n\nWITH totals AS (SELECT @weekly.keys, @weekly.region FROM @weekly)\n",
+            )],
+            sql: "WITH w AS (SELECT 1 AS product_id, 'EU' AS region), @sql.region_totals(w, weekly.keys := (product_id, region)) SELECT * FROM totals",
+            expected_code: "P018",
+            expected_message: "column region of slot weekly.keys clashes with column region that macro region_totals() defines",
+        },
+        ExpansionErrorTestCase {
+            description: "a mapped single-column slot read without AS in a LATERAL subquery",
+            adapter: "",
+            macros: &[(
+                "lateral_counts",
+                "MACRO (description \"Latest order count per customer\", arguments (weekly RELATION (order_count BIGINT)));\n\nWITH latest AS (\n  SELECT c.customer_id, l.*\n  FROM customers AS c,\n  LATERAL (SELECT @weekly.order_count FROM @weekly WHERE @weekly.customer_id = c.customer_id) AS l\n)\n",
+            )],
+            sql: "WITH w AS (SELECT 1 AS customer_id, 2 AS orders_placed), @sql.lateral_counts(w, weekly.order_count := orders_placed) SELECT * FROM latest",
+            expected_code: "P017",
+            expected_message: "slot weekly.order_count of macro lateral_counts() is mapped to orders_placed, but the macro reads it in a select list without AS, so the output column's name would depend on the mapping",
         },
         ExpansionErrorTestCase {
             description: "a positional argument after a slot mapping",

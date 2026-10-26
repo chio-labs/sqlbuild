@@ -1,6 +1,7 @@
 use crate::contracts::models::{
     ContractDiagnostic, ContractModel, ContractSchema, DeclaredColumn, DeclaredColumnFamily,
-    DynamicContractProof, InferredOutputColumn, PromotionModel, PromotionRequest,
+    DynamicContractProof, EnumColumn, EnumLiteralViolation, InferredOutputColumn, PromotionModel,
+    PromotionRequest,
 };
 
 pub(crate) fn model(contract: Option<&str>, schema: Option<ContractSchema>) -> ContractModel {
@@ -141,4 +142,25 @@ pub(crate) fn promotion_request(
             promotion_model(Some("enforced"), None, None),
         ],
     }
+}
+
+/// The header of every authored model the enum literal tests check.
+pub(crate) const ENUM_HEADER: &str = "MODEL (description 'Orders');\n";
+
+/// An order status column of a two-member string enum.
+pub(crate) fn status_column() -> EnumColumn {
+    EnumColumn {
+        name: "status".to_owned(),
+        enum_name: "order_status".to_owned(),
+        members: vec!["open".to_owned(), "closed".to_owned()],
+    }
+}
+
+/// One violation as `column value line:column`, `-` when it has no location.
+pub(crate) fn enum_violation_line(violation: &EnumLiteralViolation) -> String {
+    let location: String = violation.location.map_or_else(
+        || "-".to_owned(),
+        |location| format!("{}:{}", location.line, location.column),
+    );
+    format!("{} {} {location}", violation.column_name, violation.value)
 }

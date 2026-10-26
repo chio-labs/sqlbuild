@@ -88,6 +88,7 @@ _POPULATED_FACTS: tuple[str, ...] = (
     "declarations.constants",
     f"columns.declared:{_STAGING}",
     f"columns.inferred:{_STAGING}",
+    f"columns.enum_types:{_STAGING}",
     f"audits.for_model:{_STAGING}",
     "tests.for_model:models/marts/order_totals.sql",
     "graph.dependents:models/marts/order_flags.sql",

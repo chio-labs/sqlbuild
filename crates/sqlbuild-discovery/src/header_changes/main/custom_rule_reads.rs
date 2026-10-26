@@ -24,6 +24,7 @@ pub fn custom_rule_reads(
             "contracts.enforced" | "contract" => &["contract"],
             "contracts.grain" | "grain" => &["contract", "columns"],
             "columns.declared" | "columns.names" => &["columns", "dynamic_columns"],
+            "columns.enum_types" => &["columns"],
             "materialized" => &["materialized"],
             "tests.for_model" | "audits.for_model" => &["audits", "columns"],
             _ => &[],

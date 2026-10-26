@@ -27,3 +27,26 @@ pub(crate) struct UnknownDialectTestCase {
     pub(crate) dialect: &'static str,
     pub(crate) expected_error: &'static str,
 }
+
+pub(crate) struct EnumLiteralTestCase {
+    pub(crate) description: &'static str,
+    /// The authored model file; its query starts after the first `);\n`.
+    pub(crate) authored: &'static str,
+    /// The expanded query, when it differs from the authored one.
+    pub(crate) expanded: Option<&'static str>,
+    /// One `column value line:column` line per violation, `-` for an unlocated literal.
+    pub(crate) expected_lines: &'static [&'static str],
+}
+
+pub(crate) struct EnumLiteralMessageTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) query: &'static str,
+    /// `(code, message, help)` per violation.
+    pub(crate) expected_violations: &'static [(&'static str, &'static str, &'static str)],
+}
+
+pub(crate) struct EnumLiteralDialectTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: &'static str,
+    pub(crate) expected_count: usize,
+}

@@ -7,9 +7,18 @@ use pyo3::prelude::{
 };
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
+use serde_json::Value;
+use sqlbuild_analysis::compiled_project::main::project_models::project_models;
+use sqlbuild_analysis::compiled_project::models::CompiledModelFacts;
+use sqlbuild_analysis::contracts::constants::CONTRACT_ENFORCED;
+use sqlbuild_analysis::contracts::main::enum_literal_violations::enum_literal_violations;
+use sqlbuild_analysis::contracts::models::{
+    EnumColumn, EnumLiteralModel, EnumLiteralViolation, LiteralLocation,
+};
 use sqlbuild_sqltext::compiler::main::model_output_columns::model_output_columns;
 
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::compiled_views::model_reads::enum_columns;
 use crate::bindings::_helpers::compiled_views::records::compiled_project_facts;
 use crate::bindings::_helpers::contracts::model_contracts::{
     ConflictRow, DiagnosticRow, evaluate_project_model_contracts, project_promotion_conflicts,
@@ -25,6 +34,7 @@ const GENERIC_DIALECT: &str = "generic";
 const OUTPUT_LABEL: &str = "output";
 const CONTRACT_PHASE: &str = "contract";
 const MODEL_RESOURCE: &str = "model";
+const SQL_ANALYSIS_KEY: &str = "sql_analysis";
 
 fn keyword_call<'py>(
     callable: &Bound<'py, PyAny>,
@@ -167,6 +177,109 @@ fn contract_diagnostic<'py>(
     )
 }
 
+/// The model's enum-typed columns whose enum has only string members, in column order.
+fn string_enum_columns(model: &Bound<'_, PyAny>) -> PyResult<Vec<EnumColumn>> {
+    let mut columns: Vec<EnumColumn> = Vec::new();
+    for (name, declaration) in enum_columns(model)?.downcast_into::<PyDict>()?.iter() {
+        let name: String = name.extract()?;
+        let mut members: Vec<String> = Vec::new();
+        for member in native_field(&declaration, "members")?.try_iter()? {
+            match native_field(&member?, "value")?.extract::<String>() {
+                Ok(value) => members.push(value),
+                Err(_) => {
+                    members.clear();
+                    break;
+                }
+            }
+        }
+        if !members.is_empty() {
+            columns.push(EnumColumn {
+                name,
+                enum_name: native_field(&declaration, "name")?.extract()?,
+                members,
+            });
+        }
+    }
+    Ok(columns)
+}
+
+/// The K013 violations of a model with an enforced contract and SQL analysis left on.
+fn model_enum_violations(
+    model: &Bound<'_, PyAny>,
+    facts: Option<&CompiledModelFacts>,
+    dialect: &str,
+) -> PyResult<Vec<EnumLiteralViolation>> {
+    let Some(facts) = facts else {
+        return Ok(Vec::new());
+    };
+    let enforced: bool = facts.config.contract.as_deref() == Some(CONTRACT_ENFORCED);
+    let analysed: bool = facts.config.values.get(SQL_ANALYSIS_KEY) != Some(&Value::Bool(false));
+    if !enforced || !analysed {
+        return Ok(Vec::new());
+    }
+    let columns: Vec<EnumColumn> = string_enum_columns(model)?;
+    if columns.is_empty() {
+        return Ok(Vec::new());
+    }
+    Ok(enum_literal_violations(&EnumLiteralModel {
+        name: &facts.name,
+        dialect,
+        query_sql: &facts.query_sql,
+        authored_sql: &facts.authored_sql,
+        authored_query_sql: &facts.authored_query_sql,
+        columns,
+    }))
+}
+
+fn literal_source_location<'py>(
+    model: &Bound<'py, PyAny>,
+    location: LiteralLocation,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = model.py();
+    keyword_call(
+        &record_class(py, RecordId::SourceLocation)?,
+        vec![
+            ("path", native_field(model, "relative_path")?),
+            ("line", location.line.into_pyobject(py)?.into_any()),
+            ("column", location.column.into_pyobject(py)?.into_any()),
+            ("end_line", location.end_line.into_pyobject(py)?.into_any()),
+            (
+                "end_column",
+                location.end_column.into_pyobject(py)?.into_any(),
+            ),
+        ],
+    )
+}
+
+fn enum_literal_diagnostic<'py>(
+    model: &Bound<'py, PyAny>,
+    violation: EnumLiteralViolation,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = model.py();
+    let location: Bound<'py, PyAny> = match violation.location {
+        Some(location) => literal_source_location(model, location)?,
+        None => diagnostic_location(model, (None, Some(&violation.column_name)))?,
+    };
+    keyword_call(
+        &record_class(py, RecordId::CompilerDiagnostic)?,
+        vec![
+            ("phase", CONTRACT_PHASE.into_pyobject(py)?.into_any()),
+            ("severity", "error".into_pyobject(py)?.into_any()),
+            ("code", violation.code.into_pyobject(py)?.into_any()),
+            ("message", violation.message.into_pyobject(py)?.into_any()),
+            ("resource_type", model_resource_type(py)?),
+            ("resource_name", native_field(model, "name")?),
+            (
+                "column_name",
+                violation.column_name.into_pyobject(py)?.into_any(),
+            ),
+            ("path", native_field(model, "relative_path")?),
+            ("location", location),
+            ("help", violation.help.into_pyobject(py)?.into_any()),
+        ],
+    )
+}
+
 fn model_resource_type(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     enum_from_value(py, RecordId::CompiledResourceType, MODEL_RESOURCE)
 }
@@ -193,9 +306,13 @@ pub(crate) fn evaluate_model_contracts<'py>(
     let native: PyRef<'py, NativeCompiledProject> = native.extract()?;
     let outcomes: Vec<(String, Vec<DiagnosticRow>)> = evaluate_project_model_contracts(
         py,
-        (dialect_name, mode == IMPLICIT_COLUMN_CONTRACTS),
+        (dialect_name.clone(), mode == IMPLICIT_COLUMN_CONTRACTS),
         &native,
     )?;
+    let facts: HashMap<&str, &CompiledModelFacts> = project_models(native.facts())
+        .iter()
+        .map(|facts| (facts.name.as_str(), facts))
+        .collect();
     let latest: HashMap<&str, &[DiagnosticRow]> = outcomes
         .iter()
         .map(|(owner, rows)| (owner.as_str(), rows.as_slice()))
@@ -204,11 +321,12 @@ pub(crate) fn evaluate_model_contracts<'py>(
     for model in native_field(project, "models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
         let name: String = native_field(&model, "name")?.extract()?;
-        let Some(rows) = latest.get(name.as_str()).copied() else {
-            continue;
-        };
-        for row in rows {
+        for row in latest.get(name.as_str()).copied().unwrap_or_default() {
             diagnostics.push(contract_diagnostic(&model, row.clone())?);
+        }
+        let model_facts: Option<&CompiledModelFacts> = facts.get(name.as_str()).copied();
+        for violation in model_enum_violations(&model, model_facts, &dialect_name)? {
+            diagnostics.push(enum_literal_diagnostic(&model, violation)?);
         }
     }
     keyword_call(

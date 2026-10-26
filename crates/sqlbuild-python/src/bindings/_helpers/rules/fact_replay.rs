@@ -61,6 +61,7 @@ enum Fact {
     Declared,
     Inferred,
     Names,
+    EnumTypes,
     Enforced,
     Grain,
     TestsForModel,
@@ -83,7 +84,7 @@ enum Arguments {
 }
 
 /// Every fact by key name, globals first, in the order full read sets list them.
-const FACTS: [(&str, Fact, Arguments); 29] = [
+const FACTS: [(&str, Fact, Arguments); 30] = [
     ("project.models", Fact::Models, Arguments::None),
     ("project.sources", Fact::Sources, Arguments::None),
     ("project.seeds", Fact::Seeds, Arguments::None),
@@ -115,6 +116,7 @@ const FACTS: [(&str, Fact, Arguments); 29] = [
     ("columns.declared", Fact::Declared, Arguments::ModelPath),
     ("columns.inferred", Fact::Inferred, Arguments::ModelPath),
     ("columns.names", Fact::Names, Arguments::ModelPath),
+    ("columns.enum_types", Fact::EnumTypes, Arguments::ModelPath),
     ("contracts.enforced", Fact::Enforced, Arguments::ModelPath),
     ("contracts.grain", Fact::Grain, Arguments::ModelPath),
     ("tests.for_model", Fact::TestsForModel, Arguments::ModelName),
@@ -187,6 +189,7 @@ pub(crate) fn delta_safe_fact(
                     | Fact::Declared
                     | Fact::Inferred
                     | Fact::Names
+                    | Fact::EnumTypes
                     | Fact::Enforced
                     | Fact::Grain
             )
@@ -472,6 +475,25 @@ impl<'py> FactReplay<'py> {
                     }
                 }
             },
+            Fact::EnumTypes => {
+                let columns: Bound<'py, PyAny> = match &view {
+                    Some(view) => view.enum_columns(py)?.into_bound(py).into_any(),
+                    None => record_field(&self.encoder, &model, "enum_columns")?,
+                };
+                let mut pairs: Vec<JsonValue> = Vec::new();
+                for (column, declaration) in
+                    columns.downcast::<PyDict>().map_err(PyErr::from)?.iter()
+                {
+                    let column: String = column.extract()?;
+                    let name: String =
+                        record_field(&self.encoder, &declaration, "name")?.extract()?;
+                    pairs.push(JsonValue::Array(vec![
+                        JsonValue::String(column),
+                        JsonValue::String(name),
+                    ]));
+                }
+                JsonValue::Array(pairs)
+            }
             Fact::Inferred | Fact::Names => {
                 let rows: Option<Vec<InferredRow>> = match &view {
                     Some(view) => view.inferred_rows(py)?,

@@ -24,6 +24,7 @@ from sqlbuild.rule_engine.constants import (
     FACT_AUDITS_ALL,
     FACT_AUDITS_FOR_MODEL,
     FACT_COLUMNS_DECLARED,
+    FACT_COLUMNS_ENUM_TYPES,
     FACT_COLUMNS_INFERRED,
     FACT_COLUMNS_NAMES,
     FACT_CONTRACTS_ENFORCED,
@@ -220,6 +221,10 @@ class _TrackedColumnFacts(_TrackedView):
     def names(self, model: Model) -> tuple[str, ...] | None:
         self._tracked_reads.record_model_path(fact=FACT_COLUMNS_NAMES, model=model)
         return self._tracked_view.names(model)
+
+    def enum_types(self, model: Model) -> dict[str, str]:
+        self._tracked_reads.record_model_path(fact=FACT_COLUMNS_ENUM_TYPES, model=model)
+        return self._tracked_view.enum_types(model)
 
 
 class _TrackedContractFacts(_TrackedView):

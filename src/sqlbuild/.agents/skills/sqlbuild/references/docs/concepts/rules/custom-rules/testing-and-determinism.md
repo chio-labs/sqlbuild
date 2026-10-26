@@ -39,6 +39,21 @@ def test_given_missing_order_id_when_evaluating_then_reports_finding() -> None:
 `RuleCase.files` adds supporting project files. `RuleCase.config` supplies option values. Include
 passing cases, failing cases, near misses, and exact source-position assertions.
 
+When the Rule's file lives in the project's `rules/` directory, the harness loads it with that whole
+directory available, as `sqb compile` does, so a Rule that imports a shared helper such as
+`from rules._helpers.naming import has_layer_prefix` runs under test too.
+
+The test imports the Rule from the `rules` package, so the project directory must be on the Python
+module search path. Under pytest's default import mode, a `conftest.py` in the project directory
+adds it. With `--import-mode=importlib`, pytest adds no test directories, so set `pythonpath`
+instead:
+
+```toml
+# pyproject.toml
+[tool.pytest.ini_options]
+pythonpath = ["."]
+```
+
 Each case also checks determinism. The harness evaluates every subject once, then evaluates every
 subject again in reverse order in the same process. If the Rule's findings differ between the two
 passes, the case fails with `custom rule <code> is not deterministic`. The usual cause is

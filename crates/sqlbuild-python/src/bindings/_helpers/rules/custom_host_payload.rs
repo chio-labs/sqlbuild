@@ -6,12 +6,14 @@ use std::sync::Arc;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, PyTypeMethods, Python};
 use pyo3::pyfunction;
 use pyo3::types::{
-    PyBytes, PyBytesMethods, PyDictMethods, PyString, PyStringMethods, PyTuple, PyTupleMethods,
+    PyBytes, PyBytesMethods, PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple,
+    PyTupleMethods,
 };
 use serde_json::{Map, Value, json};
 use sqlbuild_discovery::models::LineColumnSpan;
 
 use crate::bindings::_helpers::compiled_views::compiled_model_view::NativeCompiledModel;
+use crate::bindings::_helpers::compiled_views::model_reads::enum_columns;
 use crate::bindings::_helpers::compiled_views::records::{
     compiled_audit_record, compiled_function_record, compiled_seed_record, compiled_source_record,
 };
@@ -225,6 +227,8 @@ impl<W: Write> PayloadWriter<W> {
         model.insert("declared".to_owned(), declared);
         let enums: Bound<'_, PyAny> = view.enum_declarations(py)?.into_bound(py).into_any();
         model.insert("enums".to_owned(), self.declarations(&enums)?);
+        let columns: Bound<'_, PyAny> = view.enum_columns(py)?.into_bound(py).into_any();
+        model.insert("enum_types".to_owned(), enum_type_names(&columns)?);
         let constants: Bound<'_, PyAny> = view.constant_declarations(py)?.into_bound(py).into_any();
         model.insert("constants".to_owned(), self.declarations(&constants)?);
         Ok(model)
@@ -253,11 +257,26 @@ impl<W: Write> PayloadWriter<W> {
         model.insert("declared".to_owned(), declared);
         let enums: Value = self.declarations(&native_field(record, "enum_declarations")?)?;
         model.insert("enums".to_owned(), enums);
+        model.insert(
+            "enum_types".to_owned(),
+            enum_type_names(&enum_columns(record)?)?,
+        );
         let constants: Value =
             self.declarations(&native_field(record, "constant_declarations")?)?;
         model.insert("constants".to_owned(), constants);
         Ok(model)
     }
+}
+
+/// `[column, enum name]` for each enum-typed column, in column order.
+fn enum_type_names(columns: &Bound<'_, PyAny>) -> PyResult<Value> {
+    let mut pairs: Vec<Value> = Vec::new();
+    for (column, declaration) in columns.downcast::<PyDict>()?.iter() {
+        let column: String = column.extract()?;
+        let name: String = native_field(&declaration, "name")?.extract()?;
+        pairs.push(json!([column, name]));
+    }
+    Ok(Value::Array(pairs))
 }
 
 /// The view's declared columns when every one was parsed natively at a plain path.

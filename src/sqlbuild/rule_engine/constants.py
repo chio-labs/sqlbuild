@@ -18,6 +18,8 @@ CUSTOM_HOST_STARTUP_ENVIRONMENT: tuple[str, ...] = (
     "SYSTEMROOT",
 )
 RULE_DECORATOR_TOKEN: str = "@rule"
+RULES_DIRECTORY_NAME: str = "rules"
+RULES_COPY_IGNORED_PATTERNS: tuple[str, ...] = (".*", "__pycache__", "*.pyc")
 
 FACT_PROJECT_MODELS: str = "project.models"
 FACT_PROJECT_SOURCES: str = "project.sources"
@@ -38,6 +40,7 @@ FACT_GRAPH_DEPENDENTS: str = "graph.dependents"
 FACT_COLUMNS_DECLARED: str = "columns.declared"
 FACT_COLUMNS_INFERRED: str = "columns.inferred"
 FACT_COLUMNS_NAMES: str = "columns.names"
+FACT_COLUMNS_ENUM_TYPES: str = "columns.enum_types"
 FACT_CONTRACTS_ENFORCED: str = "contracts.enforced"
 FACT_CONTRACTS_GRAIN: str = "contracts.grain"
 FACT_TESTS_ALL: str = "tests.all"

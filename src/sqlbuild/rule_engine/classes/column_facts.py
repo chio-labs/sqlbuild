@@ -22,6 +22,9 @@ class ColumnFacts:
     def inferred(self, model: Model) -> tuple[InferredColumn, ...] | None:
         return self._models[model.path].inferred_columns
 
+    def enum_types(self, model: Model) -> dict[str, str]:
+        return dict(self._models[model.path].enum_type_names)
+
     def names(self, model: Model) -> tuple[str, ...] | None:
         inferred: tuple[InferredColumn, ...] | None = self.inferred(model)
         return None if inferred is None else tuple(column.name for column in inferred)

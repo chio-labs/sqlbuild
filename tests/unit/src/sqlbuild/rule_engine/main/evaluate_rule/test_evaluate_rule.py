@@ -16,9 +16,10 @@ from sqlbuild._native import (
 from sqlbuild._native import evaluate_project_rules as evaluate
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.rule_engine.types import RuleOptionValue
-from sqlbuild.rules.testing import RuleCase, RuleResult, evaluate_rule
+from sqlbuild.rules.testing import RuleCase, RuleFile, RuleResult, evaluate_rule
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_project
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate_rule._test_types import (
+    EnumTypesRuleTestCase,
     EvaluateRuleDeterminismTestCase,
     EvaluateRuleParityTestCase,
     EvaluateRuleTestCase,
@@ -26,6 +27,7 @@ from tests.unit.src.sqlbuild.rule_engine.main.evaluate_rule._test_types import (
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate_rule.helpers import (
     first_evaluation_only,
     required_domain,
+    status_enum,
 )
 
 
@@ -150,3 +152,44 @@ def test_given_rule_with_module_state_when_evaluating_case_then_determinism_chec
 ) -> None:
     with pytest.raises(RulesError, match=test_case.expected_error_pattern):
         evaluate_rule(rule=first_evaluation_only, test_case=test_case.rule_case)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        EnumTypesRuleTestCase(
+            description="an enum-typed column reports its enum",
+            status_type="order_status",
+            expected_finding_count=0,
+        ),
+        EnumTypesRuleTestCase(
+            description="a plain VARCHAR column reports no enum",
+            status_type="VARCHAR",
+            expected_finding_count=1,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_declared_status_column_when_rule_reads_enum_types_then_sees_declared_enum(
+    test_case: EnumTypesRuleTestCase,
+) -> None:
+    rule_case: RuleCase = RuleCase(
+        description=test_case.description,
+        source=(
+            "MODEL (\n  description 'Orders.',\n"
+            f"  columns (\n    status (type {test_case.status_type}),\n  ),\n);\n\n"
+            "SELECT 'open' AS status\n"
+        ),
+        path="models/orders.sql",
+        files=(
+            RuleFile(
+                path="models/_enums/order_status.sql",
+                source='ENUM (name order_status, members (OPEN "open", CLOSED "closed"));\n',
+            ),
+        ),
+        expected_finding_count=test_case.expected_finding_count,
+    )
+
+    result: RuleResult = evaluate_rule(rule=status_enum, test_case=rule_case)
+
+    assert result.finding_count == test_case.expected_finding_count

@@ -12,6 +12,12 @@ fn given_custom_rule_facts_when_a_header_changes_then_reads_of_changed_keys_are_
             expected_reason: Some("a custom rule reads orders's columns"),
         },
         CustomRuleReadsTestCase {
+            description: "a model's enum column types are decided by its columns",
+            fact_key: vec!["columns.enum_types", "models/orders.sql"],
+            changed: vec!["columns"],
+            expected_reason: Some("a custom rule reads orders's columns"),
+        },
+        CustomRuleReadsTestCase {
             description: "a fact of another model is ignored",
             fact_key: vec!["columns.names", "customers"],
             changed: vec!["columns"],

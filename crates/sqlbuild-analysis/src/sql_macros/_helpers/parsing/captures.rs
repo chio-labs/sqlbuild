@@ -52,6 +52,12 @@ fn source_names(source: &Expression) -> Vec<Option<String>> {
 /// Whether `child` of `select` is a query of its own: a CTE body, or a non-`LATERAL` `FROM` item.
 fn own_scope(select: &Select, child: &Expression) -> bool {
     let lateral: bool = matches!(child, Expression::Subquery(subquery) if subquery.lateral);
+    let (cte, source) = child_kind(select, child);
+    cte || (source && !lateral)
+}
+
+/// Whether `child` of `select` is a CTE body, and whether it is a `FROM` or `JOIN` item.
+fn child_kind(select: &Select, child: &Expression) -> (bool, bool) {
     let source: bool = select
         .from
         .iter()
@@ -63,7 +69,13 @@ fn own_scope(select: &Select, child: &Expression) -> bool {
         .iter()
         .flat_map(|with| &with.ctes)
         .any(|cte| std::ptr::eq(&cte.this, child));
-    cte || (source && !lateral)
+    (cte, source)
+}
+
+/// Whether `child` of `select` can reach its output: a CTE body or any `FROM` item, `LATERAL` too.
+fn output_scope(select: &Select, child: &Expression) -> bool {
+    let (cte, source) = child_kind(select, child);
+    cte || source
 }
 
 /// The selects whose output names reach the query's output: all but those inside expressions.
@@ -84,7 +96,8 @@ fn selects_under(node: &Expression, in_expression: bool) -> Vec<&Select> {
         found.push(select);
     }
     for child in node.children() {
-        let inside: bool = in_expression || select.is_some_and(|select| !own_scope(select, child));
+        let inside: bool =
+            in_expression || select.is_some_and(|select| !output_scope(select, child));
         found.extend(selects_under(child, inside));
     }
     found

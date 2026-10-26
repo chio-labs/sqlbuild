@@ -42,6 +42,18 @@ for star in sql.authored.star_projections():
     ...
 ```
 
+## Declared enum types
+
+`ctx.columns.declared(model)` reports each declared column with its portable scalar type, so an
+enum-typed column reads as `VARCHAR` or `INTEGER`. `ctx.columns.enum_types(model)` maps each
+enum-typed column's name to the enum it declares:
+
+```python
+enum_types = ctx.columns.enum_types(model)
+if enum_types.get("fulfillment_method") != "fulfillment_method":
+    ...
+```
+
 ## Lazy Polyglot access
 
 Use the full Polyglot AST only when common projections are insufficient:

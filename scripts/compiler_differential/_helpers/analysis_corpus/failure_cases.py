@@ -343,6 +343,26 @@ def _contract_cases() -> tuple[FailureCase, ...]:
             files=staging_files(f"MODEL (\n{contract_header});\n\n{query}"),
         ),
         failure_case(
+            name="contract-enum-literal",
+            expected_code="K013",
+            expected_message=(
+                "value 'held' in column 'status' of model 'stg_orders' is not a member of enum "
+                "order_status"
+            ),
+            files={
+                "models/staging/_enums/order_status.sql": (
+                    'ENUM (name order_status, members (PLACED "placed", SHIPPED "shipped"));\n'
+                ),
+                **staging_files(
+                    f"MODEL (\n{contract_header}"
+                    "  columns (\n    order_id (type INTEGER),\n    customer_id (type INTEGER),\n"
+                    "    amount (type DOUBLE),\n    status (type order_status),\n  ),\n);\n\n"
+                    "SELECT order_id, customer_id, amount, 'held' AS status\n"
+                    'FROM __source("raw_orders")\n'
+                ),
+            },
+        ),
+        failure_case(
             name="contract-immediate-promotion",
             expected_code="K011",
             expected_message="contract enforced requires staged table promotion",

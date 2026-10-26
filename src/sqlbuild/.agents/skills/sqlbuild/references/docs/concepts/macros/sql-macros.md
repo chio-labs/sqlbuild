@@ -389,12 +389,14 @@ error[P017]: slot weekly.order_count needs a BIGINT column; weekly has no column
   run on the expanded SQL.
 - Overlapping groups, or a grouped column that also fills a single-column slot, fail at the call.
 - A grouped column named like a column the macro defines, or like a bare column such as `s.week`
-  beside the group in the same select list, fails with `P018`, naming both:
+  or a column read through the relation such as `@weekly.region` beside the group in the same
+  select list, fails with `P018`, naming both:
   `column refunds of slot weekly.keys clashes with column refunds that macro weekly_rates() defines`.
 - A mapped single-column slot read in a select list needs an `AS` in the macro, so output names
   don't depend on the caller's mapping. Groups are exempt, because they keep their real names, and
   so is an unmapped slot, which keeps its own name. So are reads in `IN`, `EXISTS` and scalar
-  subqueries, whose column names never reach the macro's output.
+  subqueries, whose column names never reach the macro's output. A `LATERAL` subquery in `FROM` or
+  `JOIN` is checked like a derived table, because its columns reach the output, as through `l.*`.
 
 ## Compose macros
 
