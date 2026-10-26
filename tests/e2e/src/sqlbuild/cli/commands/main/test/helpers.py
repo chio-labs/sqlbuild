@@ -1711,8 +1711,8 @@ _CTE_ENTRY_KEY: re.Pattern[str] = re.compile(r'\{"key": "((?:[^"\\]|\\.)*)", "va
 def rendered_cte_names(sql: str) -> tuple[set[str], set[str]]:
     """Return a rendered test query's top-level CTE names and every CTE name nested below them."""
 
-    row: tuple[Any, ...] | None = duckdb.sql(
-        "SELECT json_serialize_sql($sql)", params={"sql": sql}
+    row: tuple[Any, ...] | None = duckdb.execute(
+        "SELECT json_serialize_sql($sql)", {"sql": sql}
     ).fetchone()
     assert row is not None
     entries: list[dict[str, Any]] = json.loads(row[0])["statements"][0]["node"]["cte_map"]["map"]
