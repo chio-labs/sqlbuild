@@ -31,4 +31,4 @@ class MotherDuckConnectErrorTestCase:
     description: str
     connect_error: str
     expected_error_type: str
-    expected_help_fragment: str | None
+    expected_help: str | None

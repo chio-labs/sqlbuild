@@ -23,6 +23,17 @@ _PROJECT_TOML: str = (
     'name = "orders"\nadapter = "duckdb"\n[connection]\ndatabase = "orders.duckdb"\n'
 )
 _MODEL_PATH: str = "models/order_totals.sql"
+_SNAPSHOT_PROJECT_TOML: str = (
+    'name = "customers"\nadapter = "duckdb"\n[connection]\ndatabase = "customers.duckdb"\n'
+    '[snapshots]\ncurrent_state_full_refresh = "allow"\n'
+)
+_RAW_CUSTOMERS_YML: str = (
+    "sources:\n  - name: raw_customers\n    description: Raw customers.\n"
+    "    schema: main\n    table: raw_customers\n"
+)
+_CUSTOMER_SNAPSHOT_SQL: str = (
+    'SELECT customer_id, plan, updated_at FROM __source("raw_customers")\n'
+)
 
 
 @pytest.mark.parametrize(
@@ -76,19 +87,6 @@ def test_given_built_model_when_materialization_changes_then_build_replaces_rela
         test_case.description
     )
     assert rows == [(1, 250)], test_case.description
-
-
-_SNAPSHOT_PROJECT_TOML: str = (
-    'name = "customers"\nadapter = "duckdb"\n[connection]\ndatabase = "customers.duckdb"\n'
-    '[snapshots]\ncurrent_state_full_refresh = "allow"\n'
-)
-_RAW_CUSTOMERS_YML: str = (
-    "sources:\n  - name: raw_customers\n    description: Raw customers.\n"
-    "    schema: main\n    table: raw_customers\n"
-)
-_CUSTOMER_SNAPSHOT_SQL: str = (
-    'SELECT customer_id, plan, updated_at FROM __source("raw_customers")\n'
-)
 
 
 @pytest.mark.parametrize(
