@@ -1284,3 +1284,86 @@ def write_snowflake_variant_snapshot(
     (snapshot_root / "scenario.json").write_text(
         json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
     )
+
+
+SNOWFLAKE_ORDER_IDS_FIXTURE_SQL: str = "SELECT 1 AS order_id"
+
+
+def build_snowflake_lambda_scenario_project_files() -> dict[str, str]:
+    """Build an offline Snowflake project whose model filters an array with an arrow lambda."""
+
+    return {
+        "sqlbuild_project.toml": build_offline_snowflake_project_toml(),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_orders\n    description: Raw orders.\n"
+            "    schema: main\n    table: raw_orders\n    columns:\n"
+            '      - {name: order_id, type: "NUMBER(38,0)"}\n'
+        ),
+        "models/order_quantities.sql": (
+            'MODEL (description "Quantities above each order id.");\n'
+            "SELECT order_id,\n"
+            "  FILTER(ARRAY_CONSTRUCT(1, 2, 3), x -> x > order_id) AS big_quantities\n"
+            'FROM __source("raw_orders")\n'
+        ),
+        "tests/scenarios/order_quantities__lambda.sql": (
+            "SCENARIO (description 'An arrow lambda replays locally.');\n"
+            "WITH\n"
+            f"__source__raw_orders AS ({SNOWFLAKE_ORDER_IDS_FIXTURE_SQL}),\n"
+            "__expected__order_quantities AS (\n"
+            "  SELECT 1 AS order_id, ARRAY_CONSTRUCT(2, 3) AS big_quantities\n"
+            ")\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+def write_snowflake_order_ids_snapshot(*, project_dir: Path, scenario_name: str) -> None:
+    """Write the snapshot a Snowflake capture stores for a one-column order source."""
+
+    snapshot_root: Path = project_dir / "tests" / "_scenario_snapshots" / scenario_name
+    (snapshot_root / "sources").mkdir(parents=True)
+    row: str = json.dumps({"ORDER_ID": 1}) + "\n"
+    (snapshot_root / "sources" / "raw_orders.jsonl").write_text(row, encoding="utf-8")
+    manifest: dict[str, object] = {
+        "capture_adapter": "snowflake",
+        "capture_dialect": "snowflake",
+        "captured_at": "2026-10-25T11:10:54Z",
+        "format": "jsonl",
+        "input_fingerprint": build_scenario_snapshot_input_fingerprint(
+            scenario_name=scenario_name,
+            input_specs=(
+                ScenarioSnapshotInputSpec(
+                    kind=ScenarioArtifactKind.SOURCE,
+                    logical_name="raw_orders",
+                    file_path=Path("sources") / "raw_orders.jsonl",
+                    capture_sql=SNOWFLAKE_ORDER_IDS_FIXTURE_SQL,
+                ),
+            ),
+            capture_adapter="snowflake",
+            capture_dialect="snowflake",
+        ),
+        "relations": [
+            {
+                "bytes": len(row.encode("utf-8")),
+                "columns": [
+                    {
+                        "local_type": "DECIMAL(1, 0)",
+                        "name": "order_id",
+                        "warehouse_type": "NUMBER(1,0)",
+                    }
+                ],
+                "file": "sources/raw_orders.jsonl",
+                "kind": "source",
+                "logical_name": "raw_orders",
+                "row_count": 1,
+            }
+        ],
+        "scenario_name": scenario_name,
+        "sqlbuild_version": "0.177.0",
+        "total_bytes": len(row.encode("utf-8")),
+        "total_rows": 1,
+        "version": 1,
+    }
+    (snapshot_root / "scenario.json").write_text(
+        json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+    )
