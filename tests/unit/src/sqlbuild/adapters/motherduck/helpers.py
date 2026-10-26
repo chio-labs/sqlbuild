@@ -26,25 +26,44 @@ class FakeDuckDbModule:
     Error: type[Exception] = FakeDuckDbError
     __version__: str = "2.0.0"
 
-    def __init__(self, *, connect_error: str | None = None) -> None:
+    def __init__(self) -> None:
         self.connected_databases: list[str] = []
         self.connection: FakeDuckDbConnection = FakeDuckDbConnection()
-        self.connect_error: str | None = connect_error
 
     def connect(self, *, database: str) -> FakeDuckDbConnection:
         self.connected_databases.append(database)
-        if self.connect_error is not None:
-            raise FakeDuckDbError(self.connect_error)
         return self.connection
 
 
-def install_fake_duckdb_module(
-    monkeypatch: Any, *, connect_error: str | None = None
-) -> FakeDuckDbModule:
+class FailingFakeDuckDbModule(FakeDuckDbModule):
+    """Module double whose duckdb.connect raises a DuckDB error."""
+
+    def __init__(self, *, connect_error: str) -> None:
+        super().__init__()
+        self.connect_error: str = connect_error
+
+    def connect(self, *, database: str) -> FakeDuckDbConnection:
+        self.connected_databases.append(database)
+        raise FakeDuckDbError(self.connect_error)
+
+
+def install_failing_fake_duckdb_module(
+    monkeypatch: Any, *, connect_error: str
+) -> FailingFakeDuckDbModule:
+    """Install a fake duckdb module whose connect fails with the given message."""
+
+    import sys
+
+    fake_module: FailingFakeDuckDbModule = FailingFakeDuckDbModule(connect_error=connect_error)
+    monkeypatch.setitem(sys.modules, "duckdb", fake_module)
+    return fake_module
+
+
+def install_fake_duckdb_module(monkeypatch: Any) -> FakeDuckDbModule:
     """Install a fake duckdb module for adapter connection tests."""
 
     import sys
 
-    fake_module: FakeDuckDbModule = FakeDuckDbModule(connect_error=connect_error)
+    fake_module: FakeDuckDbModule = FakeDuckDbModule()
     monkeypatch.setitem(sys.modules, "duckdb", fake_module)
     return fake_module

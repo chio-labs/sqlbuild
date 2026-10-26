@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sqlbuild.adapters.motherduck.classes.motherduck_adapter import MotherDuckAdapter
+from sqlbuild.adapters.motherduck.constants import MOTHERDUCK_UNSUPPORTED_DUCKDB_HELP
 from tests.unit.src.sqlbuild.adapters.motherduck._test_types import (
     MotherDuckAdapterDefaultsTestCase,
     MotherDuckConnectErrorTestCase,
@@ -11,6 +12,7 @@ from tests.unit.src.sqlbuild.adapters.motherduck._test_types import (
 )
 from tests.unit.src.sqlbuild.adapters.motherduck.helpers import (
     FakeDuckDbModule,
+    install_failing_fake_duckdb_module,
     install_fake_duckdb_module,
 )
 
@@ -68,13 +70,13 @@ def test_given_connection_config_when_connecting_then_uses_motherduck_database(
                 '"Your DuckDB version (v2.0.0) is not yet supported by MotherDuck."'
             ),
             expected_error_type="AdapterUserError",
-            expected_help_fragment="stay on the last SQLBuild release that supports DuckDB 1.5",
+            expected_help=MOTHERDUCK_UNSUPPORTED_DUCKDB_HELP,
         ),
         MotherDuckConnectErrorTestCase(
             description="any other connection error is raised unchanged",
             connect_error="IO Error: unauthorized",
             expected_error_type="FakeDuckDbError",
-            expected_help_fragment=None,
+            expected_help=None,
         ),
     ],
     ids=lambda case: case.description,
@@ -84,17 +86,13 @@ def test_given_failing_motherduck_connect_when_connecting_then_unsupported_versi
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     adapter: MotherDuckAdapter = MotherDuckAdapter()
-    _ = install_fake_duckdb_module(monkeypatch, connect_error=test_case.connect_error)
+    _ = install_failing_fake_duckdb_module(monkeypatch, connect_error=test_case.connect_error)
 
     with pytest.raises(Exception) as raised:
         adapter.connect({"database": "md:analytics"})
 
     assert type(raised.value).__name__ == test_case.expected_error_type
-    help_text: object = getattr(raised.value, "help", None)
-    if test_case.expected_help_fragment is None:
-        assert help_text is None
-    else:
-        assert isinstance(help_text, str) and test_case.expected_help_fragment in help_text
+    assert getattr(raised.value, "help", None) == test_case.expected_help
 
 
 @pytest.mark.parametrize(
