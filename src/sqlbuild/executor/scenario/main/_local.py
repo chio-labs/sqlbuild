@@ -10,6 +10,7 @@ from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.executor.scenario._helpers.local.execution import (
     execute_local_scenario_load_only_run as _execute_local_scenario_load_only_run,
 )
+from sqlbuild.executor.scenario.classes.running_scenarios import RunningScenarios
 from sqlbuild.executor.scenario.models import ScenarioRunResult
 
 
@@ -22,6 +23,7 @@ def execute_local_scenario_load_only_run(
     promotion_mode: TablePromotionMode,
     capture_adapter: str | None = None,
     capture_dialect: str | None = None,
+    running: RunningScenarios | None = None,
 ) -> ScenarioRunResult:
     """Run one scenario locally against a run-scoped DuckDB database."""
 
@@ -33,4 +35,5 @@ def execute_local_scenario_load_only_run(
         promotion_mode=promotion_mode,
         capture_adapter=capture_adapter,
         capture_dialect=capture_dialect,
+        running=running,
     )
