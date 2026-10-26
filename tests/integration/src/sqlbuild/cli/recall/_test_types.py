@@ -318,3 +318,26 @@ class DocumentedQueryTestCase:
     question: int
     columns: tuple[str, ...]
     expected_rows: list[list[object]]
+
+
+@dataclass(frozen=True)
+class InvocationOriginTestCase:
+    description: str
+    args: tuple[str, ...]
+    environment: dict[str, str]
+    expected_rows: list[list[object]]
+
+
+@dataclass(frozen=True)
+class IntegrationColumnsTestCase:
+    description: str
+    stored_context: str
+    expected_columns: list[object]
+
+
+@dataclass(frozen=True)
+class InvocationPrefixTestCase:
+    description: str
+    prefix_length: int
+    expected_exit_code: int
+    expected_error_code: str | None

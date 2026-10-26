@@ -287,6 +287,8 @@ projected AS (
         terminals.error_message,
         COALESCE(context.command, started.command, beats.command) AS command,
         COALESCE(context.subcommand, beats.subcommand) AS subcommand,
+        context.origin,
+        context.command_mode,
         context.target,
         context.adapter,
         context.project_name,
@@ -298,6 +300,18 @@ projected AS (
         context.host_token,
         context.pid,
         context.external_context,
+        CASE WHEN json_valid(context.external_context)
+            THEN json_extract(context.external_context, '$.integration.name') END
+            AS integration,
+        CASE WHEN json_valid(context.external_context)
+            THEN json_extract(context.external_context, '$.integration.job_name') END
+            AS integration_job,
+        CASE WHEN json_valid(context.external_context)
+            THEN json_extract(context.external_context, '$.integration.run_id') END
+            AS integration_run_id,
+        CASE WHEN json_valid(context.external_context)
+            THEN json_extract(context.external_context, '$.integration.retry_number') END
+            AS integration_retry,
         context.recall_filter_active,
         beats.last_heartbeat_at
     FROM ids
@@ -328,6 +342,8 @@ SELECT
     error_message,
     command,
     subcommand,
+    origin,
+    command_mode,
     target,
     adapter,
     project_name,
@@ -339,6 +355,10 @@ SELECT
     host_token,
     pid,
     external_context,
+    integration,
+    integration_job,
+    integration_run_id,
+    integration_retry,
     recall_filter_active,
     last_heartbeat_at
 FROM projected"

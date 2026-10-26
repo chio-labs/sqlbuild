@@ -354,9 +354,9 @@ def test_given_one_invocation_lookup_when_planned_then_each_table_is_read_once_b
             expected_ddl_fragments=(
                 "CREATE OR REPLACE VIEW `{database}`.`invocations`",
                 "CREATE OR REPLACE VIEW `{database}`.`statements`",
-                "SELECT 'schema', 'schema_version', '3'",
+                "SELECT 'schema', 'schema_version', '4'",
             ),
-            expected_version=((3,),),
+            expected_version=((4,),),
         ),
     ],
     ids=lambda case: case.description,

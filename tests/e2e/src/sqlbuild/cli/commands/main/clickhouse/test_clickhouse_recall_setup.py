@@ -197,7 +197,7 @@ def test_given_a_missing_database_when_the_writer_may_not_create_it_then_the_sta
             writer_privileges="ALL",
             expected_notices=0,
             expected_stale_views=((0,),),
-            expected_version=((3,),),
+            expected_version=((4,),),
         ),
         ClickHouseRecallStaleViewsTestCase(
             description="previous views recorded as current are replaced by an administrator",
@@ -205,7 +205,7 @@ def test_given_a_missing_database_when_the_writer_may_not_create_it_then_the_sta
             writer_privileges="ALL",
             expected_notices=0,
             expected_stale_views=((0,),),
-            expected_version=((3,),),
+            expected_version=((4,),),
         ),
         ClickHouseRecallStaleViewsTestCase(
             description="previous views without a version row make a SELECT, INSERT writer warn",
@@ -282,6 +282,16 @@ def test_given_views_of_the_previous_version_when_building_then_they_count_as_ol
             sql="SELECT status FROM invocations "
             "WHERE JSONExtractString(external_context, 'integration', 'job_name') = 'daily_models'",
             expected_rows=[["completed"]],
+        ),
+        ClickHouseRecallExternalContextTestCase(
+            description="an orchestrated job's runs are found by their integration columns",
+            external_context=(
+                '{"integration": {"name": "dagster", "job_name": "orders_job",'
+                ' "run_id": "run-7", "retry_number": 1}}'
+            ),
+            sql="SELECT origin, integration, integration_run_id, integration_retry "
+            "FROM invocations WHERE integration_job = 'orders_job'",
+            expected_rows=[["integration", "dagster", "run-7", 1]],
         ),
     ],
     ids=lambda case: case.description,
@@ -364,7 +374,7 @@ def test_given_a_writer_that_may_create_only_the_database_when_building_then_bot
             dropped_column=("recall_invocations", "argv_digest"),
             expected_columns=((1,),),
             expected_stale_views=((0,),),
-            expected_version=((3,),),
+            expected_version=((4,),),
         ),
     ],
     ids=lambda case: case.description,

@@ -540,6 +540,43 @@ def make_store_behind(store: Path) -> None:
     connection.close()
 
 
+CI_VARIABLES: tuple[str, ...] = (
+    "CI",
+    "GITHUB_ACTIONS",
+    "GITLAB_CI",
+    "BUILDKITE",
+    "JENKINS_URL",
+    "CIRCLECI",
+    "TF_BUILD",
+    "TEAMCITY_VERSION",
+    "BITBUCKET_BUILD_NUMBER",
+    "CODEBUILD_BUILD_ID",
+)
+NO_CI: dict[str, str] = dict.fromkeys(CI_VARIABLES, "")
+
+
+def copy_invocation_row(store: Path, *, invocation_id: str, external_context: str) -> None:
+    """Store a copy of the first context row under another ID, as an older writer left it."""
+
+    with sqlite3.connect(store) as connection:
+        cursor: sqlite3.Cursor = connection.execute("SELECT * FROM recall_invocations LIMIT 1")
+        names: list[str] = [column[0] for column in cursor.description]
+        row: dict[str, object] = dict(zip(names, cursor.fetchone(), strict=True))
+        row.update(
+            invocation_id=invocation_id,
+            external_context=external_context,
+            origin=None,
+            command_mode=None,
+            content_hash=f"copy-{invocation_id}",
+        )
+        _ = connection.execute(
+            f"INSERT INTO recall_invocations ({', '.join(names)}) "
+            f"VALUES ({', '.join('?' for _ in names)})",
+            [row[name] for name in names],
+        )
+    connection.close()
+
+
 def drop_store_views(store: Path) -> None:
     """Drop every view of a SQLite store, as a store whose creation is still under way has none."""
 

@@ -903,7 +903,7 @@ def test_given_a_large_store_when_filtering_a_view_then_the_filter_reaches_the_t
             description="views of an older version are replaced when its version row expired",
             stale_view="SELECT invocation_id, statement_id FROM {database}.recall_events",
             expected_statement_columns=((1,),),
-            expected_version=((3,),),
+            expected_version=((4,),),
         ),
     ],
     ids=lambda case: case.description,

@@ -121,6 +121,10 @@ pub struct InvocationContext {
     pub external_context: Option<String>,
     pub recall_filter_active: bool,
     pub argv_digest: Option<String>,
+    /// `integration`, `ci` or `local`: where the invocation came from.
+    pub origin: Option<String>,
+    /// What a diagnostic command checked, from its flags; never its raw arguments.
+    pub command_mode: Option<String>,
 }
 
 /// The correlation identifiers of a fact.

@@ -51,6 +51,9 @@ what they printed. `sqb recall query` runs one read-only `SELECT` over a set of 
 | Column | Values |
 |--------|--------|
 | `invocations.status` | `completed`, `failed`, `running`, `abandoned`, `unknown` |
+| `invocations.origin` | `integration` (an orchestrator such as Dagster started it), `ci` (CI environment variables were set), `local`; `NULL` on runs older SQLBuild versions recorded |
+| `invocations.command_mode` | What a diagnostic checked: `sqb debug` records `config_only` (`--no-connection`) or `config_and_connection`; `NULL` for other commands |
+| `invocations.integration`, `integration_job`, `integration_run_id`, `integration_retry` | The orchestrator, job, run and retry from `external_context`, for example `dagster` and its job name; `NULL` when there is none or an older version stored it as non-JSON |
 | `invocations.error_type`, `error_code`, `error_message` | The cause of a failed invocation, also when it failed only through its exit code (`sqb debug`: `C980` connection, `C981` query, `C982` other check) |
 | `statements.outcome` | `completed`, `failed`, `no_terminal` |
 | `audit_results.outcome` | `pass`, `warn`, `error`, `insufficient`; `execution_error` is set when the audit query itself failed |
@@ -75,6 +78,13 @@ what they printed. `sqb recall query` runs one read-only `SELECT` over a set of 
   `bytes_read` and `elapsed_ms` on ClickHouse. A failing `--json` query prints
   `{"error": {"code", "message", "help"}}` on stdout and exits `1`.
 - The default `--limit` is 100 rows; `truncated: true` means there were more.
+- Every command is recorded, including someone's local `sqb debug --target prod`. When looking for
+  scheduled runs, filter by purpose: `command IN ('build', 'run', 'test', 'audit', 'seed')`, or
+  `origin = 'integration'` for orchestrated runs, so local diagnostics do not look like failed
+  production runs.
+- Output shows invocation IDs by their first 8 characters. `sqb recall output` accepts any unique
+  prefix and lists the matches when one is ambiguous; in SQL use `invocation_id LIKE '<prefix>%'`
+  (SQLite) or `startsWith(invocation_id, '<prefix>')` (ClickHouse).
 
 ## Output format
 
@@ -99,8 +109,16 @@ sqb recall query "SELECT invocation_id, command, status, exit_code, error_type, 
 sqb recall output <invocation_id> --stream stderr --tail 40
 ```
 
-For the last scheduled run, filter on the orchestrator's context or the target, for example
-`WHERE target = 'prod'`.
+For the last scheduled run, filter on where it came from or the target, for example
+`WHERE origin = 'integration' AND target = 'prod'`.
+
+The latest runs of an orchestrated job (the same SQL on SQLite and ClickHouse):
+
+```bash
+sqb recall query "SELECT invocation_id, invocation_started_at, status, integration_run_id, integration_retry
+  FROM invocations WHERE integration_job = 'orders_job'
+  ORDER BY invocation_started_at DESC LIMIT 5"
+```
 
 What did a model actually execute, with its SQL? Find the run, then its statements:
 
@@ -278,7 +296,7 @@ events (view): every lifecycle fact
   ingested_at TEXT
   content_hash TEXT
 
-invocations (view): one row per invocation; status is completed, failed, running, abandoned or unknown
+invocations (view): one row per invocation; status is completed, failed, running, abandoned or unknown; origin is integration, ci or local; integration, integration_job, integration_run_id and integration_retry come from external_context
   invocation_id TEXT  join key
   invocation_started_at ANY
   started_at ANY
@@ -291,6 +309,8 @@ invocations (view): one row per invocation; status is completed, failed, running
   error_message ANY
   command ANY
   subcommand ANY
+  origin TEXT
+  command_mode TEXT
   target TEXT
   adapter TEXT
   project_name TEXT
@@ -302,6 +322,10 @@ invocations (view): one row per invocation; status is completed, failed, running
   host_token TEXT
   pid INTEGER
   external_context TEXT
+  integration ANY
+  integration_job ANY
+  integration_run_id ANY
+  integration_retry ANY
   recall_filter_active INTEGER
   last_heartbeat_at ANY
 

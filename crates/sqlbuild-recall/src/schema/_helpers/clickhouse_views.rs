@@ -6,7 +6,7 @@ use crate::schema::main::table_spec::table_spec;
 use crate::schema::models::{DdlOptions, Table};
 
 /// The columns the `invocations` pass reads from its three sources, NULL (the terminal flag 0) where a source does not give them.
-const INVOCATION_SOURCE_COLUMNS: [(&str, &str, &str); 28] = [
+const INVOCATION_SOURCE_COLUMNS: [(&str, &str, &str); 30] = [
     ("ctx_command", "Nullable(String)", "NULL"),
     ("ctx_subcommand", "Nullable(String)", "NULL"),
     ("ctx_target", "Nullable(String)", "NULL"),
@@ -21,6 +21,8 @@ const INVOCATION_SOURCE_COLUMNS: [(&str, &str, &str); 28] = [
     ("ctx_pid", "Nullable(Int64)", "NULL"),
     ("ctx_external_context", "Nullable(String)", "NULL"),
     ("ctx_recall_filter_active", "Nullable(UInt8)", "NULL"),
+    ("ctx_origin", "Nullable(String)", "NULL"),
+    ("ctx_command_mode", "Nullable(String)", "NULL"),
     ("heartbeat_at", "Nullable(DateTime64(6, 'UTC'))", "NULL"),
     ("beat_stale_at", "Nullable(DateTime64(6, 'UTC'))", "NULL"),
     ("beat_command", "Nullable(String)", "NULL"),
@@ -172,6 +174,8 @@ fn invocations(options: &DdlOptions) -> String {
             ("ctx_pid", "pid"),
             ("ctx_external_context", "external_context"),
             ("ctx_recall_filter_active", "recall_filter_active"),
+            ("ctx_origin", "origin"),
+            ("ctx_command_mode", "command_mode"),
         ],
         &context,
     );
@@ -270,6 +274,8 @@ SELECT
     terminal_error_message AS error_message,
     coalesce(context_command, started_command, first_beat_command) AS command,
     coalesce(context_subcommand, first_beat_subcommand) AS subcommand,
+    context_origin AS origin,
+    context_command_mode AS command_mode,
     context_target AS target,
     context_adapter AS adapter,
     context_project_name AS project_name,
@@ -281,6 +287,18 @@ SELECT
     context_host_token AS host_token,
     context_pid AS pid,
     context_external_context AS external_context,
+    if(isValidJSON(context_external_context),
+        JSONExtract(context_external_context, 'integration', 'name', 'Nullable(String)'), NULL)
+        AS integration,
+    if(isValidJSON(context_external_context),
+        JSONExtract(context_external_context, 'integration', 'job_name', 'Nullable(String)'), NULL)
+        AS integration_job,
+    if(isValidJSON(context_external_context),
+        JSONExtract(context_external_context, 'integration', 'run_id', 'Nullable(String)'), NULL)
+        AS integration_run_id,
+    if(isValidJSON(context_external_context),
+        JSONExtract(context_external_context, 'integration', 'retry_number', 'Nullable(Int64)'),
+        NULL) AS integration_retry,
     context_recall_filter_active AS recall_filter_active,
     last_heartbeat_at
 FROM folded",

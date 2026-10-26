@@ -1,4 +1,5 @@
 pub mod artifact_rows;
+pub mod command_mode;
 pub mod conflict_row;
 pub mod delivery_row;
 pub mod diagnostic_input_from_json;
@@ -8,6 +9,7 @@ pub mod event_object_row;
 pub mod event_severity;
 pub mod format_timestamp;
 pub mod heartbeat_row;
+pub mod invocation_origin;
 pub mod invocation_row;
 pub mod meta_row;
 pub mod output_row;

@@ -11,7 +11,9 @@ use sqlbuild_cli::dispatch::main::closing_status::closing_status;
 use sqlbuild_cli::dispatch::models::CommandFacts;
 use sqlbuild_core::command_output::constants::INVOCATION_CONTEXT_ENV;
 use sqlbuild_host::entries::models::ExecutorHost;
+use sqlbuild_recall::records::main::command_mode::command_mode;
 use sqlbuild_recall::records::main::format_timestamp::format_timestamp;
+use sqlbuild_recall::records::main::invocation_origin::invocation_origin;
 use sqlbuild_recall::records::main::sha256_hex::sha256_hex;
 use sqlbuild_recall::records::models::{InvocationContext, OutputStream, RowEnvelope};
 use sqlbuild_recall::schema::main::create_database_statement::create_database_statement;
@@ -39,9 +41,10 @@ use crate::bindings::_helpers::recall::clickhouse_store::{
 };
 use crate::bindings::_helpers::recall::console::write_stderr;
 use crate::bindings::_helpers::recall::constants::{
-    CLOSE_POLL_MS, DDL_NOTICE_PREFIX, GIT_DIRTY_ENVIRONMENT, GIT_REVISION_ENVIRONMENT,
-    HEARTBEAT_ENVIRONMENT, HOST_TOKEN_LENGTH, MINIMUM_HEARTBEAT_SECONDS, NOTICE_INTERVAL_SECONDS,
-    QUARANTINE_START_WAIT_MS, RECALL_HISTORY, STDOUT_STREAM_INDEX,
+    CLOSE_POLL_MS, DDL_NOTICE_PREFIX, DEBUG_COMMAND, GIT_DIRTY_ENVIRONMENT,
+    GIT_REVISION_ENVIRONMENT, HEARTBEAT_ENVIRONMENT, HOST_TOKEN_LENGTH, MINIMUM_HEARTBEAT_SECONDS,
+    NO_CONNECTION_ATTRIBUTE, NOTICE_INTERVAL_SECONDS, QUARANTINE_START_WAIT_MS, RECALL_HISTORY,
+    STDOUT_STREAM_INDEX,
 };
 use crate::bindings::_helpers::recall::events::escaped_text;
 use crate::bindings::_helpers::recall::replacements::{RecallReplacements, in_replacement_sink};
@@ -71,8 +74,12 @@ fn text_value(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
     escaped_text(&value.str()?).map(Some)
 }
 
+fn attribute<'py>(args: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyAny>> {
+    args.getattr(name)
+}
+
 fn list_attribute(args: &Bound<'_, PyAny>, name: &str) -> PyResult<Vec<String>> {
-    let value: Bound<'_, PyAny> = args.getattr(name)?;
+    let value: Bound<'_, PyAny> = attribute(args, name)?;
     let mut items: Vec<String> = Vec::new();
     if value.is_none() {
         return Ok(items);
@@ -231,7 +238,12 @@ fn invocation_facts(
         settings.destination_database.as_deref().unwrap_or_default(),
         settings.destination_schema.as_deref().unwrap_or_default()
     );
+    let external_context: Option<String> = external_context(py)?;
+    let no_connection: bool = facts.command.as_deref() == Some(DEBUG_COMMAND)
+        && attribute(args, NO_CONNECTION_ATTRIBUTE)?.is_truthy()?;
     Ok(InvocationContext {
+        origin: Some(invocation_origin(external_context.is_some(), environment).to_owned()),
+        command_mode: command_mode(facts.command.as_deref(), no_connection).map(str::to_owned),
         command: facts.command.clone(),
         subcommand: facts.subcommand.clone(),
         selection: list_attribute(args, "select")?,
@@ -248,7 +260,7 @@ fn invocation_facts(
         git_dirty: recorded_git_dirty(),
         host_token: host_token(),
         pid: Some(std::process::id()),
-        external_context: external_context(py)?,
+        external_context,
         recall_filter_active: false,
         argv_digest: None,
     })

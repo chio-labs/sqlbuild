@@ -44,3 +44,17 @@ pub(crate) struct DiagnosticTestCase {
     pub(crate) expected_fields: &'static str,
     pub(crate) expected_run_id: Option<&'static str>,
 }
+
+pub(crate) struct OriginTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) has_external_context: bool,
+    pub(crate) environment: Vec<(&'static str, &'static str)>,
+    pub(crate) expected_origin: &'static str,
+}
+
+pub(crate) struct CommandModeTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) command: Option<&'static str>,
+    pub(crate) no_connection: bool,
+    pub(crate) expected_mode: Option<&'static str>,
+}
