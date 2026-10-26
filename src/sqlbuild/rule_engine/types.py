@@ -71,6 +71,9 @@ class RuleFactModel(Protocol):
     @property
     def constant_declarations(self) -> tuple[ConstantDeclaration, ...]: ...
 
+    @property
+    def enum_type_names(self) -> dict[str, str]: ...
+
     def config_value(self, name: str) -> object: ...
 
 

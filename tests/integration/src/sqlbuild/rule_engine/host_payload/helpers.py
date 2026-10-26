@@ -63,6 +63,9 @@ class ReferenceModel:
         self.enum_declarations: tuple[object, ...] = model.enum_declarations
         self.constant_declarations: tuple[object, ...] = model.constant_declarations
         self.declared_columns: tuple[object, ...] = getattr(model.schema_entry, "columns", ())
+        self.enum_type_names: dict[str, str] = {
+            column: declaration.name for column, declaration in model.enum_columns.items()
+        }
 
     def config_value(self, name: str) -> object:
         return self._model.config.values.get(name)
@@ -144,6 +147,7 @@ def every_fact_value(views: RuleFactViews) -> dict[str, object]:
         values[f"columns.declared:{subject}"] = views.columns.declared(model)
         values[f"columns.inferred:{subject}"] = views.columns.inferred(model)
         values[f"columns.names:{subject}"] = views.columns.names(model)
+        values[f"columns.enum_types:{subject}"] = views.columns.enum_types(model)
         values[f"contracts.enforced:{subject}"] = views.contracts.enforced(model)
         values[f"contracts.grain:{subject}"] = views.contracts.grain(model)
         values[f"tests.for_model:{subject}"] = views.tests.for_model(model)

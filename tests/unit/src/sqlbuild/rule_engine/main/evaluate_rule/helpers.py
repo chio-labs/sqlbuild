@@ -33,3 +33,15 @@ def first_evaluation_only(*, model: Model, ctx: RuleContext) -> list[Finding]:
     repeated: bool = model.name in _EVALUATED_MODELS
     _EVALUATED_MODELS.add(model.name)
     return [ctx.finding(subject=model)] * int(repeated)
+
+
+@rule(
+    code="XSQBRE001",
+    slug="status-enum",
+    message="status column must use the order_status enum",
+    remediation="Declare the column as status (type order_status).",
+)
+def status_enum(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    names: tuple[str, ...] = ctx.columns.names(model) or ()
+    typed: bool = ctx.columns.enum_types(model).get("status") == "order_status"
+    return [ctx.finding(subject=model)] * int("status" in names and not typed)

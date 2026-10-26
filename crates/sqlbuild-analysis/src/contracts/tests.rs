@@ -1,3 +1,5 @@
+#[path = "tests/test_enum_literal_violations.rs"]
+mod enum_literal_violations;
 #[path = "tests/test_evaluate_model_contracts.rs"]
 mod evaluate_model_contracts;
 #[path = "tests/helpers.rs"]

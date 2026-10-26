@@ -128,6 +128,10 @@ class _HostModel:
         encoded: object = self._entry["constants"]
         return () if encoded is None else self._payload.value(encoded)
 
+    @cached_property
+    def enum_type_names(self) -> dict[str, str]:
+        return {column: enum_name for column, enum_name in self._entry["enum_types"]}
+
 
 class _HostProject:
     """One compiled project's rule facts, each collection decoded on first read."""

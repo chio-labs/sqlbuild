@@ -253,6 +253,7 @@ Diagnostic codes:
 | `K001` | A declared column is missing from the model's query output |
 | `K002` | A column's inferred type does not match the declared type |
 | `K003` | A column's type could not be proven (with `type_enforcement` enabled) |
+| `K013` | A string literal fills an enum-typed column of an enforced contract but is not a member of the enum (not checked on SQL Server) |
 
 Compile returns exit code `1` when any error-severity diagnostic is found, making it suitable for CI checks.
 

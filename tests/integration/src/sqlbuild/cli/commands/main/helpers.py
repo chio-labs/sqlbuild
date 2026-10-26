@@ -1189,3 +1189,28 @@ def write_project_scratch_rules(project_dir: Path) -> None:
             "rules/scratch.py": PROJECT_SCRATCH_RULES,
         },
     )
+
+
+def write_enum_project(*, root: Path, model_sql: str, contract: str) -> None:
+    """Write an orders project whose model fills an `order_status` column from `model_sql`."""
+
+    (root / "sqlbuild_project.toml").write_text('name = "orders"\nadapter = "duckdb"\n')
+    (root / "models" / "_enums").mkdir(parents=True)
+    (root / "models" / "_enums" / "order_status.sql").write_text(
+        'ENUM (name order_status, members (OPEN "open", CLOSED "closed"));\n'
+    )
+    (root / "sources").mkdir()
+    (root / "sources" / "orders.yml").write_text(
+        "sources:\n"
+        "  - name: web_orders\n    description: Web orders.\n    contract: enforced\n"
+        '    expression: "(SELECT CAST(1 AS INTEGER) AS order_id)"\n'
+        "    columns:\n      - name: order_id\n        type: INTEGER\n"
+        "  - name: partner_orders\n    description: Partner orders.\n    contract: enforced\n"
+        '    expression: "(SELECT CAST(2 AS INTEGER) AS order_id)"\n'
+        "    columns:\n      - name: order_id\n        type: INTEGER\n"
+    )
+    (root / "models" / "orders.sql").write_text(
+        f"MODEL (\n  description 'Orders from every channel.',\n  contract {contract},\n"
+        "  columns (\n    order_id (type INTEGER),\n    status (type order_status),\n  ),\n);\n\n"
+        f"{model_sql}"
+    )

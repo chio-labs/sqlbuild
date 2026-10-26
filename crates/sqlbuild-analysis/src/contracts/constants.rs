@@ -8,6 +8,9 @@ pub(crate) const EXTRA_COLUMN_CODE: &str = "K005";
 pub(crate) const MISSING_DECLARATIONS_CODE: &str = "K006";
 pub(crate) const DYNAMIC_OUTPUT_NOT_PROVEN_CODE: &str = "K011";
 pub(crate) const PROMOTION_CONFLICT_CODE: &str = "K011";
+pub(crate) const ENUM_LITERAL_CODE: &str = "K013";
+/// Dialects whose default string comparison ignores case or trailing spaces, so K013 is skipped.
+pub(crate) const CASE_INSENSITIVE_DIALECTS: [&str; 1] = ["tsql"];
 
 pub const CONTRACT_ENFORCED: &str = "enforced";
 pub(crate) const CONTRACT_NONE: &str = "none";

@@ -1301,3 +1301,12 @@ class CompiledViewFallbacksTestCase:
     command: tuple[str, ...]
     expected_exit_code: int
     expected_fallbacks: int
+
+
+@dataclass(frozen=True)
+class EnumLiteralCompileTestCase:
+    description: str
+    model_sql: str
+    expected_exit_code: int
+    expected_diagnostics: tuple[tuple[str, str, int | None], ...]
+    contract: str = "enforced"

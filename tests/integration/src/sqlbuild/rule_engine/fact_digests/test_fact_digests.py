@@ -50,6 +50,15 @@ _STG_ACCEPTED_INTEGERS: dict[str, str] = {
 _STG_ACCEPTED_STRINGS: dict[str, str] = {
     _STG: _STG_ACCEPTED_INTEGERS[_STG].replace("values [1, 2]", "values ['1', '2']")
 }
+_STG_STATUS: dict[str, str] = {
+    _STG: (
+        "MODEL (\n  columns (\n    order_id (type INTEGER),\n    status (type VARCHAR),\n  ),\n);\n\n"
+        "SELECT CAST(id AS INTEGER) AS order_id, 'PAID' AS status FROM __source(\"raw_orders\")\n"
+    )
+}
+_STG_STATUS_ENUM: dict[str, str] = {
+    _STG: _STG_STATUS[_STG].replace("status (type VARCHAR)", "status (type order_status)")
+}
 _TOTALS_WITHOUT_REF: dict[str, str] = {_TOTALS: "MODEL ();\n\nSELECT 1 AS order_id\n"}
 _TEST_EDITED: dict[str, str] = {
     "tests/unit/test_order_totals.sql": (
@@ -117,6 +126,12 @@ _TEST_EDITED: dict[str, str] = {
             "inferred columns", ("columns.inferred", _TOTALS), _TOTALS_WITH_COLUMN
         ),
         FactDigestEditTestCase("column names", ("columns.names", _TOTALS), _TOTALS_WITH_COLUMN),
+        FactDigestEditTestCase(
+            "enum column types",
+            ("columns.enum_types", _STG),
+            _STG_STATUS_ENUM,
+            base_files=_STG_STATUS,
+        ),
         FactDigestEditTestCase("contract", ("contracts.enforced", _TOTALS), _TOTALS_CONTRACT),
         FactDigestEditTestCase("model tests", ("tests.for_model", "order_totals"), _TEST_EDITED),
         FactDigestEditTestCase("model audits", ("audits.for_model", "stg_orders"), _STG_AUDITED),
