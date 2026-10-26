@@ -47,6 +47,7 @@ from sqlbuild.executor.scenario._helpers.snapshots.core import (
     build_scenario_snapshot_input_specs,
     classify_scenario_snapshot_state,
 )
+from sqlbuild.executor.scenario.classes.running_scenarios import RunningScenarios
 from sqlbuild.executor.scenario.constants import (
     SCENARIO_EXEC_ASSERTION_ERRORED,
     SCENARIO_EXEC_ASSERTION_FAILED,
@@ -86,6 +87,7 @@ def execute_local_scenario_load_only_run(
     promotion_mode: TablePromotionMode,
     capture_adapter: str | None = None,
     capture_dialect: str | None = None,
+    running: RunningScenarios | None = None,
 ) -> ScenarioRunResult:
     """Run one scenario locally against a run-scoped DuckDB database."""
 
@@ -139,6 +141,8 @@ def execute_local_scenario_load_only_run(
         if isinstance(adapter, DuckDbBackedAdapter)
         else adapter.connect({"database": str(duckdb_path)})
     )
+    if running is not None:
+        running.start(scenario_plan=scenario_plan, connection=connection)
     try:
         input_fingerprint: str = build_scenario_snapshot_input_fingerprint(
             scenario_name=scenario_plan.name,
@@ -178,6 +182,8 @@ def execute_local_scenario_load_only_run(
             error_message=error_message(exc),
         )
     finally:
+        if running is not None:
+            running.finish(connection=connection)
         adapter.close(connection)
 
     return result
