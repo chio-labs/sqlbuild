@@ -47,7 +47,7 @@ from sqlbuild.adapter.contract.constants import (
     LATEST_DUCKDB_STORAGE_VERSION,
     QUALIFIED_NAME_SEPARATOR,
 )
-from sqlbuild.adapter.contract.exceptions import AdapterUserError
+from sqlbuild.adapter.contract.exceptions import AdapterUserError, ViewRenameRefusedError
 from sqlbuild.adapter.contract.main.run_relation_read_probe import run_relation_read_probe
 from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.main.unsupported_relation_usage import unsupported_relation_usage
@@ -1651,6 +1651,10 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
+        if self._is_view(connection=connection, relation=origin):
+            raise ViewRenameRefusedError(
+                message=f"DuckDB cannot rename the view {origin} as a table"
+            )
         statements: tuple[str, ...] = self.render_rename(origin=origin, destination=destination)
         statement_recorder.record_many(statements)
         stmt: str
@@ -1666,7 +1670,7 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         statement_recorder: StatementRecorder,
     ) -> None:
         if self._is_view(connection=connection, relation=left):
-            raise AdapterUserError(message=f"DuckDB cannot swap the view {left} with a table")
+            raise ViewRenameRefusedError(message=f"DuckDB cannot swap the view {left} with a table")
         statements: tuple[str, ...] = self.render_swap(left=left, right=right)
         statement_recorder.record_many(statements)
         with self.transaction(connection):

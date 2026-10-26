@@ -17,6 +17,10 @@ class AdapterUserError(ValueError):
         self.help = help
 
 
+class ViewRenameRefusedError(AdapterUserError):
+    """Raised before renaming a view with table DDL, which DuckDB 2 would otherwise accept."""
+
+
 class SqlStatementExecutionError(RuntimeError):
     """Warehouse error attributed to the exact SQL statement that raised it."""
 
