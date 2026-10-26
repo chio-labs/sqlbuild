@@ -16,8 +16,7 @@ pub(crate) fn parameter_text(parameter: &SqlMacroParameter) -> String {
             format!("collection {set} {}", type_text(data_type))
         }
         ParameterKind::Enum { name } => format!("enum {}", name.to_lowercase()),
-        ParameterKind::Relation { columns } => relation_text(columns),
-        ParameterKind::ColumnOf { relation } => format!("column of {}", relation.to_lowercase()),
+        ParameterKind::Relation { columns, groups } => relation_text(columns, groups),
     };
     let default: String = parameter
         .default
@@ -27,8 +26,8 @@ pub(crate) fn parameter_text(parameter: &SqlMacroParameter) -> String {
     format!("{} {kind} {default}", parameter.name.to_lowercase())
 }
 
-/// A relation parameter's required columns and their types.
-fn relation_text(columns: &[(String, String)]) -> String {
+/// A relation parameter's single-column slots with their types, then its `COLUMNS` groups.
+fn relation_text(columns: &[(String, String)], groups: &[String]) -> String {
     let mut text: String = String::from("relation");
     for (column, data_type) in columns {
         text.push_str(&format!(
@@ -36,6 +35,9 @@ fn relation_text(columns: &[(String, String)]) -> String {
             column.to_lowercase(),
             type_text(data_type)
         ));
+    }
+    for group in groups {
+        text.push_str(&format!(" {} columns", group.to_lowercase()));
     }
     text
 }

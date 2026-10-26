@@ -20,7 +20,7 @@ WITH src AS (
   FROM __source("storefront__subscriptions")
 ),
 
-@sql.cdc_latest(src, subscription_id)
+@sql.cdc_latest(src, src.key := (subscription_id))
 
 final AS (
   SELECT

@@ -154,6 +154,12 @@ fn given_generated_parameters_when_neutralizing_then_only_bare_parameters_are_re
             expected_text: "CASE WHEN __sqlbuild_macro_parameter_0__ IN ('a', 'b') THEN 1 END + CASE WHEN __sqlbuild_macro_parameter_1__ IS NULL AND (__sqlbuild_macro_parameter_2__ IS NULL) THEN 1 END",
         },
         ParameterTestCase {
+            description: "SQL macro slot reads hide the slot name, whole after an alias",
+            body: "SELECT s.@src.amount AS amount, @src.id, @src.* FROM @src AS s",
+            neutralize: neutralize_sql_macro_parameters,
+            expected_text: "SELECT s.__sqlbuild_macro_parameter_0__ AS amount, __sqlbuild_macro_parameter_1__.__sqlbuild_macro_parameter_2__, __sqlbuild_macro_parameter_3__.* FROM __sqlbuild_macro_parameter_4__ AS s",
+        },
+        ParameterTestCase {
             description: "SQL macro calls, enum references and quoted text keep their at-signs",
             body: "@sql.other(@v) + @enum(\"s\").A + LENGTH('@v') + @@x",
             neutralize: neutralize_sql_macro_parameters,

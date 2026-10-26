@@ -103,3 +103,25 @@ class SqlMacroWarmCompileTestCase:
     replaced_text: tuple[str, str]
     expected_cold_fragment: str
     expected_warm_fragment: str
+
+
+@dataclass(frozen=True)
+class SqlMacroEquivalenceTestCase:
+    """A project built with two models whose compiled SQL and rows must be the same."""
+
+    description: str
+    files: dict[str, str]
+    compared_paths: tuple[str, str]
+    expected_fragment: str
+    compared_queries: tuple[str, str]
+    expected_row_count: int
+
+
+@dataclass(frozen=True)
+class SqlMacroFormatPairTestCase:
+    """A macro body reading slots and the same body written by hand, formatted together."""
+
+    description: str
+    slot_text: str
+    hand_text: str
+    expected_check_returncode: int

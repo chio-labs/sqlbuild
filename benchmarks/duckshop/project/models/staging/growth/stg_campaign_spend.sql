@@ -20,7 +20,7 @@ WITH src AS (
   FROM __source("growth__campaign_spend")
 ),
 
-@sql.cdc_latest(src, spend_id)
+@sql.cdc_latest(src, src.key := (spend_id))
 
 metrics AS (
   SELECT

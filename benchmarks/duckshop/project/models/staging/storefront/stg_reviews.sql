@@ -19,7 +19,7 @@ WITH src AS (
   FROM __source("storefront__reviews")
 ),
 
-@sql.cdc_latest(src, review_id)
+@sql.cdc_latest(src, src.key := (review_id))
 
 final AS (
   SELECT

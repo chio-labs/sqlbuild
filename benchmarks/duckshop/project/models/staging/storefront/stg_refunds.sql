@@ -18,7 +18,7 @@ WITH src AS (
   FROM __source("storefront__refunds")
 ),
 
-@sql.cdc_latest(src, refund_id)
+@sql.cdc_latest(src, src.key := (refund_id))
 
 final AS (
   SELECT

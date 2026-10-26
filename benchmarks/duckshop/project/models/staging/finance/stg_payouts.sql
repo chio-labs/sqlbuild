@@ -17,7 +17,7 @@ WITH src AS (
   FROM __source("finance__payouts")
 ),
 
-@sql.cdc_latest(src, payout_id)
+@sql.cdc_latest(src, src.key := (payout_id))
 
 final AS (
   SELECT

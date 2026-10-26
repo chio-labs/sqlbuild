@@ -33,7 +33,7 @@ const IN_SUPPORTED_COUNTRY: (&str, &str) = (
 );
 const LATEST_PER_KEY: (&str, &str) = (
     "latest_per_key",
-    "MACRO (\n  description \"Latest row per key\",\n  arguments (\n    src RELATION (updated_at TIMESTAMP),\n    key COLUMN OF src,\n  ),\n);\n\nWITH latest_ranked AS (\n  SELECT @src.*, ROW_NUMBER() OVER (PARTITION BY @key ORDER BY updated_at DESC) AS row_num FROM @src\n),\nlatest_rows AS (SELECT * EXCLUDE (row_num) FROM latest_ranked WHERE row_num = 1)\n",
+    "MACRO (\n  description \"Latest row per key\",\n  arguments (\n    src RELATION (updated_at TIMESTAMP, keys COLUMNS),\n  ),\n);\n\nWITH latest_ranked AS (\n  SELECT @src.*, ROW_NUMBER() OVER (PARTITION BY @src.keys ORDER BY updated_at DESC) AS row_num FROM @src\n),\nlatest_rows AS (SELECT * EXCLUDE (row_num) FROM latest_ranked WHERE row_num = 1)\n",
 );
 const LATEST_LIVE_ORDERS: (&str, &str) = (
     "latest_live_orders",
@@ -247,7 +247,7 @@ fn given_calls_of_each_form_when_expanding_then_the_ticket_examples_compile() {
             description: "__cte renames qualified references to a renamed CTE",
             adapter: "",
             macros: &[LATEST_PER_KEY],
-            sql: "WITH r AS (SELECT 1 AS id, 2 AS updated_at), @sql.latest_per_key(r, id, __cte := l) SELECT * FROM l",
+            sql: "WITH r AS (SELECT 1 AS id, 2 AS updated_at), @sql.latest_per_key(r, src.keys := (id), __cte := l) SELECT * FROM l",
             expected_sql: "WITH r AS (SELECT 1 AS id, 2 AS updated_at), l__latest_ranked AS (\n  SELECT r.*, ROW_NUMBER() OVER (PARTITION BY id ORDER BY updated_at DESC) AS row_num FROM r\n),\nl AS (SELECT * EXCLUDE (row_num) FROM l__latest_ranked WHERE row_num = 1) SELECT * FROM l",
         },
         ExpansionTestCase {
@@ -314,10 +314,10 @@ fn given_calls_of_each_form_when_expanding_then_the_ticket_examples_compile() {
             expected_sql: "SELECT o.country_code IN ('GB', 'FR') AS supported FROM orders AS o",
         },
         ExpansionTestCase {
-            description: "column of a relation",
+            description: "a COLUMNS slot of a relation",
             adapter: "",
             macros: &[LATEST_PER_KEY],
-            sql: "WITH customers_raw AS (SELECT 1 AS customer_id), @sql.latest_per_key(customers_raw, key := customer_id) SELECT * FROM latest_rows",
+            sql: "WITH customers_raw AS (SELECT 1 AS customer_id), @sql.latest_per_key(customers_raw, src.keys := (customer_id)) SELECT * FROM latest_rows",
             expected_sql: "WITH customers_raw AS (SELECT 1 AS customer_id), latest_ranked AS (\n  SELECT customers_raw.*, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY updated_at DESC) AS row_num FROM customers_raw\n),\nlatest_rows AS (SELECT * EXCLUDE (row_num) FROM latest_ranked WHERE row_num = 1) SELECT * FROM latest_rows",
         },
         ExpansionTestCase {

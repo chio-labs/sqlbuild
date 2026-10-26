@@ -3,17 +3,22 @@
 use polyglot_sql::expressions::{Identifier, Select};
 use polyglot_sql::{DialectType, Expression, ExpressionWalk};
 
+use crate::sql_macros::_helpers::parsing::captures::{output_selects, slot_captures};
+use crate::sql_macros::_helpers::parsing::header::unquoted;
 use crate::sql_macros::_helpers::parsing::lexing::{Token, tokens};
 use crate::sql_macros::_helpers::parsing::parameters::{
     ParameterReference, alias_follows, parameter_references, placeholder, placeholder_parameter,
     with_placeholders,
 };
+use crate::sql_macros::_helpers::parsing::slots::{SlotRead, check_group_positions, slot_reads};
 use crate::sql_macros::_helpers::rendering::arguments::is_atomic;
 use crate::sql_macros::_helpers::typing::typed_calls::{shifted, spliced};
-use crate::sql_macros::constants::{ARGUMENT_CODE, INVALID_DEFINITION_CODE};
+use crate::sql_macros::constants::{
+    ARGUMENT_CODE, INVALID_DEFINITION_CODE, NAME_CLASH_CODE, SLOT_PLACEHOLDER_PREFIX,
+};
 use crate::sql_macros::errors::SqlMacroError;
 use crate::sql_macros::models::{
-    ArgumentShape, BodyExpansion, ExpandedText, ParameterKind, RenderedArgument,
+    ArgumentShape, BodyExpansion, ExpandedText, ParameterKind, RenderedArgument, SlotMapping,
     SqlMacroDefinition, SqlMacroForm, SqlMacroParameter, TextSplice, TypedCall,
 };
 
@@ -32,11 +37,11 @@ const EXPRESSION_PREFIX: &str = "SELECT ";
 const CTE_SUFFIX: &str = "\nSELECT 1";
 
 /// The body parsed as SQL.
-struct ParsedBody {
-    select: Box<Select>,
+pub(crate) struct ParsedBody {
+    pub(crate) select: Box<Select>,
 }
 
-fn parsed(form: SqlMacroForm, body: &str) -> Result<ParsedBody, String> {
+pub(crate) fn parsed(form: SqlMacroForm, body: &str) -> Result<ParsedBody, String> {
     let text: String = match form {
         SqlMacroForm::Expression => format!("{EXPRESSION_PREFIX}{body}"),
         SqlMacroForm::CteList => format!("{body}{CTE_SUFFIX}"),
@@ -131,10 +136,14 @@ fn defined_names(
         SqlMacroForm::ColumnList => {
             let mut names: Vec<String> = Vec::new();
             for projection in &select.expressions {
-                let name: String = match projection {
-                    Expression::Alias(alias) => alias.alias.name.clone(),
+                match projection {
+                    Expression::Alias(alias) => names.push(alias.alias.name.clone()),
                     Expression::Column(column) => {
-                        column_output_name(definition, column, arguments)?
+                        names.extend(column_output_names(definition, column, arguments)?);
+                    }
+                    Expression::Dot(dot) if aliased_slot(definition, dot).is_some() => {
+                        let (relation, slot) = aliased_slot(definition, dot).unwrap_or_default();
+                        names.extend(slot_output_names(definition, (relation, slot), arguments));
                     }
                     _ => {
                         return Err(format!(
@@ -142,33 +151,76 @@ fn defined_names(
                             shown_projection(projection)
                         ));
                     }
-                };
-                names.push(name);
+                }
             }
             Ok(names)
         }
     }
 }
 
-/// The output name of a bare column projection: a `COLUMN OF` argument's column, or the name.
-fn column_output_name(
+/// The output names of a bare column projection: a `COLUMNS` slot's columns, or the name.
+fn column_output_names(
     definition: &SqlMacroDefinition,
     column: &polyglot_sql::expressions::Column,
     arguments: &[RenderedArgument],
-) -> Result<String, String> {
-    let Some(parameter) = parameter_of(definition, &column.name) else {
-        return Ok(column.name.name.clone());
-    };
-    if !matches!(parameter.kind, ParameterKind::ColumnOf { .. }) {
+) -> Result<Vec<String>, String> {
+    if let Some(parameter) = parameter_of(definition, &column.name) {
         return Err(format!(
             "every column of a column-list macro needs a name; add AS <name> to @{}",
             parameter.name
         ));
     }
-    Ok(arguments
+    let slot: &str = &column.name.name;
+    let relation: Option<&str> = column
+        .table
+        .as_ref()
+        .and_then(|table| parameter_of(definition, table))
+        .map(|parameter| parameter.name.as_str());
+    Ok(match relation {
+        Some(relation) => slot_output_names(definition, (relation, slot), arguments),
+        None => vec![slot.to_owned()],
+    })
+}
+
+/// The relation and slot an aliased slot read `alias.@relation.slot` names, if `dot` is one.
+fn aliased_slot<'d>(
+    definition: &'d SqlMacroDefinition,
+    dot: &'d polyglot_sql::expressions::DotAccess,
+) -> Option<(&'d str, &'d str)> {
+    let Expression::Column(column) = &dot.this else {
+        return None;
+    };
+    column.table.as_ref()?;
+    let parameter: &SqlMacroParameter = parameter_of(definition, &column.name)?;
+    parameter
+        .kind
+        .declares_slot(&dot.field.name)
+        .then_some((parameter.name.as_str(), dot.field.name.as_str()))
+}
+
+/// The output names of a read of `relation.slot`: a group's mapped columns, or the slot's name.
+fn slot_output_names(
+    definition: &SqlMacroDefinition,
+    (relation, slot): (&str, &str),
+    arguments: &[RenderedArgument],
+) -> Vec<String> {
+    let mapped: Option<&SlotMapping> = arguments
         .iter()
-        .find(|argument| definition.parameters[argument.parameter].name == parameter.name)
-        .map_or_else(|| parameter.name.clone(), |argument| argument.sql.clone()))
+        .find(|argument| definition.parameters[argument.parameter].name == relation)
+        .and_then(|argument| {
+            argument
+                .slots
+                .iter()
+                .find(|mapping| mapping.group && mapping.slot.eq_ignore_ascii_case(slot))
+        });
+    match mapped {
+        Some(mapping) => mapping
+            .columns
+            .iter()
+            .map(|column| unquoted(column))
+            .collect(),
+        None => vec![slot.to_owned()],
+    }
 }
 
 fn shown_projection(projection: &Expression) -> String {
@@ -227,17 +279,318 @@ fn substituted(
     }
 }
 
+/// The mapping a call made for the slot a read names, if it made one.
+fn read_mapping<'a>(
+    definition: &SqlMacroDefinition,
+    read: &SlotRead,
+    arguments: &'a [RenderedArgument],
+) -> Option<&'a SlotMapping> {
+    arguments
+        .iter()
+        .find(|argument| {
+            definition.parameters[argument.parameter]
+                .name
+                .eq_ignore_ascii_case(&read.relation)
+        })?
+        .slots
+        .iter()
+        .find(|mapping| mapping.slot.eq_ignore_ascii_case(&read.slot))
+}
+
+/// A bare column `select` outputs twice: once by name and once in a group read beside it.
+fn select_clash(
+    definition: &SqlMacroDefinition,
+    select: &Select,
+    groups: &[(&str, &SlotMapping)],
+) -> Option<String> {
+    let mut bare: Vec<&str> = Vec::new();
+    let mut read: Vec<(&str, &str)> = Vec::new();
+    for projection in &select.expressions {
+        match projection {
+            Expression::Column(column) => {
+                match column
+                    .table
+                    .as_ref()
+                    .and_then(|table| parameter_of(definition, table))
+                {
+                    Some(parameter) => read.push((parameter.name.as_str(), &column.name.name)),
+                    None => bare.push(&column.name.name),
+                }
+            }
+            Expression::Dot(dot) => read.extend(aliased_slot(definition, dot)),
+            _ => {}
+        }
+    }
+    for (relation, mapping) in groups {
+        let in_select: bool = read.iter().any(|(read_relation, slot)| {
+            read_relation.eq_ignore_ascii_case(relation) && slot.eq_ignore_ascii_case(&mapping.slot)
+        });
+        if !in_select {
+            continue;
+        }
+        for column in &mapping.columns {
+            let column: String = unquoted(column);
+            if let Some(name) = bare.iter().find(|name| name.eq_ignore_ascii_case(&column)) {
+                return Some((*name).to_owned());
+            }
+        }
+    }
+    None
+}
+
+/// Rejects a grouped column named like a column the macro's body defines.
+fn check_group_clashes(
+    definition: &SqlMacroDefinition,
+    select: &Select,
+    arguments: &[RenderedArgument],
+) -> Result<(), SqlMacroError> {
+    let mut groups: Vec<(&str, &SlotMapping)> = Vec::new();
+    for argument in arguments {
+        let relation: &str = &definition.parameters[argument.parameter].name;
+        for mapping in &argument.slots {
+            if mapping.group {
+                groups.push((relation, mapping));
+            }
+        }
+    }
+    if groups.is_empty() {
+        return Ok(());
+    }
+    let root: Expression = Expression::Select(Box::new(select.clone()));
+    let mut defined: Vec<String> = Vec::new();
+    for node in root.dfs() {
+        if let Expression::Select(inner) = node {
+            for projection in &inner.expressions {
+                if let Expression::Alias(alias) = projection {
+                    defined.push(alias.alias.name.clone());
+                }
+            }
+        }
+    }
+    for select in output_selects(&root) {
+        if let Some(clash) = select_clash(definition, select, &groups) {
+            defined.push(clash);
+        }
+    }
+    for (relation, mapping) in groups {
+        for column in &mapping.columns {
+            let bare: String = unquoted(column);
+            if let Some(clash) = defined
+                .iter()
+                .find(|defined| defined.eq_ignore_ascii_case(&bare))
+            {
+                return Err(SqlMacroError::new(
+                    NAME_CLASH_CODE,
+                    format!(
+                        "column {column} of slot {relation}.{} clashes with column {clash} that macro {}() defines",
+                        mapping.slot, definition.name
+                    ),
+                )
+                .helped(format!(
+                    "map {relation}.{} to columns the macro does not define, or rename {clash} in {}",
+                    mapping.slot, definition.path
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// `body` with each of `marked` as its slot placeholder, by index, and other references as theirs.
+pub(crate) fn marked_text(
+    (body, references): (&str, &[ParameterReference]),
+    marked: &[&SlotRead],
+) -> String {
+    let mut text: String = String::with_capacity(body.len());
+    let mut cursor: usize = 0;
+    for (position, reference) in references.iter().enumerate() {
+        if let Some(index) = marked.iter().position(|read| read.reference == position) {
+            let read: &SlotRead = marked[index];
+            text.push_str(&body[cursor..read.start]);
+            text.push_str(&slot_placeholder(index));
+            cursor = read.end;
+            continue;
+        }
+        if reference.start < cursor {
+            continue;
+        }
+        text.push_str(&body[cursor..reference.start]);
+        text.push_str(&placeholder(&reference.name));
+        cursor = reference.end;
+    }
+    text.push_str(&body[cursor..]);
+    text
+}
+
+/// Rejects a mapped single-column slot read in a select-list item without `AS`.
+fn check_mapped_reads(
+    definition: &SqlMacroDefinition,
+    (body, references, reads): (&str, &[ParameterReference], &[SlotRead]),
+    arguments: &[RenderedArgument],
+) -> Result<(), SqlMacroError> {
+    let mut mapped: Vec<(&SlotRead, &SlotMapping)> = Vec::new();
+    for read in reads.iter().filter(|read| !read.group) {
+        if let Some(mapping) = read_mapping(definition, read, arguments) {
+            mapped.push((read, mapping));
+        }
+    }
+    if mapped.is_empty() {
+        return Ok(());
+    }
+    let marked: Vec<&SlotRead> = mapped.iter().map(|(read, _)| *read).collect();
+    let text: String = marked_text((body, references), &marked);
+    let Ok(parsed_text) = parsed(definition.form, &text) else {
+        return Ok(());
+    };
+    let root: Expression = Expression::Select(parsed_text.select);
+    let wrapped: bool = definition.form == SqlMacroForm::Expression;
+    for (position, select) in output_selects(&root).into_iter().enumerate() {
+        if wrapped && position == 0 {
+            continue;
+        }
+        for projection in &select.expressions {
+            if matches!(projection, Expression::Alias(_)) {
+                continue;
+            }
+            let found: Option<usize> = projection
+                .dfs()
+                .find_map(slot_placeholder_name)
+                .and_then(|name| (0..mapped.len()).find(|index| name == slot_placeholder(*index)));
+            if let Some(index) = found {
+                let (read, mapping) = mapped[index];
+                return Err(SqlMacroError::new(
+                    ARGUMENT_CODE,
+                    format!(
+                        "slot {}.{} of macro {}() is mapped to {}, but the macro reads it in a select list without AS, so the output column's name would depend on the mapping",
+                        read.relation, read.slot, definition.name, mapping.columns[0]
+                    ),
+                )
+                .helped(format!(
+                    "add AS <name> to {} in {}; a mapped single-column slot needs an explicit output name",
+                    &body[read.start..read.end],
+                    definition.path
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The word the `index`th mapped single-column slot read stands as while the body is parsed.
+pub(crate) fn slot_placeholder(index: usize) -> String {
+    format!("{SLOT_PLACEHOLDER_PREFIX}{index}")
+}
+
+/// The placeholder column name a single-column slot read stands as, if `node` is one.
+pub(crate) fn slot_placeholder_name(node: &Expression) -> Option<&str> {
+    let Expression::Column(column) = node else {
+        return None;
+    };
+    let name: &str = &column.name.name;
+    (column.table.is_none() && name.starts_with(SLOT_PLACEHOLDER_PREFIX)).then_some(name)
+}
+
+/// A slot read's columns: aliased, bare for a group or in `USING`, else through the relation.
+fn substituted_read(
+    read: &SlotRead,
+    argument: &RenderedArgument,
+    (body, qualifier): (&str, &str),
+    outer: Option<&ParameterKind>,
+) -> String {
+    let mapped: Option<&SlotMapping> = argument
+        .slots
+        .iter()
+        .find(|mapping| mapping.slot.eq_ignore_ascii_case(&read.slot));
+    let columns: Vec<&str> = match mapped {
+        Some(mapping) => mapping.columns.iter().map(String::as_str).collect(),
+        None => vec![read.written.as_str()],
+    };
+    let prefix: Option<&str> = read.prefix.map(|(start, end)| &body[start..end]);
+    let forwarded: bool = matches!(argument.shape, ArgumentShape::ParameterReference { .. });
+    let bare: bool = read.group || read.in_using;
+    let mut texts: Vec<String> = Vec::with_capacity(columns.len());
+    for column in columns {
+        let outer_slot: bool =
+            forwarded && outer.is_some_and(|kind| kind.declares_slot(&unquoted(column)));
+        texts.push(match prefix {
+            Some(prefix) if outer_slot => format!("{prefix}{}.{column}", argument.sql),
+            Some(prefix) => format!("{prefix}{column}"),
+            None if outer_slot => format!("{}.{column}", argument.sql),
+            None if bare => column.to_owned(),
+            None => format!("{qualifier}.{column}"),
+        });
+    }
+    texts.join(", ")
+}
+
+/// The outer relation's kind for an argument that forwards an outer macro's relation.
+fn forwarded_kind<'o>(
+    argument: &RenderedArgument,
+    outer: Option<&'o SqlMacroDefinition>,
+) -> Option<&'o ParameterKind> {
+    let ArgumentShape::ParameterReference { name } = &argument.shape else {
+        return None;
+    };
+    outer?.parameter(name).map(|parameter| &parameter.kind)
+}
+
+/// Rejects a forwarded slot mapped to a slot of the outer relation of the other kind.
+fn check_forwarded_kinds(
+    definition: &SqlMacroDefinition,
+    arguments: &[RenderedArgument],
+    outer: Option<&SqlMacroDefinition>,
+) -> Result<(), SqlMacroError> {
+    for argument in arguments {
+        let ArgumentShape::ParameterReference { name } = &argument.shape else {
+            continue;
+        };
+        let Some(kind) = outer
+            .and_then(|outer| outer.parameter(name))
+            .map(|outer| &outer.kind)
+        else {
+            continue;
+        };
+        let relation: &str = &definition.parameters[argument.parameter].name;
+        for mapping in &argument.slots {
+            for column in &mapping.columns {
+                let bare: String = unquoted(column);
+                if !kind.declares_slot(&bare) || kind.declares_group(&bare) == mapping.group {
+                    continue;
+                }
+                let (inner, outer_kind) = if mapping.group {
+                    ("a COLUMNS slot", "a single-column slot")
+                } else {
+                    ("a single-column slot", "a COLUMNS slot")
+                };
+                return Err(SqlMacroError::new(
+                    ARGUMENT_CODE,
+                    format!(
+                        "slot {relation}.{} of macro {}() is {inner}, but the call maps it to {name}.{bare}, {outer_kind} of the forwarded relation {name}",
+                        mapping.slot, definition.name
+                    ),
+                )
+                .helped(format!(
+                    "map {relation}.{} to slots of {name} of the same kind, or to columns of {name}",
+                    mapping.slot
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// `body` with each `@name` replaced by its argument, token by token, and the calls it holds.
 fn substituted_body(
-    definition: &SqlMacroDefinition,
-    (body, scanned, references): (&str, &[Token], &[ParameterReference]),
+    (definition, outer): (&SqlMacroDefinition, Option<&SqlMacroDefinition>),
+    (body, scanned): (&str, &[Token]),
+    (references, reads): (&[ParameterReference], &[SlotRead]),
     (arguments, body_calls): (&[RenderedArgument], &[TypedCall]),
 ) -> (String, Vec<TypedCall>) {
     let mut expanded: String = String::with_capacity(body.len());
     let mut splices: Vec<TextSplice> = Vec::new();
     let mut argument_calls: Vec<TypedCall> = Vec::new();
     let mut cursor: usize = 0;
-    for reference in references {
+    for (position, reference) in references.iter().enumerate() {
         let Some(argument) = arguments.iter().find(|argument| {
             definition.parameters[argument.parameter]
                 .name
@@ -246,13 +599,26 @@ fn substituted_body(
             continue;
         };
         let parameter = &definition.parameters[argument.parameter];
-        expanded.push_str(&body[cursor..reference.start]);
+        let read: Option<&SlotRead> = reads.iter().find(|read| read.reference == position);
+        let source: (usize, usize) = read.map_or((reference.start, reference.end), |read| {
+            (read.start, read.end)
+        });
+        expanded.push_str(&body[cursor..source.0]);
         let text: String = substituted(
             &parameter.kind,
             &parameter.name,
             argument,
             (body, scanned, reference.token),
         );
+        let text: String = match read {
+            Some(read) => substituted_read(
+                read,
+                argument,
+                (body, &text),
+                forwarded_kind(argument, outer),
+            ),
+            None => text,
+        };
         let start: usize = expanded.len();
         if !argument.calls.is_empty() {
             let inner: Option<usize> = if text == argument.sql {
@@ -268,10 +634,10 @@ fn substituted_body(
         }
         expanded.push_str(&text);
         splices.push(TextSplice {
-            source: (reference.start, reference.end),
+            source,
             output: (start, expanded.len()),
         });
-        cursor = reference.end;
+        cursor = source.1;
     }
     expanded.push_str(&body[cursor..]);
     let mut calls: Vec<TypedCall> = argument_calls;
@@ -294,7 +660,7 @@ fn within(calls: Vec<TypedCall>, (start, end): (usize, usize)) -> Vec<TypedCall>
 
 /// `body` with each parameter replaced by its argument, as the form inserts it at a call.
 pub(crate) fn expand_body(
-    definition: &SqlMacroDefinition,
+    (definition, outer): (&SqlMacroDefinition, Option<&SqlMacroDefinition>),
     body: &ExpandedText,
     arguments: &[RenderedArgument],
 ) -> Result<BodyExpansion, SqlMacroError> {
@@ -312,6 +678,9 @@ pub(crate) fn expand_body(
     let scanned: Vec<Token> =
         tokens(body).map_err(|_| invalid("it has an unclosed quote or comment".to_owned()))?;
     let references: Vec<ParameterReference> = parameter_references(body, &scanned);
+    let reads: Vec<SlotRead> =
+        slot_reads(definition, (body, &scanned, &references)).map_err(|(_, error)| error)?;
+    check_group_positions(definition, (body, &scanned), &reads).map_err(|(_, error)| error)?;
     let parsed_body: ParsedBody =
         parsed(definition.form, &with_placeholders(body, &references)).map_err(invalid)?;
     if let Some(problem) = shape_problem(definition.form, &parsed_body.select) {
@@ -325,9 +694,13 @@ pub(crate) fn expand_body(
             format!("macro {}(): {reason}", definition.name),
         )
     })?;
+    check_group_clashes(definition, &parsed_body.select, arguments)?;
+    check_mapped_reads(definition, (body, &references, &reads), arguments)?;
+    check_forwarded_kinds(definition, arguments, outer)?;
     let (expanded, calls) = substituted_body(
-        definition,
-        (body, &scanned, &references),
+        (definition, outer),
+        (body, &scanned),
+        (&references, &reads),
         (arguments, body_calls),
     );
     let kept: (usize, usize) = match definition.form {
@@ -339,6 +712,7 @@ pub(crate) fn expand_body(
         names,
         calls: within(calls, kept),
         like: None,
+        captures: slot_captures(definition, (body, &references, &reads), arguments),
     })
 }
 

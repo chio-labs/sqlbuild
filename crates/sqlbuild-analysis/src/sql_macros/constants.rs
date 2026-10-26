@@ -37,7 +37,13 @@ pub(crate) const RETURNS_KEY: &str = "returns";
 pub(crate) const CONST_KEYWORD: &str = "CONST";
 pub(crate) const DEFAULT_KEYWORD: &str = "DEFAULT";
 pub(crate) const RELATION_KEYWORD: &str = "RELATION";
-pub(crate) const COLUMN_KEYWORD: &str = "COLUMN";
+/// The type word of a `RELATION` slot that groups caller-chosen columns.
+pub(crate) const COLUMNS_KEYWORD: &str = "COLUMNS";
+/// The prefix of the word a single-column slot read stands as while a body is parsed.
+pub(crate) const SLOT_PLACEHOLDER_PREFIX: &str = "__sqlbuild_slot__";
+/// Where a `COLUMNS` slot may stand, as messages list them.
+pub(crate) const GROUP_POSITIONS: &str =
+    "a select list, PARTITION BY, GROUP BY, ORDER BY or USING (...)";
 pub(crate) const OF_KEYWORD: &str = "OF";
 pub(crate) const TYPE_KEYWORD: &str = "TYPE";
 pub(crate) const ENUM_KEYWORD: &str = "ENUM";
@@ -140,3 +146,5 @@ pub(crate) const BIGQUERY_NUMERIC_LIMITS: (u32, u32) = (29, 9);
 pub(crate) const BIGQUERY_BIGNUMERIC_LIMITS: (u32, u32) = (38, 38);
 /// BigQuery's spellings of `BIGNUMERIC`.
 pub(crate) const BIGQUERY_BIG_DECIMAL_NAMES: [&str; 2] = ["BIGNUMERIC", "BIGDECIMAL"];
+/// How a relation function such as `__ref("orders")` starts.
+pub(crate) const RELATION_FUNCTION_PREFIX: &str = "__";

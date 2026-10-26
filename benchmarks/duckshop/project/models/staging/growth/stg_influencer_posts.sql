@@ -18,7 +18,7 @@ WITH src AS (
   FROM __source("growth__influencer_posts")
 ),
 
-@sql.cdc_latest(src, post_id)
+@sql.cdc_latest(src, src.key := (post_id))
 
 final AS (
   SELECT

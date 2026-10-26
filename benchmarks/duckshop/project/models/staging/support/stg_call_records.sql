@@ -18,7 +18,7 @@ WITH src AS (
   FROM __source("support__call_records")
 ),
 
-@sql.cdc_latest(src, call_id)
+@sql.cdc_latest(src, src.key := (call_id))
 
 final AS (
   SELECT

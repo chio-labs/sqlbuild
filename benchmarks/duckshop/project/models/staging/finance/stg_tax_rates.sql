@@ -17,7 +17,7 @@ WITH src AS (
   FROM __source("finance__tax_rates")
 ),
 
-@sql.cdc_latest(src, tax_rate_id)
+@sql.cdc_latest(src, src.key := (tax_rate_id))
 
 final AS (
   SELECT

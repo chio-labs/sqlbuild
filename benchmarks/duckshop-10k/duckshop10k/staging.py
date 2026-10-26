@@ -202,7 +202,7 @@ def base_model(project: Project, instance: Instance, archetype: Archetype, folde
         )
         relation = "deduplicated"
     else:
-        ctes.append(f"@sql.cdc_latest(src, {key})")
+        ctes.append(f"@sql.cdc_latest(src, src.key := ({key}))")
         relation = "cdc_latest"
     items: list[str] = []
     columns: list[Column] = []
@@ -480,7 +480,7 @@ def history_model(project: Project, instance: Instance, archetype: Archetype, fo
     )
     ctes = [
         import_cte("src", f'__source("{source}")'),
-        f"@sql.cdc_history(src, {key_physical})",
+        f"@sql.cdc_history(src, src.key := ({key_physical}))",
         cte("versions", f"SELECT\n{select_list(versions)}\nFROM cdc_history AS s"),
         cte("final", f"SELECT\n{select_list(items)}\nFROM versions AS h"),
     ]

@@ -17,7 +17,7 @@ WITH src AS (
   FROM __source("fulfilment__shipment_packages")
 ),
 
-@sql.cdc_latest(src, package_id)
+@sql.cdc_latest(src, src.key := (package_id))
 
 final AS (
   SELECT

@@ -18,7 +18,7 @@ WITH src AS (
   FROM __source("growth__affiliate_conversions")
 ),
 
-@sql.cdc_latest(src, conversion_id)
+@sql.cdc_latest(src, src.key := (conversion_id))
 
 clicks AS (
   SELECT

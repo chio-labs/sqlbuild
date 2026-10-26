@@ -10,10 +10,10 @@ use crate::sql_macros::_helpers::rendering::arguments::{fits, type_family};
 use crate::sql_macros::_helpers::rendering::placement::{QueryParts, top_level_parts};
 use crate::sql_macros::constants::{
     ALIAS_PRECEDING_KEYWORDS, FROM_KEYWORD, INFERRED_TEXT_TYPE, PROBE_COLUMN_PREFIX,
-    PROBE_TAIL_ENDS, STAR_PROJECTION, UNKNOWN_TYPE_HINT, VARCHAR_TYPE,
+    PROBE_TAIL_ENDS, RELATION_FUNCTION_PREFIX, STAR_PROJECTION, UNKNOWN_TYPE_HINT, VARCHAR_TYPE,
 };
 use crate::sql_macros::models::{
-    ArgumentCheck, ArgumentExpectation, CallScope, SqlMacroCheck, SqlMacroFinding,
+    ArgumentCheck, ArgumentExpectation, CallScope, SlotMapping, SqlMacroCheck, SqlMacroFinding,
 };
 use crate::sql_macros::types::{ProbeColumns, RelationShapes};
 
@@ -132,6 +132,17 @@ fn relation_probe(sql: &str, parts: &QueryParts, scope: &CallScope, name: &str) 
     (!tail.is_empty()).then(|| format!("{prefix}SELECT {name}.* {tail}"))
 }
 
+/// The probe listing the columns of `source`, a relation a subquery in a macro's SQL reads.
+fn capture_probe(sql: &str, parts: &QueryParts, scope: &CallScope, source: &str) -> Option<String> {
+    if source.starts_with(RELATION_FUNCTION_PREFIX) {
+        return Some(format!(
+            "{}SELECT * FROM {source}",
+            with_prefix(sql, parts, parts.ctes.len())
+        ));
+    }
+    relation_probe(sql, parts, scope, source)
+}
+
 /// Whether the `FROM` text `tail` defines `name` as an alias, as `t AS name` or `t name`.
 fn defines_alias(tail: &str, name: &str) -> bool {
     let Ok(scanned) = tokens(tail) else {
@@ -181,6 +192,17 @@ pub(crate) fn probe_plan(sql: &str, checks: &[SqlMacroCheck]) -> ProbePlan {
     let mut scopes: Vec<TypedProbe<'_>> = Vec::new();
     for (position, check) in checks.iter().enumerate() {
         let mut evidence: Vec<Option<Evidence>> = vec![None; check.arguments.len()];
+        for (index, argument) in check.arguments.iter().enumerate() {
+            if let ArgumentExpectation::Capture {
+                source: Some(source),
+                ..
+            } = &argument.expected
+                && let Some(probe) = capture_probe(sql, &parts, &check.scope, source)
+            {
+                plan.probes.push(probe);
+                evidence[index] = Some(Evidence::Columns(plan.probes.len() - 1));
+            }
+        }
         if !check.plain_select {
             plan.evidence.push(evidence);
             continue;
@@ -193,6 +215,7 @@ pub(crate) fn probe_plan(sql: &str, checks: &[SqlMacroCheck]) -> ProbePlan {
                         evidence[index] = Some(Evidence::Columns(plan.probes.len() - 1));
                     }
                 }
+                ArgumentExpectation::Capture { .. } => {}
                 ArgumentExpectation::Typed { .. } | ArgumentExpectation::Family { .. } => {
                     let group: usize = match typed_probe_index(&scopes, &check.scope) {
                         Some(group) => group,
@@ -213,7 +236,6 @@ pub(crate) fn probe_plan(sql: &str, checks: &[SqlMacroCheck]) -> ProbePlan {
                     ));
                     probe.arguments.push((position, index));
                 }
-                ArgumentExpectation::ColumnOf { .. } => {}
             }
         }
         plan.evidence.push(evidence);
@@ -290,15 +312,41 @@ pub(crate) fn check_findings(
     for (index, argument) in check.arguments.iter().enumerate() {
         let parameter: &str = &argument.parameter;
         match &argument.expected {
-            ArgumentExpectation::Relation { columns } => {
+            ArgumentExpectation::Capture {
+                slot,
+                columns,
+                source,
+            } => {
+                let (message, help) = capture_finding(
+                    (parameter, slot),
+                    columns,
+                    source.as_deref(),
+                    columns_of(index),
+                );
+                if let Some(message) = message {
+                    findings.push(finding(argument, message, Some(help)));
+                }
+            }
+            ArgumentExpectation::Relation { columns, slots } => {
                 let Some(found) = columns_of(index) else {
                     continue;
                 };
+                if let Some(slot_finding) = slot_finding(argument, (columns, slots), found, dialect)
+                {
+                    findings.push(finding(argument, slot_finding.0, Some(slot_finding.1)));
+                    continue;
+                }
                 let listed: Vec<String> = columns
                     .iter()
                     .map(|(column, data_type)| format!("{column} {data_type}"))
                     .collect();
                 for (column, data_type) in columns {
+                    if slots
+                        .iter()
+                        .any(|mapping| mapping.slot.eq_ignore_ascii_case(column))
+                    {
+                        continue;
+                    }
                     let reason: Option<String> = match column_type(found, column) {
                         None => Some(format!("{} has no column {column}", argument.text)),
                         Some(actual) if !compatible(actual.as_deref(), data_type, dialect) => {
@@ -318,31 +366,6 @@ pub(crate) fn check_findings(
                         ));
                         break;
                     }
-                }
-            }
-            ArgumentExpectation::ColumnOf { relation } => {
-                let Some(source) = check
-                    .arguments
-                    .iter()
-                    .position(|other| other.parameter == *relation)
-                else {
-                    continue;
-                };
-                let Some(found) = columns_of(source) else {
-                    continue;
-                };
-                if column_type(found, &argument.text).is_none() {
-                    findings.push(finding(
-                        argument,
-                        format!(
-                            "argument {parameter} of macro {name}() expects COLUMN OF {relation}; {} has no column {}",
-                            check.arguments[source].text, argument.text
-                        ),
-                        Some(format!(
-                            "pass one of the columns of {}",
-                            check.arguments[source].text
-                        )),
-                    ));
                 }
             }
             ArgumentExpectation::Typed { .. } | ArgumentExpectation::Family { .. } => {
@@ -392,6 +415,99 @@ pub(crate) fn check_findings(
         }
     }
     findings
+}
+
+/// Why a plain group read in a subquery over `source` may bind elsewhere, if it may, and the fix.
+fn capture_finding(
+    (relation, slot): (&str, &str),
+    columns: &[String],
+    source: Option<&str>,
+    found: Option<&Vec<(String, Option<String>)>>,
+) -> (Option<String>, String) {
+    let help: String = format!(
+        "qualify the read with the alias of the relation it reads, as alias.@{relation}.{slot}, so its columns cannot bind to the subquery's relations"
+    );
+    let Some(source) = source else {
+        return (
+            Some(format!(
+                "slot {relation}.{slot} is read plainly in a subquery over an unnamed relation, whose columns cannot be checked; write alias.@{relation}.{slot}"
+            )),
+            help,
+        );
+    };
+    let Some(found) = found else {
+        return (
+            Some(format!(
+                "slot {relation}.{slot} is read plainly in a subquery over {source}, whose columns are not known here; write alias.@{relation}.{slot}"
+            )),
+            help,
+        );
+    };
+    let captured: Option<&String> = columns
+        .iter()
+        .find(|column| column_type(found, column).is_some());
+    let message: Option<String> = captured.map(|column| {
+        format!("slot {relation}.{slot} column {column} would bind to {source} in this subquery; write alias.@{relation}.{slot}")
+    });
+    (message, help)
+}
+
+/// The first mapped slot whose column the passed relation lacks or holds with another type.
+fn slot_finding(
+    argument: &ArgumentCheck,
+    (columns, slots): (&[(String, String)], &[SlotMapping]),
+    found: &[(String, Option<String>)],
+    dialect: &str,
+) -> Option<(String, String)> {
+    let relation: &str = &argument.parameter;
+    let passed: &str = &argument.text;
+    for mapping in slots {
+        let slot: &str = &mapping.slot;
+        let help: String = format!("map {relation}.{slot} to columns of {passed}");
+        if mapping.group {
+            if let Some(missing) = mapping
+                .columns
+                .iter()
+                .find(|column| column_type(found, column).is_none())
+            {
+                return Some((
+                    format!(
+                        "slot {relation}.{slot} groups column {missing}; {passed} has no column {missing}"
+                    ),
+                    help,
+                ));
+            }
+            continue;
+        }
+        let Some((_, data_type)) = columns
+            .iter()
+            .find(|(column, _)| column.eq_ignore_ascii_case(slot))
+        else {
+            continue;
+        };
+        let column: &str = &mapping.columns[0];
+        match column_type(found, column) {
+            None => {
+                return Some((
+                    format!(
+                        "slot {relation}.{slot} needs a {data_type} column; {passed} has no column {column}"
+                    ),
+                    help,
+                ));
+            }
+            Some(actual) if !compatible(actual.as_deref(), data_type, dialect) => {
+                return Some((
+                    format!(
+                        "slot {relation}.{slot} needs a {data_type} column; {passed}.{column} is {}",
+                        shown_type(actual.as_deref().unwrap_or_default())
+                    ),
+                    help,
+                ));
+            }
+            Some(_) => {}
+        }
+    }
+    None
 }
 
 /// An inferred type as messages show it, in the SQL type names schema declarations use.

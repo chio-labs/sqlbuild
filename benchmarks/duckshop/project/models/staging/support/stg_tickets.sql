@@ -25,7 +25,7 @@ WITH src AS (
   FROM __source("support__tickets")
 ),
 
-@sql.cdc_latest(src, ticket_id)
+@sql.cdc_latest(src, src.key := (ticket_id))
 
 final AS (
   SELECT

@@ -19,7 +19,7 @@ WITH src AS (
   FROM __source("growth__newsletter_subscriptions")
 ),
 
-@sql.cdc_latest(src, list_subscription_id)
+@sql.cdc_latest(src, src.key := (list_subscription_id))
 
 final AS (
   SELECT

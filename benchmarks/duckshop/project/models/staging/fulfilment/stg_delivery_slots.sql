@@ -18,7 +18,7 @@ WITH src AS (
   FROM __source("fulfilment__delivery_slots")
 ),
 
-@sql.cdc_latest(src, slot_id)
+@sql.cdc_latest(src, src.key := (slot_id))
 
 final AS (
   SELECT

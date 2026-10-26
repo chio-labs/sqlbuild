@@ -8,16 +8,13 @@ from duckshop10k.world import CURRENCY_EXPONENT
 SQL_MACROS: dict[str, str] = {
     "cdc_latest": """MACRO (
   description "Latest surviving version of each key in an append-only change log",
-  arguments (
-    src RELATION (_op VARCHAR, _seq NUMBER(38, 0), _loaded_at TIMESTAMP_NTZ),
-    key COLUMN OF src,
-  ),
+  arguments (src RELATION (_op VARCHAR, _seq NUMBER(38, 0), _loaded_at TIMESTAMP_NTZ, key COLUMNS)),
 );
 
 WITH cdc_versions AS (
   SELECT *
   FROM @src
-  QUALIFY ROW_NUMBER() OVER (PARTITION BY @key ORDER BY _seq DESC) = 1
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY @src.key ORDER BY _seq DESC) = 1
 ),
 
 cdc_latest AS (
@@ -28,16 +25,13 @@ cdc_latest AS (
 """,
     "cdc_history": """MACRO (
   description "Every version of each key in a change log, keeping the last one of each load",
-  arguments (
-    src RELATION (_op VARCHAR, _seq NUMBER(38, 0), _loaded_at TIMESTAMP_NTZ),
-    key COLUMN OF src,
-  ),
+  arguments (src RELATION (_op VARCHAR, _seq NUMBER(38, 0), _loaded_at TIMESTAMP_NTZ, key COLUMNS)),
 );
 
 WITH cdc_history AS (
   SELECT *
   FROM @src
-  QUALIFY ROW_NUMBER() OVER (PARTITION BY @key, _loaded_at ORDER BY _seq DESC) = 1
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY @src.key, _loaded_at ORDER BY _seq DESC) = 1
 )
 """,
     "load_metadata": """MACRO (

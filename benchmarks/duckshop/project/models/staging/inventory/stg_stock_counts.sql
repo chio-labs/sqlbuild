@@ -17,7 +17,7 @@ WITH src AS (
   FROM __source("inventory__stock_counts")
 ),
 
-@sql.cdc_latest(src, count_id)
+@sql.cdc_latest(src, src.key := (count_id))
 
 final AS (
   SELECT

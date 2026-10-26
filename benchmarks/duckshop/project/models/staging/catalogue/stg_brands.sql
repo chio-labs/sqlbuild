@@ -16,7 +16,7 @@ WITH src AS (
   FROM __source("catalogue__brands")
 ),
 
-@sql.cdc_latest(src, brand_code)
+@sql.cdc_latest(src, src.key := (brand_code))
 
 final AS (
   SELECT

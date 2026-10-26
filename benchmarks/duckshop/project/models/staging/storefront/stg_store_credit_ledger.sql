@@ -17,7 +17,7 @@ WITH src AS (
   FROM __source("storefront__store_credit_ledger")
 ),
 
-@sql.cdc_latest(src, entry_id)
+@sql.cdc_latest(src, src.key := (entry_id))
 
 final AS (
   SELECT

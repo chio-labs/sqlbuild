@@ -16,7 +16,7 @@ WITH src AS (
   FROM __source("storefront__promotion_redemptions")
 ),
 
-@sql.cdc_latest(src, redemption_id)
+@sql.cdc_latest(src, src.key := (redemption_id))
 
 final AS (
   SELECT

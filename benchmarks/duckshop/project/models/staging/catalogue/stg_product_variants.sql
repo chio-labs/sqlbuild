@@ -19,7 +19,7 @@ WITH src AS (
   FROM __source("catalogue__product_variants")
 ),
 
-@sql.cdc_latest(src, sku)
+@sql.cdc_latest(src, src.key := (sku))
 
 final AS (
   SELECT

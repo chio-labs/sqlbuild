@@ -304,16 +304,16 @@ _CALL_X: dict[str, str] = orders_model("SELECT @sql.x(1) AS a\n")
             ),
         ),
         SqlMacroErrorTestCase(
-            description="expression_for_column_of",
+            description="expression_for_a_columns_slot",
             files={
                 **LATEST_PER_KEY,
                 **orders_model(
-                    "WITH orders_raw AS (SELECT * FROM __ref(\"stg_orders\")),\n@sql.latest_per_key(orders_raw, key := status || 'x')\nSELECT * FROM latest_rows\n"
+                    "WITH orders_raw AS (SELECT * FROM __ref(\"stg_orders\")),\n@sql.latest_per_key(orders_raw, src.keys := (status || 'x'))\nSELECT * FROM latest_rows\n"
                 ),
             },
             expected_code="P017",
             expected_fragments=(
-                "argument key of macro latest_per_key() expects COLUMN OF src: a column name of src",
+                "slot src.keys of macro latest_per_key() takes a parenthesised list of column names of the passed relation; got (status || 'x')",
             ),
         ),
         SqlMacroErrorTestCase(
@@ -697,16 +697,16 @@ _CALL_X: dict[str, str] = orders_model("SELECT @sql.x(1) AS a\n")
             ),
         ),
         SqlMacroErrorTestCase(
-            description="column_of_naming_a_missing_column",
+            description="columns_slot_naming_a_missing_column",
             files={
                 **LATEST_PER_KEY,
                 **orders_model(
-                    'WITH orders_raw AS (SELECT * FROM __ref("stg_orders")),\n@sql.latest_per_key(orders_raw, key := email_typo)\nSELECT * FROM latest_rows\n'
+                    'WITH orders_raw AS (SELECT * FROM __ref("stg_orders")),\n@sql.latest_per_key(orders_raw, src.keys := (status, email_typo))\nSELECT * FROM latest_rows\n'
                 ),
             },
             expected_code="P017",
             expected_fragments=(
-                "argument key of macro latest_per_key() expects COLUMN OF src; orders_raw has no column email_typo",
+                "slot src.keys groups column email_typo; orders_raw has no column email_typo",
                 "models/marts/orders.sql:4:1",
                 "macros/sql/latest_per_key.sql:",
             ),

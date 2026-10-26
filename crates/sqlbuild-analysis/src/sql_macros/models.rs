@@ -37,10 +37,11 @@ pub enum ParameterKind {
     Collection { set: bool, data_type: String },
     /// A member of the named enum.
     Enum { name: String },
-    /// A relation with at least these columns and types.
-    Relation { columns: Vec<(String, String)> },
-    /// A column name of the named relation parameter.
-    ColumnOf { relation: String },
+    /// A relation and its slots: single typed columns and `COLUMNS` groups the caller chooses.
+    Relation {
+        columns: Vec<(String, String)>,
+        groups: Vec<String>,
+    },
 }
 
 impl ParameterKind {
@@ -57,16 +58,46 @@ impl ParameterKind {
                 format!("{} {data_type}", if *set { "SET" } else { "LIST" })
             }
             Self::Enum { name } => format!("ENUM {name}"),
-            Self::Relation { columns } => {
+            Self::Relation { columns, groups } => {
                 let listed: Vec<String> = columns
                     .iter()
                     .map(|(name, data_type)| format!("{name} {data_type}"))
+                    .chain(groups.iter().map(|group| format!("{group} COLUMNS")))
                     .collect();
                 format!("RELATION ({})", listed.join(", "))
             }
-            Self::ColumnOf { relation } => format!("COLUMN OF {relation}"),
         }
     }
+
+    /// Whether this is a `RELATION` that declares a `COLUMNS` slot called `slot`.
+    pub fn declares_group(&self, slot: &str) -> bool {
+        let Self::Relation { groups, .. } = self else {
+            return false;
+        };
+        groups.iter().any(|group| group.eq_ignore_ascii_case(slot))
+    }
+
+    /// Whether this is a `RELATION` that declares a slot called `slot`.
+    pub fn declares_slot(&self, slot: &str) -> bool {
+        let Self::Relation { columns, groups } = self else {
+            return false;
+        };
+        groups.iter().any(|group| group.eq_ignore_ascii_case(slot))
+            || columns
+                .iter()
+                .any(|(column, _)| column.eq_ignore_ascii_case(slot))
+    }
+}
+
+/// The caller's columns one slot of a `RELATION` argument reads, as the call mapped them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SlotMapping {
+    /// The slot's name as the macro declares it.
+    pub slot: String,
+    /// The caller's columns: exactly one for a single-column slot, one or more for a group.
+    pub columns: Vec<String>,
+    /// Whether the slot is a `COLUMNS` group.
+    pub group: bool,
 }
 
 /// A type family an `ANY` parameter may be narrowed to.
@@ -185,6 +216,8 @@ pub struct SqlMacroLocation {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CallArgument {
     pub name: Option<String>,
+    /// The slot a `relation.slot := ...` argument maps; `name` is then the relation.
+    pub slot: Option<String>,
     pub text: String,
     /// Byte offset of the argument text in the call's argument list.
     pub offset: usize,
@@ -200,6 +233,8 @@ pub struct BoundArgument {
     pub from_default: bool,
     /// Byte offset of the argument in the call's argument list, when the call passed it.
     pub offset: Option<usize>,
+    /// The slots a `RELATION` argument's call maps, in the order the macro declares them.
+    pub slots: Vec<SlotMapping>,
 }
 
 /// The shape a typed argument was written in, which decides how it is checked and rendered.
@@ -231,6 +266,8 @@ pub struct RenderedArgument {
     pub shape: ArgumentShape,
     /// The expression macro calls `sql` holds.
     pub calls: Vec<TypedCall>,
+    /// The slots a `RELATION` argument's call maps.
+    pub slots: Vec<SlotMapping>,
 }
 
 /// One expansion's SQL and the names it defines, for clash checks at the call site.
@@ -244,6 +281,20 @@ pub struct BodyExpansion {
     pub calls: Vec<TypedCall>,
     /// The SQL of the argument whose type an expression macro call returns, by `returns TYPE OF`.
     pub like: Option<String>,
+    /// Each plain `COLUMNS` slot read in a subquery, and the relations that could capture it.
+    pub captures: Vec<SlotCapture>,
+}
+
+/// A plain `COLUMNS` slot read inside a subquery, whose bare columns could bind to its relations.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SlotCapture {
+    /// The `RELATION` parameter and the group read.
+    pub relation: String,
+    pub slot: String,
+    /// The group's columns at the call.
+    pub columns: Vec<String>,
+    /// Each relation of the enclosing subqueries, innermost first; `None` for an unnamed one.
+    pub sources: Vec<Option<String>>,
 }
 
 /// One expression macro call's expansion in a text: its byte range and the macro's `returns`.
@@ -390,14 +441,21 @@ pub struct ArgumentCheck {
 /// What an argument must be.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ArgumentExpectation {
-    /// A relation with at least these columns, each of a compatible type.
-    Relation { columns: Vec<(String, String)> },
-    /// A column of the relation passed as the named parameter.
-    ColumnOf { relation: String },
+    /// A relation with these columns, each of a compatible type, and its mapped slots' columns.
+    Relation {
+        columns: Vec<(String, String)>,
+        slots: Vec<SlotMapping>,
+    },
     /// An expression of a type compatible with this one.
     Typed { data_type: String },
     /// An expression of a type in this family.
     Family { family: AnyFamily },
+    /// A relation, `None` when unnamed, that must hold none of a plain group read's columns.
+    Capture {
+        slot: String,
+        columns: Vec<String>,
+        source: Option<String>,
+    },
 }
 
 /// A call argument the caller's analysed SQL shows does not fit its parameter.

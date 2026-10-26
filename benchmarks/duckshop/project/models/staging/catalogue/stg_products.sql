@@ -23,7 +23,7 @@ WITH src AS (
   FROM __source("catalogue__products")
 ),
 
-@sql.cdc_latest(src, product_id)
+@sql.cdc_latest(src, src.key := (product_id))
 
 paths AS (
   SELECT

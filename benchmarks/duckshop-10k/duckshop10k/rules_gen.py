@@ -32,9 +32,10 @@ def _is_change_log(ctx: RuleContext, source: str) -> bool:
     code="XSQBRDUCK001",
     message="Staging models over a change-log source must deduplicate it with a change-log macro",
     remediation=(
-        "Read the source in an import CTE and follow it with @sql.cdc_latest(<cte>, <key>), or "
-        "@sql.cdc_history(<cte>, <key>) for a model that keeps every version, so deletes and "
-        "superseded versions are handled the same way everywhere."
+        "Read the source in an import CTE and follow it with "
+        "@sql.cdc_latest(<cte>, src.key := (<key>)), or "
+        "@sql.cdc_history(<cte>, src.key := (<key>)) for a model that keeps every version, so "
+        "deletes and superseded versions are handled the same way everywhere."
     ),
 )
 def staging_uses_change_log_macro(*, model: Model, ctx: RuleContext) -> list[Finding]:

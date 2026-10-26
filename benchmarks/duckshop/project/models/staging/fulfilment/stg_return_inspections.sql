@@ -16,7 +16,7 @@ WITH src AS (
   FROM __source("fulfilment__return_inspections")
 ),
 
-@sql.cdc_latest(src, inspection_id)
+@sql.cdc_latest(src, src.key := (inspection_id))
 
 final AS (
   SELECT
