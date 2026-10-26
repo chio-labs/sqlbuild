@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.181.0](https://github.com/chio-labs/sqlbuild/compare/v0.180.0...v0.181.0) (2026-10-26)
+
+
+### Features
+
+* name failed checks in Dagster failures and make Recall runs self-describing ([#1256](https://github.com/chio-labs/sqlbuild/issues/1256)) ([07fb51a](https://github.com/chio-labs/sqlbuild/commit/07fb51af06fb93255d661d838a20adadb4673cca))
+
 ## [0.180.0](https://github.com/chio-labs/sqlbuild/compare/v0.179.0...v0.180.0) (2026-10-26)
 
 
