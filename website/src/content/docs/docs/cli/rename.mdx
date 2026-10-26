@@ -149,7 +149,7 @@ The command refuses, and writes nothing, when:
 - a reference is produced by a macro, or a column is read inside SQL that a macro generates;
 - a column reaches a model through `SELECT *` in a subquery, a `USING` or `NATURAL` join, or an unqualified name that could belong to several tables;
 - a downstream model's `SELECT *` would silently rename its output, without `--cascade`;
-- Python code or Python node SQL strings name the model or column;
+- Python code or Python node SQL strings name a model being renamed, or a column being renamed. A move that keeps the model's name leaves Python references to it as they are;
 - a Python import of a moved Python file cannot be rewritten safely.
 
 A rename whose new name belongs to another layer's folder, under the layer-folder rules `SQBRPROJECT102` and `SQBRPROJECT105`, fails verification because `sqb rename` keeps the file where it is. When those rules are the only failures, the output says where the model belongs and prints the one-step [`sqb mv`](#rename-or-move) command, with that layer's folder and the current sub-folders filled in:

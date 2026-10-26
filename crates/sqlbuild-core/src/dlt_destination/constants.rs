@@ -13,6 +13,8 @@ pub(crate) const SQLBUILD_OWNED_DESTINATION_KEYS: [&str; 4] = [
 ];
 /// The dataset DuckDB destinations land in without an explicit one.
 pub(crate) const DUCKDB_DEFAULT_DATASET: &str = "main";
+/// The dataset of SQLite's own database file; dlt attaches a file per other dataset.
+pub(crate) const SQLITE_MAIN_DATASET: &str = "main";
 /// The suffix Snowflake account and host settings drop.
 pub(crate) const SNOWFLAKE_ACCOUNT_SUFFIX: &str = ".snowflakecomputing.com";
 /// SQL Server's default port number.
@@ -24,6 +26,9 @@ pub(crate) const SNOWFLAKE_OPTIONAL_SETTINGS: [&str; 4] =
 pub(crate) const BIGQUERY_ARGUMENTS: [(&str, &str); 2] =
     [("project_id", "project"), ("location", "location")];
 pub(crate) const DUCKDB_ADAPTER: &str = "duckdb";
+pub(crate) const SQLITE_ADAPTER: &str = "sqlite";
+/// The dlt destination factory that writes SQLite through SQLAlchemy.
+pub(crate) const SQLALCHEMY_FACTORY: &str = "sqlalchemy";
 pub(crate) const MOTHERDUCK_ADAPTER: &str = "motherduck";
 pub(crate) const POSTGRES_ADAPTER: &str = "postgres";
 pub(crate) const SNOWFLAKE_ADAPTER: &str = "snowflake";

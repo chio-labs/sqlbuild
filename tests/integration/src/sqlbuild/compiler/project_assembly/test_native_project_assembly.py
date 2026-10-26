@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-import sqlbuild._native as native_module
 from sqlbuild._native import assemble_project
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.exceptions import CompileInputError
@@ -26,8 +25,8 @@ from tests.integration.src.sqlbuild.compiler.project_assembly._test_types import
     AssemblyDeferralTestCase,
     EdgeAssemblyTestCase,
     GeneratedAssemblyParityTestCase,
-    NativePanicTestCase,
     OptOutTestCase,
+    TruncatedHookTestCase,
     WindowsEnvironmentTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.project_assembly.helpers import (
@@ -255,8 +254,8 @@ def test_given_sql_analysis_opt_outs_when_attaching_natively_then_python_rejecti
 @pytest.mark.parametrize(
     "test_case",
     [
-        NativePanicTestCase(
-            description="a T-SQL hook the parser panics on",
+        TruncatedHookTestCase(
+            description="a T-SQL hook the parser once panicked on",
             files={
                 "sqlbuild_project.toml": _PROJECT_TOML,
                 "models/orders.sql": (
@@ -265,25 +264,24 @@ def test_given_sql_analysis_opt_outs_when_attaching_natively_then_python_rejecti
                 ),
             },
             dialect="tsql",
-            expected_message=(
-                "NativeCompilerError: native SQL compilation panicked (native project assembly)"
-            ),
+            expected_message_fragment="Expected ')' to close the IF condition",
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_native_assembly_panics_when_assembling_then_raises_without_python_retry(
-    test_case: NativePanicTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_given_truncated_hook_sql_when_assembling_then_reports_it_without_python_retry(
+    test_case: TruncatedHookTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     inputs: CompileInputsView = project_inputs(
         project_dir=tmp_path / "project", files=test_case.files
     )
     calls: Counter[str] = python_resource_calls(monkeypatch=monkeypatch)
 
-    with pytest.raises(native_module.NativeCompilerError) as raised:
+    with pytest.raises(CompileInputError) as raised:
         _ = assemble_project(
             inputs=inputs,
             inference_profile=ExpressionInferenceProfile(sql_analysis_dialect=test_case.dialect),
         )
 
-    assert (str(raised.value), calls) == (test_case.expected_message, Counter())
+    assert test_case.expected_message_fragment in str(raised.value)
+    assert calls == Counter()

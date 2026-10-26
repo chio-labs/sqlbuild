@@ -47,7 +47,10 @@ fn given_logical_bounds_when_grouping_then_reads_each_relation_once_in_first_ord
     ];
     for test_case in test_cases {
         let groups = cursor_query_groups(&test_case.requests);
-        let sql: Vec<String> = groups.iter().map(cursor_query_sql).collect();
+        let sql: Vec<String> = groups
+            .iter()
+            .map(|group| cursor_query_sql(group, &|bound| format!("CAST({bound} AS VARCHAR)")))
+            .collect();
         let identities: Vec<String> = groups
             .iter()
             .enumerate()

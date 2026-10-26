@@ -133,6 +133,11 @@ pub(crate) const SEMANTIC_HELP: &[(&str, &str)] = &[
          and NOT COALESCE(x, FALSE) or x IS DISTINCT FROM TRUE for x IS NOT TRUE",
     ),
     (
+        "B104",
+        "keep the ISO-8601 text without a cast, or convert it with datetime(), date() or \
+         strftime()",
+    ),
+    (
         "B210",
         "use an expression whose inferred type satisfies this SQL construct",
     ),

@@ -115,7 +115,7 @@ Use SQLBuild's `write_disposition` (dlt's term), not `write_strategy`. `delete_i
 
 ### Destination
 
-By default each resource loads into the database SQLBuild's adapter manages, with the dataset/schema derived from your target. An optional `destination` mapping passes extra settings to the dlt destination, but it cannot set `credentials`, `dataset_name`, or `default_schema_name` (SQLBuild manages those):
+By default each resource loads into the database SQLBuild's adapter manages, with the dataset/schema derived from your target. On SQLite, dlt writes through its `sqlalchemy` destination into the project's database file (dataset `main`); the `sqlbuild[dlt]` extra installs the SQLAlchemy it needs. An optional `destination` mapping passes extra settings to the dlt destination, but it cannot set `credentials`, `dataset_name`, or `default_schema_name` (SQLBuild manages those):
 
 ```yaml
 dlt_sources:

@@ -4,6 +4,7 @@ pub mod format_fixture_blocks;
 pub mod format_sql_bodies;
 pub mod frame_sql_macro_expression;
 pub mod lint_sql_bodies;
+pub mod map_expanded_offset;
 pub mod named_declaration_role_kind;
 pub mod neutralize_audit_parameters;
 pub mod neutralize_context_interpolation;

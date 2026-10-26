@@ -48,3 +48,12 @@ pub(crate) struct WalkRaceTestCase {
     pub(crate) change_during_walk: fn(&std::path::Path),
     pub(crate) expected_stamped: bool,
 }
+
+/// A change to a recorded SQL test artifact and whether, or why not, the record is kept.
+pub(crate) struct ReusableRecordTestCase {
+    pub(crate) description: &'static str,
+    /// Changes the tests folder after the artifact `t.sql` was recorded.
+    pub(crate) change: fn(&std::path::Path),
+    pub(crate) identity: &'static str,
+    pub(crate) expected_outcome: Result<(), crate::artifacts::models::SqlTestRecordMiss>,
+}

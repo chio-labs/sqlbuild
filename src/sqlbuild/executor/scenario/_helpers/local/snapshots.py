@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -15,12 +16,15 @@ from sqlbuild.executor.scenario._helpers.snapshots.core import (
     scenario_snapshot_root,
 )
 from sqlbuild.executor.scenario.constants import (
+    LOCAL_CAPTURE_ADAPTER,
+    LOCAL_TYPE_VARIANT,
     SCENARIO_LOCAL_JSONL_INVALID,
     SCENARIO_LOCAL_LOAD_FAILED,
     SCENARIO_LOCAL_MANIFEST_INVALID,
     SCENARIO_LOCAL_SNAPSHOT_MISSING,
     SCENARIO_LOCAL_SNAPSHOT_STALE,
     SCENARIO_LOCAL_TYPE_INVALID,
+    VARIANT_FROM_JSON_PLACEHOLDER,
 )
 from sqlbuild.executor.scenario.models import (
     ScenarioLocalSnapshotLoadedRelation,
@@ -111,6 +115,7 @@ def load_scenario_snapshot_into_duckdb(
                 snapshot_root=snapshot_root,
                 manifest_path=manifest_path,
                 relation=relation,
+                capture_adapter=manifest.capture_adapter,
             )
         )
 
@@ -214,6 +219,7 @@ def _load_snapshot_relation(
     snapshot_root: Path,
     manifest_path: Path,
     relation: ScenarioSnapshotRelation,
+    capture_adapter: str,
 ) -> ScenarioLocalSnapshotLoadedRelation:
     del manifest_path
     file_path: Path = snapshot_root / relation.file_path
@@ -242,6 +248,7 @@ def _load_snapshot_relation(
         relation=relation,
         table_name=table_name,
         rows=rows,
+        native_values=capture_adapter == LOCAL_CAPTURE_ADAPTER,
     )
     return ScenarioLocalSnapshotLoadedRelation(
         kind=relation.kind,
@@ -276,16 +283,24 @@ def _insert_rows(
     relation: ScenarioSnapshotRelation,
     table_name: str,
     rows: tuple[dict[str, object], ...],
+    native_values: bool,
 ) -> None:
     if not rows:
         return
     column_names: tuple[str, ...] = tuple(column.name for column in relation.columns)
-    insert_sql: str = _build_insert_sql(table_name=table_name, column_names=column_names)
+    variant_columns: tuple[bool, ...] = tuple(
+        not native_values and column.local_type.strip().upper() == LOCAL_TYPE_VARIANT
+        for column in relation.columns
+    )
+    insert_sql: str = _build_insert_sql(
+        table_name=table_name, column_names=column_names, variant_columns=variant_columns
+    )
     row_values: list[tuple[object, ...]] = []
     for row in rows:
         values: list[object] = []
-        for column_name in column_names:
-            values.append(_row_value(row=row, column_name=column_name))
+        for column_name, variant in zip(column_names, variant_columns, strict=True):
+            value: object = _row_value(row=row, column_name=column_name)
+            values.append(_variant_json_text(value=value) if variant else value)
         row_values.append(tuple(values))
     try:
         connection.executemany(insert_sql, row_values)
@@ -340,9 +355,27 @@ def _build_create_table_sql(*, table_name: str, columns: tuple[ScenarioSnapshotC
     return f"CREATE TABLE {_quote_identifier(table_name)} ({column_defs})"
 
 
-def _build_insert_sql(*, table_name: str, column_names: tuple[str, ...]) -> str:
+def _variant_json_text(*, value: object) -> str | None:
+    """Another adapter's VARIANT value as JSON text; a string that parses is already JSON text."""
+
+    if value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            json.loads(value)
+        except ValueError:
+            return json.dumps(value)
+        return value
+    return json.dumps(value)
+
+
+def _build_insert_sql(
+    *, table_name: str, column_names: tuple[str, ...], variant_columns: tuple[bool, ...]
+) -> str:
     columns: str = ", ".join(_quote_identifier(column_name) for column_name in column_names)
-    placeholders: str = ", ".join("?" for _ in column_names)
+    placeholders: str = ", ".join(
+        VARIANT_FROM_JSON_PLACEHOLDER if variant else "?" for variant in variant_columns
+    )
     return f"INSERT INTO {_quote_identifier(table_name)} ({columns}) VALUES ({placeholders})"
 
 

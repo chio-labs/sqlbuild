@@ -64,3 +64,21 @@ impl<'py> HostEntries for PythonHost<'py> {
 pub(crate) fn entry<'py>(py: Python<'py>, id: impl Into<HostId>) -> PyResult<Bound<'py, PyAny>> {
     PythonHost(py).entry(id.into())
 }
+
+/// `log_debug_event(logger=logging.getLogger(logger), message=message)`.
+pub(crate) fn log_debug_message(py: Python<'_>, logger: &str, message: &str) -> PyResult<()> {
+    let kwargs: Bound<'_, PyDict> = PyDict::new(py);
+    kwargs.set_item(
+        "logger",
+        py.import("logging")?
+            .getattr("getLogger")?
+            .call1((logger,))?,
+    )?;
+    kwargs.set_item("message", message)?;
+    entry(
+        py,
+        sqlbuild_host::entries::models::ExecutorHost::LogDebugEvent,
+    )?
+    .call((), Some(&kwargs))
+    .map(|_| ())
+}

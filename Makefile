@@ -113,6 +113,8 @@ E2E_DUCKDB_BUILD_CORE_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_no_load_sources.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_duckdb_storage_key.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_source_end_audits.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_python_check_outcomes.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_duckdb_attach.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_unbuilt_dependencies.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_validation_failures.py
 
@@ -370,8 +372,12 @@ planner-differential:
 
 skills:
 	uv run python -m scripts.generate_docs_skill
-	uv run sqb skills --global --target opencode
 	uv run fensu skills
+
+# Installs this checkout's development skill into your user-level OpenCode skills; never run by CI.
+.PHONY: install-global-skill
+install-global-skill:
+	uv run sqb skills --global --target opencode
 
 
 DBT_EXECUTABLE ?= dbt

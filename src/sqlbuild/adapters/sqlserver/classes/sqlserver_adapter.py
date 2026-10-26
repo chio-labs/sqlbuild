@@ -114,6 +114,7 @@ from sqlbuild.adapters.sqlserver.constants import (
     DIFF_UNSUPPORTED_COMPARISON_TYPES,
     INFORMATION_SCHEMA_NULLABLE_VALUE,
     INTEGER_TYPE_TOKEN,
+    ISO8601_CONVERT_STYLE,
     USER_TABLE_OBJECT_TYPE,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
@@ -989,6 +990,13 @@ class SqlServerAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
 
     def _quote_sql_string(self, value: str) -> str:
         return "'" + value.replace("'", "''") + "'"
+
+    def render_cursor_text(self, *, expression: str, cursor_type: str) -> str:
+        """Render a timestamp bound in ISO 8601 (style 126), not CAST's 'Apr  4 2026  2:30PM'."""
+
+        if cursor_type == CursorKind.TIMESTAMP:
+            return f"CONVERT(VARCHAR(33), {expression}, {ISO8601_CONVERT_STYLE})"
+        return super().render_cursor_text(expression=expression, cursor_type=cursor_type)
 
     def render_cursor_bound_literal(self, *, value: str, cursor_type: str | None) -> str:
         if cursor_type == CursorKind.INTEGER:

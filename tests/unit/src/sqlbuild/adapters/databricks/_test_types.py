@@ -189,3 +189,14 @@ class DatabricksRelationUsageFailureTestCase:
     message: str
     sqlstate: str | None
     expected_error_match: str
+
+
+@dataclass(frozen=True)
+class DatabricksSchemaExistsTestCase:
+    """A schema existence check with or without a catalog, and what it must query and answer."""
+
+    description: str
+    database: str | None
+    rows: list[tuple[object, ...]]
+    expected_exists: bool
+    expected_query_fragment: str

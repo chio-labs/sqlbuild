@@ -138,6 +138,7 @@ SQLBuild automatically builds the ingestr destination URI from your adapter conn
 | Adapter | Destination URI format |
 |---------|----------------------|
 | DuckDB | `duckdb:///path/to/db.duckdb` |
+| SQLite | `sqlite:///path/to/db.sqlite` |
 | MotherDuck | `motherduck://database` |
 | PostgreSQL | `postgresql://user:pass@host:port/db` |
 | Snowflake | `snowflake://user:pass@account/db/schema` |

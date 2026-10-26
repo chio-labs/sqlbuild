@@ -19,6 +19,7 @@ use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
 use crate::bindings::_helpers::scopes::scope_reports::{scope_move_preview, scope_rebound_usages};
 use crate::bindings::_helpers::scopes::scope_validation::relocated_declarations;
 
+const SQL_SUFFIX: &str = ".sql";
 const GENERIC_DIALECT: &str = "generic";
 const MATERIALIZED_KEY: &str = "materialized";
 const MIGRATE_FROM_KEY: &str = "migrate_from";
@@ -305,6 +306,18 @@ fn python_locations(
     Ok(locations)
 }
 
+/// Whether `request` moves a model without renaming it: a folder, or a file of the same name.
+fn move_keeps_name(request: &RefactorRequest) -> bool {
+    if request.operation != RefactorOperation::MoveModel {
+        return false;
+    }
+    let destination: &str = request.destination.as_deref().unwrap_or_default();
+    match destination.strip_suffix(SQL_SUFFIX) {
+        Some(path) => path.rsplit('/').next() == Some(request.model_name.as_str()),
+        None => true,
+    }
+}
+
 /// The facts one refactoring plan of `requests` reads.
 pub(crate) fn refactor_facts(
     project: &Bound<'_, PyAny>,
@@ -312,7 +325,9 @@ pub(crate) fn refactor_facts(
 ) -> PyResult<RefactorFacts> {
     let mut locations: Vec<ManualLocation> = Vec::new();
     for request in requests {
-        locations.extend(python_locations(project, request)?);
+        if !move_keeps_name(request) {
+            locations.extend(python_locations(project, request)?);
+        }
     }
     let compiled: Bound<'_, PyAny> = native_field(&native_field(project, "graph")?, "project")?;
     let discovered: Bound<'_, PyAny> = native_field(project, "discovered")?;

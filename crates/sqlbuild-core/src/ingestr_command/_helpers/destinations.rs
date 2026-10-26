@@ -19,6 +19,14 @@ pub(crate) fn duckdb(connection: &LoaderConnection) -> Result<String, IngestrCom
     ))
 }
 
+/// SQLite's database file URI.
+pub(crate) fn sqlite(connection: &LoaderConnection) -> Result<String, IngestrCommandError> {
+    Ok(format!(
+        "sqlite:///{}",
+        required(connection, "path", "sqlite")?
+    ))
+}
+
 /// MotherDuck's database URI with its optional token.
 pub(crate) fn motherduck(connection: &LoaderConnection) -> String {
     let database: &str = optional(connection, "database").unwrap_or_default();

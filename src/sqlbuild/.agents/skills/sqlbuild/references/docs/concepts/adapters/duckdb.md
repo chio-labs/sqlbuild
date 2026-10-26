@@ -52,6 +52,13 @@ alias = "external"
 read_only = true
 ```
 
+A relative `path` of a DuckDB or SQLite file is relative to the project directory, like `database`,
+and a path starting with `~/` is relative to your home directory. This also applies to `attach`
+entries that come from a dbt profile: they resolve from the SQLBuild project directory, not from
+the dbt project or the working directory.
+Every connection of a command attaches it once: connections to the same project database share the
+attachment.
+
 ## Table promotion mode
 
 DuckDB defaults to `staged` promotion: tables are materialized into a staging table, audited, then swapped into the target. This is configurable in `settings`:

@@ -192,3 +192,22 @@ class LocalScenarioSqlTestCase:
     source_dialect: str | None
     sql: str
     expected_sql: str
+
+
+@dataclass(frozen=True)
+class ScenarioLocalVariantLoadTestCase:
+    """A Snowflake-captured VARIANT JSONL value and the variant type it must load as."""
+
+    description: str
+    value: object
+    expected_variant_type: str
+    expected_matches_parsed_json: bool
+
+
+@dataclass(frozen=True)
+class CanonicalJsonTestCase:
+    """JSON text and the canonical text equal values of it share."""
+
+    description: str
+    text: str | None
+    expected_canonical: str | None

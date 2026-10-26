@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import sqlite3
 import subprocess
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -247,4 +249,68 @@ def test_given_dlt_rest_api_source_when_loading_then_table_is_materialized_and_q
         db_path=warehouse_db_path,
         sql="SELECT order_id, amount FROM order_totals ORDER BY order_id",
     )
+    assert tuple(model_rows) == test_case.expected_model_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DltLocalSourceE2ETestCase(
+            description="loads local jsonl filesystem source into sqlite",
+            expected_loaded_rows=((1, 10), (2, 20), (3, 30)),
+            expected_model_rows=((2, 20), (3, 30)),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_sqlite_project_when_loading_dlt_filesystem_source_then_models_read_it(
+    tmp_path: Path, test_case: DltLocalSourceE2ETestCase
+) -> None:
+    project_root: Path = tmp_path / "dlt_sqlite_project"
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="dlt_sqlite_project",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "dlt_sqlite_project"\nadapter = "sqlite"\n\n'
+                '[connection]\npath = "warehouse.sqlite"\n\n'
+                '[defaults]\nmaterialized = "table"\n'
+            ),
+            "sources/raw.yml": (
+                "dlt_sources:\n"
+                "  - type: filesystem\n"
+                "    config:\n"
+                f'      bucket_url: "file://{project_root / "data"}"\n'
+                '      file_glob: "orders.jsonl"\n'
+                "    resources:\n"
+                "      - name: raw_orders\n"
+                "        description: Test source raw_orders.\n"
+                "        reader: jsonl\n"
+                "        write_disposition: replace\n"
+            ),
+            "data/orders.jsonl": (
+                '{"order_id": 1, "amount": 10}\n'
+                '{"order_id": 2, "amount": 20}\n'
+                '{"order_id": 3, "amount": 30}\n'
+            ),
+            "models/order_totals.sql": (
+                "MODEL (description 'Test model order_totals.', materialized table);\n\n"
+                'SELECT order_id, amount FROM __source("raw_orders") WHERE amount >= 20\n'
+            ),
+        },
+    )
+
+    built: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+
+    assert built.returncode == 0, built.stdout + built.stderr
+    with closing(sqlite3.connect(project_dir / "warehouse.sqlite")) as warehouse:
+        loaded_rows: list[tuple[object, ...]] = warehouse.execute(
+            "SELECT order_id, amount FROM raw_orders ORDER BY order_id"
+        ).fetchall()
+        model_rows: list[tuple[object, ...]] = warehouse.execute(
+            "SELECT order_id, amount FROM order_totals ORDER BY order_id"
+        ).fetchall()
+    assert tuple(loaded_rows) == test_case.expected_loaded_rows
     assert tuple(model_rows) == test_case.expected_model_rows

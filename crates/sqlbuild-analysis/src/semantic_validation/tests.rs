@@ -6,6 +6,8 @@ mod normalize_batch;
 mod positions;
 #[path = "tests/test_semantic_validation.rs"]
 mod semantic_validation;
+#[path = "tests/test_sqlite_temporal_casts.rs"]
+mod sqlite_temporal_casts;
 #[path = "tests/test_types.rs"]
 mod test_types;
 #[path = "tests/test_truth_tests.rs"]

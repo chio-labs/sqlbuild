@@ -243,3 +243,13 @@ class PostgresLongModelNameE2ETestCase:
     model_columns: str
     expected_exit_code: int
     expected_scenario_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PostgresTemporaryTestFunctionsE2ETestCase:
+    """A `sqb test` of an edited function, with or without temporary function copies."""
+
+    description: str
+    connection_option: str
+    expected_exit_code: int
+    expected_stdout_fragment: str

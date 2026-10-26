@@ -160,7 +160,7 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     sql_analysis_dialect_name: ClassVar[str | None] = "clickhouse"
     sql_lexical_syntax: ClassVar[SqlLexicalSyntax] = SqlLexicalSyntax(
         backslash_escape_quotes=frozenset({"'", '"', "`"}),
-        line_comment_prefixes=frozenset({"--"}),
+        line_comment_prefixes=frozenset({"--", "#", "//"}),
     )
     max_identifier_length: ClassVar[int] = MAX_IDENTIFIER_LENGTH
     relation_grants_supported: ClassVar[bool] = False

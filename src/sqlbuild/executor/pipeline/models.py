@@ -6,7 +6,12 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlbuild._native import AuditPlanEntry, CompiledObjectKey, SqlTestPlanEntry
+from sqlbuild._native import (
+    AuditPlanEntry,
+    CompiledObjectKey,
+    FunctionPlanEntry,
+    SqlTestPlanEntry,
+)
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import (
     BuildCallbacks,
@@ -52,6 +57,8 @@ class TemporaryTestFunctions:
     created_keys: frozenset[CompiledObjectKey] = frozenset()
     replacements: dict[str, str] = field(default_factory=dict)
     failures: dict[CompiledObjectKey, str] = field(default_factory=dict)
+    python_functions: tuple[FunctionPlanEntry, ...] = ()
+    """Connection-scoped Python functions the first connection registered, in order."""
 
 
 @dataclass(frozen=True)

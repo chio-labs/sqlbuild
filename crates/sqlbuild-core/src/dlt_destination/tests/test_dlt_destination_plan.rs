@@ -24,6 +24,22 @@ fn given_adapter_connection_when_planning_dlt_destination_then_matches_python_ma
             }),
         },
         DestinationPlanTestCase {
+            description: "sqlite writes its database file through sqlalchemy into main",
+            adapter: "sqlite",
+            strings: &[("path", "/data/warehouse.sqlite")],
+            port: None,
+            destination_keys: &[],
+            dataset_name: None,
+            expected_plan: Ok(DltDestinationPlan {
+                factory: "sqlalchemy",
+                arguments: vec![(
+                    "credentials",
+                    DltValue::Text("sqlite:////data/warehouse.sqlite".to_owned()),
+                )],
+                dataset: DltDataset::Default("main"),
+            }),
+        },
+        DestinationPlanTestCase {
             description: "postgres connection string uses host default and port",
             adapter: "postgres",
             strings: &[("user", "u"), ("database", "d")],

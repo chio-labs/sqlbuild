@@ -562,6 +562,12 @@ pub struct Model {
     /// The lines of the model file above `query_sql`, which locations inside it skip.
     #[serde(default)]
     pub query_line_offset: u64,
+    /// The characters before `query_sql`'s first line on its file line, when it shares one.
+    #[serde(default)]
+    pub query_column_offset: u64,
+    /// How `query_sql` maps back to the authored query, when its expansion is known.
+    #[serde(default)]
+    pub authored_query: Option<AuthoredQueryMap>,
     pub config: BTreeMap<String, Value>,
     pub authored_config_keys: Vec<String>,
     pub logical_schema: Option<String>,
@@ -866,6 +872,17 @@ impl fensu_policy::policy::types::PolicyRule for RuleMetadata {
     }
 }
 
+/// The expansion passes from a model's authored query to `query_sql`, and the query's file place.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+pub struct AuthoredQueryMap {
+    /// Each pass's substitutions in characters, the first pass applied to the authored query.
+    pub passes: Vec<Vec<crate::lint_text::models::ExpansionSpan>>,
+    /// The lines of the model file above the authored query.
+    pub line_offset: u64,
+    /// The characters before the authored query on its first file line.
+    pub column_offset: u64,
+}
+
 /// One compiled model's facts as the rules request builder receives them.
 #[derive(Clone, Debug, Default)]
 pub struct ModelRow {
@@ -875,6 +892,10 @@ pub struct ModelRow {
     pub authored_sql: String,
     /// The lines of the model file above `query_sql`.
     pub query_line_offset: u64,
+    /// The characters before `query_sql`'s first line on its file line.
+    pub query_column_offset: u64,
+    /// How `query_sql` maps back to the authored query, when its expansion is known.
+    pub authored_query: Option<AuthoredQueryMap>,
     pub config: BTreeMap<String, Value>,
     pub authored_config_keys: Vec<String>,
     pub logical_schema: Option<String>,

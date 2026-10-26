@@ -37,6 +37,7 @@ schema = "analytics_dev"
 | `user` | Database user |
 | `password` | Database password |
 | `dbname` | Database name |
+| `temporary_test_functions` | `false` stops `sqb test` from creating session-temporary (`pg_temp`) copies of project SQL functions, so tests call the built functions. Use it behind a transaction-mode pooler such as PgBouncer, where later statements can run in a session without the copies (default: `true`) |
 
 Connection fields are passed to `psycopg.connect()`. See the [psycopg documentation](https://www.psycopg.org/psycopg3/docs/api/connections.html) for all available options. The target remains authoritative for database and schema qualification.
 
@@ -67,4 +68,5 @@ schema = "dev"
 `sqb test` creates each SQL function the selected tests call in the session's `pg_temp` schema and
 calls it as `pg_temp.<name>`, so tests use the current project definition without a build. Temporary
 functions belong to one server session: behind a transaction-mode pooler, run `sqb test` through a
-direct connection or a session-mode pool. See [Functions in `sqb test`](/docs/concepts/testing#functions-in-sqb-test).
+direct connection or a session-mode pool, or set `temporary_test_functions = false` so tests call the
+built functions. See [Functions in `sqb test`](/docs/concepts/testing#functions-in-sqb-test).

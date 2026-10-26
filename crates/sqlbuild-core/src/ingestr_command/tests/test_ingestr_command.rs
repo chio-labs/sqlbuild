@@ -19,6 +19,13 @@ fn given_connection_when_building_destination_uri_then_matches_python_quoting() 
             expected_uri: Ok("duckdb:///warehouse.duckdb"),
         },
         DestinationUriTestCase {
+            description: "sqlite path",
+            adapter_name: "sqlite",
+            strings: &[("path", "/data/warehouse.sqlite")],
+            port: None,
+            expected_uri: Ok("sqlite:////data/warehouse.sqlite"),
+        },
+        DestinationUriTestCase {
             description: "motherduck prefix and token",
             adapter_name: "motherduck",
             strings: &[("database", "md:my db/é"), ("token", "t o/k=n&")],

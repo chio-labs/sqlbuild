@@ -24,6 +24,8 @@ EMITTED_STDOUT: bytes = b"binary \x00\xff\xfe chunk\n"
 EMITTED_STDERR: bytes = "warning \u2713 from the task\n".encode()
 EMITTED_TAIL: bytes = b"after the warning\n"
 MEBIBYTE: int = 1024 * 1024
+HANG_SECONDS: int = 600
+HANG_DUMP_GRACE_SECONDS: int = 30
 EMPTY_RESULT: bytes = b'{"rows": []}'
 NUMBERED_LINE: re.Pattern[bytes] = re.compile(rb"^(\d+) std(?:out|err)$", re.MULTILINE)
 PROJECT_TOML: str = (
@@ -108,22 +110,36 @@ def write_project(project_dir: Path, *, extra_toml: str = "", targets: int = 1) 
 
 
 def environment(**overrides: str) -> dict[str, str]:
-    """The process environment for one CLI run."""
+    """The process environment for one CLI run; a hang dump prints every thread's stack."""
 
-    return {**os.environ, "NO_COLOR": "1", **overrides}
+    return {**os.environ, "NO_COLOR": "1", "PYTHONFAULTHANDLER": "1", **overrides}
 
 
 def run(project_dir: Path, *args: str, **env: str) -> subprocess.CompletedProcess[bytes]:
-    """Run the Python CLI once in the project and capture exact streams."""
+    """Run the Python CLI once in the project and capture exact streams, or fail with its stacks."""
 
-    return subprocess.run(
-        [str(PYTHON_CLI), *args],
-        cwd=project_dir,
-        capture_output=True,
-        check=False,
-        env=environment(**env),
-        timeout=600,
-    )
+    process: subprocess.Popen[bytes] = start(project_dir, *args, **env)
+    try:
+        stdout, stderr = process.communicate(timeout=HANG_SECONDS)
+    except subprocess.TimeoutExpired:
+        raise AssertionError(
+            f"sqlbuild {shlex.join(args)} hung for {HANG_SECONDS}s:\n{hang_dump(process)}"
+        ) from None
+    return subprocess.CompletedProcess(process.args, process.returncode, stdout, stderr)
+
+
+def hang_dump(process: subprocess.Popen[bytes]) -> str:
+    """Abort a hung CLI's process group so it prints every thread's stack, and return its stderr."""
+
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(process.pid, signal.SIGABRT)
+    try:
+        _, stderr = process.communicate(timeout=HANG_DUMP_GRACE_SECONDS)
+    except subprocess.TimeoutExpired:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGKILL)
+        _, stderr = process.communicate()
+    return stderr.decode(errors="replace")
 
 
 def start(project_dir: Path, *args: str, **env: str) -> subprocess.Popen[bytes]:
@@ -267,13 +283,20 @@ def concurrent_builds(project_dir: Path, targets: tuple[str, ...]) -> tuple[list
     ]
     reads: int = 0
     unexpected_failures: int = 0
-    while any(build.poll() is None for build in builds):
+    deadline: float = time.monotonic() + HANG_SECONDS
+    while any(build.poll() is None for build in builds) and time.monotonic() < deadline:
         reader: subprocess.CompletedProcess[bytes] = run(
             project_dir, "recall", "query", "--json", "SELECT COUNT(*) FROM invocations"
         )
         reads += 1
         unexpected_failures += int(reader.returncode != 0 and b"[C971]" not in reader.stderr)
+    hung: list[str] = list(map(hang_dump, filter(_still_running, builds)))
+    assert not hung, f"{len(hung)} builds still ran after {HANG_SECONDS}s:\n" + "\n".join(hung)
     return [build.wait(timeout=600) for build in builds], reads, unexpected_failures
+
+
+def _still_running(process: subprocess.Popen[bytes]) -> bool:
+    return process.poll() is None
 
 
 def timed_build(project_dir: Path) -> tuple[subprocess.CompletedProcess[bytes], float, float]:

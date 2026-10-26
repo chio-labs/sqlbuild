@@ -1,7 +1,7 @@
 """Test case types for Rules performance guards."""
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -336,3 +336,23 @@ class ModuleStateAttributionCase:
     files: tuple[tuple[str, str], ...]
     edited_model: str
     expected_misses_after_edit: dict[str, int]
+
+
+@dataclass(frozen=True)
+class RulePositionE2ETestCase:
+    """A model file whose query starts somewhere or expands macros, and where a rule must point."""
+
+    description: str
+    model_sql: str
+    expected_location: str
+    rule: str = "SQBRMODEL102"
+    macro_files: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ClickHouseCommentE2ETestCase:
+    """A ClickHouse model with a line comment holding a quote, and the finding rules report."""
+
+    description: str
+    comment: str
+    expected_location: str

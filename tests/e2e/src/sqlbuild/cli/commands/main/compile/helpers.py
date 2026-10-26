@@ -5338,3 +5338,23 @@ def run_benchmark_generator(
         check=False,
         timeout=300,
     )
+
+
+def dialect_syntax_model(description: str, sql: str, config: str = "") -> str:
+    """Build a model file with a description, optional extra header config and its query."""
+
+    return f"MODEL (description '{description}'{config});\n{sql}\n"
+
+
+def append_to_compiled_sql_tests(project_dir: Path) -> None:
+    """Append a comment to every compiled SQL test artifact, changing its size."""
+
+    for artifact in sorted((project_dir / "target/compiled/tests").rglob("*.sql")):
+        _ = artifact.write_text(artifact.read_text() + "-- changed\n")
+
+
+def flip_compiled_sql_test_bytes(project_dir: Path) -> None:
+    """Swap one character of every compiled SQL test artifact, keeping its size."""
+
+    for artifact in sorted((project_dir / "target/compiled/tests").rglob("*.sql")):
+        _ = artifact.write_text(artifact.read_text().replace("SELECT", "select", 1))

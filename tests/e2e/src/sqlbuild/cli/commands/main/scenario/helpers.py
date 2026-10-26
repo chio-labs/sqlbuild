@@ -1137,7 +1137,12 @@ def build_connect_by_scenario_project_files() -> dict[str, str]:
     }
 
 
-def build_local_variant_scenario_project_files() -> dict[str, str]:
+def build_local_variant_scenario_project_files(
+    *,
+    output: str = "o.payload IS NOT NULL AS has_payload",
+    expected: str = "TRUE AS has_payload",
+    fixture: str = '\'{"qty": 2, "tags": ["a"]}\'::JSON::VARIANT',
+) -> dict[str, str]:
     """Build an in-memory DuckDB scenario whose source fixture holds a VARIANT column."""
 
     return {
@@ -1152,15 +1157,15 @@ def build_local_variant_scenario_project_files() -> dict[str, str]:
         ),
         "models/stg_orders.sql": (
             "MODEL (description 'Test model stg_orders.');\n"
-            "SELECT o.order_id, o.payload IS NOT NULL AS has_payload\n"
+            f"SELECT o.order_id, {output}\n"
             'FROM __source("raw_orders") AS o\n'
         ),
         "tests/scenarios/orders__keep_payload.sql": (
             "SCENARIO (description 'Test scenario orders__keep_payload.');\n"
             "WITH\n"
             "__source__raw_orders AS (\n"
-            "  SELECT 1 AS order_id, '{\"qty\": 2}'::JSON::VARIANT AS payload\n),\n"
-            "__expected__stg_orders AS (SELECT 1 AS order_id, TRUE AS has_payload)\n"
+            f"  SELECT 1 AS order_id,\n  {fixture} AS payload\n),\n"
+            f"__expected__stg_orders AS (SELECT 1 AS order_id, {expected})\n"
             "SELECT 1\n"
         ),
     }
@@ -1192,3 +1197,90 @@ def build_helper_fixture_scenario_project_files() -> dict[str, str]:
             "SELECT 1\n"
         ),
     }
+
+
+SNOWFLAKE_VARIANT_FIXTURE_SQL: str = (
+    'SELECT 1 AS order_id, \'a\' AS status, PARSE_JSON(\'{"qty": 2, "note": "x"}\') AS payload'
+)
+
+
+def build_snowflake_variant_scenario_project_files(*, expected_payload_json: str) -> dict[str, str]:
+    """Build an offline Snowflake project whose scenario compares a VARIANT with PARSE_JSON."""
+
+    return {
+        "sqlbuild_project.toml": build_offline_snowflake_project_toml(),
+        "sources/raw.yml": (
+            "sources:\n  - name: raw_orders\n    description: Raw orders.\n"
+            "    schema: main\n    table: raw_orders\n    columns:\n"
+            '      - {name: order_id, type: "NUMBER(38,0)"}\n'
+            "      - {name: status, type: VARCHAR}\n"
+            "      - {name: payload, type: VARIANT}\n"
+        ),
+        "models/stg_payloads.sql": (
+            'MODEL (description "Order payloads.");\n'
+            'SELECT order_id, payload FROM __source("raw_orders")\n'
+        ),
+        "tests/scenarios/payloads__variant_compare.sql": (
+            "SCENARIO (description 'Payload VARIANT values compare equal locally.');\n"
+            "WITH\n"
+            f"__source__raw_orders AS ({SNOWFLAKE_VARIANT_FIXTURE_SQL}),\n"
+            "__expected__stg_payloads AS (SELECT 1 AS order_id, "
+            f"PARSE_JSON('{expected_payload_json}') AS payload)\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
+def write_snowflake_variant_snapshot(
+    *, project_dir: Path, scenario_name: str, payload_text: str
+) -> None:
+    """Write the snapshot a Snowflake capture stores: the VARIANT as Snowflake's JSON text."""
+
+    snapshot_root: Path = project_dir / "tests" / "_scenario_snapshots" / scenario_name
+    (snapshot_root / "sources").mkdir(parents=True)
+    row: str = json.dumps({"ORDER_ID": 1, "PAYLOAD": payload_text, "STATUS": "a"}) + "\n"
+    (snapshot_root / "sources" / "raw_orders.jsonl").write_text(row, encoding="utf-8")
+    manifest: dict[str, object] = {
+        "capture_adapter": "snowflake",
+        "capture_dialect": "snowflake",
+        "captured_at": "2026-10-25T11:10:54Z",
+        "format": "jsonl",
+        "input_fingerprint": build_scenario_snapshot_input_fingerprint(
+            scenario_name=scenario_name,
+            input_specs=(
+                ScenarioSnapshotInputSpec(
+                    kind=ScenarioArtifactKind.SOURCE,
+                    logical_name="raw_orders",
+                    file_path=Path("sources") / "raw_orders.jsonl",
+                    capture_sql=SNOWFLAKE_VARIANT_FIXTURE_SQL,
+                ),
+            ),
+            capture_adapter="snowflake",
+            capture_dialect="snowflake",
+        ),
+        "relations": [
+            {
+                "bytes": len(row.encode("utf-8")),
+                "columns": [
+                    {"local_type": local, "name": name, "warehouse_type": warehouse}
+                    for name, local, warehouse in (
+                        ("order_id", "DECIMAL(1, 0)", "NUMBER(1,0)"),
+                        ("status", "TEXT(1)", "VARCHAR(1)"),
+                        ("payload", "VARIANT", "VARIANT"),
+                    )
+                ],
+                "file": "sources/raw_orders.jsonl",
+                "kind": "source",
+                "logical_name": "raw_orders",
+                "row_count": 1,
+            }
+        ],
+        "scenario_name": scenario_name,
+        "sqlbuild_version": "0.177.0",
+        "total_bytes": len(row.encode("utf-8")),
+        "total_rows": 1,
+        "version": 1,
+    }
+    (snapshot_root / "scenario.json").write_text(
+        json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+    )

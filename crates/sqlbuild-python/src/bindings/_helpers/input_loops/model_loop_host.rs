@@ -266,6 +266,16 @@ pub(crate) fn finished_record<'py>(
         },
     };
     let (values, encoding_error) = config_values(&stripped);
+    let expansion_passes: Vec<Vec<SpanRow>> = if *record.query_sql == *record.expansion.expanded_sql
+    {
+        vec![
+            record.expansion.interpolation_spans.clone(),
+            record.expansion.declaration_spans.clone(),
+            record.expansion.macro_spans.clone(),
+        ]
+    } else {
+        Vec::new()
+    };
     let facts: CompiledModelFacts = plain_model_facts(PlainModel {
         name,
         relative_path,
@@ -291,6 +301,7 @@ pub(crate) fn finished_record<'py>(
         enum_declarations: declarations(enums)?,
         constant_declarations: declarations(constants)?,
         typed_calls: finished.typed_calls,
+        expansion_passes,
     });
     Ok((record, facts))
 }

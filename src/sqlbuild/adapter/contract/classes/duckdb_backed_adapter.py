@@ -1190,7 +1190,7 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         """Build a DuckDB ATTACH statement from one attach config entry."""
 
         path: str = str(attach_entry["path"])
-        sql: str = f"ATTACH '{path}'"
+        sql: str = f"ATTACH IF NOT EXISTS '{path}'"
         alias: object | None = attach_entry.get("alias")
         if alias is not None:
             sql += f" AS {alias}"

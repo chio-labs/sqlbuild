@@ -84,6 +84,8 @@ fn build_model(row: ModelRow, inputs: &ModelInputs<'_, '_>) -> Result<Model, Str
         query_sql: row.query_sql,
         authored_sql: row.authored_sql,
         query_line_offset: row.query_line_offset,
+        query_column_offset: row.query_column_offset,
+        authored_query: row.authored_query,
         config: row.config,
         authored_config_keys: row.authored_config_keys,
         logical_schema: row.logical_schema,

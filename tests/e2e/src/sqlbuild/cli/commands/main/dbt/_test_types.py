@@ -130,3 +130,13 @@ class DbtTargetConcurrencyE2ETestCase:
     target_settings: str
     command: tuple[str, ...]
     expected_fragment: str
+
+
+@dataclass(frozen=True)
+class DbtJsonOptionE2ETestCase:
+    """A `sqb dbt` command given `--json`, and whether it is rejected before dbt runs."""
+
+    description: str
+    command: tuple[str, ...]
+    expected_returncode: int
+    expected_stderr_fragment: str

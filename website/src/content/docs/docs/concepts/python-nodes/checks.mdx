@@ -22,8 +22,8 @@ def check_orders_exported(ctx: CheckContext):
     """Check orders exported."""
     result = ctx.result_of(export_orders)
     if result.metadata.get("rows", 0) == 0:
-        return ctx.fail("no orders exported")
-    return ctx.pass_("orders exported")
+        return ctx.fail(message="no orders exported")
+    return ctx.pass_(message="orders exported")
 ```
 
 The check receives a `CheckContext` and reads its dependencies' persisted results with `ctx.result_of(...)`.
@@ -40,7 +40,7 @@ def orders_present(ctx):
     """Orders present."""
     orders = ctx.relation(model("fact_orders"))
     count = ctx.query(f"SELECT count(*) FROM {orders}").fetchone()[0]
-    return ctx.pass_() if count else ctx.fail("no orders")
+    return ctx.pass_() if count else ctx.fail(message="no orders")
 ```
 
 Do not hard-code relation names in check SQL; see [Hard-coded relation names](/docs/concepts/python-nodes/sql-references#hard-coded-relation-names).
@@ -75,7 +75,7 @@ Returning `None` is not allowed - checks must be explicit.
 def orders_freshness(ctx):
     """Orders freshness."""
     if stale():
-        return ctx.fail("export is stale")   # recorded as a warning, does not fail the build
+        return ctx.fail(message="export is stale")   # recorded as a warning, does not fail the build
     return ctx.pass_()
 ```
 

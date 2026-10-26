@@ -1,6 +1,9 @@
 use polyglot_sql::Expression;
 use std::collections::BTreeSet;
 
+use crate::lint_text::main::map_expanded_offset::map_expanded_offset;
+use crate::models::AuthoredQueryMap;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CallKind {
     Ref,
@@ -227,10 +230,27 @@ pub(crate) struct ModelSource<'a> {
     offsets: &'a [usize],
     /// The lines of the model file above this SQL.
     line_offset: u64,
+    /// The characters before this SQL's first content line on its file line.
+    column_offset: u64,
+    /// The 1-based line of this SQL's first content.
+    first_content_line: usize,
+    authored: Option<AuthoredText<'a>>,
+}
+
+/// The authored query that expansion turned into a model's SQL, as positions are read from it.
+#[derive(Debug)]
+struct AuthoredText<'a> {
+    characters: Vec<char>,
+    lines: Vec<usize>,
+    map: &'a AuthoredQueryMap,
 }
 
 impl<'a> ModelSource<'a> {
-    pub(crate) fn new(sql: &'a str, offsets: &'a [usize], line_offset: u64) -> Self {
+    pub(crate) fn new(
+        sql: &'a str,
+        offsets: &'a [usize],
+        (line_offset, column_offset): (u64, u64),
+    ) -> Self {
         let mut bytes: Vec<usize> = Vec::with_capacity(sql.len() + 1);
         let mut lines: Vec<usize> = vec![0];
         for (character, (byte, value)) in sql.char_indices().enumerate() {
@@ -246,7 +266,65 @@ impl<'a> ModelSource<'a> {
             lines,
             offsets,
             line_offset,
+            column_offset,
+            first_content_line: sql[..sql.len() - sql.trim_start().len()]
+                .matches('\n')
+                .count()
+                + 1,
+            authored: None,
         }
+    }
+
+    /// Report positions in `authored_sql`, the query `map`'s passes expanded into this SQL.
+    pub(crate) fn with_authored(
+        mut self,
+        authored_sql: &str,
+        map: Option<&'a AuthoredQueryMap>,
+    ) -> Self {
+        self.authored = map.map(|map| {
+            let characters: Vec<char> = authored_sql.chars().collect();
+            let mut lines: Vec<usize> = vec![0];
+            for (index, character) in characters.iter().enumerate() {
+                if *character == '\n' {
+                    lines.push(index + 1);
+                }
+            }
+            AuthoredText {
+                characters,
+                lines,
+                map,
+            }
+        });
+        self
+    }
+
+    /// The file line and column of SQL character `character` in the authored query, if it maps.
+    fn authored_line_column(&self, character: usize) -> Option<(u64, u64)> {
+        let authored: &AuthoredText<'_> = self.authored.as_ref()?;
+        let offset: i64 = i64::try_from(character).unwrap_or(i64::MAX);
+        let (mapped, generated) = map_expanded_offset(offset, &authored.map.passes);
+        let mapped: usize = usize::try_from(mapped).unwrap_or(usize::MAX);
+        let byte: usize = self.bytes.get(character).copied().unwrap_or(self.sql.len());
+        let expected: Option<char> = self.sql.get(byte..).and_then(|rest| rest.chars().next());
+        let fits: bool = if generated {
+            mapped < authored.characters.len()
+        } else {
+            authored.characters.get(mapped).copied() == expected
+        };
+        if !fits {
+            return None;
+        }
+        let line: usize = authored.lines.partition_point(|start| *start <= mapped);
+        let column: usize = mapped - authored.lines[line - 1] + 1;
+        let shifted: u64 = if line == 1 {
+            authored.map.column_offset
+        } else {
+            0
+        };
+        Some((
+            line as u64 + authored.map.line_offset,
+            column as u64 + shifted,
+        ))
     }
 
     fn original(&self, offset: usize) -> usize {
@@ -267,9 +345,17 @@ impl<'a> ModelSource<'a> {
     /// The 1-based line and column of normalized character `offset`.
     pub(crate) fn line_column(&self, offset: usize) -> (u64, u64) {
         let character = self.original(offset);
+        if let Some(position) = self.authored_line_column(character) {
+            return position;
+        }
         let line = self.lines.partition_point(|start| *start <= character);
         let column = character - self.lines[line - 1] + 1;
-        (line as u64 + self.line_offset, column as u64)
+        let shifted: u64 = if line == self.first_content_line {
+            self.column_offset
+        } else {
+            0
+        };
+        (line as u64 + self.line_offset, column as u64 + shifted)
     }
 
     /// The model's own text between normalized characters `start` and `end`.

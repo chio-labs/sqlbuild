@@ -2,6 +2,7 @@
 
 use crate::semantic_validation::_helpers::catalog::diagnostic_row;
 use crate::semantic_validation::_helpers::function_names;
+use crate::semantic_validation::_helpers::sqlite_temporal_casts;
 use crate::semantic_validation::_helpers::truth_tests;
 use crate::semantic_validation::_helpers::type_locations::locate_type_findings;
 use crate::semantic_validation::models::DiagnosticRow;
@@ -167,6 +168,9 @@ pub(crate) fn map_diagnostics(
         sql, dialect, probes,
     ));
     errors.extend(truth_tests::unsupported_truth_test_errors(sql, dialect));
+    errors.extend(sqlite_temporal_casts::sqlite_temporal_cast_warnings(
+        sql, dialect,
+    ));
     let valid = !errors
         .iter()
         .any(|error| error.severity == ValidationSeverity::Error);

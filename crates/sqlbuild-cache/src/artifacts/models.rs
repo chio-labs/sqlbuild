@@ -33,6 +33,32 @@ pub struct SqlTestArtifactRecord {
     pub content_sha256: String,
 }
 
+/// Why a cached SQL test artifact could not be kept.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SqlTestRecordMiss {
+    IdentityChanged,
+    UnsafePath,
+    ArtifactMissing,
+    SizeChanged,
+    UnreadableMtime,
+    ContentChanged,
+}
+
+impl SqlTestRecordMiss {
+    /// The reason as a short snake-case label for debug logs.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::IdentityChanged => "identity_changed",
+            Self::UnsafePath => "unsafe_path",
+            Self::ArtifactMissing => "artifact_missing",
+            Self::SizeChanged => "size_changed",
+            Self::UnreadableMtime => "unreadable_mtime",
+            Self::ContentChanged => "content_changed",
+        }
+    }
+}
+
 /// The fields of one cache file record, already checked to be strings and non-negative integers.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StoredSqlTestRecord {
