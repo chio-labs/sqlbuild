@@ -1495,9 +1495,8 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         parameter_types: list[str],
         returns: str,
     ) -> None:
-        """Register a Python function on the connection as a connection-scoped DuckDB function."""
+        """Register a Python function after finishing a partly read result, which DuckDB 2 needs."""
 
-        # DuckDB 2 refuses connection calls other than execute() while a result is partly read.
         connection.complete()
         connection.create_function(name, function, parameter_types, returns)
 
@@ -1666,7 +1665,6 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         right: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        # DuckDB 2 lets ALTER TABLE rename a view, which would swap a view into the staging name.
         if self._is_view(connection=connection, relation=left):
             raise AdapterUserError(message=f"DuckDB cannot swap the view {left} with a table")
         statements: tuple[str, ...] = self.render_swap(left=left, right=right)
@@ -1677,13 +1675,14 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
                 self.execute(connection=connection, sql=stmt)
 
     def _is_view(self, *, connection: Any, relation: str) -> bool:
-        parts: list[str] = [_unquote_duckdb_identifier(part) for part in relation.split(".")]
-        name: str = parts[-1]
+        """Whether a relation is a view; DuckDB 2 lets ALTER TABLE rename a view, so swap checks."""
+
+        *qualifiers, name = [_unquote_duckdb_identifier(part) for part in relation.split(".")]
         schema_sql: str = (
-            _duckdb_string_literal(parts[-2]) if len(parts) >= 2 else "current_schema()"
+            _duckdb_string_literal(qualifiers[-1]) if qualifiers else "current_schema()"
         )
         database_sql: str = (
-            _duckdb_string_literal(parts[-3]) if len(parts) >= 3 else "current_database()"
+            _duckdb_string_literal(qualifiers[-2]) if len(qualifiers) > 1 else "current_database()"
         )
         query: str = (
             "SELECT 1 FROM duckdb_views() WHERE NOT internal "
