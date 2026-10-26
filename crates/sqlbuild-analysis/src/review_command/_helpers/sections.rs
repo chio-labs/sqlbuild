@@ -1,6 +1,7 @@
 //! The report sections the Markdown and terminal renderers share.
 
 use crate::review_command::constants::{CLONE_START, NO_COMPARISON_MODE};
+use sqlbuild_core::command_output::main::short_invocation_id::short_invocation_id;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::review_command::_helpers::outcome::outcome;
@@ -427,7 +428,7 @@ pub(crate) fn run_lines(report: &ReviewReport, style: Style) -> Vec<String> {
     if let Some(id) = &report.invocation_id {
         lines.push(format!(
             "Recall: {}",
-            style.code(&format!("sqb recall output {id}"))
+            style.code(&format!("sqb recall output {}", short_invocation_id(id)))
         ));
     }
     if let Some(error) = &report.error {

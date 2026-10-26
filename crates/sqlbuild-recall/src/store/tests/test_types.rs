@@ -15,6 +15,12 @@ pub(crate) struct ResolveInvocationTestCase {
     pub(crate) expected_invocation: Result<&'static str, StoreErrorKind>,
 }
 
+pub(crate) struct ChosenInvocationTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) candidates: Vec<String>,
+    pub(crate) expected_message: String,
+}
+
 pub(crate) struct QueryTestCase {
     pub(crate) description: &'static str,
     pub(crate) sql: &'static str,

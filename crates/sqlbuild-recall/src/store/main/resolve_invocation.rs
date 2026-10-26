@@ -1,8 +1,9 @@
 //! `resolve_invocation`: the invocation an ID, unique prefix or `last` names.
 
 use crate::store::_helpers::sqlite::checked;
-use crate::store::constants::LAST_INVOCATION_SELECTOR as LAST;
-use crate::store::errors::{StoreError, StoreErrorKind};
+use crate::store::constants::{LAST_INVOCATION_SELECTOR as LAST, LISTED_INVOCATION_CANDIDATES};
+use crate::store::errors::StoreError;
+use crate::store::main::chosen_invocation::chosen_invocation;
 use crate::store::models::SqliteStore;
 
 /// The full invocation ID of `selector`; `last` is the most recently started invocation.
@@ -26,37 +27,19 @@ pub fn resolve_invocation(store: &SqliteStore, selector: &str) -> Result<String,
             store.connection.prepare(
                 "SELECT invocation_id FROM invocations \
                  WHERE substr(invocation_id, 1, length(?1)) = ?1 \
-                 ORDER BY invocation_id LIMIT 3",
+                 ORDER BY invocation_id LIMIT ?2",
             ),
             "find the invocation",
         )?;
         checked(
             statement
-                .query_map([selector], |row| row.get(0))
+                .query_map(
+                    rusqlite::params![selector, LISTED_INVOCATION_CANDIDATES + 1],
+                    |row| row.get(0),
+                )
                 .and_then(Iterator::collect),
             "find the invocation",
         )?
     };
-    if let Some(exact) = candidates.iter().find(|candidate| *candidate == selector) {
-        return Ok(exact.clone());
-    }
-    match candidates.as_slice() {
-        [] => Err(StoreError::new(
-            StoreErrorKind::NotFound,
-            if selector == LAST {
-                "no invocations are recorded yet".to_owned()
-            } else {
-                format!("no recorded invocation matches '{selector}'")
-            },
-        )),
-        [only] => Ok(only.clone()),
-        several => Err(StoreError::new(
-            StoreErrorKind::Ambiguous,
-            format!(
-                "'{selector}' matches several invocations: {}{}",
-                several[..2].join(", "),
-                if several.len() > 2 { ", …" } else { "" }
-            ),
-        )),
-    }
+    chosen_invocation(selector, &candidates)
 }

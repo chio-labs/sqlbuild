@@ -12,6 +12,8 @@ pub const INCREMENTAL_VACUUM_PAGES: u32 = 2_048;
 pub const META_MAINTENANCE_OVERDUE_KEY: &str = "overdue";
 /// The selector naming the most recently started invocation.
 pub const LAST_INVOCATION_SELECTOR: &str = "last";
+/// Invocations an ambiguous prefix lists; one more is read to tell whether there are others.
+pub const LISTED_INVOCATION_CANDIDATES: usize = 10;
 /// The first bytes of every SQLite database file.
 pub const SQLITE_HEADER: &[u8; 16] = b"SQLite format 3\0";
 /// What a store moved aside for corruption is renamed to, before its UTC timestamp.

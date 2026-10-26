@@ -2,6 +2,7 @@ use crate::records::main::invocation_row::invocation_row;
 use crate::records::models::{InvocationContext, OutputStream, RecallValue};
 use crate::store::_helpers::truncation::truncation_note;
 use crate::store::errors::StoreErrorKind;
+use crate::store::main::chosen_invocation::chosen_invocation;
 use crate::store::main::describe_store::describe_store;
 use crate::store::main::query_store::query_store;
 use crate::store::main::read_output_transcript::read_output_transcript;
@@ -13,12 +14,12 @@ use crate::store::tests::helpers::{
 use crate::store::tests::helpers::{
     already_replaced, lock_held, nobody_else, open_under_locked_directory, quarantine_after,
 };
+use crate::store::tests::test_types::{
+    ChosenInvocationTestCase, NewerSchemaTestCase, QueryTestCase, ResolveInvocationTestCase,
+    TranscriptTestCase, TruncationNoteTestCase,
+};
 #[cfg(unix)]
 use crate::store::tests::test_types::{LockedDirectoryTestCase, QuarantineTestCase};
-use crate::store::tests::test_types::{
-    NewerSchemaTestCase, QueryTestCase, ResolveInvocationTestCase, TranscriptTestCase,
-    TruncationNoteTestCase,
-};
 
 #[test]
 fn given_ids_when_resolved_then_prefixes_last_and_ambiguity_are_exact() {
@@ -268,6 +269,38 @@ fn given_truncated_output_when_noted_then_sizes_read_naturally() {
         assert_eq!(
             truncation_note("stdout", test_case.omitted, test_case.kept),
             test_case.expected_note,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_an_ambiguous_prefix_when_chosen_then_the_message_lists_the_candidates() {
+    let listed: String = (0..10)
+        .map(|index| format!("abc{index:02}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let test_cases = [
+        ChosenInvocationTestCase {
+            description: "every candidate is listed",
+            candidates: vec!["abc1".to_owned(), "abc2".to_owned()],
+            expected_message: "'abc' matches several invocations; use a longer prefix: abc1, abc2"
+                .to_owned(),
+        },
+        ChosenInvocationTestCase {
+            description: "a long list says there are more",
+            candidates: (0..11).map(|index| format!("abc{index:02}")).collect(),
+            expected_message: format!(
+                "'abc' matches several invocations; use a longer prefix: {listed}, and more"
+            ),
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            chosen_invocation("abc", &test_case.candidates).map_err(|error| error.message),
+            Err(test_case.expected_message),
             "{}",
             test_case.description
         );

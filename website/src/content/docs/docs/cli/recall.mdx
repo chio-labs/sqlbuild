@@ -115,6 +115,10 @@ sqb recall output last --tail 20             # only the last 20 lines
 | `--tail` | Print only the last N lines |
 | `--target` | Target whose store to read |
 
+Output shows an invocation ID by its first eight characters; pass that or any other unique prefix.
+A prefix that matches several invocations fails with `C973` and lists them, so you can pass a longer
+one.
+
 Where output past [`max_output_bytes`](/docs/concepts/observability/recall#output-limit) was left
 out, a note line marks the gap in place. Output that Recall could not record completely for any
 other reason is followed by a note on stderr naming the gap.

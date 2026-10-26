@@ -5,6 +5,7 @@ use std::time::Instant;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyStringMethods};
+use sqlbuild_core::command_output::main::short_invocation_id::short_invocation_id;
 use sqlbuild_recall::records::models::OutputStream;
 use sqlbuild_recall::schema::constants::VIEW_NAMES;
 use sqlbuild_recall::schema::main::ddl_statements::ddl_statements;
@@ -502,7 +503,8 @@ fn run_output(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
         write_stderr(
             py,
             &format!(
-                "note: output of {invocation_id} may be incomplete: {}\n",
+                "note: output of {} may be incomplete: {}\n",
+                short_invocation_id(invocation_id),
                 problems.join("; ")
             ),
         )?;

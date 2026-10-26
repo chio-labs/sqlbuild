@@ -5,4 +5,5 @@ pub mod close_output;
 pub mod flush_idle_output;
 pub mod output_loss_summary;
 pub mod queue_output_record;
+pub mod short_invocation_id;
 pub mod validate_output_record;
