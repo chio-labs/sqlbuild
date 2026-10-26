@@ -18,6 +18,8 @@ CUSTOM_HOST_STARTUP_ENVIRONMENT: tuple[str, ...] = (
     "SYSTEMROOT",
 )
 RULE_DECORATOR_TOKEN: str = "@rule"
+RULES_DIRECTORY_NAME: str = "rules"
+RULES_COPY_IGNORED_PATTERNS: tuple[str, ...] = (".*", "__pycache__", "*.pyc")
 
 FACT_PROJECT_MODELS: str = "project.models"
 FACT_PROJECT_SOURCES: str = "project.sources"

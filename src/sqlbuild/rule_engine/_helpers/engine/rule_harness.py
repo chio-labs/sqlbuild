@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import inspect
+import shutil
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from sqlbuild._native import (
     MIN_CUSTOM_RULE_TEST_CASES,
+    PROJECT_CONFIG_FILENAME,
     DiscoveredProjectInputs,
     Rule,
     RuleAssertionError,
@@ -28,6 +30,7 @@ from sqlbuild.rule_engine._helpers.engine.definition import (
     resolve_rule_signature,
     rule_from_value,
 )
+from sqlbuild.rule_engine.constants import RULES_COPY_IGNORED_PATTERNS, RULES_DIRECTORY_NAME
 from sqlbuild.rule_engine.types import RuleCheck
 
 
@@ -80,6 +83,8 @@ def _write_rule_project(*, root: Path, rule: Rule, test_case: RuleCase) -> Path:
         config_lines.append("")
     project_config: str = "\n".join(config_lines)
     (root / "sqlbuild_project.toml").write_text(project_config, encoding="utf-8")
+    source_path: Path = _rule_source_path(rule=rule)
+    rule_path: Path = _copy_rules_directory(root=root, source_path=source_path)
     model_path: Path = root / test_case.path
     model_path.parent.mkdir(parents=True, exist_ok=True)
     model_path.write_text(test_case.source, encoding="utf-8")
@@ -87,13 +92,43 @@ def _write_rule_project(*, root: Path, rule: Rule, test_case: RuleCase) -> Path:
         extra_path: Path = root / file.path
         extra_path.parent.mkdir(parents=True, exist_ok=True)
         extra_path.write_text(file.source, encoding="utf-8")
+    rule_path.parent.mkdir(parents=True, exist_ok=True)
+    rule_path.write_text(source_path.read_text(encoding="utf-8"), encoding="utf-8")
+    return rule_path
+
+
+def _rule_source_path(*, rule: Rule) -> Path:
     source: str | None = inspect.getsourcefile(rule.check)
     if source is None or not Path(source).is_file():
         raise RuleUsageError("evaluate_rule requires a rule declared in a source file")
-    rule_path: Path = root / "rules" / "custom.py"
-    rule_path.parent.mkdir(parents=True, exist_ok=True)
-    rule_path.write_text(Path(source).read_text(encoding="utf-8"), encoding="utf-8")
-    return rule_path
+    return Path(source).resolve()
+
+
+def _copy_rules_directory(*, root: Path, source_path: Path) -> Path:
+    """Copy the rule's project `rules/` directory, helpers included; return where the rule goes."""
+
+    rules_dir: Path | None = _project_rules_dir(source_path=source_path)
+    if rules_dir is None:
+        return root / RULES_DIRECTORY_NAME / "custom.py"
+    _ = shutil.copytree(
+        rules_dir,
+        root / RULES_DIRECTORY_NAME,
+        symlinks=True,
+        ignore=shutil.ignore_patterns(*RULES_COPY_IGNORED_PATTERNS),
+    )
+    return root / RULES_DIRECTORY_NAME / source_path.relative_to(rules_dir)
+
+
+def _project_rules_dir(*, source_path: Path) -> Path | None:
+    """The `rules/` directory of the SQLBuild project the rule file belongs to, if it has one."""
+
+    for directory in source_path.parents:
+        if (
+            directory.name == RULES_DIRECTORY_NAME
+            and (directory.parent / PROJECT_CONFIG_FILENAME).is_file()
+        ):
+            return directory
+    return None
 
 
 def _compile_rule_project(*, root: Path) -> CompiledProjectView:
