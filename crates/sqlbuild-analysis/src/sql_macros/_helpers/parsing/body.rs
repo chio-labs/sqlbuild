@@ -297,7 +297,7 @@ fn read_mapping<'a>(
         .find(|mapping| mapping.slot.eq_ignore_ascii_case(&read.slot))
 }
 
-/// A bare column `select` outputs twice: once by name and once in a group read beside it.
+/// A column `select` outputs twice: bare or read through a relation, and in a group beside it.
 fn select_clash(
     definition: &SqlMacroDefinition,
     select: &Select,
@@ -313,7 +313,12 @@ fn select_clash(
                     .as_ref()
                     .and_then(|table| parameter_of(definition, table))
                 {
-                    Some(parameter) => read.push((parameter.name.as_str(), &column.name.name)),
+                    Some(parameter) => {
+                        read.push((parameter.name.as_str(), &column.name.name));
+                        if !parameter.kind.declares_slot(&column.name.name) {
+                            bare.push(&column.name.name);
+                        }
+                    }
                     None => bare.push(&column.name.name),
                 }
             }
