@@ -8,6 +8,13 @@ Online: https://sqlbuild.com/docs/concepts/adapters/duckdb/
 
 DuckDB is included as a core dependency. No extra installation needed.
 
+SQLBuild requires DuckDB 2.0 or later. DuckDB 2.0 writes new database files in a storage format
+that DuckDB 1.x cannot open, so a database file SQLBuild creates can only be read by DuckDB 2.0
+clients. A file that already exists keeps its storage version, so a file created by DuckDB 1.x
+stays readable by 1.x. To create a new file that 1.x can read, create it before the first build
+with an explicit storage version, for example
+`duckdb my_project.duckdb -storage-version v1.5.0 -c "SELECT 1"`.
+
 ## Connection config
 
 ```toml
