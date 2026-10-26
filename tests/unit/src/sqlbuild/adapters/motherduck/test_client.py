@@ -5,6 +5,7 @@ import pytest
 from sqlbuild.adapters.motherduck.classes.motherduck_adapter import MotherDuckAdapter
 from tests.unit.src.sqlbuild.adapters.motherduck._test_types import (
     MotherDuckAdapterDefaultsTestCase,
+    MotherDuckConnectErrorTestCase,
     MotherDuckConnectionDatabaseTestCase,
     MotherDuckPruneSqlTestCase,
 )
@@ -55,6 +56,45 @@ def test_given_connection_config_when_connecting_then_uses_motherduck_database(
     adapter.connect(test_case.config)
 
     assert fake_duckdb.connected_databases == [test_case.expected_database]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        MotherDuckConnectErrorTestCase(
+            description="an unsupported DuckDB version is reported with what to do",
+            connect_error=(
+                'Initialization function "motherduck_duckdb_cpp_init" threw an exception: '
+                '"Your DuckDB version (v2.0.0) is not yet supported by MotherDuck."'
+            ),
+            expected_error_type="AdapterUserError",
+            expected_help_fragment="stay on the last SQLBuild release that supports DuckDB 1.5",
+        ),
+        MotherDuckConnectErrorTestCase(
+            description="any other connection error is raised unchanged",
+            connect_error="IO Error: unauthorized",
+            expected_error_type="FakeDuckDbError",
+            expected_help_fragment=None,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_failing_motherduck_connect_when_connecting_then_unsupported_version_has_help(
+    test_case: MotherDuckConnectErrorTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter: MotherDuckAdapter = MotherDuckAdapter()
+    _ = install_fake_duckdb_module(monkeypatch, connect_error=test_case.connect_error)
+
+    with pytest.raises(Exception) as raised:
+        adapter.connect({"database": "md:analytics"})
+
+    assert type(raised.value).__name__ == test_case.expected_error_type
+    help_text: object = getattr(raised.value, "help", None)
+    if test_case.expected_help_fragment is None:
+        assert help_text is None
+    else:
+        assert isinstance(help_text, str) and test_case.expected_help_fragment in help_text
 
 
 @pytest.mark.parametrize(
