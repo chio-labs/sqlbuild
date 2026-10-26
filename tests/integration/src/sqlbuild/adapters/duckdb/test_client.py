@@ -196,12 +196,12 @@ def test_given_existing_database_when_opening_for_local_replay_then_its_tables_r
         UserStorageVersionKeyTestCase(
             description="a storage version in user config is ignored like any unknown key",
             config_key="storage_compatibility_version",
-            expected_storage_version="v1.0.0+",
+            expected_storage_version="v2.0.0+",
         ),
         UserStorageVersionKeyTestCase(
             description="an unknown connection key is ignored",
             config_key="unknown_option",
-            expected_storage_version="v1.0.0+",
+            expected_storage_version="v2.0.0+",
         ),
     ],
     ids=lambda case: case.description,

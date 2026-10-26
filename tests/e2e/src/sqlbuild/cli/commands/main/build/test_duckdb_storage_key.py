@@ -23,12 +23,12 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
         ConnectionStorageKeyBuildE2ETestCase(
             description="a storage version key is ignored like any unknown connection key",
             connection_key="storage_compatibility_version",
-            expected_storage_version="v1.0.0+",
+            expected_storage_version="v2.0.0+",
         ),
         ConnectionStorageKeyBuildE2ETestCase(
             description="an unknown connection key is ignored",
             connection_key="unknown_option",
-            expected_storage_version="v1.0.0+",
+            expected_storage_version="v2.0.0+",
         ),
     ],
     ids=lambda case: case.description,
