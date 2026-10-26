@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.182.0](https://github.com/chio-labs/sqlbuild/compare/v0.181.0...v0.182.0) (2026-10-26)
+
+
+### Features
+
+* check enum literals at compile time and fix rule helper and slot checks ([#1258](https://github.com/chio-labs/sqlbuild/issues/1258)) ([229570f](https://github.com/chio-labs/sqlbuild/commit/229570f8afab139927bded0ecd4e9f7a8a2af0f1))
+
 ## [0.181.0](https://github.com/chio-labs/sqlbuild/compare/v0.180.0...v0.181.0) (2026-10-26)
 
 
