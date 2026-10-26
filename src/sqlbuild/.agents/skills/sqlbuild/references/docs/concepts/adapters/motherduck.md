@@ -12,9 +12,8 @@ MotherDuck uses DuckDB's built-in `md:` connection support. No extra installatio
 
 SQLBuild requires DuckDB 2.0, and MotherDuck does not support DuckDB 2.0 yet: its extension
 supports DuckDB up to 1.5.6 and refuses to load on 2.0. Connecting reports
-`MotherDuck does not support DuckDB 2.0.0 yet`. If you use MotherDuck, stay on the last SQLBuild
-release that supports DuckDB 1.5, as listed in the changelog, until MotherDuck supports
-DuckDB 2.0.
+`MotherDuck does not support DuckDB 2.0.0 yet`. If you use MotherDuck, stay on SQLBuild 0.182.0,
+the last release that supports DuckDB 1.5, until MotherDuck supports DuckDB 2.0.
 
 ## Connection config
 

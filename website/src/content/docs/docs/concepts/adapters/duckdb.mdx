@@ -28,8 +28,8 @@ these before upgrading:
 - Integer division `//` and modulo `%` by zero raise an error instead of returning `NULL`. Wrap
   the expression in `TRY(...)` to get `NULL`.
 
-dlt's dataset read API (reading a loaded table back as a dataframe or Arrow table) calls DuckDB
-methods that DuckDB 2.0 removed, so those reads fail. Loading data with dlt is not affected.
+dlt's dataset read API calls a DuckDB method that DuckDB 2.0 removed when it reads a loaded table
+back as one whole Arrow table, so that read fails. Dataframe and chunked Arrow reads still work. Loading data with dlt is not affected.
 
 ## Connection config
 

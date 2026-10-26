@@ -163,10 +163,7 @@ class MotherDuckAdapter(MicrobatchMixin, DuckDbBackedAdapter):
             if MOTHERDUCK_UNSUPPORTED_DUCKDB_MARKER not in str(error):
                 raise
             raise AdapterUserError(
-                message=(
-                    f"MotherDuck does not support DuckDB {duckdb.__version__} yet. "
-                    f"{MOTHERDUCK_UNSUPPORTED_DUCKDB_HELP}"
-                ),
+                message=f"MotherDuck does not support DuckDB {duckdb.__version__} yet.",
                 help=MOTHERDUCK_UNSUPPORTED_DUCKDB_HELP,
             ) from error
 
