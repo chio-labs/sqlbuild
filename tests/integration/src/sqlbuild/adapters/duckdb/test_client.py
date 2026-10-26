@@ -41,6 +41,7 @@ from tests.integration.src.sqlbuild.adapters.duckdb._test_types import (
     MaterializeTestCase,
     MergeTestCase,
     PhysicalRelationGenerationTestCase,
+    PythonFunctionRegistrationTestCase,
     QueryTestCase,
     RecorderWriteTestCase,
     RelationExistsTestCase,
@@ -1654,3 +1655,40 @@ def test_given_missing_right_table_when_swapping_then_left_table_preserved(
         connection.execute(test_case.verify_sql).fetchall()
     )
     assert actual == test_case.expected_rows_after_failure
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonFunctionRegistrationTestCase(
+            description="a one-row aggregate result with its row read",
+            open_result_sql="SELECT COUNT(*) FROM range(3)",
+            call_sql="SELECT double_amount(21)",
+            expected_rows=[(42,)],
+        ),
+        PythonFunctionRegistrationTestCase(
+            description="a many-row result with one row read",
+            open_result_sql="SELECT * FROM range(100)",
+            call_sql="SELECT double_amount(5)",
+            expected_rows=[(10,)],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_partly_read_result_when_registering_python_function_then_function_is_callable(
+    test_case: PythonFunctionRegistrationTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    cursor: Any = connection.execute(test_case.open_result_sql)
+    _ = cursor.fetchmany(1)
+
+    adapter.register_python_function(
+        connection=connection,
+        name="double_amount",
+        function=lambda amount: amount * 2,
+        parameter_types=["BIGINT"],
+        returns="BIGINT",
+    )
+
+    assert connection.execute(test_case.call_sql).fetchall() == test_case.expected_rows

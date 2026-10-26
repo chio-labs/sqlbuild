@@ -66,4 +66,10 @@ def _register_canonical_json(*, adapter: DuckDbBackedAdapter, connection: Any) -
         ),
     ).fetchone()
     if registered is not None and registered[0] == 0:
-        connection.create_function(CANONICAL_JSON_FUNCTION, canonical_json, ["VARCHAR"], "VARCHAR")
+        adapter.register_python_function(
+            connection=connection,
+            name=CANONICAL_JSON_FUNCTION,
+            function=canonical_json,
+            parameter_types=["VARCHAR"],
+            returns="VARCHAR",
+        )
