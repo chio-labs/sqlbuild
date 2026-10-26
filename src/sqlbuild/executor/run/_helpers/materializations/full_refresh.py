@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.exceptions import ViewRenameRefusedError
 from sqlbuild.adapter.contract.types import BuiltinAdapter
 from sqlbuild.adapter.relations.main.cached_relation_exists import cached_relation_exists
 from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
@@ -107,17 +108,48 @@ def promote_full_refresh_rebuild(
                     if_exists=True,
                     statement_recorder=statement_recorder,
                 )
-            promote_staged_relation(
-                adapter=adapter,
-                connection=connection,
-                target_qualified=relations.target_qualified,
-                staged_qualified=relations.rebuild_qualified,
-                displaced_qualified=relations.previous_qualified,
-                target_exists=target_exists,
-                statement_recorder=statement_recorder,
-            )
+            try:
+                promote_staged_relation(
+                    adapter=adapter,
+                    connection=connection,
+                    target_qualified=relations.target_qualified,
+                    staged_qualified=relations.rebuild_qualified,
+                    displaced_qualified=relations.previous_qualified,
+                    target_exists=target_exists,
+                    statement_recorder=statement_recorder,
+                )
+            except ViewRenameRefusedError:
+                _replace_live_view(
+                    adapter=adapter,
+                    connection=connection,
+                    relations=relations,
+                    statement_recorder=statement_recorder,
+                )
             _ = guard.rebind()
         lifecycle.completed(metadata={"changed_count": 1})
+
+
+def _replace_live_view(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    relations: FullRefreshRelations,
+    statement_recorder: StatementRecorder,
+) -> None:
+    """Drop a live view the rebuild replaces; a view keeps no data to retain as prev."""
+
+    adapter.drop_view(
+        connection=connection,
+        destination=relations.target_qualified,
+        if_exists=True,
+        statement_recorder=statement_recorder,
+    )
+    adapter.rename(
+        connection=connection,
+        origin=relations.rebuild_qualified,
+        destination=relations.target_qualified,
+        statement_recorder=statement_recorder,
+    )
 
 
 def promote_staged_relation(

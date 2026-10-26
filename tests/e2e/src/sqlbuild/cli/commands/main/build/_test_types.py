@@ -1377,6 +1377,17 @@ class MaterializationTypeChangeTestCase:
 
 
 @dataclass(frozen=True)
+class ViewToFullRefreshTestCase:
+    """A view model switched to a build-aside materialization, then fully refreshed repeatedly."""
+
+    description: str
+    model_header: str
+    full_refresh_count: int
+    expected_relations: list[tuple[str, str]]
+    expected_rows: list[tuple[object, ...]]
+
+
+@dataclass(frozen=True)
 class TargetConcurrencyE2ETestCase:
     description: str
     target_concurrency: str
