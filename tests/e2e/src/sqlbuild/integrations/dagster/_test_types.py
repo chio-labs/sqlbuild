@@ -161,3 +161,14 @@ class DagsterSkippedAuditCheckE2ETestCase:
     description: str
     skipped_check_name: str
     expected_log_line: str
+
+
+@dataclass(frozen=True)
+class DagsterFailureOutputE2ETestCase:
+    """Test case for what a failed SQLBuild command reports through Dagster."""
+
+    description: str
+    null_order_rows: int
+    expected_description_start: str
+    expected_failed_checks: list[dict[str, object]]
+    expected_error_log: str

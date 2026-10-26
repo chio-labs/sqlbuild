@@ -1,11 +1,13 @@
 //! Check names, log lines and failure text match the Dagster integration's output.
 
 use crate::dagster_invocation::main::asset_failure_text::asset_failure_text;
+use crate::dagster_invocation::main::failure_summary::failure_summary;
 use crate::dagster_invocation::main::normalize_check_name::normalize_check_name;
 use crate::dagster_invocation::main::wrap_selectors::wrap_selectors;
-use crate::dagster_invocation::models::AssetFailure;
+use crate::dagster_invocation::models::{AssetFailure, FailedCheck};
+use crate::dagster_invocation::tests::helpers::not_null_audit;
 use crate::dagster_invocation::tests::test_types::{
-    CheckNameTestCase, FailureTextTestCase, WrapTestCase,
+    CheckNameTestCase, FailureSummaryTestCase, FailureTextTestCase, WrapTestCase,
 };
 
 #[test]
@@ -106,6 +108,65 @@ fn given_failed_asset_when_formatting_then_lists_error_relation_and_sql() {
         assert_eq!(
             asset_failure_text(&test_case.failure),
             test_case.expected_text,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_failed_checks_and_assets_when_summarizing_then_names_them_first_and_caps_the_list() {
+    let failed_model = AssetFailure {
+        kind: "model".to_owned(),
+        name: "customers".to_owned(),
+        status: "failed".to_owned(),
+        failed_phase: Some("execute".to_owned()),
+        ..AssetFailure::default()
+    };
+    let sql_test = FailedCheck {
+        kind: "sql_test".to_owned(),
+        name: "orders_totals".to_owned(),
+        asset_name: Some("orders".to_owned()),
+        column_name: None,
+        status: "fail".to_owned(),
+        row_count: None,
+    };
+    let many: Vec<FailedCheck> = (0..12)
+        .map(|index| index + 2)
+        .map(|index: i64| not_null_audit(&format!("orders_{index:02}"), Some(index)))
+        .collect();
+    let many_lines: String = (2..12)
+        .map(|index| {
+            format!("\n  audit not_null on orders_{index:02}.order_id: {index} failing rows")
+        })
+        .collect();
+    let test_cases = [
+        FailureSummaryTestCase {
+            description: "nothing failed",
+            checks: Vec::new(),
+            assets: Vec::new(),
+            expected_summary: String::new(),
+        },
+        FailureSummaryTestCase {
+            description: "checks come before assets, with their failing rows or status",
+            checks: vec![not_null_audit("orders", Some(1)), sql_test],
+            assets: vec![failed_model],
+            expected_summary: "Failed: 2 checks, 1 asset\n  audit not_null on orders.order_id: \
+                               1 failing row\n  sql_test orders_totals on orders: fail\n  \
+                               model customers: failed during execute"
+                .to_owned(),
+        },
+        FailureSummaryTestCase {
+            description: "a long list ends with how many more failed",
+            checks: many,
+            assets: Vec::new(),
+            expected_summary: format!("Failed: 12 checks{many_lines}\n  and 2 more"),
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            failure_summary(&test_case.checks, &test_case.assets),
+            test_case.expected_summary,
             "{}",
             test_case.description
         );

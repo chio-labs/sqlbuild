@@ -33,3 +33,5 @@ pub(crate) const CODE_SPAN_PADDED_EDGES: [char; 2] = [CODE_SPAN_MARK, ' '];
 pub const DEFAULT_ASSET_KIND: &str = "asset";
 /// The default translator's description name of a node without one.
 pub const DEFAULT_ASSET_NAME: &str = "unknown";
+/// Failed checks and models a failure description names before "and N more".
+pub const MAX_SUMMARIZED_FAILURES: usize = 10;

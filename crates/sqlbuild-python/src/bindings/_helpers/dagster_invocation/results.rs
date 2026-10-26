@@ -29,7 +29,7 @@ const MATERIALIZATION: &str = "materialization";
 const CHECK: &str = "check";
 const AUDIT_CHECK_KIND: &str = "audit";
 /// The status of an audit that did not run; Dagster gets no check result for it.
-const SKIPPED_CHECK_STATUS: &str = "skipped";
+pub(crate) const SKIPPED_CHECK_STATUS: &str = "skipped";
 
 /// DAG nodes upstream first, or in artifact order when edges form a cycle.
 pub(crate) fn sorted_nodes<'py>(dag: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {
@@ -223,7 +223,8 @@ struct CheckFilter<'a> {
     emitted_asset_paths: Option<&'a HashSet<AssetPath>>,
 }
 
-fn warn_severity(check: &Bound<'_, PyAny>) -> PyResult<bool> {
+/// Whether a check result is a warning rather than an error.
+pub(crate) fn warn_severity(check: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py: Python<'_> = check.py();
     let warning: String = constant(py, ThirdPartyHost::WarningCheckSeverity)?.extract()?;
     let insufficient: String = constant(py, ThirdPartyHost::InsufficientCheckStatus)?.extract()?;

@@ -36,11 +36,40 @@ def _log_invocation(*, context: Any, invocation: SqlBuildCliInvocation) -> None:
     logger.info("  %s", " ".join(invocation.command))
     if invocation.selection:
         if invocation.selector_file_path:
-            logger.info("SQLBuild selector file:")
-            logger.info("  %s", invocation.selector_file_path)
-        logger.info("SQLBuild selected assets from Dagster (%s):", len(invocation.selection))
-        for line in dagster_selector_log_lines(selectors=list(invocation.selection)):
-            logger.info("  %s", line)
+            logger.info(
+                "SQLBuild selected assets from Dagster: %s (selector file: %s)",
+                len(invocation.selection),
+                invocation.selector_file_path,
+            )
+        else:
+            logger.info("SQLBuild selected assets from Dagster: %s", len(invocation.selection))
+        logger.debug(
+            "SQLBuild selectors from Dagster:\n%s",
+            "\n".join(
+                f"  {line}"
+                for line in dagster_selector_log_lines(selectors=list(invocation.selection))
+            ),
+        )
+
+
+def _log_failed_check(*, context: Any, dg: Any, result: Any) -> None:
+    """Log a check that did not pass, so it shows in the default run log view."""
+
+    if result.passed:
+        return
+    logger: Any = getattr(context, "log", None) if context is not None else None
+    if logger is None:
+        return
+    asset: str = "/".join(str(part) for part in result.asset_key.path)
+    row_count: object = (result.metadata or {}).get("row_count")
+    detail: str = ""
+    count: object = getattr(row_count, "value", row_count)
+    if isinstance(count, int) and not isinstance(count, bool):
+        detail = f": {count} failing row" if count == 1 else f": {count} failing rows"
+    if result.severity == dg.AssetCheckSeverity.WARN:
+        logger.warning("SQLBuild check %s on %s warned%s", result.check_name, asset, detail)
+        return
+    logger.error("SQLBuild check %s on %s failed%s", result.check_name, asset, detail)
 
 
 def _log_skipped_checks(*, context: Any, payload: Mapping[str, Any]) -> None:

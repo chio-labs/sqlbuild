@@ -1,6 +1,6 @@
 //! Cases for Dagster invocation assembly.
 
-use crate::dagster_invocation::models::AssetFailure;
+use crate::dagster_invocation::models::{AssetFailure, FailedCheck};
 
 pub(super) struct ArgumentsTestCase {
     pub description: &'static str,
@@ -58,4 +58,11 @@ pub(super) struct FallbackDescriptionTestCase {
     pub qualified_name: &'static str,
     pub materialization: Option<&'static str>,
     pub expected_description: &'static str,
+}
+
+pub(super) struct FailureSummaryTestCase {
+    pub description: &'static str,
+    pub checks: Vec<FailedCheck>,
+    pub assets: Vec<AssetFailure>,
+    pub expected_summary: String,
 }
