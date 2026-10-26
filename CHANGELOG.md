@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.183.0](https://github.com/chio-labs/sqlbuild/compare/v0.182.0...v0.183.0) (2026-10-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* SQLBuild requires DuckDB 2.0. MotherDuck users should stay on 0.182.0 until MotherDuck supports DuckDB 2.0. Database files SQLBuild creates cannot be opened by DuckDB 1.x.
+
+### Features
+
+* move to DuckDB 2.0 ([#1260](https://github.com/chio-labs/sqlbuild/issues/1260)) ([38f885f](https://github.com/chio-labs/sqlbuild/commit/38f885f207b031f8c20a6c4d38646b9f8e890903))
+
 ## [0.182.0](https://github.com/chio-labs/sqlbuild/compare/v0.181.0...v0.182.0) (2026-10-26)
 
 
