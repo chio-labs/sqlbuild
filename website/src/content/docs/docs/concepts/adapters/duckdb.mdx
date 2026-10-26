@@ -12,6 +12,25 @@ stays readable by 1.x. To create a new file that 1.x can read, create it before 
 with an explicit storage version, for example
 `duckdb my_project.duckdb -storage-version v1.5.0 -c "SELECT 1"`.
 
+## SQL that behaves differently on DuckDB 2.0
+
+DuckDB 2.0 changes how some SQL runs. SQLBuild runs model SQL as written, so check models for
+these before upgrading:
+
+- Arrow lambdas such as `list_filter(xs, x -> x > 0)` are rejected by default. Write
+  `list_filter(xs, lambda x: x > 0)` instead. DuckDB 2.1 removes the arrow syntax.
+- `~` and `!~` match a regular expression anywhere in the string, as in PostgreSQL, so
+  `'abc' ~ 'b'` is now true. Use `regexp_full_match` for a match of the whole string.
+- `MERGE` fails when one target row matches several source rows, instead of picking one. Keep
+  an incremental model's new rows unique on its `unique_key`.
+- An untyped `NULL`, as in `SELECT NULL AS discount`, creates a column of type `"NULL"` that
+  rejects later non-null values. Cast it, for example `CAST(NULL AS DECIMAL(18, 2)) AS discount`.
+- Integer division `//` and modulo `%` by zero raise an error instead of returning `NULL`. Wrap
+  the expression in `TRY(...)` to get `NULL`.
+
+dlt's dataset read API (reading a loaded table back as a dataframe or Arrow table) calls DuckDB
+methods that DuckDB 2.0 removed, so those reads fail. Loading data with dlt is not affected.
+
 ## Connection config
 
 ```toml
