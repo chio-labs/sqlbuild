@@ -1645,12 +1645,31 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         right: str,
         statement_recorder: StatementRecorder,
     ) -> None:
+        # DuckDB 2 lets ALTER TABLE rename a view, which would swap a view into the staging name.
+        if self._is_view(connection=connection, relation=left):
+            raise AdapterUserError(message=f"DuckDB cannot swap the view {left} with a table")
         statements: tuple[str, ...] = self.render_swap(left=left, right=right)
         statement_recorder.record_many(statements)
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
                 self.execute(connection=connection, sql=stmt)
+
+    def _is_view(self, *, connection: Any, relation: str) -> bool:
+        parts: list[str] = [_unquote_duckdb_identifier(part) for part in relation.split(".")]
+        name: str = parts[-1]
+        schema_sql: str = (
+            _duckdb_string_literal(parts[-2]) if len(parts) >= 2 else "current_schema()"
+        )
+        database_sql: str = (
+            _duckdb_string_literal(parts[-3]) if len(parts) >= 3 else "current_database()"
+        )
+        query: str = (
+            "SELECT 1 FROM duckdb_views() WHERE NOT internal "
+            f"AND view_name = {_duckdb_string_literal(name)} "
+            f"AND schema_name = {schema_sql} AND database_name = {database_sql}"
+        )
+        return self.execute(connection=connection, sql=query).fetchone() is not None
 
     def render_clone(
         self,

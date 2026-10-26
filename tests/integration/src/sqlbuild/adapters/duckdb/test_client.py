@@ -9,6 +9,7 @@ import pytest
 
 from sqlbuild._native import InferredNullability, SeedCsvSettings
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     ExpressionInferenceProfile,
@@ -48,6 +49,7 @@ from tests.integration.src.sqlbuild.adapters.duckdb._test_types import (
     SwapTestCase,
     TransactionalAtomicityTestCase,
     UserStorageVersionKeyTestCase,
+    ViewSwapTestCase,
 )
 from tests.integration.src.sqlbuild.adapters.duckdb.helpers import count_relation_rows
 
@@ -779,6 +781,53 @@ def test_given_two_tables_when_swapping_then_contents_are_exchanged(
 
     assert left_val[0] == test_case.expected_left_value
     assert right_val[0] == test_case.expected_right_value
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ViewSwapTestCase(
+            description="an unqualified view is refused and left in place",
+            setup_sql=(
+                "CREATE VIEW orders AS SELECT 1 AS order_id",
+                "CREATE TABLE orders__staging AS SELECT 2 AS order_id",
+            ),
+            left="orders",
+            expected_relations=[("orders", "VIEW"), ("orders__staging", "BASE TABLE")],
+        ),
+        ViewSwapTestCase(
+            description="a schema-qualified view is refused and left in place",
+            setup_sql=(
+                "CREATE VIEW main.orders AS SELECT 1 AS order_id",
+                "CREATE TABLE main.orders__staging AS SELECT 2 AS order_id",
+            ),
+            left="main.orders",
+            expected_relations=[("orders", "VIEW"), ("orders__staging", "BASE TABLE")],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_view_on_left_when_swapping_then_swap_is_refused_without_renaming(
+    test_case: ViewSwapTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    statement: str
+    for statement in test_case.setup_sql:
+        connection.execute(statement)
+
+    with pytest.raises(AdapterUserError, match="cannot swap the view"):
+        adapter.swap(
+            connection=connection,
+            left=test_case.left,
+            right="main.orders__staging",
+            statement_recorder=StatementRecorder(),
+        )
+
+    relations: list[tuple[str, str]] = connection.execute(
+        "SELECT table_name, table_type FROM information_schema.tables ORDER BY table_name"
+    ).fetchall()
+    assert relations == test_case.expected_relations
 
 
 @pytest.mark.parametrize(

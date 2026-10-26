@@ -130,6 +130,16 @@ class SwapTestCase:
 
 
 @dataclass(frozen=True)
+class ViewSwapTestCase:
+    """A swap whose left relation is a view, which DuckDB must not rename as a table."""
+
+    description: str
+    setup_sql: tuple[str, ...]
+    left: str
+    expected_relations: list[tuple[str, str]]
+
+
+@dataclass(frozen=True)
 class DeleteInsertTestCase:
     description: str
     setup_sql: tuple[str, ...]
