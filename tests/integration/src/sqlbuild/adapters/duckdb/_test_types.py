@@ -130,6 +130,16 @@ class SwapTestCase:
 
 
 @dataclass(frozen=True)
+class ViewSwapTestCase:
+    """A swap whose left relation is a view, which DuckDB must not rename as a table."""
+
+    description: str
+    setup_sql: tuple[str, ...]
+    left: str
+    expected_relations: list[tuple[str, str]]
+
+
+@dataclass(frozen=True)
 class DeleteInsertTestCase:
     description: str
     setup_sql: tuple[str, ...]
@@ -259,3 +269,26 @@ class UserStorageVersionKeyTestCase:
     description: str
     config_key: str
     expected_storage_version: str
+
+
+@dataclass(frozen=True)
+class PythonFunctionRegistrationTestCase:
+    """A Python function registered while an earlier result is only partly read."""
+
+    description: str
+    open_result_sql: str
+    call_sql: str
+    expected_rows: list[tuple[object, ...]]
+
+
+@dataclass(frozen=True)
+class QualifiedViewDefinitionTestCase:
+    """A view at a database-qualified location compared with the SELECT SQLBuild renders."""
+
+    description: str
+    setup_sql: tuple[str, ...]
+    database: str | None
+    schema: str
+    name: str
+    sql: str
+    expected_match: bool

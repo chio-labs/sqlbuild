@@ -83,11 +83,13 @@ def test_given_staged_relation_when_promoting_then_nothing_is_dropped(
             expected_statements=("ALTER TABLE main.__sqb_rebuild__orders RENAME TO orders",),
         ),
         FullRefreshPromotionTestCase(
-            description="rename adapters drop the previous copy then rename twice",
+            description="duckdb drops the previous copy, checks the live type, then renames twice",
             adapter_name="duckdb",
             target_exists=True,
             expected_statements=(
                 "DROP TABLE IF EXISTS main.__sqb_prev__orders",
+                "SELECT table_name, table_schema, table_type FROM information_schema.tables "
+                "WHERE 1=1 AND table_schema IN ('main') AND table_name IN ('orders')",
                 "ALTER TABLE main.orders RENAME TO __sqb_prev__orders",
                 "ALTER TABLE main.__sqb_rebuild__orders RENAME TO orders",
             ),

@@ -8,6 +8,13 @@ Online: https://sqlbuild.com/docs/concepts/adapters/motherduck/
 
 MotherDuck uses DuckDB's built-in `md:` connection support. No extra installation needed beyond the core DuckDB dependency.
 
+## DuckDB 2.0 support
+
+SQLBuild requires DuckDB 2.0, and MotherDuck does not support DuckDB 2.0 yet: its extension
+supports DuckDB up to 1.5.6 and refuses to load on 2.0. Connecting reports
+`MotherDuck does not support DuckDB 2.0.0 yet`. If you use MotherDuck, stay on SQLBuild 0.182.0,
+the last release that supports DuckDB 1.5, until MotherDuck supports DuckDB 2.0.
+
 ## Connection config
 
 ```toml

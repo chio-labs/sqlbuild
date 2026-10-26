@@ -9,6 +9,7 @@ import pytest
 
 from sqlbuild._native import InferredNullability, SeedCsvSettings
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     ExpressionInferenceProfile,
@@ -40,6 +41,8 @@ from tests.integration.src.sqlbuild.adapters.duckdb._test_types import (
     MaterializeTestCase,
     MergeTestCase,
     PhysicalRelationGenerationTestCase,
+    PythonFunctionRegistrationTestCase,
+    QualifiedViewDefinitionTestCase,
     QueryTestCase,
     RecorderWriteTestCase,
     RelationExistsTestCase,
@@ -48,6 +51,7 @@ from tests.integration.src.sqlbuild.adapters.duckdb._test_types import (
     SwapTestCase,
     TransactionalAtomicityTestCase,
     UserStorageVersionKeyTestCase,
+    ViewSwapTestCase,
 )
 from tests.integration.src.sqlbuild.adapters.duckdb.helpers import count_relation_rows
 
@@ -196,12 +200,12 @@ def test_given_existing_database_when_opening_for_local_replay_then_its_tables_r
         UserStorageVersionKeyTestCase(
             description="a storage version in user config is ignored like any unknown key",
             config_key="storage_compatibility_version",
-            expected_storage_version="v1.0.0+",
+            expected_storage_version="v2.0.0+",
         ),
         UserStorageVersionKeyTestCase(
             description="an unknown connection key is ignored",
             config_key="unknown_option",
-            expected_storage_version="v1.0.0+",
+            expected_storage_version="v2.0.0+",
         ),
     ],
     ids=lambda case: case.description,
@@ -779,6 +783,53 @@ def test_given_two_tables_when_swapping_then_contents_are_exchanged(
 
     assert left_val[0] == test_case.expected_left_value
     assert right_val[0] == test_case.expected_right_value
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ViewSwapTestCase(
+            description="an unqualified view is refused and left in place",
+            setup_sql=(
+                "CREATE VIEW orders AS SELECT 1 AS order_id",
+                "CREATE TABLE orders__staging AS SELECT 2 AS order_id",
+            ),
+            left="orders",
+            expected_relations=[("orders", "VIEW"), ("orders__staging", "BASE TABLE")],
+        ),
+        ViewSwapTestCase(
+            description="a schema-qualified view is refused and left in place",
+            setup_sql=(
+                "CREATE VIEW main.orders AS SELECT 1 AS order_id",
+                "CREATE TABLE main.orders__staging AS SELECT 2 AS order_id",
+            ),
+            left="main.orders",
+            expected_relations=[("orders", "VIEW"), ("orders__staging", "BASE TABLE")],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_view_on_left_when_swapping_then_swap_is_refused_without_renaming(
+    test_case: ViewSwapTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    statement: str
+    for statement in test_case.setup_sql:
+        connection.execute(statement)
+
+    with pytest.raises(AdapterUserError, match="cannot swap the view"):
+        adapter.swap(
+            connection=connection,
+            left=test_case.left,
+            right="main.orders__staging",
+            statement_recorder=StatementRecorder(),
+        )
+
+    relations: list[tuple[str, str]] = connection.execute(
+        "SELECT table_name, table_type FROM information_schema.tables ORDER BY table_name"
+    ).fetchall()
+    assert relations == test_case.expected_relations
 
 
 @pytest.mark.parametrize(
@@ -1605,3 +1656,120 @@ def test_given_missing_right_table_when_swapping_then_left_table_preserved(
         connection.execute(test_case.verify_sql).fetchall()
     )
     assert actual == test_case.expected_rows_after_failure
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        PythonFunctionRegistrationTestCase(
+            description="a one-row aggregate result with its row read",
+            open_result_sql="SELECT COUNT(*) FROM range(3)",
+            call_sql="SELECT double_amount(21)",
+            expected_rows=[(42,)],
+        ),
+        PythonFunctionRegistrationTestCase(
+            description="a many-row result with one row read",
+            open_result_sql="SELECT * FROM range(100)",
+            call_sql="SELECT double_amount(5)",
+            expected_rows=[(10,)],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_partly_read_result_when_registering_python_function_then_function_is_callable(
+    test_case: PythonFunctionRegistrationTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    cursor: Any = connection.execute(test_case.open_result_sql)
+    _ = cursor.fetchmany(1)
+
+    adapter.register_python_function(
+        connection=connection,
+        name="double_amount",
+        function=lambda amount: amount * 2,
+        parameter_types=["BIGINT"],
+        returns="BIGINT",
+    )
+
+    assert connection.execute(test_case.call_sql).fetchall() == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        QualifiedViewDefinitionTestCase(
+            description="a view in an attached database matches its three-part SELECT",
+            setup_sql=(
+                "CREATE SCHEMA shop.sales",
+                "CREATE TABLE shop.sales.orders AS SELECT 1 AS order_id",
+                "CREATE VIEW shop.sales.old_orders AS SELECT * FROM shop.sales.orders",
+            ),
+            database="shop",
+            schema="sales",
+            name="old_orders",
+            sql="SELECT * FROM shop.sales.orders",
+            expected_match=True,
+        ),
+        QualifiedViewDefinitionTestCase(
+            description="a quoted three-part SELECT matches too",
+            setup_sql=(
+                "CREATE SCHEMA shop.sales",
+                "CREATE TABLE shop.sales.orders AS SELECT 1 AS order_id",
+                "CREATE VIEW shop.sales.old_orders AS SELECT * FROM shop.sales.orders",
+            ),
+            database="shop",
+            schema="sales",
+            name="old_orders",
+            sql='SELECT * FROM "shop"."sales"."orders"',
+            expected_match=True,
+        ),
+        QualifiedViewDefinitionTestCase(
+            description="a view in the default database matches with no database given",
+            setup_sql=(
+                "CREATE TABLE memory.main.orders AS SELECT 1 AS order_id",
+                "CREATE VIEW memory.main.old_orders AS SELECT * FROM memory.main.orders",
+            ),
+            database=None,
+            schema="main",
+            name="old_orders",
+            sql="SELECT * FROM memory.main.orders",
+            expected_match=True,
+        ),
+        QualifiedViewDefinitionTestCase(
+            description="a three-part SELECT of another relation still differs",
+            setup_sql=(
+                "CREATE SCHEMA shop.sales",
+                "CREATE TABLE shop.sales.orders AS SELECT 1 AS order_id",
+                "CREATE TABLE shop.sales.customers AS SELECT 1 AS customer_id",
+                "CREATE VIEW shop.sales.old_orders AS SELECT * FROM shop.sales.orders",
+            ),
+            database="shop",
+            schema="sales",
+            name="old_orders",
+            sql="SELECT * FROM shop.sales.customers",
+            expected_match=False,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_database_qualified_view_when_comparing_definition_then_catalog_prefix_is_ignored(
+    test_case: QualifiedViewDefinitionTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+    tmp_path: Path,
+) -> None:
+    connection.execute(f"ATTACH '{tmp_path / 'shop.duckdb'}' AS shop")
+    statement: str
+    for statement in test_case.setup_sql:
+        connection.execute(statement)
+
+    matches: bool = adapter.view_definition_matches(
+        connection=connection,
+        database=test_case.database,
+        schema=test_case.schema,
+        name=test_case.name,
+        sql=test_case.sql,
+    )
+
+    assert matches is test_case.expected_match

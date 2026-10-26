@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import logging
+import re
 from datetime import date, datetime
 from decimal import Decimal
 from importlib.machinery import ModuleSpec
@@ -47,7 +48,7 @@ from sqlbuild.adapter.contract.constants import (
     LATEST_DUCKDB_STORAGE_VERSION,
     QUALIFIED_NAME_SEPARATOR,
 )
-from sqlbuild.adapter.contract.exceptions import AdapterUserError
+from sqlbuild.adapter.contract.exceptions import AdapterUserError, ViewRenameRefusedError
 from sqlbuild.adapter.contract.main.run_relation_read_probe import run_relation_read_probe
 from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.main.unsupported_relation_usage import unsupported_relation_usage
@@ -1478,7 +1479,27 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
             f"RETURNS {returns}"
         )
         statement_recorder.record(registration_sql)
-        connection.create_function(function_name, callable_function, parameter_types, returns)
+        self.register_python_function(
+            connection=connection,
+            name=function_name,
+            function=callable_function,
+            parameter_types=parameter_types,
+            returns=returns,
+        )
+
+    def register_python_function(
+        self,
+        *,
+        connection: Any,
+        name: str,
+        function: Any,
+        parameter_types: list[str],
+        returns: str,
+    ) -> None:
+        """Register a Python function after finishing a partly read result, which DuckDB 2 needs."""
+
+        connection.complete()
+        connection.create_function(name, function, parameter_types, returns)
 
     def _load_python_udf_callable(self, *, source_file_path: Path, entry_point: str) -> Any:
         module_name: str = "sqlbuild_python_udf_" + "_".join(
@@ -1645,12 +1666,31 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         right: str,
         statement_recorder: StatementRecorder,
     ) -> None:
+        if self._is_view(connection=connection, relation=left):
+            raise ViewRenameRefusedError(message=f"DuckDB cannot swap the view {left} with a table")
         statements: tuple[str, ...] = self.render_swap(left=left, right=right)
         statement_recorder.record_many(statements)
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
                 self.execute(connection=connection, sql=stmt)
+
+    def _is_view(self, *, connection: Any, relation: str) -> bool:
+        """Whether a relation is a view; DuckDB 2 lets ALTER TABLE rename a view, so swap checks."""
+
+        *qualifiers, name = [_unquote_duckdb_identifier(part) for part in relation.split(".")]
+        schema_sql: str = (
+            _duckdb_string_literal(qualifiers[-1]) if qualifiers else "current_schema()"
+        )
+        database_sql: str = (
+            _duckdb_string_literal(qualifiers[-2]) if len(qualifiers) > 1 else "current_database()"
+        )
+        query: str = (
+            "SELECT 1 FROM duckdb_views() WHERE NOT internal "
+            f"AND view_name = {_duckdb_string_literal(name)} "
+            f"AND schema_name = {schema_sql} AND database_name = {database_sql}"
+        )
+        return self.execute(connection=connection, sql=query).fetchone() is not None
 
     def render_clone(
         self,
@@ -1774,7 +1814,19 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         definition: str | None = self.read_view_definition(
             connection=connection, database=database, schema=schema, name=name
         )
-        return definition is not None and same_view_definition(definition=definition, sql=sql)
+        if definition is None:
+            return False
+        if same_view_definition(definition=definition, sql=sql):
+            return True
+        catalog: str = database if database is not None else self._current_database(connection)
+        return same_view_definition(
+            definition=_without_catalog_qualifier(text=definition, catalog=catalog),
+            sql=_without_catalog_qualifier(text=sql, catalog=catalog),
+        )
+
+    def _current_database(self, connection: Any) -> str:
+        row: Any = self.execute(connection=connection, sql="SELECT current_database()").fetchone()
+        return str(row[0])
 
     def render_relation_revokes(
         self, *, grants: tuple[RelationGrant, ...], destination: str
@@ -2712,6 +2764,17 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
 
     def _duckdb_string_literal(self, value: str) -> str:
         return value.replace("'", "''")
+
+
+def _without_catalog_qualifier(*, text: str, catalog: str) -> str:
+    """Drop a view's own catalog prefix, which DuckDB 2 leaves out of stored view SQL."""
+
+    quoted_catalog: str = re.escape('"' + catalog.replace('"', '""') + '"')
+    pattern: re.Pattern[str] = re.compile(
+        rf"""(?<![\w."])(?:{quoted_catalog}|{re.escape(catalog)})\.(?=[\w"])""",
+        re.IGNORECASE,
+    )
+    return pattern.sub("", text)
 
 
 def _duckdb_string_literal(value: str) -> str:

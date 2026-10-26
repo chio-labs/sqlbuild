@@ -10,9 +10,12 @@ from urllib.parse import urlencode
 
 from sqlbuild.adapter.contract.classes.duckdb_backed_adapter import DuckDbBackedAdapter
 from sqlbuild.adapter.contract.classes.microbatch import MicrobatchMixin
+from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.types import BuiltinAdapter, LoaderLogicalType
 from sqlbuild.adapters.motherduck.constants import (
     EMPTY_CONNECTION_VALUE,
+    MOTHERDUCK_UNSUPPORTED_DUCKDB_HELP,
+    MOTHERDUCK_UNSUPPORTED_DUCKDB_MARKER,
     URI_ADDITIONAL_PARAMETER_SEPARATOR,
     URI_QUERY_SEPARATOR,
 )
@@ -154,7 +157,15 @@ class MotherDuckAdapter(MicrobatchMixin, DuckDbBackedAdapter):
         import duckdb
 
         database: str = str(duckdb_config.get("database", ":memory:"))
-        connection: duckdb.DuckDBPyConnection = duckdb.connect(database=database)
+        try:
+            connection: duckdb.DuckDBPyConnection = duckdb.connect(database=database)
+        except duckdb.Error as error:
+            if MOTHERDUCK_UNSUPPORTED_DUCKDB_MARKER not in str(error):
+                raise
+            raise AdapterUserError(
+                message=f"MotherDuck does not support DuckDB {duckdb.__version__} yet.",
+                help=MOTHERDUCK_UNSUPPORTED_DUCKDB_HELP,
+            ) from error
 
         extensions: list[str] | tuple[str, ...] = duckdb_config.get("extensions", ())
         extension_name: str

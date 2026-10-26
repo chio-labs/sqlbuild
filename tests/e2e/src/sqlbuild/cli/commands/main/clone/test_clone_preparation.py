@@ -33,8 +33,8 @@ _DEV_VIEWS: tuple[tuple[object, ...], ...] = (
         "dev",
         "orders_summary",
         "CREATE VIEW dev.orders_summary AS SELECT f.*, p.amount_cents AS paid_cents "
-        "FROM dev.fct_orders AS f LEFT JOIN dev.stg_payments AS p "
-        "ON ((p.order_id = f.order_id));",
+        "FROM (dev.fct_orders AS f LEFT JOIN dev.stg_payments AS p "
+        "ON ((p.order_id = f.order_id)));",
     ),
     (
         "dev",

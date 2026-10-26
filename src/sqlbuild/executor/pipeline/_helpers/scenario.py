@@ -293,6 +293,7 @@ def run_scenario_local_test_pipeline(
     promotion_mode: TablePromotionMode = resolve_promotion_mode(
         settings=pipeline_result.project.settings, adapter=adapter
     )
+    running: RunningScenarios = RunningScenarios(adapter=adapter)
 
     def execute(scenario_plan: ScenarioExecutionPlan) -> ScenarioRunResult:
         return execute_local_scenario_load_only_run(
@@ -303,6 +304,7 @@ def run_scenario_local_test_pipeline(
             promotion_mode=promotion_mode,
             capture_adapter=replay_source.capture_adapter,
             capture_dialect=replay_source.capture_dialect,
+            running=running,
         )
 
     def failed(*, scenario_name: str, exc: Exception) -> ScenarioRunResult:
@@ -326,6 +328,11 @@ def run_scenario_local_test_pipeline(
         failed=failed,
         on_scenario_start=on_scenario_start,
         on_scenario_complete=on_scenario_complete,
+        scheduling=_ScenarioScheduling(
+            interrupts=ScenarioInterrupts(
+                cancel_statements=partial(running.interrupt, close_uncancellable=False)
+            )
+        ),
     )
 
 

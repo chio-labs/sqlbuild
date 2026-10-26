@@ -285,8 +285,12 @@ class RecordingConnection:
     def __init__(self) -> None:
         self.executed: list[str] = []
 
-    def execute(self, sql: str) -> None:
+    def execute(self, sql: str) -> "RecordingConnection":
         self.executed.append(sql)
+        return self
+
+    def fetchall(self) -> list[tuple[object, ...]]:
+        return []
 
 
 class RecordingSnowflakeAdapter(SnowflakeAdapter):
