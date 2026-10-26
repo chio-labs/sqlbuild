@@ -109,6 +109,29 @@ _SCOPED_ARGUMENTS: str = (
             inspected_paths=_COMPILED,
         ),
         SqlMacroCompileTestCase(
+            description="forwarded_aliased_read_of_a_slot_the_outer_does_not_declare",
+            files=scoped_model(
+                {
+                    **macro_file(
+                        "counted_weeks",
+                        "r RELATION (order_count BIGINT, week BIGINT)",
+                        "WITH counted AS (SELECT s.@r.week, s.@r.order_count AS orders "
+                        "FROM @r AS s)",
+                    ),
+                    **macro_file(
+                        "outer_counted",
+                        "w RELATION (placed BIGINT)",
+                        "WITH @sql.counted_weeks(r := @w, r.order_count := placed)",
+                    ),
+                },
+                "@sql.outer_counted(weekly, w.placed := orders_placed)\nSELECT * FROM counted",
+            ),
+            expected_returncode=0,
+            expected_fragments=("SELECT s.week, s.orders_placed AS orders FROM weekly AS s",),
+            unexpected_fragments=("P022",),
+            inspected_paths=_COMPILED,
+        ),
+        SqlMacroCompileTestCase(
             description="forwarded_group_mapped_to_a_single_column_outer_slot",
             files=scoped_model(
                 {
