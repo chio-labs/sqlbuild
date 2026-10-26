@@ -1478,7 +1478,28 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
             f"RETURNS {returns}"
         )
         statement_recorder.record(registration_sql)
-        connection.create_function(function_name, callable_function, parameter_types, returns)
+        self.register_python_function(
+            connection=connection,
+            name=function_name,
+            function=callable_function,
+            parameter_types=parameter_types,
+            returns=returns,
+        )
+
+    def register_python_function(
+        self,
+        *,
+        connection: Any,
+        name: str,
+        function: Any,
+        parameter_types: list[str],
+        returns: str,
+    ) -> None:
+        """Register a Python function on the connection as a connection-scoped DuckDB function."""
+
+        # DuckDB 2 refuses connection calls other than execute() while a result is partly read.
+        connection.complete()
+        connection.create_function(name, function, parameter_types, returns)
 
     def _load_python_udf_callable(self, *, source_file_path: Path, entry_point: str) -> Any:
         module_name: str = "sqlbuild_python_udf_" + "_".join(

@@ -269,3 +269,13 @@ class UserStorageVersionKeyTestCase:
     description: str
     config_key: str
     expected_storage_version: str
+
+
+@dataclass(frozen=True)
+class PythonFunctionRegistrationTestCase:
+    """A Python function registered while an earlier result is only partly read."""
+
+    description: str
+    open_result_sql: str
+    call_sql: str
+    expected_rows: list[tuple[object, ...]]
