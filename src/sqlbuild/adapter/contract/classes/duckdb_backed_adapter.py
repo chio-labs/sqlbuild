@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import logging
+import re
 from datetime import date, datetime
 from decimal import Decimal
 from importlib.machinery import ModuleSpec
@@ -1817,7 +1818,19 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         definition: str | None = self.read_view_definition(
             connection=connection, database=database, schema=schema, name=name
         )
-        return definition is not None and same_view_definition(definition=definition, sql=sql)
+        if definition is None:
+            return False
+        if same_view_definition(definition=definition, sql=sql):
+            return True
+        catalog: str = database if database is not None else self._current_database(connection)
+        return same_view_definition(
+            definition=_without_catalog_qualifier(text=definition, catalog=catalog),
+            sql=_without_catalog_qualifier(text=sql, catalog=catalog),
+        )
+
+    def _current_database(self, connection: Any) -> str:
+        row: Any = self.execute(connection=connection, sql="SELECT current_database()").fetchone()
+        return str(row[0])
 
     def render_relation_revokes(
         self, *, grants: tuple[RelationGrant, ...], destination: str
@@ -2755,6 +2768,17 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
 
     def _duckdb_string_literal(self, value: str) -> str:
         return value.replace("'", "''")
+
+
+def _without_catalog_qualifier(*, text: str, catalog: str) -> str:
+    """Drop a view's own catalog prefix, which DuckDB 2 leaves out of stored view SQL."""
+
+    quoted_catalog: str = re.escape('"' + catalog.replace('"', '""') + '"')
+    pattern: re.Pattern[str] = re.compile(
+        rf"""(?<![\w."])(?:{quoted_catalog}|{re.escape(catalog)})\.(?=[\w"])""",
+        re.IGNORECASE,
+    )
+    return pattern.sub("", text)
 
 
 def _duckdb_string_literal(value: str) -> str:
