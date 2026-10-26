@@ -24,3 +24,11 @@ class MotherDuckPruneSqlTestCase:
     schema: str
     retain_versions: int
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MotherDuckConnectErrorTestCase:
+    description: str
+    connect_error: str
+    expected_error_type: str
+    expected_help_fragment: str | None

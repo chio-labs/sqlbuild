@@ -16,23 +16,35 @@ class FakeDuckDbConnection:
         return self
 
 
+class FakeDuckDbError(Exception):
+    """Stand-in for duckdb.Error."""
+
+
 class FakeDuckDbModule:
     """Module double for duckdb.connect."""
 
-    def __init__(self) -> None:
+    Error: type[Exception] = FakeDuckDbError
+    __version__: str = "2.0.0"
+
+    def __init__(self, *, connect_error: str | None = None) -> None:
         self.connected_databases: list[str] = []
         self.connection: FakeDuckDbConnection = FakeDuckDbConnection()
+        self.connect_error: str | None = connect_error
 
     def connect(self, *, database: str) -> FakeDuckDbConnection:
         self.connected_databases.append(database)
+        if self.connect_error is not None:
+            raise FakeDuckDbError(self.connect_error)
         return self.connection
 
 
-def install_fake_duckdb_module(monkeypatch: Any) -> FakeDuckDbModule:
+def install_fake_duckdb_module(
+    monkeypatch: Any, *, connect_error: str | None = None
+) -> FakeDuckDbModule:
     """Install a fake duckdb module for adapter connection tests."""
 
     import sys
 
-    fake_module: FakeDuckDbModule = FakeDuckDbModule()
+    fake_module: FakeDuckDbModule = FakeDuckDbModule(connect_error=connect_error)
     monkeypatch.setitem(sys.modules, "duckdb", fake_module)
     return fake_module
