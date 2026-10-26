@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.180.0](https://github.com/chio-labs/sqlbuild/compare/v0.179.0...v0.180.0) (2026-10-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* **sql-macros:** COLUMN OF SQL macro arguments are removed; use relation slots.
+
+### Features
+
+* **sql-macros:** relation slots with COLUMNS groups, replacing COLUMN OF ([#1254](https://github.com/chio-labs/sqlbuild/issues/1254)) ([911882f](https://github.com/chio-labs/sqlbuild/commit/911882f236dc8979d233f9fc995dfcc0b57f0e39))
+
 ## [0.179.0](https://github.com/chio-labs/sqlbuild/compare/v0.178.0...v0.179.0) (2026-10-25)
 
 
