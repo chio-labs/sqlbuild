@@ -17,9 +17,10 @@ use crate::lint_text::models::{ExpansionSpan, FormatFile, LintSqlBody, LintSqlOp
 use crate::lint_text::tests::helpers::directive_finding;
 use crate::lint_text::tests::test_types::{
     Finding, FormatBodiesTestCase, LintBodiesTestCase, NeutralizeTestCase, ParameterTestCase,
-    RestoreTestCase, SitePatternTestCase, SuppressionTestCase, TokenAtTestCase,
+    RestoreTestCase, SitePatternTestCase, SlotReadTestCase, SuppressionTestCase, TokenAtTestCase,
     UnwrappedExpressionTestCase,
 };
+use sqlbuild_analysis::sql_macros::main::parse_sql_macro::parse_sql_macro;
 
 const SUPPRESSED_FILE: &str =
     "-- sqb: ignore SQBRSQL005 because kept\n\n-- note\nselect 1\n-- sqb: ignore nope\nselect 2\n";
@@ -144,25 +145,25 @@ fn given_generated_parameters_when_neutralizing_then_only_bare_parameters_are_re
         ParameterTestCase {
             description: "SQL macro parameters followed by words and a parenthesis",
             body: "@value IS NULL OR TRIM(@value) = ''",
-            neutralize: neutralize_sql_macro_parameters,
+            neutralize: |body| neutralize_sql_macro_parameters(body, &[]),
             expected_text: "__sqlbuild_macro_parameter_0__ IS NULL OR TRIM(__sqlbuild_macro_parameter_1__) = ''",
         },
         ParameterTestCase {
             description: "SQL macro parameters before IN and a parenthesised predicate",
             body: "CASE WHEN @x IN ('a', 'b') THEN 1 END + CASE WHEN @x IS NULL AND (@y IS NULL) THEN 1 END",
-            neutralize: neutralize_sql_macro_parameters,
+            neutralize: |body| neutralize_sql_macro_parameters(body, &[]),
             expected_text: "CASE WHEN __sqlbuild_macro_parameter_0__ IN ('a', 'b') THEN 1 END + CASE WHEN __sqlbuild_macro_parameter_1__ IS NULL AND (__sqlbuild_macro_parameter_2__ IS NULL) THEN 1 END",
         },
         ParameterTestCase {
             description: "SQL macro slot reads hide the slot name, whole after an alias",
             body: "SELECT s.@src.amount AS amount, @src.id, @src.* FROM @src AS s",
-            neutralize: neutralize_sql_macro_parameters,
+            neutralize: |body| neutralize_sql_macro_parameters(body, &[]),
             expected_text: "SELECT s.__sqlbuild_macro_parameter_0__ AS amount, __sqlbuild_macro_parameter_1__.__sqlbuild_macro_parameter_2__, __sqlbuild_macro_parameter_3__.* FROM __sqlbuild_macro_parameter_4__ AS s",
         },
         ParameterTestCase {
             description: "SQL macro calls, enum references and quoted text keep their at-signs",
             body: "@sql.other(@v) + @enum(\"s\").A + LENGTH('@v') + @@x",
-            neutralize: neutralize_sql_macro_parameters,
+            neutralize: |body| neutralize_sql_macro_parameters(body, &[]),
             expected_text: "@sql.other(__sqlbuild_macro_parameter_0__) + @enum(\"s\").A + LENGTH('@v') + @@x",
         },
         ParameterTestCase {
@@ -184,6 +185,43 @@ fn given_generated_parameters_when_neutralizing_then_only_bare_parameters_are_re
 
         assert_eq!(
             neutralized.text, test_case.expected_text,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_relation_slot_reads_when_neutralizing_then_they_stand_as_their_expansion_does() {
+    let header: &str = "MACRO (\n  description \"Weekly rates\",\n  \
+         arguments (weekly RELATION (keys COLUMNS, refund_count BIGINT), cutoff BIGINT),\n);\n\n";
+    let test_cases = [
+        SlotReadTestCase {
+            description: "a plain group read is one bare value",
+            body: "SELECT @weekly.keys, orders FROM counted GROUP BY @weekly.keys",
+            expected_text: "SELECT __sqlbuild_macro_parameter_0__, orders FROM counted GROUP BY __sqlbuild_macro_parameter_1__",
+        },
+        SlotReadTestCase {
+            description: "plain single-slot and undeclared reads go through the one relation",
+            body: "SELECT @weekly.refund_count, @weekly.week FROM @weekly WHERE @cutoff > @cutoff",
+            expected_text: "SELECT __sqlbuild_macro_parameter_0__.__sqlbuild_macro_parameter_1__, __sqlbuild_macro_parameter_0__.__sqlbuild_macro_parameter_2__ FROM __sqlbuild_macro_parameter_0__ WHERE __sqlbuild_macro_parameter_3__ > __sqlbuild_macro_parameter_4__",
+        },
+        SlotReadTestCase {
+            description: "aliased reads stay whole after their alias",
+            body: "SELECT s.@weekly.keys, s.@weekly.refund_count FROM @weekly AS s",
+            expected_text: "SELECT s.__sqlbuild_macro_parameter_0__, s.__sqlbuild_macro_parameter_1__ FROM __sqlbuild_macro_parameter_2__ AS s",
+        },
+    ];
+
+    for test_case in test_cases {
+        let source: String = format!("{header}{}\n", test_case.body);
+        let parameters = parse_sql_macro("weekly_rates", "macros/sql/weekly_rates.sql", &source)
+            .map(|definition| definition.parameters)
+            .unwrap_or_default();
+
+        assert_eq!(
+            neutralize_sql_macro_parameters(test_case.body, &parameters).text,
+            test_case.expected_text,
             "{}",
             test_case.description
         );

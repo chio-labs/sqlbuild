@@ -8,6 +8,12 @@ pub(crate) struct NeutralizeTestCase {
     pub(crate) expected_sites: Vec<(&'static str, usize, usize)>,
 }
 
+pub(crate) struct SlotReadTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) body: &'static str,
+    pub(crate) expected_text: &'static str,
+}
+
 pub(crate) struct ParameterTestCase {
     pub(crate) description: &'static str,
     pub(crate) body: &'static str,

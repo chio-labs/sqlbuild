@@ -8,8 +8,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use pyo3::exceptions::{PyException, PyValueError};
 use pyo3::prelude::{Bound, IntoPyObject, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
+use sqlbuild_analysis::sql_macros::main::parse_sql_macro::parse_sql_macro;
 use sqlbuild_analysis::sql_macros::main::sql_macro_body_form::sql_macro_body_form;
-use sqlbuild_analysis::sql_macros::models::SqlMacroForm;
+use sqlbuild_analysis::sql_macros::models::{SqlMacroForm, SqlMacroParameter};
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 use sqlbuild_core::text::main::python_isspace::python_isspace;
 use sqlbuild_core::text::main::python_str_repr::python_str_repr;
@@ -755,9 +756,13 @@ fn plan_bodies(
         ranges = sql_body_ranges(text, headers);
     }
     let sql_test: bool = headers.iter().any(|header| header.kind == SQL_TEST_KIND);
-    let neutralize: Option<fn(&str) -> Neutralized> = if sql_macro {
-        Some(neutralize_sql_macro_parameters)
-    } else if sql_test {
+    let parameters: Vec<SqlMacroParameter> = if sql_macro {
+        sql_macro_parameters(file)
+    } else {
+        Vec::new()
+    };
+    let neutralize_macro = |body: &str| neutralize_sql_macro_parameters(body, &parameters);
+    let other: Option<fn(&str) -> Neutralized> = if sql_test {
         Some(neutralize_test_parameters)
     } else {
         neutralizer(&BodyRole {
@@ -765,6 +770,13 @@ fn plan_bodies(
             in_project: true,
             in_hook_directory,
         })
+    };
+    let neutralize: Option<&dyn Fn(&str) -> Neutralized> = if sql_macro {
+        Some(&neutralize_macro)
+    } else {
+        other
+            .as_ref()
+            .map(|function| function as &dyn Fn(&str) -> Neutralized)
     };
     let mut bodies: Vec<PlannedBody> = ranges
         .into_iter()
@@ -838,7 +850,15 @@ pub(crate) fn prepare_single_body(request: &SingleBodyRequest<'_, '_>) -> PyResu
     let dialect: &str = dialect;
     let py: Python<'_> = file_path.py();
     let text: Vec<char> = contents.chars().collect();
-    let planned: PlannedBody = plan_body(&text, range, neutralizer(role), None);
+    let neutralize: Option<fn(&str) -> Neutralized> = neutralizer(role);
+    let planned: PlannedBody = plan_body(
+        &text,
+        range,
+        neutralize
+            .as_ref()
+            .map(|function| function as &dyn Fn(&str) -> Neutralized),
+        None,
+    );
     let (expanded, passes) = match planned.source {
         BodySource::Expand => {
             let expansion: AuthoredExpansion =
@@ -895,10 +915,22 @@ fn not_prepared(py: Python<'_>, path: &Path) -> PyResult<PyErr> {
     ))
 }
 
+/// The declared parameters of a SQL macro file, or none when its header does not parse.
+fn sql_macro_parameters(file: &LintFile) -> Vec<SqlMacroParameter> {
+    let name: String = file
+        .path
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    parse_sql_macro(&name, &file.path.to_string_lossy(), &file.contents)
+        .map(|definition| definition.parameters)
+        .unwrap_or_default()
+}
+
 fn plan_body(
     text: &[char],
     (mut start, end): (usize, usize),
-    neutralize: Option<fn(&str) -> Neutralized>,
+    neutralize: Option<&dyn Fn(&str) -> Neutralized>,
     compiled: Option<&CompiledExpansion>,
 ) -> PlannedBody {
     let body: String = text[start..end].iter().collect();

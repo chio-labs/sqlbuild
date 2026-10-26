@@ -1,28 +1,62 @@
 //! The byte spans of a SQL macro body's `@name` parameter references, as expansion reads them.
 
+use crate::sql_macros::_helpers::parsing::header::unquoted;
 use crate::sql_macros::_helpers::parsing::lexing::{Token, TokenKind, tokens};
 use crate::sql_macros::_helpers::parsing::parameters::parameter_references;
 use crate::sql_macros::_helpers::parsing::slots::prefix_start;
+use crate::sql_macros::models::{ParameterSpan, SqlMacroParameter};
 
-/// The span of each `@name` expansion replaces, and of each slot name whose column a call maps.
+/// Each `@name` span expansion replaces: aliased and plain group reads whole, other plain reads as relation and slot.
 #[must_use]
-pub fn sql_macro_parameter_spans(body: &str) -> Vec<(usize, usize)> {
+pub fn sql_macro_parameter_spans(
+    body: &str,
+    parameters: &[SqlMacroParameter],
+) -> Vec<ParameterSpan> {
     let Ok(scanned) = tokens(body) else {
         return Vec::new();
     };
-    let mut spans: Vec<(usize, usize)> = Vec::new();
+    let relation = |name: &str| -> Option<&SqlMacroParameter> {
+        parameters
+            .iter()
+            .find(|parameter| parameter.name.eq_ignore_ascii_case(name))
+            .filter(|parameter| parameter.kind.declares_relation())
+    };
+    let mut spans: Vec<ParameterSpan> = Vec::new();
     for reference in parameter_references(body, &scanned) {
         let name: usize = reference.token;
+        let declared: Option<&SqlMacroParameter> = relation(&reference.name);
+        let named_relation: Option<String> =
+            declared.map(|parameter| parameter.name.to_lowercase());
         let Some(slot) = slot_word(body, &scanned, name) else {
-            spans.push((reference.start, reference.end));
+            spans.push(ParameterSpan {
+                start: reference.start,
+                end: reference.end,
+                relation: named_relation,
+            });
             continue;
         };
-        if name >= 1 && prefix_start(body, &scanned, name - 1).is_some() {
-            spans.push((reference.start, slot.end));
+        let slot_name: String = unquoted(slot.text(body));
+        let qualified: bool = name >= 1 && prefix_start(body, &scanned, name - 1).is_some();
+        let group: bool =
+            declared.is_some_and(|parameter| parameter.kind.declares_group(&slot_name));
+        if qualified || group {
+            spans.push(ParameterSpan {
+                start: reference.start,
+                end: slot.end,
+                relation: None,
+            });
             continue;
         }
-        spans.push((reference.start, reference.end));
-        spans.push((slot.start, slot.end));
+        spans.push(ParameterSpan {
+            start: reference.start,
+            end: reference.end,
+            relation: named_relation,
+        });
+        spans.push(ParameterSpan {
+            start: slot.start,
+            end: slot.end,
+            relation: None,
+        });
     }
     spans
 }
