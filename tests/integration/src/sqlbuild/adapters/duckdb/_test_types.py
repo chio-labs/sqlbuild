@@ -279,3 +279,16 @@ class PythonFunctionRegistrationTestCase:
     open_result_sql: str
     call_sql: str
     expected_rows: list[tuple[object, ...]]
+
+
+@dataclass(frozen=True)
+class QualifiedViewDefinitionTestCase:
+    """A view at a database-qualified location compared with the SELECT SQLBuild renders."""
+
+    description: str
+    setup_sql: tuple[str, ...]
+    database: str | None
+    schema: str
+    name: str
+    sql: str
+    expected_match: bool

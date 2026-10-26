@@ -42,6 +42,7 @@ from tests.integration.src.sqlbuild.adapters.duckdb._test_types import (
     MergeTestCase,
     PhysicalRelationGenerationTestCase,
     PythonFunctionRegistrationTestCase,
+    QualifiedViewDefinitionTestCase,
     QueryTestCase,
     RecorderWriteTestCase,
     RelationExistsTestCase,
@@ -1692,3 +1693,83 @@ def test_given_partly_read_result_when_registering_python_function_then_function
     )
 
     assert connection.execute(test_case.call_sql).fetchall() == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        QualifiedViewDefinitionTestCase(
+            description="a view in an attached database matches its three-part SELECT",
+            setup_sql=(
+                "CREATE SCHEMA shop.sales",
+                "CREATE TABLE shop.sales.orders AS SELECT 1 AS order_id",
+                "CREATE VIEW shop.sales.old_orders AS SELECT * FROM shop.sales.orders",
+            ),
+            database="shop",
+            schema="sales",
+            name="old_orders",
+            sql="SELECT * FROM shop.sales.orders",
+            expected_match=True,
+        ),
+        QualifiedViewDefinitionTestCase(
+            description="a quoted three-part SELECT matches too",
+            setup_sql=(
+                "CREATE SCHEMA shop.sales",
+                "CREATE TABLE shop.sales.orders AS SELECT 1 AS order_id",
+                "CREATE VIEW shop.sales.old_orders AS SELECT * FROM shop.sales.orders",
+            ),
+            database="shop",
+            schema="sales",
+            name="old_orders",
+            sql='SELECT * FROM "shop"."sales"."orders"',
+            expected_match=True,
+        ),
+        QualifiedViewDefinitionTestCase(
+            description="a view in the default database matches with no database given",
+            setup_sql=(
+                "CREATE TABLE memory.main.orders AS SELECT 1 AS order_id",
+                "CREATE VIEW memory.main.old_orders AS SELECT * FROM memory.main.orders",
+            ),
+            database=None,
+            schema="main",
+            name="old_orders",
+            sql="SELECT * FROM memory.main.orders",
+            expected_match=True,
+        ),
+        QualifiedViewDefinitionTestCase(
+            description="a three-part SELECT of another relation still differs",
+            setup_sql=(
+                "CREATE SCHEMA shop.sales",
+                "CREATE TABLE shop.sales.orders AS SELECT 1 AS order_id",
+                "CREATE TABLE shop.sales.customers AS SELECT 1 AS customer_id",
+                "CREATE VIEW shop.sales.old_orders AS SELECT * FROM shop.sales.orders",
+            ),
+            database="shop",
+            schema="sales",
+            name="old_orders",
+            sql="SELECT * FROM shop.sales.customers",
+            expected_match=False,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_database_qualified_view_when_comparing_definition_then_catalog_prefix_is_ignored(
+    test_case: QualifiedViewDefinitionTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+    tmp_path: Path,
+) -> None:
+    connection.execute(f"ATTACH '{tmp_path / 'shop.duckdb'}' AS shop")
+    statement: str
+    for statement in test_case.setup_sql:
+        connection.execute(statement)
+
+    matches: bool = adapter.view_definition_matches(
+        connection=connection,
+        database=test_case.database,
+        schema=test_case.schema,
+        name=test_case.name,
+        sql=test_case.sql,
+    )
+
+    assert matches is test_case.expected_match
