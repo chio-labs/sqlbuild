@@ -1652,10 +1652,6 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        if self._is_view(connection=connection, relation=origin):
-            raise ViewRenameRefusedError(
-                message=f"DuckDB cannot rename the view {origin} as a table"
-            )
         statements: tuple[str, ...] = self.render_rename(origin=origin, destination=destination)
         statement_recorder.record_many(statements)
         stmt: str

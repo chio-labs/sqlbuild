@@ -600,6 +600,8 @@ class FullRefreshRelations:
 
     target_name: str
     target_qualified: str
+    database: str | None
+    schema: str | None
     rebuild_name: str
     rebuild_qualified: str
     previous_name: str

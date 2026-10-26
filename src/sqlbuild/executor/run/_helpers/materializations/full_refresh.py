@@ -7,9 +7,9 @@ from typing import Any
 
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.contract.exceptions import ViewRenameRefusedError
-from sqlbuild.adapter.contract.types import BuiltinAdapter
+from sqlbuild.adapter.contract.types import BuiltinAdapter, RelationType
 from sqlbuild.adapter.relations.main.cached_relation_exists import cached_relation_exists
+from sqlbuild.adapter.relations.main.cached_relation_type import cached_relation_type
 from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
     resolve_qualified_name_parts,
 )
@@ -23,6 +23,9 @@ from sqlbuild.runtime.observability.main.canonicalize_operation_adapter import (
 )
 
 _PREVIOUS_PREFIX: str = "__sqb_prev__"
+_TABLE_RENAME_MOVES_VIEWS: frozenset[str] = frozenset(
+    {BuiltinAdapter.DUCKDB, BuiltinAdapter.MOTHERDUCK}
+)
 _REBUILD_PREFIX: str = "__sqb_rebuild__"
 
 
@@ -51,6 +54,8 @@ def resolve_full_refresh_relations(
         target_qualified=_qualified(
             adapter=adapter, database=database, schema=schema, name=target_name
         ),
+        database=database,
+        schema=schema,
         rebuild_name=rebuild_name,
         rebuild_qualified=_qualified(
             adapter=adapter, database=database, schema=schema, name=rebuild_name
@@ -108,7 +113,18 @@ def promote_full_refresh_rebuild(
                     if_exists=True,
                     statement_recorder=statement_recorder,
                 )
-            try:
+            if (
+                target_exists
+                and adapter.adapter_name in _TABLE_RENAME_MOVES_VIEWS
+                and _live_view(adapter=adapter, connection=connection, relations=relations)
+            ):
+                _replace_live_view(
+                    adapter=adapter,
+                    connection=connection,
+                    relations=relations,
+                    statement_recorder=statement_recorder,
+                )
+            else:
                 promote_staged_relation(
                     adapter=adapter,
                     connection=connection,
@@ -118,15 +134,23 @@ def promote_full_refresh_rebuild(
                     target_exists=target_exists,
                     statement_recorder=statement_recorder,
                 )
-            except ViewRenameRefusedError:
-                _replace_live_view(
-                    adapter=adapter,
-                    connection=connection,
-                    relations=relations,
-                    statement_recorder=statement_recorder,
-                )
             _ = guard.rebind()
         lifecycle.completed(metadata={"changed_count": 1})
+
+
+def _live_view(*, adapter: BaseAdapter, connection: Any, relations: FullRefreshRelations) -> bool:
+    """Whether the live relation is a view, which table renames must not move aside."""
+
+    return (
+        cached_relation_type(
+            adapter=adapter,
+            connection=connection,
+            database=relations.database,
+            schema=relations.schema,
+            name=relations.target_name,
+        )
+        == RelationType.VIEW
+    )
 
 
 def _replace_live_view(
