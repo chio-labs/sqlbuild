@@ -352,3 +352,12 @@ class CapturedVariantTextScenarioTestCase:
     expected_payload_json: str
     expected_returncode: int
     expected_stdout_fragment: str
+
+
+@dataclass(frozen=True)
+class CapturedLambdaScenarioTestCase:
+    """A Snowflake-captured scenario whose model uses an arrow lambda, replayed in DuckDB."""
+
+    description: str
+    scenario_name: str
+    expected_stdout_fragment: str
