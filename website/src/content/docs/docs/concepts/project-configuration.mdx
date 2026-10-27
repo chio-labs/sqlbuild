@@ -112,10 +112,9 @@ schema = "DEV_ALICE"
 ```
 
 When the project defines exactly one named connection, across `sqlbuild_project.toml` and
-`sqlbuild_local.toml`, a target that does not set `connection` uses it. This default does not
-apply when either file has a legacy top-level `[connection]` block or the target sets an inline
-`[targets.<name>.connection]` block. With several named connections, every target must choose
-one; SQLBuild rejects a target without `connection` while loading configuration.
+`sqlbuild_local.toml`, a target that doesn't set `connection` uses it. With several named
+connections, every target must choose one; SQLBuild rejects a target without `connection` while
+loading configuration.
 
 ```toml
 [connections.local]
@@ -126,8 +125,7 @@ schema = "dev"    # uses connections.local, the only named connection
 ```
 
 A command that needs the warehouse, such as `build`, `plan`, `query`, `diff`, or `debug`, fails
-with `D001` before connecting when no connection is configured at all: no named connection, no
-legacy `[connection]` block, and no inline target connection. Commands and modes that do not
+with `D001` before connecting when no connection is configured. Commands and modes that don't
 connect, such as `compile`, `format`, `lineage`, `scope`, `rename`, `mv`, `test --inspect`, and
 `scenario test --local`, keep working without one.
 SQLBuild never falls back to an implicit in-memory DuckDB database; to use one, set it
@@ -143,10 +141,6 @@ it does not satisfy the mandatory namespace strategy for a named target. Put the
 authoritative database and schema on `[targets.<name>]`. SQLBuild validates connection
 references while loading configuration, without opening a warehouse connection, and reports
 an unknown `targets.<name>.connection` name as an offline configuration error.
-
-For migration only, SQLBuild still maps legacy `[connection]` to an implicit connection and
-legacy `[targets.<name>.connection]` blocks to target-specific implicit connections. These
-forms are compatibility syntax, not the canonical format for new or updated projects.
 
 ## Targets
 
@@ -207,9 +201,8 @@ The active target is determined by (in order of precedence):
 1. `--target` on the command line (highest priority)
 2. `sqlbuild_local.toml` `target` field
 3. `default_target` in `sqlbuild_project.toml`
-4. No target (models build to the default schema). Named connections are chosen through
-   targets, so warehouse commands fail with `D001` unless a target is selected or a legacy
-   top-level `[connection]` block exists.
+4. No target. Named connections are chosen through targets, so warehouse commands fail with
+   `D001` unless a target is selected.
 
 A typical developer keeps shared target definitions in `sqlbuild_project.toml` and selects
 their normal target once in the optional local file:
@@ -267,7 +260,7 @@ default warehouse for each command group, so `sqb build` runs on a large warehou
 ```toml
 [connections.warehouse]
 account = "my_org-my_account"
-warehouse = "ANALYTICS_WH"            # fallback for every command, as before
+warehouse = "ANALYTICS_WH"            # fallback for every command
 
 [targets.dev]
 connection = "warehouse"
@@ -286,7 +279,7 @@ Each command connects with the first warehouse set in this order:
 3. The connection's `warehouse`
 4. The Snowflake user's default warehouse
 
-Both groups are optional. A target without `warehouses` behaves exactly as before. A group
+Both groups are optional; a target without `warehouses` uses the connection's `warehouse`. A group
 warehouse takes precedence over the connection `warehouse` in every file. In particular, a
 shared group overrides a connection `warehouse` you set in `sqlbuild_local.toml`; to change a
 group locally, set the group itself, or pass `--warehouse` for one invocation. Group values
@@ -394,8 +387,8 @@ Automated tools must request approval before changing this policy.
 """
 ```
 
-All fields are optional. A target without an `execution_limits` section retains unlimited existing
-behavior, so production or orchestrated targets do not need placeholder values.
+All fields are optional. A target without an `execution_limits` section has no limits, so
+production or orchestrated targets need no placeholder values.
 
 #### Model limit
 
@@ -418,31 +411,20 @@ Every built-in adapter enforces the limit:
 | Adapter | Warehouse statement limit | Cancellation at the deadline | Longest accepted duration |
 |---------|---------------------------|------------------------------|---------------------------|
 | Snowflake | `STATEMENT_TIMEOUT_IN_SECONDS` per statement | Driver cancel request for the running query | 7 days |
-| DuckDB, MotherDuck | none | Connection interrupt | about 24 days |
-| PostgreSQL | `SET LOCAL statement_timeout` inside transactions | Driver cancel (`cancel_safe`) | about 24 days |
-| BigQuery | Job timeout (`job_timeout_ms`) on each query job | `jobs.cancel` (asynchronous) | about 24 days |
-| Databricks | `STATEMENT_TIMEOUT` session setting, capped at 48 hours | Cursor cancel (asynchronous) | about 24 days |
-| SQL Server | none | Driver cancel | about 24 days |
-| SQLite | none | Connection interrupt | about 24 days |
+| DuckDB, MotherDuck | None | Connection interrupt | About 24 days |
+| PostgreSQL | `SET LOCAL statement_timeout` inside transactions; statements outside a transaction rely on cancellation | Driver cancel (`cancel_safe`) | About 24 days |
+| BigQuery | Job timeout (`job_timeout_ms`) on each query job | `jobs.cancel`; reported as requested, not confirmed | About 24 days |
+| Databricks | `STATEMENT_TIMEOUT` session setting, capped at 48 hours | Cursor cancel; reported as requested, not confirmed | About 24 days |
+| SQL Server | None; the driver's query timeout is process-wide | Driver cancel | About 24 days |
+| SQLite | None | Connection interrupt | About 24 days |
 
-BigQuery and Databricks stop cancelled work asynchronously, so SQLBuild reports their cancellation
-as requested but unconfirmed. SQL Server has no per-statement limit; the driver's query timeout is
-process-wide, so SQLBuild relies on cancelling the running statement instead. A project adapter that
-cannot cancel a running statement is rejected for `max_duration` rather than presenting a limit that
-may leave warehouse work running. Under a per-item timeout, such an adapter's items stop before their
-next statement and report the cancellation as not supported.
+A project adapter that can't cancel a running statement is rejected for `max_duration`, rather than
+showing a limit that may leave warehouse work running. Under a per-item timeout, its items stop
+before their next statement and report the cancellation as not supported.
 
-PostgreSQL never sets `statement_timeout` for the whole session, so a limit cannot leak to another
-client through a transaction-mode connection pooler; statements outside a transaction are bounded by
-cancellation alone.
-
-A duration failure may occur after earlier models have completed. Its error therefore distinguishes
-the timeout from a pre-execution model-limit failure and states that warehouse changes may already
-have occurred.
-
-Upgrade note: earlier releases accepted `max_duration` only on Snowflake and rejected it on other
-adapters. It is now accepted on every built-in adapter, so a target that sets it for a non-Snowflake
-warehouse is enforced instead of failing at startup.
+A duration failure may come after earlier models completed. Its error therefore says it is a
+timeout, unlike a model-limit failure before execution, and that warehouse changes may already
+have happened.
 
 #### Per-item time limits
 
@@ -469,9 +451,8 @@ connection before giving it to the next item and replaces it if it is no longer 
 #### Unit test and scenario timeouts
 
 `test_timeout` and `scenario_timeout` set the per-test and per-scenario time limit on this target,
-replacing `[settings] test_timeout` and `[settings] scenario_timeout`. They follow the
-[timeout precedence](#unit-test-and-scenario-limits) described under Settings and accept a positive
-fixed duration or `"disabled"`.
+replacing `[settings] test_timeout` and `[settings] scenario_timeout`. Each takes a positive fixed
+duration or `"disabled"`. See [Unit test and scenario limits](#unit-test-and-scenario-limits).
 
 #### Custom remediation
 
@@ -679,27 +660,18 @@ delta_compile = true
 
 ### Unit test and scenario limits
 
-A SQL unit test runs the real SQL of every unmocked model between its mocks and the model under
-test as one warehouse statement. `unit_test_max_real_models` stops that statement from silently
-growing into a whole-chain integration query: a test that executes more real models fails
-compilation and names every real model, the dependency path that pulls it in, and the inputs to
-mock. See [Testing](/docs/concepts/testing#cost-guards) for an example.
+| Setting | Limits | Details |
+|---------|--------|---------|
+| `unit_test_max_real_models` | Real (unmocked) models one SQL unit test may run; a larger test fails compilation and names each model, the path that pulls it in, and the inputs to mock | [Real-model limit](/docs/concepts/testing#real-model-limit) |
+| `test_timeout` | Each unit test's warehouse time, from its first statement | [Time limits](/docs/concepts/testing#time-limits), including precedence |
+| `scenario_timeout` | Each scenario's warehouse time; no default | Below |
 
-`test_timeout` bounds each test's warehouse work, measured from the test's first statement. The
-limit that applies to a test is, from highest precedence:
-
-1. `--test-timeout` on `sqb test` or `sqb build`
-2. `TEST(timeout "...")` in the test file
-3. `[targets.<target>.execution_limits] test_timeout`
-4. `[settings] test_timeout`, then the 30-second default
-
-`scenario_timeout` works the same way with `--scenario-timeout`, `SCENARIO(timeout "...")`,
-`[targets.<target>.execution_limits] scenario_timeout` and `[settings] scenario_timeout`; it has
-no default. At the limit, SQLBuild cancels the item's running statement, reports the item as
-`TIMEOUT` with the elapsed time, the limit, where the limit was set, the cancellation outcome and
-the query IDs it saw, and continues with independent items. Every value accepts a positive fixed
-duration such as `"45s"` or `"10m"`, or `"disabled"`. `sqlbuild_local.toml` accepts all three
-settings.
+The scenario limit that applies is the first one set of `--scenario-timeout`,
+`SCENARIO(timeout "...")`, `[targets.<target>.execution_limits] scenario_timeout`, and
+`[settings] scenario_timeout`. At the limit, SQLBuild cancels the scenario's running statement,
+reports it as `TIMEOUT`, and continues with independent items, as for
+[unit tests](/docs/concepts/testing#time-limits). Every value is a positive fixed duration such as
+`"45s"` or `"10m"`, or `"disabled"`. `sqlbuild_local.toml` accepts all three settings.
 
 ### Table promotion mode
 
@@ -727,7 +699,7 @@ codes begin with `SQBR`; repository-defined codes begin with `XSQBR`. See
 | `[[rules.rule_ignores]]` | Rules turned off for `paths` or `selectors`, with a `reason`. |
 
 Rule exceptions live only in this file. Inline `-- sqb: ignore` comments are `SQBRSQL000` errors
-that print the entry to add, and the former `allow_exceptions` setting is a configuration error.
+that print the entry to add.
 
 ## Scopes
 
@@ -828,7 +800,7 @@ old_name_views = "30d"
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `old_name_views` | `"30d"` | How long a renamed model's old name keeps working through a [compatibility view](/docs/concepts/models/migrations#old-names) before janitor drops it. `false` keeps the old relation in place instead, as before. A model's `old_name_view` header overrides it. |
+| `old_name_views` | `"30d"` | How long a renamed model's old name keeps working through a [compatibility view](/docs/concepts/models/migrations#old-names) before janitor drops it. `false` keeps the old relation in place instead. A model's `old_name_view` header overrides it. |
 
 ## Scenario
 
@@ -836,7 +808,7 @@ Configuration for scenario run isolation, snapshot capture safety limits, and lo
 
 ```toml
 [scenario]
-run_namespace = "orders-job-123" # Optional; omit to preserve existing scenario relation names
+run_namespace = "orders-job-123" # Optional
 
 [scenario.snapshot_limits]
 max_rows_per_relation = 10000

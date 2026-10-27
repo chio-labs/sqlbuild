@@ -3,13 +3,9 @@ title: "Testing"
 description: "SQL unit tests and multi-model tests with macro support, assertions, and model chaining."
 ---
 
-SQLBuild supports SQL-native unit tests that validate model logic by comparing actual query results against expected values. Tests can chain across multiple models (multi-model tests), use macros for reusable mock data, and include zero-row assertions.
-
-For end-to-end testing across many models with physical warehouse relations, see [Scenarios](/docs/concepts/scenarios).
-
-## How tests work
-
-A test file defines mock inputs and expected outputs using CTEs. SQLBuild substitutes the mock data into the real model SQL, executes it, and compares the result against the expected CTE using `EXCEPT` queries. Zero mismatched rows means the test passes.
+A unit test checks a model's logic on rows you write. You mock the model's inputs with CTEs,
+SQLBuild runs the model's real SQL over them, and the test passes when the output matches the rows
+you expect:
 
 ```sql
 -- tests/unit/test_stg_orders.sql
@@ -36,105 +32,133 @@ __expected__stg_orders AS (
 )
 ```
 
-The test:
-1. Mocks the `raw__orders` source with the `__source__raw__orders` CTE
-2. Runs the real `stg_orders` model SQL with the mock substituted in
-3. Compares the output against `__expected__stg_orders`
-4. Passes if row counts match and there are zero mismatched rows
+Tests can chain several models, mock models, seeds, macros and table functions, assert properties
+that must hold for every row, and test macros, UDFs and table functions directly. For end-to-end
+tests over physical warehouse relations, see [Scenarios](/docs/concepts/scenarios).
 
-When an expected-output comparison fails, SQLBuild reports the unexpected and missing row counts
-and best-effort samples from each direction. Samples are deliberately bounded to three rows, 12
-columns, and 120 characters per value, and pass through diagnostic redaction. They are also present
-as structured `unexpected_samples` and `missing_samples` in JSON output. Sampling failure never
-replaces the known test failure.
+## How tests work
 
-When exactly one row exists in each difference direction and the bounded samples have the same
-columns, SQLBuild also aligns the rows and reports only changed columns with their redacted actual
-and expected values. It does not guess an alignment when several rows differ or sampling is
-incomplete.
+The test above:
 
-Before opening a warehouse connection, SQLBuild statically checks fixture shapes when SQL analysis
-is enabled. Missing columns are reported together with the test path, fixture resource, and models
-that read them. Statically provable collection-versus-scalar type conflicts identify the affected
-column and suggest explicit `CAST`, `ARRAY_CONSTRUCT`, or `PARSE_JSON` expressions. SQLBuild never
-invents missing values.
+1. mocks the `raw__orders` source with the `__source__raw__orders` CTE;
+2. runs the real `stg_orders` SQL with the mock in place of the source;
+3. compares the output with `__expected__stg_orders` in both directions;
+4. passes when the row counts match and no row differs.
 
-Every test file starts with a `TEST()` header. All of its fields are optional: `TEST();` is a
-complete header, and a test without a `name` is named after its file. Add fields to name the test,
-set a cursor window, declare parameters, or turn off SQL analysis.
+### The `TEST` header
 
-A test ends after its last CTE. The trailing `SELECT 1` that earlier releases required is still
-accepted but no longer needed, so this file is equivalent to the first example:
+Every test starts with a `TEST()` header. All of its fields are optional: `TEST();` is a complete
+header, and a test without a `name` is named after its file. Fields name the test, set its
+[mode](#test-modes) or [cursor window](#cursor-windows-in-tests), declare
+[parameters](#native-independent-cases), set a [time limit](#time-limits), or
+[skip SQL analysis](#skipping-sql-analysis).
+
+A test ends after its last CTE. A trailing `SELECT 1` is accepted; nothing else may follow the last
+CTE.
+
+### Failure output
+
+When the output doesn't match, SQLBuild reports how many rows were unexpected and how many were
+missing, with samples of each. Samples are limited to three rows, 12 columns and 120 characters per
+value, and are redacted like other diagnostics. JSON output has them as `unexpected_samples` and
+`missing_samples`. If sampling fails, the test still fails with its counts.
+
+When exactly one row differs in each direction and both samples have the same columns, SQLBuild
+lines the two rows up and shows only the changed columns, with their actual and expected values.
+With several differing rows it doesn't guess which rows belong together.
+
+`target/run/tests/` keeps the complete comparison query of each test, which you can run by hand.
+
+### Fixture checks
+
+When SQL analysis is on, SQLBuild checks fixture shapes before it connects to the warehouse:
+
+- Missing columns are reported together, with the test path, the fixture and the models that read
+  them.
+- A collection value where a scalar is expected, or the reverse, names the column and suggests an
+  explicit `CAST`, `ARRAY_CONSTRUCT` or `PARSE_JSON`.
+
+SQLBuild never invents missing values, except the typed nulls described in
+[Fixture columns](#fixture-columns).
+
+## Test files
+
+Put unit tests under `tests/unit/`. SQLBuild finds every `.sql` file there, recursively.
+
+```
+tests/
+  unit/
+    test_stg_orders.sql              # model test
+    test_fact_orders.sql              # model test with assertion
+    test_daily_revenue_chain.sql      # multi-model test
+    test_line_total_cents_macro.sql   # macro test
+    test_is_completed_order_udf.sql   # UDF test
+    test_customer_orders_table_fn.sql # table function test
+  scenarios/
+    ...
+```
+
+### Multiple tests per file
+
+A file can hold several `TEST()` blocks. Each block in such a file needs its own `name`; a file with
+one test can leave it out.
 
 ```sql
-TEST();
+TEST (name "completed_orders_only");
 
 WITH
 __source__raw__orders AS (
-  SELECT 1 AS id, 100 AS customer_id, 2 AS waffle_type_id, 3 AS quantity,
-         '2026-04-01 10:00:00' AS ordered_at, 'completed' AS status
+  SELECT 1 AS id, 100 AS customer_id, 'completed' AS status
 ),
 __expected__stg_orders AS (
-  SELECT 1 AS order_id, 100 AS customer_id, 2 AS waffle_type_id, 3 AS quantity,
-         '2026-04-01 10:00:00' AS ordered_at, 'completed' AS status
+  SELECT 1 AS order_id, 100 AS customer_id, 'completed' AS status
 )
-SELECT 1
+
+TEST (name "cancelled_orders_excluded");
+
+WITH
+__source__raw__orders AS (
+  SELECT 1 AS id, 100 AS customer_id, 'cancelled' AS status
+),
+__expected__stg_orders AS (
+  SELECT 1 AS order_id, 100 AS customer_id, 'cancelled' AS status
+)
 ```
 
-Nothing other than `SELECT 1` may follow the last CTE.
+Test names are unique across the project: a test can't share a name with another test, a scenario,
+a model, a source, a seed, a function or a Python node. Name a test after the behaviour it checks,
+such as `orders_status_rules`, rather than after the model. The cases of one
+[parameterized test](#native-independent-cases) share its name.
 
 ## CTE conventions
 
+A CTE's prefix says what it does:
+
 | Prefix | Purpose |
 |--------|---------|
-| `__source__<name>` | Mock a source. Replaces `__source("<name>")` in the model SQL. |
-| `__ref__<name>` | Mock a model. Replaces `__ref("<name>")` in the model SQL. |
-| `__seed__<name>` | Mock a seed. Replaces `__seed("<name>")` in the model SQL. |
-| `__table_fn__<name>` | Mock a table function in model mode. Replaces the complete `__table_fn("<name>")(...)` invocation with the fixture relation. |
-| `__expected__<name>` | Define expected output for a model. SQLBuild resolves the model's real SQL and compares both ways on the listed columns. |
-| `__assert__<name>` | Zero-row assertion. Passes if the query returns no rows; fails with the returned rows as diagnostics. |
-| `__macro__<name>` | Mock a macro. Replaces every `@<name>(...)` call with the mock value. |
-| any other name | Helper CTE, shared by the test's mocks, helpers, `__expected__` and `__assert__` CTEs. Models never see it, so it can share a name with a model's CTE or a table. It is emitted as `__helper__<name>`, so `__helper__` names are reserved. |
+| `__source__<name>` | Mock a source. Replaces `__source("<name>")` in the model SQL |
+| `__ref__<name>` | Mock a model. Replaces `__ref("<name>")` in the model SQL |
+| `__seed__<name>` | Mock a seed. Replaces `__seed("<name>")` in the model SQL |
+| `__table_fn__<name>` | Mock a table function. Replaces the whole `__table_fn("<name>")(...)` call |
+| `__expected__<name>` | Expected output of a model, compared in both directions on the listed columns |
+| `__assert__<name>` | Assertion. Passes when the query returns no rows; returned rows are reported |
+| `__macro__<name>` | Mock a macro. Replaces every `@<name>(...)` call with the mock value |
+| any other name | Helper CTE, shared by the test's mocks, helpers, `__expected__` and `__assert__` CTEs |
 
-Any CTE without one of these prefixes is treated as a helper CTE, available to mock, helper,
-`__expected__`, and `__assert__` SQL in the test. Models never see helpers: a model's own CTEs and
-the tables it reads keep their meaning even when a helper shares their name. A CTE inside another
-test CTE must not redefine a helper's name, and a model CTE must not use a name SQLBuild generates
-for the test query, such as `__ref__orders` or `__helper__expected_rows`.
-
-SQLBuild splits test files into CTEs and finds `__ref`, `__source`, `__seed`, `__dbt_ref`,
-`__udf` and `__table_fn` calls outside comments and quoted text, in tests, scenarios, models,
-functions, audits and hooks alike. Quoted text and comments follow the project adapter's rules:
-backslash escapes on Snowflake, BigQuery and Databricks, `E'...'` strings on DuckDB and Postgres,
-nested block comments on DuckDB, Postgres, Databricks and SQL Server, `#` line comments on BigQuery,
-and `//` line comments on Snowflake.
-
-An `__expected__<model>` CTE compares only the columns it lists, matched by name, so column order
-does not matter and unlisted model columns are ignored. Row counts are always compared. Listing a
-column the model does not output is a test error.
+An `__expected__<model>` CTE compares only the columns it lists, matched by name. Column order
+doesn't matter and unlisted model columns are ignored, but row counts are always compared. Listing
+a column the model doesn't output is an error.
 [Scenario](/docs/concepts/scenarios#scenario-format) expected output is compared the same way.
 
-SQLBuild reads test CTEs strictly and rejects other forms with a compile error that names the CTE:
+### Helper CTEs
 
-- A CTE name is an unquoted identifier of ASCII letters, digits and underscores that starts with a
-  letter or underscore. Quoted names such as `"recent orders"` or `` `recent orders` ``, and names
-  with `$` or non-ASCII characters, are errors that point at the name.
-- A CTE body follows `AS` directly. Materialization hints such as `AS MATERIALIZED (...)` or
-  `AS NOT MATERIALIZED (...)` are not supported in test CTEs and are errors that point at the hint.
-- `WITH`, `AS`, `SELECT` and the other keywords match ASCII letters in any case.
-- Every column of an expected CTE (`__expected__<model>`, `__macro_expected__`, `__udf_expected__`
-  or `__table_fn_expected__`) needs a name. A bare or qualified column reference such as `order_id`
-  or `o.order_id` names itself; any other expression, including `amount IS NULL` or
-  `CASE ... END`, needs an alias (`<expr> AS <name>`). An alias without `AS`, such as
-  `1 order_id`, also names the column.
-- An expected CTE is a plain `SELECT`, optionally combined with `UNION`, `INTERSECT` or `EXCEPT`.
-  Branches wrapped in parentheses and a `WITH` inside the CTE are errors; put shared rows in a
-  helper CTE instead. `SELECT *`, `SELECT DISTINCT *` and `t.*` are errors too, except
-  `SELECT * FROM __empty_fixture()` in a contracted `__expected__` CTE.
+Models never see helpers, so a helper can share a name with a model's CTE or a table. Helpers are
+emitted as `__helper__<name>`, so `__helper__` names are reserved. A CTE inside another test CTE
+must not redefine a helper's name, and a model CTE must not use a name SQLBuild generates for the
+test query, such as `__ref__orders` or `__helper__expected_rows`.
 
-Helper CTEs can read other helpers and mocks by CTE name, such as `__ref__stg_orders`. Shared
-expected rows can therefore live in one helper that both an `__expected__` CTE and an assertion
-read:
+Helpers can read other helpers and mocks by CTE name, such as `__ref__stg_orders`. Shared expected
+rows can therefore live in one helper that an `__expected__` CTE and an assertion both read:
 
 ```sql
 TEST();
@@ -156,21 +180,25 @@ __assert__no_unexpected_order_ids AS (
 )
 ```
 
-SQLBuild emits each helper and mock a query needs once, in dependency order, including mocks that
-a helper reaches through another mock.
+SQLBuild emits each helper and mock once, in dependency order, after the mocks and models it reads.
+A helper that no `__expected__` or `__assert__` CTE reaches, directly or through other helpers and
+mocks, is left out of the test query, and its references are neither checked nor run.
 
-`__expected__` and `__assert__` CTEs, and the helpers they read, can call `__ref()`,
-`__source()`, `__seed()` and `__dbt_ref()`. They resolve the same way in every test CTE:
+### References in test CTEs
 
-- A mocked name always means the mock. `__ref("stg_orders")` reads `__ref__stg_orders` when the
-  test defines it, and a mocked model is neither run nor counted as a model the test covers, so
-  `sqb test --select stg_orders` does not select the test because of it.
-- An unmocked `__ref("<model>")` reads the model's real SQL, so the test runs that model and
-  `sqb test --select <model>` selects the test, even when only a helper or expected rows read it.
-- `__source()`, `__seed()` and `__dbt_ref()` must be mocked, for example with
+`__expected__` and `__assert__` CTEs, and the helpers they read, can call `__ref()`, `__source()`,
+`__seed()` and `__dbt_ref()`. They resolve the same way everywhere in a test:
+
+- **A mocked name means the mock.** `__ref("stg_orders")` reads `__ref__stg_orders` when the test
+  defines it. A mocked model isn't run, and `sqb test --select stg_orders` doesn't select the test
+  because of it.
+- **An unmocked `__ref("<model>")` runs the model's real SQL,** and `sqb test --select <model>`
+  selects the test, even when only a helper reads it.
+- **`__source()`, `__seed()` and `__dbt_ref()` must be mocked,** for example with
   `__source__raw__orders AS (SELECT ...)`.
 
-SQLBuild emits a helper after the mocks and models it reads:
+Mocks are defined before the models a test runs, so a mock reads another mock by CTE name, such as
+`FROM __ref__stg_orders`, not through `__ref("stg_orders")`:
 
 ```sql
 TEST();
@@ -187,18 +215,40 @@ __assert__quantities_are_positive AS (
 )
 ```
 
-Only helpers the test reads count: those its `__expected__` and `__assert__` CTEs reach, directly
-or through other helpers and mocks. A helper nothing reads is left out of the test query, and its
-references are neither checked nor run. Compile rejects references the test query cannot resolve
-with `P013`, at the CTE or call that causes it: a `__ref()` to a model that does not exist, an
-unmocked `__source()`, `__seed()` or `__dbt_ref()`, helpers or mocks that read each other in a
-cycle, and a mock or `__table_fn__` fixture the test uses that reads a helper calling a reference. Mocks are defined before the models a test runs, so
-a mock reads other mocks by CTE name, such as `FROM __ref__stg_orders`, rather than through
-`__ref("stg_orders")`.
+Compile rejects references the test query can't resolve with `P013`, at the CTE or call that causes
+it:
+
+- a `__ref()` to a model that doesn't exist;
+- an unmocked `__source()`, `__seed()` or `__dbt_ref()`;
+- helpers or mocks that read each other in a cycle;
+- a mock or `__table_fn__` fixture the test uses that reads a helper calling a reference.
+
+A malformed reference call in a helper or expected CTE, such as `__source("raw", "orders")`, is a
+`P012` error at the call. Reference calls are found outside comments and quoted text, following the
+project adapter's quoting and comment rules.
+
+### CTE syntax
+
+SQLBuild reads test CTEs strictly. Other forms are compile errors that name the CTE:
+
+| Rule | Error example |
+|------|---------------|
+| A CTE name is an unquoted ASCII identifier: letters, digits and underscores, not starting with a digit | `"recent orders"`, `` `recent orders` ``, names with `$` or non-ASCII characters |
+| The CTE body follows `AS` directly | `AS MATERIALIZED (...)`, `AS NOT MATERIALIZED (...)` |
+| Every column of an expected CTE has a name | `amount IS NULL` or `CASE ... END` without an alias |
+| An expected CTE is a plain `SELECT`, optionally combined with `UNION`, `INTERSECT` or `EXCEPT` | Parenthesized branches, a `WITH` inside the CTE |
+| An expected CTE lists its columns | `SELECT *`, `SELECT DISTINCT *`, `t.*` |
+
+Keywords such as `WITH`, `AS` and `SELECT` match in any case. Expected CTEs are
+`__expected__<model>`, `__macro_expected__`, `__udf_expected__` and `__table_fn_expected__`. A
+column reference such as `order_id` or `o.order_id` names itself, and an alias without `AS`, such as
+`1 order_id`, names the column too. For shared rows, use a helper CTE instead of a nested `WITH`.
+The one `SELECT *` allowed is `SELECT * FROM __empty_fixture()` in a contracted `__expected__` CTE.
 
 ## Multi-model tests
 
-Tests can span multiple models in a single file. Mock your sources, define an expected output for the model you care about, and SQLBuild automatically resolves every intermediate model using its real SQL.
+A test can span several models. Mock the sources, give the expected output of the model you care
+about, and SQLBuild runs every model in between from its real SQL:
 
 ```sql
 -- Mock two sources, assert on the final mart.
@@ -220,22 +270,22 @@ __expected__fact_orders AS (
 )
 ```
 
-SQLBuild topologically sorts the expected models, resolves each intermediate model's real SQL with mocks substituted, and chains the outputs forward. Every model between the mocked sources and the expected model is computed automatically.
-
-Inspect that boundary without opening a warehouse connection:
+Inspect what a test will run without connecting to the warehouse:
 
 ```bash
 sqb test --select fact_orders --inspect
 ```
 
-The resolved plan lists mocked sources, refs, seeds, real models in execution order, expected
-models, and any unsatisfied leaf dependencies. A mocked ref is called out explicitly because its
-real model SQL will not execute. Inspection exits non-zero when the plan contains unresolved
-dependency errors.
+The plan lists the mocked sources, refs and seeds, the real models in execution order, the expected
+models, and any unsatisfied leaf dependencies. A mocked ref is called out, because its real SQL
+won't run. Inspection exits non-zero when the plan has unresolved dependencies.
+
+Each real model adds to the cost of the test; see [Cost guards](#cost-guards).
 
 ## Mocking refs and seeds
 
-You can mock models directly with `__ref__<name>` and seeds with `__seed__<name>`, not just sources. This skips the model's real SQL (or the seed's real CSV data) and provides controlled data instead:
+Mock a model with `__ref__<name>` or a seed with `__seed__<name>`. The model's SQL, or the seed's
+CSV data, is then replaced by your rows:
 
 ```sql
 TEST();
@@ -284,28 +334,32 @@ __expected__fact_orders AS (
 )
 ```
 
-You can mix `__source__`, `__ref__`, and `__seed__` mocks in the same test. As long as every leaf dependency is satisfied (either by a source mock, a ref mock, a seed mock, or by being in the expected chain), the test resolves.
+`__source__`, `__ref__` and `__seed__` mocks can be mixed. The test resolves as long as every leaf
+dependency is mocked or is in the expected chain.
 
 ## Fixture columns
 
-A relation fixture can omit a column when the compiled test or scenario closure requires it and
-SQLBuild knows its adapter type, unless the column is explicitly non-nullable. SQLBuild completes
-that test-only fixture column with a typed null such as `CAST(NULL AS VARCHAR)`; it never changes
-model SQL or warehouse defaults. Required columns declared with `nullable false` and columns with
-unknown types must be supplied explicitly. When the relation's complete column set is
-authoritative, misspelled or unknown supplied fixture columns are rejected.
+A fixture can leave out a column the test needs when SQLBuild knows the column's type and the column
+isn't declared `nullable false`. SQLBuild fills it with a typed null, such as
+`CAST(NULL AS VARCHAR)`, in the test only; it never changes model SQL or warehouse defaults.
+Supply these columns yourself:
 
-A direct `NULL AS column_name` projection receives the authoritative relation type in compiled test
-SQL, including expected-output CTEs for contracted models. To represent a contracted upstream with
-no rows, use `SELECT * FROM __empty_fixture()` as the complete body of a `__ref__`, `__source__`, or
-`__seed__` fixture CTE, or a contracted `__expected__` CTE. SQLBuild expands it to the relation's
-full typed schema with a false filter.
+- columns declared `nullable false`;
+- columns whose type is unknown.
+
+When a relation's full column list is known, a misspelled or unknown fixture column is rejected.
+
+A `NULL AS column_name` projection gets the relation's declared type in the compiled test SQL,
+including in expected CTEs for contracted models. To mock a contracted relation with no rows, write
+`SELECT * FROM __empty_fixture()` as the whole body of a `__ref__`, `__source__` or `__seed__`
+fixture, or of a contracted `__expected__` CTE. SQLBuild expands it to the relation's typed columns
+with a false filter.
 
 ## Mocking table functions in model tests
 
-Use `__table_fn__<name>` when the model under test reads a managed table function but the test
-should provide rows directly. SQLBuild replaces the complete invocation, including its argument
-expressions, with the fixture relation. The mocked function is not deployed as a test dependency.
+Use `__table_fn__<name>` when the model under test reads a managed table function and the test
+should supply the rows. SQLBuild replaces the whole call, arguments included, with the fixture. The
+mocked function isn't deployed for the test.
 
 ```sql
 -- models/customer_order_totals.sql reads:
@@ -324,17 +378,13 @@ __expected__customer_order_totals AS (
 )
 ```
 
-The fixture name must match a declared table function. Helper CTEs are available inside the fixture,
-just as they are for source, ref, and seed mocks. A table-function fixture can also be used directly
-inside a zero-row assertion.
-
-This is separate from `TEST (mode table_fn)`, which tests the table function implementation itself.
-Model-mode fixtures isolate a model from that implementation; table-function mode executes and
-compares the real function.
+The fixture name must match a declared table function. Fixtures can read helper CTEs, and an
+assertion can read a table-function fixture directly. To test the table function itself, use a
+[table function test](#table-function-tests).
 
 ## Multiple expected models
 
-A single test can assert on multiple models. SQLBuild resolves and compares each one independently:
+One test can check several models. Each is compared on its own:
 
 ```sql
 TEST();
@@ -361,17 +411,12 @@ __expected__dim_customers AS (
 )
 ```
 
-If the expected models form a chain (e.g. `stg_orders` feeds into `fact_orders` which feeds into `dim_customers`), SQLBuild resolves them in dependency order, using the output of earlier steps as input to later ones.
+When the expected models form a chain, such as `stg_orders` to `fact_orders` to `dim_customers`,
+they run in dependency order, each reading the output of the one before.
 
-When a test defines `__expected__model_name` output, it may also use the public enums and constants
-available to that model. A test that checks several models may use the public enums and constants
-available to each of them. Public names are unique, so those values cannot conflict.
+## Macros, enums and constants in tests
 
-Only explicit expected CTEs create grants. A matching test filename, `__ref__` mock, or nearby model path does not. Model-private declarations and macros are never granted through expected models.
-
-## Macro-powered mocks
-
-Because unit tests are written in SQL, they support macro calls. This lets you write reusable mock generators instead of copy-pasting mock data across test files:
+Test SQL can call macros, so mock data can come from a reusable generator:
 
 ```sql
 TEST();
@@ -389,22 +434,27 @@ __expected__fact_orders AS (
 )
 ```
 
-The `@py.mock_orders()` call expands at compile time to whatever SQL the Python macro function returns.
+`@py.mock_orders()` expands at compile time to the SQL the Python macro returns.
 
-Test SQL uses macros, enums, and constants available from the test file's directory under
-`tests/unit/`. Public enums and constants available to a model are also available when the test
-defines `__expected__model_name` output for that model. Model-private values are not available to
-tests. See [How Visibility Works](/docs/concepts/declaration-scopes/visibility#tests-and-expected-output).
+A test can use:
 
-A macro used only by tests must be private to them. Put it in `_sqlbuild/_macros/` in the tests'
-folder, such as `tests/unit/orders/_sqlbuild/_macros/`, or in the `_sqlbuild/_macros/` of a model
-the tests define `__expected__` output for. The project-wide `macros/` directory rejects a
-test-only macro with `S024`, which names the folder to use, and `tests/unit/_sqlbuild/` is rejected
-with `D013`.
+- the macros, enums and constants visible from its directory under `tests/unit/`;
+- the public enums and constants visible to each model it defines `__expected__` output for.
+
+Only an `__expected__` CTE grants that access. A matching file name, a `__ref__` mock or a nearby
+model path doesn't. Model-private values and macros are never available to tests. See
+[How Visibility Works](/docs/concepts/declaration-scopes/visibility#tests-and-expected-output).
+
+A macro used only by tests must be private to them. Put it in a `_sqlbuild/_macros/` folder among
+the tests, such as `tests/unit/orders/_sqlbuild/_macros/`, or in the `_sqlbuild/_macros/` of a model
+the tests define `__expected__` output for. The project `macros/` directory rejects a test-only
+macro with `S024`, which names the folder to use, and `tests/unit/_sqlbuild/` is rejected with
+`D013`.
 
 ## Macro mocking
 
-When a model uses macros that you want to control in tests (e.g. target-specific logic, dynamic SQL generation), you can override their output with `__macro__<name>` CTEs:
+To control a macro's output in a test, such as target-specific logic or generated SQL, mock it with
+a `__macro__<name>` CTE:
 
 ```sql
 TEST();
@@ -421,23 +471,20 @@ __expected__stg_orders AS (
 )
 ```
 
-When a `__macro__` mock is defined, every call to `@py.country_filter(...)` in any model SQL resolved by the test is replaced with the mock value (`country_code = 'US'`). The macro's actual Python function is not called, and the arguments are ignored.
+Every `@py.country_filter(...)` call in the model SQL the test runs is replaced with
+`country_code = 'US'`. The macro isn't called, and its arguments are ignored.
 
-Mocks of [SQL macros](/docs/concepts/macros/sql-macros) work the same way: `__macro__net_amount`
-replaces every `@sql.net_amount(...)` call written in the model SQL with the mock value. A call
-inside another SQL macro's body is expanded as usual. Macro names are unique across both kinds, so
-the mock name never needs the `sql.` or `py.` prefix.
-
-The mock value must be a single `SELECT` with one string literal, which may be named with `AS`, such as `SELECT 'country_code = ''US''' AS country_filter`. Use doubled single quotes for quotes within the value (standard SQL escaping).
-
-This is useful for:
-- Testing models that use target-specific macros without depending on target config
-- Controlling dynamic SQL generation to produce predictable test inputs
-- Isolating model logic from macro implementation details
+- The mock is a single `SELECT` of one string literal, optionally named with `AS`. Escape quotes by
+  doubling them.
+- [SQL macros](/docs/concepts/macros/sql-macros) are mocked the same way: `__macro__net_amount`
+  replaces each `@sql.net_amount(...)` call written in model SQL. A call inside another SQL macro's
+  body is expanded as usual.
+- Macro names are unique across both kinds, so the mock name has no `sql.` or `py.` prefix.
 
 ## Assertions
 
-Unit tests can include `__assert__<name>` CTEs for property-based checks. An assertion passes if the query returns zero rows - any returned rows are failing examples.
+An `__assert__<name>` CTE checks a property. It passes when it returns no rows; each returned row is
+a failing example.
 
 ```sql
 TEST();
@@ -452,48 +499,50 @@ __assert__order_ids_are_not_null AS (
 )
 ```
 
-An assertion must read a model the test runs. A mocked name always means the mock, so a test whose
-`__expected__` and `__assert__` CTEs read only mocks, such as `__ref("stg_orders")` in a test that
-also defines `__ref__stg_orders`, has no model to run against. Compile rejects it with `P013`
-instead of skipping it. Mock the model's inputs instead, such as `__source__raw__orders` above, and
-keep `__ref("stg_orders")` in the assertion, or remove the test. Earlier SQLBuild versions ran the
-model's real SQL for an assertion calling `__ref()` on a mocked model, so such tests used to run.
+Use assertions when the natural check is "no row breaks this rule", such as duplicates, negative
+values or conditional business rules. They can be mixed with `__expected__` CTEs or used alone.
+`sqb test` and `sqb build` show each assertion as a nested check row.
 
-Assertions can be mixed with `__expected__` CTEs in the same test, or used on their own. They are useful when the natural check is "no rows should violate this rule" rather than "the output should exactly equal these rows" - for example, duplicate checks, negative-value constraints, or conditional business rules.
-
-During `sqb test` and `sqb build`, assertion results appear as nested check rows alongside expected comparisons.
+An assertion must read a model the test runs. A test whose checks read only mocks, such as
+`__ref("stg_orders")` in a test that also defines `__ref__stg_orders`, has nothing to run, and
+compile rejects it with `P013`. Mock the model's inputs instead, as above, or remove the test.
 
 ## Cursor windows in tests
 
-Models that call `__cursor_start()` and `__cursor_end()` run in a test over one wide window, never
-the model's configured `cursor_start` and `cursor_end`: `1900-01-01 00:00:00` to
-`2999-12-31 00:00:00` for timestamp cursors, and `-1000000000000000` to `1000000000000000` for
-integer cursors. The bounds render as the same typed literals as a real run, so date arithmetic
-such as `DATEADD('day', -7, __cursor_start()::DATE)` keeps working and mocked rows are not filtered
-out. Microbatch models run once over the whole window, not once per batch.
+Models that call `__cursor_start()` and `__cursor_end()` run in a test over one wide window,
+never the model's own `cursor_start` and `cursor_end`:
 
-To test windowing itself, declare the window in the header. Either key is optional. As in model
-configuration, `cursor_start` is inclusive and `cursor_end` is exclusive:
+| Cursor type | Window |
+|-------------|--------|
+| Timestamp | `1900-01-01 00:00:00` to `2999-12-31 00:00:00` |
+| Integer | `-1000000000000000` to `1000000000000000` |
+
+The bounds render as the same typed literals as in a real run, so date arithmetic such as
+`DATEADD('day', -7, __cursor_start()::DATE)` works and mocked rows aren't filtered out.
+Microbatch models run once over the whole window.
+
+To test windowing itself, set the window in the header. Either key is optional; `cursor_start` is
+inclusive and `cursor_end` exclusive:
 
 ```sql
 TEST (name "daily_orders_skips_rows_outside_window", cursor_start "2026-02-01", cursor_end "2026-02-03");
 ```
 
-The window applies to every model the test evaluates that uses the intrinsics. Values are checked
-against each model's `cursor_type` and `cursor_grain` at compile time. Invalid, misaligned, or
-inverted bounds, and a window on a test whose models do not use the intrinsics, are compile errors.
-The compiled test SQL shows the rendered window.
+The window applies to every model in the test that uses the cursor functions, and is checked
+against each model's `cursor_type` and `cursor_grain`. Invalid, misaligned or inverted bounds, and a
+window on a test whose models don't use the cursor functions, are compile errors. The compiled test
+SQL shows the rendered window.
 
 ## Empty-input tests
 
-Do not write a test whose mocks are all empty (`WHERE FALSE`, `WHERE 1 = 0`, `LIMIT 0`, or
-`__EMPTY_FIXTURE()`) and whose only checks are an empty `__expected__` CTE or a bare
-`SELECT ... FROM __ref("<model>")` assertion. It cannot fail for a model whose rows come from its
-inputs. Rule `SQBRTEST203` rejects it, and `SQBRTEST202` does not count it toward
-`min_tests_per_model`. Mock representative rows and assert concrete output instead.
+A test whose mocks are all empty (`WHERE FALSE`, `WHERE 1 = 0`, `LIMIT 0` or `__EMPTY_FIXTURE()`)
+and whose only checks are an empty `__expected__` CTE or a bare `SELECT ... FROM __ref("<model>")`
+assertion can't fail for a model whose rows come from its inputs. Rule `SQBRTEST203` rejects it,
+and `SQBRTEST202` doesn't count it toward `min_tests_per_model`. Mock representative rows and
+assert concrete output instead.
 
-An empty-input test is legitimate when it asserts concrete output, for example a global aggregate
-that must return one zero-valued summary row:
+An empty-input test is fine when it asserts concrete output, such as a global aggregate that must
+return one zero row:
 
 ```sql
 TEST (name "order_summary__empty_inputs_return_zero_row");
@@ -507,22 +556,33 @@ __expected__order_summary AS (
 )
 ```
 
-Assertions that filter for invalid rows, compare against expected rows, aggregate, or limit their
-result are not treated as bare existence checks. Reviewed exceptions are listed by test name in the
-project file; see [Rule options](/docs/concepts/rules/configuration-and-selection#rule-options).
+Assertions that filter for invalid rows, compare with expected rows, aggregate or limit their result
+are not bare existence checks. List reviewed exceptions by test name in the project file; see
+[Rule options](/docs/concepts/rules/configuration-and-selection#rule-options).
 
 ## Test modes
 
-Model tests mock sources and refs and compare model outputs. Three more modes test reusable logic
-directly, without a model chain. SQLBuild infers the mode from the test's CTEs: a test that defines
-`__macro_actual__` is a macro test, `__udf_actual__` a UDF test, `__table_fn_actual__` a table
-function test, and any other test a model test, so the header's `mode` field is optional.
-`TEST (mode ...)` states the mode explicitly; an explicit mode that contradicts the CTEs is a
-compile error.
+Model tests mock inputs and compare model output. Three more modes test reusable logic directly,
+without a model chain:
+
+| Mode | Actual CTE | Expected CTE | Also allowed |
+|------|-----------|--------------|--------------|
+| `model` | none: the model chain | `__expected__<model>` | `__source__`, `__ref__`, `__seed__`, `__assert__`, `__macro__` |
+| `macro` | `__macro_actual__` | `__macro_expected__` | Helper CTEs, `@py.name()` and `@sql.name()` calls in actual, CTE-list `@sql.name()` calls in the `WITH` list |
+| `udf` | `__udf_actual__` | `__udf_expected__` | Helper CTEs, `__udf()` calls in actual |
+| `table_fn` | `__table_fn_actual__` | `__table_fn_expected__` | Helper CTEs, `__table_fn()` calls in actual |
+
+SQLBuild infers the mode from the actual CTE, so `TEST (mode ...)` is optional. An explicit mode
+that contradicts the CTEs is a compile error, and so is a prefix from another mode, such as
+`__source__` in a macro test.
+
+Only the actual CTE calls the macro, UDF or table function under test. Helpers don't call it
+either, so a helper of a macro test must not call `__udf()` or `__table_fn()`. Expected CTEs must
+not call macros, UDFs or table functions, so the expected data stays independent and easy to read.
 
 ### Macro tests
 
-Test macro output by calling the macro in `__macro_actual__` and comparing against `__macro_expected__`:
+Call the macro in `__macro_actual__` and give the result in `__macro_expected__`:
 
 ```sql
 TEST (mode macro, name "calculates_line_total_cents");
@@ -540,7 +600,8 @@ __macro_expected__ AS (
 )
 ```
 
-Macros are compile-time code, so macro tests expand the macro at compile time and compare the results. During `sqb build`, macro tests run before any model that uses the tested macro.
+Macros expand at compile time. During `sqb build`, a macro test runs before any model that uses the
+macro.
 
 [SQL macros](/docs/concepts/macros/sql-macros) are tested the same way. Call an expression macro in
 `__macro_actual__`:
@@ -556,8 +617,8 @@ __macro_actual__ AS (
 __macro_expected__ AS (SELECT CAST(12.5 AS DECIMAL(18, 2)) AS dollars)
 ```
 
-Call a column-list macro as an item of the `__macro_actual__` select list, and pass a helper CTE
-as each `RELATION` argument:
+Call a column-list macro as an item of the `__macro_actual__` select list, and pass a helper CTE as
+each `RELATION` argument:
 
 ```sql
 TEST (mode macro, name "audit_columns_flag_updates");
@@ -573,8 +634,8 @@ __macro_expected__ AS (
 )
 ```
 
-A CTE-list macro is called in the test's `WITH` list, the one place outside `__macro_actual__`
-where a macro test may call a macro, and `__macro_actual__` selects from one of its CTEs:
+Call a CTE-list macro in the test's `WITH` list, and select from one of its CTEs in
+`__macro_actual__`:
 
 ```sql
 TEST (mode macro, name "clean_orders_keeps_latest_live");
@@ -590,13 +651,13 @@ __macro_actual__ AS (SELECT order_id, updated_at FROM latest),
 __macro_expected__ AS (SELECT 1 AS order_id, TIMESTAMP '2026-01-02' AS updated_at)
 ```
 
-These calls may pass `__cte := name`, as in a model, to call the macro more than once or to give
-its CTEs names of the test's own. Other test modes may not call a CTE-list macro in their `WITH`
-list.
+This is the only place outside `__macro_actual__` where a macro test may call a macro. The call may
+pass `__cte := name`, as in a model, to call the macro more than once or to rename its CTEs. Other
+modes can't call a CTE-list macro in their `WITH` list.
 
 ### UDF tests
 
-Test scalar UDFs by calling them in `__udf_actual__` and comparing against `__udf_expected__`:
+Call the UDF in `__udf_actual__` and give the result in `__udf_expected__`:
 
 ```sql
 TEST (name "detects_completed_orders");
@@ -620,46 +681,42 @@ __udf_expected__ AS (
 )
 ```
 
-UDFs are warehouse objects, so the function is created before the test runs. During `sqb build`, UDF tests run after the function is created but before any model that uses it.
+During `sqb build`, a UDF test runs after the function is created and before any model that uses
+it.
 
 ### Functions in `sqb test`
 
-`sqb test` does not need a build to test the current version of a function. Before the tests run,
-SQLBuild creates a session-scoped temporary copy of every project UDF and table function the
-selected tests call, including functions those functions call, from the definitions in your
-project. The tests call the copies, so an edited function is tested without `sqb build`, and the
-built function in the target schema is never created, replaced or dropped. The copies disappear
-when the test connections close.
+`sqb test` tests the current version of your functions without a build. Before the tests run,
+SQLBuild creates a temporary copy of every project UDF and table function the selected tests call,
+and of the functions those call. The tests call the copies, so an edited function is tested without
+`sqb build`, and the built function in the target schema is never created, replaced or dropped. The
+copies disappear when the test connections close.
 
 | Adapter | Temporary copy |
 |---|---|
-| DuckDB, MotherDuck | `CREATE TEMP MACRO`, called as `temp.main.<name>`. Python UDFs are registered on each test connection. |
+| DuckDB, MotherDuck | `CREATE TEMP MACRO`, called as `temp.main.<name>`. Python UDFs are registered on each test connection |
 | PostgreSQL | SQL function in the session's `pg_temp` schema, called as `pg_temp.<name>` |
 | Snowflake | `CREATE TEMPORARY FUNCTION __sqb_test__<name>` in the session's current schema, for SQL and Python UDFs and table functions |
 | Databricks | `CREATE TEMPORARY FUNCTION __sqb_test__<name>` for SQL functions |
-| BigQuery, SQL Server, ClickHouse | Not supported; tests call the built function (ClickHouse functions are server-wide) |
+| BigQuery, SQL Server, ClickHouse | No copy; tests call the built function (ClickHouse functions are server-wide) |
 | SQLite | Not applicable; SQLite has no SQL functions |
 
-When an adapter cannot create a copy (a Databricks Python UDF, for example), or the warehouse
-refuses to create it (the role lacks permission, or the Snowflake session has no current schema),
-the test calls the built function instead. If that function has not been built either, the test
-fails with an error that names the function and the reason no copy was created, and asks you to run
-`sqb build` first.
-A function whose callee has no copy calls the built functions too, so one test never mixes copies
-and built functions.
+When a copy can't be made, because the adapter doesn't support it (a Databricks Python UDF, for
+example) or the warehouse refuses (the role lacks permission, or the Snowflake session has no
+current schema), the test calls the built function. If that function isn't built either, the test
+fails with an error naming the function and the reason, and asks you to run `sqb build` first. A
+function whose callee has no copy calls the built functions too, so a test never mixes copies and
+built functions.
 
-SQLBuild decides which copies exist on the first test connection and then creates the same copies
-on every other test connection, including a connection that replaces one a timeout left unusable.
-If one of those connections cannot create a copy, `sqb test` stops with error `T006`, which names
-the function and the connection.
+Every test connection gets the same copies as the first one. If a later connection can't create a
+copy, `sqb test` stops with `T006`, naming the function and the connection.
 
-PostgreSQL temporary functions belong to one server session. Behind a transaction-mode connection
-pooler, a test's statements can reach a different server session that does not hold the copies, so
-run `sqb test` for projects with functions through a direct connection or a session-mode pool.
+On PostgreSQL, the copies live in one server session. Run `sqb test` for projects with functions
+through a direct connection or a session-mode pool, not a transaction-mode connection pooler.
 
 ### Table function tests
 
-Test table functions by calling them in `__table_fn_actual__` and comparing against `__table_fn_expected__`:
+Call the table function in `__table_fn_actual__` and give its rows in `__table_fn_expected__`:
 
 ```sql
 TEST (name "returns_customer_orders");
@@ -676,71 +733,20 @@ __table_fn_expected__ AS (
 )
 ```
 
-Table function tests run after the function is created. Since table functions are terminal (models cannot depend on them), these tests validate the function independently.
-
-### Mode rules
-
-Each mode has strict CTE validation:
-
-| Mode | Actual CTE | Expected CTE | Allowed |
-|------|-----------|--------------|---------|
-| `model` (no actual CTE) | existing model-chain syntax | `__expected__<model>` | `__source__`, `__ref__`, `__seed__`, `__assert__`, `__macro__` |
-| `macro` | `__macro_actual__` | `__macro_expected__` | Helper CTEs, `@py.name()` and `@sql.name()` calls in actual, CTE-list `@sql.name()` calls in the `WITH` list |
-| `udf` | `__udf_actual__` | `__udf_expected__` | Helper CTEs, `__udf()` calls in actual |
-| `table_fn` | `__table_fn_actual__` | `__table_fn_expected__` | Helper CTEs, `__table_fn()` calls in actual |
-
-CTE prefixes from other modes are not allowed. For example, `__source__` in a macro test or `__macro_actual__` in a test declared `TEST (mode model)` will produce a clear error pointing you to the right mode. Expected CTEs must not call macros, UDFs, or table functions - they should be independent, inspectable expected data.
-
-Helper CTEs follow the same rule in every mode: only the actual CTE calls the macro, UDF or table
-function under test, so a helper of a macro test must not call `__udf()` or `__table_fn()` either.
-A malformed reference call in a helper or expected CTE, such as `__source("raw", "orders")`, is a
-P012 error at the call.
-
-## Multiple tests per file
-
-A single test file can contain multiple `TEST()` blocks. A test's name is its `name`, or the file
-stem when `name` is omitted. Test names are globally unique: a test cannot share a name with another
-test, a scenario, a model, a source, a seed, a function, or a Python node. Name the file or the block
-after the behavior it checks, such as `orders_status_rules`, rather than after the model. The cases
-of one parameterized test share its name. Each block in a file must have its own `name`:
-
-```sql
-TEST (name "completed_orders_only");
-
-WITH
-__source__raw__orders AS (
-  SELECT 1 AS id, 100 AS customer_id, 'completed' AS status
-),
-__expected__stg_orders AS (
-  SELECT 1 AS order_id, 100 AS customer_id, 'completed' AS status
-)
-
-TEST (name "cancelled_orders_excluded");
-
-WITH
-__source__raw__orders AS (
-  SELECT 1 AS id, 100 AS customer_id, 'cancelled' AS status
-),
-__expected__stg_orders AS (
-  SELECT 1 AS order_id, 100 AS customer_id, 'cancelled' AS status
-)
-```
-
-A file with a single test can omit the `name` field. Files with multiple tests require names on every block.
+Table function tests run after the function is created. Models can't depend on table functions, so
+these tests check the function on its own.
 
 ## Repeating test logic
 
-SQLBuild supports three repetition patterns:
-
-| Pattern | Use when | Result identity |
-|---------|----------|-----------------|
-| Multiple `TEST` blocks | Cases need different SQL shapes | One result per block |
-| Macro or `VALUES` case table | One aggregate comparison is sufficient | One result for the table |
-| Native parameters and cases | Cases share a template but need independent status | One result per named case |
+| Pattern | Use when | Results |
+|---------|----------|---------|
+| Several `TEST` blocks | Cases need different SQL | One per block |
+| A `VALUES` case table or macro | One comparison over all cases is enough | One for the table |
+| Parameters and cases | Cases share a template but each needs its own result | One per named case |
 
 ### Native independent cases
 
-Declare a typed schema and ordered named cases in one header:
+Declare typed parameters and ordered, named cases in the header:
 
 ```sql
 TEST (
@@ -765,22 +771,20 @@ __expected__stg_orders AS (
 )
 ```
 
-The cases report independently as `order status: maps source states [completed]`, `[cancelled]`,
-and `[pending]`. Authored order controls display order. Selecting `stg_orders` selects every case by
-default. Add `--case` to run one named case without changing the test file:
+Each case reports on its own, in the order written: `order status: maps source states [completed]`,
+`[cancelled]` and `[pending]`. Selecting `stg_orders` runs every case. Run one case with `--case`:
 
 ```bash
 sqb test --select stg_orders --case cancelled
 ```
 
-If the case does not exist within the parent/model selection, SQLBuild reports the available case
-names.
+An unknown case name lists the available ones.
 
-Supported scalar types are `string`, `integer`, `boolean`, `float`, and exact `decimal`. Decimal
-values are quoted, such as `tax_rate "0.2000"`, so they never pass through binary float. Boolean
-and integer remain distinct. Raw SQL and collection parameters are rejected.
+Parameter types are `string`, `integer`, `boolean`, `float` and exact `decimal`. Quote decimal
+values, such as `tax_rate "0.2000"`, so they never pass through binary floating point. Booleans and
+integers stay distinct. Raw SQL and collection parameters are rejected.
 
-Nullable parameters use an expanded declaration and are valid where SQL can infer the null type:
+A nullable parameter uses the expanded form, and works where SQL can infer the null's type:
 
 ```sql
 parameters (
@@ -791,35 +795,24 @@ cases (
 )
 ```
 
-Every case provides exactly the declared parameters, and every declaration must appear as
-`@param("name")` in the template. SQLBuild rejects missing, extra, incompatible, undeclared, and
-unused values before execution.
+Every case gives exactly the declared parameters, and every parameter appears as `@param("name")`
+in the test. Missing, extra, incompatible, undeclared and unused values are rejected before
+anything runs.
 
-Expansion is deterministic:
+Parameters are rendered first, as typed literals for the active adapter, then `@const` and `@enum`
+references, then macros. A parameter can therefore be a macro argument, as in
+`@py.order_fixture(@param("source_status"))`. Parameters work in every mode and keep every expected
+model of a multi-model test.
 
-```text
-parse TEST template and cases
-  -> render typed @param values with the active adapter
-  -> expand @const and @enum references
-  -> expand macros
-  -> validate SQL and compile expected models/assertions
-```
+Text and JSON output show the test, the case and its typed values. Compile JSON, manifests, DAG
+checks and compiled SQL record each case's source, block and fingerprint. Changing one case changes
+only that case's fingerprint.
 
-Values can therefore feed macro arguments, for example
-`@py.order_fixture(@param("source_status"))`. Parameters work in model, macro, UDF, and table-function
-modes and preserve every expected model in multi-model tests.
-
-Text and JSON output include parent/case identity and safe typed values. Compile JSON, manifests,
-DAG checks, and compiled/runtime SQL artifacts retain source, block, case, and content-fingerprint
-provenance. Changing one case changes that case's fingerprint without reassigning another case's
-stable identity.
-
-Scenarios are intentionally not parameterized. Keep one scenario per coherent business world so
-capture and replay identity remains explicit.
+Scenarios can't be parameterized: keep one scenario per coherent business world.
 
 ### Aggregate SQL case tables
 
-When independent status is unnecessary, a normal SQL case table remains concise:
+When cases don't need their own results, a `VALUES` table is shorter:
 
 ```sql
 TEST();
@@ -834,41 +827,31 @@ __expected__status_mapping AS (
 )
 ```
 
-This produces one aggregate test result. Use native cases when each row must pass or fail
-independently.
+This gives one test result. Quoted strings in `VALUES` rows may contain commas, brackets and
+parentheses; escape embedded quotes as usual in SQL.
 
-Quoted strings in `VALUES` rows may contain commas, brackets, and parentheses. SQLBuild preserves
-these literals while extracting test CTEs; use normal SQL quote escaping for embedded quotes.
+## Running tests
 
-## Test placement
+Tests run during `sqb build` in DAG order, before the model they test is built. Run them on their
+own with `sqb test`:
 
-Place unit test files under `tests/unit/` in your project directory. SQLBuild discovers all `.sql` files in this directory recursively.
-
-```
-tests/
-  unit/
-    test_stg_orders.sql              # model test
-    test_fact_orders.sql              # model test with assertion
-    test_daily_revenue_chain.sql      # multi-model test
-    test_line_total_cents_macro.sql   # macro test
-    test_is_completed_order_udf.sql   # UDF test
-    test_customer_orders_table_fn.sql # table function test
-  scenarios/
-    ...
+```bash
+sqb test
+sqb test --select stg_orders
 ```
 
 ## Cost guards
 
 A unit test runs the real SQL of every unmocked model between its mocks and the model under test as
-one warehouse statement. That is cheap for one or two models, but the warehouse compiles and
-optimises the whole chain at once, and that cost can grow much faster than the query's size.
-SQLBuild therefore bounds each unit test in two ways.
+one warehouse statement. The warehouse compiles and optimises that whole chain at once, and the cost
+can grow much faster than the query's size. SQLBuild bounds each test in two ways.
 
 ### Real-model limit
 
-`[settings] unit_test_max_real_models` (default `10`, also accepted in `sqlbuild_local.toml`) caps
-how many real models one unit test may execute, counting the model under test. A test over the limit
-fails compilation before any warehouse connection opens:
+`[settings] unit_test_max_real_models` (default `10`) caps how many real models one test may run,
+counting the model under test. It can also be set in `sqlbuild_local.toml`. A test over the limit
+fails compilation, in `sqb test` and in `sqb build` when it runs tests, before any warehouse
+connection opens:
 
 ```text
 error[S000]: Invalid SQL test fixtures:
@@ -893,28 +876,31 @@ Options:
        unit_test_max_real_models = 3
 ```
 
-Upgrade note: the limit is new, so after upgrading, a selection containing a unit test that executes
-more than 10 real models fails to compile (`sqb test`, and `sqb build` when it runs tests) until the
-test is mocked or the limit is raised.
-
-`sqb test` shows each test's real-model count on its row, such as `3 real models`, so a chain that
-is growing towards the limit is visible early. Direct macro, UDF and table function tests execute
-no models and are not counted.
+`sqb test` shows each test's count on its row, such as `3 real models`, so a growing chain is
+visible early. Macro, UDF and table function tests run no models and aren't counted.
 
 ### Time limits
 
-Each unit test has a time limit, `30s` by default, measured from its first warehouse statement.
-Rendering, warehouse queueing where the warehouse reports it, and cleanup after the comparison do not
-count; see [per-item time limits](/docs/concepts/project-configuration#per-item-time-limits) for
-each adapter.
-Set it, from highest precedence, with `--test-timeout` on `sqb test` or `sqb build`, with
-`TEST(timeout "45s")` in the test file, with `[targets.<target>.execution_limits] test_timeout`, or
-with `[settings] test_timeout`. Each accepts a positive fixed duration or `"disabled"`.
+Each unit test has a time limit, `30s` by default. The first of these that is set applies:
 
-At the limit SQLBuild cancels the test's running statement, reports the test as `TIMEOUT` with the
-elapsed time, the limit, where it was set and the cancellation outcome, and continues with the
-remaining tests. When the test inlines real models beyond the model under test, the message also
-lists them and the same options as the real-model limit:
+1. `--test-timeout` on `sqb test` or `sqb build`
+2. `TEST(timeout "45s")` in the test file
+3. `[targets.<target>.execution_limits] test_timeout`
+4. `[settings] test_timeout`, in `sqlbuild_local.toml` or `sqlbuild_project.toml`
+5. The `30s` default
+
+Each takes a positive fixed duration, such as `"45s"` or `"10m"`, or `"disabled"`.
+
+The clock starts at the test's first warehouse statement. Rendering, warehouse queueing where the
+warehouse reports it, and cleanup after the comparison don't count. See
+[Per-item time limits](/docs/concepts/project-configuration#per-item-time-limits) for how each
+adapter enforces the limit, and [Duration limit](/docs/concepts/project-configuration#duration-limit)
+for how each adapter cancels a running statement.
+
+At the limit, SQLBuild cancels the running statement, reports the test as `TIMEOUT`, and continues
+with the other tests. The report gives the elapsed time, the limit, where it was set, the
+cancellation outcome and the query IDs it saw. When the test runs real models beyond the model
+under test, it also lists them, with the same options as the real-model limit:
 
 ```text
 SQL unit test 'order_scans_kept' timed out after 1.0s (limit 1s).
@@ -935,49 +921,22 @@ Options:
      in sqlbuild_project.toml (or sqlbuild_local.toml), or --test-timeout for one run.
 ```
 
-A test that runs only the model under test reports the timeout, the limit, its source and how to
-change it, without the scenario advice. See
-[Duration limit](/docs/concepts/project-configuration#duration-limit) for how each adapter cancels
-a running statement.
+A test that runs only the model under test reports the timeout, the limit, where it was set and how
+to change it, without the scenario advice.
 
-### Single-read comparison
-
-A test compares its actual output with the expected rows several ways: both row counts, rows
-missing from each side, the expected-column check and, on failure, row samples. Where the warehouse
-supports it, SQLBuild evaluates each compared model's actual output once into a temporary relation
-and runs every comparison against it, so the chain is not recomputed for each read. Results,
-messages and samples are unchanged. DuckDB and MotherDuck use a session temporary table that
-SQLBuild drops after the test, including after a failure or timeout. PostgreSQL runs the test in
-one transaction with an `ON COMMIT DROP` temporary table that the transaction's end removes, so the
-reads stay on one server session behind a transaction-mode connection pooler. Snowflake reads the
-first query's persisted result through `RESULT_SCAN`. If a stored output can no longer be read,
-the test falls back to the inline comparison. If storing an output fails, SQLBuild runs the output
-query on its own: when that query fails too, for example because a fixture value cannot be
-converted in a column the expected rows leave out, the test errors with the warehouse's message
-instead of passing on a comparison of the other columns; otherwise it compares inline. On DuckDB and
-MotherDuck, an internal engine error while storing an output is a DuckDB defect rather than a
-problem with the model, so the test compares inline. Other adapters compare the inline query as before. `target/run/tests/` keeps the self-contained inline comparison query for each test.
+Scenarios have their own limit, `scenario_timeout`; see
+[Scenario timeouts](/docs/concepts/project-configuration#unit-test-and-scenario-limits).
 
 ## Skipping SQL analysis
 
-Compile checks SQL test fixtures and assertions like model SQL. For SQL the parser cannot read,
-add `sql_analysis false` to the `TEST` header; the test still runs. Tests of a model with
-`sql_analysis false`, and every test in a `--no-sql-analysis` run, are not analysed. With
-`[settings] require_sql_analysis = true`, the opt-out is accepted only on test SQL that cannot be
-parsed (see [Requiring SQL analysis](/docs/concepts/models/configuration#requiring-sql-analysis)).
+Compile checks test fixtures and assertions like model SQL. For SQL the parser can't read, add
+`sql_analysis false` to the `TEST` header; the test still runs. Tests of a model with
+`sql_analysis false`, and every test in a `--no-sql-analysis` run, aren't analysed. With
+`[settings] require_sql_analysis = true`, the opt-out is accepted only on test SQL that can't be
+parsed; see [Requiring SQL analysis](/docs/concepts/models/configuration#requiring-sql-analysis).
 
-## Running tests
+## Details
 
-Tests run automatically during `sqb build` in DAG order, before their target model is materialized.
-
-Run tests standalone:
-
-```bash
-sqb test
-```
-
-Scope to specific models:
-
-```bash
-sqb test --select stg_orders
-```
+- On DuckDB, MotherDuck, PostgreSQL and Snowflake, a test evaluates each compared model's full
+  output once. If that output fails, for example because a fixture value can't be converted in a
+  column the expected rows leave out, the test errors with the warehouse's message.
