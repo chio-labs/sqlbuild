@@ -82,7 +82,9 @@ Positional `SELECTOR` arguments work like `--select`, and both forms can be comb
 4. **Column lineage.** Traces column-level dependencies across models.
 5. **Contracts.** Checks declared columns against the inferred query output.
 6. **Rules.** Runs the selected built-in Rules, then the selected custom Rules.
-7. **Write.** Writes compiled SQL to `target/compiled/` when the Rules pass.
+7. **Write.** Writes compiled SQL to `target/compiled/` when the Rules pass. When they fail, it
+   writes only the models' SQL, so you can read what the Rules checked; see
+   [When Rules fail](#when-rules-fail).
 
 Rules that need inferred types, such as `SQBRCONTRACT105`, are skipped when SQL analysis is off,
 and compile prints one note naming them.
@@ -90,6 +92,21 @@ and compile prints one note naming them.
 `sqb compile` is authoritative for correctness, contracts, lineage and configured Rules. Rule
 findings block the artifacts. To check one Rule code or family without changing project
 configuration, use [`sqb rules run`](rules.md).
+
+### When Rules fail
+
+A Rule finding still exits `1` and blocks the manifest, the DAG file and the other artifacts. Each
+model's expanded SQL is still written to `target/compiled/models/`, so you can read SQL that macros
+generated. A model with Rule errors starts with a header that marks it not buildable and lists
+its findings:
+
+```sql
+-- sqb: compile failed for this model; not buildable
+-- SQBRSQL028 at models/open_orders.sql:6:20: Single-relation query mixes qualified and unqualified columns
+SELECT o.order_id, status FROM __ref("orders") AS o
+```
+
+The next compile that passes writes the files again without the header.
 
 ## Compiling a selection
 

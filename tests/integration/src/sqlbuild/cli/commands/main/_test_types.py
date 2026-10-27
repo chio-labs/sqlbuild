@@ -1326,3 +1326,12 @@ class MacroSlotQualificationTestCase:
     expected_exit_code: int
     expected_fragments: tuple[str, ...]
     absent_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RuleFailureArtifactsTestCase:
+    description: str
+    open_orders_sql: str
+    expected_exit_code: int
+    expected_open_orders: str
+    expected_manifest: bool

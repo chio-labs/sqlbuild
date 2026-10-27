@@ -39,8 +39,8 @@ use crate::bindings::_helpers::compile_outputs::runtime_target::{
 };
 use crate::bindings::_helpers::compiled_views::compiled_model_view::NativeCompiledModel;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
+use crate::bindings::_helpers::records::construct::{enum_member, error_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
@@ -746,6 +746,100 @@ pub(crate) fn write_static_target<'py>(
         ],
         PyTuple::new(py, diagnostics)?.into_any(),
     )
+}
+
+/// The first line of a compiled model whose Rules failed.
+const RULE_FAILED_HEADER: &str = "-- sqb: compile failed for this model; not buildable";
+
+/// `path` relative to `project_dir` with `/` separators, as model files name themselves.
+fn project_relative(path: &Bound<'_, PyAny>, project_dir: &Bound<'_, PyAny>) -> PyResult<String> {
+    let path: Bound<'_, PyAny> = path_class(path.py())?.call1((path,))?;
+    let relative: Bound<'_, PyAny> = if path.call_method0("is_absolute")?.is_truthy()? {
+        match path.call_method1("relative_to", (project_dir.call_method0("resolve")?,)) {
+            Ok(relative) => relative,
+            Err(_) => path,
+        }
+    } else {
+        path
+    };
+    relative.call_method0("as_posix")?.extract()
+}
+
+/// Each source file's Rule errors as compiled-file header lines: code, location and message.
+fn rule_error_lines(
+    diagnostics: &Bound<'_, PyAny>,
+    project_dir: &Bound<'_, PyAny>,
+) -> PyResult<HashMap<String, Vec<String>>> {
+    let py: Python<'_> = diagnostics.py();
+    let rule_phase: Bound<'_, PyAny> = enum_member(py, RecordId::DiagnosticPhase, "RULE")?;
+    let mut lines: HashMap<String, Vec<String>> = HashMap::new();
+    for diagnostic in diagnostics.try_iter()? {
+        let diagnostic: Bound<'_, PyAny> = diagnostic?;
+        let path: Bound<'_, PyAny> = native_field(&diagnostic, "path")?;
+        if path.is_none()
+            || !native_field(&diagnostic, "is_error")?.is_truthy()?
+            || !native_field(&diagnostic, "phase")?.is(&rule_phase)
+        {
+            continue;
+        }
+        let relative: String = project_relative(&path, project_dir)?;
+        let position = |field: &str| -> PyResult<String> {
+            let value: Bound<'_, PyAny> = native_field(&diagnostic, field)?;
+            Ok(if value.is_none() {
+                String::new()
+            } else {
+                format!(":{}", value.str()?)
+            })
+        };
+        let message: String = native_field(&diagnostic, "message")?.str()?.to_string();
+        let line: String = format!(
+            "-- {} at {relative}{}{}: {}",
+            native_field(&diagnostic, "code")?.str()?,
+            position("line")?,
+            position("column")?,
+            message.split_whitespace().collect::<Vec<&str>>().join(" "),
+        );
+        lines.entry(relative).or_default().push(line);
+    }
+    Ok(lines)
+}
+
+/// After Rules failed, write every model's compiled SQL so the expansion they checked can be read. A model with Rule errors starts with a header marking it not buildable and listing them. Nothing else under `target/` changes: no manifest, tests, cache or stale-file removal.
+pub(crate) fn write_rule_failed_models<'py>(
+    target_dir: &Bound<'py, PyAny>,
+    (project, project_dir): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    diagnostics: &Bound<'py, PyAny>,
+) -> PyResult<()> {
+    let py: Python<'py> = target_dir.py();
+    let errors: HashMap<String, Vec<String>> = rule_error_lines(diagnostics, project_dir)?;
+    let _ = prepared_target(target_dir)?;
+    let compiled_dir: PathBuf = joined(target_dir, &[COMPILED_DIR])?.extract()?;
+    let mut batch: ArtifactBatch = ArtifactBatch::new(true, None);
+    for model in native_field(project, "models")?.try_iter()? {
+        let model: Bound<'py, PyAny> = model?;
+        let (relative_path, query_sql): (String, String) =
+            if let Ok(native) = model.cast::<NativeCompiledModel>() {
+                let (relative_path, query_sql) = native.get().output_texts(py)?;
+                (relative_path, query_sql.to_string())
+            } else {
+                (
+                    native_field(&model, "relative_path")?
+                        .call_method0("as_posix")?
+                        .extract()?,
+                    native_field(&model, "query_sql")?.extract()?,
+                )
+            };
+        let sql: String = match errors.get(&relative_path) {
+            Some(lines) => format!("{RULE_FAILED_HEADER}\n{}\n{query_sql}", lines.join("\n")),
+            None => query_sql,
+        };
+        batch.queue_sql_at(
+            py,
+            native_model_output_path(&compiled_dir, &relative_path),
+            &sql,
+        )?;
+    }
+    batch.flush(py)
 }
 
 /// Plan uncached SQL tests and report their errors without writing artifacts or cache.
