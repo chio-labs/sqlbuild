@@ -5,261 +5,9 @@ sidebar:
   label: "compile"
 ---
 
-import Note from '../../../../components/mintlify/Note.astro';
-
-Discovers the complete project, resolves references, expands macros, validates SQL, checks column contracts, computes column lineage, and writes compiled artifacts to `target/`. The compile command is fully offline—it does not connect to the warehouse.
-
-## Usage
-
-```bash
-sqb compile [SELECTOR ...] [flags]
-```
-
-Positional `SELECTOR` arguments work like `--select`, and both forms can be combined. `--project-dir <path>`, `--no-color`, and `--debug` can go before or after the command name.
-
-## Flags
-
-| Flag | Description |
-|------|-------------|
-| `--no-sql-analysis` | Disable SQL syntax, binding, type inference, and semantic validation (`--no-sql-validation` remains an alias) |
-| `--no-cache` | Bypass the reusable compile-analysis cache and the Rules cache for this invocation |
-| `--defer-to` | Resolve unselected model references against another target |
-| `--json` | Output the full compile report as JSON |
-| `--manifest` | Generate `target/manifest.json` with project metadata |
-| `--lineage-mode` | Column lineage mode: `fast` (default), `rich` (slower, more detail), or `none` |
-| `SELECTOR ...` | Positional selectors, the same as `--select` |
-| `--select`, `-s` | Analyze and report selected resources |
-| `--select-file` | Read selectors from a file, one selector per line |
-| `--exclude` | Remove resources from the selected scope |
-
-## What compile does
-
-1. **Discovery** - finds `sqlbuild_project.toml`, scans for models, sources, seeds, functions, audits, tests, and macros
-2. **Graph resolution** - resolves `__ref()`, `__source()`, and `__seed()` references, expands macros, orders models by dependency
-3. **SQL validation** - validates SQL syntax (when SQL analysis is enabled)
-4. **Column lineage** - analyzes column-level dependencies across models (fast mode by default)
-5. **Contract validation** - checks declared column contracts against inferred query output
-6. **Rules** - evaluates selected native built-ins, then selected custom Python Rules. Rules that
-   need inferred type proofs, such as `SQBRCONTRACT105`, are skipped when SQL analysis is disabled,
-   and compile prints one note naming them
-7. **Artifact write** - writes compiled SQL to `target/compiled/` when Rules pass
-
-## Compiled artifacts
-
-`target/compiled/` mirrors what each resource will run, with every macro, variable and audit
-argument already rendered:
-
-| Path | Contents |
-|------|----------|
-| `models/<path>.sql` | Each model's query |
-| `functions/<language>/<path>.sql` | Each function's `CREATE FUNCTION` statements |
-| `audits/generic/<resource>/<audit>__<column>.sql` | Each attached generic audit, under the model, source or seed it checks; column audits end in `__<column>`, and an audit's `name` replaces the audit name |
-| `audits/singular/<audit>.sql` | Each singular audit |
-| `tests/...` | Each SQL unit test's comparison query |
-
-Read an audit's file to see how its arguments were spliced into the SQL without running it or
-looking up the warehouse's query history. Files are rewritten on every compile, and files for
-resources that no longer exist are removed. References such as `__ref("orders")` stay as written,
-as in compiled models.
-
-## Focused compilation
-
-Use normal selectors to limit expensive analysis and reporting while retaining complete project
-discovery and reference integrity:
-
-```bash
-sqb compile fact_orders daily_revenue
-sqb compile --select-file selected-models.txt
-sqb compile --exclude deprecated_model
-```
-
-SQLBuild deeply analyzes the selected resources and the upstream closure needed to understand them.
-The text report contains only the selected scope. Project totals remain available in JSON, together
-with selected model, seed, and function counts.
-
-<Note>
-Manifest and DAG outputs remain full-project artifacts. Focused compilation changes analysis and
-reporting scope; it does not produce a partial project graph.
-</Note>
-
-## Reusing an unchanged compile
-
-When nothing that can change the result has changed since the last compile, `sqb compile` replays
-that result instead of compiling again. It prints one line to stderr, for example
-`Inputs unchanged; reused the previous compile (0.1 s)`, then the same report and exit code as the
-previous run. Failed compiles are replayed too, with the same diagnostics.
-
-A compile is reused only when all of these match the stored run:
-
-- Every file and directory under the project, compared by type, size, modification and change
-  times, and inode. When those differ, SQLBuild compares content only for files whose content
-  digest it already knows; otherwise the compile runs in full. Digests are recorded for files that
-  changed within two seconds of a compile and for files whose timestamps moved since the previous
-  compile, so large unchanged files are never read. After a checkout that only moves timestamps,
-  the next compile runs in full once, and later timestamp-only changes are reused.
-- The command line: project directory, working directory, flags, selectors, `--vars`, target, and
-  whether color output is active.
-- Environment variables that SQLBuild reads: every `SQLBUILD_*` and `SQB_*` variable, every
-  variable that a template or `@@ENV` read during the stored compile, and every variable a
-  provider's settings can read, including `env_prefix`, aliases, and nested-delimiter variables.
-  Values are stored only as hashes.
-- The contents of each provider settings `env_file` and `secrets_dir`.
-- The Python interpreter, the SQLBuild version and native extension, `sys.path` entries, and every
-  loaded Python module file outside the project.
-- Every artifact the stored compile wrote under `target/compiled/`, and the `--dag` file. If one is
-  missing or changed, compile runs in full and rewrites it. A compile is stored only when these
-  artifacts still hold the bytes it wrote, so a concurrent compile cannot leave another compile's
-  artifacts behind a reused result.
-
-These project paths are not inputs: `target/`, `logs/`, `venv/`, `.git/` and `__pycache__/`
-anywhere, and these folders at the project root: `.cache`, `.fensu`, `.hg`, `.idea`,
-`.mypy_cache`, `.nox`, `.pytest_cache`, `.ruff_cache`, `.sqlbuild`, `.svn`, `.tox`, `.venv`, and
-`.vscode`. Other hidden folders are inputs, because custom rules can read them. DuckDB database
-files count only by presence.
-
-Reuse assumes macros, hooks, providers, adapters, and custom rules are deterministic: the same inputs
-must produce the same output. Macro results are also reused within a compile and may be kept between
-compiles; see [Macros must be deterministic](/docs/concepts/macros/python-macros#macros-must-be-deterministic). A
-compile whose templates read `run.id` is never reused.
-
-Compile always runs in full with `--no-cache`, `--manifest`, `--debug`, or a profiling flag, when
-`SQLBUILD_DISABLE_COMPILE_CACHE=1` or `SQLBUILD_DISABLE_COMPILE_REUSE=1` is set, when the project has
-no `sqlbuild_project.toml` or `sqlbuild_project.yml`, when the target sets `compile_cache = false`,
-and when a provider's settings use sources SQLBuild cannot list exactly, such as a custom
-`settings_customise_sources` or command-line parsing. The reason is logged at debug level.
-
-SQLBuild keeps one stored result per project and target under
-`target/cache/compiler-native-v1/project-reuse-v3/`: a small `.store` file holding what the result
-depends on, and a `.output` file beside it holding the report. A check reads only the `.store` file;
-the report is read only when nothing changed. Each file is replaced atomically; a damaged, missing or
-unreadable file is ignored and compile runs in full. Storing a result normally takes a fraction of a second after the
-report is ready. When it has to hash a lot of data or the project has very many files, compile
-prints `Recording compile for reuse...` and a completion line to stderr before the report.
-
-### Compiling after an edit
-
-When only model SQL files and SQL test files changed since the stored compile, `sqb compile`
-compiles just those files against it. It renders, analyses and checks the changed models and SQL
-tests, plus any model whose inputs' columns, types or nullability the edit changed, and takes
-everything else from a project image stored beside the stored compile. It prints one line to
-stderr, for example `Compiled 1 changed file(s) against the previous compile (1 model(s), 2.1s)`,
-then the same report and exit code a full compile would produce, including any errors the edit
-introduces or fixes. Project-wide rules still run over the whole project.
-
-The compile runs in full instead, decided before any compile work starts, when:
-
-- A file was added, removed or renamed, or any file other than a model or SQL test changed, such
-  as `sqlbuild_project.toml`, a source or schema YAML file, a macro, a seed or a function.
-- An edited model changes what it references, or changes a header setting other than its
-  `description`, `columns`, `dynamic_columns`, `model_schema`, `audits`, `contract`, or a switch
-  between `view` and `table` materialization.
-- A project-subject custom rule reads something the edit changed, or a model-subject custom rule
-  must run again for a model the edit did not change, for example because it reads the text of an
-  edited upstream file.
-- The stored compile reported errors or warnings other than rule findings in model or SQL test
-  files the edit did not change.
-- The stored compile used the other output format (`--json` or text), or has no project image.
-
-A few edits are found to need a full compile only part-way through, for example when a macro's
-arguments change which models or sources it reads, when the edit changes a model's
-`dynamic_columns` families, or when the edit changes the shape of so many models that a full
-compile is cheaper. A model-subject custom rule that must run again for an edited model runs in the
-delta compile when it reads only that model's SQL, columns, contract and grain, project files, and
-the source list; if it reads anything else, such as the model's dependencies, the compile runs in
-full.
-
-Otherwise, an edit runs the whole compile again, and a few caches under `target/cache/` shorten
-it: every model, test, and audit is rendered again, and contracts and semantic validation run for
-the whole project. Every model's SQL references are scanned again too.
-
-- An unchanged model takes its column analysis from `model-analyses.bin`. Entries are keyed by
-  the model's query and settings, the inferred columns, types and nullability of every relation
-  it reads, the project's analysis settings, and the SQLBuild build, so a model whose upstream
-  output changed is analysed again; a damaged or unreadable entry is analysed again too.
-- An unchanged SQL test file reuses its stored test scan, the CTEs and expected models read from
-  it, from `sql-test-scans.bin`. Entries are keyed by the file's expanded text, the adapter's SQL
-  lexical rules, and the SQLBuild build; a damaged or unreadable entry is scanned again.
-- Rule results are reused for unchanged inputs.
-- Macro call results are reused as described in
-  [Macros must be deterministic](/docs/concepts/macros/python-macros#macros-must-be-deterministic).
-
-Either way, the output is byte-identical to `sqb compile --no-cache`. To turn compiling only the
-changed files off, set `delta_compile = false` under `[settings]` or set
-`SQLBUILD_DISABLE_DELTA_COMPILE=1`; compiles then no longer store a project image.
-
-Known limits:
-
-- Python packages outside the project are checked by the stamps of the module files the compile
-  loaded. A newly added submodule or package data file that the compile reads without importing it
-  first is not tracked.
-- On network filesystems that cache file attributes, or when clocks differ between machines,
-  timestamps may not reflect a recent edit.
-- On Windows, a file's change time is its creation time. An in-place rewrite that keeps the same
-  size and restores the previous modification time, such as `touch -r`, `rsync -t`, or
-  `robocopy /COPY:T`, is not detected unless the file changed within two seconds of the stored
-  compile. The same applies to filesystems without a real change time, such as some FUSE, SMB, and
-  exFAT mounts.
-- In these cases, or whenever a result looks stale, run `sqb compile --no-cache` or set
-  `SQLBUILD_DISABLE_COMPILE_REUSE=1`.
-
-`--no-cache` also turns the Rules cache off for that compile: built-in and custom Rules evaluate
-every subject again, and the compile neither reads nor writes stored Rule results, as with
-`[rules.cache] enabled = false`. A `--no-cache` compile reports `rule_cache_hits` as `0`. The next
-compile without the flag reuses whatever the cache held before.
-
-<Note>
-A replayed JSON report is byte-identical to the previous one except for `compile_timings`, which
-holds `project_reuse_hits`, `project_reuse_misses`, `project_reuse_bypasses`,
-`project_reuse_check_ms`, and `total_ms`. Full compiles report the same reuse counters alongside
-the phase timings and cache counters such as `sql_test_scan_cache_hits` and
-`sql_test_scan_cache_misses`. In text mode, a replayed compile does not print the per-phase progress lines.
-Lifecycle sinks receive only the invocation events for a replayed compile; per-phase `operation`
-events are not emitted because no compile phase runs.
-</Note>
-
-## Static analysis
-
-When SQL analysis is enabled (default), compile performs static analysis on your models without connecting to the warehouse:
-
-- **Column inference**: Infers output columns from each model's SQL, including through CTEs, subqueries, and JOINs
-- **Column contract validation**: Under the default `settings.column_contract_mode = "implicit"`, a model with declared columns and no model-level `contract` declaration checks that every declared column exists in the statically inferred query output. `explicit` mode requires `contract enforced` to activate shape checks. Explicit type enforcement remains independent and verifies inferred types when possible
-- **Column lineage**: Traces which source columns flow into each output column, including transform classification. See [Column Lineage](/docs/concepts/column-lineage) for details
-
-<Note>
-`sqb compile` is authoritative for mandatory correctness, contracts, lineage, and configured Rules.
-Rules findings block artifact completion. Use [`sqb rules run`](/docs/cli/rules) to focus on one exact
-code or family without changing project configuration.
-</Note>
-
-### Contract diagnostics
-
-When a contract violation is found, compile reports it with source-annotated diagnostics:
-
-```
-error[K001]: declared column 'total_cents' was not found in statically inferred output for model 'fact_orders'
-  model: fact_orders
-  --> models/marts/fact_orders.sql:6:5
-  6 |     total_cents (),
-    |     ^^^^^^^^^^^
-  = help: add total_cents to the SELECT list or correct/remove MODEL(columns (...)); MODEL(columns (...)) is validated using static SQL analysis because settings.column_contract_mode is "implicit" (the default). If this project intentionally uses columns only for metadata and audits, set [settings] column_contract_mode = "explicit"; models with contract enforced remain validated
-```
-
-The configuration guidance is an intentional project-policy choice, not a general error suppression. Fix the query or declaration when the model is intended to have a column contract. Diagnostics for `contract enforced` models do not recommend changing the project mode because explicit model contracts remain authoritative.
-
-Diagnostic codes:
-
-| Code | Meaning |
-|------|---------|
-| `K001` | A declared column is missing from the model's query output |
-| `K002` | A column's inferred type does not match the declared type |
-| `K003` | A column's type could not be proven (with `type_enforcement` enabled) |
-| `K013` | A string literal fills an enum-typed column of an enforced contract but is not a member of the enum (not checked on SQL Server) |
-
-Compile returns exit code `1` when any error-severity diagnostic is found, making it suitable for CI checks.
-
-## Output
-
-### Text output (default)
+`sqb compile` turns your project into the SQL it will run. It resolves references, expands
+macros, checks SQL and column contracts, computes column lineage, runs your Rules, and writes the
+compiled SQL to `target/compiled/`. It works offline and never connects to the warehouse.
 
 ```bash
 sqb compile
@@ -280,7 +28,123 @@ Compile ready  12 models
   Wrote: target/compiled/
 ```
 
-Each model shows its name, status (OK or FAIL), and column count. Models with contract errors are marked FAIL.
+Each model shows its status (`OK` or `FAIL`) and column count. Compile exits with `1` when it
+finds any error, so it can gate CI.
+
+## Usage
+
+```bash
+sqb compile [SELECTOR ...] [flags]
+```
+
+Positional `SELECTOR` arguments work like `--select`, and both forms can be combined.
+`--project-dir <path>`, `--no-color` and `--debug` can go before or after the command name.
+
+## Flags
+
+| Flag | Description |
+|------|-------------|
+| `SELECTOR ...` | Positional selectors, the same as `--select` |
+| `--select`, `-s` | Analyze and report selected resources |
+| `--select-file` | Read selectors from a file, one selector per line |
+| `--exclude` | Remove resources from the selected scope |
+| `--no-sql-analysis` | Turn off SQL syntax, binding, type inference and semantic checks (`--no-sql-validation` is an alias) |
+| `--no-cache` | Compile in full, without reusing earlier compiles or the Rules cache; see [Forcing a fresh compile](#forcing-a-fresh-compile) |
+| `--defer-to` | Resolve unselected model references against another target |
+| `--json` | Print the full compile report as JSON |
+| `--manifest` | Also write `target/manifest.json` with project metadata |
+| `--lineage-mode` | Column lineage mode: `fast` (default), `rich` or `none` |
+
+## What compile does
+
+1. **Discovery.** Finds `sqlbuild_project.toml` and the project's models, sources, seeds,
+   functions, audits, tests and macros.
+2. **Graph.** Resolves `__ref()`, `__source()` and `__seed()`, expands macros, and orders models
+   by dependency.
+3. **SQL checks.** Parses and checks SQL, when SQL analysis is on. See
+   [Semantic Compilation](/docs/concepts/semantic-compilation).
+4. **Column lineage.** Traces column-level dependencies across models.
+5. **Contracts.** Checks declared columns against the inferred query output.
+6. **Rules.** Runs the selected built-in Rules, then the selected custom Rules.
+7. **Write.** Writes compiled SQL to `target/compiled/` when the Rules pass.
+
+Rules that need inferred types, such as `SQBRCONTRACT105`, are skipped when SQL analysis is off,
+and compile prints one note naming them.
+
+`sqb compile` is authoritative for correctness, contracts, lineage and configured Rules. Rule
+findings block the artifacts. To check one Rule code or family without changing project
+configuration, use [`sqb rules run`](/docs/cli/rules).
+
+## Compiling a selection
+
+Selectors limit analysis and reporting. Discovery still covers the whole project, so every
+reference is still checked.
+
+```bash
+sqb compile fact_orders daily_revenue
+sqb compile --select-file selected-models.txt
+sqb compile --exclude deprecated_model
+```
+
+SQLBuild analyses the selected resources and the upstream models needed to understand them. The
+text report shows only the selection. JSON also has the project totals and the selected model, seed
+and function counts. The manifest and the DAG always cover the whole project.
+
+## Compiled artifacts
+
+`target/compiled/` holds what each resource will run, with every macro, variable and audit
+argument rendered:
+
+| Path | Contents |
+|------|----------|
+| `models/<path>.sql` | Each model's query |
+| `functions/<language>/<path>.sql` | Each function's `CREATE FUNCTION` statements |
+| `audits/generic/<resource>/<audit>__<column>.sql` | Each attached generic audit, under the model, source or seed it checks; column audits end in `__<column>`, and an audit's `name` replaces the audit name |
+| `audits/singular/<audit>.sql` | Each singular audit |
+| `tests/...` | Each SQL unit test's comparison query |
+
+Read an audit's file to see how its arguments were spliced into the SQL, without running it.
+References such as `__ref("orders")` stay as written. Files are rewritten on every compile, and
+files for resources that no longer exist are removed.
+
+## Contract diagnostics
+
+A model's declared columns are checked against the columns its SQL produces:
+
+```
+error[K001]: declared column 'total_cents' was not found in statically inferred output for model 'fact_orders'
+  model: fact_orders
+  --> models/marts/fact_orders.sql:6:5
+  6 |     total_cents (),
+    |     ^^^^^^^^^^^
+  = help: add total_cents to the SELECT list or correct/remove MODEL(columns (...)); MODEL(columns (...)) is validated using static SQL analysis because settings.column_contract_mode is "implicit" (the default). If this project intentionally uses columns only for metadata and audits, set [settings] column_contract_mode = "explicit"; models with contract enforced remain validated
+```
+
+| Code | Meaning |
+|------|---------|
+| `K001` | A declared column is missing from the query output |
+| `K002` | A column's inferred type doesn't match the declared type |
+| `K003` | A column's type can't be proven (with `type_enforcement` on) |
+| `K013` | A string literal fills an enum-typed column of an enforced contract but isn't a member of the enum (not checked on SQL Server) |
+
+Which models are checked depends on `[settings] column_contract_mode`:
+
+- `implicit` (default): a model with declared columns and no `contract` setting must output every
+  declared column.
+- `explicit`: only models with `contract enforced` are shape-checked; declared columns elsewhere
+  are metadata and audit targets.
+
+Explicit type enforcement works in both modes. Switching to `explicit` is a project policy, not a
+way to silence an error: if a model is meant to have a contract, fix the query or the
+declaration. Errors on `contract enforced` models don't suggest changing the mode. See
+[Contracts](/docs/concepts/models/contracts).
+
+## Output
+
+### Text output
+
+The default output is the tree shown at the top of this page, followed by any diagnostics. Models
+with contract errors are marked `FAIL`.
 
 ### JSON output
 
@@ -288,74 +152,190 @@ Each model shows its name, status (OK or FAIL), and column count. Models with co
 sqb compile --json
 ```
 
-Returns a structured report including:
+| Field | Contents |
+|-------|----------|
+| `summary` | Model, seed, function, audit, test, error and warning counts |
+| `resources` | Per model: column count, dependencies, lineage summary and compiled SQL |
+| `diagnostics` | Every diagnostic, with its source location |
+| `compile_timings` | Timings and cache counters; see below |
+| `lineage_mode` | The lineage mode used |
+| `artifacts` | Paths of the files written |
 
-- `summary` - model, seed, function, audit, test, error, and warning counts
-- `resources` - per-model details including column count, dependencies, lineage summary, and compiled SQL
-- `diagnostics` - all contract violations with source locations
-- `compile_timings` - timing breakdown for discovery, graph, lineage, contracts, and write phases
-- `lineage_mode` - which lineage mode was used
-- `artifacts` - paths to written files
+If compile stops before it can build the report, for example on a model header that doesn't
+parse, `--json` still prints one document with `command`, `has_errors: true`, `stopped: true` and
+a `diagnostics` list holding the error's `code`, `message` and `help`. The exit code is `1`, and
+progress stays on stderr.
 
-Every `compile_timings` value is a non-negative integer. Besides the phase timings, it attributes
-custom Rule cost:
+`compile_timings` is one level deep, and every value is a non-negative integer. Use it to see
+where a slow compile spends its time:
 
 | Key | Meaning |
 |-----|---------|
-| `custom_rules_ms`, `custom_rules_cpu_ms` | Wall and CPU time of the custom Rules phase, including its host processes |
-| `custom_rules_invocations` | Custom Rule invocations the hosts ran, one per Rule and subject |
+| `discover_ms`, `graph_ms`, `lineage_ms`, `contracts_ms`, `write_ms` | Wall time of each phase |
+| `built_in_rules_ms` | Wall time of the built-in Rules |
+| `custom_rules_ms`, `custom_rules_cpu_ms` | Wall and CPU time of the custom Rules, including their host processes |
+| `custom_rules_invocations` | Custom Rule invocations, one per Rule and subject |
 | `custom_rules_monitor_cpu_ms` | Host CPU spent checking Rule modules for state one subject could leave for another |
-| `custom_rules_guard_cpu_ms` | Host CPU spent by the runtime guard deciding whether an audited operation, such as opening a file or importing a module, came from Rule code |
+| `custom_rules_guard_cpu_ms` | Host CPU spent deciding whether an audited operation, such as opening a file, came from Rule code |
 | `custom_rules.<code>.invocations` | Invocations of one custom Rule |
-| `custom_rules.<code>.cpu_ms` | Host CPU of those invocations, excluding the guard's checks |
+| `custom_rules.<code>.cpu_ms` | Host CPU of those invocations, without the guard's checks |
 | `custom_rules.<code>.cache_hits` | Subjects whose stored result was reused |
-| `custom_rules.<code>.cache_misses` | Subjects evaluated because no stored result applied; every subject when the Rules cache is off |
+| `custom_rules.<code>.cache_misses` | Subjects evaluated again; every subject when the Rules cache is off |
+| `rule_cache_hits`, `rule_cache_misses` | Rule results reused or evaluated again |
+| `project_reuse_hits`, `project_reuse_misses`, `project_reuse_bypasses` | Whether the compile [reused an unchanged compile](#reusing-an-unchanged-compile), compiled because something changed, or was not eligible |
+| `project_reuse_check_ms` | Time spent checking whether the previous compile can be reused |
+| `total_ms` | Wall time of the whole compile |
 
-Each selected custom Rule has the four `custom_rules.<code>.*` keys; a Rule the cache answered in
-full reports `0` invocations. The keys are flat so that `compile_timings` stays one level deep, for
-example `jq '.compile_timings["custom_rules.XORDERS001.cpu_ms"]'`. Invocations and CPU include a
-Rule SQLBuild evaluates again in one process because its module state changed, so they can exceed
-the Rule's subject count. Monitor and guard time are separate from each Rule's CPU; the hosts'
-remaining CPU goes to starting Python, loading Rule modules, and reading the project.
-
-If compile stops on an error before it can build the report, such as a model header that does not
-parse, `--json` still prints one JSON document. It has `command`, `has_errors: true`,
-`stopped: true`, and a `diagnostics` list with that error's `code`, `message`, and `help`, the same
-text the error shows on stderr. The exit code is still 1, and progress stays on stderr.
+Other keys are finer-grained phase timings and cache counters. Each selected custom Rule has all
+four `custom_rules.<code>.*` keys; read one with
+`jq '.compile_timings["custom_rules.XORDERS001.cpu_ms"]'`. A Rule answered fully from the cache
+reports `0` invocations. Invocations and CPU can exceed a Rule's subject count, because a Rule
+whose module state changed is evaluated again.
 
 ## Column lineage modes
 
-The `--lineage-mode` flag controls how column lineage is computed during compile:
-
 | Mode | Description |
 |------|-------------|
-| `fast` | Default. Lightweight column extraction using SQL model metadata. |
-| `rich` | Full SQL analysis with transform classification and deeper tracing. Slower on large projects. |
-| `none` | Skip column lineage entirely. |
+| `fast` | Default. Lightweight column extraction from model metadata |
+| `rich` | Full SQL analysis with transform classification and deeper tracing; slower on large projects |
+| `none` | No column lineage |
 
-The JSON compile report includes a lineage summary for each model, not the full column graph. Use `sqb lineage <model>[.<column>]` to inspect lineage as a tree, edge list, or JSON. See [Column Lineage](/docs/concepts/column-lineage) for details on analysis modes and transform types.
+The JSON report holds a lineage summary per model, not the full column graph. Use
+`sqb lineage <model>[.<column>]` to inspect lineage. See
+[Column Lineage](/docs/concepts/column-lineage).
+
+## Reusing an unchanged compile
+
+When nothing that affects the result has changed, `sqb compile` replays the previous result. It
+prints one line to stderr, then the same report and exit code as before, including failed compiles
+and their diagnostics:
+
+```
+Inputs unchanged; reused the previous compile (0.1 s)
+```
+
+A compile is reused only when all of these match the previous one:
+
+- every file and directory in the project, apart from the paths listed below;
+- the command line: project and working directory, flags, selectors, `--vars`, target, and
+  whether color output is on;
+- every `SQLBUILD_*` and `SQB_*` environment variable, every variable a template or `@@ENV` read,
+  and every variable a provider's settings can read, including `env_prefix`, aliases and
+  nested-delimiter variables (values are stored only as hashes);
+- the contents of each provider settings `env_file` and `secrets_dir`;
+- the Python interpreter, the SQLBuild version, `sys.path`, and every loaded Python module file
+  outside the project;
+- the files the previous compile wrote under `target/compiled/` and the `--dag` file. If one is
+  missing or edited, compile runs in full and rewrites it.
+
+These paths are not inputs: `target/`, `logs/`, `venv/`, `.git/` and `__pycache__/` anywhere, and
+`.cache`, `.fensu`, `.hg`, `.idea`, `.mypy_cache`, `.nox`, `.pytest_cache`, `.ruff_cache`,
+`.sqlbuild`, `.svn`, `.tox`, `.venv` and `.vscode` at the project root. Other hidden folders are
+inputs, because custom Rules can read them. DuckDB database files count only by whether they exist.
+
+Reuse assumes that macros, hooks, providers, adapters and custom Rules are deterministic: the same
+inputs give the same output. See
+[Macros must be deterministic](/docs/concepts/macros/python-macros#macros-must-be-deterministic). A
+compile whose templates read `run.id` is never reused.
+
+A replay differs from a full compile in three ways:
+
+- In JSON, only `compile_timings` differs. It holds `project_reuse_hits`, `project_reuse_misses`,
+  `project_reuse_bypasses`, `project_reuse_check_ms` and `total_ms`.
+- In text mode, the per-phase progress lines are not printed.
+- Lifecycle sinks receive only the invocation events, because no compile phase runs.
+
+When storing a result for reuse takes noticeable time, for example in a project with very many
+files, compile prints `Recording compile for reuse...` and a completion line on stderr before the
+report.
+
+## Compiling after an edit
+
+When only model SQL files and SQL test files changed since the previous compile, `sqb compile`
+compiles just those files. It checks the changed models and tests, and every model whose inputs'
+columns, types or nullability the edit changed, and takes everything else from the previous
+compile. Project-wide Rules still run over the whole project. It prints one line to stderr, then
+the report a full compile would give:
+
+```
+Compiled 1 changed file(s) against the previous compile (1 model(s), 2.1s)
+```
+
+Compile runs in full instead when:
+
+- a file was added, removed or renamed, or any other file changed, such as
+  `sqlbuild_project.toml`, a source or schema YAML file, a macro, a seed or a function;
+- an edited model changes what it references, or changes a header setting other than
+  `description`, `columns`, `dynamic_columns`, `model_schema`, `audits`, `contract`, or a switch
+  between `view` and `table`;
+- a custom Rule needs to see the edit: a project-subject Rule reads something the edit changed, or
+  a model-subject Rule must run again for a model that was not edited (for example because it reads
+  an edited upstream file), or reads more for an edited model than that model's SQL, columns,
+  contract and grain, project files and the source list;
+- the previous compile reported errors or warnings, other than Rule findings, in files the edit
+  didn't change;
+- the previous compile used the other output format (`--json` or text), or ran with delta compiles
+  off;
+- the edit changes which models or sources a macro reads through its arguments, changes a model's
+  `dynamic_columns` families, or changes the shape of so many models that a full compile is cheaper.
+
+A full compile after an edit still reuses work for unchanged inputs: the column analysis of models
+whose query, settings and upstream columns are unchanged, the scan of unchanged SQL test files,
+Rule results, and macro results.
+
+Either way, the output is identical to `sqb compile --no-cache`. To turn delta compiles off, set
+`delta_compile = false` under `[settings]` or set `SQLBUILD_DISABLE_DELTA_COMPILE=1`.
+
+## Forcing a fresh compile
+
+Reuse notices edits from file metadata, such as size and timestamps, without reading unchanged
+files. An edit can go unnoticed in these cases:
+
+| Situation | Why |
+|-----------|-----|
+| A Python package outside the project gains a submodule or data file that compile reads without importing first | Packages are tracked by the module files compile loaded |
+| A network filesystem that caches file attributes, or clocks that differ between machines | Timestamps may not show a recent edit |
+| Windows, or a FUSE, SMB or exFAT mount, and a rewrite that keeps the size and restores the modification time (`touch -r`, `rsync -t`, `robocopy /COPY:T`) | These filesystems have no real change time |
+
+In these cases, or whenever a result looks stale, compile in full:
+
+| To | Use |
+|----|-----|
+| Compile in full once | `sqb compile --no-cache` |
+| Always compile in full | `SQLBUILD_DISABLE_COMPILE_REUSE=1`, `SQLBUILD_DISABLE_COMPILE_CACHE=1`, or `compile_cache = false` on the target |
+| Never compile only the changed files | `[settings] delta_compile = false` or `SQLBUILD_DISABLE_DELTA_COMPILE=1` |
+
+`--no-cache` also turns the Rules cache off for that compile, as `[rules.cache] enabled = false`
+does: every Rule evaluates every subject again, and `rule_cache_hits` is `0`. The next compile
+without the flag reuses what the cache held before.
+
+Compile also always runs in full with `--manifest`, `--debug` or a profiling flag, in a project
+without `sqlbuild_project.toml` or `sqlbuild_project.yml`, and when a provider's settings use
+sources SQLBuild can't list exactly, such as a custom `settings_customise_sources` or
+command-line parsing. The reason is logged at debug level.
 
 ## Examples
 
 ```bash
-# Basic compile
+# Compile the project
 sqb compile
 
-# Compile with full JSON report
+# Print the full report as JSON
 sqb compile --json
 
-# Compile with rich column lineage
+# Compile with rich column lineage, or none
 sqb compile --lineage-mode rich
-
-# Skip column lineage
 sqb compile --lineage-mode none
 
-# Generate manifest
+# Also write target/manifest.json
 sqb compile --manifest
 
 # Compile only selected models
 sqb compile fact_orders daily_revenue
 
-# Disable SQL analysis
+# Turn off SQL analysis
 sqb compile --no-sql-analysis
+
+# Ignore earlier compiles and caches
+sqb compile --no-cache
 ```
