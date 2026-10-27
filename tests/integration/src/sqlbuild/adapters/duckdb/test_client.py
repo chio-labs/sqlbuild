@@ -259,13 +259,16 @@ def test_given_config_with_settings_when_connecting_then_applies_settings(
                 columns=("id", "name"),
                 rows=((1, "alice"),),
                 truncated=True,
+                column_types=("INTEGER", "VARCHAR"),
             ),
         ),
         QueryTestCase(
             description="returns all rows without limit",
             sql="SELECT * FROM (VALUES (1), (2)) AS t(id) ORDER BY id",
             limit=None,
-            expected_result=QueryResult(columns=("id",), rows=((1,), (2,))),
+            expected_result=QueryResult(
+                columns=("id",), rows=((1,), (2,)), column_types=("INTEGER",)
+            ),
         ),
     ],
     ids=lambda case: case.description,

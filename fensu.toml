@@ -813,6 +813,11 @@ symbols = ["OperationLifecycle"]
 reason = "Native code resolves these through the sqlbuild._native_host name table."
 
 [[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.observability.classes.statement_lifecycle"]
+symbols = ["StatementLifecycle"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
 modules = ["sqlbuild.runtime.observability.exceptions"]
 symbols = ["ObservabilityValidationError"]
 reason = "Native code resolves these through the sqlbuild._native_host name table."

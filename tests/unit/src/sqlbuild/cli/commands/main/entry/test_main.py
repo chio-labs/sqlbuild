@@ -1190,7 +1190,7 @@ def test_given_scenario_capture_arguments_when_running_with_dependencies_then_di
                 "query",
                 "select 1 as id",
                 "--format",
-                "table",
+                "long",
                 "--limit",
                 "5",
             ],
@@ -1222,7 +1222,7 @@ def test_given_query_command_arguments_when_running_with_dependencies_then_it_di
     )
 
     assert exit_code == test_case.expected_exit_code
-    assert received_args == [(None, "select 1 as id", None, "table", 5)]
+    assert received_args == [(None, "select 1 as id", None, "long", 5)]
 
 
 @pytest.mark.parametrize(
