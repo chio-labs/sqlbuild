@@ -640,12 +640,15 @@ fn observed_dispatch<'py>(
         (Err(error), Some(session))
             if !announced.get() && interrupting_signal(py, error).is_some() =>
         {
-            record_interrupted_setup(
-                py,
-                session,
-                (&started_at, started_payload()?),
-                failed_payload(error)?,
-            )?;
+            let recorded: PyResult<()> = started_payload().and_then(|started| {
+                record_interrupted_setup(
+                    py,
+                    session,
+                    (&started_at, started),
+                    failed_payload(error)?,
+                )
+            });
+            drop(recorded);
         }
         _ => {}
     }
