@@ -118,7 +118,7 @@ def run_recall_query(
     *, handle: int, sql: str, settings: dict[str, int], row_cap: int | None
 ) -> tuple[
     RecallFailure,
-    tuple[list[str], list[str | None], list[list[RecallCell]], RecallStatistics] | None,
+    tuple[tuple[list[str], list[str | None]], list[list[RecallCell]], RecallStatistics] | None,
 ]:
     """Columns and their types, at most `row_cap` rows of plain values, and server statistics."""
 
@@ -148,7 +148,7 @@ def run_recall_query(
         _number(summary=summary, key="read_bytes"),
         summary.get("query_id"),
     )
-    return None, (columns, types, rows[:row_cap] if row_cap is not None else rows, statistics)
+    return None, ((columns, types), rows[:row_cap] if row_cap is not None else rows, statistics)
 
 
 def run_recall_command(*, handle: int, sql: str) -> tuple[RecallFailure, None]:

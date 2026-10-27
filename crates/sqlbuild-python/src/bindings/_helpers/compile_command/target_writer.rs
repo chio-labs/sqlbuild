@@ -43,6 +43,7 @@ use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::construct::{enum_member, error_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
+use crate::bindings::_helpers::records::fields::path_posix_text;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::sql_test_glue::plan_driver::plan_compiled_sql_test_artifacts;
 use crate::bindings::_helpers::sql_test_glue::plan_driver::sql_test_model_chain_names_by_key;
@@ -68,6 +69,8 @@ const PUBLISHED_TREE: &str = "tree";
 const TARGET_OPTIONS: (&[&str], &[&str]) = (&["target_dir", "adapter", "project"], &["manifest"]);
 const STAGING_CHANGED_HELP: &str =
     "Rerun the compile; avoid deleting target/ while a compile is running.";
+/// The first line of a compiled model whose Rules failed.
+const RULE_FAILED_HEADER: &str = "-- sqb: compile failed for this model; not buildable";
 
 /// `base / part / ...`.
 fn joined<'py>(base: &Bound<'py, PyAny>, parts: &[&str]) -> PyResult<Bound<'py, PyAny>> {
@@ -748,21 +751,20 @@ pub(crate) fn write_static_target<'py>(
     )
 }
 
-/// The first line of a compiled model whose Rules failed.
-const RULE_FAILED_HEADER: &str = "-- sqb: compile failed for this model; not buildable";
-
 /// `path` relative to `project_dir` with `/` separators, as model files name themselves.
 fn project_relative(path: &Bound<'_, PyAny>, project_dir: &Bound<'_, PyAny>) -> PyResult<String> {
-    let path: Bound<'_, PyAny> = path_class(path.py())?.call1((path,))?;
-    let relative: Bound<'_, PyAny> = if path.call_method0("is_absolute")?.is_truthy()? {
-        match path.call_method1("relative_to", (project_dir.call_method0("resolve")?,)) {
-            Ok(relative) => relative,
-            Err(_) => path,
-        }
-    } else {
-        path
-    };
-    relative.call_method0("as_posix")?.extract()
+    let text: String = path_posix_text(path)?;
+    if !Path::new(&text).is_absolute() {
+        return Ok(text);
+    }
+    let root: PathBuf = std::fs::canonicalize(path_posix_text(project_dir)?)?;
+    Ok(Path::new(&text)
+        .strip_prefix(&root)
+        .map_or(text.clone(), |relative| {
+            relative
+                .to_string_lossy()
+                .replace(std::path::MAIN_SEPARATOR, "/")
+        }))
 }
 
 /// Each source file's Rule errors as compiled-file header lines: code, location and message.
@@ -823,9 +825,7 @@ pub(crate) fn write_rule_failed_models<'py>(
                 (relative_path, query_sql.to_string())
             } else {
                 (
-                    native_field(&model, "relative_path")?
-                        .call_method0("as_posix")?
-                        .extract()?,
+                    path_posix_text(&native_field(&model, "relative_path")?)?,
                     native_field(&model, "query_sql")?.extract()?,
                 )
             };

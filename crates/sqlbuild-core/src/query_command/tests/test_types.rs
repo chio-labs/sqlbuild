@@ -8,6 +8,12 @@ pub(super) struct DisplayTestCase {
     pub(super) expected_text: &'static str,
 }
 
+pub(super) struct FooterTestCase {
+    pub(super) description: &'static str,
+    pub(super) row_count: usize,
+    pub(super) expected_footer: &'static str,
+}
+
 pub(super) struct JsonTestCase {
     pub(super) description: &'static str,
     pub(super) columns: Vec<String>,

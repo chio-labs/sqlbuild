@@ -38,6 +38,19 @@ from tests.unit.src.sqlbuild.rule_engine._helpers.run.helpers import rebuild_ide
 STAGE_CAPTURE_SUFFIX: str = ".json"
 
 E2E_FIXTURES_DIR: Path = Path(__file__).resolve().parents[6] / "e2e" / "fixtures"
+_WEEKLY_ORDERS: str = (
+    'MODEL (\n  description "Weekly orders per product",\n  materialized table,\n);\n\n'
+    "SELECT 1 AS product_id, CAST(10 AS BIGINT) AS orders_placed, "
+    "CAST(1 AS BIGINT) AS refund_count\n"
+)
+_REFUND_RATES: str = (
+    'MODEL (\n  description "Weekly refund rate per product",\n  materialized table,\n);\n\n'
+    'WITH weekly AS (SELECT * FROM __ref("weekly_orders")),\n'
+    "@sql.weekly_rates(weekly, weekly.keys := (product_id), "
+    "weekly.order_count := orders_placed, __cte := by_product)\n"
+    "final AS (SELECT * FROM by_product)\n"
+    "SELECT * FROM final\n"
+)
 
 
 def staging_directories(target_dir: Path) -> list[str]:
@@ -1214,3 +1227,35 @@ def write_enum_project(*, root: Path, model_sql: str, contract: str) -> None:
         "  columns (\n    order_id (type INTEGER),\n    status (type order_status),\n  ),\n);\n\n"
         f"{model_sql}"
     )
+
+
+def _weekly_rates(first_step: str) -> str:
+    return (
+        'MACRO (\n  description "Weekly refund rate per grain",\n'
+        "  arguments (weekly RELATION (keys COLUMNS, order_count BIGINT, refund_count BIGINT)),\n"
+        ");\n\n"
+        f"WITH counted AS (\n{first_step}\n),\n\n"
+        "rated AS (\n"
+        "  SELECT\n"
+        "    @weekly.keys,\n"
+        "    SUM(refunds) / NULLIF(SUM(orders), 0) AS refund_rate\n"
+        "  FROM counted\n"
+        "  GROUP BY @weekly.keys\n"
+        ")\n"
+    )
+
+
+def refund_rates_project(first_step: str) -> dict[str, str]:
+    """Weekly orders, refund-rate models and the SQL macro whose first CTE is `first_step`."""
+
+    return {
+        "models/weekly_orders.sql": _WEEKLY_ORDERS,
+        "models/refund_rates.sql": _REFUND_RATES,
+        "models/_macros/sql/weekly_rates.sql": _weekly_rates(first_step),
+    }
+
+
+def open_orders_model(sql: str) -> str:
+    """An `open_orders` table model whose query is `sql`."""
+
+    return f'MODEL (\n  description "Open orders",\n  materialized table,\n);\n\n{sql}\n'

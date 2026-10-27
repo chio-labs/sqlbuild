@@ -39,6 +39,31 @@ pub(crate) struct Built {
     pub(crate) extra_artifacts: u64,
 }
 
+impl Built {
+    /// Account for one event's row and the artifact rows of its evidence.
+    fn add_event(
+        &mut self,
+        stream: DeliveryStream,
+        (row, evidence_rows): (
+            Result<RecallRow, crate::records::errors::RecordError>,
+            Option<Vec<RecallRow>>,
+        ),
+    ) {
+        if let Some(rows) = evidence_rows {
+            self.rows.extend(rows);
+            self.written.push(DeliveryStream::Artifacts);
+            self.extra_artifacts += 1;
+        }
+        match row {
+            Ok(row) => {
+                self.rows.push(row);
+                self.written.push(stream);
+            }
+            Err(_) => self.unbuildable.push(stream),
+        }
+    }
+}
+
 /// Builds rows for one session; remembers which SQL and references it has stored.
 #[derive(Debug)]
 pub(crate) struct Materializer {
@@ -132,70 +157,67 @@ impl Materializer {
         })
     }
 
-    /// The row of `event`; an `audit_completed` event's evidence rows leave its payload and, when the outcome keeps them, become an artifact its `sample_digest` names.
+    /// The row of `event`, then the artifact rows of its evidence: an `audit_completed` event's evidence rows leave its payload and, when the outcome keeps them, become an artifact its `sample_digest` names.
     fn event_rows(
         &mut self,
-        mut event: Map<String, Value>,
-        built: &mut Built,
-    ) -> Result<RecallRow, crate::records::errors::RecordError> {
-        if let Some(artifact) = self.take_evidence(&mut event)
-            && let Some(rows) = self.artifact_rows(artifact)
-        {
-            built.rows.extend(rows);
-            built.written.push(DeliveryStream::Artifacts);
-            built.extra_artifacts += 1;
-        }
-        event_object_row(&self.envelope, &event)
+        event: Map<String, Value>,
+    ) -> (
+        Result<RecallRow, crate::records::errors::RecordError>,
+        Option<Vec<RecallRow>>,
+    ) {
+        let (event, artifact): (Map<String, Value>, Option<ArtifactInput>) =
+            self.take_evidence(event);
+        let evidence_rows: Option<Vec<RecallRow>> =
+            artifact.and_then(|artifact| self.artifact_rows(artifact));
+        (event_object_row(&self.envelope, &event), evidence_rows)
     }
 
-    fn take_evidence(&self, event: &mut Map<String, Value>) -> Option<ArtifactInput> {
-        if event.get("event_type").and_then(Value::as_str) != Some(AUDIT_COMPLETED_EVENT) {
-            return None;
-        }
-        let resource_id: Option<String> = event
-            .get("resource_id")
-            .and_then(Value::as_str)
-            .map(str::to_owned);
-        let event_id: String = event
-            .get("event_id")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_owned();
-        let seen_at: String = event
-            .get("occurred_at")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_owned();
-        let payload: &mut Map<String, Value> = event.get_mut("payload")?.as_object_mut()?;
-        let evidence: Value = payload.remove(EVIDENCE_PAYLOAD_FIELD)?;
-        let outcome: &str = payload
-            .get("outcome")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
-        if !self.audit_evidence.keeps(outcome) {
-            return None;
-        }
-        let content: Vec<u8> = serde_json::to_vec(&evidence).ok()?;
+    /// `event` without its evidence rows, and the artifact holding them when its outcome keeps them.
+    fn take_evidence(
+        &self,
+        mut event: Map<String, Value>,
+    ) -> (Map<String, Value>, Option<ArtifactInput>) {
+        let evidence: Option<Value> =
+            if event.get("event_type").and_then(Value::as_str) == Some(AUDIT_COMPLETED_EVENT) {
+                event
+                    .get_mut("payload")
+                    .and_then(Value::as_object_mut)
+                    .and_then(|payload| payload.remove(EVIDENCE_PAYLOAD_FIELD))
+            } else {
+                None
+            };
+        let text = |field: &str| -> Option<String> {
+            event.get(field).and_then(Value::as_str).map(str::to_owned)
+        };
+        let outcome: Option<&str> = event
+            .get("payload")
+            .and_then(|payload| payload.get("outcome"))
+            .and_then(Value::as_str);
+        let Some(evidence) =
+            evidence.filter(|_| self.audit_evidence.keeps(outcome.unwrap_or_default()))
+        else {
+            return (event, None);
+        };
         let mut artifact: ArtifactInput = artifact_input(
-            content,
+            evidence.to_string().into_bytes(),
             (
                 AUDIT_EVIDENCE_KIND,
                 AUDIT_EVIDENCE_MEDIA_TYPE,
                 AUDIT_EVIDENCE_ROLE,
             ),
-            (None, resource_id),
-            &seen_at,
+            (None, text("resource_id")),
+            &text("occurred_at").unwrap_or_default(),
         );
-        artifact.ref_id = event_id;
-        let digest: &str = artifact
+        artifact.ref_id = text("event_id").unwrap_or_default();
+        let digest: String = artifact
             .digest
             .strip_prefix(ARTIFACT_DIGEST_PREFIX)
-            .unwrap_or(&artifact.digest);
-        payload.insert(
-            SAMPLE_DIGEST_PAYLOAD_FIELD.to_owned(),
-            Value::from(digest.to_owned()),
-        );
-        Some(artifact)
+            .unwrap_or(&artifact.digest)
+            .to_owned();
+        if let Some(payload) = event.get_mut("payload").and_then(Value::as_object_mut) {
+            payload.insert(SAMPLE_DIGEST_PAYLOAD_FIELD.to_owned(), Value::from(digest));
+        }
+        (event, Some(artifact))
     }
 
     /// The rows of `batch`, with each record's stream sorted by how it is accounted; lifecycle replacements see their events in publication order.
@@ -223,13 +245,7 @@ impl Materializer {
                     built.rows.extend(rows);
                     built.written.push(stream);
                 }
-                Payload::Event(event) => match self.event_rows(event, &mut built) {
-                    Ok(row) => {
-                        built.rows.push(row);
-                        built.written.push(stream);
-                    }
-                    Err(_) => built.unbuildable.push(stream),
-                },
+                Payload::Event(event) => built.add_event(stream, self.event_rows(event)),
                 Payload::Pending(sequence, pending) => pending_events.push((sequence, pending)),
                 Payload::Sql(input) => match self.sql_rows(input) {
                     Some(rows) => {
@@ -250,13 +266,7 @@ impl Materializer {
                 ReplacedEvents::Published(events) => {
                     built.extra_events += events.len() as u64 - 1;
                     for event in events {
-                        match self.event_rows(event, &mut built) {
-                            Ok(row) => {
-                                built.rows.push(row);
-                                built.written.push(stream);
-                            }
-                            Err(_) => built.unbuildable.push(stream),
-                        }
+                        built.add_event(stream, self.event_rows(event));
                     }
                 }
                 ReplacedEvents::Failed => built.unbuildable.push(stream),

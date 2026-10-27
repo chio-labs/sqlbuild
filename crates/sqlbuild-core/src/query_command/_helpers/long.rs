@@ -6,7 +6,7 @@ use crate::query_command::models::QueryDisplay;
 
 /// `-[ RECORD n ]---+` then `column | value` lines per row, then the row count.
 #[must_use]
-pub fn render_query_long(display: &QueryDisplay) -> String {
+pub(crate) fn long_text(display: &QueryDisplay) -> String {
     let width: usize = display
         .columns
         .iter()

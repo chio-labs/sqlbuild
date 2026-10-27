@@ -351,10 +351,7 @@ class StatementLifecycle:
         is_handled: Callable[[BaseException], bool] | None = self._is_handled
         if is_handled is None:
             return False
-        try:
-            return bool(is_handled(error))
-        except Exception:
-            return False
+        return bool(is_handled(error))
 
     def _stop_monitor(self) -> str | None:
         monitor: StatementMonitor | None = self._monitor

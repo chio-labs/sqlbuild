@@ -316,8 +316,7 @@ fn run_query(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
     let rendered = render_result(
         py,
         &result,
-        format,
-        max_bytes,
+        (format, max_bytes),
         &QueryContext {
             target: settings.target.as_deref(),
             store_path: &label,

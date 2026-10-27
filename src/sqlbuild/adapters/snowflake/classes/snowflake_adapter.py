@@ -149,6 +149,7 @@ from sqlbuild.adapters.snowflake.constants import (
     BASE_TABLE_METADATA_TYPE,
     CURRENT_DATABASE_ATTRIBUTE,
     EXTERNAL_BROWSER_AUTHENTICATOR,
+    FIXED_POINT_RESULT_TYPE,
     MAX_STATEMENT_TIMEOUT_SECONDS,
     MFA_AUTHENTICATOR,
     OAUTH_AUTHORIZATION_CODE_AUTHENTICATOR,
@@ -1924,7 +1925,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         type_name: str | None = FIELD_ID_TO_NAME.get(column[1])
         if type_name is None:
             return None
-        if type_name != "FIXED":
+        if type_name != FIXED_POINT_RESULT_TYPE:
             return type_name
         precision: int | None = column[4]
         scale: int | None = column[5]

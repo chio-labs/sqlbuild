@@ -114,12 +114,11 @@ fn numeric_column(result: &QueryResult, index: usize) -> bool {
     seen
 }
 
-/// The rendered result in `format`: `json`, `long`, or `None` for the default layout.
+/// The rendered result in `format`: `json`, `long`, or `None` for the default layout; text cells are cut at `max_bytes`.
 pub(crate) fn render_result(
     py: Python<'_>,
     result: &QueryResult,
-    format: Option<&str>,
-    max_bytes: Option<usize>,
+    (format, max_bytes): (Option<&str>, Option<usize>),
     context: &QueryContext<'_>,
 ) -> PyResult<String> {
     if format == Some(JSON_FORMAT) {

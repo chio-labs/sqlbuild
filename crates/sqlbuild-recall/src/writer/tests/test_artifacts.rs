@@ -1,74 +1,60 @@
 use crate::records::models::RecallValue;
 use crate::settings::models::AuditEvidence;
-use crate::writer::tests::helpers::{failed_statement_sql, stored_evidence};
-
-fn text(value: &str) -> RecallValue {
-    RecallValue::Text(value.to_owned())
-}
-
-/// The digest of `[{"order_id":<index>}]` without its prefix.
-fn evidence_digest(index: u8) -> RecallValue {
-    let content: String = format!("[{{\"order_id\":{index}}}]");
-    text(&crate::records::main::sha256_hex::sha256_hex(
-        content.as_bytes(),
-    ))
-}
-
-fn kept(outcome: &str, index: u8) -> Vec<RecallValue> {
-    vec![
-        text(outcome),
-        RecallValue::Integer(0),
-        evidence_digest(index),
-        RecallValue::Integer(1),
-        text("audit_evidence"),
-        text(&format!("[{{\"order_id\":{index}}}]")),
-    ]
-}
-
-fn left_out(outcome: &str) -> Vec<RecallValue> {
-    vec![
-        text(outcome),
-        RecallValue::Integer(0),
-        RecallValue::Null,
-        RecallValue::Integer(1),
-        RecallValue::Null,
-        RecallValue::Null,
-    ]
-}
+use crate::writer::tests::helpers::{
+    failed_statement_sql, kept_evidence, left_out_evidence, recall_text, stored_evidence,
+};
+use crate::writer::tests::test_types::{AuditEvidenceTestCase, FailedStatementTestCase};
 
 #[test]
 fn given_audit_evidence_settings_when_audits_complete_then_kept_evidence_is_an_artifact_and_none_stays_in_the_event()
  {
     let test_cases = [
-        (
-            AuditEvidence::WarnAndError,
-            vec![kept("error", 1), kept("warn", 0)],
-        ),
-        (
-            AuditEvidence::Error,
-            vec![kept("error", 1), left_out("warn")],
-        ),
-        (
-            AuditEvidence::Off,
-            vec![left_out("error"), left_out("warn")],
-        ),
+        AuditEvidenceTestCase {
+            description: "warn_and_error keeps both outcomes' rows",
+            audit_evidence: AuditEvidence::WarnAndError,
+            expected_rows: vec![kept_evidence("error", 1), kept_evidence("warn", 0)],
+        },
+        AuditEvidenceTestCase {
+            description: "error keeps only the failing audit's rows",
+            audit_evidence: AuditEvidence::Error,
+            expected_rows: vec![kept_evidence("error", 1), left_out_evidence("warn")],
+        },
+        AuditEvidenceTestCase {
+            description: "off keeps no rows",
+            audit_evidence: AuditEvidence::Off,
+            expected_rows: vec![left_out_evidence("error"), left_out_evidence("warn")],
+        },
     ];
 
-    for (setting, expected) in test_cases {
-        assert_eq!(stored_evidence(setting), expected, "{setting:?}");
+    for test_case in test_cases {
+        assert_eq!(
+            stored_evidence(test_case.audit_evidence),
+            test_case.expected_rows,
+            "{}",
+            test_case.description
+        );
     }
 }
 
 #[test]
 fn given_statements_sharing_sql_and_a_failed_one_when_recorded_then_text_is_stored_once_and_every_statement_is_referenced()
  {
-    assert_eq!(
-        failed_statement_sql(),
-        vec![vec![
+    let test_cases = [FailedStatementTestCase {
+        description: "two texts, three references, no conflict",
+        expected_rows: vec![vec![
             RecallValue::Integer(2),
             RecallValue::Integer(3),
             RecallValue::Integer(0),
-            text("s1,s2,s3"),
-        ]]
-    );
+            recall_text("s1,s2,s3"),
+        ]],
+    }];
+
+    for test_case in test_cases {
+        assert_eq!(
+            failed_statement_sql(),
+            test_case.expected_rows,
+            "{}",
+            test_case.description
+        );
+    }
 }

@@ -628,10 +628,7 @@ fn audit_event(index: usize, outcome: &str) -> serde_json::Map<String, serde_jso
             "evidence": [{"order_id": index}],
         },
     });
-    match event {
-        serde_json::Value::Object(event) => event,
-        _ => serde_json::Map::new(),
-    }
+    serde_json::from_value(event).expect("the audit event is an object")
 }
 
 /// Per audit outcome: whether the stored event still holds its evidence, its `sample_digest`, and the artifact text that digest names, after a session keeping `audit_evidence`.
@@ -680,4 +677,40 @@ pub(crate) fn failed_statement_sql() -> Vec<Vec<RecallValue>> {
     )
     .expect("the query is valid")
     .rows
+}
+
+pub(crate) fn recall_text(value: &str) -> RecallValue {
+    RecallValue::Text(value.to_owned())
+}
+
+/// The digest of `[{"order_id":<index>}]` without its prefix.
+fn evidence_digest(index: u8) -> RecallValue {
+    let content: String = format!("[{{\"order_id\":{index}}}]");
+    recall_text(&crate::records::main::sha256_hex::sha256_hex(
+        content.as_bytes(),
+    ))
+}
+
+/// The [`stored_evidence`] row of an audit whose one evidence row was kept as an artifact.
+pub(crate) fn kept_evidence(outcome: &str, index: u8) -> Vec<RecallValue> {
+    vec![
+        recall_text(outcome),
+        RecallValue::Integer(0),
+        evidence_digest(index),
+        RecallValue::Integer(1),
+        recall_text("audit_evidence"),
+        recall_text(&format!("[{{\"order_id\":{index}}}]")),
+    ]
+}
+
+/// The [`stored_evidence`] row of an audit whose evidence was not kept.
+pub(crate) fn left_out_evidence(outcome: &str) -> Vec<RecallValue> {
+    vec![
+        recall_text(outcome),
+        RecallValue::Integer(0),
+        RecallValue::Null,
+        RecallValue::Integer(1),
+        RecallValue::Null,
+        RecallValue::Null,
+    ]
 }

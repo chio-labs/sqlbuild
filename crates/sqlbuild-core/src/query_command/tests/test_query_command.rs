@@ -3,26 +3,10 @@ use crate::query_command::main::render_dag_summary::render_dag_summary;
 use crate::query_command::main::render_query_json::render_query_json;
 use crate::query_command::main::render_query_text::render_query_text;
 use crate::query_command::models::{QueryDisplay, QueryLayout};
-use crate::query_command::tests::helpers::texts;
-use crate::query_command::tests::test_types::{DagTestCase, DisplayTestCase, JsonTestCase};
-
-fn invocations() -> QueryDisplay {
-    QueryDisplay {
-        columns: texts(&["status", "origin", "invocations"]),
-        types: vec![
-            Some("varchar".to_owned()),
-            Some("varchar".to_owned()),
-            Some("int32".to_owned()),
-        ],
-        numeric: vec![false, false, true],
-        rows: vec![
-            texts(&["completed", "integration", "133"]),
-            texts(&["cancelled", "local", "NULL"]),
-        ],
-        truncated: false,
-        limit: None,
-    }
-}
+use crate::query_command::tests::helpers::{invocations, texts};
+use crate::query_command::tests::test_types::{
+    DagTestCase, DisplayTestCase, FooterTestCase, JsonTestCase,
+};
 
 #[test]
 fn given_rows_when_rendering_text_then_a_fitting_result_is_boxed_and_others_are_records() {
@@ -93,18 +77,35 @@ fn given_rows_when_rendering_text_then_a_fitting_result_is_boxed_and_others_are_
 }
 
 #[test]
-fn given_more_than_fifty_rows_when_rendering_text_then_the_footer_suggests_aggregating() {
-    let display = QueryDisplay {
-        columns: texts(&["n"]),
-        rows: (0..51).map(|_| texts(&["7"])).collect(),
-        ..QueryDisplay::default()
-    };
+fn given_many_rows_when_rendering_text_then_only_more_than_fifty_suggest_aggregating() {
+    let test_cases = [
+        FooterTestCase {
+            description: "fifty rows print only the count",
+            row_count: 50,
+            expected_footer: "\n50 rows\n",
+        },
+        FooterTestCase {
+            description: "more than fifty rows suggest aggregating",
+            row_count: 51,
+            expected_footer: "\n51 rows; to read fewer, aggregate with GROUP BY or add a LIMIT\n",
+        },
+    ];
 
-    let rendered: String = render_query_text(&display, QueryLayout::Fitted { width: 120 });
+    for test_case in test_cases {
+        let display = QueryDisplay {
+            columns: texts(&["n"]),
+            rows: (0..test_case.row_count).map(|_| texts(&["7"])).collect(),
+            ..QueryDisplay::default()
+        };
 
-    assert!(
-        rendered.ends_with("\n51 rows; to read fewer, aggregate with GROUP BY or add a LIMIT\n")
-    );
+        let rendered: String = render_query_text(&display, QueryLayout::Fitted { width: 120 });
+
+        assert!(
+            rendered.ends_with(test_case.expected_footer),
+            "{}",
+            test_case.description
+        );
+    }
 }
 
 #[test]

@@ -1,10 +1,11 @@
 //! The text layout `sqb query` and `sqb recall query` share: a box when the result fits the output width, records otherwise.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::prelude::{PyResult, Python};
 use sqlbuild_core::query_command::main::render_query_text::render_query_text;
 use sqlbuild_core::query_command::models::{QueryDisplay, QueryLayout};
 
 use crate::bindings::_helpers::boundary::python_calls::imported;
+use crate::bindings::_helpers::build_progress::terminal::{terminal_columns, tty_flag};
 
 /// The format that always prints one record per row.
 pub(crate) const LONG_FORMAT: &str = "long";
@@ -13,16 +14,10 @@ const PIPED_WIDTH: usize = 120;
 
 /// The terminal's width when stdout is one, else [`PIPED_WIDTH`].
 fn output_width(py: Python<'_>) -> PyResult<usize> {
-    let stdout: Bound<'_, PyAny> = imported(py, "sys", "stdout")?;
-    let interactive: bool = stdout
-        .call_method0("isatty")
-        .and_then(|answer| answer.is_truthy())
-        .unwrap_or(false);
-    if !interactive {
+    if !tty_flag(&imported(py, "sys", "stdout")?).unwrap_or(false) {
         return Ok(PIPED_WIDTH);
     }
-    let size: Bound<'_, PyAny> = imported(py, "shutil", "get_terminal_size")?.call0()?;
-    size.getattr("columns")?.extract()
+    terminal_columns(py)
 }
 
 /// `display` as text: records for `--format long`, otherwise a box when it fits the output.

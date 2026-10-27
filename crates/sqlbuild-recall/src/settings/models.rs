@@ -4,7 +4,9 @@ use std::path::PathBuf;
 
 use sqlbuild_config::models::ConfigValue;
 
-use crate::settings::constants::DEFAULT_SQLITE_MAX_OUTPUT_BYTES;
+use crate::settings::constants::{
+    AUDIT_ERROR_OUTCOME, AUDIT_WARN_OUTCOME, DEFAULT_SQLITE_MAX_OUTPUT_BYTES,
+};
 
 /// Where Recall writes or reads.
 #[derive(Clone, Debug, PartialEq)]
@@ -85,8 +87,8 @@ impl AuditEvidence {
     #[must_use]
     pub fn keeps(self, outcome: &str) -> bool {
         match self {
-            Self::WarnAndError => outcome == "warn" || outcome == "error",
-            Self::Error => outcome == "error",
+            Self::WarnAndError => [AUDIT_WARN_OUTCOME, AUDIT_ERROR_OUTCOME].contains(&outcome),
+            Self::Error => outcome == AUDIT_ERROR_OUTCOME,
             Self::Off => false,
         }
     }

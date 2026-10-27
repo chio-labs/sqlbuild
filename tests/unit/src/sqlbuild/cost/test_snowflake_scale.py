@@ -278,9 +278,12 @@ def test_given_a_history_read_timeout_when_collecting_then_only_retried_reads_ar
             attempts=1,
         )
 
-    assert {
-        event.payload.get("outcome") for event in events if event.event_type == "statement_failed"
-    } == test_case.expected_failure_outcomes
+    failures: list[LifecycleEvent] = list(
+        filter(lambda event: event.event_type == "statement_failed", events)
+    )
+    assert {event.payload.get("outcome") for event in failures} == (
+        test_case.expected_failure_outcomes
+    )
 
 
 class _ClosingHistory(_FakeQueryHistory):

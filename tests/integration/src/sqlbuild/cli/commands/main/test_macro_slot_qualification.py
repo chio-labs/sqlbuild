@@ -10,6 +10,7 @@ from sqlbuild._native import run_cli as main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     MacroSlotQualificationTestCase,
 )
+from tests.integration.src.sqlbuild.cli.commands.main.helpers import refund_rates_project
 
 _PROJECT: str = (
     'name = "shop"\n'
@@ -23,43 +24,6 @@ _PROJECT: str = (
     "[rules]\n"
     'select = ["SQBRSQL028"]\n'
 )
-_WEEKLY_ORDERS: str = (
-    'MODEL (\n  description "Weekly orders per product",\n  materialized table,\n);\n\n'
-    "SELECT 1 AS product_id, CAST(10 AS BIGINT) AS orders_placed, "
-    "CAST(1 AS BIGINT) AS refund_count\n"
-)
-_REFUND_RATES: str = (
-    'MODEL (\n  description "Weekly refund rate per product",\n  materialized table,\n);\n\n'
-    'WITH weekly AS (SELECT * FROM __ref("weekly_orders")),\n'
-    "@sql.weekly_rates(weekly, weekly.keys := (product_id), "
-    "weekly.order_count := orders_placed, __cte := by_product)\n"
-    "final AS (SELECT * FROM by_product)\n"
-    "SELECT * FROM final\n"
-)
-
-
-def _weekly_rates(first_step: str) -> str:
-    return (
-        'MACRO (\n  description "Weekly refund rate per grain",\n'
-        "  arguments (weekly RELATION (keys COLUMNS, order_count BIGINT, refund_count BIGINT)),\n"
-        ");\n\n"
-        f"WITH counted AS (\n{first_step}\n),\n\n"
-        "rated AS (\n"
-        "  SELECT\n"
-        "    @weekly.keys,\n"
-        "    SUM(refunds) / NULLIF(SUM(orders), 0) AS refund_rate\n"
-        "  FROM counted\n"
-        "  GROUP BY @weekly.keys\n"
-        ")\n"
-    )
-
-
-def _rates_project(first_step: str) -> dict[str, str]:
-    return {
-        "models/weekly_orders.sql": _WEEKLY_ORDERS,
-        "models/refund_rates.sql": _REFUND_RATES,
-        "models/_macros/sql/weekly_rates.sql": _weekly_rates(first_step),
-    }
 
 
 @pytest.mark.parametrize(
@@ -67,7 +31,7 @@ def _rates_project(first_step: str) -> dict[str, str]:
     [
         MacroSlotQualificationTestCase(
             description="a first step written in plain slot reads passes",
-            files=_rates_project(
+            files=refund_rates_project(
                 "  SELECT\n"
                 "    @weekly.keys,\n"
                 "    @weekly.order_count AS orders,\n"
@@ -80,7 +44,7 @@ def _rates_project(first_step: str) -> dict[str, str]:
         ),
         MacroSlotQualificationTestCase(
             description="aliased slot reads beside a plain group read fail once, at the macro",
-            files=_rates_project(
+            files=refund_rates_project(
                 "  SELECT\n"
                 "    @weekly.keys,\n"
                 "    s.@weekly.order_count AS orders,\n"

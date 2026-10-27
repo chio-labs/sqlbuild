@@ -10,6 +10,7 @@ from sqlbuild._native import run_cli as main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     RuleFailureArtifactsTestCase,
 )
+from tests.integration.src.sqlbuild.cli.commands.main.helpers import open_orders_model
 
 _PROJECT: str = (
     'name = "shop"\n'
@@ -28,10 +29,6 @@ _ORDERS: str = (
     "SELECT 1 AS order_id, 'open' AS status\n"
 )
 _HEADER: str = "-- sqb: compile failed for this model; not buildable\n"
-
-
-def _open_orders(sql: str) -> str:
-    return f'MODEL (\n  description "Open orders",\n  materialized table,\n);\n\n{sql}\n'
 
 
 @pytest.mark.parametrize(
@@ -66,7 +63,7 @@ def test_given_rule_findings_when_compiling_then_models_are_written_with_a_failu
     files: dict[str, str] = {
         "sqlbuild_project.toml": _PROJECT,
         "models/orders.sql": _ORDERS,
-        "models/open_orders.sql": _open_orders(
+        "models/open_orders.sql": open_orders_model(
             'SELECT o.order_id, status FROM __ref("orders") AS o'
         ),
     }
@@ -83,7 +80,7 @@ def test_given_rule_findings_when_compiling_then_models_are_written_with_a_failu
     ]
     _ = main(compile_args)
     _ = (tmp_path / "models" / "open_orders.sql").write_text(
-        _open_orders(test_case.open_orders_sql), encoding="utf-8"
+        open_orders_model(test_case.open_orders_sql), encoding="utf-8"
     )
     (tmp_path / "target" / "manifest.json").unlink(missing_ok=True)
 

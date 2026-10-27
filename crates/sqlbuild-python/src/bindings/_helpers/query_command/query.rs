@@ -276,20 +276,7 @@ fn number(value: &Bound<'_, PyAny>, decimal: &Bound<'_, PyAny>) -> PyResult<bool
 
 /// The column types the adapter reported, where it knows them.
 fn column_types(result: &Bound<'_, PyAny>, width: usize) -> PyResult<Vec<Option<String>>> {
-    let Some(types) = result.getattr_opt("column_types")? else {
-        return Ok(Vec::new());
-    };
-    let types: Vec<Option<String>> = types
-        .try_iter()?
-        .map(|kind| {
-            let kind: Bound<'_, PyAny> = kind?;
-            if kind.is_none() {
-                Ok(None)
-            } else {
-                Ok(Some(kind.str()?.to_string_lossy().into_owned()))
-            }
-        })
-        .collect::<PyResult<_>>()?;
+    let types: Vec<Option<String>> = native_field(result, "column_types")?.extract()?;
     Ok(if types.len() == width {
         types
     } else {

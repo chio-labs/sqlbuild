@@ -1,6 +1,6 @@
 //! `query_store`: run one read-only query against a store.
 
-use crate::records::models::RecallValue;
+use crate::store::_helpers::column_types::{column_facts, column_types};
 use crate::store::_helpers::sqlite::{checked, from_sql};
 use crate::store::errors::{StoreError, StoreErrorKind};
 use crate::store::models::{QueryResult, SqliteStore};
@@ -23,16 +23,7 @@ pub fn query_store(
             "Recall queries must be read-only SELECT statements",
         ));
     }
-    let columns: Vec<String> = statement
-        .column_names()
-        .into_iter()
-        .map(str::to_owned)
-        .collect();
-    let declared: Vec<Option<String>> = statement
-        .columns()
-        .iter()
-        .map(|column| column.decl_type().map(str::to_lowercase))
-        .collect();
+    let (columns, declared): (Vec<String>, Vec<Option<String>>) = column_facts(&statement);
     let width: usize = columns.len();
     let mut rows = checked(statement.query([]), "run Recall query")?;
     let mut result = QueryResult {
@@ -57,30 +48,6 @@ pub fn query_store(
         }
         result.rows.push(values);
     }
-    result.types = declared
-        .into_iter()
-        .enumerate()
-        .map(|(index, declared)| declared.or_else(|| stored_type(&result.rows, index)))
-        .collect();
+    result.types = column_types(declared, &result.rows);
     Ok(result)
-}
-
-/// The storage class every non-NULL value of a computed column holds, as SQLite names it; `None` when they differ or all are NULL.
-fn stored_type(rows: &[Vec<RecallValue>], index: usize) -> Option<String> {
-    let mut found: Option<&'static str> = None;
-    for value in rows.iter().filter_map(|row| row.get(index)) {
-        let class: &'static str = match value {
-            RecallValue::Null => continue,
-            RecallValue::Integer(_) => "integer",
-            RecallValue::Real(_) => "real",
-            RecallValue::Text(_) => "text",
-            RecallValue::Blob(_) => "blob",
-        };
-        match found {
-            None => found = Some(class),
-            Some(previous) if previous == class => {}
-            Some(_) => return None,
-        }
-    }
-    found.map(str::to_owned)
 }
