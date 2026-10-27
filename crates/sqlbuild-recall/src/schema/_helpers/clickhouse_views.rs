@@ -407,7 +407,16 @@ SELECT
     if(has_terminal, last_row_count, NULL) AS row_count,
     if(has_terminal, last_affected_rows, NULL) AS affected_rows,
     first_sql_digest AS sql_digest,
-    concat('sha256:', first_sql_digest) IN (SELECT digest FROM {artifacts}) AS sql_available
+    (invocation_id, concat('sha256:', first_sql_digest)) IN (
+        SELECT invocation_id, digest FROM {refs}
+        WHERE digest IN (SELECT digest FROM {artifacts})
+    ) AS sql_available,
+    multiIf(
+        sql_available, NULL,
+        (invocation_id, concat('sha256:', first_sql_digest))
+            IN (SELECT invocation_id, digest FROM {refs}), 'expired_or_not_captured',
+        'not_captured'
+    ) AS sql_unavailable_reason
 FROM folded"
     )
 }

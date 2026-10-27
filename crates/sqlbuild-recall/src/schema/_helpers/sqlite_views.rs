@@ -39,6 +39,17 @@ terminals AS (
     FROM facts
     WHERE event_type IN ('statement_completed', 'statement_failed')
 ),
+captures AS (
+    SELECT firsts.statement_id, (
+        SELECT MAX(artifact.digest IS NOT NULL)
+        FROM recall_artifact_refs AS ref
+        LEFT JOIN recall_artifacts AS artifact ON artifact.digest = ref.digest
+        WHERE ref.invocation_id = firsts.invocation_id
+            AND ref.digest = 'sha256:' || firsts.sql_digest
+    ) AS stored
+    FROM firsts
+    WHERE firsts.position = 1
+),
 resources AS (
     SELECT invocation_id, resource_id, MIN(resource_name) AS resource_name,
         MIN(resource_kind) AS resource_kind
@@ -74,16 +85,19 @@ SELECT
     terminals.row_count,
     terminals.affected_rows,
     firsts.sql_digest,
-    EXISTS (
-        SELECT 1 FROM recall_artifacts AS artifact
-        WHERE artifact.digest = 'sha256:' || firsts.sql_digest
-    ) AS sql_available
+    COALESCE(captures.stored, 0) AS sql_available,
+    CASE captures.stored
+        WHEN 1 THEN NULL
+        WHEN 0 THEN 'expired_or_not_captured'
+        ELSE 'not_captured'
+    END AS sql_unavailable_reason
 FROM firsts
 LEFT JOIN started ON started.statement_id = firsts.statement_id
 LEFT JOIN submitted ON submitted.statement_id = firsts.statement_id
 LEFT JOIN query_ids ON query_ids.statement_id = firsts.statement_id
 LEFT JOIN terminals
     ON terminals.statement_id = firsts.statement_id AND terminals.position = 1
+LEFT JOIN captures ON captures.statement_id = firsts.statement_id
 LEFT JOIN resources
     ON resources.invocation_id = firsts.invocation_id
     AND resources.resource_id = firsts.resource_id

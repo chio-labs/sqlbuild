@@ -1,6 +1,7 @@
 //! The native subscriber that publishes every lifecycle fact and artifact into Recall.
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use pyo3::exceptions::PyException;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyclass, pymethods};
@@ -11,6 +12,7 @@ use sqlbuild_recall::records::main::parse_event::parse_event;
 use sqlbuild_recall::writer::models::RecallSession;
 
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::recall::constants::{STATEMENT_COMPLETED, STATEMENT_FAILED};
 use crate::bindings::_helpers::recall::events::{escaped_text, event_object};
 use crate::bindings::_helpers::recall::replacements::RecallReplacements;
 
@@ -42,11 +44,15 @@ pub(crate) fn publish_lifecycle_event(
     Ok(())
 }
 
-/// Publishes lifecycle events, through the Recall replacement sink on the delivery thread when one is configured, and SQL artifacts of the active session; delivery is best effort.
+/// The SQL and resource of a statement that has not reached its terminal event yet.
+type RunningSql = HashMap<String, (String, Option<String>)>;
+
+/// Publishes lifecycle events, through the Recall replacement sink on the delivery thread when one is configured, and SQL artifacts of the active session; delivery is best effort. The SQL of a statement that fails or is cancelled is queued again with its terminal event's priority.
 #[pyclass(module = "sqlbuild._native", frozen)]
 pub(crate) struct RecallLifecycleSink {
     pub(crate) session: Arc<RecallSession>,
     pub(crate) replacements: Arc<RecallReplacements>,
+    pub(crate) running_sql: Arc<Mutex<RunningSql>>,
 }
 
 #[pymethods]
@@ -77,13 +83,49 @@ impl RecallLifecycleSink {
             texts.map(|(sql, statement_id, resource_id)| {
                 self.session
                     .publish_sql(&sql, statement_id.as_deref(), resource_id.as_deref());
+                if let Some(statement_id) = statement_id {
+                    self.running().insert(statement_id, (sql, resource_id));
+                }
             }),
         )
     }
 }
 
 impl RecallLifecycleSink {
+    fn running(&self) -> std::sync::MutexGuard<'_, RunningSql> {
+        self.running_sql
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Forget a statement's SQL at its terminal event; a failed one's SQL is queued again first.
+    fn settle_statement(&self, event: &Bound<'_, PyAny>) -> PyResult<()> {
+        let Some(event_type) = event.getattr_opt("event_type")? else {
+            return Ok(());
+        };
+        let event_type: String = event_type.str()?.to_string();
+        if event_type != STATEMENT_COMPLETED && event_type != STATEMENT_FAILED {
+            return Ok(());
+        }
+        let Some(statement_id) = event.getattr_opt("statement_id")? else {
+            return Ok(());
+        };
+        if statement_id.is_none() {
+            return Ok(());
+        }
+        let statement_id: String = escaped_text(&statement_id.str()?)?;
+        let Some((sql, resource_id)) = self.running().remove(&statement_id) else {
+            return Ok(());
+        };
+        if event_type == STATEMENT_FAILED {
+            self.session
+                .publish_failed_sql(&sql, Some(&statement_id), resource_id.as_deref());
+        }
+        Ok(())
+    }
+
     fn publish(&self, py: Python<'_>, event: &Bound<'_, PyAny>) -> PyResult<()> {
+        self.settle_statement(event)?;
         if self
             .replacements
             .deliver_lifecycle(py, &self.session, event)?

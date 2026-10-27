@@ -393,6 +393,7 @@ statements (view): one row per statement; outcome no_terminal means no terminal 
   affected_rows INTEGER
   sql_digest TEXT  join key
   sql_available ANY
+  sql_unavailable_reason ANY
 ```
 
 <!-- recall-schema:end -->

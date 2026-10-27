@@ -477,13 +477,14 @@ fn subscribe_recall(
         RecallLifecycleSink {
             session,
             replacements: Arc::clone(&recall.replacements),
+            running_sql: Arc::default(),
         },
     )?;
     dispatcher.call_method1("subscribe_history", (sink,))?;
     Ok(())
 }
 
-/// `target`, `adapter` and `selection_count` of the started invocation, when known.
+/// `target`, `adapter` and `selection_count` of the started invocation, when known; the count includes what selector files list.
 fn add_invocation_context(
     invocation: &Invocation<'_>,
     payload: &Bound<'_, PyDict>,
@@ -692,6 +693,7 @@ fn parsed_invocation<'py>(
             RecallLifecycleSink {
                 session,
                 replacements: Arc::clone(&recall.replacements),
+                running_sql: Arc::default(),
             },
         )?
         .into_any(),

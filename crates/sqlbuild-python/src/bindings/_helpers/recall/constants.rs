@@ -115,3 +115,6 @@ pub(crate) const UTC_OFFSET: &str = "+00:00";
 pub(crate) const DEBUG_COMMAND: &str = "debug";
 /// The namespace attribute of `sqb debug --no-connection`.
 pub(crate) const NO_CONNECTION_ATTRIBUTE: &str = "no_connection";
+/// The statement terminal events, at which the sink settles a statement's SQL.
+pub(crate) const STATEMENT_COMPLETED: &str = "statement_completed";
+pub(crate) const STATEMENT_FAILED: &str = "statement_failed";
