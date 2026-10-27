@@ -128,6 +128,8 @@ const AUDIT_RESULTS: &str = "SELECT
     json_extract(payload, '$.evaluation_mode') AS evaluation_mode,
     json_extract(payload, '$.execution_error') AS execution_error,
     sql_digest,
+    json_extract(payload, '$.evidence_count') AS evidence_count,
+    json_extract(payload, '$.evidence_truncated') AS evidence_truncated,
     json_extract(payload, '$.sample_digest') AS sample_digest
 FROM recall_events
 WHERE event_type = 'audit_completed'";
@@ -239,7 +241,8 @@ const ARTIFACTS: &str = "SELECT
     artifact.size,
     artifact.digest IS NOT NULL AS available,
     CASE WHEN artifact.digest IS NULL THEN 'expired_or_not_captured' END AS unavailable_reason,
-    CASE WHEN artifact.media_type LIKE 'text/%' THEN CAST(artifact.content AS TEXT) END AS text,
+    CASE WHEN artifact.media_type LIKE 'text/%' OR artifact.media_type = 'application/json'
+        THEN CAST(artifact.content AS TEXT) END AS text,
     artifact.content
 FROM recall_artifact_refs AS refs
 LEFT JOIN recall_artifacts AS artifact ON artifact.digest = refs.digest";

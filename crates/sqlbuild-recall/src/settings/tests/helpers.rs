@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use sqlbuild_config::models::ConfigValue;
 
 use crate::settings::main::resolve_recall_settings::resolve_recall_settings;
-use crate::settings::models::{RecallSettings, SettingsRequest, StoreLocation, StorePurpose};
+use crate::settings::models::{
+    AuditEvidence, RecallSettings, SettingsRequest, StoreLocation, StorePurpose,
+};
 
 /// The placeholder project directory resolved paths are reported under.
 pub(crate) const PROJECT: &str = "<project>";
@@ -74,6 +76,7 @@ pub(crate) fn defaults() -> RecallSettings {
         project_adapter: Some("duckdb".to_owned()),
         destination_database: None,
         destination_schema: None,
+        audit_evidence: AuditEvidence::WarnAndError,
     }
 }
 

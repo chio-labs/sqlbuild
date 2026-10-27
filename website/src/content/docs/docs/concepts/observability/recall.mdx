@@ -23,31 +23,29 @@ sqb recall query \
 ```
 
 ```
--[ RECORD 1 ]---------------------------+
-run             | 2026-10-20T00:01:44.784683Z
-outcome         | warn
-violation_count | 1
-status          | completed
-exit_code       | 0
-
--[ RECORD 2 ]---------------------------+
-run             | 2026-10-20T00:00:34.652468Z
-outcome         | pass
-violation_count | 0
-status          | completed
-exit_code       | 0
-
--[ RECORD 3 ]---------------------------+
-run             | 2026-10-19T23:59:23.827831Z
-outcome         | pass
-violation_count | 0
-status          | completed
-exit_code       | 0
+┌─────────────────────────────┬─────────┬─────────────────┬───────────┬───────────┐
+│             run             │ outcome │ violation_count │  status   │ exit_code │
+│            text             │  text   │     integer     │   text    │  integer  │
+├─────────────────────────────┼─────────┼─────────────────┼───────────┼───────────┤
+│ 2026-10-20T00:01:44.784683Z │ warn    │               1 │ completed │         0 │
+│ 2026-10-20T00:00:34.652468Z │ pass    │               0 │ completed │         0 │
+│ 2026-10-19T23:59:23.827831Z │ pass    │               0 │ completed │         0 │
+└─────────────────────────────┴─────────┴─────────────────┴───────────┴───────────┘
 
 3 rows
 ```
 
 The audit started warning on the latest build, and that build still exited 0, so nothing alerted.
+
+See the rows the audit flagged, which Recall keeps as the audit's evidence:
+
+```bash
+sqb recall query \
+  "SELECT r.text FROM audit_results a JOIN artifacts r
+     ON r.invocation_id = a.invocation_id AND r.ref_id = a.event_id
+   WHERE a.audit_name = 'revenue_is_non_negative' AND a.outcome <> 'pass'
+   ORDER BY a.invocation_started_at DESC LIMIT 1"
+```
 
 See what that build printed, exactly as the scheduler saw it:
 
@@ -162,6 +160,7 @@ retention = "30d"             # days of history to keep; also accepts hours, suc
 shutdown_timeout = "3s"       # longest delay Recall may add when a command exits
 diagnostics_min_severity = "info"
 max_output_bytes = 2097152    # bytes of each output stream to keep; 0 keeps everything
+audit_evidence = "warn-and-error"
 
 [targets.ci.recall]
 enabled = false               # do not record runs against the ci target
@@ -176,6 +175,7 @@ enabled = false               # do not record runs against the ci target
 | `shutdown_timeout` | `"3s"` | The cap on time spent flushing history at exit, in `s` or `ms`, up to 10 minutes |
 | `diagnostics_min_severity` | `"info"` | `trace`, `debug`, `info`, `warning`, `error`, or `critical` |
 | `max_output_bytes` | `2097152` for the local store | Bytes of stdout and of stderr kept per invocation, an integer; `0` keeps everything. See [Output limit](#output-limit) |
+| `audit_evidence` | `"warn-and-error"` | Which failing audits keep the rows they flagged: `warn-and-error`, `error`, or `off`. See [Audit evidence](#audit-evidence) |
 
 To turn Recall off for the whole project:
 

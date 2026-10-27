@@ -3,7 +3,8 @@
 use crate::models::ConfigValue;
 use crate::recall::_helpers::values::{non_empty, output_bytes, retention_days, timeout_ms};
 use crate::recall::constants::{
-    MAX_RETENTION_DAYS, RECALL_KEYS, RECALL_SEVERITIES, REMOVED_CONNECTION_KEY,
+    AUDIT_EVIDENCE_MODES, MAX_RETENTION_DAYS, RECALL_KEYS, RECALL_SEVERITIES,
+    REMOVED_CONNECTION_KEY,
 };
 use crate::recall::models::RecallSection;
 
@@ -64,6 +65,16 @@ pub fn recall_section(value: &ConfigValue, label: &str) -> Result<RecallSection,
                     ));
                 }
                 section.diagnostics_min_severity = Some(text.to_owned());
+            }
+            "audit_evidence" => {
+                let text = non_empty(value, label, key)?;
+                if !AUDIT_EVIDENCE_MODES.contains(&text) {
+                    return Err(format!(
+                        "{label}.audit_evidence must be one of: {}",
+                        AUDIT_EVIDENCE_MODES.join(", ")
+                    ));
+                }
+                section.audit_evidence = Some(text.to_owned());
             }
             other => {
                 return Err(format!(

@@ -54,6 +54,42 @@ pub struct RecallSettings {
     pub project_adapter: Option<String>,
     pub destination_database: Option<String>,
     pub destination_schema: Option<String>,
+    /// Which audit outcomes keep their evidence rows as an artifact.
+    pub audit_evidence: AuditEvidence,
+}
+
+/// Which audit outcomes keep their evidence rows in Recall, as `recall.audit_evidence` sets it; evidence holds data values from the audited relation.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AuditEvidence {
+    /// Warnings and errors: `warn-and-error`.
+    #[default]
+    WarnAndError,
+    /// Errors only: `error`.
+    Error,
+    /// None: `off`.
+    Off,
+}
+
+impl AuditEvidence {
+    /// The mode `recall.audit_evidence` names; anything else is the default.
+    #[must_use]
+    pub fn from_setting(setting: Option<&str>) -> Self {
+        match setting {
+            Some("error") => Self::Error,
+            Some("off") => Self::Off,
+            _ => Self::WarnAndError,
+        }
+    }
+
+    /// Whether an audit with `outcome` keeps its evidence.
+    #[must_use]
+    pub fn keeps(self, outcome: &str) -> bool {
+        match self {
+            Self::WarnAndError => outcome == "warn" || outcome == "error",
+            Self::Error => outcome == "error",
+            Self::Off => false,
+        }
+    }
 }
 
 /// Which connection an invocation uses, so only that one is resolved and its environment references expanded.

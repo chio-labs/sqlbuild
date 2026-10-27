@@ -10,6 +10,7 @@ Online: https://sqlbuild.com/docs/concepts/audits/
 
 - How audits work
 - Measurement audits
+- Evidence
 - Audit factories
 - Audit metadata
 - Result history
@@ -81,8 +82,19 @@ MODEL (
 ```
 
 `minimum_samples` keeps low-volume measurements distinct as `insufficient` rather than inventing a
-pass or failure. Evidence is diagnostic and bounded by `evidence_limit`; the measurement and
-threshold determine the outcome.
+pass or failure. The measurement and threshold determine the outcome.
+
+## Evidence
+
+When an audit warns or fails, SQLBuild keeps some of the rows behind the failure as evidence: a
+violation audit keeps the rows its query returned, and a measurement audit runs its `EVIDENCE`
+query. `evidence_limit` caps the rows kept (default 20), and at most 64 KB of them are kept. Set it
+on any attachment, for example `not_null (evidence_limit 5)`.
+
+Evidence is diagnostic and never changes the outcome. It holds data values from the audited
+relation, and is recorded in the `evidence_json` column of `_sqlbuild_audit_results`, as
+`evidence` in the `audit_completed` lifecycle event, and in
+[Recall](observability/recall.md#audit-evidence), which `audit_evidence` controls.
 
 ## Audit factories
 

@@ -2,7 +2,8 @@
 
 pub const RECALL_SECTION: &str = "recall";
 /// Keys `[recall]` and `targets.<name>.recall` accept, sorted.
-pub const RECALL_KEYS: [&str; 7] = [
+pub const RECALL_KEYS: [&str; 8] = [
+    "audit_evidence",
     "diagnostics_min_severity",
     "enabled",
     "max_output_bytes",
@@ -15,6 +16,8 @@ pub const RECALL_KEYS: [&str; 7] = [
 pub const REMOVED_CONNECTION_KEY: &str = "connection";
 /// The diagnostic severities a Recall store can keep from, least severe first.
 pub const RECALL_SEVERITIES: [&str; 6] = ["trace", "debug", "info", "warning", "error", "critical"];
+/// Which audit outcomes keep their evidence rows in Recall, the default first.
+pub const AUDIT_EVIDENCE_MODES: [&str; 3] = ["warn-and-error", "error", "off"];
 /// The longest shutdown flush budget, in milliseconds.
 pub const MAX_SHUTDOWN_TIMEOUT_MS: u64 = 600_000;
 /// The longest retention, in days.

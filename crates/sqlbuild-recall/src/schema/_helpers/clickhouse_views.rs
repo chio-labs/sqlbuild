@@ -448,6 +448,9 @@ fn audit_results(options: &DdlOptions) -> String {
     JSONExtract(payload, 'evaluation_mode', 'Nullable(String)') AS evaluation_mode,
     JSONExtract(payload, 'execution_error', 'Nullable(String)') AS execution_error,
     sql_digest,
+    JSONExtract(payload, 'evidence_count', 'Nullable(Int64)') AS evidence_count,
+    if(JSONHas(payload, 'evidence_truncated'),
+        toUInt8(JSONExtractBool(payload, 'evidence_truncated')), NULL) AS evidence_truncated,
     JSONExtract(payload, 'sample_digest', 'Nullable(String)') AS sample_digest
 FROM {events}
 WHERE event_type = 'audit_completed'"
@@ -617,8 +620,9 @@ fn artifacts(options: &DdlOptions) -> String {
     artifact.stored_size AS size,
     artifact.stored_digest IS NOT NULL AS available,
     if(artifact.stored_digest IS NULL, 'expired_or_not_captured', NULL) AS unavailable_reason,
-    if(startsWith(artifact.stored_media_type, 'text/'), toValidUTF8(artifact.stored_content), NULL)
-        AS text,
+    if(startsWith(artifact.stored_media_type, 'text/')
+        OR artifact.stored_media_type = 'application/json',
+        toValidUTF8(artifact.stored_content), NULL) AS text,
     artifact.stored_content AS content
 FROM {refs} AS refs
 LEFT JOIN (

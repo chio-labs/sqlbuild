@@ -203,7 +203,7 @@ artifacts (view): captured SQL and other artifacts, by reference
   text ANY
   content BLOB
 
-audit_results (view): one row per evaluated audit
+audit_results (view): one row per evaluated audit; its evidence rows are in artifacts
   invocation_id TEXT  join key
   invocation_started_at TEXT
   event_id TEXT
@@ -224,6 +224,8 @@ audit_results (view): one row per evaluated audit
   evaluation_mode ANY
   execution_error ANY
   sql_digest TEXT  join key
+  evidence_count ANY
+  evidence_truncated ANY
   sample_digest ANY
 
 conflicts (view): record keys reused with different content; the first row is kept

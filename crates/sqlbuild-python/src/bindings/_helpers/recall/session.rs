@@ -459,6 +459,7 @@ fn started_session(
         setup_budget: Duration::ZERO,
         maintenance: true,
         defer_context: true,
+        audit_evidence: settings.audit_evidence,
     });
     Ok(Some(Arc::new(session)))
 }
