@@ -88,13 +88,15 @@ what they printed. `sqb recall query` runs one read-only `SELECT` over a set of 
 
 ## Output format
 
-- The default `long` format is fine in most cases: read it as it is, every value in full, one
-  record at a time.
-- If it is too verbose, select fewer columns or add a `LIMIT` (or aggregate) rather than changing
-  the format or reshaping the output.
-- Use `--json` only when a program does something meaningful with the result, for example to chain
-  an `invocation_id` into the next query, or when you need `statistics` (`rows_read`,
-  `bytes_read`, elapsed time). Not just to print rows more compactly.
+- Keep the default format for anything a person reads. It prints a table with column types when
+  the result fits and one record per row otherwise, every value in full.
+- If a result is too long, reshape the question, not the output: aggregate with `GROUP BY`, select
+  only the columns you need, or add a `LIMIT`. A long listing usually means the query is not
+  precise enough yet.
+- Never switch format to shorten output or save context. `--format long` always prints records;
+  `--json` is for programs, for example to chain an `invocation_id` into the next query, or when
+  you need `statistics` (`rows_read`, `bytes_read`, elapsed time). If you change the format, say
+  why.
 
 ## Worked investigations
 
