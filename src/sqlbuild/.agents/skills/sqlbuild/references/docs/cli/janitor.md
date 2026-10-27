@@ -180,8 +180,9 @@ relation retention.
   project builds into; a qualified name only at that location. Once the model has built, the old
   name holds a compatibility view, which expires as above.
 - **Schemas with sources are protected.** A schema that holds the project's configured sources is
-  skipped and listed under `Skipped schemas`, so what the project reads is never archived. When such a schema is one SQLBuild manages, the
-  preview shows `Janitor blocked`, lists the actions it suppressed, and the run exits `1`.
+  skipped and listed under `Skipped schemas`, so what the project reads is never archived. In
+  direct mode, when such a schema is also one SQLBuild builds into, the preview shows
+  `Janitor blocked`, lists the actions it suppressed, and the run exits `1`.
 - **Run the same SQLBuild version as your builds.** An older janitor doesn't know compatibility
   views and archives them as stale relations.
 
