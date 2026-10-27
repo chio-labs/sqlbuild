@@ -43,11 +43,13 @@ const INVOCATION_SOURCE_COLUMNS: [(&str, &str, &str); 35] = [
     ("event_error_type", "Nullable(String)", "NULL"),
     ("event_error_code", "Nullable(String)", "NULL"),
     ("event_error_message", "Nullable(String)", "NULL"),
+    ("event_signal_number", "Nullable(Int64)", "NULL"),
+    ("event_cost_status", "Nullable(String)", "NULL"),
     ("event_is_terminal", "UInt8", "0"),
 ];
 
 /// The statement columns each statement event carries into the second fold, in tuple order.
-const STATEMENT_FACT_COLUMNS: [&str; 17] = [
+const STATEMENT_FACT_COLUMNS: [&str; 18] = [
     "statement_id",
     "event_type",
     "occurred_at",
@@ -65,6 +67,7 @@ const STATEMENT_FACT_COLUMNS: [&str; 17] = [
     "duration_ms",
     "row_count",
     "affected_rows",
+    "outcome",
 ];
 
 /// The columns the `output_invocations` pass reads: the chunk's own values default to what adds nothing to a sum, and the delivery and context values to NULL.
@@ -376,7 +379,8 @@ folded AS (
         argMaxIf(error_code, {order}, {terminal}) AS last_error_code,
         argMaxIf(duration_ms, {order}, {terminal}) AS last_duration_ms,
         argMaxIf(row_count, {order}, {terminal}) AS last_row_count,
-        argMaxIf(affected_rows, {order}, {terminal}) AS last_affected_rows
+        argMaxIf(affected_rows, {order}, {terminal}) AS last_affected_rows,
+        argMaxIf(outcome, {order}, {terminal}) AS last_outcome
     FROM statement_events GROUP BY invocation_id, invocation_started_at, statement_id
 )
 SELECT
@@ -399,6 +403,7 @@ SELECT
     multiIf(
         NOT has_terminal, 'no_terminal',
         last_event_type = 'statement_completed', 'completed',
+        last_outcome = 'handled', 'handled',
         'failed'
     ) AS outcome,
     if(has_terminal, last_error_type, NULL) AS error_type,

@@ -10,8 +10,16 @@ import pytest
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.cost.models import RunCostSummary
 from sqlbuild.cost.types import CostStatus
+from sqlbuild.observability import (
+    EventDispatcher,
+    LifecycleEvent,
+    dispatcher_scope,
+    invocation_scope,
+)
+from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
 from tests.unit.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakeCostCollectionTestCase,
+    SnowflakeCostPurposeTestCase,
 )
 
 
@@ -35,6 +43,21 @@ class _Connect:
         if self.error:
             raise ConnectionError("connect failed")
         return self.connection
+
+
+class _QueryHistoryCollect:
+    """Runs one query-history statement, as the real collector does."""
+
+    def __call__(self, **kwargs: Any) -> RunCostSummary:
+        with StatementLifecycle(
+            adapter="snowflake", sql="SELECT 1 FROM query_history", intent="query"
+        ) as lifecycle:
+            lifecycle.completed(row_count=0)
+        return RunCostSummary(
+            status=CostStatus.COMPLETE,
+            usd_per_credit=kwargs["usd_per_credit"],
+            rate_source=kwargs["rate_source"],
+        )
 
 
 class _Collect:
@@ -116,3 +139,46 @@ def test_given_telemetry_stage_failure_when_collecting_then_safe_status_is_retur
     assert connect.config["network_timeout"] == 15
     assert (test_case.expected_message_fragment or "") in (summary.message or "")
     assert (test_case.expected_limitation_fragment or "") in " ".join(summary.limitations)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeCostPurposeTestCase(
+            description="query-history statements are recorded as cost telemetry",
+            expected_purposes=["cost_telemetry", "cost_telemetry"],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cost_collection_when_it_queries_history_then_its_statements_name_their_purpose(
+    test_case: SnowflakeCostPurposeTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+    monkeypatch.setattr(
+        adapter, "connect", _Connect(connection=_CostConnection(close_error=False), error=False)
+    )
+    monkeypatch.setattr(
+        "sqlbuild.adapters.snowflake.classes.snowflake_adapter.collect_snowflake_cost",
+        _QueryHistoryCollect(),
+    )
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+    now: datetime = datetime(2026, 8, 23, tzinfo=UTC)
+
+    with invocation_scope("inv-cost-purpose"), dispatcher_scope(dispatcher):
+        _ = adapter.collect_run_cost(
+            connection_config={},
+            target_database="ANALYTICS",
+            run_id="run-1",
+            started_at=now,
+            completed_at=now,
+            statement_ledger_path=tmp_path / "statements.jsonl",
+            usd_per_credit=Decimal("3.00"),
+            rate_source="default",
+        )
+
+    assert [event.payload.get("purpose") for event in events] == test_case.expected_purposes

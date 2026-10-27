@@ -105,6 +105,13 @@ class CostResourceScopeTestCase:
 
 
 @dataclass(frozen=True)
+class SnowflakeTimeoutOutcomeTestCase:
+    description: str
+    timeout_window: timedelta
+    expected_failure_outcomes: set[str | None]
+
+
+@dataclass(frozen=True)
 class SnowflakeScaleTestCase:
     description: str
     statement_count: int

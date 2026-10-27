@@ -720,6 +720,11 @@ pub(crate) const ENTRIES: &[HostEntry] = &[
         edge: HostEdge::Executor,
     },
     HostEntry {
+        name: "StatementLifecycle",
+        kind: HostKind::Class,
+        edge: HostEdge::Executor,
+    },
+    HostEntry {
         name: "ObservabilityValidationError",
         kind: HostKind::Exception,
         edge: HostEdge::Executor,

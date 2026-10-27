@@ -22,6 +22,7 @@ from sqlbuild.observability import (
 from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
 from tests.unit.src.sqlbuild.runtime.observability._test_types import (
     ErrorCodePrivacyCase,
+    HandledFailureCase,
     StatementKindPrivacyCase,
     StatementLifecycleCase,
 )
@@ -659,3 +660,44 @@ def test_given_driver_error_code_when_failing_statement_then_only_safe_identifie
     assert events[-1].payload.get("error_code") == test_case.expected_error_code
     encoded_events: str = repr(events)
     assert all(fragment not in encoded_events for fragment in test_case.private_fragments)
+
+
+class _StatementTimeoutError(Exception):
+    pass
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        HandledFailureCase(
+            description="a failure the caller recovers from is marked handled",
+            error=_StatementTimeoutError("statement timed out"),
+            expected_outcome="handled",
+        ),
+        HandledFailureCase(
+            description="any other failure stays a failure",
+            error=ValueError("division by zero"),
+            expected_outcome=None,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_handled_failure_scope_when_a_statement_fails_then_only_recovered_failures_are_handled(
+    test_case: HandledFailureCase,
+) -> None:
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    with (
+        invocation_scope("inv-handled-failure"),
+        dispatcher_scope(dispatcher),
+        StatementLifecycle.handled_failure_scope(
+            lambda error: isinstance(error, _StatementTimeoutError)
+        ),
+        StatementLifecycle(adapter="snowflake", sql="SELECT 1", intent="execute") as lifecycle,
+    ):
+        lifecycle.failed(error=test_case.error)
+
+    assert events[-1].event_type == "statement_failed"
+    assert events[-1].payload.get("outcome") == test_case.expected_outcome

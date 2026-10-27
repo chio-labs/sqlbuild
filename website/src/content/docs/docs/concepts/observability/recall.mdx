@@ -382,8 +382,8 @@ in the store's SQL dialect, against these views:
 | View | One row per |
 |------|-------------|
 | `invocations` | Invocation, with status, exit code, and timing |
-| `statements` | Executed statement, with resource, kind, purpose, duration, and row counts |
-| `audit_results` | Evaluated audit |
+| `statements` | Executed statement, with resource, kind, purpose, outcome, duration, and row counts |
+| `audit_results` | Evaluated audit, with its evidence count |
 | `events` | Lifecycle event |
 | `diagnostics` | Retained diagnostic |
 | `artifacts` | Reference from an invocation to captured SQL, with its text |
@@ -400,7 +400,16 @@ invocation fails and lists the matches. In SQL, match a prefix with
 Run `sqb recall schema` for every column, and check the values a column holds before filtering on
 it, for example `SELECT DISTINCT resource_kind, purpose FROM statements`: a model's
 `resource_kind` is its materialization, such as `table` or `view`, and its build statements have
-`purpose = 'model_build'`.
+`purpose = 'model_build'`. On Snowflake, the statements that read query history for cost
+attribution have `purpose = 'cost_telemetry'`.
+
+`statements.outcome` is `completed`, `failed`, `handled` or `no_terminal`. A `handled` statement
+failed, and SQLBuild recovered from it: for example, a cost history read that timed out and was
+read again in smaller windows. `no_terminal` means the statement never reported an end, usually
+because the process died. `sql_available` is `1` when the statement's SQL is in `artifacts`; when it
+is `0`, `sql_unavailable_reason` says why: `not_captured` when Recall never received the SQL, or
+`expired_or_not_captured` when the statement references SQL text that is no longer stored, because
+[retention](#retention) removed it or it was dropped before it was written.
 
 Every view has `invocation_id` and `invocation_started_at`. Filter on them to keep a query cheap:
 on a ClickHouse store, a filter on either reaches the table reads, so a query about one invocation or

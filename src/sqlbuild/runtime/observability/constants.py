@@ -10,6 +10,7 @@ RETRY_SCHEDULED_EVENT: str = "retry_scheduled"
 STATEMENT_HEARTBEAT_THRESHOLD_SECONDS: float = 30.0
 MODEL_BUILD_PURPOSE: str = "model_build"
 AUDIT_PURPOSE: str = "audit"
+COST_TELEMETRY_PURPOSE: str = "cost_telemetry"
 LIFECYCLE_ENVELOPE_FIELDS_V1: frozenset[str] = frozenset(
     {
         "event_id",

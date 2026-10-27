@@ -13,6 +13,7 @@ from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     ExpressionInferenceProfile,
+    QueryResult,
     RelationInfo,
     SchemaDiffResult,
     TableFreshnessMetadata,
@@ -36,6 +37,7 @@ from tests.unit.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakePruneSqlTestCase,
     SnowflakeQualifiedColumnInspectionTestCase,
     SnowflakeQueryColumnNamesTestCase,
+    SnowflakeQueryColumnTypesTestCase,
     SnowflakeRelationAgeMetadataTestCase,
     SnowflakeRenderCloneTestCase,
     SnowflakeRenderCursorBoundLiteralTestCase,
@@ -55,6 +57,7 @@ from tests.unit.src.sqlbuild.adapters.snowflake.helpers import (
     FakeSnowflakeMetadataConnection,
     FakeSnowflakeMetadataCursor,
     FakeSnowflakeMetadataSequenceConnection,
+    FakeSnowflakeQueryCursor,
     FakeSnowflakeRawConnection,
     build_bulk_columns_rows,
     build_bulk_sequence_connection,
@@ -1153,6 +1156,43 @@ def test_given_equivalent_types_when_diffing_schema_then_snowflake_ignores_alias
     )
 
     assert result == test_case.expected_result
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeQueryColumnTypesTestCase(
+            description="numbers carry precision and scale, other types their name",
+            cursor_description=(
+                ("ORDER_ID", 0, None, None, 38, 0, False),
+                ("AMOUNT", 0, None, None, 10, 2, True),
+                ("STATUS", 2, None, 16777216, None, None, True),
+                ("ORDERED_AT", 8, None, None, 0, 9, True),
+            ),
+            expected_types=("NUMBER(38,0)", "NUMBER(10,2)", "TEXT", "TIMESTAMP_NTZ"),
+        ),
+        SnowflakeQueryColumnTypesTestCase(
+            description="an unknown type code has no name",
+            cursor_description=(("PAYLOAD", 99, None, None, None, None, True),),
+            expected_types=(None,),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_snowflake_result_metadata_when_querying_then_column_types_are_named(
+    test_case: SnowflakeQueryColumnTypesTestCase,
+) -> None:
+    adapter: SnowflakeAdapter = SnowflakeAdapter()
+    cursor: FakeSnowflakeQueryCursor = FakeSnowflakeQueryCursor(
+        description=test_case.cursor_description,
+        rows=[tuple(None for _ in test_case.cursor_description)],
+    )
+
+    result: QueryResult = adapter.query(
+        connection=FakeSnowflakeDescribeConnection(cursor), sql="SELECT 1", limit=20
+    )
+
+    assert result.column_types == test_case.expected_types
 
 
 @pytest.mark.parametrize(

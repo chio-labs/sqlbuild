@@ -374,3 +374,10 @@ class FailedMonitorStartCase:
     description: str
     threshold_seconds: float
     expected_event_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class HandledFailureCase:
+    description: str
+    error: BaseException
+    expected_outcome: str | None

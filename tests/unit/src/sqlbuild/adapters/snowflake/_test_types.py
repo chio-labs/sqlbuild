@@ -38,6 +38,12 @@ class SnowflakeCostCollectionTestCase:
 
 
 @dataclass(frozen=True)
+class SnowflakeCostPurposeTestCase:
+    description: str
+    expected_purposes: list[str | None]
+
+
+@dataclass(frozen=True)
 class SnowflakeMergeExclusionTestCase:
     description: str
     expected_update_assignment: str
@@ -103,6 +109,13 @@ class SnowflakeRenderPythonFunctionTestCase:
 class SnowflakeRenderTableFunctionTestCase:
     description: str
     expected_sql: str
+
+
+@dataclass(frozen=True)
+class SnowflakeQueryColumnTypesTestCase:
+    description: str
+    cursor_description: tuple[tuple[object, ...], ...]
+    expected_types: tuple[str | None, ...]
 
 
 @dataclass(frozen=True)

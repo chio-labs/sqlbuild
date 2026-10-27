@@ -370,7 +370,7 @@ output_transcripts (view): exact stdout, stderr and combined bytes per invocatio
   stderr BLOB
   combined BLOB
 
-statements (view): one row per statement; outcome no_terminal means no terminal fact arrived
+statements (view): one row per statement; outcome handled means SQLBuild recovered from the failure; no_terminal means no terminal fact arrived
   invocation_id TEXT  join key
   invocation_started_at TEXT
   statement_id TEXT  join key

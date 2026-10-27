@@ -13,6 +13,7 @@ use sqlbuild_core::cost_report::models::BreakdownOptions;
 use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::boundary::python_calls::call_with;
+use crate::bindings::_helpers::cost_report::attribution::report_cost_status;
 use crate::bindings::_helpers::cost_report::records::cost_run;
 use crate::bindings::_helpers::cost_report::store;
 use crate::bindings::_helpers::cost_telemetry::values::cost_aware;
@@ -219,6 +220,7 @@ fn collection_failure<'py>(
     )?;
     let status: Bound<'py, PyAny> =
         host::entry(py, ExecutorHost::CostStatus)?.getattr("COLLECTION_FAILED")?;
+    report_cost_status(&status)?;
     let message: Bound<'py, PyAny> = PyString::new(
         py,
         &format!("Cost telemetry failed during {stage} ({error_type})."),
@@ -307,6 +309,7 @@ pub(crate) fn finalize_build_cost<'py>(
             native_field(finalization, "cost_message")?,
         )?
     };
+    report_cost_status(&native_field(&cost, "status")?)?;
     let record: Bound<'py, PyAny> = cost_record(finalization, cost)?;
     persist(finalization, &record, "artifact persistence")?;
     if !native_field(finalization, "render")?.is_truthy()? {

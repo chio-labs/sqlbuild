@@ -344,6 +344,7 @@ pub enum ExecutorHost {
     ExecutionDeadlineScope,
     EventDispatcher,
     OperationLifecycle,
+    StatementLifecycle,
     ObservabilityValidationError,
     CreateLifecycleEvent,
     CurrentExecutionIdentity,

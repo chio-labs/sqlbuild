@@ -31,7 +31,7 @@ query_ids AS (
 ),
 terminals AS (
     SELECT statement_id, event_type, occurred_at, query_id, error_type, error_code, duration_ms,
-        row_count, affected_rows,
+        row_count, affected_rows, outcome,
         ROW_NUMBER() OVER (
             PARTITION BY statement_id
             ORDER BY invocation_sequence DESC, occurred_at DESC, event_id DESC
@@ -76,7 +76,8 @@ SELECT
     terminals.occurred_at AS ended_at,
     CASE terminals.event_type
         WHEN 'statement_completed' THEN 'completed'
-        WHEN 'statement_failed' THEN 'failed'
+        WHEN 'statement_failed' THEN
+            CASE WHEN terminals.outcome = 'handled' THEN 'handled' ELSE 'failed' END
         ELSE 'no_terminal'
     END AS outcome,
     terminals.error_type,

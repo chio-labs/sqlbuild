@@ -581,6 +581,10 @@ _TARGETS: dict[str, tuple[str, str]] = {
         "sqlbuild.runtime.observability.classes.operation_lifecycle",
         "OperationLifecycle",
     ),
+    "StatementLifecycle": (
+        "sqlbuild.runtime.observability.classes.statement_lifecycle",
+        "StatementLifecycle",
+    ),
     "ObservabilityValidationError": (
         "sqlbuild.runtime.observability.exceptions",
         "ObservabilityValidationError",
