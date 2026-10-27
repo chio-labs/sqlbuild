@@ -38,6 +38,7 @@ class AuditResultProjection:
     attempted_count: int = 0
     written_count: int = 0
     failed_count: int = 0
+    failure_reason: str | None = None
 
     @property
     def degraded(self) -> bool:

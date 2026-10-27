@@ -40,6 +40,7 @@ from sqlbuild.runtime.observability.models import ExecutionIdentity
 from sqlbuild.runtime.observability.types import JSONValue
 
 _LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
+_MAX_FAILURE_REASON_LENGTH: int = 500
 _LAST_AUDIT_RESULT_PROJECTION: ContextVar[AuditResultProjection | None] = ContextVar(
     "sqlbuild_last_audit_result_projection", default=None
 )
@@ -267,14 +268,15 @@ def project_audit_result_batch_impl(
             ),
         )
     except AuditResultStorageError as error:
+        reason: str = _storage_failure_reason(error)
         _LOGGER.warning(
             "Audit result persistence degraded: attempted=%d written=0 failed=%d (%s)",
             len(executed),
             len(executed),
-            error,
+            reason,
         )
         projection = AuditResultProjection(
-            attempted_count=len(executed), failed_count=len(executed)
+            attempted_count=len(executed), failed_count=len(executed), failure_reason=reason
         )
         _LAST_AUDIT_RESULT_PROJECTION.set(projection)
         return projection
@@ -435,6 +437,15 @@ def _render_bound(bound: MeasurementThresholdBound) -> dict[str, object]:
     if bound.operator == ThresholdOperator.OUTSIDE:
         return {"operator": bound.operator.value, "lower": bound.lower, "upper": bound.upper}
     return {"operator": bound.operator.value, "limit": bound.limit}
+
+
+def _storage_failure_reason(error: AuditResultStorageError) -> str:
+    """The storage error with the warehouse error that caused it, on one bounded line."""
+
+    cause: BaseException | None = error.__cause__
+    text: str = str(error) if cause is None else f"{error}: {cause}"
+    line: str = " ".join(text.split())
+    return line[:_MAX_FAILURE_REASON_LENGTH]
 
 
 def _json_or_none(value: object | None) -> str | None:

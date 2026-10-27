@@ -1310,3 +1310,10 @@ class EnumLiteralCompileTestCase:
     expected_exit_code: int
     expected_diagnostics: tuple[tuple[str, str, int | None], ...]
     contract: str = "enforced"
+
+
+@dataclass(frozen=True)
+class PreservedTargetAuditTestCase:
+    description: str
+    target_toml: str
+    expected_history_schema: str
