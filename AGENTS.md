@@ -141,6 +141,14 @@
 - Use `sqb debug` as the first diagnostic when distinguishing authentication, connection,
   configuration, and command-specific failures.
 
+## User Documentation
+
+- Every change to the docs site (`website/src/content/docs/`) must follow `website/STYLE.md`:
+  user-facing content only, task-first structure, tables for per-adapter facts, and no history
+  wording or internal mechanisms.
+- When a change affects a docs page, edit the page into shape: update the section the fact belongs
+  to and remove what is no longer true. Never append a paragraph to a page or section.
+
 ## Subagent Verification
 
 - Read-only review subagents are standing-authorized at meaningful review boundaries and do not
