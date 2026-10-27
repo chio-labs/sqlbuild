@@ -175,10 +175,8 @@ where a slow compile spends its time:
 | `built_in_rules_ms` | Wall time of the built-in Rules |
 | `custom_rules_ms`, `custom_rules_cpu_ms` | Wall and CPU time of the custom Rules, including their host processes |
 | `custom_rules_invocations` | Custom Rule invocations, one per Rule and subject |
-| `custom_rules_monitor_cpu_ms` | Host CPU spent checking Rule modules for state one subject could leave for another |
-| `custom_rules_guard_cpu_ms` | Host CPU spent deciding whether an audited operation, such as opening a file, came from Rule code |
 | `custom_rules.<code>.invocations` | Invocations of one custom Rule |
-| `custom_rules.<code>.cpu_ms` | Host CPU of those invocations, without the guard's checks |
+| `custom_rules.<code>.cpu_ms` | CPU time of those invocations |
 | `custom_rules.<code>.cache_hits` | Subjects whose stored result was reused |
 | `custom_rules.<code>.cache_misses` | Subjects evaluated again; every subject when the Rules cache is off |
 | `rule_cache_hits`, `rule_cache_misses` | Rule results reused or evaluated again |
@@ -186,7 +184,8 @@ where a slow compile spends its time:
 | `project_reuse_check_ms` | Time spent checking whether the previous compile can be reused |
 | `total_ms` | Wall time of the whole compile |
 
-Other keys are finer-grained phase timings and cache counters. Each selected custom Rule has all
+Other keys are finer-grained phase timings, cache counters and the custom Rules host's own
+overhead (`custom_rules_monitor_cpu_ms`, `custom_rules_guard_cpu_ms`). Each selected custom Rule has all
 four `custom_rules.<code>.*` keys; read one with
 `jq '.compile_timings["custom_rules.XORDERS001.cpu_ms"]'`. A Rule answered fully from the cache
 reports `0` invocations. Invocations and CPU can exceed a Rule's subject count, because a Rule
