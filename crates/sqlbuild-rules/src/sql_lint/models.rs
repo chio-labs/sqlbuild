@@ -83,12 +83,16 @@ pub(crate) struct LintRequest {
     pub relation_keys: HashMap<String, Vec<Vec<String>>>,
     #[serde(default)]
     pub relation_names: HashMap<String, String>,
+    /// Character ranges of SQL another file authored, such as SQL macro output, whose column qualification is judged in that file instead.
+    #[serde(default)]
+    pub qualification_exempt_spans: Vec<(usize, usize)>,
 }
 
 #[derive(Debug)]
 pub(crate) struct AdditionalFactOptions<'a> {
     pub external_identifiers: &'a HashSet<String>,
     pub dependency_identifiers: &'a HashSet<String>,
+    pub qualification_exempt_spans: &'a [(usize, usize)],
     pub allows_ceremonial_select: bool,
     pub allows_dynamic_output_star: bool,
     pub allows_empty_fixture_star: bool,

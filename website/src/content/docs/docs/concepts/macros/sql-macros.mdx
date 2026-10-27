@@ -301,6 +301,11 @@ fully typed.
 - Every read inside `USING (...)` stands unqualified, as `USING` needs, including
   `USING (@weekly.week)` for a column the type does not declare.
 - In a column-list macro, `o.@weekly.keys` outputs the group's columns under their own names.
+- Rules judge a read as you wrote it. `SQBRSQL028`, which rejects a query mixing qualified and
+  unqualified columns, counts every plain read as unqualified and every `alias.@weekly...` read as
+  qualified, and judges a macro's SQL in the macro file rather than at each call. A step written
+  only in plain reads, such as `SELECT @weekly.keys, @weekly.refund_count AS refunds FROM @weekly`,
+  passes; to qualify, read every slot through an alias.
 
 A plain group read inside a subquery, such as `EXISTS (SELECT @weekly.keys FROM refunds AS r ...)`,
 could bind its bare columns to the subquery's relations instead of the one the slot reads. The

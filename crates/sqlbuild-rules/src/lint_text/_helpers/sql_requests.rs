@@ -7,7 +7,9 @@ use sqlbuild_attachments::ceremonial_select::main::omitted_select_offset::omitte
 use sqlbuild_attachments::ceremonial_select::models::OmittedSelect;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
-use crate::lint_text::_helpers::sql_diagnostics::without_generated_comments;
+use crate::lint_text::_helpers::sql_diagnostics::{
+    sql_macro_output_spans, without_generated_comments,
+};
 use crate::lint_text::constants::{
     CROSS_KEYWORD, INVALID_BATCH, LINE_COMMENT_PREFIX, LINT_API_VERSION,
     OMITTED_CEREMONIAL_SELECT_SQL,
@@ -48,6 +50,15 @@ pub(crate) fn lint_payload(
     options: &LintSqlOptions,
 ) -> Value {
     let lint_text: Cow<'_, str> = without_generated_comments(body, (file, &options.dialect));
+    let inserted: usize = OMITTED_CEREMONIAL_SELECT_SQL.chars().count();
+    let exempt: Vec<Value> = sql_macro_output_spans(body, (file, &options.dialect))
+        .into_iter()
+        .map(|(start, end)| match omitted {
+            Some(offset) if start >= offset => (start + inserted, end + inserted),
+            _ => (start, end),
+        })
+        .map(|(start, end)| Value::from(vec![start, end]))
+        .collect();
     let sql: String = match omitted {
         Some(offset) => {
             let characters: Vec<char> = lint_text.chars().collect();
@@ -61,6 +72,12 @@ pub(crate) fn lint_payload(
     let _ = payload.insert("version".to_string(), Value::from(LINT_API_VERSION));
     let _ = payload.insert("sql".to_string(), Value::from(sql));
     let _ = payload.insert("dialect".to_string(), Value::from(options.dialect.clone()));
+    if !exempt.is_empty() {
+        let _ = payload.insert(
+            "qualification_exempt_spans".to_string(),
+            Value::from(exempt),
+        );
+    }
     if let Some(enabled) = &options.enabled_rules {
         let _ = payload.insert("enabled_rules".to_string(), strings(enabled));
     }

@@ -55,6 +55,14 @@ pub(crate) struct PlainSqlLintTestCase {
     pub expected_count: usize,
 }
 
+pub(crate) struct QualificationExemptLintTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    /// The text whose characters are another file's SQL.
+    pub(crate) exempt: &'static str,
+    pub(crate) expected_count: usize,
+}
+
 pub(crate) struct DynamicOutputStarLintTestCase {
     pub(crate) description: &'static str,
     pub(crate) sql: &'static str,

@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use polyglot_sql::tokens::{Span, Token, TokenType};
 
 use crate::constants::{EMPTY_FIXTURE_QUERY_TOKEN_COUNT, ENCLOSING_CTE_TOKEN_COUNT};
+use crate::lint_text::constants::SQL_MACRO_PARAMETER_SENTINEL_PREFIX;
 use crate::sql_lint::_helpers::engine::{
     direct_indices, is_comment, is_layout, is_query_from, query_end, significant_after,
     significant_before, token_depths,
@@ -35,6 +36,7 @@ struct ReferenceFactContext<'a> {
     query: &'a QuerySlice<'a>,
     outer_relations: &'a FxHashSet<String>,
     external_identifiers: &'a HashSet<String>,
+    qualification_exempt_spans: &'a [(usize, usize)],
     query_start: usize,
     query_end: usize,
 }
@@ -50,6 +52,7 @@ struct SelectFactContext<'a> {
     tokens: &'a [Token],
     depths: &'a [usize],
     external_identifiers: &'a HashSet<String>,
+    qualification_exempt_spans: &'a [(usize, usize)],
     dependency_identifiers: &'a HashSet<String>,
     allows_ceremonial_select: bool,
     allows_dynamic_output_star: bool,
@@ -171,6 +174,7 @@ pub(super) fn collect_additional_facts(
         tokens,
         depths: &depths,
         external_identifiers: options.external_identifiers,
+        qualification_exempt_spans: options.qualification_exempt_spans,
         dependency_identifiers: options.dependency_identifiers,
         allows_ceremonial_select: options.allows_ceremonial_select,
         allows_dynamic_output_star: options.allows_dynamic_output_star,
@@ -338,6 +342,7 @@ fn collect_select_additional_facts(context: &SelectFactContext<'_>) -> Additiona
                 query: &reference_slice,
                 outer_relations: &outer_relations,
                 external_identifiers: context.external_identifiers,
+                qualification_exempt_spans: context.qualification_exempt_spans,
                 query_start: select_index,
                 query_end: end,
             };
@@ -663,10 +668,14 @@ fn collect_reference_facts(context: &ReferenceFactContext<'_>) -> AdditionalQuer
         facts
             .unqualified_multi_source_columns
             .extend(unqualified.iter().map(|&index| tokens[index].span));
-    } else if !qualified.is_empty() && !unqualified.is_empty() {
+    } else {
         facts
             .inconsistent_single_source_qualification
-            .extend(unqualified.iter().map(|&index| tokens[index].span));
+            .extend(inconsistent_qualification(
+                tokens,
+                (&qualified, &unqualified),
+                context.qualification_exempt_spans,
+            ));
     }
     facts.unknown_relation_qualifiers.extend(
         qualified
@@ -683,6 +692,48 @@ fn collect_reference_facts(context: &ReferenceFactContext<'_>) -> AdditionalQuer
         ));
     }
     facts
+}
+
+/// The unqualified references of a single-relation scope that also qualifies some, judged as written: a plain macro slot read such as `@orders.amount` counts as unqualified though it reads through its relation, and SQL another file authored is judged there.
+fn inconsistent_qualification(
+    tokens: &[Token],
+    (qualified, unqualified): (&[usize], &[usize]),
+    exempt: &[(usize, usize)],
+) -> Vec<Span> {
+    let authored = |index: &&usize| {
+        let start: usize = tokens[**index].span.start;
+        !exempt
+            .iter()
+            .any(|&(exempt_start, exempt_end)| exempt_start <= start && start < exempt_end)
+    };
+    let (plain_reads, qualified): (Vec<usize>, Vec<usize>) = qualified
+        .iter()
+        .filter(authored)
+        .partition(|&&index| is_plain_slot_read(tokens, index));
+    let mut unqualified: Vec<usize> = unqualified.iter().filter(authored).copied().collect();
+    if qualified.is_empty() || (unqualified.is_empty() && plain_reads.is_empty()) {
+        return Vec::new();
+    }
+    unqualified.extend(plain_reads);
+    unqualified.sort_unstable();
+    unqualified
+        .iter()
+        .map(|&index| tokens[index].span)
+        .collect()
+}
+
+/// Whether the qualified reference at `index` is a plain SQL macro slot read, both its relation and its slot a macro parameter.
+fn is_plain_slot_read(tokens: &[Token], index: usize) -> bool {
+    let is_parameter = |token: &Token| {
+        token
+            .text
+            .to_ascii_lowercase()
+            .starts_with(SQL_MACRO_PARAMETER_SENTINEL_PREFIX)
+    };
+    is_parameter(&tokens[index])
+        && tokens
+            .get(index + 2)
+            .is_some_and(|column| is_parameter(column))
 }
 
 fn simple_qualifier(

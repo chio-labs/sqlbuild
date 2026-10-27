@@ -10,9 +10,10 @@ use crate::lint_text::_helpers::sites::{byte_offset, compiled, lint_policy, site
 use crate::lint_text::constants::{
     GENERATED_FIX, GENERATED_SQL_SUFFIX, HARNESS_CTE_PREFIXES, INVALID_DIAGNOSTIC,
     INVALID_FIX_EDIT, INVALID_FIX_OBJECT, INVALID_FIX_REASON, LINT_API_VERSION, LONG_LITERAL_CODE,
-    MISSING_DIAGNOSTICS, NATIVE_LINT_ERROR_CODE, NON_CONTIGUOUS_FIX, NON_OBJECT_RESPONSE,
-    NOT_AN_OBJECT, PARSE_ERROR_POSITION_PATTERN, PARSE_FAILURE_PREFIX, PARSE_FAILURE_REMEDIATION,
-    UNSUPPORTED_VERSION, UNUSED_CTE_CODE,
+    MACRO_MIXED_QUALIFICATION_REMEDIATION, MISSING_DIAGNOSTICS, MIXED_QUALIFICATION_CODE,
+    NATIVE_LINT_ERROR_CODE, NON_CONTIGUOUS_FIX, NON_OBJECT_RESPONSE, NOT_AN_OBJECT,
+    PARSE_ERROR_POSITION_PATTERN, PARSE_FAILURE_PREFIX, PARSE_FAILURE_REMEDIATION,
+    SQL_MACRO_PARAMETER_SENTINEL_PREFIX, UNSUPPORTED_VERSION, UNUSED_CTE_CODE,
 };
 use crate::lint_text::models::{AuthoredDiagnostic, AuthoredEdit, ExpansionSpan, LintSqlBody};
 use crate::sql_lint::main::backtick_identifiers::backtick_identifiers;
@@ -211,6 +212,48 @@ fn from_sql_macro(body: &LintSqlBody, (text, dialect): (&str, &str), offset: i64
     }
 }
 
+/// A pass's input offset where that pass's output holds it: inside a replaced range, the start or end of its replacement.
+fn forward_pass(offset: i64, spans: &[ExpansionSpan], end: bool) -> i64 {
+    let mut shift: i64 = 0;
+    for span in spans {
+        if offset < span.source_start || (end && offset == span.source_start) {
+            break;
+        }
+        if offset < span.source_end || (end && offset == span.source_end) {
+            return if end {
+                span.output_end
+            } else {
+                span.output_start
+            };
+        }
+        shift += (span.output_end - span.output_start) - (span.source_end - span.source_start);
+    }
+    offset + shift
+}
+
+/// Character ranges of the lint text that SQL macro calls generated, so rules about the author's style judge that SQL in its macro file instead.
+pub(crate) fn sql_macro_output_spans(
+    body: &LintSqlBody,
+    file: (&str, &str),
+) -> Vec<(usize, usize)> {
+    let mut spans: Vec<(usize, usize)> = Vec::new();
+    for (index, pass) in body.passes.iter().enumerate() {
+        for span in pass {
+            let (mut start, mut end): (i64, i64) = (span.output_start, span.output_end);
+            for later in &body.passes[index + 1..] {
+                start = forward_pass(start, later, false);
+                end = forward_pass(end, later, true);
+            }
+            if end > start && from_sql_macro(body, file, start) {
+                spans.push((start as usize, end as usize));
+            }
+        }
+    }
+    spans.sort_unstable();
+    spans.dedup();
+    spans
+}
+
 /// Keep diagnostics starting inside a framed expression, whose frame lint generated.
 fn inside_frame(diagnostics: Vec<Value>, (prefix, suffix): (i64, i64), length: i64) -> Vec<Value> {
     let end_of_expression: i64 = length - suffix;
@@ -392,6 +435,13 @@ pub(crate) fn authored_diagnostic(
         Some(NON_CONTIGUOUS_FIX.to_string())
     } else {
         reason
+    };
+    let remediation: String = if code == MIXED_QUALIFICATION_CODE
+        && body.lint_text.contains(SQL_MACRO_PARAMETER_SENTINEL_PREFIX)
+    {
+        MACRO_MIXED_QUALIFICATION_REMEDIATION.to_owned()
+    } else {
+        remediation
     };
     let message: String = if generated {
         match file.token_at(absolute) {

@@ -1317,3 +1317,12 @@ class PreservedTargetAuditTestCase:
     description: str
     target_toml: str
     expected_history_schema: str
+
+
+@dataclass(frozen=True)
+class MacroSlotQualificationTestCase:
+    description: str
+    files: dict[str, str]
+    expected_exit_code: int
+    expected_fragments: tuple[str, ...]
+    absent_fragments: tuple[str, ...]
