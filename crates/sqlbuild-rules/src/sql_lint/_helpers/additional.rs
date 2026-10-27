@@ -730,10 +730,7 @@ fn is_plain_slot_read(tokens: &[Token], index: usize) -> bool {
             .to_ascii_lowercase()
             .starts_with(SQL_MACRO_PARAMETER_SENTINEL_PREFIX)
     };
-    is_parameter(&tokens[index])
-        && tokens
-            .get(index + 2)
-            .is_some_and(|column| is_parameter(column))
+    is_parameter(&tokens[index]) && tokens.get(index + 2).is_some_and(is_parameter)
 }
 
 fn simple_qualifier(
