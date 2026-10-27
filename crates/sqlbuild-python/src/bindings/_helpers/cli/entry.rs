@@ -36,9 +36,9 @@ use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_colo
 use crate::bindings::_helpers::recall::constants::{JSON_FORMAT, RECALL_SETTINGS_CODE};
 use crate::bindings::_helpers::recall::events::escaped_text;
 use crate::bindings::_helpers::recall::session::{
-    InvocationRecall, finish_invocation_recall, start_invocation_recall,
+    InvocationRecall, effective_selection, finish_invocation_recall, start_invocation_recall,
 };
-use crate::bindings::_helpers::recall::sinks::RecallLifecycleSink;
+use crate::bindings::_helpers::recall::sinks::{RecallLifecycleSink, publish_lifecycle_event};
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::construct::{error_class, new_error};
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -496,7 +496,8 @@ fn add_invocation_context(
     }
     let select: Bound<'_, PyAny> = invocation.args.getattr("select")?;
     if !select.is_none() {
-        payload.set_item("selection_count", select.len()?)?;
+        let (selectors, _) = effective_selection(&invocation.args)?;
+        payload.set_item("selection_count", selectors.len())?;
     }
     Ok(())
 }

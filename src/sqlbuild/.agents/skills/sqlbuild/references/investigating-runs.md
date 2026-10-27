@@ -317,6 +317,9 @@ invocations (view): one row per invocation; status is completed, failed, running
   adapter TEXT
   project_name TEXT
   selection TEXT
+  selection_count ANY
+  selection_truncated INTEGER
+  selector_files TEXT
   exclusion TEXT
   sqlbuild_version TEXT
   git_revision TEXT

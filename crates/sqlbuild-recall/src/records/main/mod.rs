@@ -1,4 +1,5 @@
 pub mod artifact_rows;
+pub mod bounded_selection;
 pub mod command_mode;
 pub mod conflict_row;
 pub mod delivery_row;

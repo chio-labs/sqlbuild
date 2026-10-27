@@ -6,7 +6,7 @@ use crate::schema::main::table_spec::table_spec;
 use crate::schema::models::{DdlOptions, Table};
 
 /// The columns the `invocations` pass reads from its three sources, NULL (the terminal flag 0) where a source does not give them.
-const INVOCATION_SOURCE_COLUMNS: [(&str, &str, &str); 30] = [
+const INVOCATION_SOURCE_COLUMNS: [(&str, &str, &str); 35] = [
     ("ctx_command", "Nullable(String)", "NULL"),
     ("ctx_subcommand", "Nullable(String)", "NULL"),
     ("ctx_target", "Nullable(String)", "NULL"),
@@ -23,6 +23,9 @@ const INVOCATION_SOURCE_COLUMNS: [(&str, &str, &str); 30] = [
     ("ctx_recall_filter_active", "Nullable(UInt8)", "NULL"),
     ("ctx_origin", "Nullable(String)", "NULL"),
     ("ctx_command_mode", "Nullable(String)", "NULL"),
+    ("ctx_selection_count", "Nullable(Int64)", "NULL"),
+    ("ctx_selection_truncated", "Nullable(UInt8)", "NULL"),
+    ("ctx_selector_files", "Nullable(String)", "NULL"),
     ("heartbeat_at", "Nullable(DateTime64(6, 'UTC'))", "NULL"),
     ("beat_stale_at", "Nullable(DateTime64(6, 'UTC'))", "NULL"),
     ("beat_command", "Nullable(String)", "NULL"),
@@ -176,6 +179,9 @@ fn invocations(options: &DdlOptions) -> String {
             ("ctx_recall_filter_active", "recall_filter_active"),
             ("ctx_origin", "origin"),
             ("ctx_command_mode", "command_mode"),
+            ("ctx_selection_count", "selection_count"),
+            ("ctx_selection_truncated", "selection_truncated"),
+            ("ctx_selector_files", "selector_files"),
         ],
         &context,
     );
@@ -280,6 +286,11 @@ SELECT
     context_adapter AS adapter,
     context_project_name AS project_name,
     context_selection AS selection,
+    coalesce(context_selection_count,
+        if(isValidJSON(context_selection), toInt64(JSONLength(context_selection)), NULL))
+        AS selection_count,
+    context_selection_truncated AS selection_truncated,
+    context_selector_files AS selector_files,
     context_exclusion AS exclusion,
     context_sqlbuild_version AS sqlbuild_version,
     context_git_revision AS git_revision,

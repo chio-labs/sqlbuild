@@ -18,6 +18,12 @@ pub fn invocation_row(envelope: &RowEnvelope, context: &InvocationContext) -> Re
             ("command", optional_text(context.command.as_deref())),
             ("subcommand", optional_text(context.subcommand.as_deref())),
             ("selection", json_list(&context.selection)),
+            (
+                "selection_count",
+                context.selection_count.map_or(RecallValue::Null, integer),
+            ),
+            ("selection_truncated", boolean(context.selection_truncated)),
+            ("selector_files", json_list(&context.selector_files)),
             ("exclusion", json_list(&context.exclusion)),
             (
                 "project_name",
