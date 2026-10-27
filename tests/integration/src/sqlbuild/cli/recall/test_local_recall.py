@@ -390,7 +390,7 @@ def test_given_a_killed_build_when_heartbeats_stop_then_the_invocation_is_abando
     running_id, recorded = killed_build(project_dir, heartbeat_seconds=test_case.heartbeat_seconds)
 
     assert recorded == [
-        [running_id, test_case.expected_status, 1, test_case.expected_output_complete]
+        [running_id, test_case.expected_status, 1, 1, test_case.expected_output_complete]
     ]
 
 

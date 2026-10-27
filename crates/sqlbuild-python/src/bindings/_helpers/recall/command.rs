@@ -487,7 +487,7 @@ fn run_output(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
         problems.push("delivery did not report a complete flush".to_owned());
     }
     match transcript.status.as_deref() {
-        Some("completed" | "failed") | None => {}
+        Some("completed" | "failed" | "cancelled") | None => {}
         Some(status) => problems.push(format!("the invocation is {status}")),
     }
     if !problems.is_empty() {

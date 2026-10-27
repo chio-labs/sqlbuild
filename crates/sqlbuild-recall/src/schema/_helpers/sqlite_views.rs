@@ -271,6 +271,8 @@ started AS (
 terminals AS (
     SELECT invocation_id, event_type, occurred_at, exit_code, duration_ms, error_type, error_code,
         json_extract(payload, '$.error_message') AS error_message,
+        json_extract(payload, '$.signal_number') AS signal_number,
+        json_extract(payload, '$.cost_status') AS cost_status,
         ROW_NUMBER() OVER (
             PARTITION BY invocation_id
             ORDER BY invocation_sequence DESC, occurred_at DESC, event_id DESC
@@ -291,6 +293,8 @@ projected AS (
         COALESCE(started.started_at, ids.invocation_started_at) AS started_at,
         CASE
             WHEN terminals.event_type = 'invocation_completed' THEN 'completed'
+            WHEN terminals.event_type = 'invocation_failed'
+                AND terminals.signal_number IS NOT NULL THEN 'cancelled'
             WHEN terminals.event_type = 'invocation_failed' THEN 'failed'
             WHEN beats.stale_at IS NULL THEN 'unknown'
             WHEN beats.stale_at >= {NOW} THEN 'running'
@@ -303,6 +307,8 @@ projected AS (
         terminals.error_type,
         terminals.error_code,
         terminals.error_message,
+        terminals.signal_number,
+        terminals.cost_status,
         COALESCE(context.command, started.command, beats.command) AS command,
         COALESCE(context.subcommand, beats.subcommand) AS subcommand,
         context.origin,
@@ -358,10 +364,16 @@ SELECT
             (unixepoch(last_heartbeat_at, 'subsec') - unixepoch(started_at, 'subsec')) * 1000.0, 3
         )
     END AS duration_ms,
+    CASE
+        WHEN terminal_event IS NOT NULL THEN 0
+        WHEN status = 'abandoned' THEN 1
+    END AS ended_at_estimated,
     exit_code,
     error_type,
     error_code,
     error_message,
+    signal_number,
+    cost_status,
     command,
     subcommand,
     origin,

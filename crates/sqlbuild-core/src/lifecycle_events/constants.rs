@@ -663,11 +663,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [EventDefinition; 23] = [
         required_payload: &[],
         allowed_payload: &[
             "command",
+            "cost_status",
             "duration_ms",
             "error_code",
             "error_message",
             "error_type",
             "exit_code",
+            "signal_number",
         ],
         terminal: true,
     },

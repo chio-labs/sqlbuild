@@ -216,6 +216,14 @@ fn invocations(options: &DdlOptions) -> String {
                 "JSONExtract(payload, 'error_message', 'Nullable(String)')",
             ),
             (
+                "event_signal_number",
+                "JSONExtract(payload, 'signal_number', 'Nullable(Int64)')",
+            ),
+            (
+                "event_cost_status",
+                "JSONExtract(payload, 'cost_status', 'Nullable(String)')",
+            ),
+            (
                 "event_is_terminal",
                 "event_type IN ('invocation_completed', 'invocation_failed')",
             ),
@@ -253,6 +261,8 @@ folded AS (
 {terminal_error_type}
 {terminal_error_code}
 {terminal_error_message}
+{terminal_signal_number}
+{terminal_cost_status}
         maxIf(heartbeat_at, source = 'beat') AS last_heartbeat_at,
         maxIf(beat_stale_at, source = 'beat') AS stale_at,
         minIf(beat_command, source = 'beat') AS first_beat_command,
@@ -266,6 +276,7 @@ SELECT
     coalesce(started_occurred_at, invocation_started_at) AS started_at,
     multiIf(
         terminal_type = 'invocation_completed', 'completed',
+        terminal_type = 'invocation_failed' AND terminal_signal_number IS NOT NULL, 'cancelled',
         terminal_type = 'invocation_failed', 'failed',
         stale_at IS NULL, 'unknown',
         stale_at >= now64(6), 'running',
@@ -277,10 +288,14 @@ SELECT
         if(stale_at < now64(6),
             toFloat64(dateDiff('millisecond', started_at, last_heartbeat_at)), NULL))
         AS duration_ms,
+    multiIf(terminal_type IS NOT NULL, toUInt8(0), stale_at < now64(6), toUInt8(1), NULL)
+        AS ended_at_estimated,
     terminal_exit_code AS exit_code,
     terminal_error_type AS error_type,
     terminal_error_code AS error_code,
     terminal_error_message AS error_message,
+    terminal_signal_number AS signal_number,
+    terminal_cost_status AS cost_status,
     coalesce(context_command, started_command, first_beat_command) AS command,
     coalesce(context_subcommand, first_beat_subcommand) AS subcommand,
     context_origin AS origin,
@@ -323,13 +338,16 @@ FROM folded",
         terminal_error_type = terminal("event_error_type", "terminal_error_type"),
         terminal_error_code = terminal("event_error_code", "terminal_error_code"),
         terminal_error_message = terminal("event_error_message", "terminal_error_message"),
+        terminal_signal_number = terminal("event_signal_number", "terminal_signal_number"),
+        terminal_cost_status = terminal("event_cost_status", "terminal_cost_status"),
     )
 }
 
-/// Two folds over one read of the events: by resource, which names the resource and gathers its statement events, then by statement. Both group by `invocation_id` and `invocation_started_at`, so a filter on either reaches the read; `sql_available` looks digests up in the stored SQL, which is shared across invocations.
+/// Two folds over one read of the events: by resource, which names the resource and gathers its statement events, then by statement. Both group by `invocation_id` and `invocation_started_at`, so a filter on either reaches the read; `sql_available` needs a reference to the digest in the statement's own invocation and the stored SQL, which is shared across invocations.
 fn statements(options: &DdlOptions) -> String {
     let events = retained(Table::Events, options, "");
     let artifacts = clickhouse_table(table_spec(Table::Artifacts).name, options);
+    let refs = retained(Table::ArtifactRefs, options, "");
     let order = "tuple(invocation_sequence, occurred_at)";
     let terminal = "event_type IN ('statement_completed', 'statement_failed')";
     let statement_event = "statement_id IS NOT NULL AND startsWith(event_type, 'statement_')";

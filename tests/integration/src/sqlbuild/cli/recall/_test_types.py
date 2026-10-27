@@ -349,3 +349,41 @@ class InvocationPrefixTestCase:
     prefix_length: int
     expected_exit_code: int
     expected_error_code: str | None
+
+
+@dataclass(frozen=True)
+class RecordedSelectionTestCase:
+    description: str
+    selector_file: str
+    args: tuple[str, ...]
+    expected_selection: list[object]
+
+
+@dataclass(frozen=True)
+class TerminatedCommandTestCase:
+    description: str
+    environment: dict[str, str]
+    wait_sql: str
+    expected_output: bytes
+
+
+@dataclass(frozen=True)
+class FailedStatementSqlTestCase:
+    description: str
+    model_sql: str
+    expected_sql_fragment: str
+
+
+@dataclass(frozen=True)
+class AuditEvidenceTestCase:
+    description: str
+    recall_toml: str
+    expected_evidence: list[object]
+    expected_artifacts: list[list[object]]
+
+
+@dataclass(frozen=True)
+class CostAttributionTestCase:
+    description: str
+    collected: str
+    expected_cost_status: str

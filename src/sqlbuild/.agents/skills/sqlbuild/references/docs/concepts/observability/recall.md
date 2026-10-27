@@ -10,6 +10,9 @@ Online: https://sqlbuild.com/docs/concepts/observability/recall/
 
 - An investigation, start to finish
 - What is recorded
+- How a run ended
+- Selection
+- Audit evidence
 - Git revision
 - Where a run came from
 - Settings
@@ -41,31 +44,29 @@ sqb recall query \
 ```
 
 ```
--[ RECORD 1 ]---------------------------+
-run             | 2026-10-20T00:01:44.784683Z
-outcome         | warn
-violation_count | 1
-status          | completed
-exit_code       | 0
-
--[ RECORD 2 ]---------------------------+
-run             | 2026-10-20T00:00:34.652468Z
-outcome         | pass
-violation_count | 0
-status          | completed
-exit_code       | 0
-
--[ RECORD 3 ]---------------------------+
-run             | 2026-10-19T23:59:23.827831Z
-outcome         | pass
-violation_count | 0
-status          | completed
-exit_code       | 0
+┌─────────────────────────────┬─────────┬─────────────────┬───────────┬───────────┐
+│             run             │ outcome │ violation_count │  status   │ exit_code │
+│            text             │  text   │     integer     │   text    │  integer  │
+├─────────────────────────────┼─────────┼─────────────────┼───────────┼───────────┤
+│ 2026-10-20T00:01:44.784683Z │ warn    │               1 │ completed │         0 │
+│ 2026-10-20T00:00:34.652468Z │ pass    │               0 │ completed │         0 │
+│ 2026-10-19T23:59:23.827831Z │ pass    │               0 │ completed │         0 │
+└─────────────────────────────┴─────────┴─────────────────┴───────────┴───────────┘
 
 3 rows
 ```
 
 The audit started warning on the latest build, and that build still exited 0, so nothing alerted.
+
+See the rows the audit flagged, which Recall keeps as the audit's evidence:
+
+```bash
+sqb recall query \
+  "SELECT r.text FROM audit_results a JOIN artifacts r
+     ON r.invocation_id = a.invocation_id AND r.ref_id = a.event_id
+   WHERE a.audit_name = 'revenue_is_non_negative' AND a.outcome <> 'pass'
+   ORDER BY a.invocation_started_at DESC LIMIT 1"
+```
 
 See what that build printed, exactly as the scheduler saw it:
 
@@ -88,11 +89,12 @@ sqb recall query --backend warehouse \
 ```
 
 ```
--[ RECORD 1 ]---------------------------+
-payment_id   | 9
-order_id     | 8
-amount_cents | -2200
-paid_at      | 2026-04-03 15:42:00
+┌────────────┬──────────┬──────────────┬─────────────────────┐
+│ payment_id │ order_id │ amount_cents │       paid_at       │
+│  INTEGER   │ INTEGER  │   INTEGER    │      TIMESTAMP      │
+├────────────┼──────────┼──────────────┼─────────────────────┤
+│          9 │        8 │        -2200 │ 2026-04-03 15:42:00 │
+└────────────┴──────────┴──────────────┴─────────────────────┘
 
 1 row
 ```
@@ -109,21 +111,25 @@ For every recorded invocation, Recall keeps:
   for a failed invocation its cause as `error_type`, `error_code` and a one-line
   `error_message`, also when the command reported the failure only through its exit code (for
   example `sqb debug` failing to connect records `ConnectionError` and `C980`);
+- the selectors it ran with, see [Selection](#selection);
+- whether it finished attributing warehouse cost, as `cost_status`: `complete`, `partial`,
+  `pending`, `unavailable` or `collection_failed`, or `NULL` for an adapter without cost
+  attribution;
 - the commit it ran from (`git_revision`), see [Git revision](#git-revision);
 - where it came from (`origin`) and, for an orchestrated run, the job and run that started it, see
   [Where a run came from](#where-a-run-came-from);
 - its [lifecycle events](../observability.md): runs, resource attempts, statements,
   retries, and audit results;
-- the SQL text of every executed statement, stored once per distinct statement and shared across
-  invocations;
+- the SQL text of every executed statement, including statements that failed or were cancelled,
+  stored once per distinct statement and shared across invocations;
+- the rows a failing audit flagged, see [Audit evidence](#audit-evidence);
 - its stdout and stderr, byte for byte, in the order they were written, up to
   [`max_output_bytes`](#output-limit) of each stream;
 - framework diagnostics at or above `diagnostics_min_severity`.
 
 Writes happen on a background thread and never fail the command. A command that cannot record all
 of its history still succeeds, prints a warning followed by its own final status, and
-`output_invocations` reports the gap. An invocation whose process died without finishing has
-status `abandoned`.
+`output_invocations` reports the gap.
 
 `sqb recall` only reads history: it publishes no lifecycle events, runs no project sinks, and keeps
 no compute logs, so a query starts quickly. Every command is recorded except `sqb recall` itself, commands that create a project (such as
@@ -132,7 +138,58 @@ recorded either: a `sqb compile` answered from the launcher's warm cache, and `s
 `sqb rules list` and `sqb rules show` in a project with no custom rules, rule options or sinks.
 
 The store is `logs/recall.sqlite3` in the project directory. Add `logs/` to `.gitignore`; the store
-can contain sensitive SQL and output.
+can contain sensitive SQL, output and audit evidence.
+
+## How a run ended
+
+`invocations.status` is one of:
+
+| Status | Meaning |
+|--------|---------|
+| `completed` | The command exited 0 |
+| `failed` | The command exited with an error |
+| `cancelled` | The command was stopped by SIGTERM or Ctrl-C; `signal_number` is `15` or `2` |
+| `running` | The command is still running: its heartbeats are recent |
+| `abandoned` | Its heartbeats stopped without an end: the process died, for example after SIGKILL or running out of memory |
+| `unknown` | Recall has neither an end nor a heartbeat for it |
+
+A command stopped by SIGTERM, as an orchestrator stops a job, ends the way Ctrl-C ends it: it
+records its real end time and its output, prints `error: terminated by SIGTERM`, and exits with
+code 143. Recall keeps heartbeating while the command discovers and compiles the project, so a run
+stopped in any phase is never mistaken for one that died. An `abandoned` run cannot record its end:
+its `ended_at` is its last heartbeat and `ended_at_estimated` is `1`.
+
+## Selection
+
+`invocations.selection` is the JSON array of selectors the command ran with: positional selectors,
+`--select`, and the selectors read from each `--select-file`, whose paths are in `selector_files`.
+`selection_count` counts them. At most 64 KiB of selectors are kept; beyond that the list is cut
+and `selection_truncated` is `1`, while `selection_count` still counts all of them.
+
+## Audit evidence
+
+When an audit warns or fails, Recall keeps its [evidence](../audits.md#evidence): up to
+`evidence_limit` of the rows it flagged. `audit_results` counts them in `evidence_count`, sets
+`evidence_truncated` to `1` when the limit cut rows off, and names the stored rows by
+`sample_digest`. Read them from `artifacts`, joined on the audit's `event_id`:
+
+```sql
+SELECT r.text FROM audit_results a JOIN artifacts r
+  ON r.invocation_id = a.invocation_id AND r.ref_id = a.event_id
+WHERE a.outcome <> 'pass'
+```
+
+The evidence holds data values from your warehouse. Choose which failures keep it with
+`audit_evidence`:
+
+| Value | Keeps evidence for |
+|-------|--------------------|
+| `warn-and-error` (default) | Audits that warn or fail |
+| `error` | Audits that fail at error severity |
+| `off` | No audit |
+
+`evidence_count` always counts the rows the audit kept as evidence; `sample_digest` is `NULL` when
+Recall did not store them.
 
 ## Git revision
 
@@ -179,6 +236,7 @@ retention = "30d"             # days of history to keep; also accepts hours, suc
 shutdown_timeout = "3s"       # longest delay Recall may add when a command exits
 diagnostics_min_severity = "info"
 max_output_bytes = 2097152    # bytes of each output stream to keep; 0 keeps everything
+audit_evidence = "warn-and-error"
 
 [targets.ci.recall]
 enabled = false               # do not record runs against the ci target
@@ -193,6 +251,7 @@ enabled = false               # do not record runs against the ci target
 | `shutdown_timeout` | `"3s"` | The cap on time spent flushing history at exit, in `s` or `ms`, up to 10 minutes |
 | `diagnostics_min_severity` | `"info"` | `trace`, `debug`, `info`, `warning`, `error`, or `critical` |
 | `max_output_bytes` | `2097152` for the local store | Bytes of stdout and of stderr kept per invocation, an integer; `0` keeps everything. See [Output limit](#output-limit) |
+| `audit_evidence` | `"warn-and-error"` | Which failing audits keep the rows they flagged: `warn-and-error`, `error`, or `off`. See [Audit evidence](#audit-evidence) |
 
 To turn Recall off for the whole project:
 
@@ -398,8 +457,8 @@ in the store's SQL dialect, against these views:
 | View | One row per |
 |------|-------------|
 | `invocations` | Invocation, with status, exit code, and timing |
-| `statements` | Executed statement, with resource, kind, purpose, duration, and row counts |
-| `audit_results` | Evaluated audit |
+| `statements` | Executed statement, with resource, kind, purpose, outcome, duration, and row counts |
+| `audit_results` | Evaluated audit, with its evidence count |
 | `events` | Lifecycle event |
 | `diagnostics` | Retained diagnostic |
 | `artifacts` | Reference from an invocation to captured SQL, with its text |
@@ -416,7 +475,16 @@ invocation fails and lists the matches. In SQL, match a prefix with
 Run `sqb recall schema` for every column, and check the values a column holds before filtering on
 it, for example `SELECT DISTINCT resource_kind, purpose FROM statements`: a model's
 `resource_kind` is its materialization, such as `table` or `view`, and its build statements have
-`purpose = 'model_build'`.
+`purpose = 'model_build'`. On Snowflake, the statements that read query history for cost
+attribution have `purpose = 'cost_telemetry'`.
+
+`statements.outcome` is `completed`, `failed`, `handled` or `no_terminal`. A `handled` statement
+failed, and SQLBuild recovered from it: for example, a cost history read that timed out and was
+read again in smaller windows. `no_terminal` means the statement never reported an end, usually
+because the process died. `sql_available` is `1` when the statement's SQL is in `artifacts`; when it
+is `0`, `sql_unavailable_reason` says why: `not_captured` when Recall never received the SQL, or
+`expired_or_not_captured` when the statement references SQL text that is no longer stored, because
+[retention](#retention) removed it or it was dropped before it was written.
 
 Every view has `invocation_id` and `invocation_started_at`. Filter on them to keep a query cheap:
 on a ClickHouse store, a filter on either reaches the table reads, so a query about one invocation or

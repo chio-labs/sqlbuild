@@ -28,7 +28,12 @@ use crate::bindings::_helpers::cli::machine_output::take_machine_output_written;
 use crate::bindings::_helpers::cli::observability::{
     CliObservabilityScope, cli_observability_scope,
 };
+use crate::bindings::_helpers::cli::termination::{
+    CommandTerminated, TERMINATED_EXIT_CODE, TerminationHandler, handle_sigterm,
+    interrupting_signal, report_termination,
+};
 use crate::bindings::_helpers::compile_command::report::format_compile_error_json;
+use crate::bindings::_helpers::cost_report::attribution::take_cost_status;
 use crate::bindings::_helpers::diff_report::output::render_diff_error_json;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::output_capture::records::invocation_context;
@@ -545,7 +550,10 @@ fn observed_dispatch<'py>(
     }
     let command: String = invocation.command_name();
     drop(take_failure_cause());
+    drop(take_cost_status());
     let started: Instant = Instant::now();
+    let started_at: Bound<'py, PyAny> = imported(py, "datetime", "datetime")?
+        .call_method1("now", (imported(py, "datetime", "UTC")?,))?;
     let elapsed = |started: Instant| -> PyResult<Bound<'py, PyAny>> {
         u64::try_from(started.elapsed().as_millis())
             .unwrap_or(u64::MAX)
@@ -558,23 +566,53 @@ fn observed_dispatch<'py>(
             invocation.project_dir()?.unbind(),
         ),
     )?;
+    let started_payload = || -> PyResult<Bound<'py, PyDict>> {
+        let payload: Bound<'py, PyDict> = PyDict::new(py);
+        payload.set_item("command", &command)?;
+        add_invocation_context(invocation, &payload)?;
+        Ok(payload)
+    };
+    let failed_payload = |error: &PyErr| -> PyResult<Bound<'py, PyDict>> {
+        let payload: Bound<'py, PyDict> = PyDict::new(py);
+        payload.set_item("command", &command)?;
+        payload.set_item("duration_ms", elapsed(started)?)?;
+        let (error_type, code, message): (String, String, String) = raised_cause(py, error);
+        payload.set_item("error_type", error_type)?;
+        if !code.is_empty() {
+            payload.set_item("error_code", code)?;
+        }
+        payload.set_item("error_message", message)?;
+        if let Some(signal) = interrupting_signal(py, error) {
+            payload.set_item("signal_number", signal)?;
+        }
+        if let Some(status) = take_cost_status() {
+            payload.set_item("cost_status", status)?;
+        }
+        Ok(payload)
+    };
+    let announced: std::cell::Cell<bool> = std::cell::Cell::new(false);
     let scope: Bound<'py, PyAny> = observability.clone().into_any();
-    within(&scope, |dispatcher| {
+    let observed: PyResult<Bound<'py, PyAny>> = within(&scope, |dispatcher| {
         let publish = |event: Bound<'py, PyAny>| -> PyResult<()> {
             dispatcher.call_method1("publish_lifecycle", (event,))?;
             Ok(())
         };
         subscribe_recall((&observability, dispatcher), &invocation.recall)?;
-        let payload: Bound<'py, PyDict> = PyDict::new(py);
-        payload.set_item("command", &command)?;
-        add_invocation_context(invocation, &payload)?;
-        publish(lifecycle_event(py, "invocation_started", payload)?)?;
+        publish(lifecycle_event(
+            py,
+            "invocation_started",
+            started_payload()?,
+        )?)?;
+        announced.set(true);
         match dispatch_command(&invocation.args, invocation.handlers.clone()) {
             Ok(exit_code) => {
                 let payload: Bound<'py, PyDict> = PyDict::new(py);
                 payload.set_item("command", &command)?;
                 payload.set_item("duration_ms", elapsed(started)?)?;
                 payload.set_item("exit_code", &exit_code)?;
+                if let Some(status) = take_cost_status() {
+                    payload.set_item("cost_status", status)?;
+                }
                 let terminal: &str = if exit_code.eq(0)? {
                     "invocation_completed"
                 } else {
@@ -589,21 +627,55 @@ fn observed_dispatch<'py>(
                 Ok(exit_code)
             }
             Err(error) => {
-                let payload: Bound<'py, PyDict> = PyDict::new(py);
-                payload.set_item("command", &command)?;
-                payload.set_item("duration_ms", elapsed(started)?)?;
-                let (error_type, code, message): (String, String, String) =
-                    raised_cause(py, &error);
-                payload.set_item("error_type", error_type)?;
-                if !code.is_empty() {
-                    payload.set_item("error_code", code)?;
-                }
-                payload.set_item("error_message", message)?;
-                publish(lifecycle_event(py, "invocation_failed", payload)?)?;
+                publish(lifecycle_event(
+                    py,
+                    "invocation_failed",
+                    failed_payload(&error)?,
+                )?)?;
                 Err(error)
             }
         }
-    })
+    });
+    match (&observed, &invocation.recall.session) {
+        (Err(error), Some(session))
+            if !announced.get() && interrupting_signal(py, error).is_some() =>
+        {
+            record_interrupted_setup(
+                py,
+                session,
+                (&started_at, started_payload()?),
+                failed_payload(error)?,
+            )?;
+        }
+        _ => {}
+    }
+    observed
+}
+
+/// Record an invocation interrupted while its observability was still being set up, such as during project discovery, so Recall shows it cancelled instead of running.
+fn record_interrupted_setup(
+    py: Python<'_>,
+    session: &sqlbuild_recall::writer::models::RecallSession,
+    (started_at, started): (&Bound<'_, PyAny>, Bound<'_, PyDict>),
+    failed: Bound<'_, PyDict>,
+) -> PyResult<()> {
+    let started: Bound<'_, PyAny> = call_with(
+        &host::entry(py, ExecutorHost::CreateLifecycleEvent)?,
+        &[
+            (
+                "event_type",
+                PyString::new(py, "invocation_started").into_any(),
+            ),
+            ("payload", started.into_any()),
+            ("occurred_at", started_at.clone()),
+        ],
+    )?;
+    publish_lifecycle_event(py, session, &started)?;
+    publish_lifecycle_event(
+        py,
+        session,
+        &lifecycle_event(py, "invocation_failed", failed)?,
+    )
 }
 
 /// Dispatch once and project every expected failure to its coded error and exit code.
@@ -745,7 +817,13 @@ fn parsed_invocation<'py>(
         Ok(_) | Err(_) => None,
     };
     let finished: PyResult<()> = finish_invocation_recall(py, &recall, exit_status);
-    let exit_code: Bound<'py, PyAny> = dispatched?;
+    let exit_code: Bound<'py, PyAny> = match dispatched {
+        Err(error) if error.is_instance_of::<CommandTerminated>(py) => {
+            report_termination(py);
+            TERMINATED_EXIT_CODE.into_bound_py_any(py)?
+        }
+        dispatched => dispatched?,
+    };
     finished?;
     Ok(exit_code)
 }
@@ -786,6 +864,7 @@ fn run_cli<'py>(
             .get_item(pyo3::types::PySlice::new(py, 1, isize::MAX, 1))?,
     };
     let argv: Bound<'py, PyAny> = offered_launch_record(&argv)?;
+    let _termination: TerminationHandler<'py> = handle_sigterm(py)?;
     let external: Bound<'py, PyAny> = external_context(py)?;
     let invocation_scope: Bound<'py, PyAny> =
         host::entry(py, ExecutorHost::InvocationScope)?.call0()?;
