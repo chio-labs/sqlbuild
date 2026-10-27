@@ -3145,7 +3145,7 @@ class CliNamespace:
     max_columns: int | None
     query_sql: str | None
     query_file: str | None
-    query_format: str
+    query_format: str | None
     query_limit: int | None
     query_no_limit: bool
     cost_selector: str
@@ -4818,7 +4818,9 @@ def run_query_command(
     output_format: str = "long",
     limit: int | None = 20,
 ) -> int: ...
-def render_query_result(*, result: QueryResult, output_format: str, limit: int | None) -> str: ...
+def render_query_result(
+    *, result: QueryResult, output_format: str | None, limit: int | None
+) -> str: ...
 def run_dag_command(
     *,
     project_dir: Path | None,

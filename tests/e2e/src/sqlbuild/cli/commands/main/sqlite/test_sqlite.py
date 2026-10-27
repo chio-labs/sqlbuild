@@ -99,10 +99,14 @@ def test_given_orders_project_when_building_twice_then_sqlite_matches_duckdb(
                 "--no-color",
                 "query",
                 "--format",
-                "csv",
+                "long",
                 "SELECT customer_id, total_cents FROM analytics__customer_totals ORDER BY 1",
             ),
-            expected_fragments=("customer_id,total_cents", "1,1975", "2,3000", "3,500"),
+            expected_fragments=(
+                "customer_id | 1\ntotal_cents | 1975",
+                "customer_id | 2\ntotal_cents | 3000",
+                "customer_id | 3\ntotal_cents | 500",
+            ),
         ),
         SqliteCommandE2ETestCase(
             description="debug connects and runs a query",

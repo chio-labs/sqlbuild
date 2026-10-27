@@ -106,7 +106,7 @@ ruff_text_size = "=0.0.4"
 # Fast deterministic hasher for hot in-memory maps whose iteration order never reaches output.
 rustc-hash = "2"
 # Recall's local store: SQLite compiled in, so every build has the same engine version.
-rusqlite = { version = "0.37", features = ["bundled"] }
+rusqlite = { version = "0.37", features = ["bundled", "column_decltype"] }
 rustix = { version = "1.1.4", default-features = false, features = ["fs", "std", "termios"] }
 saphyr-parser = "0.1"
 regex = "1"

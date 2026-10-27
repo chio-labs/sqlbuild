@@ -300,6 +300,8 @@ def test_given_physical_source_without_freshness_when_running_on_snowflake_then_
             command=(
                 "query",
                 "SELECT CURRENT_DATABASE() AS database_name, CURRENT_SCHEMA() AS schema_name",
+                "--format",
+                "long",
             ),
             expected_stdout_fragments=("DATABASE_NAME | SQB_DB", "SCHEMA_NAME   |"),
             expected_schema_fragment="SQLBUILD_E2E_",
@@ -310,9 +312,9 @@ def test_given_physical_source_without_freshness_when_running_on_snowflake_then_
             expected_stdout_fragments=('"ID": 1', '"NAME": "alice"'),
         ),
         SnowflakeCliTestCase(
-            description="query command renders csv output",
-            command=("query", "SELECT 1 AS id, 'alice' AS name", "--format", "csv"),
-            expected_stdout_fragments=("ID,NAME", "1,alice"),
+            description="query command renders a table with Snowflake types by default",
+            command=("query", "SELECT 1 AS id, 'alice' AS name"),
+            expected_stdout_fragments=("┌", "NUMBER(1,0)", "TEXT", "alice", "1 row"),
         ),
         SnowflakeCliTestCase(
             description="query command prints ok for ddl statements",

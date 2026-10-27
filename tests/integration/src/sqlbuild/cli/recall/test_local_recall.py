@@ -245,7 +245,7 @@ def test_given_a_recall_query_when_rendered_as_json_then_it_matches_the_schema(
                 "8",
                 "SELECT 'first line' || char(10) || 'second line' AS note",
             ),
-            expected_fragments=("note | first li…[+14 bytes]", "1 row"),
+            expected_fragments=("│ first li…[+14 bytes] │", "1 row"),
         ),
         TextOutputTestCase(
             description="the schema lists views and join keys",

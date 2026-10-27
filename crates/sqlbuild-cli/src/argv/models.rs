@@ -98,6 +98,8 @@ pub struct ActionSpec {
     /// Sub-command names and their parsers, in order.
     pub parsers: Vec<(String, ParserSpec)>,
     pub choices_help: Vec<ChoiceHelp>,
+    /// Values no longer accepted, each with what to use instead; never listed in help.
+    pub removed_choices: Vec<(String, String)>,
 }
 
 /// One argument group's title and description.

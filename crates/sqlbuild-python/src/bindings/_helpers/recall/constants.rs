@@ -28,12 +28,9 @@ pub(crate) const RECALL_SETTINGS_CODE: &str = "C975";
 pub(crate) const WAREHOUSE_BACKEND: &str = "warehouse";
 /// Default cell width in text formats, in bytes.
 pub(crate) const DEFAULT_MAX_CELL_BYTES: usize = 4096;
-pub(crate) const LONG_FORMAT: &str = "long";
-pub(crate) const TABLE_FORMAT: &str = "table";
-/// What `--format table` prints in the release before it is removed.
-pub(crate) const TABLE_FORMAT_DEPRECATION: &str = "warning: --format table is deprecated and will be removed; use the default long format, or --json/--format csv\n";
-pub(crate) const CSV_FORMAT: &str = "csv";
 pub(crate) const JSON_FORMAT: &str = "json";
+/// How text output shows SQL NULL.
+pub(crate) const NULL_TEXT: &str = "NULL";
 /// The standard base64 alphabet binary JSON cells are encoded with.
 pub(crate) const BASE64_ALPHABET: &[u8; 64] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";

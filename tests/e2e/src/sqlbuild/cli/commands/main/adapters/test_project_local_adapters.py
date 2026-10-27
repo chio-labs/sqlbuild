@@ -21,7 +21,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb, run
     [
         ProjectLocalAdapterCliTestCase(
             description="query uses nested project local adapter",
-            command=("query", "SELECT 'ignored' AS value", "--format", "csv"),
+            command=("query", "SELECT 'ignored' AS value", "--format", "long"),
             expected_stdout_fragment="duckdb_plus",
         )
     ],

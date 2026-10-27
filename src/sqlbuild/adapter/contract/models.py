@@ -335,6 +335,7 @@ class QueryResult:
     columns: tuple[str, ...] = field(default_factory=tuple)
     rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
     truncated: bool = False
+    column_types: tuple[str | None, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

@@ -1,18 +1,11 @@
 use crate::json::models::JsonValue;
-use crate::query_command::models::QueryDisplay;
+use crate::query_command::models::{QueryDisplay, QueryLayout};
 
 pub(super) struct DisplayTestCase {
     pub(super) description: &'static str,
     pub(super) display: QueryDisplay,
-    pub(super) expected_long: &'static str,
-    pub(super) expected_table: &'static str,
-}
-
-pub(super) struct CsvTestCase {
-    pub(super) description: &'static str,
-    pub(super) columns: Vec<String>,
-    pub(super) rows: Vec<Vec<String>>,
-    pub(super) expected_csv: &'static str,
+    pub(super) layout: QueryLayout,
+    pub(super) expected_text: &'static str,
 }
 
 pub(super) struct JsonTestCase {

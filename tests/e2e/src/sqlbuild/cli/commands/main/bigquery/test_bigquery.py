@@ -289,7 +289,7 @@ def test_given_physical_source_without_freshness_when_running_on_bigquery_then_u
         BigQueryCliTestCase(
             description="query command uses bigquery local override",
             command=("query", "SELECT id AS ID, name AS NAME FROM {source} ORDER BY ID"),
-            expected_stdout_fragments=("ID   | 1", "NAME | alice", "ID   | 2", "NAME | bob"),
+            expected_stdout_fragments=("┌", "│ alice │", "│ bob   │", "2 rows"),
         ),
         BigQueryCliTestCase(
             description="query command renders json output",
@@ -302,14 +302,14 @@ def test_given_physical_source_without_freshness_when_running_on_bigquery_then_u
             expected_stdout_fragments=('"ID": 1', '"NAME": "alice"'),
         ),
         BigQueryCliTestCase(
-            description="query command renders csv output",
+            description="query command renders long output",
             command=(
                 "query",
                 "SELECT id AS ID, name AS NAME FROM {source} ORDER BY ID LIMIT 1",
                 "--format",
-                "csv",
+                "long",
             ),
-            expected_stdout_fragments=("ID,NAME", "1,alice"),
+            expected_stdout_fragments=("ID   | 1", "NAME | alice"),
         ),
         BigQueryCliTestCase(
             description="query command prints ok for ddl statements",

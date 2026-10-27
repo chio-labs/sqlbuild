@@ -360,7 +360,12 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             ]
             truncated = len(fetched_rows) > limit
             rows = tuple(fetched_rows[:limit])
-        return QueryResult(columns=columns, rows=rows, truncated=truncated)
+        column_types: tuple[str | None, ...] = tuple(
+            getattr(column, "type_display", None) for column in description
+        )
+        return QueryResult(
+            columns=columns, rows=rows, truncated=truncated, column_types=column_types
+        )
 
     def relation_exists(
         self,

@@ -460,7 +460,7 @@ def test_given_intermediate_strategy_project_when_loading_twice_on_databricks_th
         DatabricksCliTestCase(
             description="query command uses databricks local override",
             command=("query", "SELECT id AS ID, name AS NAME FROM {source} ORDER BY ID"),
-            expected_stdout_fragments=("ID   | 1", "NAME | alice", "ID   | 2", "NAME | bob"),
+            expected_stdout_fragments=("┌", "│ alice │", "│ bob   │", "2 rows"),
         ),
         DatabricksCliTestCase(
             description="query command renders json output",
@@ -473,14 +473,14 @@ def test_given_intermediate_strategy_project_when_loading_twice_on_databricks_th
             expected_stdout_fragments=('"ID": 1', '"NAME": "alice"'),
         ),
         DatabricksCliTestCase(
-            description="query command renders csv output",
+            description="query command renders long output",
             command=(
                 "query",
                 "SELECT id AS ID, name AS NAME FROM {source} ORDER BY ID LIMIT 1",
                 "--format",
-                "csv",
+                "long",
             ),
-            expected_stdout_fragments=("ID,NAME", "1,alice"),
+            expected_stdout_fragments=("ID   | 1", "NAME | alice"),
         ),
         DatabricksCliTestCase(
             description="query command prints ok for ddl statements",

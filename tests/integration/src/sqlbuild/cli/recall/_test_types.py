@@ -233,10 +233,18 @@ class JsonErrorTestCase:
 
 
 @dataclass(frozen=True)
-class DeprecatedFormatTestCase:
+class RemovedFormatTestCase:
     description: str
     args: tuple[str, ...]
-    expected_warning: bool
+    expected_message: str
+
+
+@dataclass(frozen=True)
+class QueryLayoutTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_fragments: tuple[str, ...]
+    unexpected_fragments: tuple[str, ...]
 
 
 @dataclass(frozen=True)

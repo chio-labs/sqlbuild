@@ -218,8 +218,9 @@ fn write_machine_error(
         let format: Option<String> = invocation
             .args
             .getattr_opt("recall_format")?
-            .map(|format| format.extract())
-            .transpose()?;
+            .map(|format| format.extract::<Option<String>>())
+            .transpose()?
+            .flatten();
         format.as_deref() == Some(JSON_FORMAT)
     } else if invocation.command_is("janitor") {
         invocation.flag("json")? && !take_machine_output_written()

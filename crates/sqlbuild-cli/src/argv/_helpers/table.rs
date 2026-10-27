@@ -131,6 +131,15 @@ impl TableReader {
                     help: help(choice.get("help").unwrap_or(&Json::Null)),
                 })
                 .collect(),
+            removed_choices: items(json, "removed_choices")
+                .iter()
+                .map(|removed| {
+                    (
+                        text(removed, "value").unwrap_or_default(),
+                        text(removed, "instead").unwrap_or_default(),
+                    )
+                })
+                .collect(),
         }
     }
 }

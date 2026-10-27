@@ -91,6 +91,8 @@ pub struct MaintenanceOutcome {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct QueryResult {
     pub columns: Vec<String>,
+    /// Each column's type as the store names it, where known.
+    pub types: Vec<Option<String>>,
     pub rows: Vec<Vec<RecallValue>>,
     /// More rows existed beyond the limit.
     pub truncated: bool,

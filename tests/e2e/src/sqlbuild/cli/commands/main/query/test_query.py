@@ -21,16 +21,24 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     "test_case",
     [
         QueryCliTestCase(
-            description="renders long output with default limit",
+            description="renders a table with column types when the result fits",
             command=("query", "SELECT 1 AS id, 'alice' AS name"),
             expected_stdout_fragment=(
-                "-[ RECORD 1 ]---------------------------+\nid   | 1\nname | alice\n\n1 row\n"
+                "┌─────────┬─────────┐\n"
+                "│   id    │  name   │\n"
+                "│ INTEGER │ VARCHAR │\n"
+                "├─────────┼─────────┤\n"
+                "│       1 │ alice   │\n"
+                "└─────────┴─────────┘\n\n"
+                "1 row\n"
             ),
         ),
         QueryCliTestCase(
-            description="renders table output when requested",
-            command=("query", "SELECT 1 AS id", "--format", "table"),
-            expected_stdout_fragment="id\n--\n1\n\n1 row\n",
+            description="renders one record per row when requested",
+            command=("query", "SELECT 1 AS id, 'alice' AS name", "--format", "long"),
+            expected_stdout_fragment=(
+                "-[ RECORD 1 ]---------------------------+\nid   | 1\nname | alice\n\n1 row\n"
+            ),
         ),
     ],
     ids=lambda case: case.description,

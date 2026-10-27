@@ -48,8 +48,7 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.query._test_types import (
                 "-[ RECORD 1 ]---------------------------+\n"
                 "id | 1\n"
                 "\n"
-                "1 row\n"
-                "Showing 1 rows. Use --limit to show more or --no-limit to disable the limit.\n"
+                "1 row shown (limit 1; use --limit or --no-limit)\n"
             ),
         ),
         QueryOutputTestCase(
@@ -60,11 +59,33 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.query._test_types import (
             expected_output='[{"id": 1, "name": "alice"}]\n',
         ),
         QueryOutputTestCase(
-            description="renders csv rows",
-            result=QueryResult(columns=("id", "name"), rows=((1, "alice"),)),
-            output_format="csv",
+            description="renders a box with the warehouse types when the result fits",
+            result=QueryResult(
+                columns=("order_id", "amount"),
+                rows=((7, "12.50"),),
+                column_types=("INTEGER", "DECIMAL(10,2)"),
+            ),
+            output_format=None,
             limit=20,
-            expected_output="id,name\n1,alice\n",
+            expected_output=(
+                "┌──────────┬───────────────┐\n"
+                "│ order_id │    amount     │\n"
+                "│ INTEGER  │ DECIMAL(10,2) │\n"
+                "├──────────┼───────────────┤\n"
+                "│        7 │ 12.50         │\n"
+                "└──────────┴───────────────┘\n"
+                "\n"
+                "1 row\n"
+            ),
+        ),
+        QueryOutputTestCase(
+            description="renders records when a value spans lines, so nothing is cut",
+            result=QueryResult(columns=("note",), rows=(("first\nsecond",),)),
+            output_format=None,
+            limit=20,
+            expected_output=(
+                "-[ RECORD 1 ]---------------------------+\nnote | first\nsecond\n\n1 row\n"
+            ),
         ),
     ],
     ids=lambda case: case.description,
