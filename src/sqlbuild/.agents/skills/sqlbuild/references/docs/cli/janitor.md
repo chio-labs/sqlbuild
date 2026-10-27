@@ -10,48 +10,21 @@ Online: https://sqlbuild.com/docs/cli/janitor/
 
 - Usage
 - Flags
-- Output
-- Relations in use
-- Speed
-- Targets
 - Lifecycle
-- Review schemas
-- Compatibility views
-- Pending migration origins
-- Relation age
-- Audit record
-- Restoring an archive
-- Configuration
-- Examples
-- State history pruning
+- What else the janitor cleans
 - Safety
+- Targets
+- Configuration
+- Output
+- Examples
 
-Finds stale warehouse relations that are no longer part of the project, archives them, and deletes archives once they expire. Requires `janitor.enabled = true` in `sqlbuild_project.toml`.
-
-## Usage
+`sqb janitor` cleans up relations your project no longer builds. It never drops a live relation
+directly: it first renames a stale relation to an archive name, and drops the archive only once it
+expires. It shows the plan and asks before changing anything.
 
 ```bash
-sqb --project-dir <path> janitor [flags]
+sqb janitor
 ```
-
-## Flags
-
-| Flag | Description |
-|------|-------------|
-| `--target <name>` | Clean up a configured target instead of the active/default target, using that target's connection, schemas and state |
-| `--as <name>` | Preview the janitor plan for another configured target's schemas through the active target's connection. Inspection only: nothing is archived, dropped or pruned, and there is no prompt. Cannot be combined with `--auto-approve` |
-| `--auto-approve` | Skip the confirmation prompt and run the planned actions immediately |
-| `--retention-days` | Override the configured retention period (days) before a stale relation is archived |
-| `--direct-state-history-versions` | Override how many state-history versions are kept per identity |
-| `--verbose`, `-v` | List every entry of each preview section and every skipped object with its reason. Without it, each section shows its first 10 entries and skipped objects are counted by reason |
-| `--json` | Print the plan and the result as one JSON document on stdout; the preview, prompt and progress go to stderr |
-| `--keep-in-use` | Keep relations that other queries read within `janitor.in_use_window` instead of archiving them, for this run. Same as `janitor.keep_in_use = true`. See [Relations in use](#relations-in-use) |
-| `--drop-old-name-view <name>` | Drop the [compatibility view](../concepts/models/migrations.md#old-names) at a renamed model's old name before it expires. Repeat for several views. Fails with `C503` if no compatibility view is recorded at the name |
-| `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `query` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
-
-## Output
-
-After the preview and confirmation, each phase with work announces how many actions it runs, prints one line per action as it finishes, and closes with its duration. The run ends with one line of totals:
 
 ```
 Archiving 3 relations...
@@ -66,21 +39,157 @@ Deleted 1 expired archive. (0.12s)
 ✓ Janitor completed  archived 3, deleted 1, pruned 0  (0.81s)
 ```
 
-The phases are archiving stale relations, deleting expired archives, dropping old-name views, dropping expired query artifacts, dropping leftover review schemas and pruning direct state, in that order. If an action fails, its line shows `FAIL` and the error, no further action starts, and the run ends with `✗ Janitor failed` and the totals completed before the failure, exiting with `1`.
+The janitor is off until you set `enabled = true` under [`[janitor]`](#configuration).
 
-Long preview sections show their first 10 entries and then `... and N more (use --verbose to show all)`. Skipped objects are counted by reason:
+## Usage
 
-```
-Skipped objects (385)
-  210  relation is newer than 14 days
-  175  relation is not tracked by SQLBuild
+```bash
+sqb --project-dir <path> janitor [flags]
 ```
 
-With `--json`, stdout holds one document with `status` (`completed`, `failed`, `cancelled`, `blocked`, `nothing_to_do`, `previewed` or `disabled`), the full `plan`, the `usage_check`, the `result` with counts and every action, and `error`. Errors before the cleanup starts, such as a refused confirmation, are reported on stderr only.
+## Flags
 
-## Relations in use
+| Flag | Description |
+|------|-------------|
+| `--target <name>` | Clean up another configured target, with that target's connection, schemas and state |
+| `--as <name>` | Preview the plan for another target's schemas through the active target's connection. Changes nothing and doesn't prompt. Can't be combined with `--auto-approve` |
+| `--auto-approve` | Run the plan without the confirmation prompt |
+| `--retention-days` | Override `retention_days` for this run |
+| `--direct-state-history-versions` | Override how many state-history versions are kept per identity |
+| `--keep-in-use` | Keep relations read within `in_use_window` instead of archiving them, for this run. See [Relations in use](#relations-in-use) |
+| `--drop-old-name-view <name>` | Drop the [compatibility view](../concepts/models/migrations.md#old-names) at a renamed model's old name before it expires. Repeat for several views. Fails with `C503` if no compatibility view is recorded at the name |
+| `--verbose`, `-v` | List every entry of each preview section and every skipped object with its reason |
+| `--json` | Print the plan and the result as one JSON document on stdout; the preview, prompt and progress go to stderr |
+| `--warehouse <name>` | Snowflake warehouse for this run; overrides the target's `query` [warehouse group](../concepts/project-configuration.md#command-group-warehouses) and the connection warehouse |
 
-Archiving renames a relation, so anything that still reads it fails from then on. Before archiving, the janitor looks up which candidates other queries read within `in_use_window` (default `7d`) and shows them, with their readers, in an `In use` section:
+## Lifecycle
+
+A relation is **stale** when all of these are true:
+
+- it is in a schema the project writes to;
+- the current, complete project doesn't produce it;
+- SQLBuild tracked it, when `delete_tracked_only = true` (the default);
+- it matches no `exclude_patterns` entry, ignoring case.
+
+A stale relation goes through two stages:
+
+1. **Archive.** Once it has been stale for `retention_days` (default `14`), the janitor renames it,
+   in the same schema, to `_SQB_ARCHIVE__<UTC timestamp>__<original name>`. For example,
+   `stg_orders` becomes `_SQB_ARCHIVE__20260924T101500Z__stg_orders`. A rename copies no data and
+   keeps the relation's table type, grants and time travel.
+2. **Delete.** Once the archive is older than `archive_retention_days` (default `14`), the janitor
+   drops it.
+
+Setting both to `0` archives and deletes stale relations in the same run.
+
+Archive names are written as unquoted lowercase identifiers, so warehouses that fold unquoted names
+show them in their own case; on Snowflake the example above appears as
+`_SQB_ARCHIVE__20260924T101500Z__STG_ORDERS`. Long names are shortened with a short hash to fit the
+adapter's identifier limit. The prefix and timestamp are never shortened.
+
+An archive's age comes from the timestamp in its name, so deleting needs no other state.
+
+### Relation age
+
+`retention_days` counts from the last time the relation was written, as the warehouse reports it.
+For a relation the project no longer builds, that is roughly when it stopped being built.
+
+| Adapter | Age source |
+|---------|------------|
+| Snowflake | `INFORMATION_SCHEMA.TABLES` `CREATED` and `LAST_ALTERED`, which change on every write |
+| Databricks | `DESCRIBE DETAIL` `lastModified` for tables, and `INFORMATION_SCHEMA.TABLES` for views |
+| BigQuery | `__TABLES__` `creation_time` and `last_modified_time` |
+| PostgreSQL, SQL Server, DuckDB, MotherDuck | Not available |
+
+When the warehouse can't report an age, the janitor skips the relation unless `retention_days` is
+`0`. SQL Server is in this group because its modification date ignores inserts and updates, so a
+recently written table could look old.
+
+### Restoring an archive
+
+Rename the archive back to its original name before it expires. For example, on Snowflake:
+
+```sql
+ALTER TABLE analytics._SQB_ARCHIVE__20260924T101500Z__stg_orders RENAME TO analytics.stg_orders;
+```
+
+If the archive's name was shortened, look up the original name in the
+[audit record](#audit-record). After an archive is deleted, your warehouse's time travel or undrop
+feature may still recover it within its own retention window.
+
+## What else the janitor cleans
+
+Each run works through these phases, in order:
+
+1. archive stale relations;
+2. delete expired archives;
+3. drop expired [compatibility views](#compatibility-views);
+4. drop expired query artifacts;
+5. drop leftover [review schemas](#review-schemas);
+6. [prune state history](#state-history-pruning).
+
+### Compatibility views
+
+When a model is renamed, SQLBuild keeps a [compatibility view](../concepts/models/migrations.md#old-names)
+at its old name. The janitor lists each one with the model it reads and its expiry:
+
+```
+Old name views (1)
+└── prod.revenue  -> model:daily_revenue
+    └── expires  2026-10-28  (live; drop early with --drop-old-name-view prod.revenue)
+```
+
+A compatibility view is never archived as a stale relation. Once it expires, or when you name it
+with `--drop-old-name-view`, the janitor drops it and records the drop in
+`_sqlbuild_old_name_views`.
+
+The janitor drops the view only if the relation at the old name is still the view SQLBuild created.
+Any other relation there, such as a view a project model built after an interrupted early drop, is
+left alone. The janitor then records the compatibility view as dropped and lists it as
+`record  dropped  (name now used by another relation, model:revenue)`, naming the model when the
+name belongs to one. A compatibility view that no longer exists is recorded as dropped too.
+
+### Review schemas
+
+[`sqb review`](review.md) builds into a schema it creates and drops for one run. When a
+review couldn't drop its schema, the janitor drops it once the timestamp in its name is more than 24
+hours old, so a running review is never touched. Only schemas with a review ownership marker in the
+active target schema's `_sqlbuild_fingerprints` table are dropped; a schema whose name only looks
+like a review schema is left alone.
+
+### State history pruning
+
+The janitor prunes old rows from `_sqlbuild_fingerprints` and `_sqlbuild_source_freshness`, keeping
+the latest `direct_state_history_versions` rows per identity (default `20`). This is separate from
+relation retention.
+
+## Safety
+
+- **You confirm the plan.** The preview lists the planned archives and deletes with exact names,
+  ages and expiry, then asks you to type an exact confirmation phrase. Use `--auto-approve` only in
+  automation, or when you're certain.
+- **Only exact archive names are deleted.** An archive is deleted only when its name strictly
+  matches the archive format and it is in a schema the project writes to. Names that only look
+  similar are reported and never touched.
+- **Unusual names are left alone.** The janitor acts only on plain lowercase identifiers (letters,
+  digits and underscores) that don't collide, ignoring case, with another relation in the same
+  schema. Anything else is reported and skipped.
+- **Pending migration origins are kept.** While a model declares `migrate_from` and its own
+  relation doesn't exist yet in the target, the origin isn't archived and is listed as
+  `pending migration origin for <model>`. A bare `migrate_from` name is matched in each schema the
+  project builds into; a qualified name only at that location. Once the model has built, the old
+  name holds a compatibility view, which expires as above.
+- **Schemas with sources are protected.** A schema that holds the project's configured sources is
+  skipped and listed under `Skipped schemas`, so what the project reads is never archived. When such a schema is one SQLBuild manages, the
+  preview shows `Janitor blocked`, lists the actions it suppressed, and the run exits `1`.
+- **Run the same SQLBuild version as your builds.** An older janitor doesn't know compatibility
+  views and archives them as stale relations.
+
+### Relations in use
+
+Archiving renames a relation, so anything that still reads it fails from then on. Before
+archiving, the janitor checks which candidates other queries read within `in_use_window` (default
+`7d`) and lists them, with their readers:
 
 ```
 In use
@@ -89,64 +198,118 @@ In use
   analytics.old_customers  queried 2026-10-21 by alice via analytics.customer_report (3 queries in 7 days); frozen since 2026-09-01, still in use
 ```
 
-Each line names the latest read, up to three readers (most queries first) and how many queries read the relation. Reading a view also reads what it is built on, so those relations are in use too. When a relation was only read that way, the line says `via` and names the views, or says `through a view` when the warehouse doesn't record which. A stale table that is still read is also flagged `frozen since <date>, still in use`: its data stopped changing on that date, so its readers are getting old data. Views are not flagged, because their reads stay live. The confirmation prompt states the count, for example `14 relations will be archived; 3 of them are in use.`
+Each line shows the latest read, up to three readers (most queries first) and the query count.
 
-By default in-use relations are still archived, which is also how their readers find out. To keep them instead, set `keep_in_use = true` under `[janitor]` or pass `--keep-in-use`. In-use relations are then listed under `Kept (in use)` with their readers and are left out of the archive list and the counts. A later run archives them once nothing reads them within the window.
+- Reading a view also reads what it's built on, so those relations are in use too. A relation read
+  only that way shows `via` and the views, or `through a view` when the warehouse doesn't record
+  which.
+- A stale table that is still read is flagged `frozen since <date>, still in use`: its data stopped
+  changing on that date, so its readers get old data. Views aren't flagged, because their reads stay
+  live.
+- The prompt states the count, for example
+  `14 relations will be archived; 3 of them are in use.`
 
-Only relations to archive are checked. Expired archives and state-table pruning are not.
+By default, in-use relations are still archived, which is also how their readers find out. To keep
+them, set `keep_in_use = true` or pass `--keep-in-use`. They are then listed under `Kept (in use)`
+and left out of the archive list and the counts. A later run archives them once nothing reads them
+within the window. Only relations to archive are checked, not expired archives or state pruning.
 
 Usage comes from the warehouse's query history:
 
-| Adapter | Usage source |
-|---------|--------------|
-| Snowflake | `SNOWFLAKE.ACCOUNT_USAGE.ACCESS_HISTORY` (`direct_objects_accessed`, `base_objects_accessed`) joined with `QUERY_HISTORY`, and `OBJECT_DEPENDENCIES` |
-| BigQuery | `` `<project>.region-<location>`.INFORMATION_SCHEMA.JOBS `` (`referenced_tables`, `referenced_logical_views`) |
-| Databricks | `system.access.table_lineage` (`source_table_full_name`, `direct_access`) |
-| ClickHouse | `system.query_log` (`tables`) on the connected server |
-| Other adapters | Not available |
-
-On Snowflake, one query reads the access history of all candidates (up to 1,000 names per query). A candidate listed in a query's base objects but not its direct objects was read through the objects the query named, which the line names after `via`. When something was read, a second query reads the view dependencies in `OBJECT_DEPENDENCIES` for the databases of the candidates and of the objects queries read directly. Anything those directly read objects are built on, through any number of views, is in use: an unread candidate reached that way is in use `via` the directly read object, with its readers. So a candidate view between a non-candidate view someone reads and a candidate table is kept too. Links through views in other databases are not followed. Dependencies created by `CREATE TABLE ... AS SELECT` and similar statements are not recorded there. Queries SQLBuild tags as its own (`QUERY_TAG` with `"app":"sqlbuild"`, which builds, audits, loads and hooks set) and `CREATE ... CLONE` statements of tables, dynamic tables, schemas and databases don't count as reads. A statement counts as a clone only when it starts with `CREATE`, after any comments, and names its source after `CLONE`; a column, string or comment containing the word doesn't make it one. SQLBuild's own reads don't need this check: schemas holding the project's sources are skipped, so the project graph already protects what the project reads. Access history needs Enterprise edition. The janitor's role needs `IMPORTED PRIVILEGES` on the `SNOWFLAKE` database, or the `SNOWFLAKE.GOVERNANCE_VIEWER` database role for access history and the `SNOWFLAKE.OBJECT_VIEWER` database role for object dependencies:
+| Adapter | Source | Grants | Caveats |
+|---------|--------|--------|---------|
+| Snowflake | `ACCOUNT_USAGE.ACCESS_HISTORY` with `QUERY_HISTORY`, and `OBJECT_DEPENDENCIES` for view chains | `IMPORTED PRIVILEGES` on the `SNOWFLAKE` database, or the `SNOWFLAKE.GOVERNANCE_VIEWER` and `SNOWFLAKE.OBJECT_VIEWER` database roles | Needs Enterprise edition. Lags up to about 3 hours |
+| BigQuery | `` `<project>.region-<location>`.INFORMATION_SCHEMA.JOBS `` of each candidate's project, in its dataset's location | `bigquery.jobs.listAll` and `bigquery.jobs.create` on each project, for example BigQuery Resource Viewer and BigQuery User | Keeps 180 days of jobs |
+| Databricks | `system.access.table_lineage` | `USE CATALOG` on `system`, `USE SCHEMA` on `system.access`, `SELECT` on `system.access.table_lineage` | Needs Unity Catalog with the `access` system schema. Keeps one year of events |
+| ClickHouse | `system.query_log` of the connected server | `SELECT` on `system.query_log` | Only the connected server's log is read |
+| Other adapters | Not available | | |
 
 ```sql
+-- Snowflake
 GRANT DATABASE ROLE SNOWFLAKE.GOVERNANCE_VIEWER TO ROLE janitor_role;
 GRANT DATABASE ROLE SNOWFLAKE.OBJECT_VIEWER TO ROLE janitor_role;
-```
 
-Without `OBJECT_VIEWER`, reads are still checked, but view chains are not followed and the preview says `view chains not followed: grant SNOWFLAKE.OBJECT_VIEWER`. Access history and object dependencies lag by up to about 3 hours, so reads in the last few hours may not show yet.
-
-On BigQuery, the janitor reads the `INFORMATION_SCHEMA.JOBS` view of each candidate's project, in the location of its dataset, and counts successful query jobs that reference the relation, by `user_email`. A job lists the views it reads as well as the tables behind them, so both count. Whether views nested inside other views are listed is not documented, so a candidate view that is only read through another view may not show as in use. Jobs answered from cached results record no tables or views, so with an `in_use_window` under about a day a reader whose queries were all cached can be missed. Jobs that run in another project are not in that view, so their reads are not seen. Script parent jobs, `CREATE SNAPSHOT TABLE` and `CREATE TABLE ... CLONE` don't count. SQLBuild sets no job labels on BigQuery, so its own jobs count like any other. The janitor's role needs `bigquery.jobs.listAll` and `bigquery.jobs.create` on each project, for example through the BigQuery Resource Viewer and BigQuery User roles. The view keeps 180 days of jobs, so a longer `in_use_window` sees only the last 180 days.
-
-On Databricks, the janitor counts read events in Unity Catalog's table lineage, by `created_by`. Lineage records the view a query reads as a direct read and the tables behind it as reads through the view, which the line names when lineage records the view for the same statement. It needs Unity Catalog with the `access` system schema enabled, and `USE CATALOG` on `system`, `USE SCHEMA` on `system.access` and `SELECT` on `system.access.table_lineage`:
-
-```sql
+-- Databricks
 GRANT USE CATALOG ON CATALOG system TO `janitor-principal`;
 GRANT USE SCHEMA ON SCHEMA system.access TO `janitor-principal`;
 GRANT SELECT ON TABLE system.access.table_lineage TO `janitor-principal`;
-```
 
-Lineage records only reads Databricks can infer lineage for, and can arrive with a delay, so "not in use" is a weaker signal than on Snowflake. Lineage has no query text, so clones and SQLBuild's own reads can't be told apart and count as reads. The table keeps one year of events.
-
-On ClickHouse, the janitor counts finished `SELECT` and `INSERT` queries in `system.query_log` of the server it connects to, by the user who started them. A query's `tables` lists every table and view it touched, including the views and tables a view is built on, so a whole view chain shows as in use, without `via`; queries a query starts count once, for its initial query. Only the connected server's `query_log` is read: queries on other replicas or shards are logged on those servers and are not seen, which matters on ClickHouse Cloud and behind load-balanced replicas. When `system.clusters` shows other replicas of the connected server's shard, the preview says `usage read from this server only; other replicas not checked`. Writes into a relation count as use, since renaming it breaks the writer too. ClickHouse answers some queries, such as a plain `count()` of a table, from metadata without logging the table, so those reads are not seen. SQLBuild doesn't mark its ClickHouse queries, so its own reads count. The janitor's user needs `SELECT` on `system.query_log`:
-
-```sql
+-- ClickHouse
 GRANT SELECT ON system.query_log TO janitor_user;
 ```
 
-Queries are logged when `log_queries` is on, which is the default; when it is off for the janitor's connection, usage is not checked. Readers whose settings profile turns `log_queries` off, or logs only a sample with `log_queries_probability`, are missed. The log is flushed about every 7.5 seconds, and ClickHouse keeps it until a TTL configured on the server removes it.
+When usage can't be checked, because the adapter has no source or the role can't read it, the
+preview and the prompt show one notice, such as `usage not checked: unsupported adapter`, and the
+janitor archives as usual. With `keep_in_use` on, a second notice, `nothing kept in use`, says that
+in-use relations are archived too.
 
-When usage can't be checked, because the adapter has no usage source or the role can't read its query history, the preview and the prompt show one notice, such as `usage not checked: unsupported adapter`, and the janitor archives as usual. With `keep_in_use` on, a second notice, `nothing kept in use`, says that relations in use are archived too.
+#### What counts as a read
 
-In the `--json` plan, each entry of `relations_to_archive` and `kept_in_use` has `in_use`: `null` when usage was not checked, `false` when nothing read the relation within the window, or an object with `last_read`, `readers`, `query_count` and `via` (`null` when the relation was read directly, otherwise the names of the views it was read through, empty when unknown). Entries of `kept_in_use` have only `name`, `age_days` and `in_use`, since they are not archived. The top-level `usage_check` has `status` (`checked` or `not_checked`), `reason`, `window`, `keep_in_use` and `notices` (what a check that ran left out, such as view chains it could not follow), or is `null` when there was nothing to check.
+**Snowflake.** A relation read through the objects a query named shows `via` those objects.
+Everything a directly read object is built on, through any number of views, is in use, so a
+candidate view between a view someone reads and a candidate table is kept too. Links through views
+in other databases aren't followed, and dependencies created by `CREATE TABLE ... AS SELECT` and
+similar statements aren't recorded. These don't count as reads:
 
-## Speed
+- queries SQLBuild tags as its own (`QUERY_TAG` with `"app":"sqlbuild"`, set by builds, audits,
+  loads and hooks);
+- `CREATE ... CLONE` of tables, dynamic tables, schemas and databases. A statement counts as a clone
+  only when it starts with `CREATE`, after any comments, and names its source after `CLONE`.
 
-The janitor reads each schema's relations once per run, and the definitions of compatibility views with one read per schema. On warehouses that run DDL concurrently (Snowflake, BigQuery and Databricks), the independent actions of each phase run on up to the target's [`concurrency`](../concepts/project-configuration.md#target-concurrency) connections at once; phases still run one after another. DuckDB, SQLite and the other adapters apply one action at a time.
+Without `OBJECT_VIEWER`, reads are still checked but view chains aren't followed, and the preview
+says `view chains not followed: grant SNOWFLAKE.OBJECT_VIEWER`.
+
+**BigQuery.** Successful query jobs that reference the relation count, by `user_email`. A job lists
+the views it reads and the tables behind them, so both count. These are missed or don't count:
+
+- a candidate view read only through another view may not show, because BigQuery doesn't document
+  whether nested views are listed;
+- jobs answered from cached results record no tables, so with an `in_use_window` under about a day
+  a reader whose queries were all cached can be missed;
+- jobs that run in another project aren't seen;
+- script parent jobs, `CREATE SNAPSHOT TABLE` and `CREATE TABLE ... CLONE` don't count;
+- SQLBuild's own jobs count like any other.
+
+**Databricks.** Read events in Unity Catalog's table lineage count, by `created_by`. A view a query
+reads is a direct read, and the tables behind it are reads through the view. Lineage covers only
+reads Databricks can infer lineage for, and can arrive late, so "not in use" is a weaker signal than
+on Snowflake. Clones and SQLBuild's own reads count as reads.
+
+**ClickHouse.** Finished `SELECT` and `INSERT` queries count, by the user who started them, once per
+initial query. A query lists every table and view it touched, so a whole view chain shows as in
+use, without `via`. Writes count, since renaming the relation breaks the writer too. These are
+missed or don't count:
+
+- queries on other replicas or shards, which matters on ClickHouse Cloud and behind load-balanced
+  replicas. When `system.clusters` shows other replicas of the connected server's shard, the preview
+  says `usage read from this server only; other replicas not checked`;
+- queries ClickHouse answers from metadata without logging the table, such as a plain `count()`;
+- readers whose settings profile turns `log_queries` off or samples it with
+  `log_queries_probability`. When `log_queries` is off for the janitor's own connection, usage isn't
+  checked;
+- queries in the last few seconds: the log is flushed about every 7.5 seconds;
+- queries older than the server's `query_log` TTL;
+- SQLBuild's own reads count.
+
+### Audit record
+
+Every archive and delete is recorded in an append-only `_sqlbuild_janitor_events` table in the
+affected schema: the original name, the archive name, the time and the invocation. The janitor
+never reads it to decide what to do; it is for auditing, and for restoring archives whose names
+were shortened, which are recorded right after their rename. Other events are written in batches
+of up to 100 per schema, so if the process is killed, up to 100 actions in a schema may have no
+event. Those archives still expire by the timestamp in their names.
 
 ## Targets
 
-By default the janitor cleans up the active target. `--target <name>` selects another configured target, exactly like `sqb build --target`: the janitor connects with that target's connection and inspects and cleans that target's schemas and state tables. Other targets are never touched.
+By default the janitor cleans the active target. `--target <name>` selects another configured
+target, exactly like `sqb build --target`. Other targets are never touched.
 
-`--as <name>` previews what the janitor would do in another target without changing anything, like [`sqb plan --as`](plan.md). The project compiles for that target, and its schemas are inspected through the active target's connection, which can be the default target or the one given with `--target`. The janitor lists the relations it would archive, the archives it would delete, the compatibility views it would drop and the state tables it would prune (all of them with `--verbose`), then exits. It drops nothing, writes no audit or state rows, prunes nothing and does not prompt. `--drop-old-name-view` is allowed with `--as` and only previews the drop.
+`--as <name>` previews another target without changing anything, like
+[`sqb plan --as`](plan.md). The project compiles for that target, and its schemas are
+inspected through the active target's connection. The preview lists what would be archived,
+deleted, dropped and pruned, then exits. It drops nothing, writes no audit or state rows and doesn't
+prompt. `--drop-old-name-view` with `--as` only previews the drop.
 
 ```
 Previewing janitor as target 'prod' through the connection of target 'dev' (inspection only).
@@ -161,87 +324,10 @@ Previewed janitor as target 'prod' through the connection of target 'dev'. Nothi
 Rerun with `--target prod` instead of `--as prod` to apply it.
 ```
 
-An unknown target name fails before anything connects. A preview exits with `0`, or with `1` when a schema is blocked, as a normal run would.
-
-## Lifecycle
-
-The janitor never drops a live relation directly. Each stale relation goes through two stages:
-
-1. **Archive.** Once a relation has been stale for `retention_days`, the janitor renames it in place, in the same schema, to:
-
-   ```
-   _SQB_ARCHIVE__<UTC timestamp>__<original name>
-   ```
-
-   For example, `stg_orders` becomes `_SQB_ARCHIVE__20260924T101500Z__stg_orders`. A rename copies no data, and keeps the relation's table type, grants and time travel.
-2. **Delete.** Once an archive is older than `archive_retention_days`, the janitor drops it.
-
-Stale relations are identified exactly as before. A relation is a candidate only if it is in a schema the project writes to, it is not produced by the current complete project, it was tracked by SQLBuild (when `delete_tracked_only = true`), it matches no exclude pattern, and it is older than the retention period.
-
-The age of an archive comes from the timestamp in its name, so deletion needs no other state. The janitor only deletes relations whose names **strictly** match the archive format and that are in a schema the project writes to. Names that only look similar are reported and never touched. The janitor also only acts on relations whose names are plain lowercase identifiers (letters, digits and underscores), and that don't collide case-insensitively with another relation in the same schema. Anything else is reported and left alone.
-
-Archive names are written as unquoted lowercase identifiers, so warehouses that fold unquoted names show them in their own case. On Snowflake, for example, the archive appears as `_SQB_ARCHIVE__20260924T101500Z__STG_ORDERS`.
-
-Long names are shortened with a short hash so they fit the adapter's identifier limit. The prefix and timestamp are never shortened.
-
-Setting both `retention_days` and `archive_retention_days` to `0` archives and deletes stale relations in the same run.
-
-## Review schemas
-
-[`sqb review`](review.md) builds into a schema it creates for one run and drops when the run ends. Before creating the schema it writes an ownership marker to the active target schema's `_sqlbuild_fingerprints` table. When a review could not drop its schema, the janitor drops it once the timestamp in its name is more than 24 hours old, so a review that is still running is never touched. Only schemas with a marker in the active target schema are dropped; a schema whose name merely looks like a review schema is left alone.
-
-## Compatibility views
-
-When a model is renamed, SQLBuild keeps a [compatibility view](../concepts/models/migrations.md#old-names) at its old name. The janitor lists each one with the model it reads and its expiry:
-
-```
-Old name views (1)
-└── prod.revenue  -> model:daily_revenue
-    └── expires  2026-10-28  (live; drop early with --drop-old-name-view prod.revenue)
-```
-
-A compatibility view is never archived as a stale relation. Once it expires, or when it is named with `--drop-old-name-view`, the janitor drops it and records the drop in `_sqlbuild_old_name_views`. Before dropping, the janitor checks that the relation at the old name is still the view SQLBuild created there, by comparing its stored definition with the view's SQL. Any other relation at that name, such as a view a project model built after an interrupted early drop, is left alone: the janitor records the compatibility view as dropped and lists it as `record  dropped  (name now used by another relation, model:revenue)`, naming the model when the name is a project destination. A compatibility view that no longer exists is recorded as dropped too.
-
-Run the same SQLBuild version for `sqb janitor` as for builds. An older janitor does not know compatibility views and archives them as stale relations.
-
-## Pending migration origins
-
-A relation that a project model still has to migrate from is never archived. While a model declares `migrate_from` and its own relation does not exist yet in the target, the janitor skips the origin and lists it as `pending migration origin for <model>`. A bare `migrate_from` name is matched in each schema the project builds into; a qualified name only at that location. Once the model has built, the origin is handled as usual: after a migration, the old name holds a compatibility view, which expires as described above.
-
-## Relation age
-
-`retention_days` is measured from the last time a relation was written, as reported by the warehouse. For a relation the project no longer builds, that is roughly when it stopped being built.
-
-| Adapter | Age source |
-|---------|------------|
-| Snowflake | `INFORMATION_SCHEMA.TABLES` `CREATED` and `LAST_ALTERED`, which change on every write |
-| Databricks | `DESCRIBE DETAIL` `lastModified` for tables, and `INFORMATION_SCHEMA.TABLES` for views |
-| BigQuery | `__TABLES__` `creation_time` and `last_modified_time` |
-| PostgreSQL, SQL Server, DuckDB, MotherDuck | Not available |
-
-When the warehouse can't report a relation's age, the janitor skips that relation whenever `retention_days` is greater than `0`. SQL Server is in this group because its modification date ignores inserts and updates, so a recently written table could look old.
-
-Ages are only looked up for relations that are otherwise candidates, and not at all when `retention_days` is `0`.
-
-## Audit record
-
-Every archive and every delete is recorded in an append-only `_sqlbuild_janitor_events` table in the affected schema. It records the original name, the archive name, the time and the invocation. The janitor never reads this table to decide what to do. It exists for auditing, and for restoring archives whose names were shortened.
-
-Events are written in batches of up to 100 per schema, after each batch of actions and after a failure. An archive whose name was shortened gets its event right after its rename. If the process is killed, at most one batch of actions in a schema can lack events; those archives still expire by the timestamp in their names.
-
-## Restoring an archive
-
-Rename the archive back to its original name before it expires, using your warehouse's rename statement. For example, on Snowflake:
-
-```sql
-ALTER TABLE analytics._SQB_ARCHIVE__20260924T101500Z__stg_orders RENAME TO analytics.stg_orders;
-```
-
-If the archive's name was shortened, look up the original name in `_sqlbuild_janitor_events`. After an archive has been deleted, your warehouse's own time travel or undrop feature may still be able to recover it within its retention window.
+An unknown target name fails before anything connects. A preview exits `0`, or `1` when a schema
+is blocked, as a normal run would.
 
 ## Configuration
-
-Configure janitor behavior in `sqlbuild_project.toml`:
 
 ```toml
 [janitor]
@@ -254,18 +340,59 @@ in_use_window = "7d"
 keep_in_use = false
 ```
 
-When `retention_days` is not set, it defaults to `14`. See [Project Configuration](../concepts/project-configuration.md#janitor) for every janitor setting.
+See [Project Configuration](../concepts/project-configuration.md#janitor) for every key and default.
+On Snowflake, BigQuery and Databricks, the actions of each phase run on up to the target's
+[`concurrency`](../concepts/project-configuration.md#target-concurrency) connections at once.
+
+## Output
+
+After the preview and confirmation, each phase with work prints how many actions it runs, one line
+per action, and its duration, as in the example at the top. The run ends with one line of totals.
+
+If an action fails, its line shows `FAIL` and the error, no further action starts, and the run ends
+with `✗ Janitor failed` and the totals completed so far. The exit code is `1`.
+
+Without `--verbose`, each preview section shows its first 10 entries and then
+`... and N more (use --verbose to show all)`, and skipped objects are counted by reason:
+
+```
+Skipped objects (385)
+  210  relation is newer than 14 days
+  175  relation is not tracked by SQLBuild
+```
+
+### JSON output
+
+With `--json`, stdout holds one document:
+
+| Field | Contents |
+|-------|----------|
+| `status` | `completed`, `failed`, `cancelled`, `blocked`, `nothing_to_do`, `previewed` or `disabled` |
+| `plan` | The full plan |
+| `usage_check` | `status` (`checked` or `not_checked`), `reason`, `window`, `keep_in_use` and `notices` (what a check left out, such as view chains it couldn't follow); `null` when there was nothing to check |
+| `result` | Counts and every action |
+| `error` | The error, if any |
+
+Each entry of `plan.relations_to_archive` and `plan.kept_in_use` has `in_use`:
+
+- `null` when usage wasn't checked;
+- `false` when nothing read the relation within the window;
+- otherwise an object with `last_read`, `readers`, `query_count` and `via` (`null` for a direct
+  read, otherwise the views it was read through, empty when unknown).
+
+Entries of `kept_in_use` have only `name`, `age_days` and `in_use`. Errors before the cleanup
+starts, such as a refused confirmation, go to stderr only.
 
 ## Examples
 
 ```bash
-# Interactive mode (shows the plan and prompts for confirmation)
+# Show the plan and prompt for confirmation
 sqb janitor
 
-# Run the planned archives and deletes without prompting
+# Run the plan without prompting
 sqb janitor --auto-approve
 
-# Override retention to 7 days
+# Archive relations stale for 7 days instead of the configured retention
 sqb janitor --retention-days 7
 
 # Preview the prod cleanup through the current connection, changing nothing
@@ -277,11 +404,3 @@ sqb janitor --target prod
 # Keep relations that are still read instead of archiving them
 sqb janitor --keep-in-use
 ```
-
-## State history pruning
-
-In addition to archiving stale relations, the janitor prunes old rows from `_sqlbuild_fingerprints` and `_sqlbuild_source_freshness`, keeping the latest `direct_state_history_versions` rows per identity (default `20`). This is configured separately from relation retention.
-
-## Safety
-
-The janitor shows the planned archives and deletes, with exact names, ages and expiry (every one of them with `--verbose`, or in the `--json` plan), then asks you to type an exact confirmation phrase. Relations whose names differ only by case from another relation in the same schema are reported and never dropped, and exclude patterns match regardless of case. Use `--auto-approve` only in automation, or when you're certain.
