@@ -150,10 +150,6 @@ from, so a local check reads differently from a failed scheduled build:
   `integration_run_id` and `integration_retry`. The Dagster integration also records `step_key`
   and `partition_key`, which you read from `external_context` with the store's JSON functions.
 
-Invocations recorded by an older SQLBuild version have `origin` and `command_mode` set to `NULL`.
-Older versions also stored `external_context` in a form that is not JSON; for those runs the
-`integration_*` columns are `NULL` and the query does not fail.
-
 ## Settings
 
 Configure Recall in `[recall]` in `sqlbuild_project.toml`. A `[targets.<name>.recall]` table
@@ -228,10 +224,6 @@ find the same corrupt file coordinate through `recall.sqlite3.lock`, so only one
 A `write_connection` on any adapter other than `sqlite` or `clickhouse` is not supported; Recall
 prints a notice and records nothing.
 
-`write_connection` and `read_connection` replaced the single `connection` key. A configuration that
-still sets `connection` fails with an error naming the replacements: set both keys to the old
-connection to keep the previous behaviour.
-
 ## Sharing history in ClickHouse
 
 Point `write_connection` and `read_connection` at ClickHouse connections to keep one history for a
@@ -276,7 +268,7 @@ writer's password on a reader's laptop, need not be set.
 
 ### Users and grants
 
-SQLBuild does not enforce grants; it only lets the roles be separated. Give the writer the rights to
+SQLBuild doesn't enforce grants; it lets you separate the roles. Give the writer the rights to
 create and upgrade the store in its database, so the first command sets it up and later SQLBuild
 versions upgrade it without anyone running DDL by hand:
 
@@ -289,64 +281,60 @@ GRANT CREATE DATABASE, CREATE TABLE, CREATE VIEW, DROP TABLE, ALTER ADD COLUMN, 
 GRANT SELECT ON observability.* TO recall_reader;
 ```
 
-`DROP TABLE` is there because ClickHouse replaces a view through a temporary table; Recall itself
-never drops a table.
+`DROP TABLE` is needed because ClickHouse replaces a view through a temporary table; Recall never
+drops a table itself.
 
-The reader may be a standard read-only user (`SETTINGS readonly = 1`, or a settings profile with
-it), which may not change any setting. Such a user's queries run with the server's own settings;
-every other reader gets the
+| User | Rights | What happens |
+|------|--------|--------------|
+| Writer with the grants above | Create and upgrade the store | The first command creates the store; later versions upgrade it |
+| Writer with only `SELECT` and `INSERT` | Write history | Works once the store exists. A missing or older store makes Recall print the statements an administrator should run |
+| Reader with `SELECT` | Read history | `sqb recall query`, `schema` and `output` work, and can't change the store |
+
+A reader may be a standard read-only user (`SETTINGS readonly = 1`, or a settings profile with
+it). Its queries run with the server's own settings; every other reader gets the
 [settings SQLBuild pins](/docs/concepts/adapters/clickhouse#settings-sqlbuild-pins). The views
-return the same rows either way. `sqb recall query` runs with
-`readonly = 2`, which refuses writes but still allows query settings, unless the user is already
-read-only; a user that may not set the row limit gets the same truncated result, cut off while
-reading. A setting that Recall needs and the user may not change fails with an error naming it; set
-it in the user's profile, or give the user `readonly = 2`, which keeps it read-only.
+return the same rows either way. `sqb recall query` runs with `readonly = 2`, which refuses writes
+but allows query settings, unless the user is already read-only. A user that may not set the row
+limit gets the same truncated result, cut off while reading. A setting Recall needs that the user
+may not change fails with an error naming it: set it in the user's profile, or give the user
+`readonly = 2`, which keeps it read-only.
 
-A writer limited to `SELECT` and `INSERT` also works, once the store exists: it writes history but
-cannot create or upgrade the store. When such a writer finds the store missing or behind, Recall
-prints the exact statements an administrator should run, and `sqb recall schema --ddl` prints them
-again.
+### Setting up and upgrading the store
 
-- **Setup.** On first use the writer creates the database if it is missing, printing
-  ``Recall: created ClickHouse database `observability` for the store.`` once, then the `recall_*`
-  MergeTree tables and the views above. An existing database is used as it is, whatever its engine.
-  The database is created on the server the writer connects to, never `ON CLUSTER`: on a
-  self-managed cluster whose default database engine is not `Replicated`, create the database
-  yourself first with `ENGINE = Replicated(...)`, and Recall leaves it alone.
-  ClickHouse Cloud needs nothing.
-  If the user may not create the store, the command still succeeds and prints the statements,
-  starting with `CREATE DATABASE IF NOT EXISTS` when the database is missing; a store created from
-  them accepts writers limited to `SELECT` and `INSERT`.
-- **Upgrades.** When a store is behind this SQLBuild version and the writer may not upgrade it, the
-  command still runs and exits as it otherwise would. History is still written, to the columns
-  that exist, and Recall prints one warning (at most once a day) with the exact statements an
-  administrator should run; `sqb recall schema --ddl` prints them again.
-- **Schema version.** The store's version is a `recall_meta` row, which retention expires like any
-  other. Writers append it again once it is older than half the retention, with the highest version
-  recorded. When it has expired anyway, a writer compares the stored tables' and views' columns
-  with its own: it upgrades an older store, records its version on a current one, and never
-  replaces the views of a store a newer SQLBuild version created. Views whose definitions show an
-  older version created them, such as views that set `join_use_nulls`, count as older whatever the
-  version row says.
-- **Writes.** History is sent in batches of up to 5,000 rows about every five seconds, one insert
-  per table, so a long command adds few parts; everything still queued is sent when it ends, with
-  the same queue, shutdown budget and exit-code guarantees as the local store. Many concurrent
-  commands can write one store.
-- **Duplicates.** Every row has a deterministic key. A retried batch is deduplicated by ClickHouse,
-  and the views read each key once, so a repeated delivery is counted once: views that list or count
-  rows read the `ReplacingMergeTree` tables with `FINAL`, and `invocations` and `statements`, which
-  only take the first, last, smallest or largest value of a key's copies, read them without it. Before writing, Recall looks up the batch's keys: a key already stored with
-  different content keeps the stored row, and the rejected copy is listed in `conflicts`.
-- **Retention.** Every table carries a TTL of `retention` (SQL text a week longer, and refreshed
-  while it is still referenced), and the views hide rows past their TTL at once. ClickHouse drops
-  expired daily parts in the background, so rows may stay on disk for a while after the views stop
-  showing them. Retention belongs to the store: when a project's `retention` differs from the
-  tables' TTL, Recall warns once a day with the `ALTER TABLE … MODIFY TTL` and view statements that
-  would apply it, and never changes the TTL itself.
-- **Reading.** `sqb recall query`, `schema` and `output` read the ClickHouse store, so queries use
-  ClickHouse SQL. `--json` output includes the server's `rows_read`, `bytes_read` and `query_id`.
+- **Setup.** On first use, the writer creates the database if it's missing, printing
+  ``Recall: created ClickHouse database `observability` for the store.`` once, then the store's
+  tables and views. An existing database is used as it is, whatever its engine.
+- **Clusters.** The database is created on the server the writer connects to, never `ON CLUSTER`.
+  On a self-managed cluster whose default database engine isn't `Replicated`, create the database
+  yourself first with `ENGINE = Replicated(...)`; Recall leaves it alone. ClickHouse Cloud needs
+  nothing. `ON CLUSTER` stores aren't supported: use a single ClickHouse server or ClickHouse Cloud.
+- **Without DDL rights.** If the writer may not create or upgrade the store, the command still
+  runs and exits as it otherwise would. Recall prints the statements an administrator should run, at
+  most once a day, starting with `CREATE DATABASE IF NOT EXISTS` when the database is missing.
+  `sqb recall schema --ddl` prints them again. A store behind the current version still receives
+  history, in the columns that exist.
+- **Mixed versions.** A writer never replaces the views of a store that a newer SQLBuild version
+  created.
+- **Many writers.** Many concurrent commands can write one store. A repeated delivery is counted
+  once. A record written again with different content keeps the stored row, and the rejected copy
+  is listed in the `conflicts` view.
+- **Writes.** History is sent about every five seconds and when the command ends, with the same shutdown
+  budget and exit-code guarantees as the local store.
 
-Use a single ClickHouse server or ClickHouse Cloud; `ON CLUSTER` stores are not supported yet.
+### Retention in ClickHouse
+
+Retention belongs to the store. Every table has a TTL of `retention`; SQL text is kept a week
+longer, and for as long as a kept invocation references it. The views hide expired rows at once,
+but ClickHouse drops expired parts in the background, so rows may stay on disk for a while.
+
+When a project's `retention` differs from the tables' TTL, Recall warns once a day with the
+`ALTER TABLE … MODIFY TTL` and view statements that would apply it. It never changes the TTL
+itself.
+
+### Reading a ClickHouse store
+
+`sqb recall query`, `schema` and `output` read the ClickHouse store, so queries use ClickHouse SQL.
+`--json` output includes the server's `rows_read`, `bytes_read` and `query_id`.
 
 ## Filtering what Recall stores
 
@@ -472,5 +460,5 @@ statement. It is `NULL` on DuckDB and BigQuery; a BigQuery statement's job ID is
 ## Relationship to compute logs
 
 Compute logs (`logs/<date>/<invocation_id>/stdout.log`, `stderr.log`, and `diagnostics.jsonl`) are
-still written alongside Recall. Recall stores the same output bytes, captured at the same point, so
+written alongside Recall. Recall stores the same output bytes, captured at the same point, so
 `sqb recall output` matches the compute log files.
