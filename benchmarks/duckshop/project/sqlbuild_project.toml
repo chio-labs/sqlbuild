@@ -9,10 +9,6 @@ account = "example-account"
 user = "example_user"
 role = "EXAMPLE_ROLE"
 warehouse = "EXAMPLE_WH"
-# SQLBuild 0.175.0 binds inspected Snowflake source columns as quoted lower-case names, which
-# unquoted references cannot match, so planning fails once the raw tables exist. Ignoring the case
-# of quoted identifiers avoids that; DuckShop's SQL quotes no identifiers whose case matters.
-session_parameters = { QUOTED_IDENTIFIERS_IGNORE_CASE = true }
 
 [targets.dev]
 connection = "warehouse"
@@ -23,6 +19,46 @@ schema = "DEV"
 connection = "warehouse"
 database = "DUCKSHOP"
 schema = "ANALYTICS"
+
+# >>> edge-case area (scripts/core_project.py leaves this block out of the core copy)
+# The edge-case area's expected values are captured on Snowflake under this pinned session: UTC,
+# with every parameter that changes a result or how text is parsed set to Snowflake's default.
+# Run the edge area on this connection only (see RUNBOOK.md, step 7).
+[connections.edge]
+account = "example-account"
+user = "example_user"
+role = "EXAMPLE_ROLE"
+warehouse = "EXAMPLE_WH"
+
+[connections.edge.session_parameters]
+TIMEZONE = "UTC"
+TIMESTAMP_TYPE_MAPPING = "TIMESTAMP_NTZ"
+WEEK_START = 0
+WEEK_OF_YEAR_POLICY = 0
+DEFAULT_NULL_ORDERING = "LAST"
+QUOTED_IDENTIFIERS_IGNORE_CASE = false
+USE_CACHED_RESULT = false
+DATE_INPUT_FORMAT = "AUTO"
+DATE_OUTPUT_FORMAT = "YYYY-MM-DD"
+TIME_INPUT_FORMAT = "AUTO"
+TIME_OUTPUT_FORMAT = "HH24:MI:SS"
+TIMESTAMP_INPUT_FORMAT = "AUTO"
+TIMESTAMP_OUTPUT_FORMAT = "YYYY-MM-DD HH24:MI:SS.FF3 TZHTZM"
+TIMESTAMP_NTZ_OUTPUT_FORMAT = "YYYY-MM-DD HH24:MI:SS.FF3"
+TIMESTAMP_LTZ_OUTPUT_FORMAT = ""
+TIMESTAMP_TZ_OUTPUT_FORMAT = ""
+TWO_DIGIT_CENTURY_START = 1970
+BINARY_INPUT_FORMAT = "HEX"
+BINARY_OUTPUT_FORMAT = "HEX"
+TIMESTAMP_DAY_IS_ALWAYS_24H = false
+JSON_INDENT = 2
+STRICT_JSON_OUTPUT = false
+
+[targets.edge]
+connection = "edge"
+database = "DUCKSHOP"
+schema = "EDGE"
+# <<< edge-case area
 
 [settings]
 default_audit_severity = "error"
@@ -56,6 +92,11 @@ valuation_date = "2026-03-31"
 lookup_customer_id = "C000001"
 # Volume multiplier for the synthetic data loaders in python/loaders; 1 is the small default.
 data_scale = "1"
+# >>> edge-case area (scripts/core_project.py leaves this block out of the core copy)
+# Last load of the edge-case delivery change log to include; "1" replays the first load only (see
+# RUNBOOK.md, step 7).
+edge_delivery_batch = "2"
+# <<< edge-case area
 
 [scenario.local_type_overrides.snowflake]
 "VARIANT" = "JSON"
@@ -235,3 +276,31 @@ reason = """
 The KPI grid is every reporting day for every region and metric pair that has ever had a value, so
 days without activity report zero instead of disappearing. Both sides are small and bounded.
 """
+
+# >>> edge-case area (scripts/core_project.py leaves this block out of the core copy)
+[[rules.rule_ignores]]
+rules = ["SQBRSQL027"]
+paths = ["models/marts/edge_cases/rpt_edge_stock_reconciliation.sql"]
+reason = """
+The edge case selects the key columns that FULL OUTER JOIN ... USING merges. They belong to neither
+side, so qualifying them with either alias would drop the keys of rows found only on the other side.
+"""
+
+[[rules.rule_ignores]]
+rules = ["SQBRTEST201"]
+paths = ["models/marts/edge_cases/rpt_edge_partner_listing_export.sql"]
+reason = """
+The partner feed export names its columns in quoted camelCase. A MODEL header cannot declare a
+quoted column name, so the model has no columns block to attach audits to, and a generic audit that
+names "listingId" fails to bind because the quoted name is folded to lower case.
+"""
+
+[[rules.rule_ignores]]
+rules = ["SQBRTEST202"]
+paths = ["models/staging/edge_cases/stg_edge_partner_listings.sql"]
+reason = """
+Unit-test and scenario fixtures for a source whose declared columns are quoted camelCase names are
+rejected (B302 and S510), so this model is covered by building the edge-case area on Snowflake,
+where it reads the loaded quoted columns, instead of by a unit test.
+"""
+# <<< edge-case area

@@ -1,0 +1,68 @@
+{
+  "capture_adapter": "snowflake",
+  "capture_dialect": "snowflake",
+  "captured_at": "2026-10-28T18:47:37Z",
+  "format": "jsonl",
+  "input_fingerprint": "9d9ce1a2ac3f9bb5cfb5400dc4d05daac103ad39b0393ed0933e5ae9aec11f80",
+  "relations": [
+    {
+      "bytes": 1021,
+      "columns": [
+        {
+          "local_type": "TEXT(5)",
+          "name": "delivery_id",
+          "warehouse_type": "VARCHAR(5)"
+        },
+        {
+          "local_type": "TEXT(4)",
+          "name": "shipment_id",
+          "warehouse_type": "VARCHAR(4)"
+        },
+        {
+          "local_type": "TEXT(9)",
+          "name": "order_ref",
+          "warehouse_type": "VARCHAR(9)"
+        },
+        {
+          "local_type": "TEXT(13)",
+          "name": "delivery_status",
+          "warehouse_type": "VARCHAR(13)"
+        },
+        {
+          "local_type": "DATE",
+          "name": "ordered_on",
+          "warehouse_type": "DATE"
+        },
+        {
+          "local_type": "DATE",
+          "name": "delivered_on",
+          "warehouse_type": "DATE"
+        },
+        {
+          "local_type": "TEXT(1)",
+          "name": "_op",
+          "warehouse_type": "VARCHAR(1)"
+        },
+        {
+          "local_type": "DECIMAL(38, 0)",
+          "name": "_seq",
+          "warehouse_type": "NUMBER(38,0)"
+        },
+        {
+          "local_type": "TIMESTAMP(9)",
+          "name": "_loaded_at",
+          "warehouse_type": "TIMESTAMP_NTZ(9)"
+        }
+      ],
+      "file": "sources/edge__delivery_updates.jsonl",
+      "kind": "source",
+      "logical_name": "edge__delivery_updates",
+      "row_count": 5
+    }
+  ],
+  "scenario_name": "edge_delivery_status__cursor_model_over_far_apart_fixture_loads",
+  "sqlbuild_version": "0.184.0",
+  "total_bytes": 1021,
+  "total_rows": 5,
+  "version": 1
+}

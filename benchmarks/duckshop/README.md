@@ -19,7 +19,8 @@ Everything in it is synthetic: order references use a `DS-O-` prefix, email addr
 ```text
 benchmarks/duckshop/
 ├── project/      the SQLBuild project (Snowflake adapter), with its data loaders in python/loaders/
-├── scripts/      tooling that is not part of the project: the construct census and cleanup SQL
+├── scripts/      tooling that is not part of the project: the construct census, cleanup SQL, the
+│                 core-only copy and edge-case expectation capture
 ├── tests/        offline checks for the synthetic data loaders
 └── RUNBOOK.md    loading, building, testing and capturing on Snowflake, and cleaning up
 ```
@@ -39,6 +40,8 @@ benchmarks/duckshop/
 
 ## Project shape
 
+The core project, without the [edge-case area](#edge-cases):
+
 - 252 models: 99 staging, 81 intermediate, 66 marts and 6 snapshots. Marts are grouped by area:
   core, orders, customers, catalogue, inventory, fulfilment, support, clickstream, growth,
   finance, partners and executive.
@@ -50,7 +53,7 @@ benchmarks/duckshop/
 
 ## Tests and scenarios
 
-`tests/unit/` mirrors `models/` and holds 266 unit tests:
+`tests/unit/` mirrors `models/` and holds 266 core unit tests:
 
 - 260 model tests, including cursor-window tests on incremental models, a table-function mock, a
   macro mock, a fixture built by a test-only Python macro, an empty fixture for a contracted
@@ -58,7 +61,7 @@ benchmarks/duckshop/
 - 3 macro tests, 2 UDF tests and 1 table-function test, most driven by `VALUES` case tables;
 - assertions in 98 tests, including a key check on every mart.
 
-`tests/scenarios/` holds 8 scenarios: one each for catalogue, clickstream, orders, fulfilment,
+`tests/scenarios/` holds 8 core scenarios: one each for catalogue, clickstream, orders, fulfilment,
 support and inventory, and two that cross areas (a regional scorecard, and campaign return on ad
 spend). Two use `expected_columns "all"`. Expected values are derived by hand from the fixtures,
 and every test and scenario passes on Snowflake (see [Status](#status)); the scenarios' captured
@@ -102,6 +105,46 @@ uv run --isolated --no-project --with pytest --with pyyaml pytest benchmarks/duc
 
 See [RUNBOOK.md](RUNBOOK.md) for loading, building and testing on Snowflake.
 
+## Edge cases
+
+The edge-case area holds small, hand-picked cases for SQL whose results are easy to get subtly
+wrong when translating Snowflake SQL or replaying it on another engine. It lives beside the core
+project and does not change it:
+
+- models in `models/staging/edge_cases/`, `models/intermediate/edge_cases/` and
+  `models/marts/edge_cases/`, each tagged `edge_case`. The `XSQBRDUCK002` Rule fails a model in an
+  `edge_cases` folder without the tag, or a model with the tag outside one;
+- unit tests in the matching `tests/unit/<layer>/edge_cases/` folders and scenarios in
+  `tests/scenarios/edge_cases/`;
+- raw `edge__*` sources in `sources/edge_cases.yml`, loaded by `python/loaders/edge_cases.py` from
+  fixed rows that `data_scale` does not change, so core data and core expectations stay the same.
+
+It has 38 models (7 staging, 22 intermediate, 9 marts), 61 unit tests and 4 scenarios, in four
+groups:
+
+| Group | Covers |
+|-------|--------|
+| Semi-structured | JSON null against SQL NULL and missing keys; document text with sorted, case-differing and escaped keys; JSON number fidelity and casts out of `VARIANT`; path-like keys (`''`, `*`, `$`-prefixed, dotted) with `GET` and `GET_IGNORE_CASE`; `OBJECT_CONSTRUCT_KEEP_NULL`, `OBJECT_INSERT`, `OBJECT_DELETE`, `OBJECT_PICK`; array builders, `ARRAY_EXCEPT` and number spellings in `ARRAY_POSITION`; `FLATTEN` outer; lenient and malformed `TRY_PARSE_JSON`; typed lambdas |
+| Dates and times | `TRY_TO_TIMESTAMP_NTZ` and its siblings over free text; epoch milliseconds as numbers and text; daylight-saving gaps and overlaps; fractional offsets; nanosecond truncation and epoch parts after 2242; pre-1970 text with sub-microsecond digits; date-part normalisation; month ends and leap days; week numbering across a year; sentinel timestamps |
+| Ordering, numbers and text | NULL ordering under `DESC`; ties in ordered aggregates, `MAX_BY`, `MODE` and `ANY_VALUE`; default window frames; `UNION ALL BY NAME`; `ROUND` half-way values, decimal division, `MOD` and 38-digit amounts; integers past 2^53 against `FLOAT`; regular expressions and backslash escapes; `LIKE ... ESCAPE` and `ILIKE ANY`; `SPLIT_PART` and `SUBSTR` before the start; `NOT IN` with a NULL; names in many scripts |
+| Scenarios and lifecycle | typed values across model boundaries; `VARIANT` expected output; a star under a lower-case contract and a quoted camelCase export; a cursor-window incremental model over far-apart fixture loads; a change log merged across two loads, checked against a full rebuild |
+
+Unit-test expectations in the edge-case area were captured on Snowflake under the `edge` target's
+pinned session, rather than derived by hand; scenario expectations, and the assertions in tests
+about ties, are written by hand from those captured values. `fct_edge_delivery_events` is disabled: it is the
+acceptance case for cursor `delete_insert` models that emit rows outside the window they replace.
+See [RUNBOOK.md](RUNBOOK.md), step 7.
+
+Benchmarks and core measurements leave the area out:
+
+- `python benchmarks/duckshop/scripts/core_project.py <destination>` copies the project without
+  it. The core-copy compile guard compares the copy's compiled files with a recorded checksum
+  (`core_project.py --checksum`), so a change to the core project's compiled SQL fails the guard
+  until the checksum is updated on purpose and noted for the benchmark;
+- warehouse runs exclude it with `--exclude tag:edge_case "source:edge__*"`, and scenario runs
+  with `--exclude edge_cases`;
+- the construct census counts the core project unless given `--area edge` or `--area all`.
+
 ## Status
 
 Last verified on Snowflake with SQLBuild 0.175.0 at `data_scale = "1"`:
@@ -113,7 +156,7 @@ Last verified on Snowflake with SQLBuild 0.175.0 at `data_scale = "1"`:
 | `sqb test` | 266 of 266 pass |
 | `sqb scenario test` | 8 of 8 pass |
 | `sqb scenario capture` | Captures all 8; snapshots are in `project/tests/_scenario_snapshots/` |
-| `sqb scenario test --local --strict` | 0 of 8 pass: 5 fail in translation, 3 report a stale snapshot |
+| `sqb scenario test --local --strict` | In the core copy, 0 of 8 pass: 5 fail in translation, 3 report a stale snapshot |
 
 Local replay translates each scenario's Snowflake SQL to DuckDB on a best-effort basis. These five
 failures are the baseline that better translation should remove:
@@ -131,6 +174,21 @@ The other three scenarios (`campaign_roas__attributes_orders_to_channel_spend`,
 `payments__fully_refunded_orders_collect_nothing`) never reach translation: their snapshots are
 reported stale straight after capture. The snapshot fingerprint now hashes the authored fixture
 SQL, so these results predate that fix; recapture the snapshots to replay them.
+
+The project no longer sets `QUOTED_IDENTIFIERS_IGNORE_CASE = true` on its connection. With SQLBuild
+0.184.0, a core build without it passes with the same results as with it: every core model holds
+the same rows, apart from the snapshots, which record build times, and three models whose results
+vary from one run to the next (`int_cart_funnel`, `int_delivery_slot_utilisation` and
+`rpt_delivery_exceptions_monthly`).
+
+The edge-case area, verified on Snowflake with SQLBuild 0.184.0 on the `edge` target:
+
+| Step | Result |
+|------|--------|
+| `sqb build --select tag:edge_case --exclude stg_edge_partner_listings+` | Passes; the disabled model is skipped |
+| `sqb test --select tag:edge_case` | 61 of 61 pass |
+| `sqb scenario test --select edge_cases` | 4 of 4 pass |
+| Two-load replay of the delivery change log | The merged status equals the full rebuild after each load |
 
 ## Expected divergences
 
@@ -155,6 +213,15 @@ noted here:
 - Compilation accepts SQL that Snowflake rejects: `CONNECT_BY_ISLEAF`, which Snowflake does not
   have, and a CTE whose body is a bare `VALUES` list. `int_category_paths` finds leaf categories
   with a join instead, and test case tables use `SELECT ... FROM VALUES ... AS v(...)`.
+- A source column whose name is quoted mixed case, such as `"listingId"`, cannot be read once the
+  table exists: planning folds the quoted reference to lower case and fails with `B002`. Fixtures
+  cannot name such columns either (`B302` in unit tests, `S510` in scenarios), and a `MODEL`
+  header cannot declare a quoted column name. `stg_edge_partner_listings` has a reviewed
+  `SQBRTEST202` ignore, `rpt_edge_partner_listing_export` a reviewed `SQBRTEST201` ignore, and the
+  edge build excludes `stg_edge_partner_listings+`.
+- Local scenario replay stops at compile (`P001`, unclosed quoted string) on a model with a
+  backslash-escaped quote in a string literal, `'O\'Brien'` in `stg_edge_ticket_notes`, so local
+  replay runs in the core copy.
 - `SQBRSQL018` can only take proof from single-column keys. Append-only feeds redeliver rows, so
   their id is unique only together with `_loaded_at` (the `unique_per_delivery` audit), and the
   staging models that keep the latest delivery carry reviewed exceptions.

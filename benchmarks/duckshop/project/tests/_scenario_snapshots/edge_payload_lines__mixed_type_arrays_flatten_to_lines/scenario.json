@@ -1,0 +1,58 @@
+{
+  "capture_adapter": "snowflake",
+  "capture_dialect": "snowflake",
+  "captured_at": "2026-10-28T18:47:37Z",
+  "format": "jsonl",
+  "input_fingerprint": "baf56e87956fd7611a41783999279faeb360c90655f9acbb3720e5574cb4055b",
+  "relations": [
+    {
+      "bytes": 570,
+      "columns": [
+        {
+          "local_type": "TEXT(4)",
+          "name": "delivery_id",
+          "warehouse_type": "VARCHAR(4)"
+        },
+        {
+          "local_type": "TEXT(4)",
+          "name": "message_id",
+          "warehouse_type": "VARCHAR(4)"
+        },
+        {
+          "local_type": "TEXT(7)",
+          "name": "partner_code",
+          "warehouse_type": "VARCHAR(7)"
+        },
+        {
+          "local_type": "TIMESTAMP(9)",
+          "name": "received_at",
+          "warehouse_type": "TIMESTAMP_NTZ(9)"
+        },
+        {
+          "local_type": "JSON",
+          "name": "payload",
+          "warehouse_type": "VARIANT"
+        },
+        {
+          "local_type": "TEXT(16777216)",
+          "name": "payload_text",
+          "warehouse_type": "VARCHAR(16777216)"
+        },
+        {
+          "local_type": "TIMESTAMP(9)",
+          "name": "_loaded_at",
+          "warehouse_type": "TIMESTAMP_NTZ(9)"
+        }
+      ],
+      "file": "sources/edge__partner_payloads.jsonl",
+      "kind": "source",
+      "logical_name": "edge__partner_payloads",
+      "row_count": 2
+    }
+  ],
+  "scenario_name": "edge_payload_lines__mixed_type_arrays_flatten_to_lines",
+  "sqlbuild_version": "0.184.0",
+  "total_bytes": 570,
+  "total_rows": 2,
+  "version": 1
+}
