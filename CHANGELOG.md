@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.184.0](https://github.com/chio-labs/sqlbuild/compare/v0.183.0...v0.184.0) (2026-10-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* `--format csv` and `--format table` are removed from `sqb query` and `sqb recall query`. Use the default output, `--format long`, or `--json`.
+
+### Features
+
+* harden Recall, unify query output and fix macro slot qualification ([db2f274](https://github.com/chio-labs/sqlbuild/commit/db2f27421a6714828a24e9f2f0a17a93e98c534b))
+
 ## [0.183.0](https://github.com/chio-labs/sqlbuild/compare/v0.182.0...v0.183.0) (2026-10-26)
 
 
