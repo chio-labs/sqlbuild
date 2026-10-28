@@ -50,6 +50,7 @@ use crate::bindings::_helpers::recall::constants::{
 };
 use crate::bindings::_helpers::recall::events::escaped_text;
 use crate::bindings::_helpers::recall::replacements::{RecallReplacements, in_replacement_sink};
+use crate::bindings::_helpers::recall::sinks::InvocationEvents;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// What the invocation records: its session, when enabled, and the resolved target and adapter.
@@ -66,6 +67,8 @@ pub(crate) struct InvocationRecall {
     pub(crate) replacements: Arc<RecallReplacements>,
     /// A Recall configuration mistake the command fails with before it runs.
     pub(crate) configuration_error: Option<String>,
+    /// The invocation's own lifecycle events the session has recorded.
+    pub(crate) invocation_events: Arc<InvocationEvents>,
 }
 
 /// The text of an optional attribute value.
@@ -501,6 +504,7 @@ pub(crate) fn start_invocation_recall(
         settings: Some((settings, project_dir)),
         replacements: Arc::default(),
         configuration_error: None,
+        invocation_events: Arc::default(),
     })
 }
 

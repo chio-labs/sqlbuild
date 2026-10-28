@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import signal
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1335,3 +1336,11 @@ class RuleFailureArtifactsTestCase:
     expected_exit_code: int
     expected_open_orders: str
     expected_manifest: bool
+
+
+@dataclass(frozen=True)
+class SignalledScenarioTestCase:
+    description: str
+    sent_signal: signal.Signals
+    expected_exit_code: int
+    expected_last_line: str

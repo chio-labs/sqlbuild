@@ -4,10 +4,14 @@ import _thread
 import json
 import os
 import shutil
+import signal
+import subprocess
 import sys
 import tempfile
 import threading
+import time
 from collections.abc import Callable
+from itertools import takewhile
 from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
@@ -1259,3 +1263,81 @@ def open_orders_model(sql: str) -> str:
     """An `open_orders` table model whose query is `sql`."""
 
     return f'MODEL (\n  description "Open orders",\n  materialized table,\n);\n\n{sql}\n'
+
+
+_ENDLESS_ORDER_TOTAL: str = "(SELECT SUM(big.n) FROM range(1000000000000) AS big(n)) * 0"
+
+
+def write_endless_scenario_project(project_dir: Path) -> Path:
+    """A DuckDB project whose scenario builds a model that runs until it is cancelled."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": (
+            'name = "scenario_signals"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "scenario_signals.duckdb"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n"
+            "    description: Raw orders.\n"
+            "    schema: main\n"
+            "    table: raw_orders\n"
+        ),
+        "models/order_totals.sql": (
+            "MODEL (description 'Order totals.', materialized table, sql_analysis false);\n\n"
+            f"SELECT SUM(o.amount) + {_ENDLESS_ORDER_TOTAL} AS total_amount "
+            'FROM __source("raw_orders") AS o\n'
+        ),
+        "tests/scenarios/totals.sql": (
+            "SCENARIO (description 'Order totals add up.');\n\n"
+            "WITH\n"
+            "__source__raw_orders AS (SELECT 1 AS id, 10 AS amount),\n"
+            "__expected__order_totals AS (SELECT 10 AS total_amount)\n"
+            "SELECT 1\n"
+        ),
+    }
+    for relative, contents in files.items():
+        path: Path = project_dir / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_text(contents, encoding="utf-8")
+    return project_dir
+
+
+def signalled_scenario_run(
+    *, project_dir: Path, sent_signal: signal.Signals
+) -> tuple[int, str, float]:
+    """Exit code and output of `sqb scenario test` sent `sent_signal` while its model runs, and
+    the seconds it took to stop."""
+
+    process: subprocess.Popen[str] = subprocess.Popen(
+        [
+            str(Path(sys.executable).with_name("sqb")),
+            "--no-color",
+            "--project-dir",
+            str(project_dir),
+            "scenario",
+            "test",
+            "--concurrency",
+            "1",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env={**os.environ, "PYTHONUNBUFFERED": "1"},
+        preexec_fn=_default_interrupt_handling,
+    )
+    assert process.stdout is not None
+    started: str = "".join(takewhile(lambda line: "order_totals START" not in line, process.stdout))
+    time.sleep(1.0)
+    process.send_signal(sent_signal)
+    sent: float = time.monotonic()
+    stdout, stderr = process.communicate(timeout=120)
+    return process.returncode, started + stdout + stderr, time.monotonic() - sent
+
+
+def _default_interrupt_handling() -> None:
+    """Give the spawned command default Ctrl-C handling even when its parent ignores SIGINT."""
+
+    _ = signal.signal(signal.SIGINT, signal.SIG_DFL)

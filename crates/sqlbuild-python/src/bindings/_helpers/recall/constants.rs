@@ -116,5 +116,8 @@ pub(crate) const DEBUG_COMMAND: &str = "debug";
 /// The namespace attribute of `sqb debug --no-connection`.
 pub(crate) const NO_CONNECTION_ATTRIBUTE: &str = "no_connection";
 /// The statement terminal events, at which the sink settles a statement's SQL.
+pub(crate) const INVOCATION_STARTED: &str = "invocation_started";
+pub(crate) const INVOCATION_COMPLETED: &str = "invocation_completed";
+pub(crate) const INVOCATION_FAILED: &str = "invocation_failed";
 pub(crate) const STATEMENT_COMPLETED: &str = "statement_completed";
 pub(crate) const STATEMENT_FAILED: &str = "statement_failed";

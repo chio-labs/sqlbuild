@@ -483,6 +483,7 @@ fn subscribe_recall(
             session,
             replacements: Arc::clone(&recall.replacements),
             running_sql: Arc::default(),
+            invocation_events: Arc::clone(&recall.invocation_events),
         },
     )?;
     dispatcher.call_method1("subscribe_history", (sink,))?;
@@ -583,13 +584,13 @@ fn observed_dispatch<'py>(
         payload.set_item("error_message", message)?;
         if let Some(signal) = interrupting_signal(py, error) {
             payload.set_item("signal_number", signal)?;
+            payload.set_item("exit_code", signal_exit_code(signal))?;
         }
         if let Some(status) = take_cost_status() {
             payload.set_item("cost_status", status)?;
         }
         Ok(payload)
     };
-    let announced: std::cell::Cell<bool> = std::cell::Cell::new(false);
     let scope: Bound<'py, PyAny> = observability.clone().into_any();
     let observed: PyResult<Bound<'py, PyAny>> = within(&scope, |dispatcher| {
         let publish = |event: Bound<'py, PyAny>| -> PyResult<()> {
@@ -639,44 +640,51 @@ fn observed_dispatch<'py>(
             }
         }
     });
-    match (&observed, &invocation.recall.session) {
-        (Err(error), Some(session))
-            if !announced.get() && interrupting_signal(py, error).is_some() =>
-        {
-            let recorded: PyResult<()> = started_payload().and_then(|started| {
-                record_interrupted_setup(
-                    py,
-                    session,
-                    (&started_at, started),
-                    failed_payload(error)?,
-                )
-            });
-            drop(recorded);
-        }
-        _ => {}
+    if let (Err(error), Some(session)) = (&observed, &invocation.recall.session)
+        && interrupting_signal(py, error).is_some()
+        && !invocation.recall.invocation_events.ended()
+    {
+        let started: Option<PyResult<Bound<'py, PyDict>>> =
+            (!invocation.recall.invocation_events.started()).then(started_payload);
+        let recorded: PyResult<()> = started.transpose().and_then(|started| {
+            record_interrupted_end(
+                py,
+                session,
+                started.map(|payload| (started_at, payload)),
+                failed_payload(error)?,
+            )
+        });
+        drop(recorded);
     }
     observed
 }
 
-/// Record an invocation interrupted while its observability was still being set up, such as during project discovery, so Recall shows it cancelled instead of running.
-fn record_interrupted_setup(
+/// Record the end of an invocation interrupted before its own lifecycle events were all recorded, such as during project discovery, so Recall shows it cancelled instead of running. `started` holds the start event's time and payload when that event was not recorded either.
+fn record_interrupted_end(
     py: Python<'_>,
     session: &sqlbuild_recall::writer::models::RecallSession,
-    (started_at, started): (&Bound<'_, PyAny>, Bound<'_, PyDict>),
+    started: Option<(SystemTime, Bound<'_, PyDict>)>,
     failed: Bound<'_, PyDict>,
 ) -> PyResult<()> {
-    let started: Bound<'_, PyAny> = call_with(
-        &host::entry(py, ExecutorHost::CreateLifecycleEvent)?,
-        &[
-            (
-                "event_type",
-                PyString::new(py, "invocation_started").into_any(),
-            ),
-            ("payload", started.into_any()),
-            ("occurred_at", started_at.clone()),
-        ],
-    )?;
-    publish_lifecycle_event(py, session, &started)?;
+    if let Some((started_at, payload)) = started {
+        let seconds: f64 = started_at
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map_or(0.0, |elapsed| elapsed.as_secs_f64());
+        let occurred_at: Bound<'_, PyDateTime> =
+            PyDateTime::from_timestamp(py, seconds, Some(&PyTzInfo::utc(py)?.to_owned()))?;
+        let started: Bound<'_, PyAny> = call_with(
+            &host::entry(py, ExecutorHost::CreateLifecycleEvent)?,
+            &[
+                (
+                    "event_type",
+                    PyString::new(py, "invocation_started").into_any(),
+                ),
+                ("payload", payload.into_any()),
+                ("occurred_at", occurred_at.into_any()),
+            ],
+        )?;
+        publish_lifecycle_event(py, session, &started)?;
+    }
     publish_lifecycle_event(
         py,
         session,
@@ -772,6 +780,7 @@ fn parsed_invocation<'py>(
                 session,
                 replacements: Arc::clone(&recall.replacements),
                 running_sql: Arc::default(),
+                invocation_events: Arc::clone(&recall.invocation_events),
             },
         )?
         .into_any(),
