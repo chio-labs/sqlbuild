@@ -80,6 +80,8 @@ class ScenarioCatalogCleanupTestCase:
     authoritative: bool = True
     catalog_schema: str = "scenario_schema"
     expected_listing_count: int = 1
+    prefix_listing: bool = False
+    expected_prefix_listings: int = 0
 
 
 @dataclass(frozen=True)

@@ -7,9 +7,11 @@ from typing import Any
 from sqlbuild._native import MaterializationType, ScenarioExecutionPlan
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.relations.classes.run_relation_listings import RunRelationListings
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.scenario._helpers.lifecycle.cleanup import (
     collect_scenario_cleanup_targets,
+    confirmed_absent_targets,
     existing_scenario_cleanup_targets,
 )
 from sqlbuild.executor.scenario.constants import SCENARIO_EXEC_CLEANUP_FAILED
@@ -53,10 +55,11 @@ def _execute_scenario_cleanup(
     )
 
     try:
-        drop_target: ScenarioCleanupTarget
-        for drop_target in existing_scenario_cleanup_targets(
+        dropped: tuple[ScenarioCleanupTarget, ...] = existing_scenario_cleanup_targets(
             targets=cleanup_targets, adapter=adapter, connection=connection
-        ):
+        )
+        drop_target: ScenarioCleanupTarget
+        for drop_target in dropped:
             with diagnostics_context(
                 sqlbuild_phase="scenario_cleanup",
                 sqlbuild_action_name="drop_relation",
@@ -69,6 +72,12 @@ def _execute_scenario_cleanup(
                         connection=connection,
                         destination=drop_target.target_relation,
                         if_exists=True,
+                        statement_recorder=statement_recorder,
+                    )
+                elif drop_target.listed:
+                    adapter.drop_table(
+                        connection=connection,
+                        destination=drop_target.target_relation,
                         statement_recorder=statement_recorder,
                     )
                 else:
@@ -90,6 +99,12 @@ def _execute_scenario_cleanup(
             error_message=str(exc),
         )
 
+    RunRelationListings.remember_absent(
+        adapter=adapter,
+        relations=confirmed_absent_targets(
+            targets=cleanup_targets, dropped=dropped, adapter=adapter
+        ),
+    )
     return ScenarioCleanupExecutionResult(
         scenario_name=scenario_plan.name,
         status=ExecutionStatus.SUCCESS,

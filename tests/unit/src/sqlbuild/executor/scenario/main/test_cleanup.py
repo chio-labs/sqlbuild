@@ -222,6 +222,20 @@ def test_given_unmocked_project_seed_when_cleaning_up_then_drops_seed_target(
             fail_listing=True,
             expected_drop_sql=_ALL_PLANNED_DROPS,
         ),
+        ScenarioCatalogCleanupTestCase(
+            description="lists only the scenario's namespace when the adapter can",
+            relation_types={
+                "__SQB_51B385AEBE20__SOURCE__RAW__ORDERS": "BASE TABLE",
+                "__SQB_51B385AEBE20__MODEL__DAILY_REVENUE": "VIEW",
+            },
+            prefix_listing=True,
+            expected_listing_count=0,
+            expected_prefix_listings=1,
+            expected_drop_sql=(
+                f"DROP TABLE IF EXISTS {_CATALOG_PREFIX}__source__raw__orders",
+                f"DROP VIEW IF EXISTS {_CATALOG_PREFIX}__model__daily_revenue",
+            ),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -233,6 +247,7 @@ def test_given_catalog_state_when_cleaning_up_then_drops_only_existing_relations
         fail_listing=test_case.fail_listing,
         authoritative=test_case.authoritative,
         catalog_schema=test_case.catalog_schema,
+        prefix_listing=test_case.prefix_listing,
     )
 
     result: ScenarioCleanupExecutionResult = execute_scenario_cleanup(
@@ -243,6 +258,7 @@ def test_given_catalog_state_when_cleaning_up_then_drops_only_existing_relations
 
     assert result.status == ExecutionStatus.SUCCESS
     assert adapter.listing_count == test_case.expected_listing_count
+    assert len(adapter.prefix_listings) == test_case.expected_prefix_listings
     assert executed_drop_sql(adapter) == test_case.expected_drop_sql
 
 
