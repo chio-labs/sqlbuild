@@ -145,6 +145,14 @@ Benchmarks and core measurements leave the area out:
   with `--exclude edge_cases`;
 - the construct census counts the core project unless given `--area edge` or `--area all`.
 
+Changes to the core project's compiled SQL, after which benchmark results are not comparable with
+earlier ones:
+
+- `int_cart_funnel`, `int_delivery_slot_utilisation` and `rpt_delivery_exceptions_monthly` give the
+  same results on every run: added SKUs are sorted, the weekday average utilisation is an exact
+  decimal sum over a count, the busiest slot of equally busy ones is the earliest, and the top
+  exception code of equally frequent ones is the first in alphabetical order.
+
 ## Status
 
 Last verified on Snowflake with SQLBuild 0.175.0 at `data_scale = "1"`:
