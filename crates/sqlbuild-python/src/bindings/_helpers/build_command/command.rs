@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{pyfunction, wrap_pyfunction};
-use sqlbuild_host::entries::models::{ExecutorHost, UserCodeHost};
+use sqlbuild_host::entries::models::{AdapterHost, ExecutorHost, UserCodeHost};
 
 use crate::bindings::_helpers::boundary::python_calls::{call_with, within};
 use crate::bindings::_helpers::build_command::completion::{
@@ -39,6 +39,15 @@ fn run_with_providers(context: &BuildContext<'_>) -> PyResult<i32> {
 
 fn run_planned_build(context: &BuildContext<'_>, providers: &Bound<'_, PyAny>) -> PyResult<i32> {
     run_defer_clone_prephase(context)?;
+    let cache_scope: Bound<'_, PyAny> = call_with(
+        &host::entry(context.py(), AdapterHost::RelationMetadataCacheScope)?,
+        &[("adapter", context.get("adapter")?)],
+    )?;
+    within(&cache_scope, |_| run_cached_build(context, providers))
+}
+
+/// Plan and run the build, sharing one relation metadata cache from planning to the run's end.
+fn run_cached_build(context: &BuildContext<'_>, providers: &Bound<'_, PyAny>) -> PyResult<i32> {
     let pipeline: Bound<'_, PyAny> = compile_build_plan(context)?;
     write_plan_text(context, &pipeline)?;
     enforce_build_plan_policies(context, &pipeline)?;

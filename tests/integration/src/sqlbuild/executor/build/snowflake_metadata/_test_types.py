@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -82,3 +83,20 @@ class ExternalChangeTestCase:
     change: Callable[[SimulatedSnowflakeWarehouse], None]
     before_statement: str
     expected_table_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PlannerListingReuseTestCase:
+    """Two real ``sqb build`` runs and the schema listings each issues.
+
+    Each external change runs once, when a build reaches its statement pattern, as another
+    session changing the schema between planning and the run.
+    """
+
+    description: str
+    expected_listings: tuple[dict[str, int], ...]
+    expected_table_types: tuple[str, ...]
+    listing_max_age_seconds: float = 60.0
+    external_changes: tuple[
+        tuple[re.Pattern[str], Callable[[SimulatedSnowflakeWarehouse], None]], ...
+    ] = ()

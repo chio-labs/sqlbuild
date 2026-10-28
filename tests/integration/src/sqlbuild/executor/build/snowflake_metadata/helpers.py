@@ -13,14 +13,19 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from sqlbuild._native import (
     CompilePipelineOptions,
     CompilePipelineResult,
     DiscoveredProjectInputs,
     discover_project_inputs,
+    run_cli,
     run_compile_pipeline,
 )
 from sqlbuild.adapter.contract.types import TablePromotionMode
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
+from sqlbuild.adapters.snowflake.classes.snowflake_connection import _SnowflakeConnection
 from sqlbuild.executor.build.models import BuildExecutionResult, BuildRuntimeParams
 from sqlbuild.executor.pipeline.main.run import run_build_pipeline
 from sqlbuild.executor.scheduling.types import ExecutionStatus
@@ -766,3 +771,33 @@ def write_model_copies(
             'SELECT order_id, ordered_at, amount FROM __ref("orders_table")\n',
             encoding="utf-8",
         )
+
+
+def build_with_cli(
+    *, project_dir: Path, warehouse: SimulatedSnowflakeWarehouse, monkeypatch: pytest.MonkeyPatch
+) -> tuple[int, tuple[str, ...]]:
+    """Run the real ``sqb build`` against the simulated warehouse; its exit code and statements."""
+
+    monkeypatch.setattr(
+        SnowflakeAdapter,
+        "connect",
+        lambda _adapter, _config: _SnowflakeConnection(warehouse.raw_connection()),
+    )
+    warehouse.reset()
+    exit_code: int = run_cli(["--project-dir", str(project_dir), "--no-color", "build"])
+    return exit_code, tuple(warehouse.attempted_sql)
+
+
+_SCHEMA_LISTING_STATEMENT: re.Pattern[str] = re.compile(
+    r"^SHOW (?P<kind>TABLES|VIEWS) IN SCHEMA (?P<scope>\S+)"
+)
+
+
+def schema_listing_counts(statements: tuple[str, ...]) -> dict[str, int]:
+    """How often each schema was listed, keyed by ``TABLES``/``VIEWS`` and the schema."""
+
+    searches: list[re.Match[str] | None] = [
+        _SCHEMA_LISTING_STATEMENT.search(statement) for statement in statements
+    ]
+    matches: list[re.Match[str]] = list(filter(None, searches))
+    return dict(Counter(f"{match['kind']} {match['scope']}" for match in matches))

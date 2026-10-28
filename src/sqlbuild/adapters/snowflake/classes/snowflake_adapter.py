@@ -327,6 +327,13 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
         return {entry.stored_name: entry.relation for entry in listing.entries}
 
+    def relation_listing_scope(
+        self, *, connection: Any, database: str | None, schema: str
+    ) -> SchemaListingScope:
+        """The stored database and schema names that key a build's listing of one schema."""
+
+        return self._listing_scope(connection=connection, database=database, schema=schema)
+
     def _listing_scope(
         self, *, connection: Any, database: str | None, schema: str
     ) -> SchemaListingScope:
