@@ -64,7 +64,7 @@ def test_given_rule_findings_when_compiling_then_models_are_written_with_a_failu
         "sqlbuild_project.toml": _PROJECT,
         "models/orders.sql": _ORDERS,
         "models/open_orders.sql": open_orders_model(
-            'SELECT o.order_id, status FROM __ref("orders") AS o'
+            'SELECT o.order_id, o.status FROM __ref("orders") AS o'
         ),
     }
     for relative, contents in files.items():
@@ -82,7 +82,7 @@ def test_given_rule_findings_when_compiling_then_models_are_written_with_a_failu
     _ = (tmp_path / "models" / "open_orders.sql").write_text(
         open_orders_model(test_case.open_orders_sql), encoding="utf-8"
     )
-    (tmp_path / "target" / "manifest.json").unlink(missing_ok=True)
+    assert (tmp_path / "target" / "manifest.json").exists()
 
     exit_code: int = main(compile_args)
 

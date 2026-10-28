@@ -806,7 +806,7 @@ fn rule_error_lines(
     Ok(lines)
 }
 
-/// After Rules failed, write every model's compiled SQL so the expansion they checked can be read. A model with Rule errors starts with a header marking it not buildable and listing them. Nothing else under `target/` changes: no manifest, tests, cache or stale-file removal.
+/// After Rules failed, write every model's compiled SQL so the expansion they checked can be read. A model with Rule errors starts with a header marking it not buildable and listing them. An earlier manifest is removed, since it no longer describes `target/`; nothing else changes: no tests, cache or stale-file removal.
 pub(crate) fn write_rule_failed_models<'py>(
     target_dir: &Bound<'py, PyAny>,
     (project, project_dir): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
@@ -815,6 +815,11 @@ pub(crate) fn write_rule_failed_models<'py>(
     let py: Python<'py> = target_dir.py();
     let errors: HashMap<String, Vec<String>> = rule_error_lines(diagnostics, project_dir)?;
     let _ = prepared_target(target_dir)?;
+    let manifest: PathBuf = target_dir.extract::<PathBuf>()?.join(MANIFEST_FILE);
+    match std::fs::remove_file(&manifest) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error.into()),
+        _ => {}
+    }
     let compiled_dir: PathBuf = joined(target_dir, &[COMPILED_DIR])?.extract()?;
     let mut batch: ArtifactBatch = ArtifactBatch::new(true, None);
     for model in native_field(project, "models")?.try_iter()? {
