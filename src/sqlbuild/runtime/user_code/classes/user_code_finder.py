@@ -13,7 +13,7 @@ _INSTALLED_PACKAGE_DIRECTORIES: frozenset[str] = frozenset({"site-packages", "di
 
 
 class UserCodeFinder:
-    """Find modules normally, switching source files under a project root to source-only loading."""
+    """Load modules found under a project root from source; search only project entries first."""
 
     def __init__(self) -> None:
         self.roots: set[Path] = set()
@@ -26,6 +26,8 @@ class UserCodeFinder:
                 *sysconfig.get_paths().values(),
             }
         )
+        self._project_entries: dict[str, bool] = {}
+        self._entry_roots: frozenset[Path] = frozenset()
 
     def find_spec(
         self,
@@ -33,6 +35,12 @@ class UserCodeFinder:
         path: Sequence[str] | None = None,
         target: ModuleType | None = None,
     ) -> ModuleSpec | None:
+        entries: Sequence[str] = sys.path if path is None else path
+        project_entries: list[str] = [entry for entry in entries if self._is_project_entry(entry)]
+        if not project_entries:
+            return None
+        if PathFinder.find_spec(fullname, project_entries, target) is None:
+            return None
         spec: ModuleSpec | None = PathFinder.find_spec(fullname, path, target)
         if spec is None or spec.origin is None or not isinstance(spec.loader, SourceFileLoader):
             return None
@@ -45,3 +53,21 @@ class UserCodeFinder:
             return None
         spec.loader = SourceOnlyLoader(fullname, spec.origin)
         return spec
+
+    def _is_project_entry(self, entry: str) -> bool:
+        roots: frozenset[Path] = frozenset(self.roots)
+        if roots != self._entry_roots:
+            self._project_entries = {}
+            self._entry_roots = roots
+        known: bool | None = self._project_entries.get(entry)
+        if known is not None:
+            return known
+        try:
+            resolved: Path = Path(entry or ".").resolve()
+        except OSError:
+            resolved = Path(entry)
+        under_root: bool = any(
+            resolved.is_relative_to(root) or root.is_relative_to(resolved) for root in roots
+        )
+        self._project_entries[entry] = under_root
+        return under_root

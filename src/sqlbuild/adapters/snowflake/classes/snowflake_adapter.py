@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import os
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import date, datetime
@@ -158,6 +159,8 @@ from sqlbuild.adapters.snowflake.constants import (
     MAX_STATEMENT_TIMEOUT_SECONDS,
     MFA_AUTHENTICATOR,
     OAUTH_AUTHORIZATION_CODE_AUTHENTICATOR,
+    PLATFORM_DETECTION_DISABLED,
+    PLATFORM_DETECTION_VARIABLE,
     SECONDARY_ROLES_ALL,
     SECONDARY_ROLES_NONE,
     SHOW_LIKE_ESCAPE_CHARACTER,
@@ -1915,8 +1918,9 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         return True
 
     def connect(self, config: dict[str, Any]) -> _SnowflakeConnection:
-        """Open a Snowflake connection from the resolved connection config."""
+        """Open a Snowflake connection, with platform detection off unless the user set it."""
 
+        _ = os.environ.setdefault(PLATFORM_DETECTION_VARIABLE, PLATFORM_DETECTION_DISABLED)
         try:
             import snowflake.connector
         except ImportError as error:

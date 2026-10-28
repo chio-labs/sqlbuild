@@ -1,0 +1,59 @@
+"""The user-code finder claims only project modules that normal import would load."""
+
+import sys
+from importlib.machinery import ModuleSpec
+from pathlib import Path
+
+import pytest
+
+from sqlbuild.runtime.user_code.classes.source_only_loader import SourceOnlyLoader
+from sqlbuild.runtime.user_code.classes.user_code_finder import UserCodeFinder
+from tests.unit.src.sqlbuild.runtime.user_code.classes._test_types import FinderSpecTestCase
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FinderSpecTestCase(
+            description="a project module loads from source",
+            module_name="order_rules",
+            earlier_entries=(),
+            expected_source_only=True,
+        ),
+        FinderSpecTestCase(
+            description="an installed module is left to normal import",
+            module_name="pytest",
+            earlier_entries=(),
+            expected_source_only=False,
+        ),
+        FinderSpecTestCase(
+            description="a project module shadowed by an earlier path entry is left alone",
+            module_name="order_rules",
+            earlier_entries=("shadow",),
+            expected_source_only=False,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_module_name_when_finding_spec_then_only_project_modules_load_from_source(
+    test_case: FinderSpecTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project: Path = tmp_path / "project"
+    project.mkdir()
+    _ = (project / "order_rules.py").write_text("LIMIT: int = 1\n", encoding="utf-8")
+    shadow: Path = tmp_path / "shadow"
+    shadow.mkdir()
+    _ = (shadow / "order_rules.py").write_text("LIMIT: int = 2\n", encoding="utf-8")
+    earlier: list[str] = [str(tmp_path / name) for name in test_case.earlier_entries]
+    monkeypatch.setattr(sys, "path", [*earlier, str(project), *sys.path])
+    finder: UserCodeFinder = UserCodeFinder()
+    finder.roots.add(project.resolve())
+
+    spec: ModuleSpec | None = finder.find_spec(test_case.module_name)
+
+    source_only: bool = spec is not None and isinstance(spec.loader, SourceOnlyLoader)
+    assert source_only == test_case.expected_source_only
+
+
+if __name__ == "__main__":
+    raise SystemExit(pytest.main([__file__, "-n", "auto", "--dist", "loadfile"]))
