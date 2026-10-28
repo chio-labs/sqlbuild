@@ -823,13 +823,7 @@ fn parsed_invocation<'py>(
         Ok(_) | Err(_) => None,
     };
     let finished: PyResult<()> = finish_invocation_recall(py, &recall, exit_status);
-    let exit_code: Bound<'py, PyAny> = match dispatched {
-        Err(error) if error.is_instance_of::<CommandTerminated>(py) => {
-            report_termination(py);
-            TERMINATED_EXIT_CODE.into_bound_py_any(py)?
-        }
-        dispatched => dispatched?,
-    };
+    let exit_code: Bound<'py, PyAny> = dispatched?;
     finished?;
     Ok(exit_code)
 }
@@ -870,7 +864,21 @@ fn run_cli<'py>(
             .get_item(pyo3::types::PySlice::new(py, 1, isize::MAX, 1))?,
     };
     let argv: Bound<'py, PyAny> = offered_launch_record(&argv)?;
-    let _termination: TerminationHandler<'py> = handle_sigterm(py)?;
+    let mut termination: TerminationHandler = handle_sigterm(py)?;
+    let ran: PyResult<Bound<'py, PyAny>> = invoke(py, &argv, handlers);
+    if termination.settle(py) {
+        drop(ran);
+        return terminated_exit(py).into_bound_py_any(py);
+    }
+    ran
+}
+
+/// Run one parsed `argv` inside its invocation, external-context and diagnostics scopes.
+fn invoke<'py>(
+    py: Python<'py>,
+    argv: &Bound<'py, PyAny>,
+    handlers: Option<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyAny>> {
     let external: Bound<'py, PyAny> = external_context(py)?;
     let invocation_scope: Bound<'py, PyAny> =
         host::entry(py, ExecutorHost::InvocationScope)?.call0()?;
@@ -888,7 +896,7 @@ fn run_cli<'py>(
                 )],
             )?;
             within(&diagnostics, |_| {
-                parsed_invocation(&argv, handlers.clone(), identity)
+                parsed_invocation(argv, handlers.clone(), identity)
             })
         })
     })
