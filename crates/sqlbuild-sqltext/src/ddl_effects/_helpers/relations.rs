@@ -192,7 +192,7 @@ fn is_neutral_object(statement: &str) -> bool {
     bounded_phrase(statement, kind_start, NEUTRAL_OBJECT_KINDS).is_some()
 }
 
-/// The end of the session parameter value at `start`: a backslash-free literal or a bare word.
+/// The end of the session parameter value at `start`: a backslash-free literal or one bare word.
 fn session_value_end(text: &str, start: usize) -> Option<usize> {
     let rest: &str = &text[start..];
     let Some(quoted) = rest.strip_prefix('\'') else {
@@ -201,7 +201,8 @@ fn session_value_end(text: &str, start: usize) -> Option<usize> {
             .take_while(|character| !python_isspace(*character))
             .map(char::len_utf8)
             .sum();
-        return (length > 0 && !rest[..length].contains('\'')).then_some(start + length);
+        let value: &str = &rest[..length];
+        return (length > 0 && !value.contains(['\'', ',', '='])).then_some(start + length);
     };
     let mut position: usize = 0;
     loop {

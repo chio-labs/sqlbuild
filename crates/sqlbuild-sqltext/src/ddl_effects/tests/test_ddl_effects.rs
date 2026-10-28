@@ -171,6 +171,27 @@ fn given_executed_statement_when_classifying_then_reports_possible_metadata_chan
             expected_ends_transaction: false,
         },
         StatementEffectTestCase {
+            description: "statement timeout listed before an identifier case setting",
+            sql: "ALTER SESSION SET STATEMENT_TIMEOUT_IN_SECONDS=10,QUOTED_IDENTIFIERS_IGNORE_CASE=TRUE",
+            expected_relation_names: &[],
+            expected_invalidates_all: true,
+            expected_ends_transaction: false,
+        },
+        StatementEffectTestCase {
+            description: "cached result setting listed before an identifier case setting",
+            sql: "ALTER SESSION SET USE_CACHED_RESULT=FALSE,QUOTED_IDENTIFIERS_IGNORE_CASE=TRUE",
+            expected_relation_names: &[],
+            expected_invalidates_all: true,
+            expected_ends_transaction: false,
+        },
+        StatementEffectTestCase {
+            description: "statement timeout without spaces around the equals sign",
+            sql: "ALTER SESSION SET STATEMENT_TIMEOUT_IN_SECONDS=10",
+            expected_relation_names: &[],
+            expected_invalidates_all: false,
+            expected_ends_transaction: false,
+        },
+        StatementEffectTestCase {
             description: "statement timeout for the session",
             sql: "ALTER SESSION SET STATEMENT_TIMEOUT_IN_SECONDS = 3600",
             expected_relation_names: &[],
