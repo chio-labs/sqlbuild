@@ -1363,3 +1363,10 @@ class SignalledScenarioTestCase:
     sent_signal: signal.Signals
     expected_exit_code: int
     expected_last_line: str
+
+
+@dataclass(frozen=True)
+class RuleFailureManifestTestCase:
+    description: str
+    compile_args: tuple[str, ...]
+    expected_artifacts: dict[str, object]

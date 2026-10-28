@@ -60,6 +60,7 @@ struct ReportInputs<'py> {
     graph: Bound<'py, PyAny>,
     project: Bound<'py, PyAny>,
     written: Bound<'py, PyAny>,
+    /// A manifest was requested and written, which a compile whose Rules failed never does.
     manifest: bool,
     lineage: Bound<'py, PyAny>,
     diagnostics: Vec<Bound<'py, PyAny>>,
@@ -72,11 +73,13 @@ impl<'py> ReportInputs<'py> {
     fn read(arguments: &KeywordArguments<'py>) -> PyResult<Self> {
         let graph: Bound<'py, PyAny> = arguments.value("graph")?;
         let lineage_mode: Bound<'py, PyAny> = arguments.value("lineage_mode")?;
+        let written: Bound<'py, PyAny> = arguments.value("written")?;
+        let failed_compile: bool = native_field(&written, "failed_compile")?.is_truthy()?;
         Ok(Self {
             project: native_field(&graph, "project")?,
             graph,
-            written: arguments.value("written")?,
-            manifest: arguments.flag("manifest")?,
+            manifest: arguments.flag("manifest")? && !failed_compile,
+            written,
             lineage: arguments.value("lineage")?,
             diagnostics: arguments
                 .value("diagnostics")?

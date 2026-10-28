@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from sqlbuild._native import COMPILE_REUSE_DISABLE_ENV_VAR, DELTA_COMPILE_VERIFY
 from sqlbuild._native import run_cli as main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     RuleFailureArtifactsTestCase,
+    RuleFailureManifestTestCase,
     RuleFailureSequenceTestCase,
     RuleFailureStaleArtifactTestCase,
 )
@@ -161,7 +163,43 @@ def test_given_rule_findings_when_compiling_then_failed_sql_is_written_beside_co
     assert artifact_tree(failed) == test_case.expected_failed
     assert failed.exists() is bool(test_case.expected_failed)
     assert (tmp_path / "target" / "manifest.json").exists() is test_case.expected_manifest
+    assert ("Wrote: target/manifest.json" in output) is test_case.expected_manifest
     assert not (tmp_path / "target" / "compiled-models.txt").exists()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RuleFailureManifestTestCase(
+            description="JSON names the failed SQL and no manifest",
+            compile_args=("--manifest", "--json"),
+            expected_artifacts={
+                "compiled_sql_dir": "target/compiled-failed/",
+                "manifest": None,
+                "failed_model_sql": ["target/compiled-failed/models/open_orders.sql"],
+            },
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_manifest_requested_when_rules_fail_then_json_reports_no_manifest(
+    test_case: RuleFailureManifestTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_project_files(
+        project_dir=tmp_path,
+        files={
+            "sqlbuild_project.toml": _PROJECT,
+            "models/orders.sql": _ORDERS,
+            "models/open_orders.sql": open_orders_model(_FAILING),
+        },
+    )
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", *test_case.compile_args])
+
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert payload["artifacts"] == test_case.expected_artifacts
+    assert not (tmp_path / "target" / "manifest.json").exists()
 
 
 @pytest.mark.parametrize(
