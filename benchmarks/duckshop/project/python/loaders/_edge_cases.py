@@ -8,6 +8,7 @@ and escapes reach Snowflake unchanged. The rows never depend on `data_scale`.
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 
 Rows = list[dict[str, object]]
 
@@ -174,8 +175,120 @@ def price_windows() -> Rows:
     ]
 
 
+def customer_profiles() -> Rows:
+    profiles = [
+        # customer, full name, previous name, first, middle, last, line 1, line 2, tier, number, updated
+        ("C-1", "Größe Ente", "Grosse Ente", "Jürgen", None, "Größe", "1 Pond Lane", None,
+         "Golden Duck", 12345678901234567890, "2026-03-01 09:00:00"),
+        ("C-1", "Größe Ente", "Grosse Ente", "Jürgen", None, "Größe", "1 Pond Lane", "Flat 2",
+         "Golden Duck", 12345678901234567890, None),
+        ("C-2", "e\u0301lodie o'neill-smith", "elodie oneill smith", "Élodie", "", "O'Neill",
+         "2 Marsh Road", "", "Duckling", 9007199254740993, "2026-03-02 10:00:00"),
+        ("C-3", "ĳsselmeer van der eend", "ijsselmeer van der eend", "Ĳsbrand", "van der", "Eend",
+         None, None, "BLOCKED", 9007199254740992, "2026-03-03 11:00:00"),
+        (None, "ann (dup)", None, None, None, None, None, None, "BLOCKED", None, None),
+        ("C-4", "ნინო ბერიძე", "ნინო ბერიძე", "ნინო", None, "ბერიძე", "4 Nest Street",
+         "Unit 🦆", "Mallard", -9223372036854775809, "2026-03-04 12:00:00"),
+    ]
+    rows: Rows = []
+    for index, profile in enumerate(profiles):
+        (customer, full, previous, first, middle, last, line1, line2, tier, number, updated) = profile
+        rows.append(
+            {
+                "profile_id": f"PR-{index + 1:04d}",
+                "customer_id": customer,
+                "full_name": full,
+                "previous_full_name": previous,
+                "first_name": first,
+                "middle_name": middle,
+                "last_name": last,
+                "address_line1": line1,
+                "address_line2": line2,
+                "loyalty_tier": tier,
+                "partner_order_number": number,
+                "profile_updated_at": updated,
+                "_loaded_at": _at("2026-03-05 00:00:00"),
+            }
+        )
+    return rows
+
+
+def ledger_entries() -> Rows:
+    entries = [
+        # order, channel, line, sku, warehouse, qty, qty text, price, amount, currency, rate,
+        # status, reason, tier, changed at
+        ("DS-O-2001", "web", 1, "MALLARD-01", "POND", 3, "007", 1299, "2.5", "GBP", 1.27,
+         "shipped", None, "Golden Duck", "2026-03-01 09:00:00"),
+        ("DS-O-2001", "web", 1, "TEAL-02", "POND", 1, "+7", 1299, "-2.5", "GBP", 1.27,
+         "Shipped", "REFUND", "Golden Duck", "2026-03-01 09:00:00"),
+        ("DS-O-2001", "web", 2, "EIDER-03", "POND", 2, "1e0", 899, "0.005", "GBP", 0.1,
+         "allocated", None, "Golden Duck", None),
+        ("DS-O-2002", "app", 1, "MALLARD-01", "NEST", 0, " 1.5 ", 1350, "1.0000000005", "KWD",
+         3.25, "counted", "DAMAGED", "Duckling", "2026-03-02 09:00:00"),
+        ("DS-O-2002", "app", 2, "PINTAIL-04", "NEST", -4, "-0", None, "-7.5", "JPY", 0.0067,
+         "ALLOCATED", None, "Duckling", "2026-03-02 09:00:00"),
+        ("DS-O-2003", "partner", 1, "TEAL-02", "MARSH", 5, "1,000", 1100,
+         "123456789012345678901234567.0123456789", "AUD", 0.66, "Counted", None, None,
+         "2026-03-03 09:00:00"),
+        ("DS-O-2003", "partner", 2, "TEAL-02", "MARSH", 5, "n/a", 1100, "0", "AUD", 0.66,
+         "pending", None, None, "2026-03-03 09:00:00"),
+    ]
+    rows: Rows = []
+    for index, entry in enumerate(entries):
+        (order, channel, line, sku, warehouse, qty, qty_text, price, amount, currency, rate,
+         status, reason, tier, changed) = entry
+        rows.append(
+            {
+                "entry_id": f"LE-{index + 1:04d}",
+                "order_ref": order,
+                "channel": channel,
+                "line_no": line,
+                "sku": sku,
+                "warehouse_code": warehouse,
+                "quantity": qty,
+                "quantity_text": qty_text,
+                "unit_price_minor": price,
+                "amount": Decimal(amount),
+                "currency_code": currency,
+                "fx_rate": rate,
+                "status": status,
+                "reason_code": reason,
+                "customer_tier": tier,
+                "changed_at": changed,
+                "_loaded_at": _at("2026-03-05 00:00:00"),
+            }
+        )
+    return rows
+
+
+def ticket_notes() -> Rows:
+    notes = [
+        ("Customer O'Brien asks about DS-O-1001 and DS-O-1002; refund\tplease",
+         "bath#gift#teal", "newsletter", "50%OFF", "MALLARD-01"),
+        ("Order ds-o-77 was REFUNDED.\nPath C:\\ducks\\pond # not a comment",
+         "#leading", "Email", "STAFF10", "DUCK--"),
+        ("No order here", "", "partner_feed", "50PERCENT", ""),
+        (None, None, None, None, "A-B-C-D"),
+    ]
+    return [
+        {
+            "note_id": f"TN-{index + 1:04d}",
+            "body": body,
+            "tags_text": tags,
+            "utm_source": utm,
+            "discount_code": code,
+            "sku": sku,
+            "_loaded_at": _at("2026-03-05 00:00:00"),
+        }
+        for index, (body, tags, utm, code, sku) in enumerate(notes)
+    ]
+
+
 TABLES: dict[str, Rows] = {
     "edge__partner_payloads": partner_payloads(),
     "edge__gateway_callbacks": gateway_callbacks(),
     "edge__price_windows": price_windows(),
+    "edge__customer_profiles": customer_profiles(),
+    "edge__ledger_entries": ledger_entries(),
+    "edge__ticket_notes": ticket_notes(),
 }

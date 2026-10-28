@@ -269,3 +269,11 @@ reason = """
 The KPI grid is every reporting day for every region and metric pair that has ever had a value, so
 days without activity report zero instead of disappearing. Both sides are small and bounded.
 """
+
+[[rules.rule_ignores]]
+rules = ["SQBRSQL027"]
+paths = ["models/marts/edge_cases/rpt_edge_stock_reconciliation.sql"]
+reason = """
+The edge case selects the key columns that FULL OUTER JOIN ... USING merges. They belong to neither
+side, so qualifying them with either alias would drop the keys of rows found only on the other side.
+"""

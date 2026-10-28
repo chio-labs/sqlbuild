@@ -94,3 +94,119 @@ sources:
         nullable: false
         audits:
           - not_null
+  - name: edge__customer_profiles
+    description: >-
+      Append-only customer profile snapshots whose business update time is sometimes missing, with
+      names and addresses in many scripts and partner order numbers beyond double precision
+    managed: true
+    contract: enforced
+    columns:
+      - name: profile_id
+        type: VARCHAR
+        nullable: false
+        audits:
+          - not_null
+          - unique
+      - name: customer_id
+        type: VARCHAR
+      - name: full_name
+        type: VARCHAR
+      - name: previous_full_name
+        type: VARCHAR
+      - name: first_name
+        type: VARCHAR
+      - name: middle_name
+        type: VARCHAR
+      - name: last_name
+        type: VARCHAR
+      - name: address_line1
+        type: VARCHAR
+      - name: address_line2
+        type: VARCHAR
+      - name: loyalty_tier
+        type: VARCHAR
+      - name: partner_order_number
+        type: NUMBER(38,0)
+      - name: profile_updated_at
+        type: TIMESTAMP_NTZ
+      - name: _loaded_at
+        type: TIMESTAMP_NTZ
+        nullable: false
+        audits:
+          - not_null
+  - name: edge__ledger_entries
+    description: >-
+      Append-only order ledger lines from every channel, with amounts at full NUMBER precision,
+      FLOAT exchange rates, quantities sent as text and mixed-case statuses
+    managed: true
+    contract: enforced
+    columns:
+      - name: entry_id
+        type: VARCHAR
+        nullable: false
+        audits:
+          - not_null
+          - unique
+      - name: order_ref
+        type: VARCHAR
+      - name: channel
+        type: VARCHAR
+      - name: line_no
+        type: NUMBER(38,0)
+      - name: sku
+        type: VARCHAR
+      - name: warehouse_code
+        type: VARCHAR
+      - name: quantity
+        type: NUMBER(38,0)
+      - name: quantity_text
+        type: VARCHAR
+      - name: unit_price_minor
+        type: NUMBER(38,0)
+      - name: amount
+        type: NUMBER(38,10)
+      - name: currency_code
+        type: VARCHAR
+      - name: fx_rate
+        type: FLOAT
+      - name: status
+        type: VARCHAR
+      - name: reason_code
+        type: VARCHAR
+      - name: customer_tier
+        type: VARCHAR
+      - name: changed_at
+        type: TIMESTAMP_NTZ
+      - name: _loaded_at
+        type: TIMESTAMP_NTZ
+        nullable: false
+        audits:
+          - not_null
+  - name: edge__ticket_notes
+    description: >-
+      Append-only support ticket notes whose text holds order references, quotes, backslashes and
+      separators, with the campaign and discount code the customer arrived with
+    managed: true
+    contract: enforced
+    columns:
+      - name: note_id
+        type: VARCHAR
+        nullable: false
+        audits:
+          - not_null
+          - unique
+      - name: body
+        type: VARCHAR
+      - name: tags_text
+        type: VARCHAR
+      - name: utm_source
+        type: VARCHAR
+      - name: discount_code
+        type: VARCHAR
+      - name: sku
+        type: VARCHAR
+      - name: _loaded_at
+        type: TIMESTAMP_NTZ
+        nullable: false
+        audits:
+          - not_null

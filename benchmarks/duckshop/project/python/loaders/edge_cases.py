@@ -31,3 +31,18 @@ def edge__gateway_callbacks(ctx: LoaderContext) -> object:
 @loader
 def edge__price_windows(ctx: LoaderContext) -> object:
     return _load(ctx, "edge__price_windows")
+
+
+@loader
+def edge__customer_profiles(ctx: LoaderContext) -> object:
+    return _load(ctx, "edge__customer_profiles")
+
+
+@loader
+def edge__ledger_entries(ctx: LoaderContext) -> object:
+    return _load(ctx, "edge__ledger_entries")
+
+
+@loader
+def edge__ticket_notes(ctx: LoaderContext) -> object:
+    return _load(ctx, "edge__ticket_notes")
