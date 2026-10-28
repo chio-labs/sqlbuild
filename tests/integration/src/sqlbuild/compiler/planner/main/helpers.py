@@ -325,7 +325,7 @@ def write_previous_function_fingerprints(
     for function_name in test_case.previous_function_bodies:
         function: CompiledFunctionView = function_map[function_name]
         fingerprint_sql: str = build_compiled_function_fingerprint_sql(function)
-        write_fingerprint(
+        _ = write_fingerprint(
             connection=connection,
             execute=adapter.execute,
             database=function.destination.database,

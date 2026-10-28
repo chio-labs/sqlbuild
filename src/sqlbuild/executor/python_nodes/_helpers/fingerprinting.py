@@ -34,7 +34,7 @@ def try_write_python_node_identity_fingerprint(
         )
         return
     try:
-        write_fingerprint(
+        _ = write_fingerprint(
             connection=connection,
             execute=adapter.execute,
             database=database,

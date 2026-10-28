@@ -174,7 +174,7 @@ def _try_write_function_fingerprint(
             metadata_json="{}",
             ts=datetime.now(tz=UTC),
         )
-        write_fingerprint(
+        _ = write_fingerprint(
             connection=connection,
             execute=adapter.execute,
             database=entry.fingerprint_destination.database,

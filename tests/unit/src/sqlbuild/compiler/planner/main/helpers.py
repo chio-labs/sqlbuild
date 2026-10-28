@@ -102,7 +102,7 @@ def create_protected_model_state(*, adapter: DuckDbAdapter, connection: Any) -> 
 
     adapter.execute(connection=connection, sql="CREATE TABLE main.order_history (id INTEGER)")
     query_sql: str = build_protected_schema_replay_project().models[0].query_sql
-    write_fingerprint(
+    _ = write_fingerprint(
         connection=connection,
         execute=adapter.execute,
         database=None,

@@ -102,6 +102,7 @@ from sqlbuild.executor.migrations.main._bound_old_name_view_guard import (
 )
 from sqlbuild.executor.migrations.main._complete_old_name_views import complete_old_name_views
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
+from sqlbuild.executor.run.classes.fingerprint_writes import FingerprintWrites
 from sqlbuild.executor.run.classes.runtime_watermark_resolver import RuntimeWatermarkResolver
 from sqlbuild.executor.run.models import (
     BatchWindow,
@@ -194,6 +195,9 @@ class BuildScheduler:
         self._promotion_mode: TablePromotionMode = runtime.promotion_mode
         self._run_id: str = runtime.run_id
         self._runtime_dir: Path = runtime.runtime_dir
+        self._fingerprint_writes: FingerprintWrites = FingerprintWrites(
+            skips_identical=not plan.migration_entries
+        )
         self._query_change_tracking: bool = (
             True if runtime.query_change_tracking is None else runtime.query_change_tracking
         )
@@ -1210,6 +1214,7 @@ class BuildScheduler:
                             on_batch_complete=self._on_batch_complete,
                             watermark_resolver=self._watermark_resolver,
                             bound_views=bound_views,
+                            fingerprint_writes=self._fingerprint_writes,
                         ),
                         promotion_mode=self._promotion_mode,
                         snapshots=self._snapshots,

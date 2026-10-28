@@ -354,21 +354,30 @@ pub(crate) fn read_latest_fingerprints<'py>(
     fingerprint_set_from_rows(py, &schema, &qualified_name, &rows)
 }
 
-/// Append one fingerprint row, retrying transient concurrent-writer conflicts.
+/// Append one fingerprint row, retrying transient concurrent-writer conflicts. With `ensure_table` false the table is assumed to exist and is set up only after the insert fails; returns whether the write set up the table.
 #[pyfunction]
 #[pyo3(signature = (**request))]
-fn write_fingerprint<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<()> {
+fn write_fingerprint<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<bool> {
     let request = Request::new("write_fingerprint", request)?;
     let py: Python<'py> = request.py();
     let fingerprint: Bound<'py, PyAny> = request.get("fingerprint")?;
+    let ensure_table: bool = match present(&request, "ensure_table")? {
+        Some(value) => value.is_truthy()?,
+        None => true,
+    };
     let parts: WriteParts<'py> = WriteParts::read(&request)?;
     let (location, writer) = (parts.location(), parts.writer());
+    let insert: String =
+        fingerprint_insert_sql(py, &qualified_table_name(&location)?, &fingerprint)?;
+    if !ensure_table {
+        match execute_sql(&writer, &insert) {
+            Ok(_) => return Ok(false),
+            Err(error) if error.is_instance_of::<PyException>(py) => {}
+            Err(error) => return Err(error),
+        }
+    }
     let mut sqls: Vec<String> = setup_sqls(&location, &writer)?;
-    sqls.push(fingerprint_insert_sql(
-        py,
-        &qualified_table_name(&location)?,
-        &fingerprint,
-    )?);
+    sqls.push(insert);
     execute_with_retry(&writer, &sqls, &|error| {
         let mut details: Vec<Bound<'py, PyAny>> = vec![
             native_field(&fingerprint, "node_type")?,
@@ -376,7 +385,8 @@ fn write_fingerprint<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<()> 
         ];
         details.extend(error_details(py, error)?);
         Ok((SINGLE_RETRY_MESSAGE, details))
-    })
+    })?;
+    Ok(true)
 }
 
 /// The batch warning details: row count, the first row's identity, then the error.

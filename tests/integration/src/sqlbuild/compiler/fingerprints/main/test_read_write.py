@@ -256,7 +256,7 @@ def test_given_fingerprints_when_writing_and_reading_then_returns_expected(
 ) -> None:
     fp: Fingerprint
     for fp in test_case.fingerprints:
-        write_fingerprint(
+        _ = write_fingerprint(
             connection=connection,
             execute=execute,
             database=test_case.database,
@@ -496,7 +496,7 @@ def test_given_no_table_when_writing_then_creates_table(
     connection: Any,
     execute: Any,
 ) -> None:
-    write_fingerprint(
+    _ = write_fingerprint(
         connection=connection,
         execute=execute,
         database=test_case.database,
@@ -606,7 +606,7 @@ def test_given_multiple_fingerprints_when_reading_then_resolves_latest(
 ) -> None:
     fp: Fingerprint
     for fp in test_case.fingerprints:
-        write_fingerprint(
+        _ = write_fingerprint(
             connection=connection,
             execute=execute,
             database=test_case.database,
@@ -782,7 +782,7 @@ def test_given_fingerprint_history_when_pruning_then_keeps_latest_versions_per_n
 ) -> None:
     fp: Fingerprint
     for fp in test_case.fingerprints:
-        write_fingerprint(
+        _ = write_fingerprint(
             connection=connection,
             execute=execute,
             database=test_case.database,

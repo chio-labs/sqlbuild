@@ -154,3 +154,12 @@ class FingerprintStateReadTestCase:
     expected_reads: int
     expected_rows_read: Callable[[int], int]
     expected_migrations: tuple[tuple[str | None, str, str, str], ...]
+
+
+@dataclass(frozen=True)
+class FingerprintHistoryTestCase:
+    """Fingerprint rows unchanged builds append before and after a project has rename history."""
+
+    description: str
+    expected_rows_without_history: int
+    expected_min_rows_after_history: int

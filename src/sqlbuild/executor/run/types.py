@@ -96,3 +96,6 @@ class AuditGateMetadataParseFailure(StrEnum):
     NON_DICT = "non-dict payload"
     MISSING_FIELD = "missing field"
     WRONG_TYPE = "wrong type"
+
+
+type FingerprintTableLocation = tuple[str | None, str]
