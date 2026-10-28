@@ -9,15 +9,49 @@ account = "example-account"
 user = "example_user"
 role = "EXAMPLE_ROLE"
 warehouse = "EXAMPLE_WH"
-# SQLBuild 0.175.0 binds inspected Snowflake source columns as quoted lower-case names, which
-# unquoted references cannot match, so planning fails once the raw tables exist. Ignoring the case
-# of quoted identifiers avoids that; DuckShop's SQL quotes no identifiers whose case matters.
-session_parameters = { QUOTED_IDENTIFIERS_IGNORE_CASE = true }
+
+# The edge-case area's expected values are captured on Snowflake under this pinned session: UTC,
+# with every parameter that changes a result or how text is parsed set to Snowflake's default.
+# Run the edge area on this connection only (see RUNBOOK.md, "Edge cases").
+[connections.edge]
+account = "example-account"
+user = "example_user"
+role = "EXAMPLE_ROLE"
+warehouse = "EXAMPLE_WH"
+
+[connections.edge.session_parameters]
+TIMEZONE = "UTC"
+TIMESTAMP_TYPE_MAPPING = "TIMESTAMP_NTZ"
+WEEK_START = 0
+WEEK_OF_YEAR_POLICY = 0
+DEFAULT_NULL_ORDERING = "LAST"
+QUOTED_IDENTIFIERS_IGNORE_CASE = false
+USE_CACHED_RESULT = false
+DATE_INPUT_FORMAT = "AUTO"
+DATE_OUTPUT_FORMAT = "YYYY-MM-DD"
+TIME_INPUT_FORMAT = "AUTO"
+TIME_OUTPUT_FORMAT = "HH24:MI:SS"
+TIMESTAMP_INPUT_FORMAT = "AUTO"
+TIMESTAMP_OUTPUT_FORMAT = "YYYY-MM-DD HH24:MI:SS.FF3 TZHTZM"
+TIMESTAMP_NTZ_OUTPUT_FORMAT = "YYYY-MM-DD HH24:MI:SS.FF3"
+TIMESTAMP_LTZ_OUTPUT_FORMAT = ""
+TIMESTAMP_TZ_OUTPUT_FORMAT = ""
+TWO_DIGIT_CENTURY_START = 1970
+BINARY_INPUT_FORMAT = "HEX"
+BINARY_OUTPUT_FORMAT = "HEX"
+TIMESTAMP_DAY_IS_ALWAYS_24H = false
+JSON_INDENT = 2
+STRICT_JSON_OUTPUT = false
 
 [targets.dev]
 connection = "warehouse"
 database = "DUCKSHOP"
 schema = "DEV"
+
+[targets.edge]
+connection = "edge"
+database = "DUCKSHOP"
+schema = "EDGE"
 
 [targets.prod]
 connection = "warehouse"
