@@ -810,23 +810,32 @@ fn parsed_invocation<'py>(
             Ok(handled_dispatch(&invocation)?.unbind())
         },
     )?;
-    let dispatched: PyResult<Bound<'py, PyAny>> = if policy.creates_project {
-        call_with(&operation.into_any(), &[])
-    } else {
-        call_with(
-            &host::entry(py, FacadeHost::DispatchWithComputeLogs)?,
-            &[
-                ("args", args),
-                ("identity", identity.clone()),
-                ("operation", operation.into_any()),
-                ("recall", recall_sink),
-                (
-                    "capture",
-                    PyBool::new(py, policy.captured).to_owned().into_any(),
-                ),
-            ],
-        )
-    };
+    let evidence_scope: Bound<'py, PyAny> = call_with(
+        &host::entry(py, ExecutorHost::AuditEvidenceScope)?,
+        &[(
+            "mode",
+            PyString::new(py, recall.audit_evidence.setting()).into_any(),
+        )],
+    )?;
+    let dispatched: PyResult<Bound<'py, PyAny>> = within(&evidence_scope, |_| {
+        if policy.creates_project {
+            call_with(&operation.into_any(), &[])
+        } else {
+            call_with(
+                &host::entry(py, FacadeHost::DispatchWithComputeLogs)?,
+                &[
+                    ("args", args),
+                    ("identity", identity.clone()),
+                    ("operation", operation.into_any()),
+                    ("recall", recall_sink),
+                    (
+                        "capture",
+                        PyBool::new(py, policy.captured).to_owned().into_any(),
+                    ),
+                ],
+            )
+        }
+    });
     let exit_status: Option<i64> = match &dispatched {
         Ok(code) if code.is_instance_of::<PyInt>() => Some(code.extract().unwrap_or(1)),
         Ok(_) | Err(_) => None,

@@ -83,6 +83,16 @@ impl AuditEvidence {
         }
     }
 
+    /// The `recall.audit_evidence` value naming this mode.
+    #[must_use]
+    pub fn setting(self) -> &'static str {
+        match self {
+            Self::WarnAndError => "warn-and-error",
+            Self::Error => "error",
+            Self::Off => "off",
+        }
+    }
+
     /// Whether an audit with `outcome` keeps its evidence.
     #[must_use]
     pub fn keeps(self, outcome: &str) -> bool {

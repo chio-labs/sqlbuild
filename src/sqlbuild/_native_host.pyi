@@ -214,6 +214,9 @@ from sqlbuild.diagnostics.main.process_resource_reporting import (
 from sqlbuild.diagnostics.models import ProcessResourceUsage as ProcessResourceUsage
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError as ExecutorInputError
 from sqlbuild.errors.contracts.exceptions import SharedInputError as SharedInputError
+from sqlbuild.executor.auditing.main._audit_evidence_scope import (
+    audit_evidence_scope as audit_evidence_scope,
+)
 from sqlbuild.executor.auditing.main._current_audit_result_projection import (
     current_audit_result_projection as current_audit_result_projection,
 )
@@ -550,6 +553,9 @@ from sqlbuild.runtime.execution_history.types import RunStatus as RunStatus
 from sqlbuild.runtime.execution_limits.exceptions import (
     ExecutionDurationLimitError as ExecutionDurationLimitError,
 )
+from sqlbuild.runtime.execution_limits.main._cancel_running_statements import (
+    cancel_running_statements as cancel_running_statements,
+)
 from sqlbuild.runtime.execution_limits.main.execution_deadline_scope import (
     execution_deadline_scope as execution_deadline_scope,
 )
@@ -559,6 +565,9 @@ from sqlbuild.runtime.observability.classes.event_dispatcher import (
 )
 from sqlbuild.runtime.observability.classes.operation_lifecycle import (
     OperationLifecycle as OperationLifecycle,
+)
+from sqlbuild.runtime.observability.classes.statement_lifecycle import (
+    StatementLifecycle as StatementLifecycle,
 )
 from sqlbuild.runtime.observability.exceptions import (
     ObservabilityValidationError as ObservabilityValidationError,

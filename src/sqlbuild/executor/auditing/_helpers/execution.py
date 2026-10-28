@@ -25,6 +25,7 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
 )
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
+from sqlbuild.executor.auditing._helpers.evidence_setting import keeps_audit_evidence
 from sqlbuild.executor.auditing.constants import (
     DEFAULT_EVIDENCE_ROW_LIMIT,
     MAX_EVIDENCE_SERIALIZED_BYTES,
@@ -107,7 +108,7 @@ def execute_audit_impl(  # noqa: PLR0913
                 executed_sql=executed_sql,
                 run_scope_phase=run_scope_phase,
             )
-            if outcome in {AuditOutcome.WARN, AuditOutcome.ERROR}:
+            if keeps_audit_evidence(outcome=outcome):
                 evidence_rows, evidence_truncated = _bounded_evidence(
                     cursor=cursor, raw_rows=rows, row_limit=_evidence_row_limit(audit)
                 )

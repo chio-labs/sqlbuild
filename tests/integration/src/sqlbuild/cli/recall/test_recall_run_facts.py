@@ -2,6 +2,7 @@ import json
 import subprocess
 from pathlib import Path
 
+import duckdb
 import pytest
 
 from tests.integration.src.sqlbuild.cli.recall._test_types import (
@@ -223,20 +224,38 @@ def test_given_a_failed_statement_when_recalled_then_its_sql_is_readable(
         AuditEvidenceTestCase(
             description="a warning audit's violating rows are kept by default",
             recall_toml="",
+            severity="warn",
+            expected_exit_code=0,
             expected_evidence=["warn", 2, 2, 0, 1],
             expected_artifacts=[["audit_evidence", "application/json"]],
+            expected_warehouse_evidence=[('[{"email":null},{"email":null}]',)],
         ),
         AuditEvidenceTestCase(
-            description="error-only evidence skips warnings",
+            description="error-only evidence does not collect a warning's rows",
             recall_toml='\n[recall]\naudit_evidence = "error"\n',
-            expected_evidence=["warn", 2, 2, 0, 0],
+            severity="warn",
+            expected_exit_code=0,
+            expected_evidence=["warn", 2, 0, 0, 0],
             expected_artifacts=[],
+            expected_warehouse_evidence=[(None,)],
         ),
         AuditEvidenceTestCase(
-            description="evidence can be turned off",
+            description="error-only evidence collects a failing audit's rows",
+            recall_toml='\n[recall]\naudit_evidence = "error"\n',
+            severity="error",
+            expected_exit_code=1,
+            expected_evidence=["error", 2, 2, 0, 1],
+            expected_artifacts=[["audit_evidence", "application/json"]],
+            expected_warehouse_evidence=[('[{"email":null},{"email":null}]',)],
+        ),
+        AuditEvidenceTestCase(
+            description="evidence turned off collects no rows",
             recall_toml='\n[recall]\naudit_evidence = "off"\n',
-            expected_evidence=["warn", 2, 2, 0, 0],
+            severity="error",
+            expected_exit_code=1,
+            expected_evidence=["error", 2, 0, 0, 0],
             expected_artifacts=[],
+            expected_warehouse_evidence=[(None,)],
         ),
     ],
     ids=lambda case: case.description,
@@ -245,9 +264,16 @@ def test_given_a_failing_audit_when_recalled_then_its_evidence_follows_the_setti
     test_case: AuditEvidenceTestCase, tmp_path: Path
 ) -> None:
     project_dir: Path = write_project(tmp_path / "orders_shop", extra_toml=test_case.recall_toml)
-    _ = (project_dir / "models" / "customers.sql").write_text(CUSTOMERS_MODEL, encoding="utf-8")
+    _ = (project_dir / "models" / "customers.sql").write_text(
+        CUSTOMERS_MODEL.replace("severity warn", f"severity {test_case.severity}"),
+        encoding="utf-8",
+    )
 
     built: subprocess.CompletedProcess[bytes] = run(project_dir, "build", "customers")
+    with duckdb.connect(str(project_dir / "warehouse.duckdb"), read_only=True) as warehouse:
+        warehouse_evidence: list[tuple[object, ...]] = warehouse.execute(
+            "SELECT evidence_json FROM dev._sqlbuild_audit_results"
+        ).fetchall()
     evidence: list[list[object]] = recall_rows(
         project_dir,
         "SELECT outcome, violation_count, evidence_count, evidence_truncated, "
@@ -259,8 +285,9 @@ def test_given_a_failing_audit_when_recalled_then_its_evidence_follows_the_setti
         "ON a.invocation_id = r.invocation_id AND a.ref_id = r.event_id",
     )
 
-    assert built.returncode == 0, built.stderr.decode(errors="replace")
+    assert built.returncode == test_case.expected_exit_code, built.stderr.decode(errors="replace")
     assert evidence == [test_case.expected_evidence]
+    assert warehouse_evidence == test_case.expected_warehouse_evidence
     assert [row[:2] for row in artifacts] == test_case.expected_artifacts
     assert [json.loads(str(row[2])) for row in artifacts] == [
         [{"email": None}, {"email": None}] for _ in test_case.expected_artifacts

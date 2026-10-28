@@ -342,6 +342,7 @@ pub enum ExecutorHost {
     RunStatus,
     ExecutionDurationLimitError,
     ExecutionDeadlineScope,
+    AuditEvidenceScope,
     CancelRunningStatements,
     EventDispatcher,
     OperationLifecycle,

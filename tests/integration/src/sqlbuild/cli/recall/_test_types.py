@@ -379,8 +379,11 @@ class FailedStatementSqlTestCase:
 class AuditEvidenceTestCase:
     description: str
     recall_toml: str
+    severity: str
+    expected_exit_code: int
     expected_evidence: list[object]
     expected_artifacts: list[list[object]]
+    expected_warehouse_evidence: list[tuple[object, ...]]
 
 
 @dataclass(frozen=True)

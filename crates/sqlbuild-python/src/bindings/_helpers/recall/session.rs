@@ -24,7 +24,7 @@ use sqlbuild_recall::schema::main::render_script::render_script;
 use sqlbuild_recall::schema::models::{DdlOptions, Dialect};
 use sqlbuild_recall::settings::main::resolve_recall_settings::resolve_recall_settings;
 use sqlbuild_recall::settings::models::{
-    RecallSettings, SettingsRequest, StoreLocation, StorePurpose,
+    AuditEvidence, RecallSettings, SettingsRequest, StoreLocation, StorePurpose,
 };
 use sqlbuild_recall::store::main::observe_store_file::observe_store_file;
 use sqlbuild_recall::store::main::quarantine_store::quarantine_store;
@@ -69,6 +69,8 @@ pub(crate) struct InvocationRecall {
     pub(crate) configuration_error: Option<String>,
     /// The invocation's own lifecycle events the session has recorded.
     pub(crate) invocation_events: Arc<InvocationEvents>,
+    /// Which failing audits collect evidence rows, as `recall.audit_evidence` sets it.
+    pub(crate) audit_evidence: AuditEvidence,
 }
 
 /// The text of an optional attribute value.
@@ -496,6 +498,7 @@ pub(crate) fn start_invocation_recall(
     } else {
         None
     };
+    let audit_evidence: AuditEvidence = settings.audit_evidence;
     Ok(InvocationRecall {
         session,
         target: settings.target.clone(),
@@ -505,6 +508,7 @@ pub(crate) fn start_invocation_recall(
         replacements: Arc::default(),
         configuration_error: None,
         invocation_events: Arc::default(),
+        audit_evidence,
     })
 }
 

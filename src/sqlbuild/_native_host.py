@@ -573,8 +573,12 @@ _TARGETS: dict[str, tuple[str, str]] = {
         "sqlbuild.runtime.execution_limits.main.execution_deadline_scope",
         "execution_deadline_scope",
     ),
+    "audit_evidence_scope": (
+        "sqlbuild.executor.auditing.main._audit_evidence_scope",
+        "audit_evidence_scope",
+    ),
     "cancel_running_statements": (
-        "sqlbuild.runtime.execution_limits.main.cancel_running_statements",
+        "sqlbuild.runtime.execution_limits.main._cancel_running_statements",
         "cancel_running_statements",
     ),
     "EventDispatcher": (
