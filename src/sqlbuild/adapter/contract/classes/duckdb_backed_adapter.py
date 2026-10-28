@@ -1233,6 +1233,8 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         )
         if schema is not None:
             query += f" AND table_schema = {_duckdb_string_literal(schema)}"
+        else:
+            query += " AND table_schema IN (SELECT UNNEST(current_schemas(true)))"
         if database is not None:
             query += f" AND table_catalog = {_duckdb_string_literal(database)}"
         result: Any = self.execute(connection=connection, sql=query).fetchone()

@@ -292,3 +292,13 @@ class QualifiedViewDefinitionTestCase:
     name: str
     sql: str
     expected_match: bool
+
+
+@dataclass(frozen=True)
+class SearchPathCacheTestCase:
+    """An unqualified existence lookup cached before and after a statement changes the path."""
+
+    description: str
+    hook_sql: str
+    expected_before: bool
+    expected_after: bool

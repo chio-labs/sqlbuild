@@ -23,6 +23,10 @@ from sqlbuild.adapter.contract.models import (
     SchemaDiffResult,
 )
 from sqlbuild.adapter.contract.types import FunctionNullabilityRule
+from sqlbuild.adapter.relations.main.cached_relation_exists import cached_relation_exists
+from sqlbuild.adapter.relations.main.relation_metadata_cache_scope import (
+    relation_metadata_cache_scope,
+)
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from tests.integration.src.sqlbuild.adapters.duckdb._test_types import (
     CompositeRowDiffSamplingTestCase,
@@ -47,6 +51,7 @@ from tests.integration.src.sqlbuild.adapters.duckdb._test_types import (
     RecorderWriteTestCase,
     RelationExistsTestCase,
     RenameTestCase,
+    SearchPathCacheTestCase,
     StorageVersionConnectTestCase,
     SwapTestCase,
     TransactionalAtomicityTestCase,
@@ -303,6 +308,26 @@ def test_given_sql_when_querying_then_returns_normalized_query_result(
             schema=None,
             name="missing_table",
             expected_exists=False,
+        ),
+        RelationExistsTestCase(
+            description="an unqualified name off the search path does not resolve",
+            setup_sql=("CREATE SCHEMA staging", "CREATE TABLE staging.raw_orders (id INTEGER)"),
+            database=None,
+            schema=None,
+            name="raw_orders",
+            expected_exists=False,
+        ),
+        RelationExistsTestCase(
+            description="an unqualified name on the search path resolves",
+            setup_sql=(
+                "CREATE SCHEMA staging",
+                "CREATE TABLE staging.raw_orders (id INTEGER)",
+                "SET search_path = 'staging'",
+            ),
+            database=None,
+            schema=None,
+            name="raw_orders",
+            expected_exists=True,
         ),
     ],
     ids=lambda case: case.description,
@@ -1776,3 +1801,35 @@ def test_given_database_qualified_view_when_comparing_definition_then_catalog_pr
     )
 
     assert matches is test_case.expected_match
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SearchPathCacheTestCase(
+            description="a hook's SET search_path between two models changes the cached answer",
+            hook_sql="SET search_path = 'staging'",
+            expected_before=False,
+            expected_after=True,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_cached_unqualified_lookup_when_hook_sets_search_path_then_lookup_reads_again(
+    test_case: SearchPathCacheTestCase,
+    adapter: DuckDbAdapter,
+    connection: Any,
+) -> None:
+    connection.execute("CREATE SCHEMA staging")
+    connection.execute("CREATE TABLE staging.raw_orders (id INTEGER)")
+
+    with relation_metadata_cache_scope(adapter=adapter):
+        before: bool = cached_relation_exists(
+            adapter=adapter, connection=connection, database=None, schema=None, name="raw_orders"
+        )
+        adapter.execute(connection=connection, sql=test_case.hook_sql)
+        after: bool = cached_relation_exists(
+            adapter=adapter, connection=connection, database=None, schema=None, name="raw_orders"
+        )
+
+    assert (before, after) == (test_case.expected_before, test_case.expected_after)
