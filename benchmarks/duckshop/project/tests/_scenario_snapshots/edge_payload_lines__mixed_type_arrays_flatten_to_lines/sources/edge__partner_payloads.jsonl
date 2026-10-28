@@ -1,0 +1,2 @@
+{"DELIVERY_ID":"DL-1","MESSAGE_ID":"PM-1","PARTNER_CODE":"mkt_eu","PAYLOAD":"{\n  \"channel\": \"web\",\n  \"lines\": [\n    1,\n    {\n      \"sku\": \"MALLARD-01\"\n    }\n  ]\n}","PAYLOAD_TEXT":null,"RECEIVED_AT":null,"_LOADED_AT":"2026-03-01T10:00:00"}
+{"DELIVERY_ID":"DL-2","MESSAGE_ID":"PM-2","PARTNER_CODE":"giftbox","PAYLOAD":"{\n  \"lines\": [\n    {\n      \"sku\": \"TEAL-02\",\n      \"y\": [\n        1,\n        {\n          \"z\": 2\n        }\n      ]\n    },\n    null\n  ]\n}","PAYLOAD_TEXT":null,"RECEIVED_AT":null,"_LOADED_AT":"2026-03-01T10:00:00"}

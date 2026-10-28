@@ -72,7 +72,7 @@ __expected__int_edge_order_line_labels AS (
     1 AS modal_quantity
 )
 
-TEST (name "int_edge_order_line_labels__picks_one_of_the_tied_lines_for_max_by_and_mode");
+TEST (name "int_edge_order_line_labels__picks_one_of_the_tied_lines_for_max_by_mode_and_any_value");
 
 WITH __ref__stg_edge_ledger_entries AS (
   SELECT
@@ -92,12 +92,12 @@ WITH __ref__stg_edge_ledger_entries AS (
     NULL AS fx_rate,
     NULL AS status,
     NULL AS reason_code,
-    NULL AS customer_tier
+    v.customer_tier
   FROM VALUES
-    ('LE-01', 'DS-O-1', 1, 'MALLARD-01', 1, 1299),
-    ('LE-02', 'DS-O-1', 2, 'TEAL-02', 2, 1299),
-    ('LE-03', 'DS-O-1', 3, 'EIDER-03', 1, 350),
-    ('LE-04', 'DS-O-1', 4, 'PINTAIL-04', 2, 350) AS v(entry_id, order_ref, line_no, sku, quantity, unit_price_minor)
+    ('LE-01', 'DS-O-1', 1, 'MALLARD-01', 1, 1299, 'Mallard'),
+    ('LE-02', 'DS-O-1', 2, 'TEAL-02', 2, 1299, 'Duckling'),
+    ('LE-03', 'DS-O-1', 3, 'EIDER-03', 1, 350, 'Mallard'),
+    ('LE-04', 'DS-O-1', 4, 'PINTAIL-04', 2, 350, 'Duckling') AS v(entry_id, order_ref, line_no, sku, quantity, unit_price_minor, customer_tier)
 ),
 
 __expected__int_edge_order_line_labels AS (
@@ -115,4 +115,5 @@ __assert__tied_picks_come_from_the_tied_lines AS (
     l.priciest_sku NOT IN ('MALLARD-01', 'TEAL-02')
     OR l.cheapest_sku NOT IN ('EIDER-03', 'PINTAIL-04')
     OR l.modal_quantity NOT IN (1, 2)
+    OR l.customer_tier NOT IN ('Mallard', 'Duckling')
 )

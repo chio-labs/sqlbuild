@@ -4,7 +4,7 @@ These rows are hand-picked edge values, not generated volume: `data_scale` does 
 and they never touch the core tables, so core outputs and expectations stay the same.
 """
 
-from python.loaders._edge_cases import TABLES
+from python.loaders._edge_cases import DELIVERY_BATCH_VAR, TABLES, delivery_updates
 from python.loaders._writer import statements
 
 from sqlbuild.executor.load.models import LoaderContext
@@ -46,3 +46,17 @@ def edge__ledger_entries(ctx: LoaderContext) -> object:
 @loader
 def edge__ticket_notes(ctx: LoaderContext) -> object:
     return _load(ctx, "edge__ticket_notes")
+
+
+@loader
+def edge__partner_listings(ctx: LoaderContext) -> object:
+    return _load(ctx, "edge__partner_listings")
+
+
+@loader
+def edge__delivery_updates(ctx: LoaderContext) -> object:
+    batch = int(ctx.vars.get(DELIVERY_BATCH_VAR, 2))  # type: ignore[call-overload]
+    rows = delivery_updates(batch)
+    for sql in statements(ctx.destination, "edge__delivery_updates", rows):
+        ctx.execute_sql(sql)
+    return ctx.result(metadata={"rows": len(rows), "batch": batch})

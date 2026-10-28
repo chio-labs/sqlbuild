@@ -1,0 +1,3 @@
+{"DELIVERY_ID":"DL-1","MESSAGE_ID":"PM-1","PARTNER_CODE":"mkt_eu","PAYLOAD":"{\n  \"amount\": 19.99,\n  \"channel\": \"web\",\n  \"placed_on\": \"2026-03-01\"\n}","PAYLOAD_TEXT":null,"RECEIVED_AT":null,"_LOADED_AT":"2026-03-01T10:00:00"}
+{"DELIVERY_ID":"DL-2","MESSAGE_ID":"PM-2","PARTNER_CODE":"mkt_eu","PAYLOAD":"{\n  \"amount\": 0,\n  \"channel\": null\n}","PAYLOAD_TEXT":null,"RECEIVED_AT":null,"_LOADED_AT":"2026-03-01T10:00:00"}
+{"DELIVERY_ID":"DL-3","MESSAGE_ID":"PM-3","PARTNER_CODE":"giftbox","PAYLOAD":"{\n  \"amount\": 0.30000000000000004,\n  \"placed_on\": \"2028-02-28\"\n}","PAYLOAD_TEXT":null,"RECEIVED_AT":null,"_LOADED_AT":"2026-03-01T10:00:00"}

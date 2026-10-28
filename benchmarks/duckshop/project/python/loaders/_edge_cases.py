@@ -284,6 +284,65 @@ def ticket_notes() -> Rows:
     ]
 
 
+def partner_listings() -> Rows:
+    listings = [
+        ("LS-MALLARD-01", 1299, "Live"),
+        ("LS-TEAL-02", 899, "OUT_OF_STOCK"),
+        ("ls-teal-02", 905, "live"),
+    ]
+    return [
+        {
+            '"listingId"': listing,
+            '"unitPriceMinor"': price,
+            '"listingStatus"': status,
+            "_loaded_at": _at("2026-03-05 00:00:00"),
+        }
+        for listing, price, status in listings
+    ]
+
+
+DELIVERY_BATCH_VAR = "edge_delivery_batch"
+"""Project variable naming the last delivery-update load to include; "2" (all loads) by default."""
+
+
+def delivery_updates(batch: int = 2) -> Rows:
+    """The delivery change log as it stands after the given load."""
+
+    first = "2026-03-01 10:00:00"
+    second = "2026-03-02 10:00:00"
+    updates = [
+        # load, shipment, order, status, ordered on, delivered on, op, seq
+        (first, "SH-1", "DS-O-3001", "label_created", "2026-02-27", None, "I", 10),
+        (first, "SH-1", "DS-O-3001", "in_transit", "2026-02-27", None, "U", 12),
+        (first, "SH-2", "DS-O-3002", "label_created", "2026-02-28", None, "I", 20),
+        (first, "SH-3", "DS-O-3003", "delivered", "2026-02-20", "2026-02-25", "I", 30),
+        (first, "SH-4", "DS-O-3004", "in_transit", "2026-02-26", None, "I", 40),
+        # A late version older than the one already loaded must not win.
+        (second, "SH-1", "DS-O-3001", "picked_up", "2026-02-27", None, "U", 11),
+        # The same version delivered again.
+        (second, "SH-2", "DS-O-3002", "label_created", "2026-02-28", None, "I", 20),
+        (second, "SH-2", "DS-O-3002", "delivered", "2026-02-28", "2026-03-02", "U", 21),
+        (second, "SH-4", "DS-O-3004", "in_transit", "2026-02-26", None, "D", 41),
+        (second, "SH-5", "DS-O-3005", "label_created", "2026-03-01", None, "I", 50),
+    ]
+    loads = [first] if batch == 1 else [first, second]
+    return [
+        {
+            "delivery_id": f"DU-{index + 1:04d}",
+            "shipment_id": shipment,
+            "order_ref": order,
+            "delivery_status": status,
+            "ordered_on": ordered,
+            "delivered_on": delivered,
+            "_op": op,
+            "_seq": seq,
+            "_loaded_at": _at(loaded),
+        }
+        for index, (loaded, shipment, order, status, ordered, delivered, op, seq) in enumerate(updates)
+        if loaded in loads
+    ]
+
+
 TABLES: dict[str, Rows] = {
     "edge__partner_payloads": partner_payloads(),
     "edge__gateway_callbacks": gateway_callbacks(),
@@ -291,4 +350,6 @@ TABLES: dict[str, Rows] = {
     "edge__customer_profiles": customer_profiles(),
     "edge__ledger_entries": ledger_entries(),
     "edge__ticket_notes": ticket_notes(),
+    "edge__partner_listings": partner_listings(),
+    "edge__delivery_updates": delivery_updates(),
 }

@@ -90,6 +90,9 @@ valuation_date = "2026-03-31"
 lookup_customer_id = "C000001"
 # Volume multiplier for the synthetic data loaders in python/loaders; 1 is the small default.
 data_scale = "1"
+# Last load of the edge-case delivery change log to include; "1" replays the first load only (see
+# RUNBOOK.md, "Edge cases").
+edge_delivery_batch = "2"
 
 [scenario.local_type_overrides.snowflake]
 "VARIANT" = "JSON"
@@ -276,4 +279,22 @@ paths = ["models/marts/edge_cases/rpt_edge_stock_reconciliation.sql"]
 reason = """
 The edge case selects the key columns that FULL OUTER JOIN ... USING merges. They belong to neither
 side, so qualifying them with either alias would drop the keys of rows found only on the other side.
+"""
+
+[[rules.rule_ignores]]
+rules = ["SQBRTEST201"]
+paths = ["models/marts/edge_cases/rpt_edge_partner_listing_export.sql"]
+reason = """
+The partner feed export names its columns in quoted camelCase. A MODEL header cannot declare a
+quoted column name, so the model has no columns block to attach audits to, and a generic audit that
+names "listingId" fails to bind because the quoted name is folded to lower case.
+"""
+
+[[rules.rule_ignores]]
+rules = ["SQBRTEST202"]
+paths = ["models/staging/edge_cases/stg_edge_partner_listings.sql"]
+reason = """
+Unit-test and scenario fixtures for a source whose declared columns are quoted camelCase names are
+rejected (B302 and S510), so this model is covered by building the edge-case area on Snowflake,
+where it reads the loaded quoted columns, instead of by a unit test.
 """

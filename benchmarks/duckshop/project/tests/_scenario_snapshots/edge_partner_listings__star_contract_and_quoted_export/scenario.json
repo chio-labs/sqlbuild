@@ -1,0 +1,38 @@
+{
+  "capture_adapter": "snowflake",
+  "capture_dialect": "snowflake",
+  "captured_at": "2026-10-28T18:47:37Z",
+  "format": "jsonl",
+  "input_fingerprint": "a447089b96c70f06bdd4d5377ba1b89f833e97f935d5b380178620eaa9d0ea37",
+  "relations": [
+    {
+      "bytes": 235,
+      "columns": [
+        {
+          "local_type": "TEXT(13)",
+          "name": "listing_id",
+          "warehouse_type": "VARCHAR(13)"
+        },
+        {
+          "local_type": "DECIMAL(38, 0)",
+          "name": "unit_price_minor",
+          "warehouse_type": "NUMBER(38,0)"
+        },
+        {
+          "local_type": "TEXT(12)",
+          "name": "listing_status",
+          "warehouse_type": "VARCHAR(12)"
+        }
+      ],
+      "file": "refs/stg_edge_partner_listings.jsonl",
+      "kind": "ref",
+      "logical_name": "stg_edge_partner_listings",
+      "row_count": 3
+    }
+  ],
+  "scenario_name": "edge_partner_listings__star_contract_and_quoted_export",
+  "sqlbuild_version": "0.184.0",
+  "total_bytes": 235,
+  "total_rows": 3,
+  "version": 1
+}
