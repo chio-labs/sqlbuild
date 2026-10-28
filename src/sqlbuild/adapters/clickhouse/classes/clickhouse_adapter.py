@@ -230,7 +230,9 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         if description is None:
             return QueryResult()
         columns: tuple[str, ...] = tuple(str(column[0]) for column in description)
-        column_types: tuple[str | None, ...] = tuple(str(column[1]) for column in description)
+        column_types: tuple[str | None, ...] = tuple(
+            None if column[1] is None else str(column[1]) for column in description
+        )
         if limit is None:
             return QueryResult(
                 columns=columns, rows=tuple(cursor.fetchall()), column_types=column_types

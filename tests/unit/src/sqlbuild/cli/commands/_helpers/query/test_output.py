@@ -59,6 +59,26 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.query._test_types import (
             expected_output='[{"id": 1, "name": "alice"}]\n',
         ),
         QueryOutputTestCase(
+            description="leaves a type cell empty where the adapter reports no type",
+            result=QueryResult(
+                columns=("order_id", "status"),
+                rows=((7, "open"),),
+                column_types=("INTEGER", None),
+            ),
+            output_format=None,
+            limit=20,
+            expected_output=(
+                "┌──────────┬────────┐\n"
+                "│ order_id │ status │\n"
+                "│ INTEGER  │        │\n"
+                "├──────────┼────────┤\n"
+                "│        7 │ open   │\n"
+                "└──────────┴────────┘\n"
+                "\n"
+                "1 row\n"
+            ),
+        ),
+        QueryOutputTestCase(
             description="renders a box with the warehouse types when the result fits",
             result=QueryResult(
                 columns=("order_id", "amount"),
