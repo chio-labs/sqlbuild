@@ -1,8 +1,12 @@
 # DuckShop runbook
 
 How to load DuckShop's synthetic data into Snowflake, build and test the project, capture the
-scenario snapshots, and clean up afterwards. Run every command from `benchmarks/duckshop/project`
-unless it says otherwise.
+scenario snapshots, run the edge-case area, and clean up afterwards. Run every command from
+`benchmarks/duckshop/project` unless it says otherwise.
+
+Steps 3 to 6 run the core project only: they exclude the edge-case area (models tagged
+`edge_case`, their `edge__*` sources and the `edge_cases` scenario folder), which step 7 runs on its
+own target.
 
 ## 1. Configure the connection
 
@@ -15,11 +19,13 @@ cp sqlbuild_local.toml.example sqlbuild_local.toml
 ```
 
 Fill in the account, user, authenticator, role and warehouse, and the `database` and `schema` of
-`[targets.dev]`. Keep the project's `session_parameters` setting on the connection (see Known
-limitations in the README): `sqlbuild_local.toml` adds to the `[connections.warehouse]` table in
-`sqlbuild_project.toml` rather than replacing it, so leave `session_parameters` out of the local
-file. `sqlbuild_local.toml` is gitignored; never commit it, and never copy its values
-into tracked files, commit messages or pull requests.
+`[targets.dev]`. For the edge-case area (step 7), fill in `[connections.edge]` and `[targets.edge]`
+the same way, with a different schema from `[targets.dev]`: two targets that write managed sources
+to the same schema fail with `S102`. `sqlbuild_local.toml` adds to the connection tables in
+`sqlbuild_project.toml` rather than replacing them, so the edge connection keeps the project's
+pinned `session_parameters`; leave `session_parameters` out of the local file.
+`sqlbuild_local.toml` is gitignored; never commit it, and never copy its values into tracked
+files, commit messages or pull requests.
 
 Check the connection, then confirm the project compiles:
 
@@ -43,13 +49,15 @@ sqb query --file target/check.sql --no-limit
 ```
 
 The query lists every existing table, view or function with a DuckShop name, which is everything
-step 7 drops, and any SQLBuild state tables (`_SQLBUILD_*`). Before the first build it should list
-no DuckShop names; if it does, stop and pick another schema. Note which state tables already existed, for the cleanup in step 7.
+step 8 drops, and any SQLBuild state tables (`_SQLBUILD_*`). Before the first build it should list
+no DuckShop names; if it does, stop and pick another schema. Note which state tables already existed, for the cleanup in step 8.
+The list includes the edge-case area's names; run the check with `--target edge` too before its
+first build.
 
 ## 3. Load the synthetic data
 
 ```bash
-sqb load --concurrency 4
+sqb load --concurrency 4 --exclude "source:edge__*"
 ```
 
 All 76 managed sources load, about 60,000 rows in total. Each loader replaces its table, so loading
@@ -64,7 +72,7 @@ data_scale = "10"
 ## 4. Build
 
 ```bash
-sqb build --concurrency 8
+sqb build --concurrency 8 --exclude tag:edge_case "source:edge__*"
 ```
 
 The build reloads the managed sources first. SQLBuild 0.175.0 does this even with `--no-load`
@@ -108,8 +116,8 @@ sqb build --select fct_web_sessions --full-refresh \
 ## 5. Run the unit tests and scenarios on Snowflake
 
 ```bash
-sqb test --concurrency 8
-sqb scenario test --concurrency 4
+sqb test --concurrency 8 --exclude tag:edge_case
+sqb scenario test --concurrency 4 --exclude edge_cases
 ```
 
 Unit tests and scenarios read only their own fixtures, not the loaded data, so they can run before
@@ -119,14 +127,17 @@ on Snowflake. Report any failure rather than editing the expectations to match.
 ## 6. Capture the scenario snapshots and commit them
 
 ```bash
-sqb scenario capture
-sqb scenario test --local --strict
+sqb scenario capture --exclude edge_cases
+python ../scripts/core_project.py /tmp/duckshop-core
+(cd /tmp/duckshop-core && sqb scenario test --local --strict)
 ```
 
 Capture materialises each scenario's fixtures in Snowflake, downloads them as JSONL into
 `tests/_scenario_snapshots/`, and drops what it created. The local run then replays all 8
 scenarios on your machine from those files, with no warehouse connection; `--strict` fails on a
-missing or stale snapshot instead of skipping it.
+missing or stale snapshot instead of skipping it. It runs in a copy of the project without the
+edge-case area, because local replay of the full project stops at compile on an edge-case model
+(see Known limitations in the README). Delete the copy afterwards.
 
 With SQLBuild 0.175.0 the local run is expected to end with `ERROR=8`: five scenarios fail while
 translating Snowflake SQL to DuckDB, and three report `X602` (stale snapshot) because of a
@@ -144,7 +155,80 @@ git commit -m "test(benchmarks): capture DuckShop scenario snapshots"
 
 The `grep` must print nothing. The repository's publication checks run on commit and push as usual.
 
-## 7. Clean up
+## 7. Edge cases
+
+The edge-case area runs on the `edge` target, whose connection pins the session its expected
+values were captured under: UTC, and Snowflake's defaults for every parameter that changes a
+result or how text is parsed, including `QUOTED_IDENTIFIERS_IGNORE_CASE = false`. Run it on that
+target only; under another session some expected values differ by design.
+
+### Load, build and test
+
+```bash
+sqb build --target edge --select tag:edge_case --exclude stg_edge_partner_listings+ --concurrency 8
+sqb test --target edge --select tag:edge_case --concurrency 8
+sqb scenario test --target edge --select edge_cases
+```
+
+The build loads the `edge__*` sources from fixed rows that `data_scale` does not change, then
+builds the edge models and runs their tests and audits. `fct_edge_delivery_events` is disabled and
+reports `skip: disabled` (see [Pending acceptance cases](#pending-acceptance-cases)).
+`stg_edge_partner_listings` and its downstream models are excluded because planning fails once the
+`edge__partner_listings` table exists (see Known limitations in the README); the
+`edge_partner_listings__star_contract_and_quoted_export` scenario covers the models downstream of
+it.
+
+### Replay the delivery change log as two loads
+
+`int_edge_delivery_status` merges a shipment delivery change log incrementally, and the
+`edge_delivery_status_matches_rebuild` audit fails if it differs from a rebuild from the whole log.
+To exercise the merge across loads, start without the table, load the first load only, build, then
+load everything and build again:
+
+```bash
+sqb query --target edge "DROP TABLE IF EXISTS <database>.<schema>.int_edge_delivery_status"
+sqb load --target edge --select edge__delivery_updates --vars '{"edge_delivery_batch": "1"}'
+sqb build --target edge --no-load \
+  --select int_edge_delivery_update_versions int_edge_delivery_status int_edge_delivery_status_rebuilt
+sqb load --target edge --select edge__delivery_updates
+sqb build --target edge --no-load \
+  --select int_edge_delivery_update_versions int_edge_delivery_status int_edge_delivery_status_rebuilt
+```
+
+The second build plans `int_edge_delivery_status` as a `merge` over the second load, which carries
+a late older version, a redelivered version, a delete and a new shipment, and the audit passes.
+Load with `sqb load` and build with `--no-load`, so that each build reads exactly the load you
+chose.
+
+### Capture expected values
+
+Edge-case expectations are Snowflake's own results on the fixtures, not values derived by hand.
+To capture them for a new or changed edge test, write its `__expected__<model>` CTE with the
+columns to compare (any values, such as `NULL AS column_name`), then run:
+
+```bash
+python ../scripts/capture_edge_expectations.py --write <test name> ...
+sqb format tests/unit/staging/edge_cases tests/unit/intermediate/edge_cases tests/unit/marts/edge_cases
+```
+
+The script runs the edge tests on the `edge` target, reads each selected test's executed SQL, and
+replaces each expected CTE with the actual rows as typed literals. Without a test name it
+recaptures every edge test, which must leave the files unchanged. Check every captured value
+against the case the test describes before committing: a capture records what Snowflake returned,
+which is the point, but a fixture mistake is captured as faithfully as a real edge. Scenario
+expectations are written by hand from the captured unit-test values.
+
+Capture scenario snapshots for the edge scenarios with
+`sqb scenario capture --target edge --select edge_cases`.
+
+### Pending acceptance cases
+
+`fct_edge_delivery_events` filters its input by order date but is rebuilt by delivery date, so a
+rerun of a window deletes only that window's deliveries and inserts deliveries outside it again.
+It stays disabled (`enabled false`) until cursor `delete_insert` models guard rows outside the
+window; its unit test records the rows outside the window that the model emits today.
+
+## 8. Clean up
 
 Drop everything the project created, by name:
 
@@ -156,7 +240,9 @@ sqb clean
 ```
 
 `drop.sql` is one Snowflake Scripting block of `DROP ... IF EXISTS` statements for every model,
-snapshot, seed, raw source table and function, so it is safe to run twice. Scenario runs and
+snapshot, seed, raw source table and function, edge-case area included, so it is safe to run
+twice. Run the same three commands with `--target edge` (on `sqb compile` and `sqb query`) to clean
+up the edge target. Scenario runs and
 captures already drop their own relations.
 
 SQLBuild also keeps state tables (`_SQLBUILD_*`) in the schema. If step 2 showed none before the

@@ -2,11 +2,12 @@
 
 Run `sqb compile` in ../project first, then:
 
-    python benchmarks/duckshop/scripts/census.py [--json]
+    python benchmarks/duckshop/scripts/census.py [--json] [--area core|edge|all]
 
 Constructs are detected with regular expressions over the compiled model SQL, with comments and
 string literals removed. A model counts towards a family when the family appears at least once.
-The output is aggregate only.
+The output is aggregate only. By default it counts the core project only: models under an
+`edge_cases` folder belong to the edge-case area, which `--area edge` or `--area all` selects.
 """
 
 from __future__ import annotations
@@ -20,6 +21,8 @@ import sys
 
 PROJECT = pathlib.Path(__file__).resolve().parent.parent / "project"
 COMPILED = PROJECT / "target" / "compiled" / "models"
+EDGE_FOLDER = "edge_cases"
+AREAS = ("core", "edge", "all")
 
 STRING = re.compile(r"'(?:[^'\\]|\\.|'')*'", re.S)
 TOKENS = re.compile(r"('(?:[^'\\]|\\.|'')*')|(/\*.*?\*/)|((?:--|//)[^\n]*)", re.S)
@@ -212,11 +215,22 @@ def layer_of(path: pathlib.Path) -> str:
     return path.relative_to(COMPILED).parts[0]
 
 
+def in_area(path: pathlib.Path, area: str) -> bool:
+    is_edge = EDGE_FOLDER in path.relative_to(COMPILED).parts
+    return area == "all" or is_edge == (area == "edge")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--json", action="store_true", help="print JSON instead of a table")
+    parser.add_argument(
+        "--area",
+        choices=AREAS,
+        default="core",
+        help="core models only (the default), the edge-case area only, or both",
+    )
     args = parser.parse_args()
-    files = sorted(COMPILED.rglob("*.sql"))
+    files = sorted(path for path in COMPILED.rglob("*.sql") if in_area(path, args.area))
     if not files:
         print(f"no compiled models under {COMPILED}; run `sqb compile` first", file=sys.stderr)
         return 1

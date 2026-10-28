@@ -1252,6 +1252,17 @@ class BenchmarkProjectCompileTestCase:
 
 
 @dataclass(frozen=True)
+class BenchmarkCoreCopyCompileTestCase:
+    """A script that copies a benchmark project without an area, and the folder it leaves out."""
+
+    description: str
+    copy_script: Path
+    expected_absent_folder: str
+    expected_errors: int
+    expected_warnings: int
+
+
+@dataclass(frozen=True)
 class GeneratedBenchmarkCompileTestCase:
     """A generated benchmark project, its recorded checksum and its cold compile budget."""
 

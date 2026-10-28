@@ -22,22 +22,29 @@ import yaml
 PROJECT_DIR = Path(__file__).resolve().parents[1] / "project"
 sys.path.insert(0, str(PROJECT_DIR))
 
-from python.loaders import _world  # noqa: E402
+from python.loaders import _edge_cases, _world  # noqa: E402
 from python.loaders._registry import GENERATORS, generate, scale_from_vars  # noqa: E402
 
 Rows = list[dict[str, object]]
 
 
-def _sources() -> dict[str, dict[str, object]]:
+EDGE_SOURCES_FILE = PROJECT_DIR / "sources" / "edge_cases.yml"
+
+
+def _sources(*, edge: bool) -> dict[str, dict[str, object]]:
     sources: dict[str, dict[str, object]] = {}
     for path in sorted((PROJECT_DIR / "sources").glob("*.yml")):
+        if (path == EDGE_SOURCES_FILE) != edge:
+            continue
         for source in yaml.safe_load(path.read_text())["sources"]:
             sources[source["name"]] = source
     return sources
 
 
-SOURCES = _sources()
+SOURCES = _sources(edge=False)
 MANAGED = sorted(name for name, source in SOURCES.items() if source.get("managed"))
+EDGE_SOURCES = _sources(edge=True)
+EDGE_MANAGED = sorted(name for name, source in EDGE_SOURCES.items() if source.get("managed"))
 
 
 @pytest.fixture(scope="module")
@@ -426,3 +433,68 @@ def test_given_special_characters_when_rendering_literals_then_they_are_escaped(
     assert literal(None) == "NULL"
     assert literal(True) == "TRUE"
     assert literal(date(2026, 3, 31)) == "'2026-03-31'"
+
+
+def test_given_edge_sources_when_listing_fixed_tables_then_each_has_rows_and_a_loader() -> None:
+    loaders = (PROJECT_DIR / "python" / "loaders" / "edge_cases.py").read_text()
+
+    assert EDGE_MANAGED
+    assert sorted(_edge_cases.TABLES) == EDGE_MANAGED
+    assert not set(EDGE_MANAGED) & set(GENERATORS)
+    for name in EDGE_MANAGED:
+        assert f"def {name}(ctx: LoaderContext)" in loaders, name
+
+
+@pytest.mark.parametrize("name", EDGE_MANAGED)
+def test_given_edge_rows_when_compared_to_source_yaml_then_shape_matches(name: str) -> None:
+    rows = _edge_cases.TABLES[name]
+    columns = EDGE_SOURCES[name]["columns"]
+    declared = [column["name"] for column in columns]  # type: ignore[attr-defined]
+
+    assert rows, f"{name} has no rows"
+    for row in rows:
+        assert list(row) == declared, f"{name}: {sorted(set(row) ^ set(declared))}"
+    for column in declared:
+        kinds = {_kind(row[column]) for row in rows} - {None}
+        assert len(kinds) <= 1, f"{name}.{column} mixes {kinds}"
+    for column in columns:  # type: ignore[attr-defined]
+        values = [row[column["name"]] for row in rows]
+        if column.get("nullable") is False:
+            assert None not in values, f"{name}.{column['name']} has NULLs"
+        if "unique" in (column.get("audits") or []):
+            assert len(set(values)) == len(values), f"{name}.{column['name']} repeats"
+
+
+@pytest.mark.parametrize("scale", ["1", "10"])
+def test_given_any_data_scale_when_building_edge_rows_then_they_are_fixed(scale: str) -> None:
+    assert scale_from_vars({"data_scale": scale}) == int(scale)
+    rebuilt = {
+        "edge__partner_payloads": _edge_cases.partner_payloads(),
+        "edge__gateway_callbacks": _edge_cases.gateway_callbacks(),
+        "edge__price_windows": _edge_cases.price_windows(),
+        "edge__customer_profiles": _edge_cases.customer_profiles(),
+        "edge__ledger_entries": _edge_cases.ledger_entries(),
+        "edge__ticket_notes": _edge_cases.ticket_notes(),
+        "edge__partner_listings": _edge_cases.partner_listings(),
+        "edge__delivery_updates": _edge_cases.delivery_updates(),
+    }
+
+    assert {name: _digest(rows) for name, rows in rebuilt.items()} == {
+        name: _digest(rows) for name, rows in _edge_cases.TABLES.items()
+    }
+
+
+def test_given_first_delivery_batch_when_loading_then_it_is_the_first_load_of_the_log() -> None:
+    first = _edge_cases.delivery_updates(1)
+    full = _edge_cases.delivery_updates(2)
+    first_load = min(row["_loaded_at"] for row in full)  # type: ignore[type-var]
+
+    assert first == [row for row in full if row["_loaded_at"] == first_load]
+    assert len(first) < len(full)
+    later = [row for row in full if row not in first]
+    assert {row["_op"] for row in later} == {"I", "U", "D"}
+    shipments = {row["shipment_id"]: row["_seq"] for row in first}
+    assert any(
+        row["shipment_id"] in shipments and row["_seq"] < shipments[row["shipment_id"]]  # type: ignore[operator]
+        for row in later
+    ), "the second load must carry a late older version"

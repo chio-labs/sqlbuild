@@ -25,9 +25,11 @@ def partner_payloads() -> Rows:
             '{"sku": "MALLARD-01", "qty": 2, "amount": 19.990000000000002, '
             '"txn_id": 12345678901234567890, "gift": "yes", "placed_on": "2026-03-01", '
             '"colour": null, "channel": "web", "currency": "GBP", '
-            '"items": [{"sku": "MALLARD-01", "qty": 2, "price": 4.995}, {"QTY": 2, "sku": "TEAL-02"}], '
+            '"items": [{"sku": "MALLARD-01", "qty": 2, "price": 4.995}, '
+            '{"QTY": 2, "sku": "TEAL-02"}], '
             '"attrs": {"Size (cm)": "12", "a.b": "dotted", "a": {"b": "nested"}, '
-            '"$discount": "5%", "": "blank", "*": "star", "$.a": "dollar path", "Sku": "MALLARD-01"}, '
+            '"$discount": "5%", "": "blank", "*": "star", "$.a": "dollar path", '
+            '"Sku": "MALLARD-01"}, '
             '"meta": {"order_id": "DS-O-1001"}, "tags": ["bath", "gift", "bath", null], '
             '"removed_tags": ["bath"], "extra_tags": ["gift"], "promo_code": "SPRING", '
             '"gift_code": null, "category_id": 2, "eligible_ids": [1, 2.0, 3], '
@@ -177,22 +179,80 @@ def price_windows() -> Rows:
 
 def customer_profiles() -> Rows:
     profiles = [
-        # customer, full name, previous name, first, middle, last, line 1, line 2, tier, number, updated
-        ("C-1", "Größe Ente", "Grosse Ente", "Jürgen", None, "Größe", "1 Pond Lane", None,
-         "Golden Duck", 12345678901234567890, "2026-03-01 09:00:00"),
-        ("C-1", "Größe Ente", "Grosse Ente", "Jürgen", None, "Größe", "1 Pond Lane", "Flat 2",
-         "Golden Duck", 12345678901234567890, None),
-        ("C-2", "e\u0301lodie o'neill-smith", "elodie oneill smith", "Élodie", "", "O'Neill",
-         "2 Marsh Road", "", "Duckling", 9007199254740993, "2026-03-02 10:00:00"),
-        ("C-3", "ĳsselmeer van der eend", "ijsselmeer van der eend", "Ĳsbrand", "van der", "Eend",
-         None, None, "BLOCKED", 9007199254740992, "2026-03-03 11:00:00"),
+        # customer, full name, previous name, first, middle, last, address lines 1 and 2, tier,
+        # partner order number, updated at
+        (
+            "C-1",
+            "Größe Ente",
+            "Grosse Ente",
+            "Jürgen",
+            None,
+            "Größe",
+            "1 Pond Lane",
+            None,
+            "Golden Duck",
+            12345678901234567890,
+            "2026-03-01 09:00:00",
+        ),
+        (
+            "C-1",
+            "Größe Ente",
+            "Grosse Ente",
+            "Jürgen",
+            None,
+            "Größe",
+            "1 Pond Lane",
+            "Flat 2",
+            "Golden Duck",
+            12345678901234567890,
+            None,
+        ),
+        (
+            "C-2",
+            "e\u0301lodie o'neill-smith",
+            "elodie oneill smith",
+            "Élodie",
+            "",
+            "O'Neill",
+            "2 Marsh Road",
+            "",
+            "Duckling",
+            9007199254740993,
+            "2026-03-02 10:00:00",
+        ),
+        (
+            "C-3",
+            "ĳsselmeer van der eend",
+            "ijsselmeer van der eend",
+            "Ĳsbrand",
+            "van der",
+            "Eend",
+            None,
+            None,
+            "BLOCKED",
+            9007199254740992,
+            "2026-03-03 11:00:00",
+        ),
         (None, "ann (dup)", None, None, None, None, None, None, "BLOCKED", None, None),
-        ("C-4", "ნინო ბერიძე", "ნინო ბერიძე", "ნინო", None, "ბერიძე", "4 Nest Street",
-         "Unit 🦆", "Mallard", -9223372036854775809, "2026-03-04 12:00:00"),
+        (
+            "C-4",
+            "ნინო ბერიძე",
+            "ნინო ბერიძე",
+            "ნინო",
+            None,
+            "ბერიძე",
+            "4 Nest Street",
+            "Unit 🦆",
+            "Mallard",
+            -9223372036854775809,
+            "2026-03-04 12:00:00",
+        ),
     ]
     rows: Rows = []
     for index, profile in enumerate(profiles):
-        (customer, full, previous, first, middle, last, line1, line2, tier, number, updated) = profile
+        (customer, full, previous, first, middle, last, line1, line2, tier, number, updated) = (
+            profile
+        )
         rows.append(
             {
                 "profile_id": f"PR-{index + 1:04d}",
@@ -217,26 +277,145 @@ def ledger_entries() -> Rows:
     entries = [
         # order, channel, line, sku, warehouse, qty, qty text, price, amount, currency, rate,
         # status, reason, tier, changed at
-        ("DS-O-2001", "web", 1, "MALLARD-01", "POND", 3, "007", 1299, "2.5", "GBP", 1.27,
-         "shipped", None, "Golden Duck", "2026-03-01 09:00:00"),
-        ("DS-O-2001", "web", 1, "TEAL-02", "POND", 1, "+7", 1299, "-2.5", "GBP", 1.27,
-         "Shipped", "REFUND", "Golden Duck", "2026-03-01 09:00:00"),
-        ("DS-O-2001", "web", 2, "EIDER-03", "POND", 2, "1e0", 899, "0.005", "GBP", 0.1,
-         "allocated", None, "Golden Duck", None),
-        ("DS-O-2002", "app", 1, "MALLARD-01", "NEST", 0, " 1.5 ", 1350, "1.0000000005", "KWD",
-         3.25, "counted", "DAMAGED", "Duckling", "2026-03-02 09:00:00"),
-        ("DS-O-2002", "app", 2, "PINTAIL-04", "NEST", -4, "-0", None, "-7.5", "JPY", 0.0067,
-         "ALLOCATED", None, "Duckling", "2026-03-02 09:00:00"),
-        ("DS-O-2003", "partner", 1, "TEAL-02", "MARSH", 5, "1,000", 1100,
-         "123456789012345678901234567.0123456789", "AUD", 0.66, "Counted", None, None,
-         "2026-03-03 09:00:00"),
-        ("DS-O-2003", "partner", 2, "TEAL-02", "MARSH", 5, "n/a", 1100, "0", "AUD", 0.66,
-         "pending", None, None, "2026-03-03 09:00:00"),
+        (
+            "DS-O-2001",
+            "web",
+            1,
+            "MALLARD-01",
+            "POND",
+            3,
+            "007",
+            1299,
+            "2.5",
+            "GBP",
+            1.27,
+            "shipped",
+            None,
+            "Golden Duck",
+            "2026-03-01 09:00:00",
+        ),
+        (
+            "DS-O-2001",
+            "web",
+            1,
+            "TEAL-02",
+            "POND",
+            1,
+            "+7",
+            1299,
+            "-2.5",
+            "GBP",
+            1.27,
+            "Shipped",
+            "REFUND",
+            "Golden Duck",
+            "2026-03-01 09:00:00",
+        ),
+        (
+            "DS-O-2001",
+            "web",
+            2,
+            "EIDER-03",
+            "POND",
+            2,
+            "1e0",
+            899,
+            "0.005",
+            "GBP",
+            0.1,
+            "allocated",
+            None,
+            "Golden Duck",
+            None,
+        ),
+        (
+            "DS-O-2002",
+            "app",
+            1,
+            "MALLARD-01",
+            "NEST",
+            0,
+            " 1.5 ",
+            1350,
+            "1.0000000005",
+            "KWD",
+            3.25,
+            "counted",
+            "DAMAGED",
+            "Duckling",
+            "2026-03-02 09:00:00",
+        ),
+        (
+            "DS-O-2002",
+            "app",
+            2,
+            "PINTAIL-04",
+            "NEST",
+            -4,
+            "-0",
+            None,
+            "-7.5",
+            "JPY",
+            0.0067,
+            "ALLOCATED",
+            None,
+            "Duckling",
+            "2026-03-02 09:00:00",
+        ),
+        (
+            "DS-O-2003",
+            "partner",
+            1,
+            "TEAL-02",
+            "MARSH",
+            5,
+            "1,000",
+            1100,
+            "123456789012345678901234567.0123456789",
+            "AUD",
+            0.66,
+            "Counted",
+            None,
+            None,
+            "2026-03-03 09:00:00",
+        ),
+        (
+            "DS-O-2003",
+            "partner",
+            2,
+            "TEAL-02",
+            "MARSH",
+            5,
+            "n/a",
+            1100,
+            "0",
+            "AUD",
+            0.66,
+            "pending",
+            None,
+            None,
+            "2026-03-03 09:00:00",
+        ),
     ]
     rows: Rows = []
     for index, entry in enumerate(entries):
-        (order, channel, line, sku, warehouse, qty, qty_text, price, amount, currency, rate,
-         status, reason, tier, changed) = entry
+        (
+            order,
+            channel,
+            line,
+            sku,
+            warehouse,
+            qty,
+            qty_text,
+            price,
+            amount,
+            currency,
+            rate,
+            status,
+            reason,
+            tier,
+            changed,
+        ) = entry
         rows.append(
             {
                 "entry_id": f"LE-{index + 1:04d}",
@@ -263,10 +442,20 @@ def ledger_entries() -> Rows:
 
 def ticket_notes() -> Rows:
     notes = [
-        ("Customer O'Brien asks about DS-O-1001 and DS-O-1002; refund\tplease",
-         "bath#gift#teal", "newsletter", "50%OFF", "MALLARD-01"),
-        ("Order ds-o-77 was REFUNDED.\nPath C:\\ducks\\pond # not a comment",
-         "#leading", "Email", "STAFF10", "DUCK--"),
+        (
+            "Customer O'Brien asks about DS-O-1001 and DS-O-1002; refund\tplease",
+            "bath#gift#teal",
+            "newsletter",
+            "50%OFF",
+            "MALLARD-01",
+        ),
+        (
+            "Order ds-o-77 was REFUNDED.\nPath C:\\ducks\\pond # not a comment",
+            "#leading",
+            "Email",
+            "STAFF10",
+            "DUCK--",
+        ),
         ("No order here", "", "partner_feed", "50PERCENT", ""),
         (None, None, None, None, "A-B-C-D"),
     ]
@@ -338,7 +527,9 @@ def delivery_updates(batch: int = 2) -> Rows:
             "_seq": seq,
             "_loaded_at": _at(loaded),
         }
-        for index, (loaded, shipment, order, status, ordered, delivered, op, seq) in enumerate(updates)
+        for index, (loaded, shipment, order, status, ordered, delivered, op, seq) in enumerate(
+            updates
+        )
         if loaded in loads
     ]
 
