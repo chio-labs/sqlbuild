@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.184.1](https://github.com/chio-labs/sqlbuild/compare/v0.184.0...v0.184.1) (2026-10-28)
+
+
+### Performance Improvements
+
+* **snowflake:** cut per-model statement overhead, and write a Rules-failed compile to target/compiled-failed ([8d75270](https://github.com/chio-labs/sqlbuild/commit/8d75270ff6582977c958d2334b741c8ea1f757bd))
+
 ## [0.184.0](https://github.com/chio-labs/sqlbuild/compare/v0.183.0...v0.184.0) (2026-10-28)
 
 
