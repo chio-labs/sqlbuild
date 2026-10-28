@@ -90,6 +90,92 @@ def partner_payloads() -> Rows:
     return rows
 
 
+def gateway_callbacks() -> Rows:
+    callbacks = [
+        # zone, wall time, zoned event, nanosecond event, free text, business date, period, body
+        (
+            "Europe/London",
+            "2026-03-29 01:30:00",
+            "2026-03-01 10:00:00 +05:45",
+            "2026-03-01 23:59:59.9999995",
+            "2026-03-01T10:15:00Z",
+            "2026-01-31",
+            ("2026-03-31 23:59:00", "2026-04-01 00:01:00"),
+            '{"ts_ms": 1772359200000}',
+        ),
+        (
+            "Europe/London",
+            "2026-10-25 01:30:00",
+            "2026-03-01 04:15:00 -00:00",
+            "2026-03-01 10:00:00.0005",
+            "01-MAR-26 10:15",
+            "2028-02-29",
+            ("2026-01-31 00:00:00", "2026-02-01 00:00:00"),
+            '{"ts_ms": "1772359200000"}',
+        ),
+        (
+            "America/New_York",
+            "2026-11-01 01:30:00",
+            "2026-02-28 18:45:00 -09:30",
+            "1962-07-01 12:00:00.123456789",
+            "2026-03-01 24:00:00",
+            "2026-12-27",
+            ("2028-02-28 12:00:00", "2028-03-01 12:00:00"),
+            '{"ts_ms": 1772359200}',
+        ),
+        (
+            "Australia/Sydney",
+            "2026-04-05 02:30:00",
+            "2026-03-01 23:30:00 +05:45",
+            "2250-06-01 00:00:00.123456",
+            "  2026-3-1 7:5:0  ",
+            "2027-01-03",
+            ("2026-03-01 10:00:59", "2026-03-01 10:01:00"),
+            "{}",
+        ),
+    ]
+    rows: Rows = []
+    for index, (zone, wall, zoned, nano, text, business, period, body) in enumerate(callbacks):
+        rows.append(
+            {
+                "callback_id": f"CB-{index + 1:04d}",
+                "merchant_zone": zone,
+                "local_wall_time": wall,
+                "event_at": zoned,
+                "event_at_ns": nano,
+                "event_time_text": text,
+                "business_date": business,
+                "period_start": period[0],
+                "period_end": period[1],
+                "body": body,
+                "_loaded_at": _at("2026-03-02 00:00:00"),
+            }
+        )
+    return rows
+
+
+def price_windows() -> Rows:
+    windows = [
+        ("MALLARD-01", 1299, None, None),
+        ("TEAL-02", 899, "0001-01-01 00:00:00", "9999-12-31 23:59:59.999999"),
+        ("EIDER-03", 2450, "2026-01-01 00:00:00", None),
+        ("PINTAIL-04", 1575, "1969-12-31 23:59:59.999999", "1970-01-01 00:00:00.000001"),
+    ]
+    return [
+        {
+            "window_id": f"PW-{index + 1:04d}",
+            "sku": sku,
+            "price_minor": price,
+            "valid_from": valid_from,
+            "valid_to": valid_to,
+            "_loaded_at": _at("2026-03-02 00:00:00"),
+        }
+        for index, (sku, price, valid_from, valid_to) in enumerate(windows)
+    ]
+
+
 TABLES: dict[str, Rows] = {
     "edge__partner_payloads": partner_payloads(),
+    "edge__gateway_callbacks": gateway_callbacks(),
+    "edge__price_windows": price_windows(),
 }

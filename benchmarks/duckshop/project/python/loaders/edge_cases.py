@@ -21,3 +21,13 @@ def _load(ctx: LoaderContext, source_name: str) -> object:
 @loader
 def edge__partner_payloads(ctx: LoaderContext) -> object:
     return _load(ctx, "edge__partner_payloads")
+
+
+@loader
+def edge__gateway_callbacks(ctx: LoaderContext) -> object:
+    return _load(ctx, "edge__gateway_callbacks")
+
+
+@loader
+def edge__price_windows(ctx: LoaderContext) -> object:
+    return _load(ctx, "edge__price_windows")
