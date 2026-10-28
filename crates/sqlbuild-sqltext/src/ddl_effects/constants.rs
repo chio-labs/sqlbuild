@@ -31,6 +31,19 @@ pub(crate) const READ_OR_DATA_STATEMENTS: &[&str] = &[
     "RM",
     "ANALYZE",
 ];
+/// Statements that change only the compute later statements run on.
+pub(crate) const COMPUTE_ONLY_STATEMENTS: &[&[&str]] = &[&["USE", "WAREHOUSE"]];
+/// `ALTER SESSION SET` before the parameter it sets.
+pub(crate) const ALTER_SESSION_SET: &[&str] = &["ALTER", "SESSION", "SET"];
+/// `ALTER SESSION UNSET` before the parameter it resets.
+pub(crate) const ALTER_SESSION_UNSET: &[&str] = &["ALTER", "SESSION", "UNSET"];
+/// Session parameters that change neither relations nor how their names resolve.
+pub(crate) const NEUTRAL_SESSION_PARAMETERS: &[&[&str]] = &[
+    &["QUERY_TAG"],
+    &["TIMEZONE"],
+    &["STATEMENT_TIMEOUT_IN_SECONDS"],
+    &["USE_CACHED_RESULT"],
+];
 /// Statements that end the current transaction.
 pub(crate) const TRANSACTION_END_STATEMENTS: &[&str] = &["COMMIT", "ROLLBACK", "END", "ABORT"];
 /// Statements whose relation name is read from the statement.

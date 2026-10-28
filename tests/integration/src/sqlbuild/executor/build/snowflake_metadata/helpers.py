@@ -746,8 +746,10 @@ def create_external_table(warehouse: SimulatedSnowflakeWarehouse, name: str) -> 
     )
 
 
-def write_model_copies(*, project_dir: Path, count: int, retention_days: int) -> None:
-    """Add ``count`` permanent table copies of the orders table with managed retention."""
+def write_model_copies(
+    *, project_dir: Path, count: int, retention_days: int, header_options: str = ""
+) -> None:
+    """Add ``count`` permanent table copies of the orders table, with ``header_options``."""
 
     project: Path = project_dir / "sqlbuild_project.toml"
     _ = project.write_text(
@@ -759,7 +761,8 @@ def write_model_copies(*, project_dir: Path, count: int, retention_days: int) ->
     index: int
     for index in range(count):
         _ = (project_dir / "models" / "marts" / f"order_copy_{index}.sql").write_text(
-            f"MODEL (description 'Copy {index} of the orders.', materialized table);\n\n"
+            f"MODEL ({header_options}description 'Copy {index} of the orders.', "
+            "materialized table);\n\n"
             'SELECT order_id, ordered_at, amount FROM __ref("orders_table")\n',
             encoding="utf-8",
         )

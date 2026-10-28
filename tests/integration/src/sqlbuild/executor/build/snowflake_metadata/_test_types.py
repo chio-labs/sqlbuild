@@ -68,6 +68,8 @@ class RetentionLookupTestCase:
     expected_first_alters: int
     expected_max_table_lookups: int
     expected_max_listings: int
+    header_options: str = ""
+    expected_query_tags: int = 0
     expected_information_schema: tuple[str, ...] = ()
 
 

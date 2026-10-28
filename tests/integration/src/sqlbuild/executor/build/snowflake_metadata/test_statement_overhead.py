@@ -39,6 +39,7 @@ _RETENTION_ALTER: re.Pattern[str] = re.compile(
 )
 _TABLE_LOOKUP: re.Pattern[str] = re.compile(r"^SHOW TABLES LIKE ")
 _SCHEMA_LISTING: re.Pattern[str] = re.compile(r"^SHOW (?:TABLES|VIEWS) IN SCHEMA ")
+_QUERY_TAG: re.Pattern[str] = re.compile(r"^ALTER SESSION SET QUERY_TAG")
 _OWNED_VIEW_DROP: re.Pattern[str] = re.compile(r"^DROP VIEW IF EXISTS \S+__(?:staging|delta)$")
 
 
@@ -99,6 +100,16 @@ def test_given_materialization_switch_when_building_then_each_kind_replaces_the_
             expected_max_table_lookups=7,
             expected_max_listings=4,
         ),
+        RetentionLookupTestCase(
+            description="a query tag set before each table keeps the schema listings",
+            table_count=6,
+            retention_days=3,
+            header_options=("pre_hooks [inline_sql(\"ALTER SESSION SET QUERY_TAG = 'orders'\")], "),
+            expected_first_alters=6,
+            expected_max_table_lookups=7,
+            expected_max_listings=4,
+            expected_query_tags=6,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -107,7 +118,10 @@ def test_given_many_tables_in_one_schema_when_building_then_retention_is_read_wi
 ) -> None:
     write_orders_project(project_dir=tmp_path)
     write_model_copies(
-        project_dir=tmp_path, count=test_case.table_count, retention_days=test_case.retention_days
+        project_dir=tmp_path,
+        count=test_case.table_count,
+        retention_days=test_case.retention_days,
+        header_options=test_case.header_options,
     )
     warehouse: SimulatedSnowflakeWarehouse = orders_warehouse()
 
@@ -135,6 +149,7 @@ def test_given_many_tables_in_one_schema_when_building_then_retention_is_read_wi
     assert max(
         len(matching_statements(build.statements, _SCHEMA_LISTING)) for build in (first, second)
     ) <= (test_case.expected_max_listings)
+    assert len(matching_statements(first.statements, _QUERY_TAG)) == (test_case.expected_query_tags)
 
 
 @pytest.mark.parametrize(
