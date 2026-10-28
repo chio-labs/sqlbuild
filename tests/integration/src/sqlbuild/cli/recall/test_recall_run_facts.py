@@ -6,6 +6,7 @@ import pytest
 
 from tests.integration.src.sqlbuild.cli.recall._test_types import (
     AuditEvidenceTestCase,
+    ClosingTerminationTestCase,
     CostAttributionTestCase,
     FailedStatementSqlTestCase,
     RecordedSelectionTestCase,
@@ -13,9 +14,11 @@ from tests.integration.src.sqlbuild.cli.recall._test_types import (
 )
 from tests.integration.src.sqlbuild.cli.recall.helpers import (
     EMITTED_TAIL,
+    ORDERS_MODEL,
     recall_rows,
     run,
     terminated_build,
+    terminated_while_closing,
     write_project,
     write_slow_import_sink,
 )
@@ -85,6 +88,7 @@ def test_given_selectors_when_building_then_the_effective_selection_is_recorded(
     [
         TerminatedCommandTestCase(
             description="during project discovery",
+            orders_model=ORDERS_MODEL,
             environment={"ORDERS_IMPORT_SECONDS": "60"},
             wait_sql=(
                 "SELECT invocation_id FROM invocations WHERE status = 'running' "
@@ -94,11 +98,25 @@ def test_given_selectors_when_building_then_the_effective_selection_is_recorded(
         ),
         TerminatedCommandTestCase(
             description="while a task runs",
+            orders_model=ORDERS_MODEL,
             environment={"ORDERS_TASK_SLEEP_SECONDS": "60"},
             wait_sql=(
                 "SELECT invocation_id FROM output_tail WHERE text LIKE '%after the warning%'"
             ),
             expected_output=EMITTED_TAIL,
+        ),
+        TerminatedCommandTestCase(
+            description="while a long warehouse statement runs",
+            orders_model=(
+                'MODEL (\n  description "One row per order",\n  materialized table,\n);\n\n'
+                "SELECT sum(range % 7) AS order_id FROM range(80000000000)\n"
+            ),
+            environment={},
+            wait_sql=(
+                "SELECT statement_id FROM statements "
+                "WHERE statement_kind = 'CREATE' AND ended_at IS NULL"
+            ),
+            expected_output=b"",
         ),
     ],
     ids=lambda case: case.description,
@@ -107,8 +125,9 @@ def test_given_sigterm_when_a_build_is_stopped_then_it_is_recorded_cancelled_wit
     test_case: TerminatedCommandTestCase, tmp_path: Path
 ) -> None:
     project_dir: Path = write_slow_import_sink(write_project(tmp_path / "orders_shop"))
+    _ = (project_dir / "models" / "orders.sql").write_text(test_case.orders_model, encoding="utf-8")
 
-    terminated: subprocess.CompletedProcess[bytes] = terminated_build(
+    terminated, stop_seconds = terminated_build(
         project_dir,
         wait_sql=test_case.wait_sql,
         SQLBUILD_RECALL_HEARTBEAT_SECONDS="0.5",
@@ -116,16 +135,53 @@ def test_given_sigterm_when_a_build_is_stopped_then_it_is_recorded_cancelled_wit
     )
     recorded: list[list[object]] = recall_rows(
         project_dir,
-        "SELECT i.status, i.signal_number, i.ended_at_estimated, i.ended_at > i.started_at, "
-        "o.flush_complete FROM invocations i JOIN output_invocations o USING (invocation_id)",
+        "SELECT i.status, i.signal_number, i.exit_code, i.ended_at_estimated, "
+        "i.ended_at > i.started_at, o.flush_complete "
+        "FROM invocations i JOIN output_invocations o USING (invocation_id)",
+    )
+    starts: list[list[object]] = recall_rows(
+        project_dir, "SELECT COUNT(*) FROM recall_events WHERE event_type = 'invocation_started'"
     )
     output: subprocess.CompletedProcess[bytes] = run(project_dir, "recall", "output", "last")
 
     assert terminated.returncode == 143
+    assert stop_seconds < 10
     assert terminated.stderr.endswith(b"error: terminated by SIGTERM\n")
-    assert recorded == [["cancelled", 15, 0, 1, 1]]
+    assert b"Traceback" not in terminated.stderr
+    assert recorded == [["cancelled", 15, 143, 0, 1, 1]]
+    assert starts == [[1]]
     assert test_case.expected_output in output.stdout
     assert b"may be incomplete" not in output.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClosingTerminationTestCase(
+            description="a build waiting for a locked store at exit",
+            shutdown_timeout="60s",
+            expected_exit_code=143,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_sigterm_while_recall_closes_when_a_build_has_finished_then_it_exits_143(
+    test_case: ClosingTerminationTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_project(
+        tmp_path / "orders_shop",
+        extra_toml=f'\n[recall]\nshutdown_timeout = "{test_case.shutdown_timeout}"\n',
+    )
+
+    terminated, stop_seconds = terminated_while_closing(project_dir)
+
+    assert b"Completed" in terminated.stdout
+    assert terminated.returncode == test_case.expected_exit_code, terminated.stderr.decode(
+        errors="replace"
+    )
+    assert stop_seconds < 10
+    assert b"Traceback" not in terminated.stderr
+    assert terminated.stderr.endswith(b"error: terminated by SIGTERM\n")
 
 
 @pytest.mark.parametrize(

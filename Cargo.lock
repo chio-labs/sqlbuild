@@ -1176,6 +1176,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
 
 [[package]]
+name = "signal-hook"
+version = "0.3.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d881a16cf4426aa584979d30bd82cb33429027e42122b169753d6ef1085ed6e2"
+dependencies = [
+ "libc",
+ "signal-hook-registry",
+]
+
+[[package]]
+name = "signal-hook-registry"
+version = "1.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4db69cba1110affc0e9f7bcd48bbf87b3f4fc7c61fc9155afd4c469eb3d6c1b"
+dependencies = [
+ "errno",
+ "libc",
+]
+
+[[package]]
 name = "siphasher"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1225,12 +1245,14 @@ dependencies = [
  "arrayvec",
  "bstr",
  "either",
+ "errno",
  "memchr",
  "once_cell",
  "regex-automata",
  "syn 2.0.119",
  "syn 3.0.3",
  "thiserror 2.0.21",
+ "windows-sys",
 ]
 
 [[package]]
@@ -1350,6 +1372,7 @@ dependencies = [
  "rustc-hash",
  "serde",
  "serde_json",
+ "signal-hook",
  "sqlbuild-analysis",
  "sqlbuild-attachments",
  "sqlbuild-cache",

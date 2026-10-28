@@ -362,6 +362,7 @@ class RecordedSelectionTestCase:
 @dataclass(frozen=True)
 class TerminatedCommandTestCase:
     description: str
+    orders_model: str
     environment: dict[str, str]
     wait_sql: str
     expected_output: bytes
@@ -387,3 +388,10 @@ class CostAttributionTestCase:
     description: str
     collected: str
     expected_cost_status: str
+
+
+@dataclass(frozen=True)
+class ClosingTerminationTestCase:
+    description: str
+    shutdown_timeout: str
+    expected_exit_code: int

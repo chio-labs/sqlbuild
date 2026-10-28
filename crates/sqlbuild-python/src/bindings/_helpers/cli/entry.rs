@@ -1,15 +1,15 @@
 //! The `sqb` entry: invocation scopes, parsing, observed dispatch and the error projection.
 
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 
 use pyo3::exceptions::PySystemExit;
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
 use pyo3::types::{
-    PyBool, PyCFunction, PyDict, PyDictMethods, PyInt, PyList, PyString, PyStringMethods, PyTuple,
-    PyTypeMethods,
+    PyBool, PyCFunction, PyDateTime, PyDict, PyDictMethods, PyInt, PyList, PyString,
+    PyStringMethods, PyTuple, PyTypeMethods, PyTzInfo,
 };
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_cli::dispatch::main::failure_report::failure_report;
@@ -29,8 +29,8 @@ use crate::bindings::_helpers::cli::observability::{
     CliObservabilityScope, cli_observability_scope,
 };
 use crate::bindings::_helpers::cli::termination::{
-    CommandTerminated, TERMINATED_EXIT_CODE, TerminationHandler, handle_sigterm,
-    interrupting_signal, report_termination,
+    CommandTerminated, TERMINATED_MESSAGE, TerminationHandler, handle_sigterm, interrupting_signal,
+    signal_exit_code, terminated, terminated_exit,
 };
 use crate::bindings::_helpers::compile_command::report::format_compile_error_json;
 use crate::bindings::_helpers::cost_report::attribution::take_cost_status;
@@ -552,8 +552,7 @@ fn observed_dispatch<'py>(
     drop(take_failure_cause());
     drop(take_cost_status());
     let started: Instant = Instant::now();
-    let started_at: Bound<'py, PyAny> = imported(py, "datetime", "datetime")?
-        .call_method1("now", (imported(py, "datetime", "UTC")?,))?;
+    let started_at: SystemTime = SystemTime::now();
     let elapsed = |started: Instant| -> PyResult<Bound<'py, PyAny>> {
         u64::try_from(started.elapsed().as_millis())
             .unwrap_or(u64::MAX)
@@ -603,8 +602,12 @@ fn observed_dispatch<'py>(
             "invocation_started",
             started_payload()?,
         )?)?;
-        announced.set(true);
-        match dispatch_command(&invocation.args, invocation.handlers.clone()) {
+        let dispatched: PyResult<Bound<'py, PyAny>> =
+            match dispatch_command(&invocation.args, invocation.handlers.clone()) {
+                Ok(_) if terminated() => Err(CommandTerminated::new_err(TERMINATED_MESSAGE)),
+                dispatched => dispatched,
+            };
+        match dispatched {
             Ok(exit_code) => {
                 let payload: Bound<'py, PyDict> = PyDict::new(py);
                 payload.set_item("command", &command)?;

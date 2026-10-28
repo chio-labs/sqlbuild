@@ -23,6 +23,7 @@ rayon.workspace = true
 rustc-hash.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+signal-hook.workspace = true
 sqlbuild-analysis.workspace = true
 sqlbuild-attachments.workspace = true
 sqlbuild-cache.workspace = true
