@@ -81,6 +81,7 @@ def test_given_table_when_describing_then_postgres_returns_columns_in_order(
             expected_result=QueryResult(
                 columns=("id", "name"),
                 rows=((1, "hello"),),
+                column_types=("int4", "text"),
             ),
         )
     ],
