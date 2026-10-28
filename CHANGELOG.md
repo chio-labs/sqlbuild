@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.185.0](https://github.com/chio-labs/sqlbuild/compare/v0.184.1...v0.185.0) (2026-10-28)
+
+
+### Features
+
+* **benchmarks:** add a DuckShop edge-case stress area ([dd0084a](https://github.com/chio-labs/sqlbuild/commit/dd0084a9554739d0bd3de355d8f6624da2c9457d))
+
 ## [0.184.1](https://github.com/chio-labs/sqlbuild/compare/v0.184.0...v0.184.1) (2026-10-28)
 
 
