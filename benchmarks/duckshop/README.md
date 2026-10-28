@@ -129,15 +129,18 @@ groups:
 | Ordering, numbers and text | NULL ordering under `DESC`; ties in ordered aggregates, `MAX_BY`, `MODE` and `ANY_VALUE`; default window frames; `UNION ALL BY NAME`; `ROUND` half-way values, decimal division, `MOD` and 38-digit amounts; integers past 2^53 against `FLOAT`; regular expressions and backslash escapes; `LIKE ... ESCAPE` and `ILIKE ANY`; `SPLIT_PART` and `SUBSTR` before the start; `NOT IN` with a NULL; names in many scripts |
 | Scenarios and lifecycle | typed values across model boundaries; `VARIANT` expected output; a star under a lower-case contract and a quoted camelCase export; a cursor-window incremental model over far-apart fixture loads; a change log merged across two loads, checked against a full rebuild |
 
-Every expected value in the edge-case area was captured on Snowflake under the `edge` target's
-pinned session, rather than derived by hand. `fct_edge_delivery_events` is disabled: it is the
+Unit-test expectations in the edge-case area were captured on Snowflake under the `edge` target's
+pinned session, rather than derived by hand; scenario expectations, and the assertions in tests
+about ties, are written by hand from those captured values. `fct_edge_delivery_events` is disabled: it is the
 acceptance case for cursor `delete_insert` models that emit rows outside the window they replace.
 See [RUNBOOK.md](RUNBOOK.md), step 7.
 
 Benchmarks and core measurements leave the area out:
 
 - `python benchmarks/duckshop/scripts/core_project.py <destination>` copies the project without
-  it; the copy compiles to the same files as the project did before the area existed;
+  it. The core-copy compile guard compares the copy's compiled files with a recorded checksum
+  (`core_project.py --checksum`), so a change to the core project's compiled SQL fails the guard
+  until the checksum is updated on purpose and noted for the benchmark;
 - warehouse runs exclude it with `--exclude tag:edge_case "source:edge__*"`, and scenario runs
   with `--exclude edge_cases`;
 - the construct census counts the core project unless given `--area edge` or `--area all`.

@@ -37,12 +37,21 @@ final AS (
       p.payload:gift_code::VARCHAR
     )::ARRAY AS codes_compact,
     ARRAY_COMPACT(p.payload:tags::ARRAY)::ARRAY AS tags_compact,
-    ARRAY_EXCEPT(p.payload:tags::ARRAY, p.payload:removed_tags::ARRAY)::ARRAY AS tags_kept,
+    -- ARRAY_EXCEPT and ARRAY_DISTINCT leave element order unspecified; sort ascending, NULLs last.
+    ARRAY_SORT(
+      ARRAY_EXCEPT(p.payload:tags::ARRAY, p.payload:removed_tags::ARRAY),
+      TRUE,
+      FALSE
+    )::ARRAY AS tags_kept,
     ARRAY_CAT(
       p.payload:tags::ARRAY,
       p.payload:extra_tags::ARRAY
     )::ARRAY AS tags_all,
-    ARRAY_DISTINCT(p.payload:tags::ARRAY)::ARRAY AS tags_distinct,
+    ARRAY_SORT(
+      ARRAY_DISTINCT(p.payload:tags::ARRAY),
+      TRUE,
+      FALSE
+    )::ARRAY AS tags_distinct,
     ARRAY_POSITION(p.payload:category_id, p.payload:eligible_ids::ARRAY)::INT AS category_position,
     ARRAY_CONTAINS(p.payload:category_id, p.payload:eligible_ids::ARRAY)::BOOLEAN AS is_eligible,
     ARRAYS_OVERLAP(

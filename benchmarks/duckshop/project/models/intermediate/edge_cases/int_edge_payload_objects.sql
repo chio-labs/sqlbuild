@@ -75,7 +75,8 @@ final AS (
       n.payload:pick_keys::ARRAY
     )::OBJECT AS picked_by_array,
     OBJECT_PICK(n.payload::OBJECT, n.payload:pick_keys)::OBJECT AS picked_by_variant,
-    OBJECT_KEYS(n.payload::OBJECT)::ARRAY AS payload_keys
+    -- OBJECT_KEYS leaves key order unspecified; sort ascending.
+    ARRAY_SORT(OBJECT_KEYS(n.payload::OBJECT), TRUE, FALSE)::ARRAY AS payload_keys
   FROM normalised AS n
 )
 

@@ -54,6 +54,11 @@ no DuckShop names; if it does, stop and pick another schema. Note which state ta
 The list includes the edge-case area's names; run the check with `--target edge` too before its
 first build.
 
+The project no longer sets `QUOTED_IDENTIFIERS_IGNORE_CASE = true` on its connections. A schema
+built while it did may hold objects and SQLBuild state that no longer resolve under Snowflake's
+default case rules, so rebuild into a clean schema: drop everything as in step 8, or pick a new
+schema, before the first build.
+
 ## 3. Load the synthetic data
 
 ```bash
@@ -162,6 +167,11 @@ values were captured under: UTC, and Snowflake's defaults for every parameter th
 result or how text is parsed, including `QUOTED_IDENTIFIERS_IGNORE_CASE = false`. Run it on that
 target only; under another session some expected values differ by design.
 
+`DEFAULT_DDL_COLLATION` also changes results (comparisons, ordering and `LIKE` on text columns),
+but it is an account, database or schema parameter, not a session one, so the connection cannot
+pin it. The edge target's schema, and its database and account, must leave it at the default (no
+collation). Check with `SHOW PARAMETERS LIKE 'DEFAULT_DDL_COLLATION' IN SCHEMA <database>.<schema>`.
+
 ### Load, build and test
 
 ```bash
@@ -202,8 +212,8 @@ chose.
 
 ### Capture expected values
 
-Edge-case expectations are Snowflake's own results on the fixtures, not values derived by hand.
-To capture them for a new or changed edge test, write its `__expected__<model>` CTE with the
+Unit-test expectations in the edge-case area are Snowflake's own results on the fixtures, not
+values derived by hand. To capture them for a new or changed edge test, write its `__expected__<model>` CTE with the
 columns to compare (any values, such as `NULL AS column_name`), then run:
 
 ```bash
@@ -216,7 +226,8 @@ replaces each expected CTE with the actual rows as typed literals. Without a tes
 recaptures every edge test, which must leave the files unchanged. Check every captured value
 against the case the test describes before committing: a capture records what Snowflake returned,
 which is the point, but a fixture mistake is captured as faithfully as a real edge. Scenario
-expectations are written by hand from the captured unit-test values.
+expectations, and the assertions in tests about ties (where Snowflake may return any of the tied
+rows), are written by hand from the captured values.
 
 Capture scenario snapshots for the edge scenarios with
 `sqb scenario capture --target edge --select edge_cases`.

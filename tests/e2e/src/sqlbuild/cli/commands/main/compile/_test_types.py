@@ -1253,13 +1253,18 @@ class BenchmarkProjectCompileTestCase:
 
 @dataclass(frozen=True)
 class BenchmarkCoreCopyCompileTestCase:
-    """A script that copies a benchmark project without an area, and the folder it leaves out."""
+    """A script that copies a benchmark project without an area, and the copy's compiled output.
+
+    `expected_compiled_checksum` is the script's `--checksum` of the copy's compiled files; a core
+    model change updates it deliberately.
+    """
 
     description: str
     copy_script: Path
     expected_absent_folder: str
     expected_errors: int
     expected_warnings: int
+    expected_compiled_checksum: str
 
 
 @dataclass(frozen=True)

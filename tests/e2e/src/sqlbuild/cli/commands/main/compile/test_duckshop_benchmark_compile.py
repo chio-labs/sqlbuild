@@ -72,6 +72,9 @@ def test_given_benchmark_project_when_compiling_then_reports_no_errors_or_warnin
             expected_absent_folder="/edge_cases/",
             expected_errors=0,
             expected_warnings=0,
+            expected_compiled_checksum=(
+                "4568ab62e8033a5698793db6993f19467ff68bd919c3ae2e2f72055b8ac2cde0"
+            ),
         )
     ],
     ids=lambda case: case.description,
@@ -100,3 +103,11 @@ def test_given_benchmark_core_copy_when_compiling_then_leaves_out_the_excluded_a
     model_paths: str = "\n".join(model["relative_path"] for model in report["resources"]["models"])
     assert model_paths
     assert test_case.expected_absent_folder not in model_paths
+    checksum: subprocess.CompletedProcess[str] = subprocess.run(
+        [sys.executable, str(test_case.copy_script), "--checksum", str(project_dir)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert checksum.returncode == 0, checksum.stdout + checksum.stderr
+    assert checksum.stdout.strip() == test_case.expected_compiled_checksum

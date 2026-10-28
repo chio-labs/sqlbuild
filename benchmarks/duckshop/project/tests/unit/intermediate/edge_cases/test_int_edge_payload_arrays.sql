@@ -26,7 +26,7 @@ __expected__int_edge_payload_arrays AS (
     PARSE_JSON('["SPRING",undefined]')::ARRAY AS codes,
     PARSE_JSON('["SPRING"]')::ARRAY AS codes_compact,
     PARSE_JSON('["bath","gift","bath","bath"]')::ARRAY AS tags_compact,
-    PARSE_JSON('["gift","bath",null,"bath"]')::ARRAY AS tags_kept,
+    PARSE_JSON('["bath","bath","gift",null]')::ARRAY AS tags_kept,
     PARSE_JSON('["bath","gift","bath",null,"bath","gift",null]')::ARRAY AS tags_all,
     PARSE_JSON('["bath","gift",null]')::ARRAY AS tags_distinct,
     TRUE AS shares_extra_tags

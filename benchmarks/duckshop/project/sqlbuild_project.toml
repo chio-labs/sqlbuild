@@ -10,9 +10,20 @@ user = "example_user"
 role = "EXAMPLE_ROLE"
 warehouse = "EXAMPLE_WH"
 
+[targets.dev]
+connection = "warehouse"
+database = "DUCKSHOP"
+schema = "DEV"
+
+[targets.prod]
+connection = "warehouse"
+database = "DUCKSHOP"
+schema = "ANALYTICS"
+
+# >>> edge-case area (scripts/core_project.py leaves this block out of the core copy)
 # The edge-case area's expected values are captured on Snowflake under this pinned session: UTC,
 # with every parameter that changes a result or how text is parsed set to Snowflake's default.
-# Run the edge area on this connection only (see RUNBOOK.md, "Edge cases").
+# Run the edge area on this connection only (see RUNBOOK.md, step 7).
 [connections.edge]
 account = "example-account"
 user = "example_user"
@@ -43,20 +54,11 @@ TIMESTAMP_DAY_IS_ALWAYS_24H = false
 JSON_INDENT = 2
 STRICT_JSON_OUTPUT = false
 
-[targets.dev]
-connection = "warehouse"
-database = "DUCKSHOP"
-schema = "DEV"
-
 [targets.edge]
 connection = "edge"
 database = "DUCKSHOP"
 schema = "EDGE"
-
-[targets.prod]
-connection = "warehouse"
-database = "DUCKSHOP"
-schema = "ANALYTICS"
+# <<< edge-case area
 
 [settings]
 default_audit_severity = "error"
@@ -90,9 +92,11 @@ valuation_date = "2026-03-31"
 lookup_customer_id = "C000001"
 # Volume multiplier for the synthetic data loaders in python/loaders; 1 is the small default.
 data_scale = "1"
+# >>> edge-case area (scripts/core_project.py leaves this block out of the core copy)
 # Last load of the edge-case delivery change log to include; "1" replays the first load only (see
-# RUNBOOK.md, "Edge cases").
+# RUNBOOK.md, step 7).
 edge_delivery_batch = "2"
+# <<< edge-case area
 
 [scenario.local_type_overrides.snowflake]
 "VARIANT" = "JSON"
@@ -273,6 +277,7 @@ The KPI grid is every reporting day for every region and metric pair that has ev
 days without activity report zero instead of disappearing. Both sides are small and bounded.
 """
 
+# >>> edge-case area (scripts/core_project.py leaves this block out of the core copy)
 [[rules.rule_ignores]]
 rules = ["SQBRSQL027"]
 paths = ["models/marts/edge_cases/rpt_edge_stock_reconciliation.sql"]
@@ -298,3 +303,4 @@ Unit-test and scenario fixtures for a source whose declared columns are quoted c
 rejected (B302 and S510), so this model is covered by building the edge-case area on Snowflake,
 where it reads the loaded quoted columns, instead of by a unit test.
 """
+# <<< edge-case area
