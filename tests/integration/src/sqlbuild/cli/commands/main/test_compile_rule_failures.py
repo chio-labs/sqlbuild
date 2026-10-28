@@ -11,9 +11,11 @@ from sqlbuild._native import run_cli as main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     RuleFailureArtifactsTestCase,
     RuleFailureSequenceTestCase,
+    RuleFailureStaleArtifactTestCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
     artifact_tree,
+    changed_artifacts,
     open_orders_model,
     write_project_files,
 )
@@ -50,6 +52,31 @@ _FAILED_OPEN_ORDERS: bytes = (
 _PASSING_OPEN_ORDERS: bytes = b'SELECT o.order_id, o.status FROM __ref("orders") AS o\n'
 _REUSED_LINE: str = "reused the previous compile"
 _VERIFIED_LINE: str = "delta compile verified"
+
+
+_TOTALS: str = (
+    'MODEL (\n  description "Order totals",\n  materialized table,\n);\n\n'
+    'SELECT o.order_id, o.order_id * 10 AS total FROM __ref("orders") AS o\n'
+)
+_TOTALS_TEST: str = (
+    'TEST (name "order_totals_case");\n'
+    "WITH\n"
+    "__ref__orders AS (SELECT 1 AS order_id, 'open' AS status),\n"
+    "__expected__order_totals AS (SELECT 1 AS order_id, 10 AS total)\n"
+    "SELECT 1\n"
+)
+_LARGE_FUNCTION: str = (
+    "FUNCTION (description 'Whether a total is large.',\n"
+    "  arguments (total INTEGER),\n"
+    "  returns BOOLEAN\n"
+    ");\n\n"
+    "total > 100"
+)
+_TOTALS_AUDIT: str = (
+    'AUDIT ();\n\nSELECT t.order_id FROM __ref("order_totals") AS t '
+    'JOIN __ref("orders") AS o ON o.order_id = t.order_id WHERE t.total < 0'
+)
+_AFTER_FAILURE_LINE: str = "delta compile fell back: the previous compile failed its Rules"
 
 
 @pytest.mark.parametrize(
@@ -152,7 +179,7 @@ def test_given_rule_findings_when_compiling_then_failed_sql_is_written_beside_co
             environment={COMPILE_REUSE_DISABLE_ENV_VAR: "0", DELTA_COMPILE_VERIFY_ENV_VAR: "1"},
             extra_args=(),
             expected_rewarm_reused=True,
-            expected_minimum_verified_deltas=5,
+            expected_minimum_verified_deltas=2,
         ),
         RuleFailureSequenceTestCase(
             description="without the compile cache",
@@ -267,3 +294,101 @@ def test_given_failing_and_passing_compiles_when_alternating_then_compiled_faile
     assert not failed.exists()
     assert artifact_tree(compiled) == first_pass
     assert stderr_lines.count(_VERIFIED_LINE) >= test_case.expected_minimum_verified_deltas
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RuleFailureStaleArtifactTestCase(
+            description="with the compile cache",
+            environment={COMPILE_REUSE_DISABLE_ENV_VAR: "0"},
+            extra_args=(),
+            expected_after_failure_fragment="",
+        ),
+        RuleFailureStaleArtifactTestCase(
+            description="with each delta compile checked against a full compile",
+            environment={COMPILE_REUSE_DISABLE_ENV_VAR: "0", DELTA_COMPILE_VERIFY_ENV_VAR: "1"},
+            extra_args=(),
+            expected_after_failure_fragment=_AFTER_FAILURE_LINE,
+        ),
+        RuleFailureStaleArtifactTestCase(
+            description="without the compile cache",
+            environment={},
+            extra_args=("--no-cache",),
+            expected_after_failure_fragment="",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_resources_edited_while_rules_fail_when_the_fix_passes_then_compiled_matches_a_full_compile(
+    test_case: RuleFailureStaleArtifactTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name, value in test_case.environment.items():
+        monkeypatch.setenv(name, value)
+    project_dir: Path = tmp_path / "project"
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": _PROJECT,
+        "models/orders.sql": _ORDERS,
+        "models/order_totals.sql": _TOTALS,
+        "models/open_orders.sql": open_orders_model(_PASSING),
+        "tests/unit/test_order_totals.sql": _TOTALS_TEST,
+        "functions/sql/is_large.sql": _LARGE_FUNCTION,
+        "audits/singular/positive_totals.sql": _TOTALS_AUDIT,
+    }
+    write_project_files(project_dir=project_dir, files=files)
+    compile_args: list[str] = ["--project-dir", str(project_dir), "compile", *test_case.extra_args]
+    compiled_dir: Path = project_dir / "target" / "compiled"
+
+    def fixed_after_failing(name: str, edits: dict[str, str]) -> tuple[str, dict[str, bytes]]:
+        write_project_files(
+            project_dir=project_dir,
+            files={**edits, "models/open_orders.sql": open_orders_model(_FAILING)},
+        )
+        assert main(compile_args) == 1
+        _ = capsys.readouterr()
+        write_project_files(
+            project_dir=project_dir, files={"models/open_orders.sql": open_orders_model(_PASSING)}
+        )
+        exit_code: int = main(compile_args)
+        stdout, stderr = capsys.readouterr()
+        assert exit_code == 0, stdout + stderr
+        reference_dir: Path = tmp_path / name
+        files.update(edits)
+        write_project_files(project_dir=reference_dir, files=files)
+        assert main(["--project-dir", str(reference_dir), "compile", "--no-cache"]) == 0
+        _ = capsys.readouterr()
+        assert artifact_tree(compiled_dir) == artifact_tree(reference_dir / "target" / "compiled")
+        assert not (project_dir / "target" / "compiled-failed").exists()
+        return stderr, artifact_tree(compiled_dir)
+
+    assert main(compile_args) == 0
+    passing: dict[str, bytes] = artifact_tree(compiled_dir)
+    test_edit_stderr, after_test_edit = fixed_after_failing(
+        "after_test_edit",
+        {
+            "tests/unit/test_order_totals.sql": _TOTALS_TEST.replace("10 AS total", "20 AS total"),
+            "functions/sql/is_large.sql": _LARGE_FUNCTION.replace("> 100", "> 200"),
+        },
+    )
+    model_edit_stderr, after_model_edit = fixed_after_failing(
+        "after_model_edit",
+        {
+            "models/order_totals.sql": _TOTALS.replace("* 10", "* 20"),
+            "audits/singular/positive_totals.sql": _TOTALS_AUDIT.replace("< 0", "<= 0"),
+        },
+    )
+
+    assert test_case.expected_after_failure_fragment in test_edit_stderr
+    assert test_case.expected_after_failure_fragment in model_edit_stderr
+    assert changed_artifacts(passing, after_test_edit) == [
+        "functions/sql/is_large.sql",
+        "tests/order_totals/order_totals_case.sql",
+    ]
+    assert changed_artifacts(after_test_edit, after_model_edit) == [
+        "audits/singular/positive_totals.sql",
+        "models/order_totals.sql",
+        "tests/order_totals/order_totals_case.sql",
+    ]

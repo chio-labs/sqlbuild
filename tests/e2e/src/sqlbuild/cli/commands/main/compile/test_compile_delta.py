@@ -146,6 +146,20 @@ _ATTACH_ORDER_QUALITY: tuple[str, str, str] = (
     "MODEL (description",
     "MODEL (audit_factories [order_quality], description",
 )
+_RULE_HARNESS: str = """import pytest
+from sqlbuild.rules.testing import RuleCase, evaluate_rule
+from rules.{module} import {function}
+
+CASES = (
+    RuleCase(description="plain model", source="MODEL (); SELECT 1 AS id", expected_finding_count=0),
+)
+
+
+@pytest.mark.parametrize("test_case", CASES, ids=lambda case: case.description)
+def test_given_model_when_checking_then_reports_expected_findings(test_case):
+    result = evaluate_rule(rule={function}, test_case=test_case)
+    assert result.finding_count == test_case.expected_finding_count
+"""
 _MODEL_SQL_RULE: tuple[str, str] = (
     "rules/order_sql.py",
     """from sqlbuild.rules import Finding, Model, RuleContext, rule
@@ -177,6 +191,21 @@ def order_folder_siblings(*, model: Model, ctx: RuleContext) -> list[Finding]:
     siblings = ctx.project.tree.resources_under(model.path.parent.as_posix())
     return [ctx.finding(subject=model)] if len(siblings) < 2 else []
 """,
+)
+# Each custom Rule needs a harness case, or the stored compile fails its Rules and the next is full.
+_MODEL_SQL_RULE_CASES: tuple[str, str] = (
+    "tests/test_rule_order_sql.py",
+    _RULE_HARNESS.format(module="order_sql", function="order_todo_markers"),
+)
+_FOLDER_RULE_CASES: tuple[str, str] = (
+    "tests/test_rule_order_folders.py",
+    _RULE_HARNESS.format(module="order_folders", function="order_folder_siblings"),
+)
+# Built-in Rules cannot parse PIVOT models, which would fail the stored compile's Rules.
+_BUILT_IN_RULES_OFF: tuple[str, str, str] = (
+    "sqlbuild_project.toml",
+    'select = ["SQBR", "XSQBR"]',
+    'select = ["XSQBR"]',
 )
 _RULE_READ_MORE: str = "delta compile fell back: a custom rule read more than the changed models"
 _FAMILY_TYPE_EDIT: tuple[str, str, str] = (_CATEGORY_PIVOT_PATH, "type DOUBLE", "type VARCHAR")
@@ -354,6 +383,7 @@ def test_given_stored_compile_when_compiling_an_edit_then_it_prints_what_a_full_
         DeltaCompileProjectShapeTestCase(
             description="a model with dynamic column families",
             files=(_CATEGORY_AMOUNTS, _CATEGORY_PIVOT),
+            stored_edits=(_BUILT_IN_RULES_OFF,),
             edits=(_BODY_EDIT,),
             expected_delta_line=True,
         ),
@@ -366,19 +396,20 @@ def test_given_stored_compile_when_compiling_an_edit_then_it_prints_what_a_full_
         ),
         DeltaCompileProjectShapeTestCase(
             description="a model-subject custom rule reading the edited model's SQL",
-            files=(_MODEL_SQL_RULE,),
+            files=(_MODEL_SQL_RULE, _MODEL_SQL_RULE_CASES),
             edits=(_BODY_EDIT,),
             expected_delta_line=True,
         ),
         DeltaCompileProjectShapeTestCase(
             description="a model-subject custom rule listing models under a folder",
-            files=(_FOLDER_RULE,),
+            files=(_FOLDER_RULE, _FOLDER_RULE_CASES),
             edits=(_BODY_EDIT,),
             expected_delta_line=False,
         ),
         DeltaCompileProjectShapeTestCase(
             description="an edit to dynamic column families compiles in full",
             files=(_CATEGORY_AMOUNTS, _CATEGORY_PIVOT),
+            stored_edits=(_BUILT_IN_RULES_OFF,),
             edits=(_FAMILY_TYPE_EDIT,),
             expected_delta_line=False,
         ),
@@ -419,8 +450,14 @@ def test_given_project_shape_when_compiling_an_edit_then_it_prints_what_a_full_c
     [
         DeltaCompileVerifyTestCase(
             description="every shape together matches a full compile",
-            files=(_CATEGORY_AMOUNTS, _CATEGORY_PIVOT, _ORDER_QUALITY_FACTORY, _MODEL_SQL_RULE),
-            stored_edits=(_ATTACH_ORDER_QUALITY,),
+            files=(
+                _CATEGORY_AMOUNTS,
+                _CATEGORY_PIVOT,
+                _ORDER_QUALITY_FACTORY,
+                _MODEL_SQL_RULE,
+                _MODEL_SQL_RULE_CASES,
+            ),
+            stored_edits=(_ATTACH_ORDER_QUALITY, _BUILT_IN_RULES_OFF),
             edits=(_BODY_EDIT,),
             env={DELTA_COMPILE_VERIFY_ENV_VAR: "1"},
             expected_stderr_line=DELTA_VERIFIED_LINE,
@@ -428,13 +465,14 @@ def test_given_project_shape_when_compiling_an_edit_then_it_prints_what_a_full_c
         DeltaCompileVerifyTestCase(
             description="an edit to dynamic column families names why it fell back",
             files=(_CATEGORY_AMOUNTS, _CATEGORY_PIVOT),
+            stored_edits=(_BUILT_IN_RULES_OFF,),
             edits=(_FAMILY_TYPE_EDIT,),
             env={DELTA_COMPILE_VERIFY_ENV_VAR: "1"},
             expected_stderr_line=_FAMILIES_CHANGED,
         ),
         DeltaCompileVerifyTestCase(
             description="a rule listing models under a folder names why it fell back",
-            files=(_FOLDER_RULE,),
+            files=(_FOLDER_RULE, _FOLDER_RULE_CASES),
             edits=(_BODY_EDIT,),
             env={DELTA_COMPILE_VERIFY_ENV_VAR: "1"},
             expected_stderr_line=_RULE_READ_MORE,

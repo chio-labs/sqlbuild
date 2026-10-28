@@ -64,6 +64,12 @@ def artifact_tree(root: Path) -> dict[str, bytes]:
     return {path.relative_to(root).as_posix(): path.read_bytes() for path in files}
 
 
+def changed_artifacts(before: dict[str, bytes], after: dict[str, bytes]) -> list[str]:
+    """Return the sorted paths whose bytes differ between two artifact trees, or exist in one."""
+
+    return sorted(filter(lambda path: before.get(path) != after.get(path), before | after))
+
+
 def staging_directories(target_dir: Path) -> list[str]:
     """Return hidden entries left in target_dir, such as abandoned artifact staging."""
 

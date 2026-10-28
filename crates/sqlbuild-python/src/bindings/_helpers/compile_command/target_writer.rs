@@ -23,8 +23,7 @@ use crate::bindings::_helpers::boundary::python_calls::{
 use crate::bindings::_helpers::compile_command::artifact_batch::ArtifactBatch;
 use crate::bindings::_helpers::compile_command::constants::RACY_WINDOW_NS;
 use crate::bindings::_helpers::compile_command::reuse_recording::{
-    ArtifactRecorder, CompileArtifactWrites, artifact_kept, artifact_moved, artifact_tree_kept,
-    artifact_tree_moved,
+    ArtifactRecorder, CompileArtifactWrites, artifact_kept, artifact_moved, artifact_tree_moved,
 };
 use crate::bindings::_helpers::compile_command::test_artifact_cache::{
     IdentityContext, artifact_identity_payload, artifact_record_key_payload, identity_context,
@@ -868,71 +867,20 @@ pub(crate) fn write_rule_failed_models<'py>(
     Ok(failing)
 }
 
-/// After a passing delta compile whose stored compile failed its Rules, bring `target/compiled/` up to that compile: write each model the delta did not rerun from `target/compiled-failed/` without its header, remove model files the project no longer has, and record every other compiled file as kept.
-pub(crate) fn restore_models_after_failed_compile<'py>(
-    target_dir: &Bound<'py, PyAny>,
-    project: &Bound<'py, PyAny>,
-    recorder: ArtifactRecorder<'_>,
-) -> PyResult<()> {
-    let py: Python<'py> = target_dir.py();
-    let Some(injection) = crate::bindings::_helpers::compile_context::delta::injection() else {
-        return Ok(());
-    };
-    let target: PathBuf = target_dir.extract()?;
-    if !target.join(FAILED_COMPILED_DIRECTORY_NAME).is_dir() {
-        return Ok(());
-    }
-    let mut rerun: Vec<(String, String)> = Vec::new();
-    for model in native_field(project, "models")?.try_iter()? {
-        let model: Bound<'py, PyAny> = model?;
-        let relative_path: String = if let Ok(native) = model.cast::<NativeCompiledModel>() {
-            native.get().output_texts(py)?.0
-        } else {
-            path_posix_text(&native_field(&model, "relative_path")?)?
-        };
-        rerun.push((relative_path, String::new()));
-    }
-    let compiled_dir: PathBuf = target.join(COMPILED_DIR);
-    let mut batch: ArtifactBatch = ArtifactBatch::new(true, recorder);
-    for (relative_path, query_sql) in
-        models_not_rerun(&target, &rerun, &injection.project_model_paths)?
-    {
-        batch.queue_sql_at(
-            py,
-            native_model_output_path(&compiled_dir, &relative_path),
-            &query_sql,
-        )?;
-    }
-    batch.flush(py)?;
-    let managed: Vec<PathBuf> = injection
-        .project_model_paths
-        .iter()
-        .map(|relative_path| native_model_output_path(&compiled_dir, relative_path))
-        .collect();
-    let _ = remove_stale_artifacts(py, compiled_dir.join(MODELS_DIR), managed, None)?;
-    artifact_tree_kept(py, recorder, &compiled_dir)
-}
-
-/// In a delta compile, the compiled SQL of each project model it did not rerun, unchanged since the stored compile: read from `target/compiled-failed/` without its header when that compile failed its Rules, otherwise from `target/compiled/`.
+/// In a delta compile, which runs only after a passing compile, the compiled SQL of each project model it did not rerun, unchanged in `target/compiled/` since that compile.
 fn models_not_rerun(
     target: &Path,
     rerun: &[(String, String)],
     project_model_paths: &[String],
 ) -> PyResult<Vec<(String, String)>> {
     let rerun: HashSet<&str> = rerun.iter().map(|(path, _)| path.as_str()).collect();
-    let failed_dir: PathBuf = target.join(FAILED_COMPILED_DIRECTORY_NAME);
-    let stored_failed: bool = failed_dir.is_dir();
-    let stored_dir: PathBuf = if stored_failed {
-        failed_dir
-    } else {
-        target.join(COMPILED_DIR)
-    };
+    let compiled_dir: PathBuf = target.join(COMPILED_DIR);
     let mut models: Vec<(String, String)> = Vec::new();
     for relative_path in project_model_paths {
         if rerun.contains(relative_path.as_str()) {
             continue;
         }
-        let path: PathBuf = native_model_output_path(&stored_dir, relative_path);
+        let path: PathBuf = native_model_output_path(&compiled_dir, relative_path);
         let Ok(text) = std::fs::read_to_string(&path) else {
             return Err(
                 crate::bindings::_helpers::compile_context::delta::delta_unsupported(
@@ -940,41 +888,14 @@ fn models_not_rerun(
                 ),
             );
         };
-        let text: String = if cfg!(windows) {
+        let query_sql: String = if cfg!(windows) {
             text.replace("\r\n", "\n")
-        } else {
-            text
-        };
-        let query_sql: String = if stored_failed {
-            without_failure_header(&text, relative_path).to_owned()
         } else {
             text
         };
         models.push((relative_path.clone(), query_sql));
     }
     Ok(models)
-}
-
-/// `text` without the not-buildable header and the Rule error lines `rule_error_lines` wrote for `relative_path`.
-fn without_failure_header<'a>(text: &'a str, relative_path: &str) -> &'a str {
-    let Some(mut rest) = text
-        .strip_prefix(RULE_FAILED_HEADER)
-        .and_then(|rest| rest.strip_prefix('\n'))
-    else {
-        return text;
-    };
-    let location: String = format!("at {relative_path}");
-    while let Some((line, after)) = rest.split_once('\n') {
-        let is_error_line: bool = line
-            .strip_prefix("-- ")
-            .and_then(|line| line.split_once(' '))
-            .is_some_and(|(_, line)| line.starts_with(location.as_str()));
-        if !is_error_line {
-            break;
-        }
-        rest = after;
-    }
-    rest
 }
 
 /// `path` relative to `failed_dir`, with `/` separators.

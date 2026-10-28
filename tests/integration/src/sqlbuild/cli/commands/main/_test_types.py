@@ -1350,6 +1350,14 @@ class RuleFailureSequenceTestCase:
 
 
 @dataclass(frozen=True)
+class RuleFailureStaleArtifactTestCase:
+    description: str
+    environment: dict[str, str]
+    extra_args: tuple[str, ...]
+    expected_after_failure_fragment: str
+
+
+@dataclass(frozen=True)
 class SignalledScenarioTestCase:
     description: str
     sent_signal: signal.Signals

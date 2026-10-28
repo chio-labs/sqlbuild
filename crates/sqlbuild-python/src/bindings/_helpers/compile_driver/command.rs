@@ -28,7 +28,7 @@ use crate::bindings::_helpers::compile_command::reuse_recording::{
     CompileArtifactWrites, RecordedCompileOutput, compile_reuse_timings, new_artifact_recorder,
 };
 use crate::bindings::_helpers::compile_command::target_writer::{
-    remove_failed_compile, restore_models_after_failed_compile, write_rule_failed_models,
+    remove_failed_compile, write_rule_failed_models,
 };
 use crate::bindings::_helpers::compile_context::input_reads::record_compile_input_reads;
 use crate::bindings::_helpers::compile_driver::analysis::analyze;
@@ -385,11 +385,6 @@ fn compiled_with_status<'py>(
             ],
         )?
     } else {
-        restore_models_after_failed_compile(
-            &target_dir(&project_dir)?,
-            &native_field(&native_field(&analysis, "graph")?, "project")?,
-            recorder,
-        )?;
         remove_failed_compile(&target_dir(&project_dir)?.extract::<PathBuf>()?)?;
         written
     };
