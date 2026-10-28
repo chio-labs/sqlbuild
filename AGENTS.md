@@ -18,6 +18,18 @@
   explicitly requests it; rely on CI for those suites.
 - Before pushing, run the exact static CI target with all optional dependencies available: `uv sync --all-extras` followed by `make check-ci`.
 
+## DuckShop Edge Cases
+
+- DuckShop (`benchmarks/duckshop`) is the all-round stress test for the compiler, Rules, unit
+  tests, scenarios, and translation from Snowflake SQL. Edge cases found anywhere must end up in it.
+- A fix for a bug, review finding, or recorded hazard that involves a project shape (a model, macro
+  or test pattern), a data value, or a lifecycle sequence (for example a view/table switch or a
+  microbatch retry) adds a matching synthetic case to DuckShop's edge-case area in the same change.
+  If it does not apply, such as command-line behavior or output formatting, the pull request says
+  why.
+- The edge-case area stays selectable on its own, and benchmark comparisons exclude it, until the
+  stress version replaces the current DuckShop and the benchmark is re-baselined on it.
+
 ## Real-Project Verification and Performance Guards
 
 - Synthetic fixtures and clean benchmark projects do not exercise every path. Before releasing
