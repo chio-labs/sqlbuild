@@ -59,7 +59,7 @@ _PROJECT: str = (
             absent_fragments=("--> models/refund_rates.sql",),
         ),
         MacroSlotQualificationTestCase(
-            description="an expression macro's plain reads count as unqualified beside bare columns",
+            description="an expression macro's plain reads pass beside bare caller columns",
             files={
                 "models/orders.sql": (
                     'MODEL (\n  description "One row per order",\n  materialized table,\n);\n\n'
@@ -82,7 +82,7 @@ _PROJECT: str = (
             absent_fragments=("SQBRSQL028",),
         ),
         MacroSlotQualificationTestCase(
-            description="an expression macro's plain reads beside a hand-qualified column fail",
+            description="an expression macro's plain reads pass beside hand-qualified columns",
             files={
                 "models/orders.sql": (
                     'MODEL (\n  description "One row per order",\n  materialized table,\n);\n\n'
@@ -100,9 +100,9 @@ _PROJECT: str = (
                     'FROM __ref("orders") AS o\n'
                 ),
             },
-            expected_exit_code=1,
-            expected_fragments=("error[SQBRSQL028]", "--> models/order_totals.sql"),
-            absent_fragments=("--> models/_macros/sql/net_amount.sql",),
+            expected_exit_code=0,
+            expected_fragments=("Project compiled",),
+            absent_fragments=("SQBRSQL028",),
         ),
         MacroSlotQualificationTestCase(
             description="an expression macro's bare column beside a hand-qualified column fails",

@@ -171,10 +171,8 @@ MACRO (
 SELECT @src.created_at, @src.updated_at, @src.updated_at > @src.created_at AS was_updated
 ```
 
-`SELECT order_id, @sql.audit_columns(o) FROM orders AS o` compiles to
-`SELECT order_id, o.created_at, o.updated_at, o.updated_at > o.created_at AS was_updated FROM orders AS o`.
-The macro's plain reads count as unqualified, so the caller writes its own columns bare too (see
-[reading slots](#reading-slots)).
+`SELECT o.order_id, @sql.audit_columns(o) FROM orders AS o` compiles to
+`SELECT o.order_id, o.created_at, o.updated_at, o.updated_at > o.created_at AS was_updated FROM orders AS o`.
 
 Use a column list when the same ordered set of columns repeats, for example in every branch of a
 `UNION ALL`. The call takes no alias (`P021`): each inserted column is named in the macro.
@@ -319,13 +317,15 @@ fully typed.
   `USING (@weekly.week)` for a column the type does not declare.
 - In a column-list macro, `o.@weekly.keys` outputs the group's columns under their own names.
 - Rules judge a read as you wrote it. `SQBRSQL028`, which rejects a query mixing qualified and
-  unqualified columns, counts every plain read as unqualified, every `alias.@weekly...` read as
-  qualified, and any other column a macro outputs as the macro writes it. A query the macro writes
-  whole, such as a CTE of a CTE-list macro, is judged once, in the macro file. Where a call's output
-  joins the caller's query, as with expression and column-list macros, that query is judged at the
-  call, so a plain read beside a hand-qualified column such as `o.order_id` fails. A step written
-  only in plain reads, such as `SELECT @weekly.keys, @weekly.refund_count AS refunds FROM @weekly`,
-  passes; to qualify, read every slot through an alias.
+  unqualified columns, judges a query the macro writes whole, such as a CTE of a CTE-list macro,
+  once, in the macro file. There every plain read counts as unqualified and every
+  `alias.@weekly...` read as qualified. A step written only in plain reads, such as
+  `SELECT @weekly.keys, @weekly.refund_count AS refunds FROM @weekly`, passes; to qualify, read
+  every slot through an alias.
+- Where a call's output joins the caller's query, as with expression and column-list macros, the
+  query is judged at the call. A read through the relation the call passes, such as `o.created_at`
+  above, fits either style; any other column counts as the macro writes it, so a bare `status`
+  beside a hand-qualified `o.order_id` fails.
 
 A plain group read inside a subquery, such as `EXISTS (SELECT @weekly.keys FROM refunds AS r ...)`,
 could bind its bare columns to the subquery's relations instead of the one the slot reads. The

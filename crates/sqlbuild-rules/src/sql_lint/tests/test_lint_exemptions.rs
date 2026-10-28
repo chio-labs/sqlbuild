@@ -17,18 +17,25 @@ fn given_sql_macro_output_when_linting_qualification_then_each_column_counts_as_
             expected_count: 1,
         },
         SqlMacroOutputLintTestCase {
-            description: "plain slot reads count as unqualified beside a bare caller column",
+            description: "reads through a passed relation pass beside a bare caller column",
             sql: "SELECT order_id, o.amount - o.discount AS net FROM orders AS o",
             output: "o.amount - o.discount",
             relations: &["o"],
             expected_count: 0,
         },
         SqlMacroOutputLintTestCase {
-            description: "plain slot reads beside a hand-qualified column fail",
+            description: "reads through a passed relation pass beside a hand-qualified column",
             sql: "SELECT o.order_id, o.amount - o.discount AS net FROM orders AS o",
             output: "o.amount - o.discount",
             relations: &["o"],
-            expected_count: 2,
+            expected_count: 0,
+        },
+        SqlMacroOutputLintTestCase {
+            description: "the caller's own mix beside reads through a passed relation fails",
+            sql: "SELECT o.order_id, status, o.amount AS a FROM orders AS o",
+            output: "o.amount",
+            relations: &["o"],
+            expected_count: 1,
         },
         SqlMacroOutputLintTestCase {
             description: "an aliased read counts as qualified beside a bare caller column",

@@ -694,7 +694,7 @@ fn collect_reference_facts(context: &ReferenceFactContext<'_>) -> AdditionalQuer
     facts
 }
 
-/// The unqualified references of a single-relation scope that also qualifies some, each judged as it was written. A plain macro slot read such as `@orders.amount` counts as unqualified though it expands to read through its relation: in a macro file it lints as a parameter sentinel pair, and in a call's output as a qualifier naming a relation the call passes. A scope whose every reference a macro call generated is judged once, in the macro file.
+/// The unqualified references of a single-relation scope that also qualifies some, each judged as it was written. In a macro file a plain slot read such as `@orders.amount` lints as a parameter sentinel pair and counts as unqualified. In a call's output, a read qualified by a relation the call passes takes neither style: the slot decides how it expands, not the caller or the macro author. A scope whose every reference a macro call generated is judged once, in the macro file.
 fn inconsistent_qualification(
     tokens: &[Token],
     (qualified, unqualified): (&[usize], &[usize]),
@@ -713,18 +713,20 @@ fn inconsistent_qualification(
     {
         return Vec::new();
     }
-    let plain_read = |index: &usize| {
-        is_plain_slot_read(tokens, *index)
-            || output_of(*index).is_some_and(|output| {
-                let qualifier: String = unquoted_name(&tokens[*index].text);
-                outputs[output]
-                    .relations
-                    .iter()
-                    .any(|relation| relation.eq_ignore_ascii_case(&qualifier))
-            })
+    let passed_relation_read = |index: &usize| {
+        output_of(*index).is_some_and(|output| {
+            let qualifier: String = unquoted_name(&tokens[*index].text);
+            outputs[output]
+                .relations
+                .iter()
+                .any(|relation| relation.eq_ignore_ascii_case(&qualifier))
+        })
     };
-    let (plain_reads, qualified): (Vec<usize>, Vec<usize>) =
-        qualified.iter().copied().partition(plain_read);
+    let (plain_reads, qualified): (Vec<usize>, Vec<usize>) = qualified
+        .iter()
+        .copied()
+        .filter(|index| !passed_relation_read(index))
+        .partition(|&index| is_plain_slot_read(tokens, index));
     if qualified.is_empty() || (unqualified.is_empty() && plain_reads.is_empty()) {
         return Vec::new();
     }
