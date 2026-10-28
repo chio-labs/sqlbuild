@@ -10,6 +10,11 @@ pub(crate) fn stdout_supports_color(py: Python<'_>) -> PyResult<bool> {
     if std::env::var_os(NO_COLOR_VARIABLE).is_some() {
         return Ok(false);
     }
+    stdout_is_tty(py)
+}
+
+/// Whether `sys.stdout` is a terminal.
+pub(crate) fn stdout_is_tty(py: Python<'_>) -> PyResult<bool> {
     let stdout = py.import("sys")?.getattr("stdout")?;
     if !stdout.hasattr("isatty")? {
         return Ok(false);

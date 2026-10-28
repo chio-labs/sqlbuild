@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 
 use crate::records::models::{OutputChunk, OutputStream, RecallRow, RecallValue, RowEnvelope};
 use crate::schema::models::Table;
+use crate::settings::models::AuditEvidence;
 use crate::store::errors::{StoreError, StoreErrorKind};
 use crate::store::models::InsertOutcome;
 use crate::store::types::{RecallStore, RecallStoreOpener};
@@ -348,4 +349,15 @@ impl RecallStoreOpener for CreatingStore {
     fn batch_window(&self) -> Duration {
         Duration::from_millis(10)
     }
+}
+
+pub(crate) struct AuditEvidenceTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) audit_evidence: AuditEvidence,
+    pub(crate) expected_rows: Vec<Vec<RecallValue>>,
+}
+
+pub(crate) struct FailedStatementTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) expected_rows: Vec<Vec<RecallValue>>,
 }

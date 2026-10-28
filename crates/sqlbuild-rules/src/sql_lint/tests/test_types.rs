@@ -55,6 +55,15 @@ pub(crate) struct PlainSqlLintTestCase {
     pub expected_count: usize,
 }
 
+pub(crate) struct SqlMacroOutputLintTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    /// The text a `@sql.` call generated, and the names the call passed.
+    pub(crate) output: &'static str,
+    pub(crate) relations: &'static [&'static str],
+    pub(crate) expected_count: usize,
+}
+
 pub(crate) struct DynamicOutputStarLintTestCase {
     pub(crate) description: &'static str,
     pub(crate) sql: &'static str,

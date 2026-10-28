@@ -13,4 +13,6 @@ pub struct RecallSection {
     pub diagnostics_min_severity: Option<String>,
     /// Bytes of each output stream to record; `Some(0)` records everything.
     pub max_output_bytes: Option<u64>,
+    /// Which audit outcomes keep their evidence rows: one of [`AUDIT_EVIDENCE_MODES`](crate::recall::constants::AUDIT_EVIDENCE_MODES).
+    pub audit_evidence: Option<String>,
 }

@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Generator
 from typing import Any, ClassVar
 
+from sqlbuild._native import CommandTerminated, termination_requested
 from sqlbuild.adapter.contract.main._attribute_failed_sql import attribute_failed_sql
 from sqlbuild.adapter.contract.models import QueryResult
 from sqlbuild.runtime.execution_limits.exceptions import (
@@ -23,6 +24,8 @@ from sqlbuild.runtime.execution_limits.main.tracked_statement_connection import 
     tracked_statement_connection,
 )
 from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
+
+_TERMINATED_MESSAGE: str = "terminated by SIGTERM"
 
 
 class ConnectionMixin(ABC):
@@ -44,6 +47,8 @@ class ConnectionMixin(ABC):
                 with tracked_statement_connection(adapter=self, connection=connection):
                     result: Any = self._execute(connection=connection, sql=sql)
             except Exception as error:
+                if termination_requested():
+                    raise CommandTerminated(_TERMINATED_MESSAGE) from error
                 try:
                     enforce_execution_deadline(after_failure=True)
                 except (ExecutionDurationLimitError, ItemTimeoutError) as deadline_error:

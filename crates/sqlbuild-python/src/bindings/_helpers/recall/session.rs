@@ -8,9 +8,11 @@ use std::time::{Duration, Instant, SystemTime};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use sqlbuild_cli::dispatch::main::closing_status::closing_status;
+use sqlbuild_cli::dispatch::main::selector_file_selectors::selector_file_selectors;
 use sqlbuild_cli::dispatch::models::CommandFacts;
 use sqlbuild_core::command_output::constants::INVOCATION_CONTEXT_ENV;
 use sqlbuild_host::entries::models::ExecutorHost;
+use sqlbuild_recall::records::main::bounded_selection::bounded_selection;
 use sqlbuild_recall::records::main::command_mode::command_mode;
 use sqlbuild_recall::records::main::format_timestamp::format_timestamp;
 use sqlbuild_recall::records::main::invocation_origin::invocation_origin;
@@ -22,7 +24,7 @@ use sqlbuild_recall::schema::main::render_script::render_script;
 use sqlbuild_recall::schema::models::{DdlOptions, Dialect};
 use sqlbuild_recall::settings::main::resolve_recall_settings::resolve_recall_settings;
 use sqlbuild_recall::settings::models::{
-    RecallSettings, SettingsRequest, StoreLocation, StorePurpose,
+    AuditEvidence, RecallSettings, SettingsRequest, StoreLocation, StorePurpose,
 };
 use sqlbuild_recall::store::main::observe_store_file::observe_store_file;
 use sqlbuild_recall::store::main::quarantine_store::quarantine_store;
@@ -48,6 +50,7 @@ use crate::bindings::_helpers::recall::constants::{
 };
 use crate::bindings::_helpers::recall::events::escaped_text;
 use crate::bindings::_helpers::recall::replacements::{RecallReplacements, in_replacement_sink};
+use crate::bindings::_helpers::recall::sinks::InvocationEvents;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// What the invocation records: its session, when enabled, and the resolved target and adapter.
@@ -64,6 +67,10 @@ pub(crate) struct InvocationRecall {
     pub(crate) replacements: Arc<RecallReplacements>,
     /// A Recall configuration mistake the command fails with before it runs.
     pub(crate) configuration_error: Option<String>,
+    /// The invocation's own lifecycle events the session has recorded.
+    pub(crate) invocation_events: Arc<InvocationEvents>,
+    /// Which failing audits collect evidence rows, as `recall.audit_evidence` sets it.
+    pub(crate) audit_evidence: AuditEvidence,
 }
 
 /// The text of an optional attribute value.
@@ -88,6 +95,24 @@ fn list_attribute(args: &Bound<'_, PyAny>, name: &str) -> PyResult<Vec<String>> 
         items.push(escaped_text(&item?.str()?)?);
     }
     Ok(items)
+}
+
+/// The effective selection: positional selectors and `--select`, then what every `--select-file` lists, with the files as passed. A file that cannot be read adds no selectors here; the command reports it.
+pub(crate) fn effective_selection(args: &Bound<'_, PyAny>) -> PyResult<(Vec<String>, Vec<String>)> {
+    let mut selectors: Vec<String> = list_attribute(args, "select")?;
+    let files: Vec<String> = match args.getattr_opt("select_file")? {
+        Some(value) if !value.is_none() => value
+            .try_iter()?
+            .map(|item| escaped_text(&item?.str()?))
+            .collect::<PyResult<_>>()?,
+        _ => Vec::new(),
+    };
+    for file in &files {
+        if let Some(text) = file_text(Path::new(file)) {
+            selectors.extend(selector_file_selectors(&text));
+        }
+    }
+    Ok((selectors, files))
 }
 
 fn environment(name: &str) -> Option<String> {
@@ -239,6 +264,9 @@ fn invocation_facts(
         settings.destination_schema.as_deref().unwrap_or_default()
     );
     let external_context: Option<String> = external_context(py)?;
+    let (selectors, selector_files) = effective_selection(args)?;
+    let selection_count: u64 = selectors.len() as u64;
+    let (selection, selection_truncated) = bounded_selection(selectors);
     let no_connection: bool = facts.command.as_deref() == Some(DEBUG_COMMAND)
         && attribute(args, NO_CONNECTION_ATTRIBUTE)?.is_truthy()?;
     Ok(InvocationContext {
@@ -246,7 +274,10 @@ fn invocation_facts(
         command_mode: command_mode(facts.command.as_deref(), no_connection).map(str::to_owned),
         command: facts.command.clone(),
         subcommand: facts.subcommand.clone(),
-        selection: list_attribute(args, "select")?,
+        selection,
+        selection_count: Some(selection_count),
+        selection_truncated,
+        selector_files,
         exclusion: list_attribute(args, "exclude")?,
         project_name: settings.project_name.clone(),
         project_dir_hash: Some(sha256_hex(project_dir.to_string_lossy().as_bytes())),
@@ -433,6 +464,7 @@ fn started_session(
         setup_budget: Duration::ZERO,
         maintenance: true,
         defer_context: true,
+        audit_evidence: settings.audit_evidence,
     });
     Ok(Some(Arc::new(session)))
 }
@@ -466,6 +498,7 @@ pub(crate) fn start_invocation_recall(
     } else {
         None
     };
+    let audit_evidence: AuditEvidence = settings.audit_evidence;
     Ok(InvocationRecall {
         session,
         target: settings.target.clone(),
@@ -474,6 +507,8 @@ pub(crate) fn start_invocation_recall(
         settings: Some((settings, project_dir)),
         replacements: Arc::default(),
         configuration_error: None,
+        invocation_events: Arc::default(),
+        audit_evidence,
     })
 }
 

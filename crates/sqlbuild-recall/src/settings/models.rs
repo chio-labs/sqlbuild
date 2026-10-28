@@ -4,7 +4,9 @@ use std::path::PathBuf;
 
 use sqlbuild_config::models::ConfigValue;
 
-use crate::settings::constants::DEFAULT_SQLITE_MAX_OUTPUT_BYTES;
+use crate::settings::constants::{
+    AUDIT_ERROR_OUTCOME, AUDIT_WARN_OUTCOME, DEFAULT_SQLITE_MAX_OUTPUT_BYTES,
+};
 
 /// Where Recall writes or reads.
 #[derive(Clone, Debug, PartialEq)]
@@ -54,6 +56,52 @@ pub struct RecallSettings {
     pub project_adapter: Option<String>,
     pub destination_database: Option<String>,
     pub destination_schema: Option<String>,
+    /// Which audit outcomes keep their evidence rows as an artifact.
+    pub audit_evidence: AuditEvidence,
+}
+
+/// Which audit outcomes keep their evidence rows in Recall, as `recall.audit_evidence` sets it; evidence holds data values from the audited relation.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AuditEvidence {
+    /// Warnings and errors: `warn-and-error`.
+    #[default]
+    WarnAndError,
+    /// Errors only: `error`.
+    Error,
+    /// None: `off`.
+    Off,
+}
+
+impl AuditEvidence {
+    /// The mode `recall.audit_evidence` names; anything else is the default.
+    #[must_use]
+    pub fn from_setting(setting: Option<&str>) -> Self {
+        match setting {
+            Some("error") => Self::Error,
+            Some("off") => Self::Off,
+            _ => Self::WarnAndError,
+        }
+    }
+
+    /// The `recall.audit_evidence` value naming this mode.
+    #[must_use]
+    pub fn setting(self) -> &'static str {
+        match self {
+            Self::WarnAndError => "warn-and-error",
+            Self::Error => "error",
+            Self::Off => "off",
+        }
+    }
+
+    /// Whether an audit with `outcome` keeps its evidence.
+    #[must_use]
+    pub fn keeps(self, outcome: &str) -> bool {
+        match self {
+            Self::WarnAndError => [AUDIT_WARN_OUTCOME, AUDIT_ERROR_OUTCOME].contains(&outcome),
+            Self::Error => outcome == AUDIT_ERROR_OUTCOME,
+            Self::Off => false,
+        }
+    }
 }
 
 /// Which connection an invocation uses, so only that one is resolved and its environment references expanded.

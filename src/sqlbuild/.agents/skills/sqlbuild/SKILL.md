@@ -94,10 +94,12 @@ Check that target's `read_connection` in `[recall]` or `[targets.<name>.recall]`
   ClickHouse SQL, and `--json` reports `rows_read` and `bytes_read`; filter on `invocation_id` or
   `invocation_started_at` and keep a `LIMIT` on large stores.
 
-The default `long` format is fine in most cases: read it as it is. If it is too verbose, select
-fewer columns or add a `LIMIT` rather than changing the format or reshaping the output. Use
-`--json` only when a program does something meaningful with the result, such as feeding it into
-further processing, not just to print rows more compactly.
+Keep the default output format for anything a person reads: it prints a table when the result fits
+and one record per row otherwise, so nothing is cut. If a result is too long, reshape the question,
+not the output: aggregate with `GROUP BY`, select only the columns you need, or add a `LIMIT`. A
+long listing usually means the query is not precise enough yet. Never switch format to shorten
+output or save context; `--json` is for programs that process the result. If you change the
+format, say why.
 
 Every command except `sqb recall` is recorded in the store of the target it runs against,
 including `sqb debug` and failed commands. To check a shared target, prefer `sqb recall` reads:

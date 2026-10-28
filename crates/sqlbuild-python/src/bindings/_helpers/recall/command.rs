@@ -30,10 +30,9 @@ use crate::bindings::_helpers::query_command::query::run_query_command;
 use crate::bindings::_helpers::recall::clickhouse_store::{ClickHouseLocation, ClickHouseReader};
 use crate::bindings::_helpers::recall::console::{write_stderr, write_stdout_bytes};
 use crate::bindings::_helpers::recall::constants::{
-    DEFAULT_MAX_CELL_BYTES, DEFAULT_QUERY_LIMIT, JSON_FORMAT, LAST_INVOCATION, LONG_FORMAT,
+    DEFAULT_MAX_CELL_BYTES, DEFAULT_QUERY_LIMIT, JSON_FORMAT, LAST_INVOCATION,
     RECALL_AMBIGUOUS_CODE, RECALL_DISABLED_CODE, RECALL_NOT_FOUND_CODE, RECALL_OPTIONS,
-    RECALL_QUERY_CODE, RECALL_SETTINGS_CODE, RECALL_STORE_CODE, TABLE_FORMAT,
-    TABLE_FORMAT_DEPRECATION, WAREHOUSE_BACKEND,
+    RECALL_QUERY_CODE, RECALL_SETTINGS_CODE, RECALL_STORE_CODE, WAREHOUSE_BACKEND,
 };
 use crate::bindings::_helpers::recall::rendering::{QueryContext, render_result, render_schema};
 use crate::bindings::_helpers::records::construct::new_error;
@@ -60,7 +59,8 @@ struct RecallRequest {
     selected_target: Option<String>,
     sql: Option<String>,
     backend: Option<String>,
-    format: String,
+    /// `long`, `json`, or `None` for the default layout.
+    format: Option<String>,
     limit: Option<i64>,
     no_limit: bool,
     max_cell_bytes: Option<i64>,
@@ -89,7 +89,7 @@ fn recall_request(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResul
         selected_target: text("selected_target")?,
         sql: text("sql")?,
         backend: text("backend")?,
-        format: text("output_format")?.unwrap_or_else(|| LONG_FORMAT.to_owned()),
+        format: text("output_format")?,
         limit: number("limit")?,
         no_limit: arguments.value("no_limit")?.is_truthy()?,
         max_cell_bytes: number("max_cell_bytes")?,
@@ -99,14 +99,6 @@ fn recall_request(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResul
         tail: number("tail")?,
         ddl: arguments.value("ddl")?.is_truthy()?,
     })
-}
-
-/// Warn once that `--format table` goes away in a later release; it still works in this one.
-fn warn_table_format(py: Python<'_>, recall: &RecallRequest) -> PyResult<()> {
-    if recall.format == TABLE_FORMAT {
-        write_stderr(py, TABLE_FORMAT_DEPRECATION)?;
-    }
-    Ok(())
 }
 
 /// The project directory, target and settings, or the coded failure.
@@ -280,7 +272,6 @@ fn limit(recall: &RecallRequest) -> Option<i64> {
 }
 
 fn run_query(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
-    warn_table_format(py, recall)?;
     let (project_dir, settings) = settings(py, recall)?;
     let sql: String = recall.sql.clone().unwrap_or_default();
     if sql.trim().is_empty() {
@@ -315,17 +306,17 @@ fn run_query(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
     let (adapter, label) = (store.adapter(), store.label());
     store.close();
     let (result, statistics) = queried.map_err(|error| store_failure(py, &error))?;
-    let format: &str = &recall.format;
+    let format: Option<&str> = recall.format.as_deref();
     let max_bytes: Option<usize> = match recall.max_cell_bytes {
         Some(bytes) if bytes <= 0 => None,
         Some(bytes) => Some(usize::try_from(bytes).unwrap_or(usize::MAX)),
-        None if format == JSON_FORMAT => None,
+        None if format == Some(JSON_FORMAT) => None,
         None => Some(DEFAULT_MAX_CELL_BYTES),
     };
     let rendered = render_result(
+        py,
         &result,
-        format,
-        max_bytes,
+        (format, max_bytes),
         &QueryContext {
             target: settings.target.as_deref(),
             store_path: &label,
@@ -334,7 +325,7 @@ fn run_query(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
             elapsed_ms: started.elapsed().as_secs_f64() * 1000.0,
             statistics: statistics.as_ref(),
         },
-    );
+    )?;
     write_stdout_bytes(py, rendered.as_bytes())?;
     Ok(0)
 }
@@ -390,7 +381,6 @@ fn run_schema_ddl(py: Python<'_>, settings: &RecallSettings) -> PyResult<i32> {
 }
 
 fn run_schema(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
-    warn_table_format(py, recall)?;
     let (project_dir, settings) = settings(py, recall)?;
     if recall.ddl {
         if recall.backend.as_deref() == Some(WAREHOUSE_BACKEND) {
@@ -426,7 +416,7 @@ fn run_schema(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
     let (dialect, label) = (store.dialect(), store.label());
     store.close();
     let relations = described.map_err(|error| store_failure(py, &error))?;
-    let json_output: bool = recall.format == JSON_FORMAT;
+    let json_output: bool = recall.format.as_deref() == Some(JSON_FORMAT);
     write_stdout_bytes(
         py,
         render_schema(
@@ -496,7 +486,7 @@ fn run_output(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
         problems.push("delivery did not report a complete flush".to_owned());
     }
     match transcript.status.as_deref() {
-        Some("completed" | "failed") | None => {}
+        Some("completed" | "failed" | "cancelled") | None => {}
         Some(status) => problems.push(format!("the invocation is {status}")),
     }
     if !problems.is_empty() {

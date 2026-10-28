@@ -12,6 +12,8 @@ pub(crate) const DBT_INIT_SUBCOMMAND: &str = "init";
 pub(crate) const DIFF_COMMAND_NAME: &str = "diff";
 /// `sqb recall` reads history and is never recorded itself.
 pub(crate) const RECALL_COMMAND_NAME: &str = "recall";
+/// A `--select-file` line starting with this is a comment.
+pub(crate) const SELECTOR_COMMENT_PREFIX: &str = "#";
 
 const PROJECT_DIR: Field = field("project_dir", Source::ProjectDir);
 const SELECT: Field = field("select", Source::Select);

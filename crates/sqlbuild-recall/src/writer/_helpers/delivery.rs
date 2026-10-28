@@ -344,7 +344,7 @@ pub(crate) fn deliver(shared: &Arc<Shared>, config: &SessionConfig) {
     };
     let mut next_heartbeat: SystemTime = SystemTime::now();
     let mut first_heartbeat: bool = true;
-    let mut materializer = Materializer::new(config.envelope.clone());
+    let mut materializer = Materializer::new(config.envelope.clone(), config.audit_evidence);
     let batching: Batching = batching(config);
     loop {
         let (batch, closing) = next_batch(shared, next_heartbeat, batching);
@@ -354,9 +354,11 @@ pub(crate) fn deliver(shared: &Arc<Shared>, config: &SessionConfig) {
             || !built.unbuildable.is_empty()
             || !built.filtered.is_empty()
             || built.extra_events > 0
+            || built.extra_artifacts > 0
         {
             let mut state = locked(&shared.state);
             state.counts_mut(DeliveryStream::Events).accepted += built.extra_events;
+            state.counts_mut(DeliveryStream::Artifacts).accepted += built.extra_artifacts;
             state.account(&built.settled, Ok(&InsertOutcome::default()));
             state.account_unbuildable(&built.unbuildable);
             state.account_filtered(&built.filtered);

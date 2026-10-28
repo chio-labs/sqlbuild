@@ -10,7 +10,7 @@ use crate::settings::constants::{
     LOCAL_FILE_NAME, PROJECT_FILE_NAME,
 };
 use crate::settings::errors::SettingsError;
-use crate::settings::models::{RecallSettings, SettingsRequest};
+use crate::settings::models::{AuditEvidence, RecallSettings, SettingsRequest};
 
 /// The effective settings: `targets.<t>.recall` over `[recall]` over the built-in local store, local configuration over project configuration at each level. Only the connection of the request's purpose is resolved, so a machine holding only the writer's or only the reader's credentials resolves its own side.
 pub fn resolve_recall_settings(request: &SettingsRequest) -> Result<RecallSettings, SettingsError> {
@@ -73,5 +73,6 @@ pub fn resolve_recall_settings(request: &SettingsRequest) -> Result<RecallSettin
         project_adapter,
         destination_database: target_field("database"),
         destination_schema: target_field("schema"),
+        audit_evidence: AuditEvidence::from_setting(effective.audit_evidence.as_deref()),
     })
 }

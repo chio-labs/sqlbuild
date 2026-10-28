@@ -6,6 +6,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use crate::records::models::{DeliveryCounts, InvocationContext, RowEnvelope};
+use crate::settings::models::AuditEvidence;
 use crate::store::types::RecallStoreOpener;
 use crate::writer::_helpers::delivery::Shared;
 
@@ -115,6 +116,8 @@ pub struct SessionConfig {
     /// Hold the context row until `RecallSession::publish_context` says whether a replacement filters history.
     pub defer_context: bool,
     pub maintenance_owner: String,
+    /// Which audit outcomes keep their evidence rows as an artifact; the rest are left out of the stored event.
+    pub audit_evidence: AuditEvidence,
 }
 
 /// How table setup went.

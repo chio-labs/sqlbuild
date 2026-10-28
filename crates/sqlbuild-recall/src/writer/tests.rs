@@ -1,3 +1,5 @@
+#[path = "tests/test_artifacts.rs"]
+mod artifacts;
 #[path = "tests/helpers.rs"]
 mod helpers;
 #[path = "tests/test_queue.rs"]

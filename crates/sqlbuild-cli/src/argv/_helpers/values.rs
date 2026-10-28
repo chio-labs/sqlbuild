@@ -114,6 +114,16 @@ impl Run<'_> {
         if choices.iter().any(|choice| choice == text) {
             return Ok(());
         }
+        if let Some((_, instead)) = action
+            .removed_choices
+            .iter()
+            .find(|(removed, _)| removed == text)
+        {
+            return Err(argument_error(
+                action,
+                &format!("{} was removed; {instead}", self.host.repr(text)),
+            ));
+        }
         let listed: Vec<String> = choices
             .iter()
             .map(|choice| python_str_repr(choice))

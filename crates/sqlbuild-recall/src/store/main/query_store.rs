@@ -1,5 +1,6 @@
 //! `query_store`: run one read-only query against a store.
 
+use crate::store::_helpers::column_types::{column_facts, column_types};
 use crate::store::_helpers::sqlite::{checked, from_sql};
 use crate::store::errors::{StoreError, StoreErrorKind};
 use crate::store::models::{QueryResult, SqliteStore};
@@ -22,15 +23,12 @@ pub fn query_store(
             "Recall queries must be read-only SELECT statements",
         ));
     }
-    let columns: Vec<String> = statement
-        .column_names()
-        .into_iter()
-        .map(str::to_owned)
-        .collect();
+    let (columns, declared): (Vec<String>, Vec<Option<String>>) = column_facts(&statement);
     let width: usize = columns.len();
     let mut rows = checked(statement.query([]), "run Recall query")?;
     let mut result = QueryResult {
         columns,
+        types: Vec::new(),
         rows: Vec::new(),
         truncated: false,
     };
@@ -50,5 +48,6 @@ pub fn query_store(
         }
         result.rows.push(values);
     }
+    result.types = column_types(declared, &result.rows);
     Ok(result)
 }

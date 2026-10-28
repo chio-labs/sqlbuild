@@ -29,68 +29,70 @@ File paths are resolved from the current working directory.
 |------|-------------|
 | `sql` | SQL to execute (positional argument) |
 | `--file` | Read SQL from a file instead of the command line |
-| `--format` | Output format: `long` (default), `table`, `json`, or `csv` |
+| `--format` | `long` prints one record per row; `json` prints a JSON array. Without it, the [default output](#output) applies |
 | `--json` | Shorthand for `--format json` |
 | `--limit` | Maximum rows to return (default: 20) |
 | `--no-limit` | Disable the row limit |
 | `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `query` [warehouse group](/docs/concepts/project-configuration#command-group-warehouses) and the connection warehouse |
 
-## Output formats
+## Output
 
-### long (default)
-
-Vertical record format, one field per line:
+By default `sqb query` prints a table with each column's name and warehouse type:
 
 ```
--[ RECORD 1 ]---------------------------+
-order_id | 1
-customer_id | 100
-status   | completed
-
--[ RECORD 2 ]---------------------------+
-order_id | 2
-customer_id | 200
-status   | completed
+┌──────────┬─────────────┬───────────┐
+│ order_id │ customer_id │  status   │
+│ INTEGER  │   INTEGER   │  VARCHAR  │
+├──────────┼─────────────┼───────────┤
+│        1 │         100 │ completed │
+│        2 │         200 │ completed │
+└──────────┴─────────────┴───────────┘
 
 2 rows
 ```
 
-### table
+The table must fit the terminal width, or 120 characters when output is redirected. When it is
+wider, or a value spans several lines, `sqb query` prints one record per row instead, so no column
+or value is ever cut. Numbers are right-aligned. Types show where the adapter reports them.
 
-Horizontal table format:
+The last line counts the rows. When the limit cut rows off, it says so and how to see more:
 
 ```
-order_id | customer_id | status
--------- | ----------- | ---------
-1        | 100         | completed
-2        | 200         | completed
+20 rows shown (limit 20; use --limit or --no-limit)
+```
+
+Above 50 rows it suggests reading fewer: `60 rows; to read fewer, aggregate with GROUP BY or add a
+LIMIT`.
+
+### long
+
+`--format long` always prints one record per row:
+
+```
+-[ RECORD 1 ]---------------------------+
+order_id    | 1
+customer_id | 100
+status      | completed
 
 2 rows
 ```
 
 ### json
 
-JSON array of objects:
+`--format json`, or `--json`, prints a JSON array of objects for programs:
 
 ```json
 [{"order_id": 1, "customer_id": 100, "status": "completed"}]
 ```
 
-### csv
-
-Standard CSV with headers:
-
-```csv
-order_id,customer_id,status
-1,100,completed
-2,200,completed
-```
+`--format table` and `--format csv` are not accepted. The default output already prints a table
+when the result fits; use `--json` for programs.
 
 ## Errors
 
 When the warehouse rejects the SQL, `sqb query` prints the warehouse message as
 `error[C108]: ...` on stderr and exits with code `2`. Nothing is written to stdout, so
-redirected `json` or `csv` output is never partial. Invalid command input, such as a missing
+redirected `json` output is never partial. Invalid command input, such as a missing
 query file, exits with code `1`.
 
 ## Examples
@@ -99,8 +101,8 @@ query file, exits with code `1`.
 # Quick inspection with default format
 sqb query "SELECT * FROM dev.fact_orders"
 
-# Table format with higher limit
-sqb query "SELECT * FROM dev.dim_customers" --format table --limit 50
+# One record per row with a higher limit
+sqb query "SELECT * FROM dev.dim_customers" --format long --limit 50
 
 # Export to JSON
 sqb query "SELECT * FROM dev.daily_revenue" --json --no-limit

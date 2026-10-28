@@ -384,9 +384,9 @@ def test_given_positional_selectors_when_parsing_then_they_join_the_selection(
         ),
         OutputFormatAliasTestCase(
             description="query explicit format",
-            argv=("query", "SELECT 1", "--format", "csv"),
+            argv=("query", "SELECT 1", "--format", "long"),
             format_attribute="query_format",
-            expected_format="csv",
+            expected_format="long",
         ),
     ],
     ids=lambda case: case.description,

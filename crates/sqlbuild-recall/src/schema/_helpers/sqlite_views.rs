@@ -31,13 +31,24 @@ query_ids AS (
 ),
 terminals AS (
     SELECT statement_id, event_type, occurred_at, query_id, error_type, error_code, duration_ms,
-        row_count, affected_rows,
+        row_count, affected_rows, outcome,
         ROW_NUMBER() OVER (
             PARTITION BY statement_id
             ORDER BY invocation_sequence DESC, occurred_at DESC, event_id DESC
         ) AS position
     FROM facts
     WHERE event_type IN ('statement_completed', 'statement_failed')
+),
+captures AS (
+    SELECT firsts.statement_id, (
+        SELECT MAX(artifact.digest IS NOT NULL)
+        FROM recall_artifact_refs AS ref
+        LEFT JOIN recall_artifacts AS artifact ON artifact.digest = ref.digest
+        WHERE ref.invocation_id = firsts.invocation_id
+            AND ref.digest = 'sha256:' || firsts.sql_digest
+    ) AS stored
+    FROM firsts
+    WHERE firsts.position = 1
 ),
 resources AS (
     SELECT invocation_id, resource_id, MIN(resource_name) AS resource_name,
@@ -65,7 +76,8 @@ SELECT
     terminals.occurred_at AS ended_at,
     CASE terminals.event_type
         WHEN 'statement_completed' THEN 'completed'
-        WHEN 'statement_failed' THEN 'failed'
+        WHEN 'statement_failed' THEN
+            CASE WHEN terminals.outcome = 'handled' THEN 'handled' ELSE 'failed' END
         ELSE 'no_terminal'
     END AS outcome,
     terminals.error_type,
@@ -74,16 +86,19 @@ SELECT
     terminals.row_count,
     terminals.affected_rows,
     firsts.sql_digest,
-    EXISTS (
-        SELECT 1 FROM recall_artifacts AS artifact
-        WHERE artifact.digest = 'sha256:' || firsts.sql_digest
-    ) AS sql_available
+    COALESCE(captures.stored, 0) AS sql_available,
+    CASE captures.stored
+        WHEN 1 THEN NULL
+        WHEN 0 THEN 'expired_or_not_captured'
+        ELSE 'not_captured'
+    END AS sql_unavailable_reason
 FROM firsts
 LEFT JOIN started ON started.statement_id = firsts.statement_id
 LEFT JOIN submitted ON submitted.statement_id = firsts.statement_id
 LEFT JOIN query_ids ON query_ids.statement_id = firsts.statement_id
 LEFT JOIN terminals
     ON terminals.statement_id = firsts.statement_id AND terminals.position = 1
+LEFT JOIN captures ON captures.statement_id = firsts.statement_id
 LEFT JOIN resources
     ON resources.invocation_id = firsts.invocation_id
     AND resources.resource_id = firsts.resource_id
@@ -114,6 +129,8 @@ const AUDIT_RESULTS: &str = "SELECT
     json_extract(payload, '$.evaluation_mode') AS evaluation_mode,
     json_extract(payload, '$.execution_error') AS execution_error,
     sql_digest,
+    json_extract(payload, '$.evidence_count') AS evidence_count,
+    json_extract(payload, '$.evidence_truncated') AS evidence_truncated,
     json_extract(payload, '$.sample_digest') AS sample_digest
 FROM recall_events
 WHERE event_type = 'audit_completed'";
@@ -225,7 +242,8 @@ const ARTIFACTS: &str = "SELECT
     artifact.size,
     artifact.digest IS NOT NULL AS available,
     CASE WHEN artifact.digest IS NULL THEN 'expired_or_not_captured' END AS unavailable_reason,
-    CASE WHEN artifact.media_type LIKE 'text/%' THEN CAST(artifact.content AS TEXT) END AS text,
+    CASE WHEN artifact.media_type LIKE 'text/%' OR artifact.media_type = 'application/json'
+        THEN CAST(artifact.content AS TEXT) END AS text,
     artifact.content
 FROM recall_artifact_refs AS refs
 LEFT JOIN recall_artifacts AS artifact ON artifact.digest = refs.digest";
@@ -253,6 +271,8 @@ started AS (
 terminals AS (
     SELECT invocation_id, event_type, occurred_at, exit_code, duration_ms, error_type, error_code,
         json_extract(payload, '$.error_message') AS error_message,
+        json_extract(payload, '$.signal_number') AS signal_number,
+        json_extract(payload, '$.cost_status') AS cost_status,
         ROW_NUMBER() OVER (
             PARTITION BY invocation_id
             ORDER BY invocation_sequence DESC, occurred_at DESC, event_id DESC
@@ -273,6 +293,8 @@ projected AS (
         COALESCE(started.started_at, ids.invocation_started_at) AS started_at,
         CASE
             WHEN terminals.event_type = 'invocation_completed' THEN 'completed'
+            WHEN terminals.event_type = 'invocation_failed'
+                AND terminals.signal_number IS NOT NULL THEN 'cancelled'
             WHEN terminals.event_type = 'invocation_failed' THEN 'failed'
             WHEN beats.stale_at IS NULL THEN 'unknown'
             WHEN beats.stale_at >= {NOW} THEN 'running'
@@ -285,6 +307,8 @@ projected AS (
         terminals.error_type,
         terminals.error_code,
         terminals.error_message,
+        terminals.signal_number,
+        terminals.cost_status,
         COALESCE(context.command, started.command, beats.command) AS command,
         COALESCE(context.subcommand, beats.subcommand) AS subcommand,
         context.origin,
@@ -293,6 +317,10 @@ projected AS (
         context.adapter,
         context.project_name,
         context.selection,
+        COALESCE(context.selection_count, json_array_length(context.selection))
+            AS selection_count,
+        context.selection_truncated,
+        context.selector_files,
         context.exclusion,
         context.sqlbuild_version,
         context.git_revision,
@@ -336,10 +364,16 @@ SELECT
             (unixepoch(last_heartbeat_at, 'subsec') - unixepoch(started_at, 'subsec')) * 1000.0, 3
         )
     END AS duration_ms,
+    CASE
+        WHEN terminal_event IS NOT NULL THEN 0
+        WHEN status = 'abandoned' THEN 1
+    END AS ended_at_estimated,
     exit_code,
     error_type,
     error_code,
     error_message,
+    signal_number,
+    cost_status,
     command,
     subcommand,
     origin,
@@ -348,6 +382,9 @@ SELECT
     adapter,
     project_name,
     selection,
+    selection_count,
+    selection_truncated,
+    selector_files,
     exclusion,
     sqlbuild_version,
     git_revision,

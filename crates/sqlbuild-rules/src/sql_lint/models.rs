@@ -83,12 +83,25 @@ pub(crate) struct LintRequest {
     pub relation_keys: HashMap<String, Vec<Vec<String>>>,
     #[serde(default)]
     pub relation_names: HashMap<String, String>,
+    /// The SQL each `@sql.` call in the query generated, so column qualification is judged as the macro wrote it.
+    #[serde(default)]
+    pub sql_macro_outputs: Vec<SqlMacroOutput>,
+}
+
+/// The character range one `@sql.` call's output fills, and the names its arguments pass, which a plain slot read such as `@rel.amount` expands to qualify with.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+pub(crate) struct SqlMacroOutput {
+    pub start: usize,
+    pub end: usize,
+    #[serde(default)]
+    pub relations: Vec<String>,
 }
 
 #[derive(Debug)]
 pub(crate) struct AdditionalFactOptions<'a> {
     pub external_identifiers: &'a HashSet<String>,
     pub dependency_identifiers: &'a HashSet<String>,
+    pub sql_macro_outputs: &'a [SqlMacroOutput],
     pub allows_ceremonial_select: bool,
     pub allows_dynamic_output_star: bool,
     pub allows_empty_fixture_star: bool,

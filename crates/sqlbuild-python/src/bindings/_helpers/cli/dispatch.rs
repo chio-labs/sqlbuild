@@ -46,12 +46,12 @@ use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use sqlbuild_cli::diff_report::errors::DiffUserError;
 use sqlbuild_cli::diff_report::main::parse_diff_name_range::parse_diff_name_range;
 use sqlbuild_cli::dispatch::main::command_dispatch::command_dispatch;
+use sqlbuild_cli::dispatch::main::selector_file_selectors::selector_file_selectors;
 use sqlbuild_cli::dispatch::main::unavailable_handler::unavailable_handler;
 use sqlbuild_cli::dispatch::models::{
     ClassRef, CommandFacts, DiffSide, Dispatch, DispatchFailure, Field, Route, Source,
 };
 use sqlbuild_core::format_command::main::format_path_selectors::format_path_selectors;
-use sqlbuild_core::text::main::python_strip::python_strip;
 
 use crate::bindings::_helpers::boundary::python_calls::{imported, within};
 use crate::bindings::_helpers::records::construct::error_class;
@@ -60,7 +60,6 @@ use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
 const PATHLIB_MODULE: &str = "pathlib";
-const COMMENT_PREFIX: &str = "#";
 const UTF8: &str = "utf-8";
 /// The code of a `--select-file` that cannot be read.
 const SELECTOR_FILE_CODE: &str = "C114";
@@ -265,15 +264,10 @@ fn selector_inputs<'py>(
             Ok(text) => text,
             Err(error) => return Err(selector_file_error(py, &path, &error)?),
         };
-        let lines: Vec<String> = text.call_method0("splitlines")?.extract()?;
-        let mut count: usize = 0;
-        for line in &lines {
-            let stripped: &str = python_strip(line);
-            if stripped.is_empty() || stripped.starts_with(COMMENT_PREFIX) {
-                continue;
-            }
-            selectors.push(PyString::new(py, stripped).into_any());
-            count += 1;
+        let listed: Vec<String> = selector_file_selectors(&text.extract::<String>()?);
+        let count: usize = listed.len();
+        for selector in &listed {
+            selectors.push(PyString::new(py, selector).into_any());
         }
         files.push(new_record_with(
             py,

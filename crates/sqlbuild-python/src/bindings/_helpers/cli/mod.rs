@@ -8,3 +8,4 @@ pub(crate) mod namespace;
 pub(crate) mod observability;
 pub(crate) mod registration;
 pub(crate) mod surrogates;
+pub(crate) mod termination;

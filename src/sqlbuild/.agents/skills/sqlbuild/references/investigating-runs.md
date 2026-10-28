@@ -31,11 +31,17 @@ what they printed. `sqb recall query` runs one read-only `SELECT` over a set of 
   `invocation_started_at` and the filter reaches the table reads; without one, a view folds the
   whole retention window.
 - **Writing history never fails the command,** so a missing row means "not recorded", not "did not
-  happen": `invocations.status = 'abandoned'` (the process died), `statements.outcome =
-  'no_terminal'` (no terminal fact arrived), and `output_invocations.complete = 0` with a
-  `gap_reason` when output is incomplete.
+  happen": `invocations.status = 'abandoned'` (the process died; `ended_at` is its last heartbeat
+  and `ended_at_estimated = 1`), `statements.outcome = 'no_terminal'` (no terminal fact arrived),
+  and `output_invocations.complete = 0` with a `gap_reason` when output is incomplete. A command
+  stopped by SIGTERM or Ctrl-C is `cancelled`, with `signal_number` 15 or 2 and its real end time.
 - **SQL is stored once by digest.** `statements.sql_digest` joins `artifacts` on
-  `(invocation_id, statement_id)` for the SQL text (`artifacts.text`).
+  `(invocation_id, statement_id)` for the SQL text (`artifacts.text`), also for failed and
+  cancelled statements. `statements.sql_available = 0` means the text is missing, and
+  `sql_unavailable_reason` says why.
+- **Audit evidence is an artifact.** A warning or failing audit's flagged rows (up to
+  `evidence_limit`) are in `artifacts` with `ref_id = audit_results.event_id`; `sample_digest` is
+  `NULL` when `[recall] audit_evidence` kept none. Evidence holds warehouse data values.
 - **Output is a byte-for-byte copy** of stdout and stderr, up to `max_output_bytes` per stream (the
   local store keeps the first and last MiB). Use `sqb recall output` rather than querying
   `output_transcripts` for long output.
@@ -50,12 +56,15 @@ what they printed. `sqb recall query` runs one read-only `SELECT` over a set of 
 
 | Column | Values |
 |--------|--------|
-| `invocations.status` | `completed`, `failed`, `running`, `abandoned`, `unknown` |
+| `invocations.status` | `completed`, `failed`, `cancelled`, `running`, `abandoned`, `unknown` |
+| `invocations.selection`, `selection_count`, `selector_files` | The selectors the command ran with, including those read from `--select-file` (paths in `selector_files`); `selection_truncated = 1` when the list exceeded 64 KiB |
+| `invocations.cost_status` | `complete`, `partial`, `pending`, `unavailable`, `collection_failed`; `NULL` when the adapter attributes no cost |
 | `invocations.origin` | `integration` (an orchestrator such as Dagster started it), `ci` (CI environment variables were set), `local`; `NULL` on runs older SQLBuild versions recorded |
 | `invocations.command_mode` | What a diagnostic checked: `sqb debug` records `config_only` (`--no-connection`) or `config_and_connection`; `NULL` for other commands |
 | `invocations.integration`, `integration_job`, `integration_run_id`, `integration_retry` | The orchestrator, job, run and retry from `external_context`, for example `dagster` and its job name; `NULL` when there is none or an older version stored it as non-JSON |
 | `invocations.error_type`, `error_code`, `error_message` | The cause of a failed invocation, also when it failed only through its exit code (`sqb debug`: `C980` connection, `C981` query, `C982` other check) |
-| `statements.outcome` | `completed`, `failed`, `no_terminal` |
+| `statements.outcome` | `completed`, `failed`, `handled` (failed, and SQLBuild recovered, such as a timed-out cost history read retried in smaller windows), `no_terminal` |
+| `statements.purpose` | `model_build` for a model's build statements, `cost_telemetry` for cost history reads, and others; check with `SELECT DISTINCT purpose` |
 | `audit_results.outcome` | `pass`, `warn`, `error`, `insufficient`; `execution_error` is set when the audit query itself failed |
 | `output_invocations.gap_reason` | `NULL` (complete), `truncated`, `filtered`, `dropped`, `unexplained` |
 | `events.event_type` | `invocation_started`, `invocation_completed`, `invocation_failed`, `run_started`, `run_completed`, `run_failed`, `resource_attempt_started`, `resource_attempt_completed`, `resource_attempt_failed`, `resource_attempt_skipped`, `operation_*`, `statement_started`, `statement_submitted`, `statement_completed`, `statement_failed`, `statement_heartbeat`, `microbatch_*`, `retry_scheduled`, `audit_completed` |
@@ -88,13 +97,15 @@ what they printed. `sqb recall query` runs one read-only `SELECT` over a set of 
 
 ## Output format
 
-- The default `long` format is fine in most cases: read it as it is, every value in full, one
-  record at a time.
-- If it is too verbose, select fewer columns or add a `LIMIT` (or aggregate) rather than changing
-  the format or reshaping the output.
-- Use `--json` only when a program does something meaningful with the result, for example to chain
-  an `invocation_id` into the next query, or when you need `statistics` (`rows_read`,
-  `bytes_read`, elapsed time). Not just to print rows more compactly.
+- Keep the default format for anything a person reads. It prints a table with column types when
+  the result fits and one record per row otherwise, every value in full.
+- If a result is too long, reshape the question, not the output: aggregate with `GROUP BY`, select
+  only the columns you need, or add a `LIMIT`. A long listing usually means the query is not
+  precise enough yet.
+- Never switch format to shorten output or save context. `--format long` always prints records;
+  `--json` is for programs, for example to chain an `invocation_id` into the next query, or when
+  you need `statistics` (`rows_read`, `bytes_read`, elapsed time). If you change the format, say
+  why.
 
 ## Worked investigations
 
@@ -201,7 +212,7 @@ artifacts (view): captured SQL and other artifacts, by reference
   text ANY
   content BLOB
 
-audit_results (view): one row per evaluated audit
+audit_results (view): one row per evaluated audit; its evidence rows are in artifacts
   invocation_id TEXT  join key
   invocation_started_at TEXT
   event_id TEXT
@@ -222,6 +233,8 @@ audit_results (view): one row per evaluated audit
   evaluation_mode ANY
   execution_error ANY
   sql_digest TEXT  join key
+  evidence_count ANY
+  evidence_truncated ANY
   sample_digest ANY
 
 conflicts (view): record keys reused with different content; the first row is kept
@@ -296,17 +309,20 @@ events (view): every lifecycle fact
   ingested_at TEXT
   content_hash TEXT
 
-invocations (view): one row per invocation; status is completed, failed, running, abandoned or unknown; origin is integration, ci or local; integration, integration_job, integration_run_id and integration_retry come from external_context
+invocations (view): one row per invocation; status is completed, failed, cancelled, running, abandoned or unknown; origin is integration, ci or local; integration, integration_job, integration_run_id and integration_retry come from external_context
   invocation_id TEXT  join key
   invocation_started_at ANY
   started_at ANY
   status ANY
   ended_at ANY
   duration_ms ANY
+  ended_at_estimated ANY
   exit_code INTEGER
   error_type TEXT
   error_code TEXT
   error_message ANY
+  signal_number ANY
+  cost_status ANY
   command ANY
   subcommand ANY
   origin TEXT
@@ -315,6 +331,9 @@ invocations (view): one row per invocation; status is completed, failed, running
   adapter TEXT
   project_name TEXT
   selection TEXT
+  selection_count ANY
+  selection_truncated INTEGER
+  selector_files TEXT
   exclusion TEXT
   sqlbuild_version TEXT
   git_revision TEXT
@@ -363,7 +382,7 @@ output_transcripts (view): exact stdout, stderr and combined bytes per invocatio
   stderr BLOB
   combined BLOB
 
-statements (view): one row per statement; outcome no_terminal means no terminal fact arrived
+statements (view): one row per statement; outcome handled means SQLBuild recovered from the failure; no_terminal means no terminal fact arrived
   invocation_id TEXT  join key
   invocation_started_at TEXT
   statement_id TEXT  join key
@@ -388,6 +407,7 @@ statements (view): one row per statement; outcome no_terminal means no terminal 
   affected_rows INTEGER
   sql_digest TEXT  join key
   sql_available ANY
+  sql_unavailable_reason ANY
 ```
 
 <!-- recall-schema:end -->

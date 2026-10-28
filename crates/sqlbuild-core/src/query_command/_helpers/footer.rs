@@ -1,20 +1,18 @@
-//! The row count and truncation lines under long and table output.
+//! The row count line under every text layout.
 
+use crate::query_command::constants::MANY_ROWS;
 use crate::query_command::models::QueryDisplay;
 
-/// A blank line, `<n> row(s)`, and the truncation hint when the limit cut rows off.
+/// A blank line and the row count: when the limit cut rows off, the limit and how to change it; above [`MANY_ROWS`], a hint to aggregate or limit the query.
 pub(crate) fn footer(display: &QueryDisplay) -> Vec<String> {
     let count: usize = display.rows.len();
-    let mut lines: Vec<String> = vec![
-        String::new(),
-        format!("{count} {}", if count == 1 { "row" } else { "rows" }),
-    ];
-    if display.truncated {
-        lines.push(display.limit.map_or_else(String::new, |limit| {
-            format!(
-                "Showing {limit} rows. Use --limit to show more or --no-limit to disable the limit."
-            )
-        }));
-    }
-    lines
+    let noun: &str = if count == 1 { "row" } else { "rows" };
+    let line: String = match display.limit.filter(|_| display.truncated) {
+        Some(limit) => format!("{count} {noun} shown (limit {limit}; use --limit or --no-limit)"),
+        None if count > MANY_ROWS => {
+            format!("{count} {noun}; to read fewer, aggregate with GROUP BY or add a LIMIT")
+        }
+        None => format!("{count} {noun}"),
+    };
+    vec![String::new(), line]
 }

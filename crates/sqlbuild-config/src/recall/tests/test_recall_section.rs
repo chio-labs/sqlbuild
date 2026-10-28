@@ -17,6 +17,7 @@ fn given_valid_sections_when_validated_then_settings_are_typed() {
                 ("shutdown_timeout", text("1500ms")),
                 ("diagnostics_min_severity", text("debug")),
                 ("max_output_bytes", ConfigValue::Integer(4_194_304)),
+                ("audit_evidence", text("error")),
             ]),
             expected_section: RecallSection {
                 enabled: Some(false),
@@ -26,6 +27,7 @@ fn given_valid_sections_when_validated_then_settings_are_typed() {
                 shutdown_timeout_ms: Some(1500),
                 diagnostics_min_severity: Some("debug".to_owned()),
                 max_output_bytes: Some(4_194_304),
+                audit_evidence: Some("error".to_owned()),
             },
         },
         ValidSectionTestCase {
@@ -64,6 +66,13 @@ fn given_valid_sections_when_validated_then_settings_are_typed() {
 #[test]
 fn given_invalid_sections_when_validated_then_the_message_names_the_key() {
     let test_cases = [
+        InvalidSectionTestCase {
+            description: "audit evidence names one of its modes",
+            value: table(&[("audit_evidence", text("always"))]),
+            label: "targets.prod.recall",
+            expected_message_prefix: "targets.prod.recall.audit_evidence must be one of: \
+                                      warn-and-error, error, off",
+        },
         InvalidSectionTestCase {
             description: "output bytes must not be negative",
             value: table(&[("max_output_bytes", ConfigValue::Integer(-1))]),

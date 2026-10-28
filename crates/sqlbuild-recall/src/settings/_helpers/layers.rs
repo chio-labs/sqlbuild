@@ -37,6 +37,7 @@ pub(crate) fn overlay(base: RecallSection, layer: RecallSection) -> RecallSectio
             .diagnostics_min_severity
             .or(base.diagnostics_min_severity),
         max_output_bytes: layer.max_output_bytes.or(base.max_output_bytes),
+        audit_evidence: layer.audit_evidence.or(base.audit_evidence),
     }
 }
 

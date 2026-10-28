@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyInt, PyList, PyListMethods, PyString, PyTuple};
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
+use sqlbuild_analysis::assembly::target_checks::constants::PRESERVE_TARGET_VALUE;
 use sqlbuild_core::audit_command::main::audit_exit_code::audit_exit_code;
 use sqlbuild_core::audit_command::main::render_audit_header::render_audit_header;
 use sqlbuild_core::audit_command::main::render_audit_summary::render_audit_summary;
@@ -41,6 +42,15 @@ const PROJECTION_FAILURE: &str = "audit_result_projection_failure";
 
 fn text<'py>(py: Python<'py>, value: &str) -> Bound<'py, PyAny> {
     PyString::new(py, value).into_any()
+}
+
+/// A target database or schema as a storage location: `preserve` names no location, so audit history is stored beside the models, as a build stores it.
+fn literal_location<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = value.py();
+    if !value.is_none() && value.extract::<String>()? == PRESERVE_TARGET_VALUE {
+        return Ok(py.None().into_bound(py));
+    }
+    Ok(value.clone())
 }
 
 /// Forward audit results to the event writer and connection timing to its reporter.
@@ -388,11 +398,11 @@ fn execute<'py>(
                     ("run_id", run_id.clone()),
                     (
                         "storage_database",
-                        native_field(&project, "effective_target_database")?,
+                        literal_location(&native_field(&project, "effective_target_database")?)?,
                     ),
                     (
                         "storage_schema",
-                        native_field(&project, "effective_target_schema")?,
+                        literal_location(&native_field(&project, "effective_target_schema")?)?,
                     ),
                 ],
             )?
@@ -452,6 +462,22 @@ fn audit_payload<'py>(
     Ok(PyString::new(py, &format!("{dumped}\n")).into_any())
 }
 
+/// The warning line for audit results that could not be stored in the warehouse history table; audit outcomes are unaffected.
+fn projection_warning(py: Python<'_>, style: CliStyle) -> PyResult<Option<String>> {
+    let projection: Bound<'_, PyAny> =
+        host::entry(py, ExecutorHost::CurrentAuditResultProjection)?.call0()?;
+    if projection.is_none() || !native_field(&projection, "degraded")?.is_truthy()? {
+        return Ok(None);
+    }
+    let failed: i64 = native_field(&projection, "failed_count")?.extract()?;
+    let reason: Option<String> = native_field(&projection, "failure_reason")?.extract()?;
+    let reason: String = reason.map_or_else(String::new, |reason| format!(": {reason}"));
+    Ok(Some(format!(
+        "{} {failed} audit result(s) were not written to the audit history table{reason}\n",
+        style.warning("warning:")
+    )))
+}
+
 /// Write the summary footer and JSON output; returns the exit code.
 fn complete(
     request: &Bound<'_, PyAny>,
@@ -481,7 +507,11 @@ fn complete(
     let style: CliStyle = CliStyle {
         use_color: native_field(invocation, "use_color")?.is_truthy()?,
     };
-    stream.call_method1("write", (render_audit_summary(counts, style),))?;
+    let warning: String = projection_warning(py, style)?.unwrap_or_default();
+    stream.call_method1(
+        "write",
+        (format!("{warning}{}", render_audit_summary(counts, style)),),
+    )?;
     stream.call_method0("flush")?;
     let payload: Bound<'_, PyAny> = audit_payload(
         &PyTuple::new(py, results)?.into_any(),

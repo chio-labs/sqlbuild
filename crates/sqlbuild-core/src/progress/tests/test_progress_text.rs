@@ -269,9 +269,9 @@ fn given_parsed_options_when_choosing_output_mode_then_machine_output_is_detecte
             expected_machine_output: true,
         },
         OutputModeTestCase {
-            description: "query csv",
+            description: "query json",
             facts: OutputModeFacts {
-                query_format: Some("csv".to_owned()),
+                query_format: Some("json".to_owned()),
                 ..facts("query", &[])
             },
             expected_machine_output: true,

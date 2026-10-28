@@ -26,7 +26,7 @@ Statements that write, and multiple statements, are rejected.
 | Flag | Description |
 |------|-------------|
 | `sql` | The query (positional argument) |
-| `--format` | `long` (default) for reading, `json` for programs, or `csv` for export. `table` still works in this release but prints a deprecation warning and will be removed |
+| `--format` | `long` prints one record per row; `json` is for programs. Without it, a table when the result fits, as [`sqb query`](/docs/cli/query#output) prints it |
 | `--json` | Shorthand for `--format json` |
 | `--limit` | Maximum rows to return (default: 100) |
 | `--no-limit` | Disable the row limit |
@@ -43,14 +43,20 @@ sqb recall query \
 ```
 
 ```
--[ RECORD 1 ]---------------------------+
-command     | build
-status      | completed
-exit_code   | 0
-duration_ms | 752.0
+┌─────────┬───────────┬───────────┬─────────────┐
+│ command │  status   │ exit_code │ duration_ms │
+│  text   │   text    │  integer  │    real     │
+├─────────┼───────────┼───────────┼─────────────┤
+│ build   │ completed │         0 │       752.0 │
+└─────────┴───────────┴───────────┴─────────────┘
 
 1 row
 ```
+
+The second header line is each column's type in the store. A result wider than the terminal (120
+characters when output is redirected), or with a value spanning lines, prints one record per row
+instead, so nothing is cut. `--format table` and `--format csv` are not accepted: the default
+output already prints a table when it fits, and `--json` is for programs.
 
 The slowest statements of past builds, with their SQL:
 
@@ -62,15 +68,13 @@ sqb recall query --max-cell-bytes 60 \
 ```
 
 ```
--[ RECORD 1 ]---------------------------+
-resource_name | orders
-ms            | 3.6
-sql           | CREATE OR REPLACE TABLE dev.orders__staging AS SELECT 1 …[+74 bytes]
-
--[ RECORD 2 ]---------------------------+
-resource_name | NULL
-ms            | 3.2
-sql           | CREATE SCHEMA IF NOT EXISTS dev
+┌───────────────┬──────┬──────────────────────────────────────────────────────────────────────────┐
+│ resource_name │  ms  │                                   sql                                    │
+│     text      │ real │                                   text                                   │
+├───────────────┼──────┼──────────────────────────────────────────────────────────────────────────┤
+│ orders        │  5.1 │ CREATE OR REPLACE TABLE dev.orders__staging AS SELECT 1 AS o…[+81 bytes] │
+│ NULL          │  3.2 │ CREATE SCHEMA IF NOT EXISTS dev                                          │
+└───────────────┴──────┴──────────────────────────────────────────────────────────────────────────┘
 
 2 rows
 ```

@@ -7,6 +7,7 @@ use crate::records::models::{
     DeliveryCounts, InvocationContext, OutputStream, RecallValue, RowEnvelope,
 };
 use crate::schema::models::Table;
+use crate::settings::models::AuditEvidence;
 use crate::store::main::open_sqlite_store::open_sqlite_store;
 use crate::store::main::query_store::query_store;
 use crate::store::main::read_output_transcript::read_output_transcript;
@@ -94,6 +95,7 @@ pub(crate) fn config(path: PathBuf, invocation_id: &str) -> SessionConfig {
         maintenance: true,
         maintenance_owner: "test:42".to_owned(),
         defer_context: false,
+        audit_evidence: AuditEvidence::WarnAndError,
     }
 }
 
@@ -583,7 +585,7 @@ pub(crate) fn replacement_order(priorities: &[Priority]) -> Vec<usize> {
         );
     }
     let batch = state.take_batch(usize::MAX);
-    drop(Materializer::new(envelope("ordered")).build(batch, None));
+    drop(Materializer::new(envelope("ordered"), AuditEvidence::WarnAndError).build(batch, None));
     std::mem::take(&mut *seen.lock().expect("the record is not poisoned"))
 }
 
@@ -604,4 +606,111 @@ pub(crate) fn creation_notices(
         session.information(),
         matches!(setup, Some(SetupOutcome::PermissionDenied { .. })),
     )
+}
+
+/// One `audit_completed` event of `outcome` carrying one evidence row.
+fn audit_event(index: usize, outcome: &str) -> serde_json::Map<String, serde_json::Value> {
+    let event: serde_json::Value = serde_json::json!({
+        "event_id": format!("audit-{index}"),
+        "event_type": "audit_completed",
+        "schema_version": 2,
+        "producer": "sqlbuild",
+        "producer_version": "1",
+        "occurred_at": "2026-10-19T00:00:01.000000Z",
+        "invocation_id": "evidence",
+        "invocation_sequence": index,
+        "resource_id": format!("audit:orders_{outcome}"),
+        "payload": {
+            "audit_name": format!("orders_{outcome}"),
+            "outcome": outcome,
+            "evidence_count": 1,
+            "evidence_truncated": false,
+            "evidence": [{"order_id": index}],
+        },
+    });
+    serde_json::from_value(event).expect("the audit event is an object")
+}
+
+/// Per audit outcome: whether the stored event still holds its evidence, its `sample_digest`, and the artifact text that digest names, after a session keeping `audit_evidence`.
+pub(crate) fn stored_evidence(audit_evidence: AuditEvidence) -> Vec<Vec<RecallValue>> {
+    let directory = tempfile::tempdir().expect("a temporary directory can be created");
+    let path = directory.path().join("recall.sqlite3");
+    let session = start_recall_session(SessionConfig {
+        audit_evidence,
+        ..config(path.clone(), "evidence")
+    });
+    for (index, outcome) in ["warn", "error"].iter().enumerate() {
+        session.publish_event_object(audit_event(index, outcome));
+    }
+    drop(session.close());
+    let store = open_sqlite_store(&path, OpenMode::ReadOnly).expect("the store opens");
+    query_store(
+        &store,
+        "SELECT r.outcome, json_extract(e.payload, '$.evidence') IS NOT NULL, r.sample_digest, \
+         r.evidence_count, a.kind, a.text \
+         FROM audit_results AS r JOIN recall_events AS e USING (event_id) \
+         LEFT JOIN artifacts AS a ON a.digest = 'sha256:' || r.sample_digest \
+         ORDER BY r.outcome",
+        None,
+    )
+    .expect("the query is valid")
+    .rows
+}
+
+/// Content rows, reference rows and conflicts after two statements ran the same SQL and the second failed.
+pub(crate) fn failed_statement_sql() -> Vec<Vec<RecallValue>> {
+    let directory = tempfile::tempdir().expect("a temporary directory can be created");
+    let path = directory.path().join("recall.sqlite3");
+    let session = start_recall_session(config(path.clone(), "failed"));
+    session.publish_sql("select 1", Some("s1"), Some("orders"));
+    session.publish_sql("select 1", Some("s2"), Some("orders"));
+    session.publish_failed_sql("select 1", Some("s2"), Some("orders"));
+    session.publish_failed_sql("select 2", Some("s3"), None);
+    drop(session.close());
+    let store = open_sqlite_store(&path, OpenMode::ReadOnly).expect("the store opens");
+    query_store(
+        &store,
+        "SELECT (SELECT COUNT(*) FROM recall_artifacts), \
+         (SELECT COUNT(*) FROM recall_artifact_refs), (SELECT COUNT(*) FROM recall_conflicts), \
+         (SELECT group_concat(statement_id, ',' ORDER BY statement_id) FROM artifacts)",
+        None,
+    )
+    .expect("the query is valid")
+    .rows
+}
+
+pub(crate) fn recall_text(value: &str) -> RecallValue {
+    RecallValue::Text(value.to_owned())
+}
+
+/// The digest of `[{"order_id":<index>}]` without its prefix.
+fn evidence_digest(index: u8) -> RecallValue {
+    let content: String = format!("[{{\"order_id\":{index}}}]");
+    recall_text(&crate::records::main::sha256_hex::sha256_hex(
+        content.as_bytes(),
+    ))
+}
+
+/// The [`stored_evidence`] row of an audit whose one evidence row was kept as an artifact.
+pub(crate) fn kept_evidence(outcome: &str, index: u8) -> Vec<RecallValue> {
+    vec![
+        recall_text(outcome),
+        RecallValue::Integer(0),
+        evidence_digest(index),
+        RecallValue::Integer(1),
+        recall_text("audit_evidence"),
+        recall_text(&format!("[{{\"order_id\":{index}}}]")),
+    ]
+}
+
+/// The [`stored_evidence`] row of an audit whose evidence was not kept.
+pub(crate) fn left_out_evidence(outcome: &str) -> Vec<RecallValue> {
+    vec![
+        recall_text(outcome),
+        RecallValue::Integer(0),
+        RecallValue::Null,
+        RecallValue::Integer(1),
+        RecallValue::Null,
+        RecallValue::Null,
+    ]
 }

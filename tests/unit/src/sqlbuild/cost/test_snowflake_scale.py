@@ -22,12 +22,20 @@ from sqlbuild._native import (
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.cost.models import RunCostSummary
 from sqlbuild.cost.types import CostStatus
+from sqlbuild.observability import (
+    EventDispatcher,
+    LifecycleEvent,
+    dispatcher_scope,
+    invocation_scope,
+)
+from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
 from tests.unit.src.sqlbuild.cli.commands._helpers.cost.helpers import write_snowflake_project
 from tests.unit.src.sqlbuild.cost._test_types import (
     SnowflakeCostBudgetTestCase,
     SnowflakeCostFailureMessageTestCase,
     SnowflakeLargeRunCostTestCase,
     SnowflakeScaleTestCase,
+    SnowflakeTimeoutOutcomeTestCase,
 )
 from tests.unit.src.sqlbuild.cost.helpers import (
     build_cost_run_record,
@@ -213,6 +221,69 @@ def test_given_large_run_when_collecting_snowflake_cost_then_sql_stays_bounded(
     assert {read.timeout_seconds for read in history.reads} == {"10"}
     assert test_case.expected_minimum_reads <= len(history.reads)
     assert len(history.reads) <= test_case.expected_maximum_reads
+
+
+class _ObservedHistory(_FakeQueryHistory):
+    """Query history read through statement lifecycles, as the Snowflake connection records them."""
+
+    def execute(self, sql: str, **kwargs: Any) -> _Cursor:
+        with StatementLifecycle(adapter="snowflake", sql=sql, intent="query") as lifecycle:
+            try:
+                cursor: _Cursor = super().execute(sql, **kwargs)
+            except Exception as error:
+                lifecycle.failed(error=error)
+                raise
+            lifecycle.completed(row_count=len(cursor.rows))
+            return cursor
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SnowflakeTimeoutOutcomeTestCase(
+            description="a timed-out read retried in smaller windows is handled",
+            timeout_window=timedelta(minutes=8),
+            expected_failure_outcomes={"handled"},
+        ),
+        SnowflakeTimeoutOutcomeTestCase(
+            description="a timed-out read too narrow to split stays failed",
+            timeout_window=timedelta(0),
+            expected_failure_outcomes={"handled", None},
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_history_read_timeout_when_collecting_then_only_retried_reads_are_handled(
+    test_case: SnowflakeTimeoutOutcomeTestCase, tmp_path: Path
+) -> None:
+    duration: timedelta = timedelta(minutes=42)
+    rows: list[tuple[Any, ...]] = run_history_rows(
+        origin=_ORIGIN, statement_count=6_500, duration=duration
+    )
+    ledger_path: Path = tmp_path / "statements.jsonl"
+    write_ledger(path=ledger_path, run_id=_RUN_ID, rows=rows)
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    with invocation_scope("inv-history-timeout"), dispatcher_scope(dispatcher):
+        _ = collect_snowflake_cost(
+            connection=_ObservedHistory(rows=rows, timeout_window=test_case.timeout_window),
+            run_id=_RUN_ID,
+            started_at=_ORIGIN,
+            completed_at=_ORIGIN + duration,
+            statement_ledger_path=ledger_path,
+            usd_per_credit=Decimal("3.00"),
+            rate_source="default",
+            attempts=1,
+        )
+
+    failures: list[LifecycleEvent] = list(
+        filter(lambda event: event.event_type == "statement_failed", events)
+    )
+    assert {event.payload.get("outcome") for event in failures} == (
+        test_case.expected_failure_outcomes
+    )
 
 
 class _ClosingHistory(_FakeQueryHistory):

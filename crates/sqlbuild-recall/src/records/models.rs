@@ -103,7 +103,14 @@ pub struct OmittedOutput {
 pub struct InvocationContext {
     pub command: Option<String>,
     pub subcommand: Option<String>,
+    /// The effective selectors: positional, `--select` and the contents of every selector file, at most [`MAX_RECORDED_SELECTION_BYTES`](crate::records::constants::MAX_RECORDED_SELECTION_BYTES).
     pub selection: Vec<String>,
+    /// How many effective selectors there were, recorded ones and truncated ones alike.
+    pub selection_count: Option<u64>,
+    /// Selectors were left out of `selection` to keep it within its bound.
+    pub selection_truncated: bool,
+    /// The selector files as passed, in order.
+    pub selector_files: Vec<String>,
     pub exclusion: Vec<String>,
     pub project_name: Option<String>,
     pub project_dir_hash: Option<String>,

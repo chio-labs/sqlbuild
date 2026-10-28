@@ -213,7 +213,8 @@ def killed_build(project_dir: Path, *, heartbeat_seconds: str) -> tuple[str, lis
     time.sleep(5 * float(heartbeat_seconds))
     recorded: list[list[object]] = recall_rows(
         project_dir,
-        "SELECT i.invocation_id, i.status, i.ended_at IS NOT NULL, o.complete "
+        "SELECT i.invocation_id, i.status, i.ended_at IS NOT NULL, i.ended_at_estimated, "
+        "o.complete "
         "FROM invocations i JOIN output_invocations o USING (invocation_id)",
     )
     return str(running[0][0]), recorded
@@ -224,15 +225,8 @@ def killed_during_discovery(
 ) -> tuple[list[list[object]], subprocess.CompletedProcess[bytes]]:
     """Rows left by a build SIGKILLed while importing a slow sink, and `recall output last`."""
 
-    sink: Path = project_dir / "sinks" / "slow_import.py"
-    sink.parent.mkdir(parents=True, exist_ok=True)
-    _ = sink.write_text(
-        "import os\nimport time\n\n"
-        "time.sleep(float(os.environ.get('ORDERS_IMPORT_SECONDS', '0')))\n",
-        encoding="utf-8",
-    )
     process: subprocess.Popen[bytes] = start(
-        project_dir,
+        write_slow_import_sink(project_dir),
         "build",
         SQLBUILD_RECALL_HEARTBEAT_SECONDS=heartbeat_seconds,
         ORDERS_IMPORT_SECONDS="60",
@@ -249,6 +243,62 @@ def killed_during_discovery(
         project_dir, "SELECT command, status, started_at IS NOT NULL FROM invocations"
     )
     return recorded, run(project_dir, "recall", "output", "last")
+
+
+def write_slow_import_sink(project_dir: Path) -> Path:
+    """Add a sink module whose import sleeps for `ORDERS_IMPORT_SECONDS`, slowing discovery."""
+
+    sink: Path = project_dir / "sinks" / "slow_import.py"
+    sink.parent.mkdir(parents=True, exist_ok=True)
+    _ = sink.write_text(
+        "import os\nimport time\n\n"
+        "time.sleep(float(os.environ.get('ORDERS_IMPORT_SECONDS', '0')))\n",
+        encoding="utf-8",
+    )
+    return project_dir
+
+
+def terminated_build(
+    project_dir: Path, *, wait_sql: str, **env: str
+) -> tuple[subprocess.CompletedProcess[bytes], float]:
+    """A build sent SIGTERM, as an orchestrator stops it, once `wait_sql` returns a row, and the
+    seconds it took to stop."""
+
+    process: subprocess.Popen[bytes] = start(project_dir, "build", **env)
+    try:
+        _ = wait_for(wait_sql, project_dir, timeout=120)
+        process.send_signal(signal.SIGTERM)
+        sent: float = time.monotonic()
+        stdout, stderr = process.communicate(timeout=60)
+    except subprocess.TimeoutExpired:
+        raise AssertionError(f"a terminated build kept running:\n{hang_dump(process)}") from None
+    completed: subprocess.CompletedProcess[bytes] = subprocess.CompletedProcess(
+        process.args, process.returncode, stdout, stderr
+    )
+    return completed, time.monotonic() - sent
+
+
+def terminated_while_closing(project_dir: Path) -> tuple[subprocess.CompletedProcess[bytes], float]:
+    """A build sent SIGTERM while it waits for a locked Recall store at exit, and the seconds it
+    took to stop."""
+
+    with held_store_lock(project_dir):
+        process: subprocess.Popen[bytes] = start(project_dir, "build", PYTHONUNBUFFERED="1")
+        assert process.stdout is not None
+        printed: bytes = b""
+        while b"Completed" not in printed and process.poll() is None:
+            printed += process.stdout.readline()
+        time.sleep(1)
+        process.send_signal(signal.SIGTERM)
+        sent: float = time.monotonic()
+        try:
+            stdout, stderr = process.communicate(timeout=60)
+        except subprocess.TimeoutExpired:
+            raise AssertionError(f"a closing build kept running:\n{hang_dump(process)}") from None
+    completed: subprocess.CompletedProcess[bytes] = subprocess.CompletedProcess(
+        process.args, process.returncode, printed + stdout, stderr
+    )
+    return completed, time.monotonic() - sent
 
 
 def interrupted_build(project_dir: Path, **env: str) -> tuple[int | None, float]:

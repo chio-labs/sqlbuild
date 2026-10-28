@@ -4397,13 +4397,21 @@
          "--format"
         ],
         "dest": "query_format",
-        "default": "long",
         "choices": [
          "long",
-         "table",
-         "json",
-         "csv"
+         "json"
         ],
+        "removed_choices": [
+         {
+          "value": "table",
+          "instead": "the default output prints a table when the result fits; use --format long for one record per row"
+         },
+         {
+          "value": "csv",
+          "instead": "use --json for programs, or the warehouse's own export for bulk data"
+         }
+        ],
+        "help": "by default a table when the result fits, else one record per row; long always prints records; json for programs",
         "mutex_group": 0,
         "group": 1
        },
@@ -7183,14 +7191,21 @@
               "--format"
              ],
              "dest": "recall_format",
-             "default": "long",
              "choices": [
               "long",
-              "table",
-              "json",
-              "csv"
+              "json"
              ],
-             "help": "long (default) for reading, json for programs, csv for export; table is deprecated",
+             "removed_choices": [
+              {
+               "value": "table",
+               "instead": "the default output prints a table when the result fits; use --format long for one record per row"
+              },
+              {
+               "value": "csv",
+               "instead": "use --json for programs"
+              }
+             ],
+             "help": "by default a table when the result fits, else one record per row; long always prints records; json for programs",
              "mutex_group": 0,
              "group": 1
             },
@@ -7374,14 +7389,21 @@
               "--format"
              ],
              "dest": "recall_format",
-             "default": "long",
              "choices": [
               "long",
-              "table",
-              "json",
-              "csv"
+              "json"
              ],
-             "help": "long (default) for reading, json for programs, csv for export; table is deprecated",
+             "removed_choices": [
+              {
+               "value": "table",
+               "instead": "use the default long output"
+              },
+              {
+               "value": "csv",
+               "instead": "use --json for programs"
+              }
+             ],
+             "help": "long (default) for reading, json for programs",
              "mutex_group": 0,
              "group": 1
             },

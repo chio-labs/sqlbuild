@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import signal
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1310,3 +1311,36 @@ class EnumLiteralCompileTestCase:
     expected_exit_code: int
     expected_diagnostics: tuple[tuple[str, str, int | None], ...]
     contract: str = "enforced"
+
+
+@dataclass(frozen=True)
+class PreservedTargetAuditTestCase:
+    description: str
+    target_toml: str
+    expected_history_schema: str
+
+
+@dataclass(frozen=True)
+class MacroSlotQualificationTestCase:
+    description: str
+    files: dict[str, str]
+    expected_exit_code: int
+    expected_fragments: tuple[str, ...]
+    absent_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RuleFailureArtifactsTestCase:
+    description: str
+    open_orders_sql: str
+    expected_exit_code: int
+    expected_open_orders: str
+    expected_manifest: bool
+
+
+@dataclass(frozen=True)
+class SignalledScenarioTestCase:
+    description: str
+    sent_signal: signal.Signals
+    expected_exit_code: int
+    expected_last_line: str

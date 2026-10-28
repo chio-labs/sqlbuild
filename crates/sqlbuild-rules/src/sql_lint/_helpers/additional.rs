@@ -3,12 +3,13 @@ use std::collections::HashSet;
 use polyglot_sql::tokens::{Span, Token, TokenType};
 
 use crate::constants::{EMPTY_FIXTURE_QUERY_TOKEN_COUNT, ENCLOSING_CTE_TOKEN_COUNT};
+use crate::lint_text::constants::SQL_MACRO_PARAMETER_SENTINEL_PREFIX;
 use crate::sql_lint::_helpers::engine::{
     direct_indices, is_comment, is_layout, is_query_from, query_end, significant_after,
     significant_before, token_depths,
 };
 use crate::sql_lint::constants::RELATION_MODIFIER_KEYWORDS;
-use crate::sql_lint::models::{AdditionalFactOptions, AdditionalQueryFacts};
+use crate::sql_lint::models::{AdditionalFactOptions, AdditionalQueryFacts, SqlMacroOutput};
 use rustc_hash::{FxHashMap, FxHashSet};
 use sqlbuild_core::constants::{CLOSE_PAREN, OPEN_PAREN, SQL_WILDCARD};
 
@@ -35,6 +36,7 @@ struct ReferenceFactContext<'a> {
     query: &'a QuerySlice<'a>,
     outer_relations: &'a FxHashSet<String>,
     external_identifiers: &'a HashSet<String>,
+    sql_macro_outputs: &'a [SqlMacroOutput],
     query_start: usize,
     query_end: usize,
 }
@@ -50,6 +52,7 @@ struct SelectFactContext<'a> {
     tokens: &'a [Token],
     depths: &'a [usize],
     external_identifiers: &'a HashSet<String>,
+    sql_macro_outputs: &'a [SqlMacroOutput],
     dependency_identifiers: &'a HashSet<String>,
     allows_ceremonial_select: bool,
     allows_dynamic_output_star: bool,
@@ -171,6 +174,7 @@ pub(super) fn collect_additional_facts(
         tokens,
         depths: &depths,
         external_identifiers: options.external_identifiers,
+        sql_macro_outputs: options.sql_macro_outputs,
         dependency_identifiers: options.dependency_identifiers,
         allows_ceremonial_select: options.allows_ceremonial_select,
         allows_dynamic_output_star: options.allows_dynamic_output_star,
@@ -338,6 +342,7 @@ fn collect_select_additional_facts(context: &SelectFactContext<'_>) -> Additiona
                 query: &reference_slice,
                 outer_relations: &outer_relations,
                 external_identifiers: context.external_identifiers,
+                sql_macro_outputs: context.sql_macro_outputs,
                 query_start: select_index,
                 query_end: end,
             };
@@ -663,10 +668,14 @@ fn collect_reference_facts(context: &ReferenceFactContext<'_>) -> AdditionalQuer
         facts
             .unqualified_multi_source_columns
             .extend(unqualified.iter().map(|&index| tokens[index].span));
-    } else if !qualified.is_empty() && !unqualified.is_empty() {
+    } else {
         facts
             .inconsistent_single_source_qualification
-            .extend(unqualified.iter().map(|&index| tokens[index].span));
+            .extend(inconsistent_qualification(
+                tokens,
+                (&qualified, &unqualified),
+                context.sql_macro_outputs,
+            ));
     }
     facts.unknown_relation_qualifiers.extend(
         qualified
@@ -683,6 +692,68 @@ fn collect_reference_facts(context: &ReferenceFactContext<'_>) -> AdditionalQuer
         ));
     }
     facts
+}
+
+/// The unqualified references of a single-relation scope that also qualifies some, each judged as it was written. In a macro file a plain slot read such as `@orders.amount` lints as a parameter sentinel pair and counts as unqualified. In a call's output, a read qualified by a relation the call passes takes neither style: the slot decides how it expands, not the caller or the macro author. A scope whose every reference a macro call generated is judged once, in the macro file.
+fn inconsistent_qualification(
+    tokens: &[Token],
+    (qualified, unqualified): (&[usize], &[usize]),
+    outputs: &[SqlMacroOutput],
+) -> Vec<Span> {
+    let output_of = |index: usize| -> Option<usize> {
+        let start: usize = tokens[index].span.start;
+        outputs
+            .iter()
+            .position(|output| output.start <= start && start < output.end)
+    };
+    let mut references = qualified.iter().chain(unqualified).copied();
+    if let Some(first) = references.next()
+        && let Some(output) = output_of(first)
+        && references.all(|index| output_of(index) == Some(output))
+    {
+        return Vec::new();
+    }
+    let passed_relation_read = |index: &usize| {
+        output_of(*index).is_some_and(|output| {
+            let qualifier: String = unquoted_name(&tokens[*index].text);
+            outputs[output]
+                .relations
+                .iter()
+                .any(|relation| relation.eq_ignore_ascii_case(&qualifier))
+        })
+    };
+    let (plain_reads, qualified): (Vec<usize>, Vec<usize>) = qualified
+        .iter()
+        .copied()
+        .filter(|index| !passed_relation_read(index))
+        .partition(|&index| is_plain_slot_read(tokens, index));
+    if qualified.is_empty() || (unqualified.is_empty() && plain_reads.is_empty()) {
+        return Vec::new();
+    }
+    let mut unqualified: Vec<usize> = unqualified.to_vec();
+    unqualified.extend(plain_reads);
+    unqualified.sort_unstable();
+    unqualified
+        .iter()
+        .map(|&index| tokens[index].span)
+        .collect()
+}
+
+/// An identifier's name without its quotes.
+fn unquoted_name(text: &str) -> String {
+    text.trim_matches(|character| matches!(character, '"' | '`' | '[' | ']'))
+        .to_owned()
+}
+
+/// Whether the qualified reference at `index` is a plain SQL macro slot read, both its relation and its slot a macro parameter.
+fn is_plain_slot_read(tokens: &[Token], index: usize) -> bool {
+    let is_parameter = |token: &Token| {
+        token
+            .text
+            .to_ascii_lowercase()
+            .starts_with(SQL_MACRO_PARAMETER_SENTINEL_PREFIX)
+    };
+    is_parameter(&tokens[index]) && tokens.get(index + 2).is_some_and(is_parameter)
 }
 
 fn simple_qualifier(

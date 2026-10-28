@@ -5,11 +5,12 @@ from pathlib import Path
 import pytest
 
 from tests.integration.src.sqlbuild.cli.recall._test_types import (
-    DeprecatedFormatTestCase,
     JsonErrorTestCase,
     LeanRecallTestCase,
+    QueryLayoutTestCase,
     RecallDiagnosticsTestCase,
     RecallUsageErrorTestCase,
+    RemovedFormatTestCase,
     StatementStartTestCase,
     StoreBeingCreatedTestCase,
 )
@@ -21,8 +22,6 @@ from tests.integration.src.sqlbuild.cli.recall.helpers import (
     write_project,
     write_sinks,
 )
-
-TABLE_DEPRECATION: str = "--format table is deprecated and will be removed"
 
 
 @pytest.mark.parametrize(
@@ -81,35 +80,106 @@ def test_given_a_failing_recall_command_with_json_when_run_then_stdout_is_a_json
 @pytest.mark.parametrize(
     "test_case",
     [
-        DeprecatedFormatTestCase(
-            description="table still renders and warns",
+        RemovedFormatTestCase(
+            description="recall query rejects table and points at the default",
             args=("recall", "query", "--format", "table", "SELECT 1 AS answer"),
-            expected_warning=True,
+            expected_message=(
+                "'table' was removed; the default output prints a table when the result fits"
+            ),
         ),
-        DeprecatedFormatTestCase(
-            description="the schema table warns too",
+        RemovedFormatTestCase(
+            description="recall schema rejects table too",
             args=("recall", "schema", "--format", "table"),
-            expected_warning=True,
+            expected_message="'table' was removed",
         ),
-        DeprecatedFormatTestCase(
-            description="the default long format does not warn",
-            args=("recall", "query", "SELECT 1 AS answer"),
-            expected_warning=False,
+        RemovedFormatTestCase(
+            description="recall query rejects csv and points at json",
+            args=("recall", "query", "--format", "csv", "SELECT 1 AS answer"),
+            expected_message="'csv' was removed; use --json for programs",
+        ),
+        RemovedFormatTestCase(
+            description="query rejects table",
+            args=("query", "--format", "table", "SELECT 1 AS answer"),
+            expected_message="'table' was removed",
+        ),
+        RemovedFormatTestCase(
+            description="query rejects csv",
+            args=("query", "--format", "csv", "SELECT 1 AS answer"),
+            expected_message="'csv' was removed; use --json for programs",
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_the_table_format_when_querying_then_it_works_with_a_deprecation_warning(
-    test_case: DeprecatedFormatTestCase, tmp_path: Path
+def test_given_a_removed_format_when_querying_then_it_is_a_usage_error_naming_the_replacement(
+    test_case: RemovedFormatTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_project(tmp_path / "orders_shop")
+
+    rejected: subprocess.CompletedProcess[bytes] = run(project_dir, *test_case.args)
+
+    assert rejected.returncode == 2
+    assert rejected.stdout == b""
+    assert test_case.expected_message in rejected.stderr.decode()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        QueryLayoutTestCase(
+            description="a narrow Recall result prints a box with column types",
+            args=("recall", "query", "SELECT 7 AS order_count, 'open' AS status"),
+            expected_fragments=("│ order_count │ status │", "│   integer   │  text  │", "1 row"),
+            unexpected_fragments=("RECORD",),
+        ),
+        QueryLayoutTestCase(
+            description="a Recall result wider than the output prints whole records",
+            args=("recall", "query", "SELECT replace(hex(zeroblob(70)), '0', 'x') AS note"),
+            expected_fragments=("-[ RECORD 1 ]", "note | " + "x" * 140, "1 row"),
+            unexpected_fragments=("┌",),
+        ),
+        QueryLayoutTestCase(
+            description="long always prints records",
+            args=("recall", "query", "--format", "long", "SELECT 7 AS order_count"),
+            expected_fragments=("-[ RECORD 1 ]", "order_count | 7"),
+            unexpected_fragments=("┌",),
+        ),
+        QueryLayoutTestCase(
+            description="a warehouse result shows the warehouse type names",
+            args=("query", "SELECT 7 AS order_id, CAST(12.5 AS DECIMAL(10,2)) AS amount"),
+            expected_fragments=("│ order_id │    amount     │", "INTEGER", "DECIMAL(10,2)"),
+            unexpected_fragments=("RECORD",),
+        ),
+        QueryLayoutTestCase(
+            description="a limited result says how to see more",
+            args=("query", "SELECT range AS order_id FROM range(30)"),
+            expected_fragments=("20 rows shown (limit 20; use --limit or --no-limit)",),
+            unexpected_fragments=("GROUP BY",),
+        ),
+        QueryLayoutTestCase(
+            description="many rows suggest reading fewer",
+            args=("query", "--no-limit", "SELECT range AS order_id FROM range(60)"),
+            expected_fragments=("60 rows; to read fewer, aggregate with GROUP BY or add a LIMIT",),
+            unexpected_fragments=(),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_query_result_when_printed_by_default_then_it_fits_the_output_without_hiding_data(
+    test_case: QueryLayoutTestCase, tmp_path: Path
 ) -> None:
     project_dir: Path = write_project(tmp_path / "orders_shop")
     assert run(project_dir, "build").returncode == 0
 
     rendered: subprocess.CompletedProcess[bytes] = run(project_dir, *test_case.args)
 
-    assert rendered.returncode == 0
-    assert rendered.stdout
-    assert (TABLE_DEPRECATION in rendered.stderr.decode()) is test_case.expected_warning
+    stdout: str = rendered.stdout.decode()
+    assert rendered.returncode == 0, rendered.stderr.decode(errors="replace")
+    assert [fragment in stdout for fragment in test_case.expected_fragments] == [
+        True for _ in test_case.expected_fragments
+    ], stdout
+    assert [fragment in stdout for fragment in test_case.unexpected_fragments] == [
+        False for _ in test_case.unexpected_fragments
+    ], stdout
 
 
 @pytest.mark.parametrize(

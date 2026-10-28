@@ -146,8 +146,27 @@ impl RecallSession {
         Ok(())
     }
 
-    /// Queue the SQL a statement executed, once per digest per invocation.
+    /// Queue the SQL a statement executed: its text once per digest per invocation, and a reference per statement.
     pub fn publish_sql(&self, sql: &str, statement_id: Option<&str>, resource_id: Option<&str>) {
+        self.queue_sql(sql, (statement_id, resource_id), Priority::Artifact);
+    }
+
+    /// Queue the SQL of a statement that failed or was cancelled again, above output and diagnostics, so a full queue or a spent shutdown budget keeps it; it is stored once if it already was.
+    pub fn publish_failed_sql(
+        &self,
+        sql: &str,
+        statement_id: Option<&str>,
+        resource_id: Option<&str>,
+    ) {
+        self.queue_sql(sql, (statement_id, resource_id), Priority::FailedTerminal);
+    }
+
+    fn queue_sql(
+        &self,
+        sql: &str,
+        (statement_id, resource_id): (Option<&str>, Option<&str>),
+        priority: Priority,
+    ) {
         if sql.len() > MAX_ARTIFACT_BYTES {
             let mut state = locked(&self.shared.state);
             let counts = state.counts_mut(DeliveryStream::Artifacts);
@@ -166,7 +185,7 @@ impl RecallSession {
             stream: DeliveryStream::Artifacts,
         };
         let mut state = locked(&self.shared.state);
-        state.push_record(record, Priority::Artifact);
+        state.push_record(record, priority);
         self.shared.wake.notify_one();
     }
 

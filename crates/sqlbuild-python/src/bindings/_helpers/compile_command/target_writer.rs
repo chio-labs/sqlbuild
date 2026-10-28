@@ -1,6 +1,6 @@
 //! Write compiled project output to `target/`: models, functions, audits, SQL tests, manifest.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use pyo3::exceptions::PyValueError;
@@ -39,10 +39,11 @@ use crate::bindings::_helpers::compile_outputs::runtime_target::{
 };
 use crate::bindings::_helpers::compiled_views::compiled_model_view::NativeCompiledModel;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
+use crate::bindings::_helpers::records::construct::{enum_member, error_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
+use crate::bindings::_helpers::records::fields::path_posix_text;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::sql_test_glue::plan_driver::plan_compiled_sql_test_artifacts;
 use crate::bindings::_helpers::sql_test_glue::plan_driver::sql_test_model_chain_names_by_key;
@@ -57,6 +58,9 @@ const TESTS_DIR: &str = "tests";
 const MANIFEST_FILE: &str = "manifest.json";
 /// The compile cache file stamping the compiled tree the last stale-file walk left.
 const COMPILED_TREE_STAMP_FILE: &str = "compiled-tree.bin";
+/// The model files compiles wrote under `target/compiled/`, one per line, relative to it.
+const COMPILED_MODELS_FILE: &str = "compiled-models.txt";
+
 const SQL_FILE_SUFFIX: &str = ".sql";
 const SQL_TEST_CACHE_LOGGER: &str = "sqlbuild.compile.reuse";
 /// The miss reason of a SQL test the cache file holds no record for.
@@ -68,6 +72,8 @@ const PUBLISHED_TREE: &str = "tree";
 const TARGET_OPTIONS: (&[&str], &[&str]) = (&["target_dir", "adapter", "project"], &["manifest"]);
 const STAGING_CHANGED_HELP: &str =
     "Rerun the compile; avoid deleting target/ while a compile is running.";
+/// The first line of a compiled model whose Rules failed.
+const RULE_FAILED_HEADER: &str = "-- sqb: compile failed for this model; not buildable";
 
 /// `base / part / ...`.
 fn joined<'py>(base: &Bound<'py, PyAny>, parts: &[&str]) -> PyResult<Bound<'py, PyAny>> {
@@ -318,8 +324,15 @@ fn write_planned_target<'py>(
         managed.push(path);
     }
     batch.flush(py)?;
+    let managed: Vec<PathBuf> = extracted(&managed)?;
+    record_compiled_models(
+        &target_dir.extract::<PathBuf>()?,
+        &compiled.extract::<PathBuf>()?,
+        &managed,
+        record_mode(remove_stale_files),
+    )?;
     if remove_stale_files {
-        remove_stale(target_dir, extracted(&managed)?, None)?;
+        remove_stale(target_dir, managed, None)?;
     }
     write_manifest(target_dir, manifest, None)?;
     written_target(
@@ -723,9 +736,15 @@ pub(crate) fn write_static_target<'py>(
     })();
     let (test_paths, diagnostics) = batch.settle(py, queued)?;
     managed.extend(test_paths);
+    let mut paths: Vec<PathBuf> = managed_models;
+    paths.extend(extracted(&managed)?);
+    record_compiled_models(
+        &target_dir.extract::<PathBuf>()?,
+        &compiled_dir,
+        &paths,
+        record_mode(remove_stale_files),
+    )?;
     if remove_stale_files {
-        let mut paths: Vec<PathBuf> = managed_models;
-        paths.extend(extracted(&managed)?);
         let cache_dir: Bound<'py, PyAny> = native_field(project, "compile_cache_dir")?;
         let cache_dir: Option<PathBuf> = if cache_dir.is_none() {
             None
@@ -746,6 +765,182 @@ pub(crate) fn write_static_target<'py>(
         ],
         PyTuple::new(py, diagnostics)?.into_any(),
     )
+}
+
+/// `path` relative to `project_dir` with `/` separators, as model files name themselves.
+fn project_relative(path: &Bound<'_, PyAny>, project_dir: &Bound<'_, PyAny>) -> PyResult<String> {
+    let text: String = path_posix_text(path)?;
+    if !Path::new(&text).is_absolute() {
+        return Ok(text);
+    }
+    let root: PathBuf = std::fs::canonicalize(path_posix_text(project_dir)?)?;
+    Ok(Path::new(&text)
+        .strip_prefix(&root)
+        .map_or(text.clone(), |relative| {
+            relative
+                .to_string_lossy()
+                .replace(std::path::MAIN_SEPARATOR, "/")
+        }))
+}
+
+/// Each source file's Rule errors as compiled-file header lines: code, location and message.
+fn rule_error_lines(
+    diagnostics: &Bound<'_, PyAny>,
+    project_dir: &Bound<'_, PyAny>,
+) -> PyResult<HashMap<String, Vec<String>>> {
+    let py: Python<'_> = diagnostics.py();
+    let rule_phase: Bound<'_, PyAny> = enum_member(py, RecordId::DiagnosticPhase, "RULE")?;
+    let mut lines: HashMap<String, Vec<String>> = HashMap::new();
+    for diagnostic in diagnostics.try_iter()? {
+        let diagnostic: Bound<'_, PyAny> = diagnostic?;
+        let path: Bound<'_, PyAny> = native_field(&diagnostic, "path")?;
+        if path.is_none()
+            || !native_field(&diagnostic, "is_error")?.is_truthy()?
+            || !native_field(&diagnostic, "phase")?.is(&rule_phase)
+        {
+            continue;
+        }
+        let relative: String = project_relative(&path, project_dir)?;
+        let position = |field: &str| -> PyResult<String> {
+            let value: Bound<'_, PyAny> = native_field(&diagnostic, field)?;
+            Ok(if value.is_none() {
+                String::new()
+            } else {
+                format!(":{}", value.str()?)
+            })
+        };
+        let message: String = native_field(&diagnostic, "message")?.str()?.to_string();
+        let line: String = format!(
+            "-- {} at {relative}{}{}: {}",
+            native_field(&diagnostic, "code")?.str()?,
+            position("line")?,
+            position("column")?,
+            message.split_whitespace().collect::<Vec<&str>>().join(" "),
+        );
+        lines.entry(relative).or_default().push(line);
+    }
+    Ok(lines)
+}
+
+/// After Rules failed, write every model's compiled SQL so the expansion they checked can be read. A model with Rule errors starts with a header marking it not buildable and listing them. An earlier manifest is removed, since it no longer describes `target/`, and so is a model file an earlier compile wrote for a model the project no longer has. Every other artifact stays as the last compile left it, for the next passing compile to publish or remove.
+pub(crate) fn write_rule_failed_models<'py>(
+    target_dir: &Bound<'py, PyAny>,
+    (project, project_dir): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    diagnostics: &Bound<'py, PyAny>,
+) -> PyResult<()> {
+    let py: Python<'py> = target_dir.py();
+    let errors: HashMap<String, Vec<String>> = rule_error_lines(diagnostics, project_dir)?;
+    let _ = prepared_target(target_dir)?;
+    let manifest: PathBuf = target_dir.extract::<PathBuf>()?.join(MANIFEST_FILE);
+    match std::fs::remove_file(&manifest) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error.into()),
+        _ => {}
+    }
+    let compiled_dir: PathBuf = joined(target_dir, &[COMPILED_DIR])?.extract()?;
+    let mut batch: ArtifactBatch = ArtifactBatch::new(true, None);
+    let mut written: Vec<PathBuf> = Vec::new();
+    for model in native_field(project, "models")?.try_iter()? {
+        let model: Bound<'py, PyAny> = model?;
+        let (relative_path, query_sql): (String, String) =
+            if let Ok(native) = model.cast::<NativeCompiledModel>() {
+                let (relative_path, query_sql) = native.get().output_texts(py)?;
+                (relative_path, query_sql.to_string())
+            } else {
+                (
+                    path_posix_text(&native_field(&model, "relative_path")?)?,
+                    native_field(&model, "query_sql")?.extract()?,
+                )
+            };
+        let sql: String = match errors.get(&relative_path) {
+            Some(lines) => format!("{RULE_FAILED_HEADER}\n{}\n{query_sql}", lines.join("\n")),
+            None => query_sql,
+        };
+        let path: PathBuf = native_model_output_path(&compiled_dir, &relative_path);
+        batch.queue_sql_at(py, path.clone(), &sql)?;
+        written.push(path);
+    }
+    batch.flush(py)?;
+    record_compiled_models(
+        &target_dir.extract::<PathBuf>()?,
+        &compiled_dir,
+        &written,
+        ModelRecord::RemoveRetired,
+    )
+}
+
+fn record_mode(removes_stale_files: bool) -> ModelRecord {
+    if removes_stale_files {
+        ModelRecord::Replace
+    } else {
+        ModelRecord::Extend
+    }
+}
+
+/// How a compile updates the record of the model files SQLBuild wrote under `target/compiled/`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ModelRecord {
+    /// A passing compile that removed stale files: the record is exactly what it wrote.
+    Replace,
+    /// A passing compile that kept the files already there: the record gains what it wrote.
+    Extend,
+    /// A compile whose Rules failed: other recorded models are retired, so their files are removed.
+    RemoveRetired,
+}
+
+/// Update the record of written model files, one path per line relative to `compiled_dir`.
+fn record_compiled_models(
+    target: &Path,
+    compiled_dir: &Path,
+    written: &[PathBuf],
+    mode: ModelRecord,
+) -> PyResult<()> {
+    let record: PathBuf = target.join(COMPILED_MODELS_FILE);
+    let previous: String = match std::fs::read_to_string(&record) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(error.into()),
+    };
+    let models_dir: PathBuf = compiled_dir.join(MODELS_DIR);
+    let mut lines: BTreeSet<String> = BTreeSet::new();
+    for path in written {
+        match path.strip_prefix(&models_dir) {
+            Ok(relative) => {
+                let _ = lines.insert(format!(
+                    "{MODELS_DIR}/{}",
+                    relative.to_string_lossy().replace('\\', "/")
+                ));
+            }
+            Err(_not_a_model) => continue,
+        }
+    }
+    for line in previous.lines().filter(|line| !line.is_empty()) {
+        if lines.contains(line) {
+            continue;
+        }
+        match mode {
+            ModelRecord::Replace => {}
+            ModelRecord::Extend => {
+                let _ = lines.insert(line.to_owned());
+            }
+            ModelRecord::RemoveRetired => {
+                let path: PathBuf = compiled_dir.join(line);
+                if !path.starts_with(&models_dir) {
+                    continue;
+                }
+                match std::fs::remove_file(&path) {
+                    Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                        return Err(error.into());
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    let contents: String = lines.iter().map(|line| format!("{line}\n")).collect();
+    if contents != previous {
+        std::fs::write(&record, contents)?;
+    }
+    Ok(())
 }
 
 /// Plan uncached SQL tests and report their errors without writing artifacts or cache.
@@ -783,7 +978,7 @@ pub(crate) fn publish_staged_target<'py>(
         .extract()?;
     let (staged, compiled): (PathBuf, PathBuf) = (staged_dir.extract()?, compiled_dir.extract()?);
     let (kind, published) = record_compile_timing("physical_write_ms", || {
-        publish_staged_artifacts(py, staged, compiled, expected)
+        publish_staged_artifacts(py, staged, compiled.clone(), expected.clone())
     })?;
     if kind == PUBLISHED_STAGING_CHANGED {
         return Err(staging_changed(
@@ -807,6 +1002,16 @@ pub(crate) fn publish_staged_target<'py>(
             remove_stale(target_dir, extracted(&managed)?, None)?;
         }
     }
+    let written: Vec<PathBuf> = expected
+        .iter()
+        .map(|relative| compiled.join(relative))
+        .collect();
+    record_compiled_models(
+        &target_dir.extract::<PathBuf>()?,
+        &compiled,
+        &written,
+        ModelRecord::Replace,
+    )?;
     write_manifest(target_dir, manifest, recorder)?;
     written_target(
         target_dir,

@@ -1,3 +1,4 @@
+pub(crate) mod column_types;
 pub(crate) mod identity;
 pub(crate) mod quarantine;
 pub(crate) mod rows;

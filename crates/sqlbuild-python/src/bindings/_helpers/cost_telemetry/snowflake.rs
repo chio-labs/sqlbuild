@@ -6,7 +6,7 @@ use pyo3::exceptions::{PyTimeoutError, PyValueError};
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyDict, PyList, PyListMethods, PyString, PyStringMethods, PyTuple};
+use pyo3::types::{PyCFunction, PyDict, PyList, PyListMethods, PyString, PyStringMethods, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::snowflake_cost::main::metadata_only_statement::metadata_only_statement;
 use sqlbuild_analysis::snowflake_cost::main::sqlbuild_query_tag::sqlbuild_query_tag;
@@ -14,14 +14,16 @@ use sqlbuild_analysis::snowflake_cost::models::QueryTag;
 use sqlbuild_core::cost_allocation::constants::QUERY_HISTORY_RESULT_LIMIT;
 use sqlbuild_core::cost_allocation::main::query_history_sql::query_history_sql;
 use sqlbuild_core::cost_allocation::models::{QueryHistoryWindow, RunAllocation};
+use sqlbuild_host::entries::models::ExecutorHost;
 
-use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, imported, within};
 use crate::bindings::_helpers::cost_telemetry::allocation::{
     SummaryState, allocate_observations, priced, summary_object,
 };
 use crate::bindings::_helpers::cost_telemetry::health::consume_ledger_failure;
 use crate::bindings::_helpers::cost_telemetry::ledger::read_ledger;
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
@@ -85,9 +87,43 @@ fn check_deadline(history: &History<'_>, py: Python<'_>) -> PyResult<()> {
     Ok(())
 }
 
+/// Whether a read's statement timeout is recovered from by reading smaller windows, so its failed statement is recorded as handled.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TimeoutRetry {
+    Split,
+    None,
+}
+
+/// Run `execute`, marking a statement timeout inside it as handled when the caller retries it.
+fn with_timeout_retry<'py, T>(
+    py: Python<'py>,
+    retry: TimeoutRetry,
+    execute: impl FnOnce() -> PyResult<T>,
+) -> PyResult<T> {
+    if retry == TimeoutRetry::None {
+        return execute();
+    }
+    let is_timeout = PyCFunction::new_closure(
+        py,
+        None,
+        None,
+        |arguments: &Bound<'_, PyTuple>, _: Option<&Bound<'_, PyDict>>| -> PyResult<bool> {
+            Ok(arguments
+                .get_item(0)?
+                .str()?
+                .to_string_lossy()
+                .contains(STATEMENT_TIMEOUT_CODE))
+        },
+    )?;
+    let scope: Bound<'py, PyAny> = host::entry(py, ExecutorHost::StatementLifecycle)?
+        .call_method1("handled_failure_scope", (is_timeout,))?;
+    within(&scope, |_| execute())
+}
+
 fn history_rows<'py>(
     history: &History<'py>,
     (start, end): (&Bound<'py, PyAny>, Option<&Bound<'py, PyAny>>),
+    retry: TimeoutRetry,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py: Python<'py> = start.py();
     check_deadline(history, py)?;
@@ -107,10 +143,11 @@ fn history_rows<'py>(
     parameters.set_item("STATEMENT_TIMEOUT_IN_SECONDS", QUERY_TIMEOUT_SECONDS)?;
     let options: Bound<'py, PyDict> = PyDict::new(py);
     options.set_item("statement_params", parameters)?;
-    let cursor: Bound<'py, PyAny> =
+    let cursor: Bound<'py, PyAny> = with_timeout_retry(py, retry, || {
         history
             .connection
-            .call_method("execute", (sql,), Some(&options))?;
+            .call_method("execute", (sql,), Some(&options))
+    })?;
     check_deadline(history, py)?;
     let rows: Vec<Bound<'py, PyAny>> = cursor
         .call_method0("fetchall")?
@@ -157,12 +194,14 @@ fn bounded_rows<'py>(
 ) -> PyResult<(Vec<Bound<'py, PyAny>>, bool)> {
     let py: Python<'py> = start.py();
     let width: Bound<'py, PyAny> = end.sub(start)?;
-    let rows: Vec<Bound<'py, PyAny>> = match history_rows(history, (start, Some(end))) {
+    let retry: TimeoutRetry = if width.gt(timedelta(py, ("seconds", MIN_TIMEOUT_SPLIT_SECONDS))?)? {
+        TimeoutRetry::Split
+    } else {
+        TimeoutRetry::None
+    };
+    let rows: Vec<Bound<'py, PyAny>> = match history_rows(history, (start, Some(end)), retry) {
         Ok(rows) => rows,
-        Err(error)
-            if statement_timeout(py, &error)
-                && width.gt(timedelta(py, ("seconds", MIN_TIMEOUT_SPLIT_SECONDS))?)? =>
-        {
+        Err(error) if retry == TimeoutRetry::Split && statement_timeout(py, &error) => {
             return split_rows(history, (start, end), &width);
         }
         Err(error) => return Err(error),
@@ -328,13 +367,14 @@ fn open_rows<'py>(
     (start, window_end): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<(Vec<Bound<'py, PyAny>>, bool)> {
     let py: Python<'py> = start.py();
-    let open_rows: Vec<Bound<'py, PyAny>> = match history_rows(history, (start, None)) {
-        Ok(rows) => rows,
-        Err(error) if statement_timeout(py, &error) => {
-            return bounded_rows(history, (start, window_end));
-        }
-        Err(error) => return Err(error),
-    };
+    let open_rows: Vec<Bound<'py, PyAny>> =
+        match history_rows(history, (start, None), TimeoutRetry::Split) {
+            Ok(rows) => rows,
+            Err(error) if statement_timeout(py, &error) => {
+                return bounded_rows(history, (start, window_end));
+            }
+            Err(error) => return Err(error),
+        };
     if open_rows.len() < history.result_limit {
         return Ok((open_rows, false));
     }

@@ -1,52 +1,75 @@
 use crate::json::models::JsonValue;
 use crate::query_command::main::render_dag_summary::render_dag_summary;
-use crate::query_command::main::render_query_csv::render_query_csv;
 use crate::query_command::main::render_query_json::render_query_json;
-use crate::query_command::main::render_query_long::render_query_long;
-use crate::query_command::main::render_query_table::render_query_table;
-use crate::query_command::models::QueryDisplay;
-use crate::query_command::tests::helpers::texts;
+use crate::query_command::main::render_query_text::render_query_text;
+use crate::query_command::models::{QueryDisplay, QueryLayout};
+use crate::query_command::tests::helpers::{invocations, texts};
 use crate::query_command::tests::test_types::{
-    CsvTestCase, DagTestCase, DisplayTestCase, JsonTestCase,
+    DagTestCase, DisplayTestCase, FooterTestCase, JsonTestCase,
 };
 
 #[test]
-fn given_rows_when_rendering_text_then_aligns_and_counts() {
+fn given_rows_when_rendering_text_then_a_fitting_result_is_boxed_and_others_are_records() {
     let test_cases = [
         DisplayTestCase {
-            description: "two rows with unicode and a truncation hint",
-            display: QueryDisplay {
-                columns: texts(&["id", "name"]),
-                rows: vec![texts(&["1", "héllo"]), texts(&["22", ""])],
-                truncated: true,
-                limit: Some(2),
-            },
-            expected_long: "-[ RECORD 1 ]---------------------------+\nid   | 1\nname | héllo\n\n-[ RECORD 2 ]---------------------------+\nid   | 22\nname | \n\n2 rows\nShowing 2 rows. Use --limit to show more or --no-limit to disable the limit.\n",
-            expected_table: "id | name \n-- | -----\n1  | héllo\n22 |\n\n2 rows\nShowing 2 rows. Use --limit to show more or --no-limit to disable the limit.\n",
+            description: "a narrow result is boxed with types and right-aligned numbers",
+            display: invocations(),
+            layout: QueryLayout::Fitted { width: 120 },
+            expected_text: "┌───────────┬─────────────┬─────────────┐\n\
+                            │  status   │   origin    │ invocations │\n\
+                            │  varchar  │   varchar   │    int32    │\n\
+                            ├───────────┼─────────────┼─────────────┤\n\
+                            │ completed │ integration │         133 │\n\
+                            │ cancelled │ local       │        NULL │\n\
+                            └───────────┴─────────────┴─────────────┘\n\n2 rows\n",
         },
         DisplayTestCase {
-            description: "no rows and an unlimited truncation leaves an empty line",
+            description: "a result wider than the limit prints every value as records",
+            display: invocations(),
+            layout: QueryLayout::Fitted { width: 40 },
+            expected_text: "-[ RECORD 1 ]---------------------------+\nstatus      | completed\n\
+                            origin      | integration\ninvocations | 133\n\n\
+                            -[ RECORD 2 ]---------------------------+\nstatus      | cancelled\n\
+                            origin      | local\ninvocations | NULL\n\n2 rows\n",
+        },
+        DisplayTestCase {
+            description: "a value spanning lines prints as records, and the limit is named",
             display: QueryDisplay {
-                columns: texts(&["x"]),
-                rows: Vec::new(),
+                columns: texts(&["sql"]),
+                rows: vec![texts(&["SELECT 1\nFROM orders"])],
                 truncated: true,
-                limit: None,
+                limit: Some(1),
+                ..QueryDisplay::default()
             },
-            expected_long: "\n0 rows\n\n",
-            expected_table: "x\n-\n\n0 rows\n\n",
+            layout: QueryLayout::Fitted { width: 120 },
+            expected_text: "-[ RECORD 1 ]---------------------------+\nsql | SELECT 1\nFROM orders\n\n\
+                            1 row shown (limit 1; use --limit or --no-limit)\n",
+        },
+        DisplayTestCase {
+            description: "no rows still show the columns, without a type line when none is known",
+            display: QueryDisplay {
+                columns: texts(&["order_id"]),
+                ..QueryDisplay::default()
+            },
+            layout: QueryLayout::Fitted { width: 120 },
+            expected_text: "┌──────────┐\n│ order_id │\n├──────────┤\n└──────────┘\n\n0 rows\n",
+        },
+        DisplayTestCase {
+            description: "the long layout is kept when forced",
+            display: QueryDisplay {
+                columns: texts(&["id"]),
+                rows: vec![texts(&["1"])],
+                ..QueryDisplay::default()
+            },
+            layout: QueryLayout::Long,
+            expected_text: "-[ RECORD 1 ]---------------------------+\nid | 1\n\n1 row\n",
         },
     ];
 
     for test_case in test_cases {
         assert_eq!(
-            render_query_long(&test_case.display),
-            test_case.expected_long,
-            "{}",
-            test_case.description
-        );
-        assert_eq!(
-            render_query_table(&test_case.display),
-            test_case.expected_table,
+            render_query_text(&test_case.display, test_case.layout),
+            test_case.expected_text,
             "{}",
             test_case.description
         );
@@ -54,23 +77,31 @@ fn given_rows_when_rendering_text_then_aligns_and_counts() {
 }
 
 #[test]
-fn given_rows_when_rendering_csv_then_quotes_minimally() {
-    let test_cases = [CsvTestCase {
-        description: "delimiters, quotes, newlines and a lone empty field",
-        columns: texts(&["a", "b"]),
-        rows: vec![
-            texts(&["x,y", "q\"z"]),
-            texts(&["l\nm", ""]),
-            texts(&[""]),
-            Vec::new(),
-        ],
-        expected_csv: "a,b\n\"x,y\",\"q\"\"z\"\n\"l\nm\",\n\"\"\n\n",
-    }];
+fn given_many_rows_when_rendering_text_then_only_more_than_fifty_suggest_aggregating() {
+    let test_cases = [
+        FooterTestCase {
+            description: "fifty rows print only the count",
+            row_count: 50,
+            expected_footer: "\n50 rows\n",
+        },
+        FooterTestCase {
+            description: "more than fifty rows suggest aggregating",
+            row_count: 51,
+            expected_footer: "\n51 rows; to read fewer, aggregate with GROUP BY or add a LIMIT\n",
+        },
+    ];
 
     for test_case in test_cases {
-        assert_eq!(
-            render_query_csv(&test_case.columns, &test_case.rows),
-            test_case.expected_csv,
+        let display = QueryDisplay {
+            columns: texts(&["n"]),
+            rows: (0..test_case.row_count).map(|_| texts(&["7"])).collect(),
+            ..QueryDisplay::default()
+        };
+
+        let rendered: String = render_query_text(&display, QueryLayout::Fitted { width: 120 });
+
+        assert!(
+            rendered.ends_with(test_case.expected_footer),
             "{}",
             test_case.description
         );

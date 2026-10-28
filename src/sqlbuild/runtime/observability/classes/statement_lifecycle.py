@@ -44,6 +44,10 @@ _STATEMENT_LIFECYCLE_OWNER: ContextVar[StatementLifecycle | None] = ContextVar(
     "sqlbuild_statement_lifecycle_owner", default=None
 )
 _STATEMENT_PURPOSE: ContextVar[str | None] = ContextVar("sqlbuild_statement_purpose", default=None)
+_HANDLED_FAILURE: ContextVar[Callable[[BaseException], bool] | None] = ContextVar(
+    "sqlbuild_statement_handled_failure", default=None
+)
+_HANDLED_OUTCOME: str = "handled"
 type _ExecutionOwnerKey = tuple[int, int | None]
 
 
@@ -86,6 +90,7 @@ class StatementLifecycle:
         self._pending_failure: tuple[BaseException, str | None, str | None] | None = None
         self._statement_facts: tuple[str, str] | None = None
         self._purpose: str | None = _STATEMENT_PURPOSE.get()
+        self._is_handled: Callable[[BaseException], bool] | None = _HANDLED_FAILURE.get()
         self._item_deadline: ItemDeadline | None = None
         self._terminal_query_id: str | None = None
 
@@ -107,6 +112,17 @@ class StatementLifecycle:
             yield
         finally:
             _STATEMENT_PURPOSE.reset(token)
+
+    @staticmethod
+    @contextmanager
+    def handled_failure_scope(is_handled: Callable[[BaseException], bool]) -> Iterator[None]:
+        """Mark failures the caller recovers from, such as a timeout it retries in parts."""
+
+        token: Token[Callable[[BaseException], bool] | None] = _HANDLED_FAILURE.set(is_handled)
+        try:
+            yield
+        finally:
+            _HANDLED_FAILURE.reset(token)
 
     @staticmethod
     def discard_failed_attempt() -> None:
@@ -271,6 +287,8 @@ class StatementLifecycle:
             payload["query_id"] = query_id
         if job_id is not None:
             payload["job_id"] = job_id
+        if self._failure_handled(error=error):
+            payload["outcome"] = _HANDLED_OUTCOME
         self._publish_terminal(event_type="statement_failed", payload=payload)
 
     def __exit__(
@@ -328,6 +346,12 @@ class StatementLifecycle:
         started: float = self._started_monotonic if self._started_monotonic is not None else 0.0
         payload["duration_ms"] = max(0.0, (self._clock() - started) * 1000.0)
         return payload
+
+    def _failure_handled(self, *, error: BaseException) -> bool:
+        is_handled: Callable[[BaseException], bool] | None = self._is_handled
+        if is_handled is None:
+            return False
+        return bool(is_handled(error))
 
     def _stop_monitor(self) -> str | None:
         monitor: StatementMonitor | None = self._monitor

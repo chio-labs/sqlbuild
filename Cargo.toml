@@ -105,8 +105,13 @@ ruff_text_size = "=0.0.4"
 # Unix only: `sqb` shares the compute log prune lock with Python's `filelock` through `flock`.
 # Fast deterministic hasher for hot in-memory maps whose iteration order never reaches output.
 rustc-hash = "2"
+# The native SIGTERM handler: sets a flag the CLI watches, without unsafe code in the workspace.
+signal-hook = { version = "0.3", default-features = false }
+# Features signal-hook's registry enables, matched in the sqb build through sqlbuild-build-features.
+errno = "0.3"
+windows-sys = { version = "0.61", default-features = false, features = ["Win32_System_Diagnostics_Debug"] }
 # Recall's local store: SQLite compiled in, so every build has the same engine version.
-rusqlite = { version = "0.37", features = ["bundled"] }
+rusqlite = { version = "0.37", features = ["bundled", "column_decltype"] }
 rustix = { version = "1.1.4", default-features = false, features = ["fs", "std", "termios"] }
 saphyr-parser = "0.1"
 regex = "1"

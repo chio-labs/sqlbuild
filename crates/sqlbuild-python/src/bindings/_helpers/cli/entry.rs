@@ -1,15 +1,15 @@
 //! The `sqb` entry: invocation scopes, parsing, observed dispatch and the error projection.
 
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 
 use pyo3::exceptions::PySystemExit;
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
 use pyo3::types::{
-    PyBool, PyCFunction, PyDict, PyDictMethods, PyInt, PyList, PyString, PyStringMethods, PyTuple,
-    PyTypeMethods,
+    PyBool, PyCFunction, PyDateTime, PyDict, PyDictMethods, PyInt, PyList, PyString,
+    PyStringMethods, PyTuple, PyTypeMethods, PyTzInfo,
 };
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_cli::dispatch::main::failure_report::failure_report;
@@ -28,7 +28,12 @@ use crate::bindings::_helpers::cli::machine_output::take_machine_output_written;
 use crate::bindings::_helpers::cli::observability::{
     CliObservabilityScope, cli_observability_scope,
 };
+use crate::bindings::_helpers::cli::termination::{
+    CommandTerminated, TERMINATED_MESSAGE, TerminationHandler, handle_sigterm, interrupting_signal,
+    signal_exit_code, terminated, terminated_exit,
+};
 use crate::bindings::_helpers::compile_command::report::format_compile_error_json;
+use crate::bindings::_helpers::cost_report::attribution::take_cost_status;
 use crate::bindings::_helpers::diff_report::output::render_diff_error_json;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::output_capture::records::invocation_context;
@@ -36,9 +41,9 @@ use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_colo
 use crate::bindings::_helpers::recall::constants::{JSON_FORMAT, RECALL_SETTINGS_CODE};
 use crate::bindings::_helpers::recall::events::escaped_text;
 use crate::bindings::_helpers::recall::session::{
-    InvocationRecall, finish_invocation_recall, start_invocation_recall,
+    InvocationRecall, effective_selection, finish_invocation_recall, start_invocation_recall,
 };
-use crate::bindings::_helpers::recall::sinks::RecallLifecycleSink;
+use crate::bindings::_helpers::recall::sinks::{RecallLifecycleSink, publish_lifecycle_event};
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::construct::{error_class, new_error};
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -218,8 +223,9 @@ fn write_machine_error(
         let format: Option<String> = invocation
             .args
             .getattr_opt("recall_format")?
-            .map(|format| format.extract())
-            .transpose()?;
+            .map(|format| format.extract::<Option<String>>())
+            .transpose()?
+            .flatten();
         format.as_deref() == Some(JSON_FORMAT)
     } else if invocation.command_is("janitor") {
         invocation.flag("json")? && !take_machine_output_written()
@@ -476,13 +482,15 @@ fn subscribe_recall(
         RecallLifecycleSink {
             session,
             replacements: Arc::clone(&recall.replacements),
+            running_sql: Arc::default(),
+            invocation_events: Arc::clone(&recall.invocation_events),
         },
     )?;
     dispatcher.call_method1("subscribe_history", (sink,))?;
     Ok(())
 }
 
-/// `target`, `adapter` and `selection_count` of the started invocation, when known.
+/// `target`, `adapter` and `selection_count` of the started invocation, when known; the count includes what selector files list.
 fn add_invocation_context(
     invocation: &Invocation<'_>,
     payload: &Bound<'_, PyDict>,
@@ -495,7 +503,8 @@ fn add_invocation_context(
     }
     let select: Bound<'_, PyAny> = invocation.args.getattr("select")?;
     if !select.is_none() {
-        payload.set_item("selection_count", select.len()?)?;
+        let (selectors, _) = effective_selection(&invocation.args)?;
+        payload.set_item("selection_count", selectors.len())?;
     }
     Ok(())
 }
@@ -542,7 +551,9 @@ fn observed_dispatch<'py>(
     }
     let command: String = invocation.command_name();
     drop(take_failure_cause());
+    drop(take_cost_status());
     let started: Instant = Instant::now();
+    let started_at: SystemTime = SystemTime::now();
     let elapsed = |started: Instant| -> PyResult<Bound<'py, PyAny>> {
         u64::try_from(started.elapsed().as_millis())
             .unwrap_or(u64::MAX)
@@ -555,23 +566,57 @@ fn observed_dispatch<'py>(
             invocation.project_dir()?.unbind(),
         ),
     )?;
+    let started_payload = || -> PyResult<Bound<'py, PyDict>> {
+        let payload: Bound<'py, PyDict> = PyDict::new(py);
+        payload.set_item("command", &command)?;
+        add_invocation_context(invocation, &payload)?;
+        Ok(payload)
+    };
+    let failed_payload = |error: &PyErr| -> PyResult<Bound<'py, PyDict>> {
+        let payload: Bound<'py, PyDict> = PyDict::new(py);
+        payload.set_item("command", &command)?;
+        payload.set_item("duration_ms", elapsed(started)?)?;
+        let (error_type, code, message): (String, String, String) = raised_cause(py, error);
+        payload.set_item("error_type", error_type)?;
+        if !code.is_empty() {
+            payload.set_item("error_code", code)?;
+        }
+        payload.set_item("error_message", message)?;
+        if let Some(signal) = interrupting_signal(py, error) {
+            payload.set_item("signal_number", signal)?;
+            payload.set_item("exit_code", signal_exit_code(signal))?;
+        }
+        if let Some(status) = take_cost_status() {
+            payload.set_item("cost_status", status)?;
+        }
+        Ok(payload)
+    };
     let scope: Bound<'py, PyAny> = observability.clone().into_any();
-    within(&scope, |dispatcher| {
+    let observed: PyResult<Bound<'py, PyAny>> = within(&scope, |dispatcher| {
         let publish = |event: Bound<'py, PyAny>| -> PyResult<()> {
             dispatcher.call_method1("publish_lifecycle", (event,))?;
             Ok(())
         };
         subscribe_recall((&observability, dispatcher), &invocation.recall)?;
-        let payload: Bound<'py, PyDict> = PyDict::new(py);
-        payload.set_item("command", &command)?;
-        add_invocation_context(invocation, &payload)?;
-        publish(lifecycle_event(py, "invocation_started", payload)?)?;
-        match dispatch_command(&invocation.args, invocation.handlers.clone()) {
+        publish(lifecycle_event(
+            py,
+            "invocation_started",
+            started_payload()?,
+        )?)?;
+        let dispatched: PyResult<Bound<'py, PyAny>> =
+            match dispatch_command(&invocation.args, invocation.handlers.clone()) {
+                Ok(_) if terminated() => Err(CommandTerminated::new_err(TERMINATED_MESSAGE)),
+                dispatched => dispatched,
+            };
+        match dispatched {
             Ok(exit_code) => {
                 let payload: Bound<'py, PyDict> = PyDict::new(py);
                 payload.set_item("command", &command)?;
                 payload.set_item("duration_ms", elapsed(started)?)?;
                 payload.set_item("exit_code", &exit_code)?;
+                if let Some(status) = take_cost_status() {
+                    payload.set_item("cost_status", status)?;
+                }
                 let terminal: &str = if exit_code.eq(0)? {
                     "invocation_completed"
                 } else {
@@ -586,21 +631,65 @@ fn observed_dispatch<'py>(
                 Ok(exit_code)
             }
             Err(error) => {
-                let payload: Bound<'py, PyDict> = PyDict::new(py);
-                payload.set_item("command", &command)?;
-                payload.set_item("duration_ms", elapsed(started)?)?;
-                let (error_type, code, message): (String, String, String) =
-                    raised_cause(py, &error);
-                payload.set_item("error_type", error_type)?;
-                if !code.is_empty() {
-                    payload.set_item("error_code", code)?;
-                }
-                payload.set_item("error_message", message)?;
-                publish(lifecycle_event(py, "invocation_failed", payload)?)?;
+                publish(lifecycle_event(
+                    py,
+                    "invocation_failed",
+                    failed_payload(&error)?,
+                )?)?;
                 Err(error)
             }
         }
-    })
+    });
+    if let (Err(error), Some(session)) = (&observed, &invocation.recall.session)
+        && interrupting_signal(py, error).is_some()
+        && !invocation.recall.invocation_events.ended()
+    {
+        let started: Option<PyResult<Bound<'py, PyDict>>> =
+            (!invocation.recall.invocation_events.started()).then(started_payload);
+        let recorded: PyResult<()> = started.transpose().and_then(|started| {
+            record_interrupted_end(
+                py,
+                session,
+                started.map(|payload| (started_at, payload)),
+                failed_payload(error)?,
+            )
+        });
+        drop(recorded);
+    }
+    observed
+}
+
+/// Record the end of an invocation interrupted before its own lifecycle events were all recorded, such as during project discovery, so Recall shows it cancelled instead of running. `started` holds the start event's time and payload when that event was not recorded either.
+fn record_interrupted_end(
+    py: Python<'_>,
+    session: &sqlbuild_recall::writer::models::RecallSession,
+    started: Option<(SystemTime, Bound<'_, PyDict>)>,
+    failed: Bound<'_, PyDict>,
+) -> PyResult<()> {
+    if let Some((started_at, payload)) = started {
+        let seconds: f64 = started_at
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map_or(0.0, |elapsed| elapsed.as_secs_f64());
+        let occurred_at: Bound<'_, PyDateTime> =
+            PyDateTime::from_timestamp(py, seconds, Some(&PyTzInfo::utc(py)?.to_owned()))?;
+        let started: Bound<'_, PyAny> = call_with(
+            &host::entry(py, ExecutorHost::CreateLifecycleEvent)?,
+            &[
+                (
+                    "event_type",
+                    PyString::new(py, "invocation_started").into_any(),
+                ),
+                ("payload", payload.into_any()),
+                ("occurred_at", occurred_at.into_any()),
+            ],
+        )?;
+        publish_lifecycle_event(py, session, &started)?;
+    }
+    publish_lifecycle_event(
+        py,
+        session,
+        &lifecycle_event(py, "invocation_failed", failed)?,
+    )
 }
 
 /// Dispatch once and project every expected failure to its coded error and exit code.
@@ -690,6 +779,8 @@ fn parsed_invocation<'py>(
             RecallLifecycleSink {
                 session,
                 replacements: Arc::clone(&recall.replacements),
+                running_sql: Arc::default(),
+                invocation_events: Arc::clone(&recall.invocation_events),
             },
         )?
         .into_any(),
@@ -719,23 +810,32 @@ fn parsed_invocation<'py>(
             Ok(handled_dispatch(&invocation)?.unbind())
         },
     )?;
-    let dispatched: PyResult<Bound<'py, PyAny>> = if policy.creates_project {
-        call_with(&operation.into_any(), &[])
-    } else {
-        call_with(
-            &host::entry(py, FacadeHost::DispatchWithComputeLogs)?,
-            &[
-                ("args", args),
-                ("identity", identity.clone()),
-                ("operation", operation.into_any()),
-                ("recall", recall_sink),
-                (
-                    "capture",
-                    PyBool::new(py, policy.captured).to_owned().into_any(),
-                ),
-            ],
-        )
-    };
+    let evidence_scope: Bound<'py, PyAny> = call_with(
+        &host::entry(py, ExecutorHost::AuditEvidenceScope)?,
+        &[(
+            "mode",
+            PyString::new(py, recall.audit_evidence.setting()).into_any(),
+        )],
+    )?;
+    let dispatched: PyResult<Bound<'py, PyAny>> = within(&evidence_scope, |_| {
+        if policy.creates_project {
+            call_with(&operation.into_any(), &[])
+        } else {
+            call_with(
+                &host::entry(py, FacadeHost::DispatchWithComputeLogs)?,
+                &[
+                    ("args", args),
+                    ("identity", identity.clone()),
+                    ("operation", operation.into_any()),
+                    ("recall", recall_sink),
+                    (
+                        "capture",
+                        PyBool::new(py, policy.captured).to_owned().into_any(),
+                    ),
+                ],
+            )
+        }
+    });
     let exit_status: Option<i64> = match &dispatched {
         Ok(code) if code.is_instance_of::<PyInt>() => Some(code.extract().unwrap_or(1)),
         Ok(_) | Err(_) => None,
@@ -782,6 +882,21 @@ fn run_cli<'py>(
             .get_item(pyo3::types::PySlice::new(py, 1, isize::MAX, 1))?,
     };
     let argv: Bound<'py, PyAny> = offered_launch_record(&argv)?;
+    let mut termination: TerminationHandler = handle_sigterm(py)?;
+    let ran: PyResult<Bound<'py, PyAny>> = invoke(py, &argv, handlers);
+    if termination.settle(py) {
+        drop(ran);
+        return terminated_exit(py).into_bound_py_any(py);
+    }
+    ran
+}
+
+/// Run one parsed `argv` inside its invocation, external-context and diagnostics scopes.
+fn invoke<'py>(
+    py: Python<'py>,
+    argv: &Bound<'py, PyAny>,
+    handlers: Option<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyAny>> {
     let external: Bound<'py, PyAny> = external_context(py)?;
     let invocation_scope: Bound<'py, PyAny> =
         host::entry(py, ExecutorHost::InvocationScope)?.call0()?;
@@ -799,7 +914,7 @@ fn run_cli<'py>(
                 )],
             )?;
             within(&diagnostics, |_| {
-                parsed_invocation(&argv, handlers.clone(), identity)
+                parsed_invocation(argv, handlers.clone(), identity)
             })
         })
     })

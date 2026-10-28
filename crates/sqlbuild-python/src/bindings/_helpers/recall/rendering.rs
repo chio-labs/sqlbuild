@@ -1,17 +1,16 @@
-//! `sqb recall query` and `schema` output: text cells, CSV and the JSON document.
+//! `sqb recall query` and `schema` output: text cells, the shared text layout and the JSON document.
 
+use pyo3::prelude::{PyResult, Python};
 use serde_json::{Map, Value, json};
-use sqlbuild_core::query_command::main::render_query_csv::render_query_csv;
-use sqlbuild_core::query_command::main::render_query_long::render_query_long;
-use sqlbuild_core::query_command::main::render_query_table::render_query_table;
 use sqlbuild_core::query_command::models::QueryDisplay;
 use sqlbuild_recall::records::models::RecallValue;
 use sqlbuild_recall::schema::models::Dialect;
 use sqlbuild_recall::store::models::{DescribedColumn, DescribedRelation, QueryResult};
 
+use crate::bindings::_helpers::query_command::text_output::render_text;
 use crate::bindings::_helpers::recall::clickhouse_calls::QueryStatistics;
 use crate::bindings::_helpers::recall::constants::{
-    BASE64_ALPHABET, CSV_FORMAT, JOIN_KEYS, JSON_FORMAT, TABLE_FORMAT,
+    BASE64_ALPHABET, JOIN_KEYS, JSON_FORMAT, NULL_TEXT,
 };
 
 fn base64(data: &[u8]) -> String {
@@ -102,14 +101,27 @@ pub(crate) struct QueryContext<'a> {
     pub(crate) statistics: Option<&'a QueryStatistics>,
 }
 
-/// The rendered result in `format`: `long`, `table`, `csv` or `json`.
+/// Whether every non-NULL value of the column at `index` is a number, and at least one is.
+fn numeric_column(result: &QueryResult, index: usize) -> bool {
+    let mut seen: bool = false;
+    for row in &result.rows {
+        match row.get(index) {
+            Some(RecallValue::Integer(_) | RecallValue::Real(_)) => seen = true,
+            Some(RecallValue::Null) | None => {}
+            Some(_) => return false,
+        }
+    }
+    seen
+}
+
+/// The rendered result in `format`: `json`, `long`, or `None` for the default layout; text cells are cut at `max_bytes`.
 pub(crate) fn render_result(
+    py: Python<'_>,
     result: &QueryResult,
-    format: &str,
-    max_bytes: Option<usize>,
+    (format, max_bytes): (Option<&str>, Option<usize>),
     context: &QueryContext<'_>,
-) -> String {
-    if format == JSON_FORMAT {
+) -> PyResult<String> {
+    if format == Some(JSON_FORMAT) {
         let rows: Vec<Value> = result
             .rows
             .iter()
@@ -131,42 +143,39 @@ pub(crate) fn render_result(
                 "query_id": context.statistics.and_then(|statistics| statistics.query_id.clone()),
             },
         });
-        return format!("{document}\n");
-    }
-    let csv: bool = format == CSV_FORMAT;
-    let null: &str = if csv { "" } else { "NULL" };
-    let cells: Vec<Vec<String>> = result
-        .rows
-        .iter()
-        .map(|row| display_row(row, null, max_bytes))
-        .collect();
-    if csv {
-        return render_query_csv(&result.columns, &cells);
+        return Ok(format!("{document}\n"));
     }
     let display = QueryDisplay {
         columns: result.columns.clone(),
-        rows: cells,
+        types: result.types.clone(),
+        numeric: (0..result.columns.len())
+            .map(|index| numeric_column(result, index))
+            .collect(),
+        rows: result
+            .rows
+            .iter()
+            .map(|row| display_row(row, NULL_TEXT, max_bytes))
+            .collect(),
         truncated: result.truncated,
         limit: context
             .limit
             .map(|limit| i64::try_from(limit).unwrap_or(i64::MAX)),
     };
-    if format == TABLE_FORMAT {
-        render_query_table(&display)
-    } else {
-        render_query_long(&display)
-    }
+    render_text(py, &display, format)
 }
 
 fn relation_note(name: &str) -> &'static str {
     match name {
         "invocations" => {
-            "one row per invocation; status is completed, failed, running, abandoned or unknown; \
-             origin is integration, ci or local; integration, integration_job, \
+            "one row per invocation; status is completed, failed, cancelled, running, abandoned \
+             or unknown; origin is integration, ci or local; integration, integration_job, \
              integration_run_id and integration_retry come from external_context"
         }
-        "statements" => "one row per statement; outcome no_terminal means no terminal fact arrived",
-        "audit_results" => "one row per evaluated audit",
+        "statements" => {
+            "one row per statement; outcome handled means SQLBuild recovered from the failure; \
+             no_terminal means no terminal fact arrived"
+        }
+        "audit_results" => "one row per evaluated audit; its evidence rows are in artifacts",
         "output_invocations" => {
             "output completeness per invocation: gaps, drops, filtering, truncation, flush"
         }

@@ -29,8 +29,8 @@ from sqlbuild.observability import (
 class FakeSnowflakeDescribeCursor:
     """Cursor double exposing Snowflake-style description metadata."""
 
-    def __init__(self, description: tuple[tuple[str], ...]) -> None:
-        self.description: tuple[tuple[str], ...] = description
+    def __init__(self, description: tuple[tuple[object, ...], ...]) -> None:
+        self.description: tuple[tuple[object, ...], ...] = description
         self.executed_sql: str | None = None
         self.executemany_sql: str | None = None
         self.executemany_rows: list[tuple[object, ...]] = []
@@ -45,6 +45,22 @@ class FakeSnowflakeDescribeCursor:
 
     def close(self) -> None:
         self.closed = True
+
+
+class FakeSnowflakeQueryCursor(FakeSnowflakeDescribeCursor):
+    """Cursor double returning rows under Snowflake result metadata."""
+
+    def __init__(
+        self, description: tuple[tuple[object, ...], ...], rows: list[tuple[object, ...]]
+    ) -> None:
+        super().__init__(description=description)
+        self._rows: list[tuple[object, ...]] = rows
+
+    def fetchall(self) -> list[tuple[object, ...]]:
+        return self._rows
+
+    def fetchmany(self, size: int) -> list[tuple[object, ...]]:
+        return self._rows[:size]
 
 
 class FakeSnowflakeDescribeConnection:

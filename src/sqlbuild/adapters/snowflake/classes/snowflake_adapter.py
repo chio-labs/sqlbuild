@@ -149,6 +149,7 @@ from sqlbuild.adapters.snowflake.constants import (
     BASE_TABLE_METADATA_TYPE,
     CURRENT_DATABASE_ATTRIBUTE,
     EXTERNAL_BROWSER_AUTHENTICATOR,
+    FIXED_POINT_RESULT_TYPE,
     MAX_STATEMENT_TIMEOUT_SECONDS,
     MFA_AUTHENTICATOR,
     OAUTH_AUTHORIZATION_CODE_AUTHENTICATOR,
@@ -166,6 +167,7 @@ from sqlbuild.cost.models import RunCostSummary
 from sqlbuild.cost.types import CostCapability, CostStatus
 from sqlbuild.diagnostics.main.log_sql import log_sql
 from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
+from sqlbuild.runtime.observability.constants import COST_TELEMETRY_PURPOSE
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 
 _EXACT_COLUMN_INSPECTION_LIMIT: int = 32
@@ -352,6 +354,32 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         return CostCapability.SNOWFLAKE_QUERY_HISTORY
 
     def collect_run_cost(
+        self,
+        *,
+        connection_config: dict[str, object],
+        target_database: str | None,
+        run_id: str,
+        started_at: datetime,
+        completed_at: datetime,
+        statement_ledger_path: Path,
+        usd_per_credit: Decimal,
+        rate_source: str,
+        budget_seconds: float | None = None,
+    ) -> RunCostSummary:
+        with StatementLifecycle.purpose_scope(COST_TELEMETRY_PURPOSE):
+            return self._collect_run_cost(
+                connection_config=connection_config,
+                target_database=target_database,
+                run_id=run_id,
+                started_at=started_at,
+                completed_at=completed_at,
+                statement_ledger_path=statement_ledger_path,
+                usd_per_credit=usd_per_credit,
+                rate_source=rate_source,
+                budget_seconds=budget_seconds,
+            )
+
+    def _collect_run_cost(
         self,
         *,
         connection_config: dict[str, object],
@@ -1863,13 +1891,16 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             if description is None:
                 return QueryResult()
             columns: tuple[str, ...] = tuple(str(column[0]) for column in description)
+            column_types: tuple[str | None, ...] = tuple(
+                self._result_column_type(column) for column in description
+            )
             if limit is None:
                 rows: tuple[tuple[object, ...], ...] = tuple(
                     tuple(row) for row in cursor.fetchall()
                 )
                 if self._is_status_only_non_row_result(columns=columns, rows=rows):
                     return QueryResult()
-                return QueryResult(columns=columns, rows=rows)
+                return QueryResult(columns=columns, rows=rows, column_types=column_types)
             fetched_rows: list[tuple[object, ...]] = [
                 tuple(row) for row in cursor.fetchmany(limit + 1)
             ]
@@ -1880,9 +1911,27 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 columns=columns,
                 rows=rows,
                 truncated=len(fetched_rows) > limit,
+                column_types=column_types,
             )
         finally:
             cursor.close()
+
+    @staticmethod
+    def _result_column_type(column: Any) -> str | None:
+        """Name a result column's Snowflake type from its cursor description entry."""
+
+        from snowflake.connector.constants import FIELD_ID_TO_NAME
+
+        type_name: str | None = FIELD_ID_TO_NAME.get(column[1])
+        if type_name is None:
+            return None
+        if type_name != FIXED_POINT_RESULT_TYPE:
+            return type_name
+        precision: int | None = column[4]
+        scale: int | None = column[5]
+        if precision is None:
+            return "NUMBER"
+        return f"NUMBER({precision},{scale or 0})"
 
     @staticmethod
     def _is_status_only_non_row_result(

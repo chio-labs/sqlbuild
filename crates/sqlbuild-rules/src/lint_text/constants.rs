@@ -93,6 +93,11 @@ pub(crate) const GROUPED_NAMED_ROLES: [(&[&str], bool); 9] = [
 pub(crate) const LINT_API_VERSION: i64 = 1;
 pub(crate) const UNUSED_CTE_CODE: &str = "SQBRSQL005";
 pub(crate) const LONG_LITERAL_CODE: &str = "SQBRSQL044";
+pub(crate) const MIXED_QUALIFICATION_CODE: &str = "SQBRSQL028";
+/// The reserved argument naming a CTE-list call's CTEs; it passes no relation.
+pub(crate) const CTE_ARGUMENT: &str = "__cte";
+/// The help for mixed qualification in a SQL macro body, where slot reads are qualified through an alias.
+pub(crate) const MACRO_MIXED_QUALIFICATION_REMEDIATION: &str = "Use one consistent qualification style in this query scope. A plain slot read such as `@rel.column` counts as unqualified; to qualify it, read through an alias: `FROM @rel AS s`, then `s.@rel.column`.";
 pub(crate) const NATIVE_LINT_ERROR_CODE: &str = "L003";
 pub(crate) const PARSE_ERROR_POSITION_PATTERN: &str =
     r"^Parse error at line (?P<line>\d+), column (?P<column>\d+):";

@@ -6,7 +6,7 @@ use crate::schema::main::table_spec::table_spec;
 use crate::schema::models::{DdlOptions, Table};
 
 /// The columns the `invocations` pass reads from its three sources, NULL (the terminal flag 0) where a source does not give them.
-const INVOCATION_SOURCE_COLUMNS: [(&str, &str, &str); 30] = [
+const INVOCATION_SOURCE_COLUMNS: [(&str, &str, &str); 35] = [
     ("ctx_command", "Nullable(String)", "NULL"),
     ("ctx_subcommand", "Nullable(String)", "NULL"),
     ("ctx_target", "Nullable(String)", "NULL"),
@@ -23,6 +23,9 @@ const INVOCATION_SOURCE_COLUMNS: [(&str, &str, &str); 30] = [
     ("ctx_recall_filter_active", "Nullable(UInt8)", "NULL"),
     ("ctx_origin", "Nullable(String)", "NULL"),
     ("ctx_command_mode", "Nullable(String)", "NULL"),
+    ("ctx_selection_count", "Nullable(Int64)", "NULL"),
+    ("ctx_selection_truncated", "Nullable(UInt8)", "NULL"),
+    ("ctx_selector_files", "Nullable(String)", "NULL"),
     ("heartbeat_at", "Nullable(DateTime64(6, 'UTC'))", "NULL"),
     ("beat_stale_at", "Nullable(DateTime64(6, 'UTC'))", "NULL"),
     ("beat_command", "Nullable(String)", "NULL"),
@@ -40,11 +43,13 @@ const INVOCATION_SOURCE_COLUMNS: [(&str, &str, &str); 30] = [
     ("event_error_type", "Nullable(String)", "NULL"),
     ("event_error_code", "Nullable(String)", "NULL"),
     ("event_error_message", "Nullable(String)", "NULL"),
+    ("event_signal_number", "Nullable(Int64)", "NULL"),
+    ("event_cost_status", "Nullable(String)", "NULL"),
     ("event_is_terminal", "UInt8", "0"),
 ];
 
 /// The statement columns each statement event carries into the second fold, in tuple order.
-const STATEMENT_FACT_COLUMNS: [&str; 17] = [
+const STATEMENT_FACT_COLUMNS: [&str; 18] = [
     "statement_id",
     "event_type",
     "occurred_at",
@@ -62,6 +67,7 @@ const STATEMENT_FACT_COLUMNS: [&str; 17] = [
     "duration_ms",
     "row_count",
     "affected_rows",
+    "outcome",
 ];
 
 /// The columns the `output_invocations` pass reads: the chunk's own values default to what adds nothing to a sum, and the delivery and context values to NULL.
@@ -176,6 +182,9 @@ fn invocations(options: &DdlOptions) -> String {
             ("ctx_recall_filter_active", "recall_filter_active"),
             ("ctx_origin", "origin"),
             ("ctx_command_mode", "command_mode"),
+            ("ctx_selection_count", "selection_count"),
+            ("ctx_selection_truncated", "selection_truncated"),
+            ("ctx_selector_files", "selector_files"),
         ],
         &context,
     );
@@ -205,6 +214,14 @@ fn invocations(options: &DdlOptions) -> String {
             (
                 "event_error_message",
                 "JSONExtract(payload, 'error_message', 'Nullable(String)')",
+            ),
+            (
+                "event_signal_number",
+                "JSONExtract(payload, 'signal_number', 'Nullable(Int64)')",
+            ),
+            (
+                "event_cost_status",
+                "JSONExtract(payload, 'cost_status', 'Nullable(String)')",
             ),
             (
                 "event_is_terminal",
@@ -244,6 +261,8 @@ folded AS (
 {terminal_error_type}
 {terminal_error_code}
 {terminal_error_message}
+{terminal_signal_number}
+{terminal_cost_status}
         maxIf(heartbeat_at, source = 'beat') AS last_heartbeat_at,
         maxIf(beat_stale_at, source = 'beat') AS stale_at,
         minIf(beat_command, source = 'beat') AS first_beat_command,
@@ -257,6 +276,7 @@ SELECT
     coalesce(started_occurred_at, invocation_started_at) AS started_at,
     multiIf(
         terminal_type = 'invocation_completed', 'completed',
+        terminal_type = 'invocation_failed' AND terminal_signal_number IS NOT NULL, 'cancelled',
         terminal_type = 'invocation_failed', 'failed',
         stale_at IS NULL, 'unknown',
         stale_at >= now64(6), 'running',
@@ -268,10 +288,14 @@ SELECT
         if(stale_at < now64(6),
             toFloat64(dateDiff('millisecond', started_at, last_heartbeat_at)), NULL))
         AS duration_ms,
+    multiIf(terminal_type IS NOT NULL, toUInt8(0), stale_at < now64(6), toUInt8(1), NULL)
+        AS ended_at_estimated,
     terminal_exit_code AS exit_code,
     terminal_error_type AS error_type,
     terminal_error_code AS error_code,
     terminal_error_message AS error_message,
+    terminal_signal_number AS signal_number,
+    terminal_cost_status AS cost_status,
     coalesce(context_command, started_command, first_beat_command) AS command,
     coalesce(context_subcommand, first_beat_subcommand) AS subcommand,
     context_origin AS origin,
@@ -280,6 +304,11 @@ SELECT
     context_adapter AS adapter,
     context_project_name AS project_name,
     context_selection AS selection,
+    coalesce(context_selection_count,
+        if(isValidJSON(context_selection), toInt64(JSONLength(context_selection)), NULL))
+        AS selection_count,
+    context_selection_truncated AS selection_truncated,
+    context_selector_files AS selector_files,
     context_exclusion AS exclusion,
     context_sqlbuild_version AS sqlbuild_version,
     context_git_revision AS git_revision,
@@ -309,13 +338,16 @@ FROM folded",
         terminal_error_type = terminal("event_error_type", "terminal_error_type"),
         terminal_error_code = terminal("event_error_code", "terminal_error_code"),
         terminal_error_message = terminal("event_error_message", "terminal_error_message"),
+        terminal_signal_number = terminal("event_signal_number", "terminal_signal_number"),
+        terminal_cost_status = terminal("event_cost_status", "terminal_cost_status"),
     )
 }
 
-/// Two folds over one read of the events: by resource, which names the resource and gathers its statement events, then by statement. Both group by `invocation_id` and `invocation_started_at`, so a filter on either reaches the read; `sql_available` looks digests up in the stored SQL, which is shared across invocations.
+/// Two folds over one read of the events: by resource, which names the resource and gathers its statement events, then by statement. Both group by `invocation_id` and `invocation_started_at`, so a filter on either reaches the read; `sql_available` needs a reference to the digest in the statement's own invocation and the stored SQL, which is shared across invocations. The references and the stored SQL are each read once.
 fn statements(options: &DdlOptions) -> String {
     let events = retained(Table::Events, options, "");
     let artifacts = clickhouse_table(table_spec(Table::Artifacts).name, options);
+    let refs = retained(Table::ArtifactRefs, options, "");
     let order = "tuple(invocation_sequence, occurred_at)";
     let terminal = "event_type IN ('statement_completed', 'statement_failed')";
     let statement_event = "statement_id IS NOT NULL AND startsWith(event_type, 'statement_')";
@@ -365,7 +397,8 @@ folded AS (
         argMaxIf(error_code, {order}, {terminal}) AS last_error_code,
         argMaxIf(duration_ms, {order}, {terminal}) AS last_duration_ms,
         argMaxIf(row_count, {order}, {terminal}) AS last_row_count,
-        argMaxIf(affected_rows, {order}, {terminal}) AS last_affected_rows
+        argMaxIf(affected_rows, {order}, {terminal}) AS last_affected_rows,
+        argMaxIf(outcome, {order}, {terminal}) AS last_outcome
     FROM statement_events GROUP BY invocation_id, invocation_started_at, statement_id
 )
 SELECT
@@ -388,6 +421,7 @@ SELECT
     multiIf(
         NOT has_terminal, 'no_terminal',
         last_event_type = 'statement_completed', 'completed',
+        last_outcome = 'handled', 'handled',
         'failed'
     ) AS outcome,
     if(has_terminal, last_error_type, NULL) AS error_type,
@@ -396,8 +430,20 @@ SELECT
     if(has_terminal, last_row_count, NULL) AS row_count,
     if(has_terminal, last_affected_rows, NULL) AS affected_rows,
     first_sql_digest AS sql_digest,
-    concat('sha256:', first_sql_digest) IN (SELECT digest FROM {artifacts}) AS sql_available
-FROM folded"
+    sql_referenced
+        AND concat('sha256:', first_sql_digest) IN (SELECT digest FROM {artifacts})
+        AS sql_available,
+    multiIf(
+        sql_available, NULL,
+        sql_referenced, 'expired_or_not_captured',
+        'not_captured'
+    ) AS sql_unavailable_reason
+FROM (
+    SELECT *,
+        (invocation_id, concat('sha256:', first_sql_digest))
+            IN (SELECT invocation_id, digest FROM {refs}) AS sql_referenced
+    FROM folded
+)"
     )
 }
 
@@ -428,6 +474,9 @@ fn audit_results(options: &DdlOptions) -> String {
     JSONExtract(payload, 'evaluation_mode', 'Nullable(String)') AS evaluation_mode,
     JSONExtract(payload, 'execution_error', 'Nullable(String)') AS execution_error,
     sql_digest,
+    JSONExtract(payload, 'evidence_count', 'Nullable(Int64)') AS evidence_count,
+    if(JSONHas(payload, 'evidence_truncated'),
+        toUInt8(JSONExtractBool(payload, 'evidence_truncated')), NULL) AS evidence_truncated,
     JSONExtract(payload, 'sample_digest', 'Nullable(String)') AS sample_digest
 FROM {events}
 WHERE event_type = 'audit_completed'"
@@ -597,8 +646,9 @@ fn artifacts(options: &DdlOptions) -> String {
     artifact.stored_size AS size,
     artifact.stored_digest IS NOT NULL AS available,
     if(artifact.stored_digest IS NULL, 'expired_or_not_captured', NULL) AS unavailable_reason,
-    if(startsWith(artifact.stored_media_type, 'text/'), toValidUTF8(artifact.stored_content), NULL)
-        AS text,
+    if(startsWith(artifact.stored_media_type, 'text/')
+        OR artifact.stored_media_type = 'application/json',
+        toValidUTF8(artifact.stored_content), NULL) AS text,
     artifact.stored_content AS content
 FROM {refs} AS refs
 LEFT JOIN (

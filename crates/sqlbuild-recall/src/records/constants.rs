@@ -10,6 +10,18 @@ pub const ARTIFACT_DIGEST_PREFIX: &str = "sha256:";
 pub const SQL_ARTIFACT_KIND: &str = "sql";
 pub const SQL_MEDIA_TYPE: &str = "text/x-sql";
 pub const EXECUTED_SQL_ROLE: &str = "executed_sql";
+/// Evidence rows of a warning or failing audit, stored as a JSON array of row objects.
+pub const AUDIT_EVIDENCE_KIND: &str = "audit_evidence";
+pub const AUDIT_EVIDENCE_MEDIA_TYPE: &str = "application/json";
+pub const AUDIT_EVIDENCE_ROLE: &str = "audit_evidence";
+/// The event whose payload may carry evidence rows.
+pub const AUDIT_COMPLETED_EVENT: &str = "audit_completed";
+/// The payload field holding evidence rows, which Recall stores as an artifact instead.
+pub const EVIDENCE_PAYLOAD_FIELD: &str = "evidence";
+/// The payload field naming the evidence artifact's digest, without its `sha256:` prefix.
+pub const SAMPLE_DIGEST_PAYLOAD_FIELD: &str = "sample_digest";
+/// The most selector text an invocation's context row records; later selectors are counted but left out.
+pub const MAX_RECORDED_SELECTION_BYTES: usize = 64 * 1024;
 /// Diagnostic severities, least severe first.
 pub const SEVERITY_ORDER: [&str; 6] = ["trace", "debug", "info", "warning", "error", "critical"];
 /// Event payload fields promoted to their own `recall_events` columns.

@@ -573,6 +573,14 @@ _TARGETS: dict[str, tuple[str, str]] = {
         "sqlbuild.runtime.execution_limits.main.execution_deadline_scope",
         "execution_deadline_scope",
     ),
+    "audit_evidence_scope": (
+        "sqlbuild.executor.auditing.main._audit_evidence_scope",
+        "audit_evidence_scope",
+    ),
+    "cancel_running_statements": (
+        "sqlbuild.runtime.execution_limits.main._cancel_running_statements",
+        "cancel_running_statements",
+    ),
     "EventDispatcher": (
         "sqlbuild.runtime.observability.classes.event_dispatcher",
         "EventDispatcher",
@@ -580,6 +588,10 @@ _TARGETS: dict[str, tuple[str, str]] = {
     "OperationLifecycle": (
         "sqlbuild.runtime.observability.classes.operation_lifecycle",
         "OperationLifecycle",
+    ),
+    "StatementLifecycle": (
+        "sqlbuild.runtime.observability.classes.statement_lifecycle",
+        "StatementLifecycle",
     ),
     "ObservabilityValidationError": (
         "sqlbuild.runtime.observability.exceptions",

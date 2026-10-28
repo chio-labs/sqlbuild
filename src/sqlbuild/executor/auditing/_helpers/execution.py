@@ -25,6 +25,7 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
 )
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
+from sqlbuild.executor.auditing._helpers.evidence_setting import keeps_audit_evidence
 from sqlbuild.executor.auditing.constants import (
     DEFAULT_EVIDENCE_ROW_LIMIT,
     MAX_EVIDENCE_SERIALIZED_BYTES,
@@ -107,6 +108,13 @@ def execute_audit_impl(  # noqa: PLR0913
                 executed_sql=executed_sql,
                 run_scope_phase=run_scope_phase,
             )
+            if keeps_audit_evidence(outcome=outcome):
+                evidence_rows, evidence_truncated = _bounded_evidence(
+                    cursor=cursor, raw_rows=rows, row_limit=_evidence_row_limit(audit)
+                )
+                result = replace(
+                    result, evidence_rows=evidence_rows, evidence_truncated=evidence_truncated
+                )
         lifecycle.completed()
         return result
 
@@ -218,13 +226,14 @@ def _measurement_result(  # noqa: PLR0913
                 connection=context.connection,
                 run_scope_phase=context.run_scope_phase,
             )
+            row_limit: int = _evidence_row_limit(audit)
+            fetchmany: object = getattr(evidence_cursor, "fetchmany", None)
             evidence_rows, evidence_truncated = _bounded_evidence(
                 cursor=evidence_cursor,
-                row_limit=(
-                    DEFAULT_EVIDENCE_ROW_LIMIT
-                    if audit.evidence_limit is None
-                    else audit.evidence_limit
+                raw_rows=list(
+                    fetchmany(row_limit + 1) if callable(fetchmany) else evidence_cursor.fetchall()
                 ),
+                row_limit=row_limit,
             )
         except Exception as caught_error:
             evidence_error = f"{type(caught_error).__name__}: {caught_error}"
@@ -383,27 +392,31 @@ def _sample_count(*, row: Mapping[str, object], column: str) -> tuple[int | None
     return int(numeric), None
 
 
+def _evidence_row_limit(audit: AuditPlanEntry) -> int:
+    return DEFAULT_EVIDENCE_ROW_LIMIT if audit.evidence_limit is None else audit.evidence_limit
+
+
 def _bounded_evidence(
-    *, cursor: Any, row_limit: int
+    *, cursor: Any, raw_rows: list[Any], row_limit: int
 ) -> tuple[tuple[Mapping[str, object], ...], bool]:
-    fetchmany: object = getattr(cursor, "fetchmany", None)
-    raw_rows: list[Any] = list(
-        fetchmany(row_limit + 1) if callable(fetchmany) else cursor.fetchall()
-    )
+    """The leading rows within the row limit and serialized byte cap, and whether rows were cut."""
+
     truncated: bool = len(raw_rows) > row_limit
     retained: list[Mapping[str, object]] = []
+    serialized_bytes: int = len(b"[]")
     for raw_row in raw_rows[:row_limit]:
         safe_row: Mapping[str, object] = {
             key: _json_safe(value)
             for key, value in _row_mapping(cursor=cursor, row=raw_row).items()
         }
-        candidate: list[Mapping[str, object]] = [*retained, safe_row]
-        serialized: bytes = json.dumps(candidate, sort_keys=True, separators=(",", ":")).encode(
-            "utf-8"
+        row_bytes: int = len(
+            json.dumps(safe_row, sort_keys=True, separators=(",", ":")).encode("utf-8")
         )
-        if len(serialized) > MAX_EVIDENCE_SERIALIZED_BYTES:
+        separator_bytes: int = len(b",") if retained else 0
+        if serialized_bytes + separator_bytes + row_bytes > MAX_EVIDENCE_SERIALIZED_BYTES:
             truncated = True
             break
+        serialized_bytes += separator_bytes + row_bytes
         retained.append(safe_row)
     return tuple(retained), truncated
 

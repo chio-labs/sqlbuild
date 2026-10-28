@@ -31,9 +31,9 @@ enum Cell {
     Bytes(Vec<u8>),
 }
 
-/// A query reply: column names, rows of cells, and rows read, bytes read and query ID.
+/// A query reply: column names and types, rows of cells, and rows read, bytes read and query ID.
 type QueryReply = (
-    Vec<String>,
+    (Vec<String>, Vec<Option<String>>),
     Vec<Vec<Option<Cell>>>,
     (Option<u64>, Option<u64>, Option<String>),
 );
@@ -175,11 +175,12 @@ pub(crate) fn query(
         ],
         action,
     )?;
-    let (columns, rows, (rows_read, bytes_read, query_id)): QueryReply =
+    let ((columns, types), rows, (rows_read, bytes_read, query_id)): QueryReply =
         value.extract().map_err(|error| raised(action, &error))?;
     Ok((
         QueryResult {
             columns,
+            types,
             rows: rows
                 .into_iter()
                 .map(|row| row.into_iter().map(cell_value).collect())

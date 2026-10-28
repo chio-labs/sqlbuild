@@ -26,6 +26,7 @@ use crate::bindings::_helpers::compile_command::reuse_recording::write_reusable_
 use crate::bindings::_helpers::compile_command::reuse_recording::{
     CompileArtifactWrites, RecordedCompileOutput, compile_reuse_timings, new_artifact_recorder,
 };
+use crate::bindings::_helpers::compile_command::target_writer::write_rule_failed_models;
 use crate::bindings::_helpers::compile_context::input_reads::record_compile_input_reads;
 use crate::bindings::_helpers::compile_driver::analysis::analyze;
 use crate::bindings::_helpers::compile_driver::phases::{
@@ -358,6 +359,16 @@ fn compiled_with_status<'py>(
         (prepared_artifacts, recorder),
         status,
     )?;
+    if rules_failed && !skip_write {
+        write_rule_failed_models(
+            &target_dir(&project_dir)?,
+            (
+                &native_field(&native_field(&analysis, "graph")?, "project")?,
+                &project_dir,
+            ),
+            &native_field(&analysis, "diagnostics")?,
+        )?;
+    }
     let timings: Bound<'py, PyDict> = timings_ms(
         (&analysis, write_ms),
         (&recorders.detailed_timings, reuse_timings),

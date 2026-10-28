@@ -1,4 +1,4 @@
-//! Query cell values as display text, CSV fields and JSON values.
+//! Query cell values as display text and JSON values.
 
 use pyo3::exceptions::{PyUnicodeEncodeError, PyValueError};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
@@ -18,7 +18,8 @@ fn python_text(value: &Bound<'_, PyAny>) -> PyResult<String> {
     Ok(value.str()?.to_string_lossy().into_owned())
 }
 
-fn decimal_instance(value: &Bound<'_, PyAny>) -> PyResult<bool> {
+/// Whether `value` is a `decimal.Decimal`.
+pub(crate) fn decimal_instance(value: &Bound<'_, PyAny>) -> PyResult<bool> {
     value.is_instance(&imported(value.py(), "decimal", "Decimal")?)
 }
 
@@ -36,17 +37,6 @@ pub(crate) fn display_text(value: &Bound<'_, PyAny>) -> PyResult<String> {
     }
     if decimal_instance(value)? {
         return fixed_point(value);
-    }
-    python_text(value)
-}
-
-/// The text `csv.writer` writes: empty for `None`, `repr` for floats, else `str`.
-pub(crate) fn csv_text(value: &Bound<'_, PyAny>) -> PyResult<String> {
-    if value.is_none() {
-        return Ok(String::new());
-    }
-    if value.is_instance_of::<PyFloat>() {
-        return Ok(value.repr()?.to_string_lossy().into_owned());
     }
     python_text(value)
 }

@@ -245,7 +245,7 @@ def test_given_a_recall_query_when_rendered_as_json_then_it_matches_the_schema(
                 "8",
                 "SELECT 'first line' || char(10) || 'second line' AS note",
             ),
-            expected_fragments=("note | first li…[+14 bytes]", "1 row"),
+            expected_fragments=("│ first li…[+14 bytes] │", "1 row"),
         ),
         TextOutputTestCase(
             description="the schema lists views and join keys",
@@ -390,7 +390,7 @@ def test_given_a_killed_build_when_heartbeats_stop_then_the_invocation_is_abando
     running_id, recorded = killed_build(project_dir, heartbeat_seconds=test_case.heartbeat_seconds)
 
     assert recorded == [
-        [running_id, test_case.expected_status, 1, test_case.expected_output_complete]
+        [running_id, test_case.expected_status, 1, 1, test_case.expected_output_complete]
     ]
 
 

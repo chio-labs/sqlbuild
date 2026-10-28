@@ -1,4 +1,4 @@
-use crate::settings::models::{RecallSettings, StoreLocation, StorePurpose};
+use crate::settings::models::{AuditEvidence, RecallSettings, StoreLocation, StorePurpose};
 use crate::settings::tests::helpers::{
     central_store, defaults, local_store, resolution_error, resolved,
 };
@@ -23,7 +23,7 @@ const LAYERED_PROJECT: &[(&str, &str)] = &[
          [targets.dev]\n[targets.dev.recall]\nenabled = false\n\
          [targets.prod]\n[targets.prod.recall]\nwrite_connection = \"central\"\nread_connection = \"central\"\n\
          [targets.capped]\n[targets.capped.recall]\nwrite_connection = \"central\"\nread_connection = \"central\"\n\
-         max_output_bytes = 4096\n\
+         max_output_bytes = 4096\naudit_evidence = \"error\"\n\
          [targets.qa]\n[targets.qa.recall]\nwrite_connection = \"other\"\nread_connection = \"other\"\n\
          [targets.laptop]\n[targets.laptop.recall]\nread_connection = \"central\"\n",
     ),
@@ -136,7 +136,7 @@ fn given_project_layers_when_resolved_then_target_over_local_over_project_over_d
             },
         },
         ResolveTestCase {
-            description: "a configured output limit applies to a ClickHouse store",
+            description: "a configured output limit and audit evidence mode apply to one target",
             files: LAYERED_PROJECT,
             target: Some("capped"),
             purpose: StorePurpose::Record,
@@ -148,6 +148,7 @@ fn given_project_layers_when_resolved_then_target_over_local_over_project_over_d
                 retention_days: 10,
                 shutdown_timeout_ms: 1000,
                 max_output_bytes: Some(4096),
+                audit_evidence: AuditEvidence::Error,
                 ..defaults()
             },
         },

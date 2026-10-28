@@ -10,15 +10,16 @@ from sqlbuild.runtime.execution_limits._helpers.context import (
     current_invocation_connections_context,
     current_item_deadline_context,
 )
+from sqlbuild.runtime.execution_limits._helpers.running import running_statements
 from sqlbuild.runtime.execution_limits.classes.active_connections import ActiveConnections
 from sqlbuild.runtime.execution_limits.classes.item_deadline import ItemDeadline
 
 
 @contextmanager
 def tracked_statement_connection(*, adapter: Any, connection: Any) -> Generator[None]:
-    """Record that a statement runs on `connection` so a deadline can cancel it there."""
+    """Record that a statement runs on `connection` so a deadline or termination can cancel it."""
 
-    registries: list[ActiveConnections] = []
+    registries: list[ActiveConnections] = [running_statements]
     invocation: ActiveConnections | None = current_invocation_connections_context.get()
     if invocation is not None:
         registries.append(invocation)

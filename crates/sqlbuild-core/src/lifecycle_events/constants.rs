@@ -79,7 +79,7 @@ pub(crate) const FORBIDDEN_STATEMENT_PAYLOAD_FIELDS: [&str; 8] = [
     "sql",
     "statement_sql",
 ];
-pub(crate) const STRING_PAYLOAD_FIELDS: [&str; 55] = [
+pub(crate) const STRING_PAYLOAD_FIELDS: [&str; 56] = [
     "adapter",
     "attached_column_name",
     "attached_target_kind",
@@ -92,6 +92,7 @@ pub(crate) const STRING_PAYLOAD_FIELDS: [&str; 55] = [
     "binding_key",
     "command",
     "configured_batch_size",
+    "cost_status",
     "cursor_end_exclusive",
     "cursor_start",
     "definition_fingerprint",
@@ -653,7 +654,7 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [EventDefinition; 23] = [
         event_type: "invocation_completed",
         required_correlations: &[],
         required_payload: &[],
-        allowed_payload: &["command", "duration_ms", "exit_code"],
+        allowed_payload: &["command", "cost_status", "duration_ms", "exit_code"],
         terminal: true,
     },
     EventDefinition {
@@ -662,11 +663,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [EventDefinition; 23] = [
         required_payload: &[],
         allowed_payload: &[
             "command",
+            "cost_status",
             "duration_ms",
             "error_code",
             "error_message",
             "error_type",
             "exit_code",
+            "signal_number",
         ],
         terminal: true,
     },
@@ -1010,6 +1013,7 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [EventDefinition; 23] = [
             "intent",
             "job_id",
             "metadata",
+            "outcome",
             "purpose",
             "query_id",
             "row_count",

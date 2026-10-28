@@ -4,10 +4,14 @@ import _thread
 import json
 import os
 import shutil
+import signal
+import subprocess
 import sys
 import tempfile
 import threading
+import time
 from collections.abc import Callable
+from itertools import takewhile
 from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
@@ -38,6 +42,19 @@ from tests.unit.src.sqlbuild.rule_engine._helpers.run.helpers import rebuild_ide
 STAGE_CAPTURE_SUFFIX: str = ".json"
 
 E2E_FIXTURES_DIR: Path = Path(__file__).resolve().parents[6] / "e2e" / "fixtures"
+_WEEKLY_ORDERS: str = (
+    'MODEL (\n  description "Weekly orders per product",\n  materialized table,\n);\n\n'
+    "SELECT 1 AS product_id, CAST(10 AS BIGINT) AS orders_placed, "
+    "CAST(1 AS BIGINT) AS refund_count\n"
+)
+_REFUND_RATES: str = (
+    'MODEL (\n  description "Weekly refund rate per product",\n  materialized table,\n);\n\n'
+    'WITH weekly AS (SELECT * FROM __ref("weekly_orders")),\n'
+    "@sql.weekly_rates(weekly, weekly.keys := (product_id), "
+    "weekly.order_count := orders_placed, __cte := by_product)\n"
+    "final AS (SELECT * FROM by_product)\n"
+    "SELECT * FROM final\n"
+)
 
 
 def staging_directories(target_dir: Path) -> list[str]:
@@ -1214,3 +1231,113 @@ def write_enum_project(*, root: Path, model_sql: str, contract: str) -> None:
         "  columns (\n    order_id (type INTEGER),\n    status (type order_status),\n  ),\n);\n\n"
         f"{model_sql}"
     )
+
+
+def _weekly_rates(first_step: str) -> str:
+    return (
+        'MACRO (\n  description "Weekly refund rate per grain",\n'
+        "  arguments (weekly RELATION (keys COLUMNS, order_count BIGINT, refund_count BIGINT)),\n"
+        ");\n\n"
+        f"WITH counted AS (\n{first_step}\n),\n\n"
+        "rated AS (\n"
+        "  SELECT\n"
+        "    @weekly.keys,\n"
+        "    SUM(refunds) / NULLIF(SUM(orders), 0) AS refund_rate\n"
+        "  FROM counted\n"
+        "  GROUP BY @weekly.keys\n"
+        ")\n"
+    )
+
+
+def refund_rates_project(first_step: str) -> dict[str, str]:
+    """Weekly orders, refund-rate models and the SQL macro whose first CTE is `first_step`."""
+
+    return {
+        "models/weekly_orders.sql": _WEEKLY_ORDERS,
+        "models/refund_rates.sql": _REFUND_RATES,
+        "models/_macros/sql/weekly_rates.sql": _weekly_rates(first_step),
+    }
+
+
+def open_orders_model(sql: str) -> str:
+    """An `open_orders` table model whose query is `sql`."""
+
+    return f'MODEL (\n  description "Open orders",\n  materialized table,\n);\n\n{sql}\n'
+
+
+_ENDLESS_ORDER_TOTAL: str = "(SELECT SUM(big.n) FROM range(1000000000000) AS big(n)) * 0"
+
+
+def write_endless_scenario_project(project_dir: Path) -> Path:
+    """A DuckDB project whose scenario builds a model that runs until it is cancelled."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": (
+            'name = "scenario_signals"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "scenario_signals.duckdb"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n"
+            "  - name: raw_orders\n"
+            "    description: Raw orders.\n"
+            "    schema: main\n"
+            "    table: raw_orders\n"
+        ),
+        "models/order_totals.sql": (
+            "MODEL (description 'Order totals.', materialized table, sql_analysis false);\n\n"
+            f"SELECT SUM(o.amount) + {_ENDLESS_ORDER_TOTAL} AS total_amount "
+            'FROM __source("raw_orders") AS o\n'
+        ),
+        "tests/scenarios/totals.sql": (
+            "SCENARIO (description 'Order totals add up.');\n\n"
+            "WITH\n"
+            "__source__raw_orders AS (SELECT 1 AS id, 10 AS amount),\n"
+            "__expected__order_totals AS (SELECT 10 AS total_amount)\n"
+            "SELECT 1\n"
+        ),
+    }
+    for relative, contents in files.items():
+        path: Path = project_dir / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_text(contents, encoding="utf-8")
+    return project_dir
+
+
+def signalled_scenario_run(
+    *, project_dir: Path, sent_signal: signal.Signals
+) -> tuple[int, str, float]:
+    """Exit code and output of `sqb scenario test` sent `sent_signal` while its model runs, and
+    the seconds it took to stop."""
+
+    process: subprocess.Popen[str] = subprocess.Popen(
+        [
+            str(Path(sys.executable).with_name("sqb")),
+            "--no-color",
+            "--project-dir",
+            str(project_dir),
+            "scenario",
+            "test",
+            "--concurrency",
+            "1",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env={**os.environ, "PYTHONUNBUFFERED": "1"},
+        preexec_fn=_default_interrupt_handling,
+    )
+    assert process.stdout is not None
+    started: str = "".join(takewhile(lambda line: "order_totals START" not in line, process.stdout))
+    time.sleep(1.0)
+    process.send_signal(sent_signal)
+    sent: float = time.monotonic()
+    stdout, stderr = process.communicate(timeout=120)
+    return process.returncode, started + stdout + stderr, time.monotonic() - sent
+
+
+def _default_interrupt_handling() -> None:
+    """Give the spawned command default Ctrl-C handling even when its parent ignores SIGINT."""
+
+    _ = signal.signal(signal.SIGINT, signal.SIG_DFL)

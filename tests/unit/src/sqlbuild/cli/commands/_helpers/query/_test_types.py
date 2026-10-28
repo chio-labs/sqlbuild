@@ -7,6 +7,6 @@ from sqlbuild.adapter.contract.models import QueryResult
 class QueryOutputTestCase:
     description: str
     result: QueryResult
-    output_format: str
+    output_format: str | None
     limit: int | None
     expected_output: str

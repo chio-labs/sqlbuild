@@ -2,8 +2,12 @@
 
 use std::collections::HashSet;
 
+use serde_json::{Map, Value};
+
 use crate::records::constants::{
-    ARTIFACT_DIGEST_PREFIX, EXECUTED_SQL_ROLE, SQL_ARTIFACT_KIND, SQL_MEDIA_TYPE,
+    ARTIFACT_DIGEST_PREFIX, AUDIT_COMPLETED_EVENT, AUDIT_EVIDENCE_KIND, AUDIT_EVIDENCE_MEDIA_TYPE,
+    AUDIT_EVIDENCE_ROLE, EVIDENCE_PAYLOAD_FIELD, EXECUTED_SQL_ROLE, SAMPLE_DIGEST_PAYLOAD_FIELD,
+    SQL_ARTIFACT_KIND, SQL_MEDIA_TYPE,
 };
 use crate::records::main::artifact_rows::artifact_rows;
 use crate::records::main::event_object_row::event_object_row;
@@ -11,6 +15,7 @@ use crate::records::main::format_timestamp::format_timestamp;
 use crate::records::main::output_row::output_row;
 use crate::records::main::sha256_hex::sha256_hex;
 use crate::records::models::{ArtifactInput, OutputChunk, OutputStream, RecallRow, RowEnvelope};
+use crate::settings::models::AuditEvidence;
 use crate::writer::_helpers::output_chunk::output_chunk;
 use crate::writer::_helpers::queue::{Payload, Queued, SqlInput};
 use crate::writer::models::{DeliveryStream, ReplacedEvents, ReplacedOutput};
@@ -30,22 +35,54 @@ pub(crate) struct Built {
     pub(crate) filtered: Vec<DeliveryStream>,
     /// Events a lifecycle replacement published beyond the one it was handed, accepted as they are built.
     pub(crate) extra_events: u64,
+    /// Audit evidence artifacts taken out of their events, accepted as they are built.
+    pub(crate) extra_artifacts: u64,
 }
 
-/// Builds rows for one session; remembers which SQL it has stored.
+impl Built {
+    /// Account for one event's row and the artifact rows of its evidence.
+    fn add_event(
+        &mut self,
+        stream: DeliveryStream,
+        (row, evidence_rows): (
+            Result<RecallRow, crate::records::errors::RecordError>,
+            Option<Vec<RecallRow>>,
+        ),
+    ) {
+        if let Some(rows) = evidence_rows {
+            self.rows.extend(rows);
+            self.written.push(DeliveryStream::Artifacts);
+            self.extra_artifacts += 1;
+        }
+        match row {
+            Ok(row) => {
+                self.rows.push(row);
+                self.written.push(stream);
+            }
+            Err(_) => self.unbuildable.push(stream),
+        }
+    }
+}
+
+/// Builds rows for one session; remembers which SQL and references it has stored.
 #[derive(Debug)]
 pub(crate) struct Materializer {
     envelope: RowEnvelope,
     artifacts_seen: HashSet<String>,
+    /// Digests and the references already written for them.
+    refs_seen: HashSet<(String, String)>,
     /// Output bytes stored per stream, for the offsets of replaced chunks.
     output_bytes: [u64; 2],
+    audit_evidence: AuditEvidence,
 }
 
 impl Materializer {
-    pub(crate) fn new(envelope: RowEnvelope) -> Self {
+    pub(crate) fn new(envelope: RowEnvelope, audit_evidence: AuditEvidence) -> Self {
         Self {
+            audit_evidence,
             envelope,
             artifacts_seen: HashSet::new(),
+            refs_seen: HashSet::new(),
             output_bytes: [0; 2],
         }
     }
@@ -92,26 +129,95 @@ impl Materializer {
         Ok(stored)
     }
 
+    /// The content row the first time a digest is seen, and a reference row for each statement that ran it; `None` when both are already written.
     fn sql_rows(&mut self, input: SqlInput) -> Option<Vec<RecallRow>> {
-        let digest = format!(
-            "{ARTIFACT_DIGEST_PREFIX}{}",
-            sha256_hex(input.sql.as_bytes())
+        let artifact: ArtifactInput = artifact_input(
+            input.sql.into_bytes(),
+            (SQL_ARTIFACT_KIND, SQL_MEDIA_TYPE, EXECUTED_SQL_ROLE),
+            (input.statement_id, input.resource_id),
+            &format_timestamp(input.seen_at),
         );
-        if !self.artifacts_seen.insert(digest.clone()) {
+        self.artifact_rows(artifact)
+    }
+
+    /// `artifact`'s content row the first time its digest is seen and its reference row the first time it is named; `None` when both are written.
+    fn artifact_rows(&mut self, artifact: ArtifactInput) -> Option<Vec<RecallRow>> {
+        if !self
+            .refs_seen
+            .insert((artifact.digest.clone(), artifact.ref_id.clone()))
+        {
             return None;
         }
-        let artifact = ArtifactInput {
-            ref_id: input.statement_id.clone().unwrap_or_else(|| digest.clone()),
-            digest,
-            kind: SQL_ARTIFACT_KIND.to_owned(),
-            media_type: SQL_MEDIA_TYPE.to_owned(),
-            content: input.sql.into_bytes(),
-            seen_at: format_timestamp(input.seen_at),
-            role: EXECUTED_SQL_ROLE.to_owned(),
-            statement_id: input.statement_id,
-            resource_id: input.resource_id,
+        let first_sighting: bool = self.artifacts_seen.insert(artifact.digest.clone());
+        let [content, reference] = artifact_rows(&self.envelope, &artifact);
+        Some(if first_sighting {
+            vec![content, reference]
+        } else {
+            vec![reference]
+        })
+    }
+
+    /// The row of `event`, then the artifact rows of its evidence: an `audit_completed` event's evidence rows leave its payload and, when the outcome keeps them, become an artifact its `sample_digest` names.
+    fn event_rows(
+        &mut self,
+        event: Map<String, Value>,
+    ) -> (
+        Result<RecallRow, crate::records::errors::RecordError>,
+        Option<Vec<RecallRow>>,
+    ) {
+        let (event, artifact): (Map<String, Value>, Option<ArtifactInput>) =
+            self.take_evidence(event);
+        let evidence_rows: Option<Vec<RecallRow>> =
+            artifact.and_then(|artifact| self.artifact_rows(artifact));
+        (event_object_row(&self.envelope, &event), evidence_rows)
+    }
+
+    /// `event` without its evidence rows, and the artifact holding them when its outcome keeps them.
+    fn take_evidence(
+        &self,
+        mut event: Map<String, Value>,
+    ) -> (Map<String, Value>, Option<ArtifactInput>) {
+        let evidence: Option<Value> =
+            if event.get("event_type").and_then(Value::as_str) == Some(AUDIT_COMPLETED_EVENT) {
+                event
+                    .get_mut("payload")
+                    .and_then(Value::as_object_mut)
+                    .and_then(|payload| payload.remove(EVIDENCE_PAYLOAD_FIELD))
+            } else {
+                None
+            };
+        let text = |field: &str| -> Option<String> {
+            event.get(field).and_then(Value::as_str).map(str::to_owned)
         };
-        Some(artifact_rows(&self.envelope, &artifact).to_vec())
+        let outcome: Option<&str> = event
+            .get("payload")
+            .and_then(|payload| payload.get("outcome"))
+            .and_then(Value::as_str);
+        let Some(evidence) =
+            evidence.filter(|_| self.audit_evidence.keeps(outcome.unwrap_or_default()))
+        else {
+            return (event, None);
+        };
+        let mut artifact: ArtifactInput = artifact_input(
+            evidence.to_string().into_bytes(),
+            (
+                AUDIT_EVIDENCE_KIND,
+                AUDIT_EVIDENCE_MEDIA_TYPE,
+                AUDIT_EVIDENCE_ROLE,
+            ),
+            (None, text("resource_id")),
+            &text("occurred_at").unwrap_or_default(),
+        );
+        artifact.ref_id = text("event_id").unwrap_or_default();
+        let digest: String = artifact
+            .digest
+            .strip_prefix(ARTIFACT_DIGEST_PREFIX)
+            .unwrap_or(&artifact.digest)
+            .to_owned();
+        if let Some(payload) = event.get_mut("payload").and_then(Value::as_object_mut) {
+            payload.insert(SAMPLE_DIGEST_PAYLOAD_FIELD.to_owned(), Value::from(digest));
+        }
+        (event, Some(artifact))
     }
 
     /// The rows of `batch`, with each record's stream sorted by how it is accounted; lifecycle replacements see their events in publication order.
@@ -139,13 +245,7 @@ impl Materializer {
                     built.rows.extend(rows);
                     built.written.push(stream);
                 }
-                Payload::Event(event) => match event_object_row(&self.envelope, &event) {
-                    Ok(row) => {
-                        built.rows.push(row);
-                        built.written.push(stream);
-                    }
-                    Err(_) => built.unbuildable.push(stream),
-                },
+                Payload::Event(event) => built.add_event(stream, self.event_rows(event)),
                 Payload::Pending(sequence, pending) => pending_events.push((sequence, pending)),
                 Payload::Sql(input) => match self.sql_rows(input) {
                     Some(rows) => {
@@ -166,18 +266,33 @@ impl Materializer {
                 ReplacedEvents::Published(events) => {
                     built.extra_events += events.len() as u64 - 1;
                     for event in events {
-                        match event_object_row(&self.envelope, &event) {
-                            Ok(row) => {
-                                built.rows.push(row);
-                                built.written.push(stream);
-                            }
-                            Err(_) => built.unbuildable.push(stream),
-                        }
+                        built.add_event(stream, self.event_rows(event));
                     }
                 }
                 ReplacedEvents::Failed => built.unbuildable.push(stream),
             }
         }
         built
+    }
+}
+
+/// An artifact of `content`, referenced by its statement or, without one, by its digest.
+fn artifact_input(
+    content: Vec<u8>,
+    (kind, media_type, role): (&str, &str, &str),
+    (statement_id, resource_id): (Option<String>, Option<String>),
+    seen_at: &str,
+) -> ArtifactInput {
+    let digest = format!("{ARTIFACT_DIGEST_PREFIX}{}", sha256_hex(&content));
+    ArtifactInput {
+        ref_id: statement_id.clone().unwrap_or_else(|| digest.clone()),
+        digest,
+        kind: kind.to_owned(),
+        media_type: media_type.to_owned(),
+        content,
+        seen_at: seen_at.to_owned(),
+        role: role.to_owned(),
+        statement_id,
+        resource_id,
     }
 }

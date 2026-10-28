@@ -710,12 +710,27 @@ pub(crate) const ENTRIES: &[HostEntry] = &[
         edge: HostEdge::Executor,
     },
     HostEntry {
+        name: "audit_evidence_scope",
+        kind: HostKind::Function,
+        edge: HostEdge::Executor,
+    },
+    HostEntry {
+        name: "cancel_running_statements",
+        kind: HostKind::Function,
+        edge: HostEdge::Executor,
+    },
+    HostEntry {
         name: "EventDispatcher",
         kind: HostKind::Class,
         edge: HostEdge::Executor,
     },
     HostEntry {
         name: "OperationLifecycle",
+        kind: HostKind::Class,
+        edge: HostEdge::Executor,
+    },
+    HostEntry {
+        name: "StatementLifecycle",
         kind: HostKind::Class,
         edge: HostEdge::Executor,
     },

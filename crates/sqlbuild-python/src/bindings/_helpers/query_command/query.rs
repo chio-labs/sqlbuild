@@ -4,13 +4,10 @@ use pyo3::exceptions::PyException;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyDict, PyDictMethods, PyInt, PyString, PyStringMethods};
+use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFloat, PyInt, PyString, PyStringMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::json::models::JsonValue;
-use sqlbuild_core::query_command::main::render_query_csv::render_query_csv;
 use sqlbuild_core::query_command::main::render_query_json::render_query_json;
-use sqlbuild_core::query_command::main::render_query_long::render_query_long;
-use sqlbuild_core::query_command::main::render_query_table::render_query_table;
 use sqlbuild_core::query_command::models::QueryDisplay;
 use sqlbuild_host::entries::models::AdapterHost;
 
@@ -23,16 +20,14 @@ use crate::bindings::_helpers::query_command::project::{
     ProjectAdapter, ProjectInputs, project_adapter,
 };
 use crate::bindings::_helpers::query_command::query_values::{
-    csv_text, display_text, json_cell, python_json_rows, strict_width,
+    decimal_instance, display_text, json_cell, python_json_rows, strict_width,
 };
+use crate::bindings::_helpers::query_command::text_output::{LONG_FORMAT, render_text};
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 
-const LONG_FORMAT: &str = "long";
-const TABLE_FORMAT: &str = "table";
 const JSON_FORMAT: &str = "json";
-const CSV_FORMAT: &str = "csv";
 const STATEMENT_OK: &str = "OK\n";
 const DEFAULT_LIMIT: i64 = 20;
 
@@ -248,8 +243,51 @@ fn render_json(
     }
 }
 
+/// Whether every value of the column at `index` is a number or NULL, and at least one is a number.
+fn numeric_column(rows: &[Vec<Bound<'_, PyAny>>], index: usize) -> PyResult<bool> {
+    let mut seen: bool = false;
+    for row in rows {
+        let Some(value) = row.get(index) else {
+            continue;
+        };
+        if value.is_none() {
+            continue;
+        }
+        if !number(value)? {
+            return Ok(false);
+        }
+        seen = true;
+    }
+    Ok(seen)
+}
+
+fn number(value: &Bound<'_, PyAny>) -> PyResult<bool> {
+    if value.is_instance_of::<PyBool>() {
+        return Ok(false);
+    }
+    Ok(value.is_instance_of::<PyInt>()
+        || value.is_instance_of::<PyFloat>()
+        || decimal_instance(value)?)
+}
+
+/// The column types the adapter reported, where it knows them.
+fn column_types(result: &Bound<'_, PyAny>, width: usize) -> PyResult<Vec<Option<String>>> {
+    let types: Vec<Option<String>> = native_field(result, "column_types")?
+        .extract()
+        .unwrap_or_default();
+    Ok(if types.len() == width {
+        types
+    } else {
+        Vec::new()
+    })
+}
+
 /// The result in the requested format; a statement without columns prints `OK`.
-fn render(result: &Bound<'_, PyAny>, output_format: &str, limit: Option<i64>) -> PyResult<String> {
+fn render(
+    result: &Bound<'_, PyAny>,
+    output_format: Option<&str>,
+    limit: Option<i64>,
+) -> PyResult<String> {
     let py: Python<'_> = result.py();
     let columns: Vec<String> = native_field(result, "columns")?
         .try_iter()?
@@ -259,27 +297,27 @@ fn render(result: &Bound<'_, PyAny>, output_format: &str, limit: Option<i64>) ->
         return Ok(STATEMENT_OK.to_owned());
     }
     let rows: Vec<Vec<Bound<'_, PyAny>>> = rows(result)?;
-    let display = |strict: bool| -> PyResult<QueryDisplay> {
-        if strict {
+    match output_format {
+        Some(JSON_FORMAT) => render_json(result, &columns, &rows),
+        None | Some(LONG_FORMAT) => {
             for row in &rows {
                 strict_width(columns.len(), row.len())?;
             }
+            let display = QueryDisplay {
+                types: column_types(result, columns.len())?,
+                numeric: (0..columns.len())
+                    .map(|index| numeric_column(&rows, index))
+                    .collect::<PyResult<_>>()?,
+                columns,
+                rows: texts(&rows, display_text)?,
+                truncated: native_field(result, "truncated")?.is_truthy()?,
+                limit,
+            };
+            render_text(py, &display, output_format)
         }
-        Ok(QueryDisplay {
-            columns: columns.clone(),
-            rows: texts(&rows, display_text)?,
-            truncated: native_field(result, "truncated")?.is_truthy()?,
-            limit,
-        })
-    };
-    match output_format {
-        LONG_FORMAT => Ok(render_query_long(&display(true)?)),
-        TABLE_FORMAT => Ok(render_query_table(&display(false)?)),
-        JSON_FORMAT => render_json(result, &columns, &rows),
-        CSV_FORMAT => Ok(render_query_csv(&columns, &texts(&rows, csv_text)?)),
-        _ => Err(user_error(
+        Some(other) => Err(user_error(
             py,
-            &format!("unsupported query output format '{output_format}'"),
+            &format!("unsupported query output format '{other}'"),
             None,
             None,
         )),
@@ -302,10 +340,10 @@ pub(crate) fn run_query_command(
             &["query_file", "selected_target", "output_format", "limit"],
         ),
     )?;
-    let output_format: String = if arguments.passed("output_format")? {
+    let output_format: Option<String> = if arguments.passed("output_format")? {
         arguments.value("output_format")?.extract()?
     } else {
-        LONG_FORMAT.to_owned()
+        None
     };
     let limit: Option<i64> = if arguments.passed("limit")? {
         arguments.value("limit")?.extract()?
@@ -336,7 +374,7 @@ pub(crate) fn run_query_command(
         sql,
         limit,
     )?;
-    let rendered: String = render(&result, &output_format, limit)?;
+    let rendered: String = render(&result, output_format.as_deref(), limit)?;
     let stdout: Bound<'_, PyAny> = py.import("sys")?.getattr("stdout")?;
     stdout.call_method1("write", (PyString::new(py, &rendered),))?;
     stdout.call_method0("flush")?;
@@ -348,7 +386,7 @@ pub(crate) fn run_query_command(
 #[pyo3(signature = (*, result, output_format, limit))]
 fn render_query_result(
     result: &Bound<'_, PyAny>,
-    output_format: &str,
+    output_format: Option<&str>,
     limit: Option<i64>,
 ) -> PyResult<String> {
     render(result, output_format, limit)

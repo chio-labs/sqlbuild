@@ -230,11 +230,19 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         if description is None:
             return QueryResult()
         columns: tuple[str, ...] = tuple(str(column[0]) for column in description)
+        column_types: tuple[str | None, ...] = tuple(
+            None if column[1] is None else str(column[1]) for column in description
+        )
         if limit is None:
-            return QueryResult(columns=columns, rows=tuple(cursor.fetchall()))
+            return QueryResult(
+                columns=columns, rows=tuple(cursor.fetchall()), column_types=column_types
+            )
         fetched: list[tuple[object, ...]] = cursor.fetchmany(limit + 1)
         return QueryResult(
-            columns=columns, rows=tuple(fetched[:limit]), truncated=len(fetched) > limit
+            columns=columns,
+            rows=tuple(fetched[:limit]),
+            truncated=len(fetched) > limit,
+            column_types=column_types,
         )
 
     def supports_zero_copy_clone(self) -> bool:
