@@ -149,8 +149,8 @@ def test_given_project_when_running_command_then_project_discovery_runs_only_whe
     (
         QueryTargetConnectionTestCase(
             description="default target connection",
-            command=("query", "SELECT label FROM destination", "--format", "long"),
-            expected_stdout_fragment="label | dev\n",
+            command=("query", "SELECT label FROM destination", "--format", "json"),
+            expected_stdout_fragment='[{"label": "dev"}]\n',
         ),
         QueryTargetConnectionTestCase(
             description="explicit target connection",
@@ -158,11 +158,11 @@ def test_given_project_when_running_command_then_project_discovery_runs_only_whe
                 "query",
                 "SELECT label FROM destination",
                 "--format",
-                "long",
+                "json",
                 "--target",
                 "prod",
             ),
-            expected_stdout_fragment="label | prod\n",
+            expected_stdout_fragment='[{"label": "prod"}]\n',
         ),
     ),
     ids=lambda case: case.description,

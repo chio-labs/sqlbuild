@@ -75,9 +75,12 @@ def test_given_query_command_when_running_then_outputs_result(
             query_file_path="queries/orders.sql",
             query_sql="SELECT 7 AS order_id, 'gaufre' AS label\n",
             expected_stdout_fragment=(
-                "-[ RECORD 1 ]---------------------------+\n"
-                "order_id | 7\n"
-                "label    | gaufre\n\n"
+                "┌──────────┬─────────┐\n"
+                "│ order_id │  label  │\n"
+                "│ INTEGER  │ VARCHAR │\n"
+                "├──────────┼─────────┤\n"
+                "│        7 │ gaufre  │\n"
+                "└──────────┴─────────┘\n\n"
                 "1 row\n"
             ),
         )
