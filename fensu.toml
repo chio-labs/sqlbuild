@@ -2076,7 +2076,6 @@ pending_budgets = [
     "crates/sqlbuild-python/src/bindings/_helpers/planner_strategy/fixture_preparation.rs=2",
     "crates/sqlbuild-python/src/bindings/_helpers/planner_strategy/fixture_reads.rs=4",
     "crates/sqlbuild-python/src/bindings/_helpers/planner_strategy/fixture_sql.rs=3",
-    "crates/sqlbuild-python/src/bindings/_helpers/planner_strategy/fixture_values.rs=1",
     "crates/sqlbuild-python/src/bindings/_helpers/planner_strategy/microbatch_limits.rs=1",
     "crates/sqlbuild-python/src/bindings/_helpers/planner_strategy/model_entries.rs=3",
     "crates/sqlbuild-python/src/bindings/_helpers/planner_strategy/models.rs=1",

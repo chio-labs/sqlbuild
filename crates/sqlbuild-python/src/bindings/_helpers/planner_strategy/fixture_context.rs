@@ -9,7 +9,6 @@ use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet};
 use pyo3::{pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_analysis::planner_fixtures::main::fixture_schema::fixture_schema;
 use sqlbuild_analysis::planner_fixtures::models::FixtureColumn;
-use sqlbuild_core::text::main::python_casefold::python_casefold;
 
 use crate::bindings::_helpers::analysis_session::fixture_inferences::FixtureColumnInferences;
 use crate::bindings::_helpers::compiled_views::model_reads;
@@ -23,7 +22,7 @@ use crate::bindings::_helpers::planner_strategy::constants::{
 use crate::bindings::_helpers::planner_strategy::fixture_metadata::model_fixture_relation;
 use crate::bindings::_helpers::planner_strategy::fixture_reads::lineage_reads;
 use crate::bindings::_helpers::planner_strategy::fixture_types::projections;
-use crate::bindings::_helpers::planner_strategy::fixture_values::columns;
+use crate::bindings::_helpers::planner_strategy::fixture_values::{columns, folded_name};
 use crate::bindings::_helpers::planner_strategy::models::{
     FixtureReadCacheHost, FixtureRelation, ModelFixtureFacts, RelationFixturePlanningContext,
 };
@@ -180,7 +179,7 @@ impl RelationFixturePlanningContext {
             let mut fixture_columns: Vec<FixtureColumn> = Vec::with_capacity(columns.len());
             for (name, sql_type, nullable) in columns {
                 fixture_columns.push(FixtureColumn {
-                    folded_name: python_casefold(&name),
+                    folded_name: folded_name(&name),
                     name,
                     sql_type,
                     nullable,

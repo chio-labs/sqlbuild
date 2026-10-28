@@ -49,6 +49,7 @@ from sqlbuild.adapter.contract.constants import (
     QUALIFIED_NAME_SEPARATOR,
 )
 from sqlbuild.adapter.contract.exceptions import AdapterUserError, ViewRenameRefusedError
+from sqlbuild.adapter.contract.main.is_quoted_identifier import is_quoted_identifier
 from sqlbuild.adapter.contract.main.run_relation_read_probe import run_relation_read_probe
 from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
 from sqlbuild.adapter.contract.main.unsupported_relation_usage import unsupported_relation_usage
@@ -399,6 +400,8 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
     def render_identifier(self, name: str) -> str:
         """Render one DuckDB identifier using double-quote escaping."""
 
+        if is_quoted_identifier(name):
+            return name
         return '"' + name.replace('"', '""') + '"'
 
     def render_exact_identifier(self, name: str) -> str:

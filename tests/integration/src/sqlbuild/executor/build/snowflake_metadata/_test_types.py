@@ -100,3 +100,12 @@ class PlannerListingReuseTestCase:
     external_changes: tuple[
         tuple[re.Pattern[str], Callable[[SimulatedSnowflakeWarehouse], None]], ...
     ] = ()
+
+
+@dataclass(frozen=True)
+class QuotedColumnBuildTestCase:
+    """A source stored with quoted mixed-case column names, built twice through the real CLI."""
+
+    description: str
+    stored_columns: tuple[str, ...]
+    expected_fragment: str

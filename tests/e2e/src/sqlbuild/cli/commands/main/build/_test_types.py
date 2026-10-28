@@ -1494,3 +1494,13 @@ class DuckDbAttachE2ETestCase:
     expected_archived_rows: list[tuple[object, ...]]
     attach_path: str = "archive.duckdb"
     expected_archive_root: str = "project"
+
+
+@dataclass(frozen=True)
+class QuotedMixedCaseColumnsBuildE2ETestCase:
+    """A source and a model output with quoted mixed-case columns, through every command."""
+
+    description: str
+    expected_export_rows: list[tuple[object, ...]]
+    expected_test_fragment: str
+    expected_scenario_fragment: str

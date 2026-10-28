@@ -119,7 +119,7 @@ project and does not change it:
 - raw `edge__*` sources in `sources/edge_cases.yml`, loaded by `python/loaders/edge_cases.py` from
   fixed rows that `data_scale` does not change, so core data and core expectations stay the same.
 
-It has 38 models (7 staging, 22 intermediate, 9 marts), 61 unit tests and 4 scenarios, in four
+It has 38 models (7 staging, 22 intermediate, 9 marts), 62 unit tests and 4 scenarios, in four
 groups:
 
 | Group | Covers |
@@ -189,12 +189,12 @@ the same rows, apart from the snapshots, which record build times, and three mod
 vary from one run to the next (`int_cart_funnel`, `int_delivery_slot_utilisation` and
 `rpt_delivery_exceptions_monthly`).
 
-The edge-case area, verified on Snowflake with SQLBuild 0.184.0 on the `edge` target:
+The edge-case area, verified on Snowflake with SQLBuild built after 0.185.0 on the `edge` target:
 
 | Step | Result |
 |------|--------|
-| `sqb build --select tag:edge_case --exclude stg_edge_partner_listings+` | Passes; the disabled model is skipped |
-| `sqb test --select tag:edge_case` | 61 of 61 pass |
+| `sqb build --select tag:edge_case` | Passes; the disabled model is skipped |
+| `sqb test --select tag:edge_case` | 62 of 62 pass |
 | `sqb scenario test --select edge_cases` | 4 of 4 pass |
 | Two-load replay of the delivery change log | The merged status equals the full rebuild after each load |
 
@@ -221,12 +221,9 @@ noted here:
 - Compilation accepts SQL that Snowflake rejects: `CONNECT_BY_ISLEAF`, which Snowflake does not
   have, and a CTE whose body is a bare `VALUES` list. `int_category_paths` finds leaf categories
   with a join instead, and test case tables use `SELECT ... FROM VALUES ... AS v(...)`.
-- A source column whose name is quoted mixed case, such as `"listingId"`, cannot be read once the
-  table exists: planning folds the quoted reference to lower case and fails with `B002`. Fixtures
-  cannot name such columns either (`B302` in unit tests, `S510` in scenarios), and a `MODEL`
-  header cannot declare a quoted column name. `stg_edge_partner_listings` has a reviewed
-  `SQBRTEST202` ignore, `rpt_edge_partner_listing_export` a reviewed `SQBRTEST201` ignore, and the
-  edge build excludes `stg_edge_partner_listings+`.
+- Static type inference cannot follow a quoted mixed-case column, such as `"unitPrice"`, from a CTE
+  through `SELECT *` on Snowflake, so `rpt_edge_partner_listing_export` declares only the name and
+  audits of `"listingId"`, without types.
 - `SQBRSQL018` can only take proof from single-column keys. Append-only feeds redeliver rows, so
   their id is unique only together with `_loaded_at` (the `unique_per_delivery` audit), and the
   staging models that keep the latest delivery carry reviewed exceptions.

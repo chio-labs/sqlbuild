@@ -172,7 +172,7 @@ collation). Check with `SHOW PARAMETERS LIKE 'DEFAULT_DDL_COLLATION' IN SCHEMA <
 ### Load, build and test
 
 ```bash
-sqb build --target edge --select tag:edge_case --exclude stg_edge_partner_listings+ --concurrency 8
+sqb build --target edge --select tag:edge_case --concurrency 8
 sqb test --target edge --select tag:edge_case --concurrency 8
 sqb scenario test --target edge --select edge_cases
 ```
@@ -180,10 +180,6 @@ sqb scenario test --target edge --select edge_cases
 The build loads the `edge__*` sources from fixed rows that `data_scale` does not change, then
 builds the edge models and runs their tests and audits. `fct_edge_delivery_events` is disabled and
 reports `skip: disabled` (see [Pending acceptance cases](#pending-acceptance-cases)).
-`stg_edge_partner_listings` and its downstream models are excluded because planning fails once the
-`edge__partner_listings` table exists (see Known limitations in the README); the
-`edge_partner_listings__star_contract_and_quoted_export` scenario covers the models downstream of
-it.
 
 ### Replay the delivery change log as two loads
 

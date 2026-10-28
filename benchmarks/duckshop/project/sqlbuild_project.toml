@@ -286,21 +286,4 @@ The edge case selects the key columns that FULL OUTER JOIN ... USING merges. The
 side, so qualifying them with either alias would drop the keys of rows found only on the other side.
 """
 
-[[rules.rule_ignores]]
-rules = ["SQBRTEST201"]
-paths = ["models/marts/edge_cases/rpt_edge_partner_listing_export.sql"]
-reason = """
-The partner feed export names its columns in quoted camelCase. A MODEL header cannot declare a
-quoted column name, so the model has no columns block to attach audits to, and a generic audit that
-names "listingId" fails to bind because the quoted name is folded to lower case.
-"""
-
-[[rules.rule_ignores]]
-rules = ["SQBRTEST202"]
-paths = ["models/staging/edge_cases/stg_edge_partner_listings.sql"]
-reason = """
-Unit-test and scenario fixtures for a source whose declared columns are quoted camelCase names are
-rejected (B302 and S510), so this model is covered by building the edge-case area on Snowflake,
-where it reads the loaded quoted columns, instead of by a unit test.
-"""
 # <<< edge-case area
