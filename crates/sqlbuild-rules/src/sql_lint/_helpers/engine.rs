@@ -12,7 +12,7 @@ use polyglot_sql::{
 use crate::sql_lint::constants::LINT_API_VERSION;
 use crate::sql_lint::models::{
     AdditionalFactOptions, CrossJoinRequest, LintDiagnostic, LintEdit, LintRequest, LintResponse,
-    LintRuleMetadata, QueryFacts,
+    LintRuleMetadata, QueryFacts, SqlMacroOutput,
 };
 
 use crate::sql_lint::_helpers::additional::collect_additional_facts;
@@ -337,7 +337,7 @@ struct DiagnosticContext<'a> {
 
 struct FactBuildOptions<'a> {
     external_identifiers: &'a HashSet<String>,
-    qualification_exempt_spans: &'a [(usize, usize)],
+    sql_macro_outputs: &'a [SqlMacroOutput],
     dependency_identifiers: &'a HashSet<String>,
     externally_referenced_ctes: &'a HashSet<String>,
     allows_ceremonial_select: bool,
@@ -407,7 +407,7 @@ pub(crate) fn lint(request: LintRequest) -> Result<LintResponse, String> {
         .collect();
     let options = FactBuildOptions {
         external_identifiers: &external_identifiers,
-        qualification_exempt_spans: &request.qualification_exempt_spans,
+        sql_macro_outputs: &request.sql_macro_outputs,
         dependency_identifiers: &dependency_identifiers,
         externally_referenced_ctes: &externally_referenced_ctes,
         allows_ceremonial_select: request.allows_ceremonial_select,
@@ -518,7 +518,7 @@ fn build_facts(
         tokens,
         &AdditionalFactOptions {
             external_identifiers: options.external_identifiers,
-            qualification_exempt_spans: options.qualification_exempt_spans,
+            sql_macro_outputs: options.sql_macro_outputs,
             dependency_identifiers: options.dependency_identifiers,
             allows_ceremonial_select: options.allows_ceremonial_select,
             allows_dynamic_output_star: options.allows_dynamic_output_star,

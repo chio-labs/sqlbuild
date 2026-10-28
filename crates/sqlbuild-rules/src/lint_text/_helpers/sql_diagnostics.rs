@@ -200,15 +200,24 @@ pub(crate) fn without_generated_frame(
 }
 
 /// Whether lint text offset `offset` lies in SQL a `@sql.` call generated in the authored file.
-fn from_sql_macro(body: &LintSqlBody, (text, dialect): (&str, &str), offset: i64) -> bool {
+fn from_sql_macro(body: &LintSqlBody, file: (&str, &str), offset: i64) -> bool {
+    sql_macro_call_at(body, file, offset).is_some()
+}
+
+/// The `@sql.` call in the authored file that generated lint text offset `offset`, if one did.
+fn sql_macro_call_at(
+    body: &LintSqlBody,
+    (text, dialect): (&str, &str),
+    offset: i64,
+) -> Option<String> {
     let (mapped, generated) = map_offset(offset, &body.passes);
     if !generated {
-        return false;
+        return None;
     }
     match usize::try_from(body.body_start + mapped) {
         Ok(start) => interpolation_text_at(text, start, dialect)
-            .is_some_and(|token| token.starts_with(SQL_CALL_PREFIX)),
-        Err(_) => false,
+            .filter(|token| token.starts_with(SQL_CALL_PREFIX)),
+        Err(_before_the_file) => None,
     }
 }
 
@@ -231,12 +240,12 @@ fn forward_pass(offset: i64, spans: &[ExpansionSpan], end: bool) -> i64 {
     offset + shift
 }
 
-/// Character ranges of the lint text that SQL macro calls generated, so rules about the author's style judge that SQL in its macro file instead.
+/// Character ranges of the lint text that SQL macro calls generated, each with the text of the call that generated it.
 pub(crate) fn sql_macro_output_spans(
     body: &LintSqlBody,
     file: (&str, &str),
-) -> Vec<(usize, usize)> {
-    let mut spans: Vec<(usize, usize)> = Vec::new();
+) -> Vec<(usize, usize, String)> {
+    let mut spans: Vec<(usize, usize, String)> = Vec::new();
     for (index, pass) in body.passes.iter().enumerate() {
         for span in pass {
             let (mut start, mut end): (i64, i64) = (span.output_start, span.output_end);
@@ -244,8 +253,11 @@ pub(crate) fn sql_macro_output_spans(
                 start = forward_pass(start, later, false);
                 end = forward_pass(end, later, true);
             }
-            if end > start && from_sql_macro(body, file, start) {
-                spans.push((start as usize, end as usize));
+            if end <= start {
+                continue;
+            }
+            if let Some(call) = sql_macro_call_at(body, file, start) {
+                spans.push((start as usize, end as usize, call));
             }
         }
     }

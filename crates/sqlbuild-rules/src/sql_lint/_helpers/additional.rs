@@ -9,7 +9,7 @@ use crate::sql_lint::_helpers::engine::{
     significant_before, token_depths,
 };
 use crate::sql_lint::constants::RELATION_MODIFIER_KEYWORDS;
-use crate::sql_lint::models::{AdditionalFactOptions, AdditionalQueryFacts};
+use crate::sql_lint::models::{AdditionalFactOptions, AdditionalQueryFacts, SqlMacroOutput};
 use rustc_hash::{FxHashMap, FxHashSet};
 use sqlbuild_core::constants::{CLOSE_PAREN, OPEN_PAREN, SQL_WILDCARD};
 
@@ -36,7 +36,7 @@ struct ReferenceFactContext<'a> {
     query: &'a QuerySlice<'a>,
     outer_relations: &'a FxHashSet<String>,
     external_identifiers: &'a HashSet<String>,
-    qualification_exempt_spans: &'a [(usize, usize)],
+    sql_macro_outputs: &'a [SqlMacroOutput],
     query_start: usize,
     query_end: usize,
 }
@@ -52,7 +52,7 @@ struct SelectFactContext<'a> {
     tokens: &'a [Token],
     depths: &'a [usize],
     external_identifiers: &'a HashSet<String>,
-    qualification_exempt_spans: &'a [(usize, usize)],
+    sql_macro_outputs: &'a [SqlMacroOutput],
     dependency_identifiers: &'a HashSet<String>,
     allows_ceremonial_select: bool,
     allows_dynamic_output_star: bool,
@@ -174,7 +174,7 @@ pub(super) fn collect_additional_facts(
         tokens,
         depths: &depths,
         external_identifiers: options.external_identifiers,
-        qualification_exempt_spans: options.qualification_exempt_spans,
+        sql_macro_outputs: options.sql_macro_outputs,
         dependency_identifiers: options.dependency_identifiers,
         allows_ceremonial_select: options.allows_ceremonial_select,
         allows_dynamic_output_star: options.allows_dynamic_output_star,
@@ -342,7 +342,7 @@ fn collect_select_additional_facts(context: &SelectFactContext<'_>) -> Additiona
                 query: &reference_slice,
                 outer_relations: &outer_relations,
                 external_identifiers: context.external_identifiers,
-                qualification_exempt_spans: context.qualification_exempt_spans,
+                sql_macro_outputs: context.sql_macro_outputs,
                 query_start: select_index,
                 query_end: end,
             };
@@ -674,7 +674,7 @@ fn collect_reference_facts(context: &ReferenceFactContext<'_>) -> AdditionalQuer
             .extend(inconsistent_qualification(
                 tokens,
                 (&qualified, &unqualified),
-                context.qualification_exempt_spans,
+                context.sql_macro_outputs,
             ));
     }
     facts.unknown_relation_qualifiers.extend(
@@ -694,32 +694,53 @@ fn collect_reference_facts(context: &ReferenceFactContext<'_>) -> AdditionalQuer
     facts
 }
 
-/// The unqualified references of a single-relation scope that also qualifies some, judged as written: a plain macro slot read such as `@orders.amount` counts as unqualified though it reads through its relation, and SQL another file authored is judged there.
+/// The unqualified references of a single-relation scope that also qualifies some, each judged as it was written. A plain macro slot read such as `@orders.amount` counts as unqualified though it expands to read through its relation: in a macro file it lints as a parameter sentinel pair, and in a call's output as a qualifier naming a relation the call passes. A scope whose every reference a macro call generated is judged once, in the macro file.
 fn inconsistent_qualification(
     tokens: &[Token],
     (qualified, unqualified): (&[usize], &[usize]),
-    exempt: &[(usize, usize)],
+    outputs: &[SqlMacroOutput],
 ) -> Vec<Span> {
-    let authored = |index: &&usize| {
-        let start: usize = tokens[**index].span.start;
-        !exempt
+    let output_of = |index: usize| -> Option<usize> {
+        let start: usize = tokens[index].span.start;
+        outputs
             .iter()
-            .any(|&(exempt_start, exempt_end)| exempt_start <= start && start < exempt_end)
+            .position(|output| output.start <= start && start < output.end)
     };
-    let (plain_reads, qualified): (Vec<usize>, Vec<usize>) = qualified
-        .iter()
-        .filter(authored)
-        .partition(|&&index| is_plain_slot_read(tokens, index));
-    let mut unqualified: Vec<usize> = unqualified.iter().filter(authored).copied().collect();
+    let mut references = qualified.iter().chain(unqualified).copied();
+    if let Some(first) = references.next()
+        && let Some(output) = output_of(first)
+        && references.all(|index| output_of(index) == Some(output))
+    {
+        return Vec::new();
+    }
+    let plain_read = |index: &usize| {
+        is_plain_slot_read(tokens, *index)
+            || output_of(*index).is_some_and(|output| {
+                let qualifier: String = unquoted_name(&tokens[*index].text);
+                outputs[output]
+                    .relations
+                    .iter()
+                    .any(|relation| relation.eq_ignore_ascii_case(&qualifier))
+            })
+    };
+    let (plain_reads, qualified): (Vec<usize>, Vec<usize>) =
+        qualified.iter().copied().partition(plain_read);
     if qualified.is_empty() || (unqualified.is_empty() && plain_reads.is_empty()) {
         return Vec::new();
     }
+    let mut unqualified: Vec<usize> = unqualified.to_vec();
     unqualified.extend(plain_reads);
     unqualified.sort_unstable();
     unqualified
         .iter()
         .map(|&index| tokens[index].span)
         .collect()
+}
+
+/// An identifier's name without its quotes.
+fn unquoted_name(text: &str) -> String {
+    text.trim_matches(|character| matches!(character, '"' | '`' | '[' | ']'))
+        .to_owned()
 }
 
 /// Whether the qualified reference at `index` is a plain SQL macro slot read, both its relation and its slot a macro parameter.

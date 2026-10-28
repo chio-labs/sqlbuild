@@ -2,38 +2,65 @@ use serde_json::{Value, json};
 
 use crate::sql_lint::main::engine::lint_json;
 use crate::sql_lint::tests::test_types::{
-    DynamicOutputStarLintTestCase, QualificationExemptLintTestCase,
+    DynamicOutputStarLintTestCase, SqlMacroOutputLintTestCase,
 };
 
 #[test]
-fn given_exempt_macro_output_when_linting_qualification_then_only_authored_columns_are_judged()
+fn given_sql_macro_output_when_linting_qualification_then_each_column_counts_as_written()
 -> Result<(), String> {
     let test_cases = [
-        QualificationExemptLintTestCase {
-            description: "a caller's bare column beside qualified macro output passes",
-            sql: "SELECT order_id, orders.amount - orders.discount AS net FROM orders",
-            exempt: "orders.amount - orders.discount",
+        SqlMacroOutputLintTestCase {
+            description: "a bare column from an expression macro beside a qualified column fails",
+            sql: "SELECT o.order_id, status AS s FROM orders AS o",
+            output: "status",
+            relations: &[],
+            expected_count: 1,
+        },
+        SqlMacroOutputLintTestCase {
+            description: "plain slot reads count as unqualified beside a bare caller column",
+            sql: "SELECT order_id, o.amount - o.discount AS net FROM orders AS o",
+            output: "o.amount - o.discount",
+            relations: &["o"],
             expected_count: 0,
         },
-        QualificationExemptLintTestCase {
-            description: "the caller's own mix still fails",
-            sql: "SELECT order_id, orders.status, orders.amount - orders.discount AS net FROM orders",
-            exempt: "orders.amount - orders.discount",
+        SqlMacroOutputLintTestCase {
+            description: "plain slot reads beside a hand-qualified column fail",
+            sql: "SELECT o.order_id, o.amount - o.discount AS net FROM orders AS o",
+            output: "o.amount - o.discount",
+            relations: &["o"],
+            expected_count: 2,
+        },
+        SqlMacroOutputLintTestCase {
+            description: "an aliased read counts as qualified beside a bare caller column",
+            sql: "SELECT order_id, s.amount AS a FROM orders AS s",
+            output: "s.amount",
+            relations: &["orders"],
             expected_count: 1,
+        },
+        SqlMacroOutputLintTestCase {
+            description: "a query scope the macro generated whole is judged in the macro file",
+            sql: "WITH c AS (SELECT a, w.b FROM w) SELECT * FROM c",
+            output: "SELECT a, w.b FROM w",
+            relations: &[],
+            expected_count: 0,
         },
     ];
     for test_case in test_cases {
         let start: usize = test_case
             .sql
-            .find(test_case.exempt)
-            .ok_or("exempt text should be in the SQL")?;
+            .find(test_case.output)
+            .ok_or("the output should be in the SQL")?;
         let response = lint_json(
             &json!({
                 "version": 1,
                 "sql": test_case.sql,
                 "dialect": "duckdb",
                 "enabled_rules": ["SQBRSQL028"],
-                "qualification_exempt_spans": [[start, start + test_case.exempt.len()]],
+                "sql_macro_outputs": [{
+                    "start": start,
+                    "end": start + test_case.output.len(),
+                    "relations": test_case.relations,
+                }],
             })
             .to_string(),
         )?;

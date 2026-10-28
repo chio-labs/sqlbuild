@@ -11,7 +11,7 @@ use crate::lint_text::_helpers::sql_diagnostics::{
     sql_macro_output_spans, without_generated_comments,
 };
 use crate::lint_text::constants::{
-    CROSS_KEYWORD, INVALID_BATCH, LINE_COMMENT_PREFIX, LINT_API_VERSION,
+    CROSS_KEYWORD, CTE_ARGUMENT, INVALID_BATCH, LINE_COMMENT_PREFIX, LINT_API_VERSION,
     OMITTED_CEREMONIAL_SELECT_SQL,
 };
 use crate::lint_text::models::{LintSqlBody, LintSqlOptions};
@@ -39,6 +39,63 @@ fn mentions_cross_join(text: &str) -> bool {
         .any(|window| window.eq_ignore_ascii_case(CROSS_KEYWORD))
 }
 
+/// The names a `@sql.` call passes as whole arguments, such as `orders` in `@sql.net_amount(orders)`: the relations a plain slot read in its output may qualify with. Slot mappings and the reserved `__cte` name pass none.
+fn call_relations(call: &str) -> Vec<String> {
+    let Some(open) = call.find('(') else {
+        return Vec::new();
+    };
+    let close: usize = call
+        .rfind(')')
+        .filter(|&close| close > open)
+        .unwrap_or(call.len());
+    let mut names: Vec<String> = Vec::new();
+    for argument in top_level_arguments(&call[open + 1..close]) {
+        if let Some(name) = passed_name(argument) {
+            names.push(name.to_owned());
+        }
+    }
+    names
+}
+
+/// The bare name one call argument passes, if it passes one: the value of `name := value` or the whole argument.
+fn passed_name(argument: &str) -> Option<&str> {
+    let value: &str = match argument.split_once(":=") {
+        Some((name, _)) if name.contains('.') || name.trim().eq_ignore_ascii_case(CTE_ARGUMENT) => {
+            return None;
+        }
+        Some((_, value)) => value,
+        None => argument,
+    };
+    let name: &str = value.trim().trim_matches('"');
+    let bare: bool = !name.is_empty()
+        && name
+            .chars()
+            .all(|character| character.is_alphanumeric() || character == '_');
+    bare.then_some(name)
+}
+
+/// `arguments` split at its top-level commas, outside brackets and quotes.
+fn top_level_arguments(arguments: &str) -> Vec<&str> {
+    let mut parts: Vec<&str> = Vec::new();
+    let (mut depth, mut quote, mut start): (usize, Option<char>, usize) = (0, None, 0);
+    for (index, character) in arguments.char_indices() {
+        match (quote, character) {
+            (Some(open), _) if character == open => quote = None,
+            (Some(_), _) => {}
+            (None, '\'' | '"') => quote = Some(character),
+            (None, '(' | '[') => depth += 1,
+            (None, ')' | ']') => depth = depth.saturating_sub(1),
+            (None, ',') if depth == 0 => {
+                parts.push(&arguments[start..index]);
+                start = index + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(&arguments[start..]);
+    parts
+}
+
 fn strings(values: &[String]) -> Value {
     Value::from(values.to_vec())
 }
@@ -51,13 +108,15 @@ pub(crate) fn lint_payload(
 ) -> Value {
     let lint_text: Cow<'_, str> = without_generated_comments(body, (file, &options.dialect));
     let inserted: usize = OMITTED_CEREMONIAL_SELECT_SQL.chars().count();
-    let exempt: Vec<Value> = sql_macro_output_spans(body, (file, &options.dialect))
+    let outputs: Vec<Value> = sql_macro_output_spans(body, (file, &options.dialect))
         .into_iter()
-        .map(|(start, end)| match omitted {
-            Some(offset) if start >= offset => (start + inserted, end + inserted),
-            _ => (start, end),
+        .map(|(start, end, call)| {
+            let (start, end): (usize, usize) = match omitted {
+                Some(offset) if start >= offset => (start + inserted, end + inserted),
+                _ => (start, end),
+            };
+            serde_json::json!({"start": start, "end": end, "relations": call_relations(&call)})
         })
-        .map(|(start, end)| Value::from(vec![start, end]))
         .collect();
     let sql: String = match omitted {
         Some(offset) => {
@@ -72,11 +131,8 @@ pub(crate) fn lint_payload(
     let _ = payload.insert("version".to_string(), Value::from(LINT_API_VERSION));
     let _ = payload.insert("sql".to_string(), Value::from(sql));
     let _ = payload.insert("dialect".to_string(), Value::from(options.dialect.clone()));
-    if !exempt.is_empty() {
-        let _ = payload.insert(
-            "qualification_exempt_spans".to_string(),
-            Value::from(exempt),
-        );
+    if !outputs.is_empty() {
+        let _ = payload.insert("sql_macro_outputs".to_string(), Value::from(outputs));
     }
     if let Some(enabled) = &options.enabled_rules {
         let _ = payload.insert("enabled_rules".to_string(), strings(enabled));
