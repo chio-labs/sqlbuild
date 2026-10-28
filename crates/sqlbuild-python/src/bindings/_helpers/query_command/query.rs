@@ -12,7 +12,7 @@ use sqlbuild_core::query_command::models::QueryDisplay;
 use sqlbuild_host::entries::models::AdapterHost;
 
 use crate::bindings::_helpers::boundary::python_calls::keywords;
-use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::command_runtime::connection::resolve_project_connection_config;
 use crate::bindings::_helpers::native_host::connections::connection_failure;
 use crate::bindings::_helpers::native_host::host;
@@ -20,7 +20,7 @@ use crate::bindings::_helpers::query_command::project::{
     ProjectAdapter, ProjectInputs, project_adapter,
 };
 use crate::bindings::_helpers::query_command::query_values::{
-    display_text, json_cell, python_json_rows, strict_width,
+    decimal_instance, display_text, json_cell, python_json_rows, strict_width,
 };
 use crate::bindings::_helpers::query_command::text_output::{LONG_FORMAT, render_text};
 use crate::bindings::_helpers::records::construct::error_class;
@@ -244,11 +244,7 @@ fn render_json(
 }
 
 /// Whether every value of the column at `index` is a number or NULL, and at least one is a number.
-fn numeric_column(
-    rows: &[Vec<Bound<'_, PyAny>>],
-    index: usize,
-    decimal: &Bound<'_, PyAny>,
-) -> PyResult<bool> {
+fn numeric_column(rows: &[Vec<Bound<'_, PyAny>>], index: usize) -> PyResult<bool> {
     let mut seen: bool = false;
     for row in rows {
         let Some(value) = row.get(index) else {
@@ -257,7 +253,7 @@ fn numeric_column(
         if value.is_none() {
             continue;
         }
-        if !number(value, decimal)? {
+        if !number(value)? {
             return Ok(false);
         }
         seen = true;
@@ -265,13 +261,13 @@ fn numeric_column(
     Ok(seen)
 }
 
-fn number(value: &Bound<'_, PyAny>, decimal: &Bound<'_, PyAny>) -> PyResult<bool> {
+fn number(value: &Bound<'_, PyAny>) -> PyResult<bool> {
     if value.is_instance_of::<PyBool>() {
         return Ok(false);
     }
     Ok(value.is_instance_of::<PyInt>()
         || value.is_instance_of::<PyFloat>()
-        || value.is_instance(decimal)?)
+        || decimal_instance(value)?)
 }
 
 /// The column types the adapter reported, where it knows them.
@@ -307,11 +303,10 @@ fn render(
             for row in &rows {
                 strict_width(columns.len(), row.len())?;
             }
-            let decimal: Bound<'_, PyAny> = imported(py, "decimal", "Decimal")?;
             let display = QueryDisplay {
                 types: column_types(result, columns.len())?,
                 numeric: (0..columns.len())
-                    .map(|index| numeric_column(&rows, index, &decimal))
+                    .map(|index| numeric_column(&rows, index))
                     .collect::<PyResult<_>>()?,
                 columns,
                 rows: texts(&rows, display_text)?,

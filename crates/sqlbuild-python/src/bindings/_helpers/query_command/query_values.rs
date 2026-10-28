@@ -18,7 +18,8 @@ fn python_text(value: &Bound<'_, PyAny>) -> PyResult<String> {
     Ok(value.str()?.to_string_lossy().into_owned())
 }
 
-fn decimal_instance(value: &Bound<'_, PyAny>) -> PyResult<bool> {
+/// Whether `value` is a `decimal.Decimal`.
+pub(crate) fn decimal_instance(value: &Bound<'_, PyAny>) -> PyResult<bool> {
     value.is_instance(&imported(value.py(), "decimal", "Decimal")?)
 }
 

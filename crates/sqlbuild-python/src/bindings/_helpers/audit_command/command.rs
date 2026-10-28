@@ -507,10 +507,11 @@ fn complete(
     let style: CliStyle = CliStyle {
         use_color: native_field(invocation, "use_color")?.is_truthy()?,
     };
-    if let Some(warning) = projection_warning(py, style)? {
-        stream.call_method1("write", (warning,))?;
-    }
-    stream.call_method1("write", (render_audit_summary(counts, style),))?;
+    let warning: String = projection_warning(py, style)?.unwrap_or_default();
+    stream.call_method1(
+        "write",
+        (format!("{warning}{}", render_audit_summary(counts, style)),),
+    )?;
     stream.call_method0("flush")?;
     let payload: Bound<'_, PyAny> = audit_payload(
         &PyTuple::new(py, results)?.into_any(),

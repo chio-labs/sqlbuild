@@ -4,8 +4,8 @@ use pyo3::prelude::{PyResult, Python};
 use sqlbuild_core::query_command::main::render_query_text::render_query_text;
 use sqlbuild_core::query_command::models::{QueryDisplay, QueryLayout};
 
-use crate::bindings::_helpers::boundary::python_calls::imported;
-use crate::bindings::_helpers::build_progress::terminal::{terminal_columns, tty_flag};
+use crate::bindings::_helpers::build_progress::terminal::terminal_columns;
+use crate::bindings::_helpers::presentation_text::terminal::stdout_is_tty;
 
 /// The format that always prints one record per row.
 pub(crate) const LONG_FORMAT: &str = "long";
@@ -14,7 +14,7 @@ const PIPED_WIDTH: usize = 120;
 
 /// The terminal's width when stdout is one, else [`PIPED_WIDTH`].
 fn output_width(py: Python<'_>) -> PyResult<usize> {
-    if !tty_flag(&imported(py, "sys", "stdout")?).unwrap_or(false) {
+    if !stdout_is_tty(py).unwrap_or(false) {
         return Ok(PIPED_WIDTH);
     }
     terminal_columns(py)

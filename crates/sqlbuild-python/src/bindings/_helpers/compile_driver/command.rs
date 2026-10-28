@@ -363,7 +363,7 @@ fn compiled_with_status<'py>(
         write_rule_failed_models(
             &target_dir(&project_dir)?,
             (
-                &native_field(&analysis, "graph")?.getattr("project")?,
+                &native_field(&native_field(&analysis, "graph")?, "project")?,
                 &project_dir,
             ),
             &native_field(&analysis, "diagnostics")?,
