@@ -211,14 +211,20 @@ def test_given_a_reader_when_querying_then_pinned_settings_apply_unless_it_may_n
             ],
             expected_added_columns=(
                 (
+                    ("ended_at_estimated", "Nullable(UInt8)"),
+                    ("signal_number", "Nullable(Int64)"),
+                    ("cost_status", "Nullable(String)"),
                     ("origin", "Nullable(String)"),
                     ("command_mode", "Nullable(String)"),
+                    ("selection_count", "Nullable(Int64)"),
+                    ("selection_truncated", "Nullable(UInt8)"),
+                    ("selector_files", "Nullable(String)"),
                     ("integration", "Nullable(String)"),
                     ("integration_job", "Nullable(String)"),
                     ("integration_run_id", "Nullable(String)"),
                     ("integration_retry", "Nullable(Int64)"),
                 ),
-                (),
+                (("sql_unavailable_reason", "Nullable(String)"),),
                 (),
                 (),
             ),
@@ -345,9 +351,9 @@ def test_given_representative_invocations_when_views_are_rewritten_then_rows_and
             expected_primary_key_reads=3,
         ),
         ClickHouseRecallTableReadsTestCase(
-            description="statements reads the events once and the stored SQL once",
+            description="statements reads the events, SQL references and stored SQL once each",
             view="statements",
-            expected_tables=("recall_artifacts", "recall_events"),
+            expected_tables=("recall_artifact_refs", "recall_artifacts", "recall_events"),
             expected_primary_key_reads=1,
         ),
         ClickHouseRecallTableReadsTestCase(

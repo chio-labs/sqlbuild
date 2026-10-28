@@ -343,7 +343,7 @@ FROM folded",
     )
 }
 
-/// Two folds over one read of the events: by resource, which names the resource and gathers its statement events, then by statement. Both group by `invocation_id` and `invocation_started_at`, so a filter on either reaches the read; `sql_available` needs a reference to the digest in the statement's own invocation and the stored SQL, which is shared across invocations.
+/// Two folds over one read of the events: by resource, which names the resource and gathers its statement events, then by statement. Both group by `invocation_id` and `invocation_started_at`, so a filter on either reaches the read; `sql_available` needs a reference to the digest in the statement's own invocation and the stored SQL, which is shared across invocations. The references and the stored SQL are each read once.
 fn statements(options: &DdlOptions) -> String {
     let events = retained(Table::Events, options, "");
     let artifacts = clickhouse_table(table_spec(Table::Artifacts).name, options);
@@ -430,17 +430,20 @@ SELECT
     if(has_terminal, last_row_count, NULL) AS row_count,
     if(has_terminal, last_affected_rows, NULL) AS affected_rows,
     first_sql_digest AS sql_digest,
-    (invocation_id, concat('sha256:', first_sql_digest)) IN (
-        SELECT invocation_id, digest FROM {refs}
-        WHERE digest IN (SELECT digest FROM {artifacts})
-    ) AS sql_available,
+    sql_referenced
+        AND concat('sha256:', first_sql_digest) IN (SELECT digest FROM {artifacts})
+        AS sql_available,
     multiIf(
         sql_available, NULL,
-        (invocation_id, concat('sha256:', first_sql_digest))
-            IN (SELECT invocation_id, digest FROM {refs}), 'expired_or_not_captured',
+        sql_referenced, 'expired_or_not_captured',
         'not_captured'
     ) AS sql_unavailable_reason
-FROM folded"
+FROM (
+    SELECT *,
+        (invocation_id, concat('sha256:', first_sql_digest))
+            IN (SELECT invocation_id, digest FROM {refs}) AS sql_referenced
+    FROM folded
+)"
     )
 }
 
