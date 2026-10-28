@@ -79,11 +79,12 @@ configuration, use [`sqb rules run`](/docs/cli/rules).
 
 ### When Rules fail
 
-A Rule finding still exits `1` and blocks the manifest, the DAG file and the other artifacts.
-Each model's expanded SQL is still written to `target/compiled/models/`, so you can read SQL that
-macros generated. Other files under `target/compiled/` and a `target/manifest.json` from an earlier
-compile are removed, since they no longer match. A model with Rule errors starts with a header that marks it not buildable and lists
-its findings:
+A Rule finding still exits `1` and blocks the manifest, the DAG file and the other artifacts; a
+`target/manifest.json` from an earlier compile is removed, since it no longer matches. Each
+model's expanded SQL is still written to `target/compiled/models/`, so you can read SQL that macros
+generated, and the compiled file of a model you removed from the project is deleted. Other
+compiled files stay as the last passing compile left them. A model with Rule errors starts with a
+header that marks it not buildable and lists its findings:
 
 ```sql
 -- sqb: compile failed for this model; not buildable

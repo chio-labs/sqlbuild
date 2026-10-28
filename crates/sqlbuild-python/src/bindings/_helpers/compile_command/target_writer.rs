@@ -1,6 +1,6 @@
 //! Write compiled project output to `target/`: models, functions, audits, SQL tests, manifest.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use pyo3::exceptions::PyValueError;
@@ -58,6 +58,9 @@ const TESTS_DIR: &str = "tests";
 const MANIFEST_FILE: &str = "manifest.json";
 /// The compile cache file stamping the compiled tree the last stale-file walk left.
 const COMPILED_TREE_STAMP_FILE: &str = "compiled-tree.bin";
+/// The model files compiles wrote under `target/compiled/`, one per line, relative to it.
+const COMPILED_MODELS_FILE: &str = "compiled-models.txt";
+
 const SQL_FILE_SUFFIX: &str = ".sql";
 const SQL_TEST_CACHE_LOGGER: &str = "sqlbuild.compile.reuse";
 /// The miss reason of a SQL test the cache file holds no record for.
@@ -321,8 +324,15 @@ fn write_planned_target<'py>(
         managed.push(path);
     }
     batch.flush(py)?;
+    let managed: Vec<PathBuf> = extracted(&managed)?;
+    record_compiled_models(
+        &target_dir.extract::<PathBuf>()?,
+        &compiled.extract::<PathBuf>()?,
+        &managed,
+        record_mode(remove_stale_files),
+    )?;
     if remove_stale_files {
-        remove_stale(target_dir, extracted(&managed)?, None)?;
+        remove_stale(target_dir, managed, None)?;
     }
     write_manifest(target_dir, manifest, None)?;
     written_target(
@@ -726,9 +736,15 @@ pub(crate) fn write_static_target<'py>(
     })();
     let (test_paths, diagnostics) = batch.settle(py, queued)?;
     managed.extend(test_paths);
+    let mut paths: Vec<PathBuf> = managed_models;
+    paths.extend(extracted(&managed)?);
+    record_compiled_models(
+        &target_dir.extract::<PathBuf>()?,
+        &compiled_dir,
+        &paths,
+        record_mode(remove_stale_files),
+    )?;
     if remove_stale_files {
-        let mut paths: Vec<PathBuf> = managed_models;
-        paths.extend(extracted(&managed)?);
         let cache_dir: Bound<'py, PyAny> = native_field(project, "compile_cache_dir")?;
         let cache_dir: Option<PathBuf> = if cache_dir.is_none() {
             None
@@ -806,7 +822,7 @@ fn rule_error_lines(
     Ok(lines)
 }
 
-/// After Rules failed, write every model's compiled SQL so the expansion they checked can be read. A model with Rule errors starts with a header marking it not buildable and listing them. An earlier manifest and every other compiled file are removed, since they no longer describe `target/`; no tests or cache are written.
+/// After Rules failed, write every model's compiled SQL so the expansion they checked can be read. A model with Rule errors starts with a header marking it not buildable and listing them. An earlier manifest is removed, since it no longer describes `target/`, and so is a model file an earlier compile wrote for a model the project no longer has. Every other artifact stays as the last compile left it, for the next passing compile to publish or remove.
 pub(crate) fn write_rule_failed_models<'py>(
     target_dir: &Bound<'py, PyAny>,
     (project, project_dir): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
@@ -844,7 +860,87 @@ pub(crate) fn write_rule_failed_models<'py>(
         written.push(path);
     }
     batch.flush(py)?;
-    remove_stale(target_dir, written, None)
+    record_compiled_models(
+        &target_dir.extract::<PathBuf>()?,
+        &compiled_dir,
+        &written,
+        ModelRecord::RemoveRetired,
+    )
+}
+
+fn record_mode(removes_stale_files: bool) -> ModelRecord {
+    if removes_stale_files {
+        ModelRecord::Replace
+    } else {
+        ModelRecord::Extend
+    }
+}
+
+/// How a compile updates the record of the model files SQLBuild wrote under `target/compiled/`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ModelRecord {
+    /// A passing compile that removed stale files: the record is exactly what it wrote.
+    Replace,
+    /// A passing compile that kept the files already there: the record gains what it wrote.
+    Extend,
+    /// A compile whose Rules failed: other recorded models are retired, so their files are removed.
+    RemoveRetired,
+}
+
+/// Update the record of written model files, one path per line relative to `compiled_dir`.
+fn record_compiled_models(
+    target: &Path,
+    compiled_dir: &Path,
+    written: &[PathBuf],
+    mode: ModelRecord,
+) -> PyResult<()> {
+    let record: PathBuf = target.join(COMPILED_MODELS_FILE);
+    let previous: String = match std::fs::read_to_string(&record) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(error.into()),
+    };
+    let models_dir: PathBuf = compiled_dir.join(MODELS_DIR);
+    let mut lines: BTreeSet<String> = BTreeSet::new();
+    for path in written {
+        match path.strip_prefix(&models_dir) {
+            Ok(relative) => {
+                let _ = lines.insert(format!(
+                    "{MODELS_DIR}/{}",
+                    relative.to_string_lossy().replace('\\', "/")
+                ));
+            }
+            Err(_not_a_model) => continue,
+        }
+    }
+    for line in previous.lines().filter(|line| !line.is_empty()) {
+        if lines.contains(line) {
+            continue;
+        }
+        match mode {
+            ModelRecord::Replace => {}
+            ModelRecord::Extend => {
+                let _ = lines.insert(line.to_owned());
+            }
+            ModelRecord::RemoveRetired => {
+                let path: PathBuf = compiled_dir.join(line);
+                if !path.starts_with(&models_dir) {
+                    continue;
+                }
+                match std::fs::remove_file(&path) {
+                    Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                        return Err(error.into());
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    let contents: String = lines.iter().map(|line| format!("{line}\n")).collect();
+    if contents != previous {
+        std::fs::write(&record, contents)?;
+    }
+    Ok(())
 }
 
 /// Plan uncached SQL tests and report their errors without writing artifacts or cache.
@@ -882,7 +978,7 @@ pub(crate) fn publish_staged_target<'py>(
         .extract()?;
     let (staged, compiled): (PathBuf, PathBuf) = (staged_dir.extract()?, compiled_dir.extract()?);
     let (kind, published) = record_compile_timing("physical_write_ms", || {
-        publish_staged_artifacts(py, staged, compiled, expected)
+        publish_staged_artifacts(py, staged, compiled.clone(), expected.clone())
     })?;
     if kind == PUBLISHED_STAGING_CHANGED {
         return Err(staging_changed(
@@ -906,6 +1002,16 @@ pub(crate) fn publish_staged_target<'py>(
             remove_stale(target_dir, extracted(&managed)?, None)?;
         }
     }
+    let written: Vec<PathBuf> = expected
+        .iter()
+        .map(|relative| compiled.join(relative))
+        .collect();
+    record_compiled_models(
+        &target_dir.extract::<PathBuf>()?,
+        &compiled,
+        &written,
+        ModelRecord::Replace,
+    )?;
     write_manifest(target_dir, manifest, recorder)?;
     written_target(
         target_dir,
