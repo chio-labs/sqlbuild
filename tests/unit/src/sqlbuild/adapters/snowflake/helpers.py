@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Callable
+from contextlib import nullcontext
 from dataclasses import dataclass
 from io import StringIO
 from itertools import cycle, islice
@@ -11,7 +12,16 @@ from types import ModuleType
 from typing import Any
 
 from sqlbuild._native import NativeProgressProjector
-from sqlbuild.adapter.contract.models import ColumnInfo, RelationInfo, RelationUsageReport
+from sqlbuild.adapter.contract.models import (
+    ColumnInfo,
+    RelationInfo,
+    RelationUsageReport,
+    RetentionRequest,
+)
+from sqlbuild.adapter.contract.types import RetentionScope
+from sqlbuild.adapter.relations.main.relation_metadata_cache_scope import (
+    relation_metadata_cache_scope,
+)
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_connection import _SnowflakeConnection
 from sqlbuild.observability import (
@@ -23,6 +33,11 @@ from sqlbuild.observability import (
     dispatcher_scope,
     invocation_scope,
     run_scope,
+)
+from tests.unit.src.sqlbuild.adapters.snowflake.inspection.helpers import (
+    FakeRelation,
+    OfflineSnowflakeAdapter,
+    RecordingSnowflakeWarehouse,
 )
 
 
@@ -524,4 +539,138 @@ def read_snowflake_usage(
         connection=FakeUsageConnection(warehouse),
         relations=relations,
         window_seconds=window_seconds,
+    )
+
+
+def retention_relation(
+    schema: str,
+    name: str,
+    *,
+    retention: int,
+    transient: bool = False,
+    table_type: str = "BASE TABLE",
+) -> FakeRelation:
+    """One synthetic relation in the ANALYTICS database with its retention."""
+
+    return FakeRelation(
+        database="ANALYTICS",
+        schema=schema,
+        name=name,
+        table_type=table_type,
+        is_transient=transient,
+        retention_time=retention,
+    )
+
+
+def retention_request(*, schema: str, name: str, desired_days: int = 7) -> RetentionRequest:
+    """A relation retention request in the analytics database, identified by its name."""
+
+    return RetentionRequest(
+        request_id=name,
+        scope=RetentionScope.RELATION,
+        database="analytics",
+        schema=schema,
+        name=name,
+        desired_days=desired_days,
+    )
+
+
+def show_statement(sql: str) -> str:
+    """A SHOW statement without its schema scope after LIKE, or its row limit after IN SCHEMA."""
+
+    return (sql.split(" LIMIT ")[0], sql.split(" IN SCHEMA ")[0])[" LIKE " in sql]
+
+
+def _lookup_exists(
+    *, adapter: OfflineSnowflakeAdapter, connection: Any, schema: str, name: str
+) -> None:
+    _ = adapter.relation_exists(
+        connection=connection, database="analytics", schema=schema, name=name
+    )
+
+
+def _lookup_retention(
+    *, adapter: OfflineSnowflakeAdapter, connection: Any, schema: str, name: str
+) -> int | None:
+    return adapter.inspect_retention(
+        connection=connection, request=retention_request(schema=schema, name=name)
+    ).effective_days
+
+
+def _replace_table(
+    *, adapter: OfflineSnowflakeAdapter, connection: Any, schema: str, name: str
+) -> None:
+    _ = adapter.execute(
+        connection=connection, sql=f"CREATE OR REPLACE TABLE analytics.{schema}.{name} (id INT)"
+    )
+
+
+_LOOKUP_STEPS: dict[str, Callable[..., int | None]] = {
+    "exists": _lookup_exists,
+    "retention": _lookup_retention,
+    "replace": _replace_table,
+}
+
+
+def run_metadata_steps(
+    *,
+    relations: tuple[FakeRelation, ...],
+    steps: tuple[tuple[str, str, str], ...],
+    in_build: bool,
+) -> tuple[tuple[int | None, tuple[str, ...]], ...]:
+    """Run each (kind, schema, name) step; return its retention days and SHOW statements."""
+
+    warehouse: RecordingSnowflakeWarehouse = RecordingSnowflakeWarehouse(relations=relations)
+    adapter: OfflineSnowflakeAdapter = OfflineSnowflakeAdapter(warehouse=warehouse)
+    connection: Any = adapter.connect({})
+    results: list[tuple[int | None, tuple[str, ...]]] = []
+    with (nullcontext(), relation_metadata_cache_scope(adapter=adapter))[in_build]:
+        kind: str
+        schema: str
+        name: str
+        for kind, schema, name in steps:
+            warehouse.reset()
+            days: int | None = _LOOKUP_STEPS[kind](
+                adapter=adapter, connection=connection, schema=schema, name=name
+            )
+            results.append(
+                (
+                    days,
+                    tuple(show_statement(query.sql) for query in warehouse.queries),
+                )
+            )
+    return tuple(results)
+
+
+def relation_existence(
+    *, relations: tuple[FakeRelation, ...], lookups: tuple[str, ...], in_build: bool
+) -> tuple[tuple[bool, ...], int]:
+    """Each name's existence in the MART schema, and how many whole-schema listings were read."""
+
+    warehouse: RecordingSnowflakeWarehouse = RecordingSnowflakeWarehouse(relations=relations)
+    adapter: OfflineSnowflakeAdapter = OfflineSnowflakeAdapter(warehouse=warehouse)
+    connection: Any = adapter.connect({})
+    with (nullcontext(), relation_metadata_cache_scope(adapter=adapter))[in_build]:
+        answers: tuple[bool, ...] = tuple(
+            adapter.relation_exists(
+                connection=connection, database="analytics", schema="mart", name=name
+            )
+            for name in lookups
+        )
+    listings: int = len(
+        tuple(
+            filter(
+                lambda sql: " IN SCHEMA " in sql and " LIKE " not in sql, warehouse.attempted_sql
+            )
+        )
+    )
+    return answers, listings
+
+
+def prefix_listing_statements(warehouse: RecordingSnowflakeWarehouse) -> tuple[str, ...]:
+    """The SHOW TERSE OBJECTS statements the warehouse received, without their schema scope."""
+
+    return tuple(
+        sql.split(" IN SCHEMA ")[0]
+        for sql in filter(lambda sql: sql.startswith("SHOW TERSE OBJECTS"), warehouse.attempted_sql)
     )

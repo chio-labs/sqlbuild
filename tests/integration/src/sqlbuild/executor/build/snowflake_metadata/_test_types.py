@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+
+from tests.integration.src.sqlbuild.executor.build.snowflake_metadata.helpers import (
+    SimulatedSnowflakeWarehouse,
+)
 
 
 @dataclass(frozen=True)
@@ -41,3 +46,37 @@ class SourceBindingCaseTestCase:
     select: str
     expected_error: str | None = None
     expected_models: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class MaterializationSwitchTestCase:
+    """A model's materialization across builds and the relation type each build leaves."""
+
+    description: str
+    materializations: tuple[str, ...]
+    expected_table_types: tuple[str, ...]
+    expected_owned_view_drops: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class RetentionLookupTestCase:
+    """Many managed-retention tables in one schema and the lookups their build may issue."""
+
+    description: str
+    table_count: int
+    retention_days: int
+    expected_first_alters: int
+    expected_max_table_lookups: int
+    expected_max_listings: int
+    expected_information_schema: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ExternalChangeTestCase:
+    """A change another session makes to a model's relation while a build promotes it."""
+
+    description: str
+    builds_before: int
+    change: Callable[[SimulatedSnowflakeWarehouse], None]
+    before_statement: str
+    expected_table_types: tuple[str, ...]

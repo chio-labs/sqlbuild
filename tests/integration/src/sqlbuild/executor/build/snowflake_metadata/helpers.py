@@ -47,7 +47,7 @@ _CREATE_DEFINED_PATTERN: re.Pattern[str] = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _DROP_PATTERN: re.Pattern[str] = re.compile(
-    r"^\s*DROP\s+(?:TABLE|VIEW)\s+(?:IF\s+EXISTS\s+)?" + _NAME.format(group="name") + r"\s*$",
+    r"^\s*DROP\s+(?P<kind>TABLE|VIEW)\s+(?:IF\s+EXISTS\s+)?" + _NAME.format(group="name") + r"\s*$",
     re.IGNORECASE,
 )
 _RENAME_PATTERN: re.Pattern[str] = re.compile(
@@ -70,6 +70,12 @@ _ADD_COLUMN_PATTERN: re.Pattern[str] = re.compile(
     r"^\s*ALTER\s+TABLE\s+"
     + _NAME.format(group="name")
     + r'\s+ADD\s+COLUMN\s+"?(?P<column>[A-Za-z0-9_]+)"?\s+(?P<type>.+?)\s*$',
+    re.IGNORECASE,
+)
+_SET_RETENTION_PATTERN: re.Pattern[str] = re.compile(
+    r"^\s*ALTER\s+TABLE\s+"
+    + _NAME.format(group="name")
+    + r"\s+SET\s+DATA_RETENTION_TIME_IN_DAYS\s*=\s*(?P<days>\d+)\s*$",
     re.IGNORECASE,
 )
 _CREATE_SCHEMA_PATTERN: re.Pattern[str] = re.compile(
@@ -100,6 +106,10 @@ class SimulatedSnowflakeWarehouse(RecordingSnowflakeWarehouse):
     model_columns: dict[str, tuple[FakeColumn, ...]] = field(default_factory=dict)
     ddl_events: list[tuple[int, frozenset[_Identity]]] = field(default_factory=list)
     max_retention_days: int = 90
+    # Changes another session makes just before a matching statement runs.
+    external_changes: list[
+        tuple[re.Pattern[str], Callable[[SimulatedSnowflakeWarehouse], None]]
+    ] = field(default_factory=list)
 
     def reset(self) -> None:
         """Forget recorded statements and simulated DDL events, keeping the catalog."""
@@ -115,6 +125,12 @@ class SimulatedSnowflakeWarehouse(RecordingSnowflakeWarehouse):
             self.model_columns[model.upper()] = columns
 
     def _answer(self, *, sql: str, params: tuple[object, ...]) -> tuple[list[tuple[Any, ...]], Any]:
+        external: tuple[re.Pattern[str], Callable[[SimulatedSnowflakeWarehouse], None]]
+        for external in tuple(
+            filter(lambda item: item[0].search(sql) is not None, self.external_changes)
+        ):
+            self.external_changes.remove(external)
+            external[1](self)
         retention: re.Match[str]
         for retention in filter(None, (_RETENTION_PATTERN.search(sql),)):
             _RETENTION_CHECKS[int(retention.group("days")) > self.max_retention_days](
@@ -127,6 +143,7 @@ class SimulatedSnowflakeWarehouse(RecordingSnowflakeWarehouse):
             (_RENAME_PATTERN, self._rename),
             (_SWAP_PATTERN, self._swap),
             (_ADD_COLUMN_PATTERN, self._add_column),
+            (_SET_RETENTION_PATTERN, self._set_retention),
             (_CREATE_SCHEMA_PATTERN, self._create_schema),
         )
         pattern: re.Pattern[str]
@@ -155,6 +172,7 @@ class SimulatedSnowflakeWarehouse(RecordingSnowflakeWarehouse):
 
     def _create_as(self, match: re.Match[str]) -> frozenset[_Identity]:
         identity: _Identity = self._parts(match.group("name"))
+        self._require_kind(identity=identity, kind=match.group("kind"), error=_already_exists)
         copied: tuple[re.Match[str], ...] = tuple(
             filter(None, (_COPY_SOURCE_PATTERN.match(match.group("query")),))
         )
@@ -201,6 +219,7 @@ class SimulatedSnowflakeWarehouse(RecordingSnowflakeWarehouse):
 
     def _drop(self, match: re.Match[str]) -> frozenset[_Identity]:
         identity: _Identity = self._parts(match.group("name"))
+        self._require_kind(identity=identity, kind=match.group("kind"), error=_wrong_type)
         self.replace_relations(
             relations=tuple(filter(lambda fake: _identity(fake) != identity, self.relations))
         )
@@ -209,6 +228,9 @@ class SimulatedSnowflakeWarehouse(RecordingSnowflakeWarehouse):
     def _rename(self, match: re.Match[str]) -> frozenset[_Identity]:
         origin: _Identity = self._parts(match.group("name"))
         destination: _Identity = self._parts(match.group("other"))
+        fake: FakeRelation
+        for fake in filter(lambda candidate: _identity(candidate) == destination, self.relations):
+            _already_exists(destination[2], ("TABLE", "VIEW")[fake.table_type == "VIEW"])
         self.replace_relations(
             relations=tuple(
                 (fake, _moved(fake=fake, identity=destination))[_identity(fake) == origin]
@@ -220,6 +242,15 @@ class SimulatedSnowflakeWarehouse(RecordingSnowflakeWarehouse):
     def _swap(self, match: re.Match[str]) -> frozenset[_Identity]:
         left: _Identity = self._parts(match.group("name"))
         right: _Identity = self._parts(match.group("other"))
+        identity: _Identity
+        for identity in (left, right):
+            missing: _Identity
+            for missing in filter(
+                lambda wanted: all(_identity(fake) != wanted for fake in self.relations),
+                (identity,),
+            ):
+                _does_not_exist(missing[2])
+            self._require_kind(identity=identity, kind="TABLE", error=_wrong_type)
         targets: dict[_Identity, _Identity] = {left: right, right: left}
         self.replace_relations(
             relations=tuple(
@@ -239,6 +270,34 @@ class SimulatedSnowflakeWarehouse(RecordingSnowflakeWarehouse):
             )
         )
         return frozenset({identity})
+
+    def _set_retention(self, match: re.Match[str]) -> frozenset[_Identity]:
+        identity: _Identity = self._parts(match.group("name"))
+        days: int = int(match.group("days"))
+        self.replace_relations(
+            relations=tuple(
+                (fake, replace(fake, retention_time=days))[_identity(fake) == identity]
+                for fake in self.relations
+            )
+        )
+        return frozenset({identity})
+
+    def _require_kind(
+        self, *, identity: _Identity, kind: str, error: Callable[[str, str], None]
+    ) -> None:
+        """Fail like Snowflake when the object at ``identity`` is not of ``kind``."""
+
+        found: str
+        for found in filter(
+            lambda listed: listed != kind.upper(),
+            (
+                ("TABLE", "VIEW")[fake.table_type == "VIEW"]
+                for fake in filter(
+                    lambda candidate: _identity(candidate) == identity, self.relations
+                )
+            ),
+        ):
+            error(identity[2], found)
 
     def _create_schema(self, match: re.Match[str]) -> frozenset[_Identity]:
         parts: tuple[str, ...] = tuple(
@@ -265,6 +324,29 @@ class SimulatedSnowflakeWarehouse(RecordingSnowflakeWarehouse):
         parts: tuple[str, ...] = tuple(part.strip('"').upper() for part in name.split("."))
         full: tuple[str, ...] = (self.current_database, self.current_database, *parts)[-3:]
         return full[0], full[1], full[2]
+
+
+def _does_not_exist(name: str) -> None:
+    raise FakeSnowflakeProgrammingError(
+        f"002003 (02000): SQL compilation error:\nTable '{name}' does not exist or not authorized.",
+        errno=2003,
+    )
+
+
+def _already_exists(name: str, found: str) -> None:
+    raise FakeSnowflakeProgrammingError(
+        f"002002 (42710): SQL compilation error:\nObject '{name}' already exists as {found}",
+        errno=2002,
+    )
+
+
+def _wrong_type(name: str, found: str) -> None:
+    wanted: str = ("VIEW", "TABLE")[found == "VIEW"]
+    raise FakeSnowflakeProgrammingError(
+        f"002203 (02000): SQL compilation error: Object found is of type '{found}', "
+        f"not specified type '{wanted}'. ({name})",
+        errno=2203,
+    )
 
 
 def _accept_retention(days: str) -> None:
@@ -617,3 +699,67 @@ def failed_models(build: OfflineBuild) -> tuple[str, ...]:
             lambda result: result.status != ExecutionStatus.SUCCESS, build.result.model_results
         )
     )
+
+
+def relation_types(warehouse: SimulatedSnowflakeWarehouse, name: str) -> tuple[str, ...]:
+    """The table types of the warehouse's relations stored as ``name``."""
+
+    return tuple(
+        relation.table_type
+        for relation in filter(lambda candidate: candidate.name == name, warehouse.relations)
+    )
+
+
+def retention_by_prefix(warehouse: SimulatedSnowflakeWarehouse, prefix: str) -> dict[str, int]:
+    """The retention of each relation whose stored name starts with ``prefix``."""
+
+    return {
+        relation.name: relation.retention_time
+        for relation in filter(
+            lambda candidate: candidate.name.startswith(prefix), warehouse.relations
+        )
+    }
+
+
+def matching_statements(statements: tuple[str, ...], pattern: re.Pattern[str]) -> tuple[str, ...]:
+    """The statements ``pattern`` matches at their start."""
+
+    return tuple(filter(lambda statement: pattern.match(statement) is not None, statements))
+
+
+def drop_external_relation(warehouse: SimulatedSnowflakeWarehouse, name: str) -> None:
+    """Drop a relation the way another session would, outside the build's statements."""
+
+    warehouse.replace_relations(
+        relations=tuple(filter(lambda relation: relation.name != name, warehouse.relations))
+    )
+
+
+def create_external_table(warehouse: SimulatedSnowflakeWarehouse, name: str) -> None:
+    """Create a table in the marts schema the way another session would."""
+
+    warehouse.replace_relations(
+        relations=(
+            *warehouse.relations,
+            FakeRelation(database="ANALYTICS", schema="MARTS", name=name),
+        )
+    )
+
+
+def write_model_copies(*, project_dir: Path, count: int, retention_days: int) -> None:
+    """Add ``count`` permanent table copies of the orders table with managed retention."""
+
+    project: Path = project_dir / "sqlbuild_project.toml"
+    _ = project.write_text(
+        project.read_text(encoding="utf-8")
+        + '\n[materialization_defaults.table]\ntable_type = "permanent"\n'
+        + f'time_travel_retention = "{retention_days}d"\n',
+        encoding="utf-8",
+    )
+    index: int
+    for index in range(count):
+        _ = (project_dir / "models" / "marts" / f"order_copy_{index}.sql").write_text(
+            f"MODEL (description 'Copy {index} of the orders.', materialized table);\n\n"
+            'SELECT order_id, ordered_at, amount FROM __ref("orders_table")\n',
+            encoding="utf-8",
+        )

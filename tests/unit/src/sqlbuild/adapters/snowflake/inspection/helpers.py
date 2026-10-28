@@ -36,7 +36,7 @@ _SHOW_COLUMNS_PATTERN: re.Pattern[str] = re.compile(
     r"^\s*SHOW\s+COLUMNS\s+IN\s+(?:TABLE|VIEW)\s+(?P<relation>\S+)\s*$", re.IGNORECASE
 )
 _SHOW_SCHEMA_RELATIONS_PATTERN: re.Pattern[str] = re.compile(
-    r"^SHOW (?P<terse>TERSE )?(?P<kind>TABLES|VIEWS)(?: LIKE '(?P<like>(?:[^']|'')*)')? "
+    r"^SHOW (?P<terse>TERSE )?(?P<kind>TABLES|VIEWS|OBJECTS)(?: LIKE '(?P<like>(?:[^']|'')*)')? "
     r"IN SCHEMA (?P<scope>\S+)"
     r"(?: LIMIT (?P<limit>\d+)(?: FROM '(?P<after>(?:[^']|'')*)')?)?$"
 )
@@ -134,6 +134,7 @@ _SHOW_SCHEMA_COLUMN_FIELDS: tuple[str, ...] = (
     "autoincrement",
 )
 _VIEW_TABLE_TYPES: frozenset[str] = frozenset({"VIEW", "MATERIALIZED VIEW"})
+_OBJECT_KINDS: dict[str, str] = {"BASE TABLE": "TABLE", "VIEW": "VIEW"}
 _TIMESTAMP_TYPES: frozenset[str] = frozenset(
     {"TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "TIMESTAMP_TZ", "TIME"}
 )
@@ -432,12 +433,13 @@ class RecordingSnowflakeWarehouse:
         del params
         match: re.Match[str] = next(_SHOW_SCHEMA_RELATIONS_PATTERN.finditer(sql))
         wants_views: bool = match.group("kind") == "VIEWS"
+        wants_objects: bool = match.group("kind") == "OBJECTS"
         after: str = (match.group("after") or "").replace("''", "'")
         like: re.Pattern[str] = _like_pattern(match.group("like") or "%")
         selected: list[FakeRelation] = sorted(
             filter(
                 lambda fake: (
-                    (fake.table_type in _VIEW_TABLE_TYPES) is wants_views
+                    (wants_objects or (fake.table_type in _VIEW_TABLE_TYPES) is wants_views)
                     and fake.name > after
                     and like.fullmatch(fake.name) is not None
                 ),
@@ -448,13 +450,19 @@ class RecordingSnowflakeWarehouse:
         limit: int = int(match.group("limit") or SHOW_RESULT_CAP)
         terse: bool = match.group("terse") is not None
         row_builder: Callable[[FakeRelation], tuple[Any, ...]] = (
-            (_show_table_row, _show_view_row)[wants_views],
-            _show_terse_row,
-        )[terse]
+            (
+                (_show_table_row, _show_view_row)[wants_views],
+                _show_terse_row,
+            )[terse],
+            _show_object_row,
+        )[wants_objects]
         fields: tuple[str, ...] = (
-            (_SHOW_TABLE_FIELDS, _SHOW_VIEW_FIELDS)[wants_views],
+            (
+                (_SHOW_TABLE_FIELDS, _SHOW_VIEW_FIELDS)[wants_views],
+                _SHOW_TERSE_FIELDS,
+            )[terse],
             _SHOW_TERSE_FIELDS,
-        )[terse]
+        )[wants_objects]
         return [row_builder(fake) for fake in selected[:limit]], tuple((f,) for f in fields)
 
     def _answer_show_schema_columns(
@@ -598,6 +606,18 @@ def _show_terse_row(relation: FakeRelation) -> tuple[Any, ...]:
         _FIXED_CREATED_AT,
         relation.name,
         relation.table_type,
+        relation.database,
+        relation.schema,
+    )
+
+
+def _show_object_row(relation: FakeRelation) -> tuple[Any, ...]:
+    """A SHOW TERSE OBJECTS row, whose kind names the object type as Snowflake spells it."""
+
+    return (
+        _FIXED_CREATED_AT,
+        relation.name,
+        _OBJECT_KINDS.get(relation.table_type, relation.table_type.replace(" ", "_")),
         relation.database,
         relation.schema,
     )

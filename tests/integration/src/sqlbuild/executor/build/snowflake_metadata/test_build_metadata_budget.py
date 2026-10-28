@@ -29,16 +29,13 @@ from tests.integration.src.sqlbuild.executor.build.snowflake_metadata.helpers im
 from tests.unit.src.sqlbuild.adapters.snowflake.inspection.helpers import FakeColumn
 
 _FIRST_BUILD_COLUMN_READS: dict[str, int] = {
-    "ANALYTICS.MARTS.ORDERS_TABLE__STAGING": 1,
-    "ANALYTICS.MARTS.ORDERS_MERGE__STAGING": 1,
-    "ANALYTICS.MARTS.ORDERS_DAILY__DELTA": 3,
+    "ANALYTICS.MARTS.ORDERS_DAILY__DELTA": 1,
     "ANALYTICS.MARTS.__SQB_REBUILD__ORDERS_DAILY": 1,
 }
 _SECOND_BUILD_COLUMN_READS: dict[str, int] = {
-    "ANALYTICS.MARTS.ORDERS_TABLE__STAGING": 1,
     "ANALYTICS.MARTS.ORDERS_MERGE__DELTA": 1,
     "ANALYTICS.MARTS.ORDERS_MERGE": 1,
-    "ANALYTICS.MARTS.ORDERS_DAILY__DELTA": 2,
+    "ANALYTICS.MARTS.ORDERS_DAILY__DELTA": 1,
     "ANALYTICS.MARTS.ORDERS_DAILY": 1,
 }
 

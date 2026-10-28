@@ -51,3 +51,12 @@ class StatementMetadataEffect:
     relation_names: frozenset[str] = frozenset()
     invalidates_all: bool = False
     ends_transaction: bool = False
+
+
+@dataclass(frozen=True)
+class RunSchemaListing:
+    """One schema's relations as a build listed them, and the cache versions at that moment."""
+
+    relations: dict[str, RelationInfo]
+    global_version: int
+    name_versions: dict[str, int]

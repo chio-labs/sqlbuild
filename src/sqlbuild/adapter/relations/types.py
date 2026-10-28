@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
 type RelationCacheKey = tuple[str, str | None, str | None, str]
 type RelationCacheVersion = tuple[int, int]
+type SchemaListingScope = tuple[str | None, str]
 
 
 class RelationLocation(Protocol):
