@@ -133,16 +133,13 @@ on Snowflake. Report any failure rather than editing the expectations to match.
 
 ```bash
 sqb scenario capture --exclude edge_cases
-python ../scripts/core_project.py /tmp/duckshop-core
-(cd /tmp/duckshop-core && sqb scenario test --local --strict)
+sqb scenario test --local --strict --exclude edge_cases
 ```
 
 Capture materialises each scenario's fixtures in Snowflake, downloads them as JSONL into
 `tests/_scenario_snapshots/`, and drops what it created. The local run then replays all 8
 scenarios on your machine from those files, with no warehouse connection; `--strict` fails on a
-missing or stale snapshot instead of skipping it. It runs in a copy of the project without the
-edge-case area, because local replay of the full project stops at compile on an edge-case model
-(see Known limitations in the README). Delete the copy afterwards.
+missing or stale snapshot instead of skipping it.
 
 With SQLBuild 0.175.0 the local run is expected to end with `ERROR=8`: five scenarios fail while
 translating Snowflake SQL to DuckDB, and three report `X602` (stale snapshot) because of a

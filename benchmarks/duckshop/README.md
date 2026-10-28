@@ -156,7 +156,7 @@ Last verified on Snowflake with SQLBuild 0.175.0 at `data_scale = "1"`:
 | `sqb test` | 266 of 266 pass |
 | `sqb scenario test` | 8 of 8 pass |
 | `sqb scenario capture` | Captures all 8; snapshots are in `project/tests/_scenario_snapshots/` |
-| `sqb scenario test --local --strict` | In the core copy, 0 of 8 pass: 5 fail in translation, 3 report a stale snapshot |
+| `sqb scenario test --local --strict --exclude edge_cases` | 0 of 8 pass: 5 fail in translation, 3 report a stale snapshot |
 
 Local replay translates each scenario's Snowflake SQL to DuckDB on a best-effort basis. These five
 failures are the baseline that better translation should remove:
@@ -219,9 +219,6 @@ noted here:
   header cannot declare a quoted column name. `stg_edge_partner_listings` has a reviewed
   `SQBRTEST202` ignore, `rpt_edge_partner_listing_export` a reviewed `SQBRTEST201` ignore, and the
   edge build excludes `stg_edge_partner_listings+`.
-- Local scenario replay stops at compile (`P001`, unclosed quoted string) on a model with a
-  backslash-escaped quote in a string literal, `'O\'Brien'` in `stg_edge_ticket_notes`, so local
-  replay runs in the core copy.
 - `SQBRSQL018` can only take proof from single-column keys. Append-only feeds redeliver rows, so
   their id is unique only together with `_loaded_at` (the `unique_per_delivery` audit), and the
   staging models that keep the latest delivery carry reviewed exceptions.
