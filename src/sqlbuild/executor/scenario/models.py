@@ -59,6 +59,7 @@ class ScenarioCleanupTarget:
     database: str | None = None
     schema: str | None = None
     name: str | None = None
+    listed: bool = False
 
 
 @dataclass(frozen=True)

@@ -72,10 +72,19 @@ Run `sqb plan -v` to see each metadata query with its elapsed time and row count
 
 ## Build metadata
 
-During a build, checks for whether one relation exists use `SHOW TERSE TABLES` and
-`SHOW TERSE VIEWS`, and reads of one relation's columns use `SHOW COLUMNS`, so they also don't
-need a running warehouse. Each build reuses these answers until it changes that relation, for
-example by replacing a delta table or adding a column, and then reads it again.
+Builds and scenario runs read relation metadata with `SHOW` commands too, so these reads don't
+need a running warehouse either:
+
+| Read | Statement |
+| -- | -- |
+| Whether one relation exists | `SHOW TERSE TABLES` and `SHOW TERSE VIEWS` |
+| A second relation in the same schema | `SHOW TABLES` and `SHOW VIEWS` for the whole schema, once |
+| A table's time travel retention | `SHOW TABLES LIKE`, or the schema listing |
+| One relation's columns | `SHOW COLUMNS` |
+| A scenario's leftover relations | `SHOW TERSE OBJECTS` for the scenario's name prefix |
+
+Each run reuses these answers until it changes that relation, for example by replacing a delta
+table or adding a column, and then reads it again.
 
 ## State tables
 

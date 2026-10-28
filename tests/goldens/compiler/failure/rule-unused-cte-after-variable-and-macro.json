@@ -25,7 +25,8 @@
    ]
   }
  ],
- "compiled": {
+ "compiled": {},
+ "compiled_failed": {
   "models/marts/customer_totals.sql": [
    "-- sqb: compile failed for this model; not buildable",
    "-- SQBRSQL005 at models/marts/customer_totals.sql:5:117: CTE is unreachable from the final query",

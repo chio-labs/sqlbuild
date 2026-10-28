@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -113,6 +114,28 @@ def test_given_corpus_project_when_locating_its_golden_then_only_golden_corpora_
                     }
                 ],
                 "compiled": {},
+                "manifest": None,
+            },
+        ),
+        GoldenPayloadTestCase(
+            description="failed_compile_sql_is_kept_beside_the_compiled_sql",
+            run=replace(
+                machine_error_run(),
+                compiled_failed={"models/orders.sql": b"-- sqb: not buildable\nSELECT 1\n"},
+            ),
+            masked_paths=(),
+            expected_payload={
+                "commands": [
+                    {
+                        "label": "plan",
+                        "exit_code": 1,
+                        "diagnostics": ["error[C214]: no manifest", ""],
+                    }
+                ],
+                "compiled": {},
+                "compiled_failed": {
+                    "models/orders.sql": ["-- sqb: not buildable", "SELECT 1", ""],
+                },
                 "manifest": None,
             },
         ),

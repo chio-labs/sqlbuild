@@ -82,11 +82,8 @@ def enforce_types_staged(
         },
         statement_recorder=statement_recorder,
     )
-    adapter.drop(
-        connection=connection,
-        destination=staging_qualified,
-        if_exists=True,
-        statement_recorder=statement_recorder,
+    adapter.drop_table(
+        connection=connection, destination=staging_qualified, statement_recorder=statement_recorder
     )
     adapter.rename(
         connection=connection,

@@ -134,6 +134,31 @@ class StrictAdapter(
 
         del connection, relation
 
+    def drop_table(
+        self, *, connection: Any, destination: str, statement_recorder: StatementRecorder
+    ) -> None:
+        """Optional: drop a staging or delta table SQLBuild created, if it exists."""
+
+        self.drop(
+            connection=connection,
+            destination=destination,
+            if_exists=True,
+            statement_recorder=statement_recorder,
+        )
+
+    def list_relations_with_prefix(
+        self, *, connection: Any, database: str | None, schemas: tuple[str, ...], prefix: str
+    ) -> tuple[RelationInfo, ...] | None:
+        """Optional: relations in ``schemas`` whose names start with ``prefix``, or None."""
+
+        del connection, database, schemas, prefix
+        return None
+
+    def create_table_as_replaces(self) -> bool:
+        """Optional: whether `create_table_as` replaces a table already at its destination."""
+
+        return False
+
     def render_cursor_operand(self, *, expression: str, cursor_type: str | None) -> str:
         """Optional: the cursor-column expression compared with cursor bounds and aggregated."""
 

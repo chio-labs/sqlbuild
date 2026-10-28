@@ -126,6 +126,9 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
 
     execution_duration_limit_seconds: ClassVar[int | None] = CANCELLABLE_DURATION_LIMIT_SECONDS
 
+    def create_table_as_replaces(self) -> bool:
+        return True
+
     def create_sql_test_output(self, *, connection: Any, sql: str, name: str) -> str | None:
         """Store a unit test's output in a temporary table; compare inline on an engine bug."""
 

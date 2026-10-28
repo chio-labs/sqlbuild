@@ -24,10 +24,10 @@ from tests.integration.src.sqlbuild.executor.build.snowflake_metadata.helpers im
     "test_case",
     [
         StateTableRetentionTestCase(
-            description="enterprise account keeps 90 days",
+            description="enterprise account keeps 90 days, set up once per build",
             max_retention_days=90,
             expected_first_retention_days="90",
-            expected_later_retention_days=frozenset({"90"}),
+            expected_later_retention_days=frozenset(),
         ),
         StateTableRetentionTestCase(
             description="standard account retries once and then creates with 1 day",
@@ -51,7 +51,7 @@ def test_given_account_edition_when_building_then_state_tables_are_permanent_wit
     creates: tuple[str, ...] = state_table_creates(build)
 
     assert failed_models(build) == ()
-    assert len(creates) > 1
+    assert len(creates) == 1 + len(test_case.expected_later_retention_days)
     assert all(create.startswith("CREATE TABLE IF NOT EXISTS ") for create in creates)
     assert all("._sqlbuild_fingerprints (" in create for create in creates)
     assert creates[0].rsplit(" = ", 1)[1] == test_case.expected_first_retention_days

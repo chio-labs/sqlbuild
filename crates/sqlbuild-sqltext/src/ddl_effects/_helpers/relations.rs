@@ -11,9 +11,10 @@ use crate::ddl_effects::_helpers::matching::{
 };
 use crate::ddl_effects::_helpers::names::{UnquotedPart, part_name_key, qualified_name};
 use crate::ddl_effects::constants::{
-    ALTER_FOLLOWING_WORDS, COPY_INTO, CREATE_FOLLOWING_WORDS, CREATE_SCHEMA_IF_NOT_EXISTS,
-    DROP_FOLLOWING_WORDS, FROM_WORD, IF_EXISTS, IF_NOT_EXISTS, INTO, NEUTRAL_OBJECT_KINDS,
-    NEUTRAL_OBJECT_LEADS, NEUTRAL_OBJECT_MODIFIERS, OR_REPLACE, QUERY_STATEMENTS,
+    ALTER_FOLLOWING_WORDS, ALTER_SESSION_SET, ALTER_SESSION_UNSET, COMPUTE_ONLY_STATEMENTS,
+    COPY_INTO, CREATE_FOLLOWING_WORDS, CREATE_SCHEMA_IF_NOT_EXISTS, DROP_FOLLOWING_WORDS,
+    FROM_WORD, IF_EXISTS, IF_NOT_EXISTS, INTO, NEUTRAL_OBJECT_KINDS, NEUTRAL_OBJECT_LEADS,
+    NEUTRAL_OBJECT_MODIFIERS, NEUTRAL_SESSION_PARAMETERS, OR_REPLACE, QUERY_STATEMENTS,
     READ_OR_DATA_STATEMENTS, RELATION_DDL_STATEMENTS, RELATION_KIND_MODIFIERS, RELATION_KINDS,
     RENAMING_ALTERS, STATEMENT_SEPARATOR, TRANSACTION_END_STATEMENTS,
 };
@@ -85,9 +86,10 @@ fn select_into_relation(text: &str) -> Option<NamedRelation<'_>> {
         .find_map(|(index, _)| named_relation(text, whitespace(text, index + INTO.len())?))
 }
 
-fn has_into_keyword(text: &str) -> bool {
+/// Whether `keyword` appears in `text` as a whole word.
+fn has_keyword(text: &str, keyword: &str) -> bool {
     text.char_indices().any(|(index, _)| {
-        word(text, index, INTO)
+        word(text, index, keyword)
             .is_some_and(|end| word_boundary(text, index) && word_boundary(text, end))
     })
 }
@@ -144,7 +146,7 @@ fn named_effect(names: BTreeSet<String>) -> StatementMetadataEffect {
 }
 
 fn select_into_effect(statement: &str) -> StatementMetadataEffect {
-    if !has_into_keyword(statement) {
+    if !has_keyword(statement, INTO) {
         return StatementMetadataEffect::default();
     }
     unambiguous_names(Form::SelectInto, select_into_relation(statement))
@@ -190,6 +192,61 @@ fn is_neutral_object(statement: &str) -> bool {
     bounded_phrase(statement, kind_start, NEUTRAL_OBJECT_KINDS).is_some()
 }
 
+/// The end of the session parameter value at `start`: a backslash-free literal or one bare word.
+fn session_value_end(text: &str, start: usize) -> Option<usize> {
+    let rest: &str = &text[start..];
+    let Some(quoted) = rest.strip_prefix('\'') else {
+        let length: usize = rest
+            .chars()
+            .take_while(|character| !python_isspace(*character))
+            .map(char::len_utf8)
+            .sum();
+        let value: &str = &rest[..length];
+        return (length > 0 && !value.contains(['\'', ',', '='])).then_some(start + length);
+    };
+    let mut position: usize = 0;
+    loop {
+        let close: usize = quoted[position..].find('\'')? + position;
+        if quoted[position..close].contains('\\') {
+            return None;
+        }
+        if !quoted[close + 1..].starts_with('\'') {
+            return Some(start + 1 + close + 1);
+        }
+        position = close + 2;
+    }
+}
+
+/// Whether the statement only sets or resets one session parameter that name resolution ignores.
+fn sets_neutral_session_parameter(statement: &str) -> bool {
+    if let Some(end) = phrase(statement, 0, ALTER_SESSION_UNSET) {
+        return whitespace(statement, end)
+            .and_then(|start| bounded_phrase(statement, start, NEUTRAL_SESSION_PARAMETERS))
+            .is_some_and(|end| only_whitespace(statement, end));
+    }
+    let Some(start) =
+        phrase(statement, 0, ALTER_SESSION_SET).and_then(|end| whitespace(statement, end))
+    else {
+        return false;
+    };
+    let Some(after_name) = bounded_phrase(statement, start, NEUTRAL_SESSION_PARAMETERS) else {
+        return false;
+    };
+    let equals: usize = skip_whitespace(statement, after_name);
+    if !statement[equals..].starts_with('=') {
+        return false;
+    }
+    session_value_end(statement, skip_whitespace(statement, equals + 1))
+        .is_some_and(|end| only_whitespace(statement, end))
+}
+
+/// Whether the statement changes only session state that relations and name resolution ignore.
+fn is_session_only(statement: &str) -> bool {
+    bounded_phrase(statement, 0, COMPUTE_ONLY_STATEMENTS)
+        .is_some_and(|end| whitespace(statement, end).is_some())
+        || sets_neutral_session_parameter(statement)
+}
+
 /// The effect of one reading of the statement's code text; `None` code changes everything.
 pub(crate) fn code_effect(code: Option<&str>) -> StatementMetadataEffect {
     let Some(code) = code else {
@@ -216,6 +273,9 @@ pub(crate) fn code_effect(code: Option<&str>) -> StatementMetadataEffect {
             ends_transaction: true,
             ..StatementMetadataEffect::default()
         };
+    }
+    if is_session_only(statement) {
+        return StatementMetadataEffect::default();
     }
     if !RELATION_DDL_STATEMENTS.contains(&keyword.as_str()) {
         return all_relations();

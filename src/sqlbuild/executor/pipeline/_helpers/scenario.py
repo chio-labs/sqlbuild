@@ -32,6 +32,9 @@ from sqlbuild._native import (
 from sqlbuild._native import build_cli_scenario_plan as build_scenario_plan
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.types import TablePromotionMode
+from sqlbuild.adapter.relations.main.relation_metadata_cache_scope import (
+    relation_metadata_cache_scope,
+)
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event
 from sqlbuild.executor.pipeline._helpers.connections import (
     close_connections,
@@ -161,13 +164,16 @@ def run_scenario_test_pipeline(
         ),
         running=running,
     )
-    with _scenario_target_connections(
-        adapter=adapter,
-        connection_config=connection_config,
-        connection_hooks=connection_hooks,
-        connection_count=worker_count,
-        abandoned=scheduling.interrupts.abandoned,
-    ) as connection_pool:
+    with (
+        relation_metadata_cache_scope(adapter=adapter),
+        _scenario_target_connections(
+            adapter=adapter,
+            connection_config=connection_config,
+            connection_hooks=connection_hooks,
+            connection_count=worker_count,
+            abandoned=scheduling.interrupts.abandoned,
+        ) as connection_pool,
+    ):
         options: ScenarioRunOptions = ScenarioRunOptions(
             promotion_mode=resolve_promotion_mode(
                 settings=pipeline_result.project.settings, adapter=adapter

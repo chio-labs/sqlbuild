@@ -7,16 +7,26 @@ from sqlbuild.adapter.contract.models import FunctionInfo, RelationUsageReport, 
 from sqlbuild.adapter.contract.types import TableFreshnessStatus
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.cost.types import CostStatus
+from tests.unit.src.sqlbuild.adapters.snowflake.inspection.helpers import FakeRelation
 
 
 @dataclass(frozen=True)
 class SnowflakeRetentionTestCase:
     description: str
     desired_days: int
-    observed_row: tuple[object, ...]
+    relation: FakeRelation
     expected_days: int
     expected_kind: str
     expected_sql: str
+
+
+@dataclass(frozen=True)
+class SnowflakeShowRetentionTestCase:
+    description: str
+    relations: tuple[FakeRelation, ...]
+    steps: tuple[tuple[str, str, str], ...]
+    in_build: bool
+    expected_steps: tuple[tuple[int | None, tuple[str, ...]], ...]
 
 
 @dataclass(frozen=True)
@@ -207,8 +217,8 @@ class SnowflakeQualifiedColumnInspectionTestCase:
 class SnowflakeBatchedRetentionTestCase:
     description: str
     requests: tuple[tuple[str, str], ...]
-    schema_rows: tuple[list[tuple[object, ...]], ...]
-    expected_query_schemas: tuple[str, ...]
+    relations: tuple[FakeRelation, ...]
+    expected_queries: tuple[str, ...]
     expected_days: dict[str, int]
 
 
@@ -216,7 +226,7 @@ class SnowflakeBatchedRetentionTestCase:
 class SnowflakeBatchedRetentionErrorTestCase:
     description: str
     requests: tuple[tuple[str, str], ...]
-    rows: list[tuple[object, ...]]
+    relations: tuple[FakeRelation, ...]
     expected_error: str
 
 
@@ -382,3 +392,21 @@ class SnowflakeRelationUsageChainsUnfollowedTestCase:
     message: str
     expected_usages: tuple[tuple[str, tuple[str, ...], int], ...]
     expected_notices: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SnowflakePrefixListingTestCase:
+    description: str
+    relations: tuple[FakeRelation, ...]
+    schema: str
+    prefix: str
+    expected_relations: tuple[tuple[str, str], ...]
+    expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SnowflakeRunListingTestCase:
+    description: str
+    relations: tuple[FakeRelation, ...]
+    lookups: tuple[str, ...]
+    expected_listings: tuple[int, int]

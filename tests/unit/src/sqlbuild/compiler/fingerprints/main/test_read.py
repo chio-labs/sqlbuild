@@ -160,7 +160,7 @@ def test_given_index_renderer_when_writing_fingerprint_then_executes_index_befor
     adapter: DuckDbAdapter = DuckDbAdapter()
     execute: FakeFingerprintWriteExecute = FakeFingerprintWriteExecute()
 
-    write_fingerprint(
+    _ = write_fingerprint(
         connection=object(),
         execute=execute,
         database=None,

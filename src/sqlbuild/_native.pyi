@@ -4146,7 +4146,8 @@ def write_fingerprint(
     render_framework_type: Callable[[FrameworkType], str],
     render_create_table_sql: Callable[..., str] | None = None,
     render_create_index_sqls: Callable[..., tuple[str, ...]] | None = None,
-) -> None: ...
+    ensure_table: bool = True,
+) -> bool: ...
 def write_fingerprints(
     *,
     connection: Any,
@@ -7344,6 +7345,8 @@ class WrittenTarget(NativeRecord):
     test_count: int
     target_dir: Path
     diagnostics: tuple[CompilerDiagnostic, ...]
+    failed_compile: bool
+    failed_model_sql: tuple[str, ...]
     def __init__(
         self,
         model_count: int,
@@ -7353,6 +7356,8 @@ class WrittenTarget(NativeRecord):
         test_count: int,
         target_dir: Path,
         diagnostics: tuple[CompilerDiagnostic, ...] = ...,
+        failed_compile: bool = ...,
+        failed_model_sql: tuple[str, ...] = ...,
     ) -> None: ...
 
 class SkillMaintenanceResult(NativeRecord):
@@ -13811,6 +13816,7 @@ class ModelPlanEntry(NativeRecord):
     pre_hooks: object
     post_hooks: object
     previous_query_sql: str | None
+    previous_fingerprint: Fingerprint | None
     fingerprint_metadata_json: str | None
     previous_metadata_json: str | None
     fingerprint_version_hash: str | None
@@ -13897,6 +13903,7 @@ class ModelPlanEntry(NativeRecord):
         pre_hooks: object = ...,
         post_hooks: object = ...,
         previous_query_sql: str | None = ...,
+        previous_fingerprint: Fingerprint | None = ...,
         fingerprint_metadata_json: str | None = ...,
         previous_metadata_json: str | None = ...,
         fingerprint_version_hash: str | None = ...,

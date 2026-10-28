@@ -23,7 +23,7 @@ def write_fingerprint_from_own_connection(
     connection: duckdb.DuckDBPyConnection = duckdb.connect(str(db_path))
     barrier.wait()
     try:
-        write_fingerprint(
+        _ = write_fingerprint(
             connection=connection,
             execute=adapter.execute,
             database=None,

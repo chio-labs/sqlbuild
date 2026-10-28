@@ -31,7 +31,7 @@ def write_review_marker(
         sort_keys=True,
         separators=(",", ":"),
     )
-    write_fingerprint(
+    _ = write_fingerprint(
         connection=connection,
         execute=adapter.execute,
         database=marker.marker_database,

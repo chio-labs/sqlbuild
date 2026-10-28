@@ -97,7 +97,7 @@ def materialize_query_diff_artifact(
             sort_keys=True,
             separators=(",", ":"),
         )
-        write_fingerprint(
+        _ = write_fingerprint(
             connection=connection,
             execute=adapter.execute,
             database=artifact.database,

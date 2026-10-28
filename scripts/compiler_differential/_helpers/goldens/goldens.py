@@ -119,21 +119,30 @@ def golden_path(*, golden_dir: Path, project: str) -> Path | None:
 def golden_payload(
     *, run: ProjectRun, masked_paths: tuple[tuple[str, str], ...]
 ) -> dict[str, object]:
-    """Return a run's diagnostics, compiled SQL and slimmed manifest with run noise masked."""
+    """Return a run's diagnostics, compiled and failed-compile SQL and slimmed manifest, masked."""
 
-    return {
+    payload: dict[str, object] = {
         "commands": [
             _command(outcome=outcome, masked_paths=masked_paths) for outcome in run.outcomes
         ],
-        "compiled": {
-            path: _lines(
-                text=_masked(
-                    text=contents.decode("utf-8", "surrogateescape"), masked_paths=masked_paths
-                )
+        "compiled": _tree(files=run.compiled, masked_paths=masked_paths),
+    }
+    if run.compiled_failed:
+        payload["compiled_failed"] = _tree(files=run.compiled_failed, masked_paths=masked_paths)
+    payload["manifest"] = _manifest(text=run.manifest, masked_paths=masked_paths)
+    return payload
+
+
+def _tree(
+    *, files: dict[str, bytes], masked_paths: tuple[tuple[str, str], ...]
+) -> dict[str, list[str]]:
+    return {
+        path: _lines(
+            text=_masked(
+                text=contents.decode("utf-8", "surrogateescape"), masked_paths=masked_paths
             )
-            for path, contents in sorted(run.compiled.items())
-        },
-        "manifest": _manifest(text=run.manifest, masked_paths=masked_paths),
+        )
+        for path, contents in sorted(files.items())
     }
 
 

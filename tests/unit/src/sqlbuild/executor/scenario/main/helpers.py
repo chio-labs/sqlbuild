@@ -65,8 +65,11 @@ class ScenarioCatalogTestAdapter(ScenarioFixtureTestAdapter):
         interrupt_on_create: bool = False,
         authoritative: bool = True,
         catalog_schema: str = "scenario_schema",
+        prefix_listing: bool = False,
     ) -> None:
         super().__init__()
+        self.prefix_listing: bool = prefix_listing
+        self.prefix_listings: list[str] = []
         self.relation_types: dict[str, str] = relation_types
         self.fail_listing: bool = fail_listing
         self.authoritative: bool = authoritative
@@ -102,6 +105,25 @@ class ScenarioCatalogTestAdapter(ScenarioFixtureTestAdapter):
             )
             for name in sorted(listed_names)
         )
+
+    def list_relations_with_prefix(
+        self, *, connection: Any, database: str | None, schemas: tuple[str, ...], prefix: str
+    ) -> tuple[RelationInfo, ...] | None:
+        del connection
+        self.prefix_listings.extend((prefix,) * self.prefix_listing)
+        listed: tuple[RelationInfo, ...] = tuple(
+            RelationInfo(
+                database=database,
+                schema=schemas[0],
+                name=name.lower(),
+                relation_type=relation_type,
+            )
+            for name, relation_type in filter(
+                lambda item: item[0].lower().startswith(prefix.lower()),
+                sorted(self.relation_types.items()),
+            )
+        )
+        return (None, listed)[self.prefix_listing]
 
     def _execute(self, connection: object, sql: str) -> object:
         _CATALOG_CREATE_STRATEGIES[self.interrupt_on_create and sql.startswith("CREATE ")]()

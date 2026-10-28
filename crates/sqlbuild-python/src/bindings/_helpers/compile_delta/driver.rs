@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::PyStringMethods;
 use sqlbuild_analysis::assembly::analysis_session::models::RelationTables;
+use sqlbuild_cache::project_reuse::constants::FAILED_COMPILED_DIRECTORY_NAME;
 use sqlbuild_cache::project_reuse::main::read_delta_base::read_delta_base;
 use sqlbuild_cache::project_reuse::main::read_delta_output::read_delta_output;
 use sqlbuild_cache::project_reuse::models::{DeltaBase, DeltaCandidate, ProjectFileChanges};
@@ -14,6 +15,7 @@ use sqlbuild_cache::project_reuse::types::ImageSections;
 use crate::bindings::_helpers::build_progress::progress::{
     NativeProgressProjector, current_projector,
 };
+use crate::bindings::_helpers::compile_command::constants::TARGET_DIRECTORY_NAME;
 use crate::bindings::_helpers::compile_command::reuse_attempt::reuse_debug;
 use crate::bindings::_helpers::compile_command::reuse_recording::{
     RecordedCompileOutput, print_to,
@@ -73,6 +75,8 @@ const UNCOMPILED_MODEL: &str = "the delta compile reported a model it did not co
 const CANDIDATES_LOGGED: usize = 5;
 const UNREADABLE_IMAGE: &str = "the project image cannot be read";
 const TOO_MANY_MODELS: &str = "too many models would compile again";
+/// A compile whose Rules failed writes no SQL tests, functions or audits, so the next compile is full.
+const AFTER_FAILED_RULES: &str = "the previous compile failed its Rules";
 /// The attribute holding a Python enum member's value.
 const ENUM_VALUE: &str = "value";
 /// The lineage mode a delta compile reproduces; richer modes compile in full.
@@ -513,6 +517,14 @@ pub(crate) fn run<'py>(
     }
     if let Some(reason) = ineligible(request)? {
         return fallback(reason);
+    }
+    let project_dir: PathBuf = native_field(attempt, "project_dir")?.extract()?;
+    if project_dir
+        .join(TARGET_DIRECTORY_NAME)
+        .join(FAILED_COMPILED_DIRECTORY_NAME)
+        .is_dir()
+    {
+        return fallback(AFTER_FAILED_RULES);
     }
     let py: Python<'py> = request.py();
     let started: std::time::Instant = std::time::Instant::now();

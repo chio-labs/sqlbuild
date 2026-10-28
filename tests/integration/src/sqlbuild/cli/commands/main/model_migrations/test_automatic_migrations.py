@@ -9,6 +9,7 @@ import pytest
 
 from tests.integration.src.sqlbuild.cli.commands.main.model_migrations._test_types import (
     AutomaticMigrationTestCase,
+    FingerprintHistoryTestCase,
 )
 from tests.integration.src.sqlbuild.cli.commands.main.model_migrations.helpers import (
     CliRun,
@@ -23,6 +24,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.model_migrations.helpers i
     load_raw_orders,
     migration_events,
     model_entry,
+    model_fingerprint_rows,
     order_ids,
     original_order_models,
     plan_json,
@@ -451,6 +453,37 @@ def test_given_fingerprinted_upstream_when_retrying_failed_downstream_then_histo
     )
     assert row_count(project_dir=tmp_path, relation="main.customer_daily_order_totals") == 8
     assert tuple(sorted(migration_events(project_dir=tmp_path))) == test_case.expected_events
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FingerprintHistoryTestCase(
+            description="rename history keeps every rebuilt incremental model recording",
+            expected_rows_without_history=0,
+            expected_min_rows_after_history=1,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_migration_history_when_rebuilding_unchanged_models_then_every_build_records(
+    test_case: FingerprintHistoryTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    build_original_order_models(project_dir=tmp_path, capsys=capsys)
+    before_history: int = model_fingerprint_rows(project_dir=tmp_path)
+    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+    unchanged_without_history: int = model_fingerprint_rows(project_dir=tmp_path)
+    write_project(project_dir=tmp_path, models=renamed_order_models())
+    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+    after_migration: int = model_fingerprint_rows(project_dir=tmp_path)
+
+    _ = build_ok(project_dir=tmp_path, capsys=capsys)
+
+    assert unchanged_without_history - before_history == test_case.expected_rows_without_history
+    assert migration_events(project_dir=tmp_path) != ()
+    assert model_fingerprint_rows(project_dir=tmp_path) - after_migration >= (
+        test_case.expected_min_rows_after_history
+    )
 
 
 if __name__ == "__main__":

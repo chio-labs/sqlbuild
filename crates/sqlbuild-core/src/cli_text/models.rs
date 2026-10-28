@@ -232,6 +232,8 @@ pub struct CompileTextReport {
     pub warning_count: usize,
     /// The compiled SQL directory relative to `target/`'s parent, without a trailing slash.
     pub compiled_dir: String,
+    /// Each failing model's SQL file under `compiled_dir` when Rules failed, relative like it.
+    pub failed_model_sql: Vec<String>,
     pub manifest: bool,
     pub lineage: LineageNote,
 }

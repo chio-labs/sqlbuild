@@ -9,6 +9,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from datetime import date, datetime
 from decimal import Decimal
+from functools import partial
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
@@ -100,6 +101,7 @@ from sqlbuild.adapter.contract.types import (
     TablePromotionMode,
 )
 from sqlbuild.adapter.relations.classes.inspection_catalog import InspectionCatalog
+from sqlbuild.adapter.relations.classes.run_relation_listings import RunRelationListings
 from sqlbuild.adapter.relations.constants import INSPECTION_IN_LIST_LIMIT
 from sqlbuild.adapter.relations.main.active_inspection_catalog import active_inspection_catalog
 from sqlbuild.adapter.relations.main.cached_view_definition import cached_view_definition
@@ -114,6 +116,7 @@ from sqlbuild.adapter.relations.models import (
     SchemaColumnListing,
     SchemaRelationListing,
 )
+from sqlbuild.adapter.relations.types import SchemaListingScope
 from sqlbuild.adapter.type_system.main.conditional_result_nullability import (
     conditional_result_nullability,
 )
@@ -174,6 +177,7 @@ _EXACT_COLUMN_INSPECTION_LIMIT: int = 32
 _STATE_TABLE_RETENTION_ATTRIBUTE: str = "_state_table_retention_fallbacks_state"
 _METADATA_INSPECTION_CONCURRENCY: int = 8
 _SHOW_RESULT_LIMIT: int = 10_000
+_SHOW_OBJECT_RELATION_TYPES: dict[str, str] = {"TABLE": "base table", "VIEW": "view"}
 _COST_LOGIN_TIMEOUT_SECONDS: int = 5
 _COST_NETWORK_TIMEOUT_SECONDS: int = 15
 _SHOW_COLUMN_KIND: str = "COLUMN"
@@ -214,39 +218,14 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     )
 
     def inspect_retention(self, *, connection: Any, request: RetentionRequest) -> RetentionState:
-        self._validate_relation_retention_request(request=request)
-        clauses: list[str] = ["table_name = %s", "table_schema = %s"]
-        params: list[str] = [
-            self._information_schema_identifier(str(request.name)),
-            self._information_schema_identifier(request.schema),
+        return self.inspect_retentions(connection=connection, requests=(request,))[
+            request.request_id
         ]
-        if request.database is not None:
-            clauses.append("table_catalog = %s")
-            params.append(self._information_schema_identifier(request.database))
-        cursor: Any = connection.cursor()
-        try:
-            cursor.execute(
-                "SELECT retention_time, is_transient FROM "
-                + self._information_schema_relation(database=request.database, name="tables")
-                + " WHERE "
-                + " AND ".join(clauses),
-                tuple(params),
-            )
-            row: tuple[Any, ...] | None = cursor.fetchone()
-        finally:
-            cursor.close()
-        if row is None:
-            raise AdapterUserError(
-                message=f"Snowflake retention metadata not found for {request.name}"
-            )
-        return self._relation_retention_state(
-            request=request, retention_time=row[0], is_transient_value=row[1]
-        )
 
     def inspect_retentions(
         self, *, connection: Any, requests: tuple[RetentionRequest, ...]
     ) -> dict[str, RetentionState]:
-        """Inspect relation retention with one metadata query per database and schema."""
+        """Inspect relation retention with SHOW TABLES, which needs no running warehouse."""
 
         grouped: dict[tuple[str | None, str], list[RetentionRequest]] = {}
         for request in requests:
@@ -254,44 +233,111 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             grouped.setdefault((request.database, request.schema), []).append(request)
         states: dict[str, RetentionState] = {}
         for (database, schema), group in grouped.items():
-            names: tuple[str, ...] = tuple(
-                dict.fromkeys(
-                    self._information_schema_identifier(str(request.name)) for request in group
-                )
+            relations: dict[str, RelationInfo | None] = self._retention_relations(
+                connection=connection, database=database, schema=schema, group=tuple(group)
             )
-            clauses: list[str] = [
-                f"table_name IN ({', '.join(['%s'] * len(names))})",
-                "table_schema = %s",
-            ]
-            params: list[str] = [*names, self._information_schema_identifier(schema)]
-            if database is not None:
-                clauses.append("table_catalog = %s")
-                params.append(self._information_schema_identifier(database))
-            cursor: Any = connection.cursor()
-            try:
-                cursor.execute(
-                    "SELECT table_name, retention_time, is_transient FROM "
-                    + self._information_schema_relation(database=database, name="tables")
-                    + " WHERE "
-                    + " AND ".join(clauses),
-                    tuple(params),
-                )
-                rows: list[tuple[Any, ...]] = cursor.fetchall()
-            finally:
-                cursor.close()
-            rows_by_name: dict[str, tuple[Any, ...]] = {str(row[0]): row for row in rows}
             for request in group:
-                row: tuple[Any, ...] | None = rows_by_name.get(
+                relation: RelationInfo | None = relations.get(
                     self._information_schema_identifier(str(request.name))
                 )
-                if row is None:
+                state: RetentionState | None = (
+                    None
+                    if relation is None
+                    else self.retention_state_from_relation(request=request, relation=relation)
+                )
+                if state is None:
                     raise AdapterUserError(
                         message=f"Snowflake retention metadata not found for {request.name}"
                     )
-                states[request.request_id] = self._relation_retention_state(
-                    request=request, retention_time=row[1], is_transient_value=row[2]
-                )
+                states[request.request_id] = state
         return states
+
+    def _retention_relations(
+        self,
+        *,
+        connection: Any,
+        database: str | None,
+        schema: str,
+        group: tuple[RetentionRequest, ...],
+    ) -> dict[str, RelationInfo | None]:
+        """The listed relation of each request, keyed by stored name."""
+
+        scope: SchemaListingScope = self._listing_scope(
+            connection=connection, database=database, schema=schema
+        )
+        relations: dict[str, RelationInfo | None] = {}
+        unanswered: list[str] = []
+        for request in group:
+            stored_name: str = self._information_schema_identifier(str(request.name))
+            answered, relation = RunRelationListings.listed_relation(
+                adapter=self, scope=scope, name=str(request.name), stored_name=stored_name
+            )
+            if answered:
+                relations[stored_name] = relation
+            else:
+                unanswered.append(stored_name)
+        if not unanswered:
+            return relations
+        if len(set(unanswered)) == 1 and SHOW_LIKE_ESCAPE_CHARACTER not in unanswered[0]:
+            relations[unanswered[0]] = self._show_table(
+                connection=connection, database=database, schema=schema, stored_name=unanswered[0]
+            )
+            return relations
+        listed: dict[str, RelationInfo] = RunRelationListings.refresh_schema_listing(
+            adapter=self,
+            scope=scope,
+            read_listing=partial(
+                self._schema_relations, connection=connection, database=database, schema=schema
+            ),
+        )
+        for stored_name in unanswered:
+            relations[stored_name] = listed.get(stored_name)
+        return relations
+
+    def _show_table(
+        self, *, connection: Any, database: str | None, schema: str, stored_name: str
+    ) -> RelationInfo | None:
+        """One table as SHOW TABLES lists it, or None when the schema holds no such table."""
+
+        show_database: str = self._show_database(
+            connection=connection, database=database, schema=schema
+        )
+        scope: str = self._show_schema_scope(
+            connection=connection, database=database, schema=schema
+        )
+        rows: list[dict[str, object]] = self._fetch_schema_show_rows(
+            connection=connection,
+            query=f"SHOW TABLES LIKE '{show_like_pattern(stored_name)}' IN SCHEMA {scope}",
+            show_database=show_database,
+            schema=schema,
+        )
+        row: dict[str, object]
+        for row in rows:
+            if str(row.get("name")) == stored_name:
+                return listed_relation_from_show_table(row=row, database=database).relation
+        return None
+
+    def _schema_relations(
+        self, *, connection: Any, database: str | None, schema: str
+    ) -> dict[str, RelationInfo]:
+        """Every table and view in one schema, keyed by stored name."""
+
+        listing: SchemaRelationListing = self.read_schema_relation_listing(
+            connection=connection, database=database, schema=schema
+        )
+        return {entry.stored_name: entry.relation for entry in listing.entries}
+
+    def _listing_scope(
+        self, *, connection: Any, database: str | None, schema: str
+    ) -> SchemaListingScope:
+        """The stored database and schema names that key a build's listing of one schema."""
+
+        return (
+            self._information_schema_identifier(
+                self._show_database(connection=connection, database=database, schema=schema)
+            ),
+            self._information_schema_identifier(schema),
+        )
 
     def retention_state_from_relation(
         self, *, request: RetentionRequest, relation: RelationInfo
@@ -305,20 +351,6 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             effective_days=relation.retention_days,
             relation_kind="TRANSIENT" if relation.is_transient else "PERMANENT",
             is_transient=relation.is_transient,
-        )
-
-    @staticmethod
-    def _relation_retention_state(
-        *, request: RetentionRequest, retention_time: Any, is_transient_value: Any
-    ) -> RetentionState:
-        is_transient: bool = str(is_transient_value).upper() == TRUE_METADATA_VALUE
-        return RetentionState(
-            request_id=request.request_id,
-            scope=request.scope,
-            configured_days=None,
-            effective_days=int(retention_time),
-            relation_kind="TRANSIENT" if is_transient else "PERMANENT",
-            is_transient=is_transient,
         )
 
     def render_retention_changes(
@@ -1094,8 +1126,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             sql=f"SELECT * FROM {staged}",
             columns=columns,
         )
-        drop_staged: tuple[str, ...] = self.render_drop(destination=staged, if_exists=True)
-        return (*create_staged, delete_sql, *insert_stmts, *drop_staged)
+        return (*create_staged, delete_sql, *insert_stmts, f"DROP TABLE IF EXISTS {staged}")
 
     def render_delete_insert_cursor(
         self,
@@ -1272,6 +1303,54 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         for stmt in statements:
             self.execute(connection=connection, sql=stmt)
 
+    def drop_table(
+        self, *, connection: Any, destination: str, statement_recorder: StatementRecorder
+    ) -> None:
+        statement: str = f"DROP TABLE IF EXISTS {destination}"
+        statement_recorder.record(statement)
+        self.execute(connection=connection, sql=statement)
+
+    def create_table_as_replaces(self) -> bool:
+        return True
+
+    def list_relations_with_prefix(
+        self, *, connection: Any, database: str | None, schemas: tuple[str, ...], prefix: str
+    ) -> tuple[RelationInfo, ...] | None:
+        """One SHOW TERSE OBJECTS for a single schema; None for several or past its row limit."""
+
+        if len(schemas) != 1:
+            return None
+        schema: str = schemas[0]
+        stored_prefix: str = self._information_schema_identifier(prefix)
+        scope: str = self._show_schema_scope(
+            connection=connection, database=database, schema=schema
+        )
+        rows: list[dict[str, object]] = self._fetch_schema_show_rows(
+            connection=connection,
+            query=(
+                f"SHOW TERSE OBJECTS LIKE '{show_like_pattern(stored_prefix)}%' "
+                f"IN SCHEMA {scope} LIMIT {_SHOW_RESULT_LIMIT}"
+            ),
+            show_database=self._show_database(
+                connection=connection, database=database, schema=schema
+            ),
+            schema=schema,
+        )
+        if len(rows) >= _SHOW_RESULT_LIMIT:
+            return None
+        return tuple(
+            RelationInfo(
+                database=database,
+                schema=str(row.get("schema_name") or schema).lower(),
+                name=str(row["name"]).lower(),
+                relation_type=_SHOW_OBJECT_RELATION_TYPES.get(
+                    str(row.get("kind") or "").upper(), str(row.get("kind") or "").lower()
+                ),
+            )
+            for row in rows
+            if str(row["name"]).startswith(stored_prefix)
+        )
+
     def drop_view(
         self,
         *,
@@ -1400,14 +1479,12 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         sql: str,
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
-    ) -> None:
+    ) -> int | None:
         statements: tuple[str, ...] = self.render_append(
             destination=destination, sql=sql, columns=columns
         )
         statement_recorder.record_many(statements)
-        stmt: str
-        for stmt in statements:
-            self.execute(connection=connection, sql=stmt)
+        return self._inserted_rows(connection=connection, statements=statements)
 
     def delete_insert(
         self,
@@ -1418,16 +1495,14 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         unique_key: str | tuple[str, ...],
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
-    ) -> None:
+    ) -> int | None:
         keys: tuple[str, ...] = (unique_key,) if isinstance(unique_key, str) else unique_key
         statements: tuple[str, ...] = self.render_delete_insert(
             destination=destination, sql=sql, unique_key=keys, columns=columns
         )
         statement_recorder.record_many(statements)
         with self.transaction(connection):
-            stmt: str
-            for stmt in statements:
-                self.execute(connection=connection, sql=stmt)
+            return self._inserted_rows(connection=connection, statements=statements)
 
     def delete_insert_cursor(
         self,
@@ -1441,7 +1516,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         columns: tuple[str, ...] | None = None,
         statement_recorder: StatementRecorder,
         cursor_type: str | None = None,
-    ) -> None:
+    ) -> int | None:
         statements: tuple[str, ...] = self.render_delete_insert_cursor(
             destination=destination,
             sql=sql,
@@ -1453,9 +1528,18 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
         statement_recorder.record_many(statements)
         with self.transaction(connection):
-            stmt: str
-            for stmt in statements:
-                self.execute(connection=connection, sql=stmt)
+            return self._inserted_rows(connection=connection, statements=statements)
+
+    def _inserted_rows(self, *, connection: Any, statements: tuple[str, ...]) -> int | None:
+        """Run DML statements; the rows the INSERT among them wrote, as Snowflake reports them."""
+
+        inserted: int | None = None
+        stmt: str
+        for stmt in statements:
+            cursor: Any = self.execute(connection=connection, sql=stmt)
+            if stmt.startswith("INSERT"):
+                inserted = self.affected_row_count(cursor=cursor)
+        return inserted
 
     def sql_analysis_dialect(self) -> str | None:
         """Return the SQL analysis dialect name for this adapter, if any."""
@@ -1966,6 +2050,17 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             connection=connection, database=database, schema=schema
         )
         stored_name: str = self._information_schema_identifier(name)
+        answered, listed = RunRelationListings.schema_relation(
+            adapter=self,
+            scope=self._listing_scope(connection=connection, database=database, schema=schema),
+            name=name,
+            stored_name=stored_name,
+            read_listing=partial(
+                self._schema_relations, connection=connection, database=database, schema=schema
+            ),
+        )
+        if answered:
+            return listed is not None
         pattern: str = show_like_pattern(stored_name)
         kind: str
         for kind in ("TABLES", "VIEWS"):

@@ -211,9 +211,11 @@ pub(crate) fn spliced_report(
     let mut cursor: usize = 0;
     for ((key, base_span), (_, delta_span)) in base_members.iter().zip(&delta_members) {
         let replacement: String = match key.as_str() {
-            "has_errors" | "diagnostics" | "semantic_checks_partial" | "compile_timings" => {
-                text(delta, delta_span).to_owned()
-            }
+            "has_errors"
+            | "diagnostics"
+            | "semantic_checks_partial"
+            | "compile_timings"
+            | "artifacts" => text(delta, delta_span).to_owned(),
             "summary" => spliced_summary(base, *base_span, delta, *delta_span)
                 .ok_or("the summaries do not line up")?,
             "resources" => spliced_resources((base, *base_span), (delta, *delta_span), scope)

@@ -842,3 +842,14 @@ def declared_rename_models() -> dict[str, str]:
         "orders_enriched": enriched_view_sql(upstream=DESTINATION_MODEL, alias="o"),
         "daily_order_totals": daily_totals_sql(upstream="orders_enriched", cte="orders_enriched"),
     }
+
+
+def model_fingerprint_rows(*, project_dir: Path) -> int:
+    """Count the model fingerprint rows recorded in the main schema."""
+
+    return int(
+        query(
+            project_dir=project_dir,
+            sql="SELECT COUNT(*) FROM main._sqlbuild_fingerprints WHERE node_type = 'model'",
+        )[0][0]
+    )

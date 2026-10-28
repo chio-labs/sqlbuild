@@ -41,6 +41,7 @@ from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.custom.models import MaterializationResult
 from sqlbuild.executor.python_nodes.classes.runtime_relation_guard import RuntimeRelationGuard
 from sqlbuild.executor.python_nodes.types import PythonIdentityRecorder
+from sqlbuild.executor.run.classes.fingerprint_writes import FingerprintWrites
 from sqlbuild.executor.run.types import (
     AuditGateMetadataParseFailure,
     AuditGateReuseReason,
@@ -328,6 +329,7 @@ class ModelMaterializationContext:
     watermark_resolver: WatermarkResolver | None = None
     enforce_explicit_references: bool = False
     bound_views: BoundViewGuard = field(default_factory=BoundViewGuard)
+    fingerprint_writes: FingerprintWrites | None = None
 
 
 @dataclass(frozen=True, kw_only=True, init=False)

@@ -1,6 +1,6 @@
 //! Write compiled project output to `target/`: models, functions, audits, SQL tests, manifest.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use pyo3::exceptions::PyValueError;
@@ -12,6 +12,7 @@ use pyo3::{IntoPyObjectExt, pyclass, pyfunction, wrap_pyfunction};
 use sqlbuild_cache::artifacts::main::new_sql_test_record::new_sql_test_record;
 use sqlbuild_cache::artifacts::main::reusable_sql_test_record::reusable_sql_test_record;
 use sqlbuild_cache::artifacts::models::{SqlTestArtifactRecord, SqlTestRecordMiss};
+use sqlbuild_cache::project_reuse::constants::FAILED_COMPILED_DIRECTORY_NAME;
 use sqlbuild_host::compile_context::main::record_compile_timing::record_compile_timing;
 use sqlbuild_host::entries::models::ExecutorHost;
 
@@ -58,8 +59,6 @@ const TESTS_DIR: &str = "tests";
 const MANIFEST_FILE: &str = "manifest.json";
 /// The compile cache file stamping the compiled tree the last stale-file walk left.
 const COMPILED_TREE_STAMP_FILE: &str = "compiled-tree.bin";
-/// The model files compiles wrote under `target/compiled/`, one per line, relative to it.
-const COMPILED_MODELS_FILE: &str = "compiled-models.txt";
 
 const SQL_FILE_SUFFIX: &str = ".sql";
 const SQL_TEST_CACHE_LOGGER: &str = "sqlbuild.compile.reuse";
@@ -324,15 +323,8 @@ fn write_planned_target<'py>(
         managed.push(path);
     }
     batch.flush(py)?;
-    let managed: Vec<PathBuf> = extracted(&managed)?;
-    record_compiled_models(
-        &target_dir.extract::<PathBuf>()?,
-        &compiled.extract::<PathBuf>()?,
-        &managed,
-        record_mode(remove_stale_files),
-    )?;
     if remove_stale_files {
-        remove_stale(target_dir, managed, None)?;
+        remove_stale(target_dir, extracted(&managed)?, None)?;
     }
     write_manifest(target_dir, manifest, None)?;
     written_target(
@@ -736,15 +728,9 @@ pub(crate) fn write_static_target<'py>(
     })();
     let (test_paths, diagnostics) = batch.settle(py, queued)?;
     managed.extend(test_paths);
-    let mut paths: Vec<PathBuf> = managed_models;
-    paths.extend(extracted(&managed)?);
-    record_compiled_models(
-        &target_dir.extract::<PathBuf>()?,
-        &compiled_dir,
-        &paths,
-        record_mode(remove_stale_files),
-    )?;
     if remove_stale_files {
+        let mut paths: Vec<PathBuf> = managed_models;
+        paths.extend(extracted(&managed)?);
         let cache_dir: Bound<'py, PyAny> = native_field(project, "compile_cache_dir")?;
         let cache_dir: Option<PathBuf> = if cache_dir.is_none() {
             None
@@ -822,23 +808,23 @@ fn rule_error_lines(
     Ok(lines)
 }
 
-/// After Rules failed, write every model's compiled SQL so the expansion they checked can be read. A model with Rule errors starts with a header marking it not buildable and listing them. An earlier manifest is removed, since it no longer describes `target/`, and so is a model file an earlier compile wrote for a model the project no longer has. Every other artifact stays as the last compile left it, for the next passing compile to publish or remove.
+/// After Rules failed, write every model's compiled SQL to `target/compiled-failed/` and remove every other file there, so it holds exactly the expansion these Rules checked. A model with Rule errors starts with a header marking it not buildable and listing them. `target/compiled/` keeps the last passing compile; only an earlier manifest is removed, since it no longer describes `target/`. Returns the failing models' files, relative to `target/compiled-failed/` and sorted.
 pub(crate) fn write_rule_failed_models<'py>(
     target_dir: &Bound<'py, PyAny>,
     (project, project_dir): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
     diagnostics: &Bound<'py, PyAny>,
-) -> PyResult<()> {
+    recorder: ArtifactRecorder<'_>,
+) -> PyResult<Vec<String>> {
     let py: Python<'py> = target_dir.py();
     let errors: HashMap<String, Vec<String>> = rule_error_lines(diagnostics, project_dir)?;
     let _ = prepared_target(target_dir)?;
-    let manifest: PathBuf = target_dir.extract::<PathBuf>()?.join(MANIFEST_FILE);
-    match std::fs::remove_file(&manifest) {
+    let target: PathBuf = target_dir.extract()?;
+    match std::fs::remove_file(target.join(MANIFEST_FILE)) {
         Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error.into()),
         _ => {}
     }
-    let compiled_dir: PathBuf = joined(target_dir, &[COMPILED_DIR])?.extract()?;
-    let mut batch: ArtifactBatch = ArtifactBatch::new(true, None);
-    let mut written: Vec<PathBuf> = Vec::new();
+    let failed_dir: PathBuf = target.join(FAILED_COMPILED_DIRECTORY_NAME);
+    let mut models: Vec<(String, String)> = Vec::new();
     for model in native_field(project, "models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
         let (relative_path, query_sql): (String, String) =
@@ -851,96 +837,83 @@ pub(crate) fn write_rule_failed_models<'py>(
                     native_field(&model, "query_sql")?.extract()?,
                 )
             };
+        models.push((relative_path, query_sql));
+    }
+    if let Some(injection) = crate::bindings::_helpers::compile_context::delta::injection() {
+        models.extend(models_not_rerun(
+            &target,
+            &models,
+            &injection.project_model_paths,
+        )?);
+    }
+    let mut batch: ArtifactBatch = ArtifactBatch::new(true, recorder);
+    let mut failing: Vec<String> = Vec::new();
+    let mut written: Vec<PathBuf> = Vec::new();
+    for (relative_path, query_sql) in models {
+        let path: PathBuf = native_model_output_path(&failed_dir, &relative_path);
         let sql: String = match errors.get(&relative_path) {
-            Some(lines) => format!("{RULE_FAILED_HEADER}\n{}\n{query_sql}", lines.join("\n")),
+            Some(lines) => {
+                failing.push(failed_relative(&failed_dir, &path));
+                format!("{RULE_FAILED_HEADER}\n{}\n{query_sql}", lines.join("\n"))
+            }
             None => query_sql,
         };
-        let path: PathBuf = native_model_output_path(&compiled_dir, &relative_path);
-        batch.queue_sql_at(py, path.clone(), &sql)?;
-        written.push(path);
+        written.push(path.clone());
+        batch.queue_sql_at(py, path, &sql)?;
     }
     batch.flush(py)?;
-    record_compiled_models(
-        &target_dir.extract::<PathBuf>()?,
-        &compiled_dir,
-        &written,
-        ModelRecord::RemoveRetired,
-    )
+    let _ = remove_stale_artifacts(py, failed_dir, written, None)?;
+    failing.sort_unstable();
+    Ok(failing)
 }
 
-fn record_mode(removes_stale_files: bool) -> ModelRecord {
-    if removes_stale_files {
-        ModelRecord::Replace
-    } else {
-        ModelRecord::Extend
-    }
-}
-
-/// How a compile updates the record of the model files SQLBuild wrote under `target/compiled/`.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum ModelRecord {
-    /// A passing compile that removed stale files: the record is exactly what it wrote.
-    Replace,
-    /// A passing compile that kept the files already there: the record gains what it wrote.
-    Extend,
-    /// A compile whose Rules failed: other recorded models are retired, so their files are removed.
-    RemoveRetired,
-}
-
-/// Update the record of written model files, one path per line relative to `compiled_dir`.
-fn record_compiled_models(
+/// In a delta compile, which runs only after a passing compile, the compiled SQL of each project model it did not rerun, unchanged in `target/compiled/` since that compile.
+fn models_not_rerun(
     target: &Path,
-    compiled_dir: &Path,
-    written: &[PathBuf],
-    mode: ModelRecord,
-) -> PyResult<()> {
-    let record: PathBuf = target.join(COMPILED_MODELS_FILE);
-    let previous: String = match std::fs::read_to_string(&record) {
-        Ok(text) => text,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(error) => return Err(error.into()),
-    };
-    let models_dir: PathBuf = compiled_dir.join(MODELS_DIR);
-    let mut lines: BTreeSet<String> = BTreeSet::new();
-    for path in written {
-        match path.strip_prefix(&models_dir) {
-            Ok(relative) => {
-                let _ = lines.insert(format!(
-                    "{MODELS_DIR}/{}",
-                    relative.to_string_lossy().replace('\\', "/")
-                ));
-            }
-            Err(_not_a_model) => continue,
-        }
-    }
-    for line in previous.lines().filter(|line| !line.is_empty()) {
-        if lines.contains(line) {
+    rerun: &[(String, String)],
+    project_model_paths: &[String],
+) -> PyResult<Vec<(String, String)>> {
+    let rerun: HashSet<&str> = rerun.iter().map(|(path, _)| path.as_str()).collect();
+    let compiled_dir: PathBuf = target.join(COMPILED_DIR);
+    let mut models: Vec<(String, String)> = Vec::new();
+    for relative_path in project_model_paths {
+        if rerun.contains(relative_path.as_str()) {
             continue;
         }
-        match mode {
-            ModelRecord::Replace => {}
-            ModelRecord::Extend => {
-                let _ = lines.insert(line.to_owned());
-            }
-            ModelRecord::RemoveRetired => {
-                let path: PathBuf = compiled_dir.join(line);
-                if !path.starts_with(&models_dir) {
-                    continue;
-                }
-                match std::fs::remove_file(&path) {
-                    Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-                        return Err(error.into());
-                    }
-                    _ => {}
-                }
-            }
-        }
+        let path: PathBuf = native_model_output_path(&compiled_dir, relative_path);
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            return Err(
+                crate::bindings::_helpers::compile_context::delta::delta_unsupported(
+                    "the stored compile's SQL for a model it did not rerun is unreadable",
+                ),
+            );
+        };
+        let query_sql: String = if cfg!(windows) {
+            text.replace("\r\n", "\n")
+        } else {
+            text
+        };
+        models.push((relative_path.clone(), query_sql));
     }
-    let contents: String = lines.iter().map(|line| format!("{line}\n")).collect();
-    if contents != previous {
-        std::fs::write(&record, contents)?;
+    Ok(models)
+}
+
+/// `path` relative to `failed_dir`, with `/` separators.
+fn failed_relative(failed_dir: &Path, path: &Path) -> String {
+    match path.strip_prefix(failed_dir) {
+        Ok(relative) => relative
+            .to_string_lossy()
+            .replace(std::path::MAIN_SEPARATOR, "/"),
+        Err(_outside) => path.to_string_lossy().into_owned(),
     }
-    Ok(())
+}
+
+/// Delete `target/compiled-failed/`, which only the latest compile whose Rules failed owns.
+pub(crate) fn remove_failed_compile(target: &Path) -> PyResult<()> {
+    match std::fs::remove_dir_all(target.join(FAILED_COMPILED_DIRECTORY_NAME)) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error.into()),
+        _ => Ok(()),
+    }
 }
 
 /// Plan uncached SQL tests and report their errors without writing artifacts or cache.
@@ -1002,16 +975,6 @@ pub(crate) fn publish_staged_target<'py>(
             remove_stale(target_dir, extracted(&managed)?, None)?;
         }
     }
-    let written: Vec<PathBuf> = expected
-        .iter()
-        .map(|relative| compiled.join(relative))
-        .collect();
-    record_compiled_models(
-        &target_dir.extract::<PathBuf>()?,
-        &compiled,
-        &written,
-        ModelRecord::Replace,
-    )?;
     write_manifest(target_dir, manifest, recorder)?;
     written_target(
         target_dir,

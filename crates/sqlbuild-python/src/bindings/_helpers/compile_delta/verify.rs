@@ -27,6 +27,9 @@ pub(crate) struct Expected {
     pub(crate) compiled: BTreeMap<String, String>,
     pub(crate) compiled_root: String,
     pub(crate) artifacts_written: bool,
+    /// Every file under `target/compiled-failed/` after the delta, with its native digest.
+    pub(crate) failed: BTreeMap<String, String>,
+    pub(crate) failed_root: String,
 }
 
 /// What the full compile produced.
@@ -176,18 +179,34 @@ pub(crate) fn differences(raised: Option<String>) -> Vec<String> {
             expected.artifacts_written, actual.artifacts_written
         ));
     }
-    if !actual.artifacts_written {
-        return found;
+    found.extend(tree_differences(
+        (&expected.failed_root, &expected.failed),
+        &actual.written,
+    ));
+    if actual.artifacts_written {
+        found.extend(tree_differences(
+            (&expected.compiled_root, &expected.compiled),
+            &actual.written,
+        ));
     }
-    let prefix: &str = expected.compiled_root.as_str();
-    let full_paths: BTreeMap<&str, &Option<String>> = actual
-        .written
+    found.truncate(50);
+    found
+}
+
+/// Where the files the full compile wrote under `root` differ from what the delta left there.
+fn tree_differences(
+    (root, expected): (&str, &BTreeMap<String, String>),
+    written: &HashMap<String, Option<String>>,
+) -> Vec<String> {
+    let mut found: Vec<String> = Vec::new();
+    let prefix: String = format!("{root}{}", std::path::MAIN_SEPARATOR);
+    let full_paths: BTreeMap<&str, &Option<String>> = written
         .iter()
-        .filter(|(path, _)| path.starts_with(prefix))
+        .filter(|(path, _)| path.starts_with(prefix.as_str()))
         .map(|(path, digest)| (path.as_str(), digest))
         .collect();
     for (path, digest) in &full_paths {
-        match (expected.compiled.get(*path), digest) {
+        match (expected.get(*path), digest) {
             (None, _) => found.push(format!("the delta left no artifact at {path}")),
             (Some(left), Some(right)) if left != right => {
                 found.push(format!("artifact differs: {path}"));
@@ -195,14 +214,13 @@ pub(crate) fn differences(raised: Option<String>) -> Vec<String> {
             _ => {}
         }
     }
-    for path in expected.compiled.keys() {
+    for path in expected.keys() {
         if !full_paths.contains_key(path.as_str()) {
             found.push(format!(
                 "the delta left an artifact the full compile does not: {path}"
             ));
         }
     }
-    found.truncate(50);
     found
 }
 

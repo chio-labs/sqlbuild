@@ -153,7 +153,7 @@ def test_given_transient_write_conflicts_when_writing_fingerprint_then_retries_u
     sleeper: RecordingSleeper = RecordingSleeper()
     monkeypatch.setattr("time.sleep", sleeper)
 
-    write_fingerprint(
+    _ = write_fingerprint(
         connection=object(),
         execute=execute,
         database=None,
@@ -198,7 +198,7 @@ def test_given_persistent_write_conflicts_when_writing_fingerprint_then_raises_a
     monkeypatch.setattr("time.sleep", sleeper)
 
     with pytest.raises(RuntimeError) as error_info:
-        write_fingerprint(
+        _ = write_fingerprint(
             connection=object(),
             execute=execute,
             database=None,

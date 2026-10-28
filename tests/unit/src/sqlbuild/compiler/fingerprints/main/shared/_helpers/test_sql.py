@@ -215,7 +215,7 @@ def test_given_fingerprint_values_when_writing_then_insert_sql_contains_expected
     test_case: BuildInsertSqlTestCase,
 ) -> None:
     executed: list[str] = []
-    write_fingerprint(
+    _ = write_fingerprint(
         connection=object(),
         execute=lambda *, connection, sql: executed.append(sql),
         database=test_case.database,

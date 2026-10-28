@@ -83,7 +83,7 @@ def create_janitor_demo_relations(*, db_path: Path) -> None:
         connection.execute("CREATE TABLE janitor_untracked_extra AS SELECT 1 AS id")
         connection.execute("CREATE TABLE partition_state AS SELECT 1 AS id")
         connection.execute("CREATE TABLE _sqlbuild_microbatches AS SELECT 1 AS id")
-        write_fingerprint(
+        _ = write_fingerprint(
             connection=connection,
             execute=lambda *, connection, sql: connection.execute(sql),
             database=None,
@@ -103,7 +103,7 @@ def create_janitor_demo_relations(*, db_path: Path) -> None:
             render_qualified_name=DuckDbAdapter().render_qualified_name,
             render_framework_type=DuckDbAdapter().render_framework_type,
         )
-        write_fingerprint(
+        _ = write_fingerprint(
             connection=connection,
             execute=lambda *, connection, sql: connection.execute(sql),
             database=None,
@@ -157,7 +157,7 @@ def create_direct_state_history(*, db_path: Path, schema: str = "main") -> None:
             ("run_002", 12),
             ("run_003", 13),
         ):
-            write_fingerprint(
+            _ = write_fingerprint(
                 connection=connection,
                 execute=lambda *, connection, sql: connection.execute(sql),
                 database=None,

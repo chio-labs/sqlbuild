@@ -7,6 +7,7 @@ from itertools import zip_longest
 from pathlib import Path
 
 from scripts.delta_compile_series.constants import (
+    AFTER_FAILED_RULES,
     COMPILE_REUSE_HIT_LINE,
     COMPILE_TIMINGS_PATTERN,
     DELTA_COMPILE_LINE,
@@ -46,6 +47,8 @@ def judged(
         return False, None if reverted else "replayed a compile after an edit"
     reason: str | None = fallback_reason(outcome=outcome)
     if others_edited and reason is not None and STALE_PROBLEMS in reason:
+        return False, None
+    if after_failure and reason == AFTER_FAILED_RULES:
         return False, None
     if edit.fallback_reason is None:
         verified: bool = DELTA_VERIFIED_LINE in outcome.stderr

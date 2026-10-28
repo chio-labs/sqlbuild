@@ -38,13 +38,8 @@ def create_staging_relation(
             target_kind="staging_relation",
         ),
     ) as lifecycle:
-        adapter.drop(
-            connection=connection,
-            destination=staging_qualified,
-            if_exists=True,
-            statement_recorder=statement_recorder,
-        )
-        adapter.create_table_as(
+        create_intermediate_table(
+            adapter=adapter,
             connection=connection,
             destination=staging_qualified,
             sql=resolved_sql,
@@ -53,3 +48,27 @@ def create_staging_relation(
         )
         lifecycle.completed(metadata={"changed_count": 1})
     return None
+
+
+def create_intermediate_table(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    destination: str,
+    sql: str,
+    config: dict[str, Any] | None,
+    statement_recorder: StatementRecorder,
+) -> None:
+    """Create a table only SQLBuild writes, replacing one an interrupted run left behind."""
+
+    if not adapter.create_table_as_replaces():
+        adapter.drop_table(
+            connection=connection, destination=destination, statement_recorder=statement_recorder
+        )
+    adapter.create_table_as(
+        connection=connection,
+        destination=destination,
+        sql=sql,
+        config=config,
+        statement_recorder=statement_recorder,
+    )

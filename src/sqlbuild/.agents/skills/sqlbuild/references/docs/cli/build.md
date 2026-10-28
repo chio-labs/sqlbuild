@@ -168,7 +168,7 @@ JSON `status` is `failed`.
 
 ## Fingerprints
 
-After a successful build, SQLBuild writes version identities to `_sqlbuild_fingerprints` in the target schema. These are used on subsequent runs to detect changes and skip unchanged work. See [Planning and Change Detection](../concepts/planning.md) for details.
+After a successful build, SQLBuild writes version identities to `_sqlbuild_fingerprints` in the target schema. These are used on subsequent runs to detect changes and skip unchanged work. A build writes a row only for a resource whose identity differs from its latest row, so a build that changes no definitions writes none. In a project with model migration history, every build writes a row for each resource it builds. See [Planning and Change Detection](../concepts/planning.md) for details.
 
 ## Runtime artifacts
 

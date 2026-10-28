@@ -11,8 +11,14 @@ from sqlbuild._native import (
     relation_name_key,
     statement_metadata_effect,
 )
-from sqlbuild.adapter.relations.models import StatementMetadataEffect
-from sqlbuild.adapter.relations.types import RelationCacheKey, RelationCacheVersion
+from sqlbuild.adapter.contract.models import RelationInfo
+from sqlbuild.adapter.relations.constants import SCHEMA_LISTING_LOOKUP_THRESHOLD
+from sqlbuild.adapter.relations.models import RunSchemaListing, StatementMetadataEffect
+from sqlbuild.adapter.relations.types import (
+    RelationCacheKey,
+    RelationCacheVersion,
+    SchemaListingScope,
+)
 
 
 class RelationMetadataCache:
@@ -26,6 +32,9 @@ class RelationMetadataCache:
         self._global_version: int = 0
         self._pending_names: dict[int, set[str]] = {}
         self._pending_all: set[int] = set()
+        self._listings: dict[SchemaListingScope, RunSchemaListing] = {}
+        self._schema_lookups: dict[SchemaListingScope, int] = {}
+        self._listing_locks: dict[SchemaListingScope, threading.Lock] = {}
 
     def lookup[ValueT](
         self,
@@ -39,6 +48,77 @@ class RelationMetadataCache:
         """Return the cached answer for this exact lookup, reading it on a miss."""
 
         return cast(ValueT, self._lookup(key=(kind, database, schema, name), read=read))
+
+    def remember(
+        self, *, kind: str, database: str | None, schema: str | None, name: str, value: object
+    ) -> None:
+        """Record an answer this run has just established, such as a relation it dropped."""
+
+        with self._lock:
+            self._entries[(kind, database, schema, name)] = value
+
+    def schema_relation(
+        self,
+        *,
+        scope: SchemaListingScope,
+        name: str,
+        stored_name: str,
+        read_listing: Callable[[], dict[str, RelationInfo]],
+    ) -> tuple[bool, RelationInfo | None]:
+        """Answer ``(answered, relation)`` from the schema listing made at its second lookup."""
+
+        listing: RunSchemaListing | None
+        with self._lock:
+            listing = self._listings.get(scope)
+            if listing is None:
+                lookups: int = self._schema_lookups.get(scope, 0) + 1
+                self._schema_lookups[scope] = lookups
+                if lookups < SCHEMA_LISTING_LOOKUP_THRESHOLD:
+                    return False, None
+            listing_lock: threading.Lock = self._listing_locks.setdefault(scope, threading.Lock())
+        if listing is None:
+            with listing_lock:
+                with self._lock:
+                    listing = self._listings.get(scope)
+                if listing is None:
+                    listing = self.refresh_schema_listing(scope=scope, read_listing=read_listing)
+        with self._lock:
+            if not self._listed_fresh(listing=listing, name=name):
+                return False, None
+        return True, listing.relations.get(stored_name)
+
+    def refresh_schema_listing(
+        self, *, scope: SchemaListingScope, read_listing: Callable[[], dict[str, RelationInfo]]
+    ) -> RunSchemaListing:
+        """List the schema again; every relation in it is current as of this listing."""
+
+        with self._lock:
+            global_version: int = self._global_version
+            name_versions: dict[str, int] = dict(self._name_versions)
+        listing: RunSchemaListing = RunSchemaListing(
+            relations=read_listing(), global_version=global_version, name_versions=name_versions
+        )
+        with self._lock:
+            if self._global_version == global_version:
+                self._listings[scope] = listing
+        return listing
+
+    def listed_relation(
+        self, *, scope: SchemaListingScope, name: str, stored_name: str
+    ) -> tuple[bool, RelationInfo | None]:
+        """Answer from an existing listing of the schema only, without listing it."""
+
+        with self._lock:
+            listing: RunSchemaListing | None = self._listings.get(scope)
+            if listing is None or not self._listed_fresh(listing=listing, name=name):
+                return False, None
+        return True, listing.relations.get(stored_name)
+
+    def _listed_fresh(self, *, listing: RunSchemaListing, name: str) -> bool:
+        name_key: str = relation_name_key(name)
+        return listing.global_version == self._global_version and listing.name_versions.get(
+            name_key, 0
+        ) == self._name_versions.get(name_key, 0)
 
     def invalidate_relations(self, *, qualified_names: tuple[str, ...]) -> None:
         """Evict relations changed outside SQL statements, such as by a warehouse copy job."""
@@ -106,3 +186,4 @@ class RelationMetadataCache:
     def _invalidate_all(self) -> None:
         self._global_version += 1
         self._entries.clear()
+        self._listings.clear()

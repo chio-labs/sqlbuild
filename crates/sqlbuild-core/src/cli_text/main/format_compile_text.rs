@@ -83,6 +83,9 @@ pub fn format_compile_text(report: &CompileTextReport) -> String {
         "Project compiled",
         &summary,
     ));
+    for path in &report.failed_model_sql {
+        lines.push(format!("  {} {path}", style.muted("Failed SQL:")));
+    }
     lines.push(format!(
         "  {} {}/",
         style.muted("Wrote:"),

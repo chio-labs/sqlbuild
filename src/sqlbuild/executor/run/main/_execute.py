@@ -262,12 +262,16 @@ def _staged_lifecycle(
         with diagnostics_context(
             sqlbuild_phase="contract", sqlbuild_action_name="validate_staging"
         ):
-            staging_columns: tuple[ColumnInfo, ...] = inspect_runtime_relation_schema(
-                adapter=adapter,
-                connection=connection,
-                database=targets.target_database,
-                schema=targets.target_schema,
-                name=targets.staging_table,
+            staging_columns: tuple[ColumnInfo, ...] = (
+                ()
+                if not entry.contract_enforced
+                else inspect_runtime_relation_schema(
+                    adapter=adapter,
+                    connection=connection,
+                    database=targets.target_database,
+                    schema=targets.target_schema,
+                    name=targets.staging_table,
+                )
             )
             validate_runtime_contract(
                 entry=entry,
@@ -362,6 +366,7 @@ def _staged_lifecycle(
         connection=connection,
         run_id=context.run_id,
         query_change_tracking=context.query_change_tracking,
+        fingerprint_writes=context.fingerprint_writes,
         model_audits=context.model_audits,
         audit_results=tuple(audit_results),
     )
@@ -490,6 +495,7 @@ def _immediate_lifecycle(
         connection=connection,
         run_id=context.run_id,
         query_change_tracking=context.query_change_tracking,
+        fingerprint_writes=context.fingerprint_writes,
         model_audits=context.model_audits,
         audit_results=tuple(audit_results),
     )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections import defaultdict
 from dataclasses import replace
 from typing import Any
@@ -35,6 +36,8 @@ from sqlbuild.executor.run.models import TableTargets
 from sqlbuild.executor.scenario.models import ScenarioCleanupTarget
 
 _DEBUG_LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
+
+_MINIMUM_LISTING_PREFIX: int = 8
 
 
 def collect_scenario_cleanup_targets(
@@ -178,12 +181,32 @@ def existing_scenario_cleanup_targets(
         database: str | None
         names: set[str]
         for database, names in names_by_database.items():
+            database_targets: tuple[ScenarioCleanupTarget, ...] = tuple(
+                target for target in listed_targets if target.database == database
+            )
+            prefix: str = os.path.commonprefix(
+                [str(target.name).lower() for target in database_targets]
+            )
+            relations: tuple[RelationInfo, ...] | None = (
+                adapter.list_relations_with_prefix(
+                    connection=connection,
+                    database=database,
+                    schemas=tuple(sorted({str(target.schema) for target in database_targets})),
+                    prefix=prefix,
+                )
+                if len(prefix) >= _MINIMUM_LISTING_PREFIX
+                else None
+            )
             relation: RelationInfo
-            for relation in adapter.list_relations(
-                connection=connection,
-                database=database,
-                schemas=tuple(sorted(schemas_by_database[database])),
-                names=tuple(sorted(names)),
+            for relation in (
+                relations
+                if relations is not None
+                else adapter.list_relations(
+                    connection=connection,
+                    database=database,
+                    schemas=tuple(sorted(schemas_by_database[database])),
+                    names=tuple(sorted(names)),
+                )
             ):
                 exact_types[(database, relation.schema, relation.name)] = relation.relation_type
                 folded_types[
@@ -212,17 +235,36 @@ def existing_scenario_cleanup_targets(
         )
         if relation_type is None:
             continue
+        listed_type: RelationType = normalize_relation_type(relation_type)
         existing.append(
             replace(
                 target,
                 materialization_type=(
                     MaterializationType.VIEW
-                    if normalize_relation_type(relation_type) == RelationType.VIEW
+                    if listed_type == RelationType.VIEW
                     else MaterializationType.TABLE
                 ),
+                listed=listed_type != RelationType.OTHER,
             )
         )
     return tuple(existing)
+
+
+def confirmed_absent_targets(
+    *,
+    targets: tuple[ScenarioCleanupTarget, ...],
+    dropped: tuple[ScenarioCleanupTarget, ...],
+    adapter: BaseAdapter,
+) -> tuple[tuple[str | None, str | None, str], ...]:
+    """Locations a successful cleanup left empty: listed absent, or dropped by their listed kind."""
+
+    unconfirmed: set[str] = {target.target_relation for target in dropped if not target.listed}
+    return tuple(
+        (target.database, target.schema, str(target.name))
+        for target in targets
+        if _authoritatively_listable(target=target, adapter=adapter)
+        and target.target_relation not in unconfirmed
+    )
 
 
 def _authoritatively_listable(*, target: ScenarioCleanupTarget, adapter: BaseAdapter) -> bool:

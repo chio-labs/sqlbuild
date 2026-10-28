@@ -104,27 +104,52 @@ fn given_partial_reasons_when_building_notice_then_groups_by_reason() {
 
 #[test]
 fn given_report_when_formatting_then_lists_models_and_summary() {
-    let test_cases = [CompileTextTestCase {
-        description: "one plain model with a manifest and unavailable lineage",
-        report: CompileTextReport {
-            style: CliStyle { use_color: false },
-            models: vec![ModelLine {
-                name: "orders".to_owned(),
-                failed: false,
-                column_count: 2,
-            }],
-            semantic_notice: None,
-            diagnostics: Vec::new(),
-            seed_count: 1,
-            function_count: 0,
-            error_count: 0,
-            warning_count: 0,
-            compiled_dir: "target/compiled".to_owned(),
-            manifest: true,
-            lineage: LineageNote::Unavailable,
+    let test_cases = [
+        CompileTextTestCase {
+            description: "one plain model with a manifest and unavailable lineage",
+            report: CompileTextReport {
+                style: CliStyle { use_color: false },
+                models: vec![ModelLine {
+                    name: "orders".to_owned(),
+                    failed: false,
+                    column_count: 2,
+                }],
+                semantic_notice: None,
+                diagnostics: Vec::new(),
+                seed_count: 1,
+                function_count: 0,
+                error_count: 0,
+                warning_count: 0,
+                compiled_dir: "target/compiled".to_owned(),
+                failed_model_sql: Vec::new(),
+                manifest: true,
+                lineage: LineageNote::Unavailable,
+            },
+            expected_text: "\nCompile ready  1 model\n\n\u{2514}\u{2500}\u{2500} orders                   OK   2 columns\n\n\u{2713} Project compiled  1 model, 1 seed, 0 functions, 0 errors, 0 warnings\n  Wrote: target/compiled/\n  Wrote: target/manifest.json\n  Column lineage: unavailable\n",
         },
-        expected_text: "\nCompile ready  1 model\n\n\u{2514}\u{2500}\u{2500} orders                   OK   2 columns\n\n\u{2713} Project compiled  1 model, 1 seed, 0 functions, 0 errors, 0 warnings\n  Wrote: target/compiled/\n  Wrote: target/manifest.json\n  Column lineage: unavailable\n",
-    }];
+        CompileTextTestCase {
+            description: "a compile whose Rules failed names each failing model's SQL",
+            report: CompileTextReport {
+                style: CliStyle { use_color: false },
+                models: vec![ModelLine {
+                    name: "orders".to_owned(),
+                    failed: true,
+                    column_count: 2,
+                }],
+                semantic_notice: None,
+                diagnostics: Vec::new(),
+                seed_count: 0,
+                function_count: 0,
+                error_count: 1,
+                warning_count: 0,
+                compiled_dir: "target/compiled-failed".to_owned(),
+                failed_model_sql: vec!["target/compiled-failed/models/orders.sql".to_owned()],
+                manifest: false,
+                lineage: LineageNote::Silent,
+            },
+            expected_text: "\nCompile ready  1 model\n\n\u{2514}\u{2500}\u{2500} orders                   FAIL 2 columns\n\n\u{2717} Project compiled  1 model, 0 seeds, 0 functions, 1 error, 0 warnings\n  Failed SQL: target/compiled-failed/models/orders.sql\n  Wrote: target/compiled-failed/\n",
+        },
+    ];
 
     for test_case in test_cases {
         assert_eq!(

@@ -237,7 +237,7 @@ def test_given_warehouse_state_when_gathering_snapshot_then_returns_expected(
 
     fp_entry: tuple[str, Fingerprint]
     for fp_entry in test_case.fingerprints_to_write:
-        write_fingerprint(
+        _ = write_fingerprint(
             connection=connection,
             execute=execute,
             database=None,

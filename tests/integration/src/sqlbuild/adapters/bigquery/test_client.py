@@ -889,7 +889,7 @@ def test_given_fingerprint_row_when_written_to_bigquery_then_base64_sql_round_tr
         ts=datetime(2026, 5, 4, 12, 0, tzinfo=UTC),
     )
 
-    write_fingerprint(
+    _ = write_fingerprint(
         connection=connection,
         execute=adapter.execute,
         database=bigquery_project,

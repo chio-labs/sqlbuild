@@ -644,6 +644,7 @@ const R_MODEL_PLAN_ENTRY: RecordSpec = RecordSpec {
         FieldSpec::new("pre_hooks", FieldDefault::None),
         FieldSpec::new("post_hooks", FieldDefault::None),
         FieldSpec::new("previous_query_sql", FieldDefault::None),
+        FieldSpec::new("previous_fingerprint", FieldDefault::None),
         FieldSpec::new("fingerprint_metadata_json", FieldDefault::None),
         FieldSpec::new("previous_metadata_json", FieldDefault::None),
         FieldSpec::new("fingerprint_version_hash", FieldDefault::None),

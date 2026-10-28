@@ -691,9 +691,18 @@ pub(crate) fn assemble_model_plan_entry<'py>(
     entry.set_item(
         "previous_query_sql",
         if fingerprint.is_none() {
-            fingerprint
+            fingerprint.clone()
         } else {
             native_field(&fingerprint, "definition")?
+        },
+    )?;
+    let skippable: bool = native_field(snapshot, "migration_state_schemas")?.len()? == 0;
+    entry.set_item(
+        "previous_fingerprint",
+        if skippable {
+            fingerprint
+        } else {
+            py.None().into_bound(py)
         },
     )?;
     entry.set_item("schema_actions", schema_actions)?;

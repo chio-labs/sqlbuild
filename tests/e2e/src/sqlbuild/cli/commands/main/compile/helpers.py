@@ -3688,13 +3688,14 @@ def touch_back(path: Path, *, seconds: int) -> None:
 
 
 def compiled_artifacts(*, project_dir: Path) -> dict[str, bytes]:
-    """Return every compiled SQL artifact by path relative to target/compiled."""
+    """Return every compiled and failed-compile SQL artifact by path relative to target/."""
 
-    compiled_dir: Path = project_dir / "target" / "compiled"
-    return {
-        path.relative_to(compiled_dir).as_posix(): path.read_bytes()
-        for path in sorted(compiled_dir.rglob("*.sql"))
-    }
+    target_dir: Path = project_dir / "target"
+    paths: list[Path] = [
+        *sorted((target_dir / "compiled").rglob("*.sql")),
+        *sorted((target_dir / "compiled-failed").rglob("*.sql")),
+    ]
+    return {path.relative_to(target_dir).as_posix(): path.read_bytes() for path in paths}
 
 
 def compile_in_process_reused(

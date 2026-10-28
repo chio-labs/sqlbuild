@@ -1334,8 +1334,27 @@ class RuleFailureArtifactsTestCase:
     description: str
     open_orders_sql: str
     expected_exit_code: int
-    expected_open_orders: str
+    expected_compiled: dict[str, bytes]
+    expected_failed: dict[str, bytes]
     expected_manifest: bool
+    expected_output_fragment: str
+
+
+@dataclass(frozen=True)
+class RuleFailureSequenceTestCase:
+    description: str
+    environment: dict[str, str]
+    extra_args: tuple[str, ...]
+    expected_rewarm_reused: bool
+    expected_minimum_verified_deltas: int
+
+
+@dataclass(frozen=True)
+class RuleFailureStaleArtifactTestCase:
+    description: str
+    environment: dict[str, str]
+    extra_args: tuple[str, ...]
+    expected_after_failure_fragment: str
 
 
 @dataclass(frozen=True)
@@ -1344,3 +1363,10 @@ class SignalledScenarioTestCase:
     sent_signal: signal.Signals
     expected_exit_code: int
     expected_last_line: str
+
+
+@dataclass(frozen=True)
+class RuleFailureManifestTestCase:
+    description: str
+    compile_args: tuple[str, ...]
+    expected_artifacts: dict[str, object]

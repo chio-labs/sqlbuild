@@ -22,7 +22,8 @@
    ]
   }
  ],
- "compiled": {
+ "compiled": {},
+ "compiled_failed": {
   "models/marts/customer_totals.sql": [
    "SELECT customer_id, SUM(amount) AS total_amount",
    "FROM __ref(\"stg_orders\")",

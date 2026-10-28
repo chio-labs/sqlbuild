@@ -48,7 +48,7 @@ def try_write_seed_fingerprint(
             metadata_json=seed_entry.fingerprint_metadata_json,
             ts=datetime.now(tz=UTC),
         )
-        write_fingerprint(
+        _ = write_fingerprint(
             connection=connection,
             execute=adapter.execute,
             database=seed_entry.destination.database,
