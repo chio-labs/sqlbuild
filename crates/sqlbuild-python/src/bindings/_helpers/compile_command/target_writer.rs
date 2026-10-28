@@ -806,7 +806,7 @@ fn rule_error_lines(
     Ok(lines)
 }
 
-/// After Rules failed, write every model's compiled SQL so the expansion they checked can be read. A model with Rule errors starts with a header marking it not buildable and listing them. An earlier manifest is removed, since it no longer describes `target/`; nothing else changes: no tests, cache or stale-file removal.
+/// After Rules failed, write every model's compiled SQL so the expansion they checked can be read. A model with Rule errors starts with a header marking it not buildable and listing them. An earlier manifest and every other compiled file are removed, since they no longer describe `target/`; no tests or cache are written.
 pub(crate) fn write_rule_failed_models<'py>(
     target_dir: &Bound<'py, PyAny>,
     (project, project_dir): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
@@ -822,6 +822,7 @@ pub(crate) fn write_rule_failed_models<'py>(
     }
     let compiled_dir: PathBuf = joined(target_dir, &[COMPILED_DIR])?.extract()?;
     let mut batch: ArtifactBatch = ArtifactBatch::new(true, None);
+    let mut written: Vec<PathBuf> = Vec::new();
     for model in native_field(project, "models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
         let (relative_path, query_sql): (String, String) =
@@ -838,13 +839,12 @@ pub(crate) fn write_rule_failed_models<'py>(
             Some(lines) => format!("{RULE_FAILED_HEADER}\n{}\n{query_sql}", lines.join("\n")),
             None => query_sql,
         };
-        batch.queue_sql_at(
-            py,
-            native_model_output_path(&compiled_dir, &relative_path),
-            &sql,
-        )?;
+        let path: PathBuf = native_model_output_path(&compiled_dir, &relative_path);
+        batch.queue_sql_at(py, path.clone(), &sql)?;
+        written.push(path);
     }
-    batch.flush(py)
+    batch.flush(py)?;
+    remove_stale(target_dir, written, None)
 }
 
 /// Plan uncached SQL tests and report their errors without writing artifacts or cache.

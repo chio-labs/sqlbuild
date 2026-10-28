@@ -66,6 +66,7 @@ def test_given_rule_findings_when_compiling_then_models_are_written_with_a_failu
         "models/open_orders.sql": open_orders_model(
             'SELECT o.order_id, o.status FROM __ref("orders") AS o'
         ),
+        "models/retired_orders.sql": _ORDERS,
     }
     for relative, contents in files.items():
         path: Path = tmp_path / relative
@@ -83,6 +84,7 @@ def test_given_rule_findings_when_compiling_then_models_are_written_with_a_failu
         open_orders_model(test_case.open_orders_sql), encoding="utf-8"
     )
     assert (tmp_path / "target" / "manifest.json").exists()
+    (tmp_path / "models" / "retired_orders.sql").unlink()
 
     exit_code: int = main(compile_args)
 
@@ -96,3 +98,4 @@ def test_given_rule_findings_when_compiling_then_models_are_written_with_a_failu
         "SELECT 1 AS order_id, 'open' AS status\n"
     )
     assert (tmp_path / "target" / "manifest.json").exists() is test_case.expected_manifest
+    assert sorted(path.name for path in compiled.iterdir()) == ["open_orders.sql", "orders.sql"]
