@@ -1431,6 +1431,7 @@ dependencies = [
  "serde_json",
  "sqlbuild-cache",
  "sqlbuild-core",
+ "sqlbuild-sqltext",
  "tempfile",
 ]
 

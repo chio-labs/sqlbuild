@@ -7,6 +7,7 @@ use sqlbuild_sqltext::header_strings::main::follows_description_key::follows_des
 use sqlbuild_sqltext::header_strings::main::opens_triple_quote::opens_triple_quote;
 use sqlbuild_sqltext::header_strings::main::prose_end::prose_end;
 use sqlbuild_sqltext::header_strings::main::triple_quoted_end::triple_quoted_end;
+use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::sql_macros::constants::{HEADER_KEYWORD, SQL_KIND_WORD};
 use crate::sql_macros::errors::LexError;
@@ -57,15 +58,36 @@ pub(crate) const DECLARATION_WORDS: [&str; 3] = ["const", "enum", "param"];
 
 /// Every token of `sql`; text unclosed under doubled-quote escapes is reread with backslash ones.
 pub(crate) fn tokens(sql: &str) -> Result<Vec<Token>, LexError> {
-    match scanned_tokens(sql, false) {
+    tokens_with(sql, None)
+}
+
+/// Every token of `sql`, with `syntax`'s backslash escapes, or as [`tokens`] reads it.
+pub(crate) fn tokens_with(
+    sql: &str,
+    syntax: Option<&LexicalSyntax>,
+) -> Result<Vec<Token>, LexError> {
+    if let Some(syntax) = syntax {
+        let escapes = |quote: u8| {
+            syntax
+                .backslash_escape_quotes
+                .iter()
+                .any(|value| value.as_bytes() == [quote])
+        };
+        return scanned_tokens(sql, &escapes);
+    }
+    match scanned_tokens(sql, &|_| false) {
         Err(LexError::UnclosedQuote(start)) => {
-            scanned_tokens(sql, true).map_err(|_| LexError::UnclosedQuote(start))
+            scanned_tokens(sql, &|_| true).map_err(|_| LexError::UnclosedQuote(start))
         }
         scanned => scanned,
     }
 }
 
-fn scanned_tokens(sql: &str, backslash_escapes: bool) -> Result<Vec<Token>, LexError> {
+/// Every token of `sql`; a backslash escapes inside quotes for which `backslash_escapes` holds.
+fn scanned_tokens(
+    sql: &str,
+    backslash_escapes: &dyn Fn(u8) -> bool,
+) -> Result<Vec<Token>, LexError> {
     let bytes: &[u8] = sql.as_bytes();
     let mut found: Vec<Token> = Vec::new();
     let mut index: usize = 0;
@@ -103,12 +125,12 @@ fn scanned_tokens(sql: &str, backslash_escapes: bool) -> Result<Vec<Token>, LexE
                 TokenKind::Quoted
             }
             b'\'' => {
-                index = quote_end(bytes, index, backslash_escapes)
+                index = quote_end(bytes, index, backslash_escapes(byte))
                     .ok_or(LexError::UnclosedQuote(start))?;
                 TokenKind::Text
             }
             b'"' | b'`' => {
-                index = quote_end(bytes, index, backslash_escapes)
+                index = quote_end(bytes, index, backslash_escapes(byte))
                     .ok_or(LexError::UnclosedQuote(start))?;
                 TokenKind::Quoted
             }
@@ -366,11 +388,14 @@ pub(crate) enum AtConstruct {
 }
 
 /// Every SQL macro call, Python macro call and bare call in `sql`, top-level and nested.
-pub(crate) fn at_constructs(sql: &str) -> Result<Vec<AtConstruct>, LexError> {
+pub(crate) fn at_constructs(
+    sql: &str,
+    syntax: Option<&LexicalSyntax>,
+) -> Result<Vec<AtConstruct>, LexError> {
     if !sql.contains('@') {
         return Ok(Vec::new());
     }
-    let scanned: Vec<Token> = tokens(sql)?;
+    let scanned: Vec<Token> = tokens_with(sql, syntax)?;
     let mut found: Vec<AtConstruct> = Vec::new();
     for (index, token) in scanned.iter().enumerate() {
         if !token.is(sql, "@") {
