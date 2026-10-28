@@ -14,6 +14,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.statement_counts._test_typ
 )
 from tests.integration.src.sqlbuild.cli.commands.main.statement_counts.helpers import (
     add_post_hook,
+    add_upstream_reads,
     execute_sql,
     fingerprint_rows,
     intermediate_relations,
@@ -80,9 +81,10 @@ def test_given_second_build_when_identities_are_unchanged_then_only_changed_mode
     "test_case",
     [
         FingerprintLossTestCase(
-            description="a view's post hook drops the table after the table model recorded",
+            description="a view's post hook drops the table after every model it reads recorded",
             edited_models=("orders_table",),
             hooked_model="orders_view",
+            hooked_model_reads=("orders_daily", "orders_merge"),
             expected_setups=2,
             expected_rows_after_loss={"orders_view": 1},
             expected_models_after_rebuild=_ALL_MODELS,
@@ -108,6 +110,7 @@ def test_given_fingerprint_table_dropped_mid_build_when_building_then_later_mode
     original: str = add_post_hook(
         project_dir, test_case.hooked_model, "DROP TABLE main._sqlbuild_fingerprints"
     )
+    add_upstream_reads(project_dir, test_case.hooked_model, test_case.hooked_model_reads)
 
     code, output, counts, _ = run_counted(project_dir=project_dir, args=("build",), capsys=capsys)
     after_loss: dict[str, int] = fingerprint_rows(project_dir)

@@ -360,6 +360,18 @@ def add_post_hook(project_dir: Path, name: str, sql: str) -> str:
     return original
 
 
+def add_upstream_reads(project_dir: Path, name: str, upstream: tuple[str, ...]) -> None:
+    """Make one model read ``upstream`` without changing its rows, so it builds after them."""
+
+    model: Path = project_dir / "models" / f"{name}.sql"
+    filters: str = " AND ".join(
+        f'NOT EXISTS (SELECT 1 FROM __ref("{reference}") WHERE FALSE)' for reference in upstream
+    )
+    _ = model.write_text(
+        model.read_text(encoding="utf-8").rstrip("\n") + f" WHERE {filters}\n", encoding="utf-8"
+    )
+
+
 def run_step(
     *,
     project_dir: Path,

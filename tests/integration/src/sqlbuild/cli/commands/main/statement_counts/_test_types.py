@@ -38,6 +38,7 @@ class FingerprintLossTestCase:
     description: str
     edited_models: tuple[str, ...]
     hooked_model: str
+    hooked_model_reads: tuple[str, ...]
     expected_setups: int
     expected_rows_after_loss: dict[str, int]
     expected_models_after_rebuild: tuple[str, ...]
