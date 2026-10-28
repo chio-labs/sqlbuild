@@ -9,6 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
+from functools import partial
 from typing import Any
 
 from sqlbuild._native import (
@@ -83,6 +84,7 @@ from sqlbuild.executor.run._helpers.execution.results import (
     build_skipped_result,
 )
 from sqlbuild.executor.run._helpers.execution.schema import inspect_runtime_relation_schema
+from sqlbuild.executor.run._helpers.execution.staging import create_intermediate_table
 from sqlbuild.executor.run._helpers.execution.table_config import model_output_config
 from sqlbuild.executor.run._helpers.materializations.full_refresh import (
     promote_full_refresh_rebuild,
@@ -239,6 +241,20 @@ class _MicrobatchLifecyclePlan:
     batch_count: int
     cursor_start: str
     cursor_end_exclusive: str
+
+
+class _BatchColumns:
+    """The delta columns of a model's first batch; later batches stage the same query's output."""
+
+    def __init__(self) -> None:
+        self._delta: tuple[ColumnInfo, ...] | None = None
+
+    def delta(self, read: Callable[[], tuple[ColumnInfo, ...]]) -> tuple[ColumnInfo, ...]:
+        """The first batch's delta columns, read once."""
+
+        if self._delta is None:
+            self._delta = read()
+        return self._delta
 
 
 @dataclass(frozen=True)
@@ -608,6 +624,7 @@ def execute_microbatch_entry(
             connection=context.connection,
             run_id=context.run_id,
             query_change_tracking=context.query_change_tracking,
+            fingerprint_writes=context.fingerprint_writes,
             model_audits=context.model_audits,
             audit_results=tuple(state.audit_results),
         )
@@ -1052,6 +1069,7 @@ def _execute_microbatch_batches(
     completed_batches: int = 0
     total_rows: int = 0
     row_count_known: bool = False
+    known_columns: _BatchColumns = _BatchColumns()
     batch: BatchWindow
     for batch in batches:
         lifecycle: MicrobatchLifecycle = _microbatch_lifecycle(
@@ -1122,6 +1140,7 @@ def _execute_microbatch_batches(
             window_text=window_text,
             targets=batch_targets,
             state=state,
+            known_columns=known_columns,
         )
         if isinstance(dml_result, ModelExecutionResult):
             lifecycle.failed(error_code=dml_result.error_code)
@@ -1183,6 +1202,8 @@ def _execute_microbatch_batches(
                 window_text=window_text,
                 targets=batch_targets,
                 state=state,
+                replaced_next=batch is not batches[-1]
+                and batch_targets.delta_qualified == targets.delta_qualified,
             )
         except BaseException as error:
             lifecycle.failed(error=error)
@@ -2815,13 +2836,8 @@ def _stage_microbatch_delta(
                     target_kind="staging_relation",
                 ),
             ) as lifecycle:
-                context.adapter.drop(
-                    connection=context.connection,
-                    destination=targets.delta_qualified,
-                    if_exists=True,
-                    statement_recorder=state.statement_recorder,
-                )
-                context.adapter.create_table_as(
+                create_intermediate_table(
+                    adapter=context.adapter,
                     connection=context.connection,
                     destination=targets.delta_qualified,
                     sql=batch_sql,
@@ -2999,6 +3015,7 @@ def _apply_microbatch_dml(
     window_text: str,
     targets: MicrobatchTargets,
     state: MicrobatchLifecycleState,
+    known_columns: _BatchColumns,
 ) -> ModelExecutionResult | int | None:
     try:
         with diagnostics_context(
@@ -3017,16 +3034,20 @@ def _apply_microbatch_dml(
                 if not is_full_refresh or completed_batches > 0
                 else ()
             )
-            delta_columns: tuple[ColumnInfo, ...] = inspect_runtime_relation_schema(
-                adapter=context.adapter,
-                connection=context.connection,
-                database=targets.target_database,
-                schema=targets.target_schema,
-                name=targets.delta_table,
+            delta_columns: tuple[ColumnInfo, ...] = known_columns.delta(
+                partial(
+                    inspect_runtime_relation_schema,
+                    adapter=context.adapter,
+                    connection=context.connection,
+                    database=targets.target_database,
+                    schema=targets.target_schema,
+                    name=targets.delta_table,
+                )
             )
             _validate_cursor_output_columns(entry=context.entry, delta_columns=delta_columns)
-            batch_rows: int | None = _count_microbatch_delta_rows(context=context, targets=targets)
+            batch_rows: int | None
             if is_full_refresh and completed_batches == 0:
+                batch_rows = _count_microbatch_delta_rows(context=context, targets=targets)
                 context.adapter.create_table_as(
                     connection=context.connection,
                     destination=targets.target_qualified,
@@ -3050,8 +3071,11 @@ def _apply_microbatch_dml(
                     cursor_end=render(value=batch.end),
                     statement_recorder=state.statement_recorder,
                 )
-                if reported_rows is not None:
-                    batch_rows = reported_rows
+                batch_rows = (
+                    reported_rows
+                    if reported_rows is not None
+                    else _count_microbatch_delta_rows(context=context, targets=targets)
+                )
     except Exception as exc:
         return build_failed_result(
             entry=context.entry,
@@ -3085,18 +3109,21 @@ def _complete_microbatch_batch(
     window_text: str,
     targets: MicrobatchTargets,
     state: MicrobatchLifecycleState,
+    replaced_next: bool,
 ) -> None:
-    with diagnostics_context(
-        sqlbuild_phase="cleanup",
-        sqlbuild_action_name="drop_delta",
-        sqlbuild_window=window_text,
-    ):
-        context.adapter.drop(
-            connection=context.connection,
-            destination=targets.delta_qualified,
-            if_exists=True,
-            statement_recorder=state.statement_recorder,
-        )
+    """Finish one batch; its delta stays only when the next batch's delta replaces it."""
+
+    if not (replaced_next and context.adapter.create_table_as_replaces()):
+        with diagnostics_context(
+            sqlbuild_phase="cleanup",
+            sqlbuild_action_name="drop_delta",
+            sqlbuild_window=window_text,
+        ):
+            context.adapter.drop_table(
+                connection=context.connection,
+                destination=targets.delta_qualified,
+                statement_recorder=state.statement_recorder,
+            )
     log_debug_event(
         logger=_DEBUG_LOGGER,
         message="",
@@ -3140,10 +3167,9 @@ def _prepare_full_refresh_rebuild(
                 statement_recorder=state.statement_recorder,
             )
         elif rebuild_exists:
-            context.adapter.drop(
+            context.adapter.drop_table(
                 connection=context.connection,
                 destination=relations.rebuild_qualified,
-                if_exists=True,
                 statement_recorder=state.statement_recorder,
             )
     except Exception as exc:

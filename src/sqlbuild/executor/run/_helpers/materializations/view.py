@@ -213,6 +213,7 @@ def execute_view_entry(
             query_change_tracking=query_change_tracking,
             model_audits=model_audits,
             audit_results=tuple(audit_results),
+            fingerprint_writes=context.fingerprint_writes,
         )
     )
 

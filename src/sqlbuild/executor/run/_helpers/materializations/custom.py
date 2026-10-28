@@ -391,6 +391,7 @@ def _complete_custom_materialization(
         connection=context.connection,
         run_id=context.run_id,
         query_change_tracking=context.query_change_tracking,
+        fingerprint_writes=context.fingerprint_writes,
         model_audits=context.model_audits,
         audit_results=tuple(state.audit_results),
     )

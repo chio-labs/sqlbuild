@@ -42,6 +42,7 @@ from sqlbuild.executor.run._helpers.execution.results import (
     build_skipped_result,
 )
 from sqlbuild.executor.run._helpers.execution.schema import inspect_runtime_relation_schema
+from sqlbuild.executor.run._helpers.execution.staging import create_intermediate_table
 from sqlbuild.executor.run._helpers.execution.table_config import model_output_config
 from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run._helpers.validation.contracts import validate_runtime_contract
@@ -388,10 +389,9 @@ def execute_incremental_entry(
         return post_hook_outcome.failure
     if post_hook_outcome.skipped:
         with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_delta"):
-            adapter.drop(
+            adapter.drop_table(
                 connection=connection,
                 destination=delta_qualified,
-                if_exists=True,
                 statement_recorder=statement_recorder,
             )
         return build_skipped_result(
@@ -410,16 +410,16 @@ def execute_incremental_entry(
             connection=connection,
             run_id=context.run_id,
             query_change_tracking=context.query_change_tracking,
+            fingerprint_writes=context.fingerprint_writes,
             model_audits=context.model_audits,
             audit_results=tuple(audit_results),
         )
     )
 
     with diagnostics_context(sqlbuild_phase="cleanup", sqlbuild_action_name="drop_delta"):
-        adapter.drop(
+        adapter.drop_table(
             connection=connection,
             destination=delta_qualified,
-            if_exists=True,
             statement_recorder=statement_recorder,
         )
 
@@ -513,13 +513,8 @@ def _prepare_delta_relation(
                 target_kind="staging_relation",
             ),
         ) as lifecycle:
-            adapter.drop(
-                connection=connection,
-                destination=delta_qualified,
-                if_exists=True,
-                statement_recorder=statement_recorder,
-            )
-            adapter.create_table_as(
+            create_intermediate_table(
+                adapter=adapter,
                 connection=connection,
                 destination=delta_qualified,
                 sql=preparation.resolved_sql,
