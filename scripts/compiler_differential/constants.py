@@ -41,6 +41,7 @@ DUCKDB_ADAPTER: str = "duckdb"
 PROJECT_DIRECTORY: str = "project"
 CAPTURES_DIRECTORY: str = "captures"
 COMPILED_DIRECTORY: str = "target/compiled"
+FAILED_COMPILED_DIRECTORY: str = "target/compiled-failed"
 MANIFEST_FILE: str = "target/manifest.json"
 ELAPSED_TIME_PATTERN: re.Pattern[str] = re.compile(r"\b\d+(?:\.\d+)?\s?m?s\b")
 ELAPSED_TIME_MASK: str = "<elapsed>"

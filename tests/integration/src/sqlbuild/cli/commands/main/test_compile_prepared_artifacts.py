@@ -234,12 +234,12 @@ def test_given_existing_artifacts_when_rules_fail_then_staged_changes_are_not_pu
     failed: dict[str, object] = json.loads(capsys.readouterr().out)
     assert failed["has_errors"] is True
     changed: Path = compiled / "models" / "orders_000.sql"
-    assert {path: path.read_bytes() for path in before} == {
-        **before,
-        changed: b"-- sqb: compile failed for this model; not buildable\n"
+    assert {path: path.read_bytes() for path in before} == before
+    assert (tmp_path / "target" / "compiled-failed" / "models" / "orders_000.sql").read_bytes() == (
+        b"-- sqb: compile failed for this model; not buildable\n"
         b"-- XSQBRARCH001 at models/orders_000.sql:1:1: Model rejected\n"
-        b"SELECT CAST(2 AS INTEGER) AS order_id\n",
-    }
+        b"SELECT CAST(2 AS INTEGER) AS order_id\n"
+    )
     assert stale.exists()
     assert staging_directories(tmp_path / "target") == []
 
@@ -248,6 +248,7 @@ def test_given_existing_artifacts_when_rules_fail_then_staged_changes_are_not_pu
     final: dict[str, object] = json.loads(capsys.readouterr().out)
     assert final["has_errors"] is False
     assert not stale.exists()
+    assert not (tmp_path / "target" / "compiled-failed").exists()
     for path in modified_times.keys() - {changed}:
         assert path.stat().st_mtime_ns == modified_times[path]
         assert path.read_bytes() == before[path]

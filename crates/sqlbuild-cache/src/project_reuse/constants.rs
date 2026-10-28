@@ -8,3 +8,5 @@ pub const REUSE_IMAGE_SUFFIX: &str = "image";
 pub const REUSE_MAX_STORED_IMAGES: usize = 2;
 /// Prefix of digests computed natively, so they never equal a Python digest.
 pub const NATIVE_DIGEST_PREFIX: &str = "b3:";
+/// The sibling of the compiled directory that holds a compile whose Rules failed.
+pub const FAILED_COMPILED_DIRECTORY_NAME: &str = "compiled-failed";

@@ -8,6 +8,7 @@ use pyo3::prelude::{
 };
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyList, PyString};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
+use sqlbuild_cache::project_reuse::constants::FAILED_COMPILED_DIRECTORY_NAME;
 use sqlbuild_cli::replay::main::write_launch_record::write_launch_record as write_record_file;
 use sqlbuild_core::command_output::constants::INVOCATION_CONTEXT_ENV;
 
@@ -554,6 +555,7 @@ fn compiled_with_delta<'py>(
             .join(TARGET_DIRECTORY_NAME)
             .join(COMPILED_DIRECTORY_NAME),
     )?;
+    let failed_root: PathBuf = compiled_root.with_file_name(FAILED_COMPILED_DIRECTORY_NAME);
     match delta {
         DeltaOutcome::Finished(finished) if !verifying => {
             keep_delta_claim();
@@ -595,10 +597,13 @@ fn compiled_with_delta<'py>(
             raised: None,
             compiled: verify::compiled_digests(&compiled_root),
             compiled_root: compiled_root.to_string_lossy().into_owned(),
+            failed: verify::compiled_digests(&failed_root),
+            failed_root: failed_root.to_string_lossy().into_owned(),
         }),
         DeltaOutcome::Raised(error) => verify::hold_expected(verify::Expected {
             raised: Some(error.to_string()),
             compiled_root: compiled_root.to_string_lossy().into_owned(),
+            failed_root: failed_root.to_string_lossy().into_owned(),
             ..verify::Expected::default()
         }),
     }

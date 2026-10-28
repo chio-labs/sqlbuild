@@ -13,6 +13,7 @@ from scripts.compiler_differential.constants import (
     COMPILED_DIRECTORY,
     EXCLUDED_ENVIRONMENT_KEYS,
     EXCLUDED_ENVIRONMENT_PREFIX,
+    FAILED_COMPILED_DIRECTORY,
     GENERATOR_ENVIRONMENT,
     MANIFEST_FILE,
     PROJECT_DIRECTORY,
@@ -73,6 +74,7 @@ def run_project(
         compiled=_compiled_tree(project_dir / COMPILED_DIRECTORY),
         manifest=_optional_text(project_dir / MANIFEST_FILE),
         captures=_captures(capture_root),
+        compiled_failed=_compiled_tree(project_dir / FAILED_COMPILED_DIRECTORY),
     )
 
 

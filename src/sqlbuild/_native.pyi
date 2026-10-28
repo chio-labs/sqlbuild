@@ -7345,6 +7345,8 @@ class WrittenTarget(NativeRecord):
     test_count: int
     target_dir: Path
     diagnostics: tuple[CompilerDiagnostic, ...]
+    failed_compile: bool
+    failed_model_sql: tuple[str, ...]
     def __init__(
         self,
         model_count: int,
@@ -7354,6 +7356,8 @@ class WrittenTarget(NativeRecord):
         test_count: int,
         target_dir: Path,
         diagnostics: tuple[CompilerDiagnostic, ...] = ...,
+        failed_compile: bool = ...,
+        failed_model_sql: tuple[str, ...] = ...,
     ) -> None: ...
 
 class SkillMaintenanceResult(NativeRecord):

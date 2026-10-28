@@ -25,7 +25,7 @@ from scripts.compile_performance_ratio.constants import (
     COLD_MODE,
     COMPILE_ENTRY,
     COMPILE_TIMINGS_KEY,
-    COMPILED_DIRECTORY,
+    COMPILED_TREES,
     DENSE_KIND,
     EDIT_MODE,
     ERROR_TAIL_CHARACTERS,
@@ -41,6 +41,7 @@ from scripts.compile_performance_ratio.constants import (
     MODE_TITLES,
     PYTHONPATH_KEY,
     REPORTED_PHASES,
+    TARGET_DIRECTORY,
     UNCACHED_MODE,
     WARM_MODE,
 )
@@ -247,14 +248,19 @@ def check_cache_use(*, run: CompileRun, mode: str, models: int) -> None:
 
 
 def compiled_tree(*, project_dir: Path) -> dict[str, bytes]:
-    """Every compiled artifact's bytes by its path under the compiled directory."""
+    """Every compiled and failed-compile artifact's bytes by its path under `target/`."""
 
-    root: Path = project_dir / COMPILED_DIRECTORY
-    return {
-        path.relative_to(root).as_posix(): path.read_bytes()
-        for path in sorted(root.rglob("*"))
-        if path.is_file()
-    }
+    target: Path = project_dir / TARGET_DIRECTORY
+    artifacts: dict[str, bytes] = {}
+    for tree in COMPILED_TREES:
+        artifacts.update(
+            {
+                path.relative_to(target).as_posix(): path.read_bytes()
+                for path in sorted((target / tree).rglob("*"))
+                if path.is_file()
+            }
+        )
+    return artifacts
 
 
 def check_matches_uncached(

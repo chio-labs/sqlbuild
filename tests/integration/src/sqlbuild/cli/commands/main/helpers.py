@@ -57,6 +57,13 @@ _REFUND_RATES: str = (
 )
 
 
+def artifact_tree(root: Path) -> dict[str, bytes]:
+    """Return each file under root by its POSIX path relative to root, or nothing when missing."""
+
+    files: list[Path] = sorted(filter(Path.is_file, root.rglob("*")))
+    return {path.relative_to(root).as_posix(): path.read_bytes() for path in files}
+
+
 def staging_directories(target_dir: Path) -> list[str]:
     """Return hidden entries left in target_dir, such as abandoned artifact staging."""
 

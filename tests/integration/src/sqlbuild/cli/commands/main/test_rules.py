@@ -1441,7 +1441,7 @@ def final_directory(*, model: Model, ctx: RuleContext) -> list[Finding]:
     assert cold["compile_timings"]["rule_cache_hits"] == 0
     assert warm["compile_timings"]["rule_cache_hits"] >= 1
     assert (
-        (tmp_path / "target" / "compiled" / "models" / "orders.sql")
+        (tmp_path / "target" / "compiled-failed" / "models" / "orders.sql")
         .read_text(encoding="utf-8")
         .startswith("-- sqb: compile failed for this model; not buildable\n-- XSQBRARCH001 at ")
     )

@@ -59,6 +59,7 @@ class ProjectRun:
     compiled: dict[str, bytes]
     manifest: str | None
     captures: dict[str, dict[str, Path]] = field(default_factory=dict)
+    compiled_failed: dict[str, bytes] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

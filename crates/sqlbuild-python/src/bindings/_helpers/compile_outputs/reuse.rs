@@ -10,7 +10,9 @@ use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::{FromPyObject, pyclass, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_cache::digest::main::bytes_digest::bytes_digest;
 use sqlbuild_cache::digest::main::hex_digest::hex_digest;
-use sqlbuild_cache::project_reuse::constants::{NATIVE_DIGEST_PREFIX, REUSE_STORE_SUFFIX};
+use sqlbuild_cache::project_reuse::constants::{
+    FAILED_COMPILED_DIRECTORY_NAME, NATIVE_DIGEST_PREFIX, REUSE_STORE_SUFFIX,
+};
 use sqlbuild_cache::project_reuse::main::check_reuse::check_reuse;
 use sqlbuild_cache::project_reuse::main::pending_digest_bytes::pending_digest_bytes;
 use sqlbuild_cache::project_reuse::main::record_reuse::record_reuse;
@@ -228,9 +230,23 @@ impl NativeReuseAttempt {
                 image: crate::bindings::_helpers::compile_context::delta::take_pending_image(),
                 vouched_target_stamps: None,
             };
-            if let Some(merge) =
+            if let Some(mut merge) =
                 crate::bindings::_helpers::compile_context::delta::take_record_merge()
             {
+                let failed: String = format!(
+                    "{}{}",
+                    self.attempt
+                        .lock()
+                        .map_err(poisoned)?
+                        .project_dir
+                        .join(&rules.compiled_root)
+                        .with_file_name(FAILED_COMPILED_DIRECTORY_NAME)
+                        .to_string_lossy(),
+                    std::path::MAIN_SEPARATOR
+                );
+                merge
+                    .kept
+                    .retain(|stamp| !stamp.relative_path.starts_with(failed.as_str()));
                 for stamp in &merge.kept {
                     compile
                         .artifacts

@@ -67,8 +67,8 @@ Positional `SELECTOR` arguments work like `--select`, and both forms can be comb
 5. **Contracts.** Checks declared columns against the inferred query output.
 6. **Rules.** Runs the selected built-in Rules, then the selected custom Rules.
 7. **Write.** Writes compiled SQL to `target/compiled/` when the Rules pass. When they fail, it
-   writes only the models' SQL, so you can read what the Rules checked; see
-   [When Rules fail](#when-rules-fail).
+   writes the models' SQL to `target/compiled-failed/` instead, so you can read what the Rules
+   checked; see [When Rules fail](#when-rules-fail).
 
 Rules that need inferred types, such as `SQBRCONTRACT105`, are skipped when SQL analysis is off,
 and compile prints one note naming them.
@@ -79,12 +79,21 @@ configuration, use [`sqb rules run`](/docs/cli/rules).
 
 ### When Rules fail
 
-A Rule finding still exits `1` and blocks the manifest, the DAG file and the other artifacts; a
-`target/manifest.json` from an earlier compile is removed, since it no longer matches. Each
-model's expanded SQL is still written to `target/compiled/models/`, so you can read SQL that macros
-generated, and the compiled file of a model you removed from the project is deleted. Other
-compiled files stay as the last passing compile left them. A model with Rule errors starts with a
-header that marks it not buildable and lists its findings:
+A Rule finding exits `1` and blocks the manifest, the DAG file and the other artifacts. A
+`target/manifest.json` from an earlier compile is removed, since it no longer matches.
+`target/compiled/` keeps exactly what the last passing compile wrote.
+
+Each model's expanded SQL goes to `target/compiled-failed/`, laid out like `target/compiled/`, so
+you can read the SQL that macros generated. The report names the file of each model with Rule
+errors:
+
+```
+✗ Project compiled  2 models, 0 seeds, 0 functions, 1 error, 0 warnings
+  Failed SQL: target/compiled-failed/models/open_orders.sql
+  Wrote: target/compiled-failed/
+```
+
+A model with Rule errors starts with a header that marks it not buildable and lists its findings:
 
 ```sql
 -- sqb: compile failed for this model; not buildable
@@ -92,7 +101,8 @@ header that marks it not buildable and lists its findings:
 SELECT o.order_id, status FROM __ref("orders") AS o
 ```
 
-The next compile that passes writes the files again without the header.
+`target/compiled-failed/` holds only the latest failing compile: each failing compile replaces it
+as a whole, and the next passing compile deletes it.
 
 ## Compiling a selection
 
@@ -178,7 +188,7 @@ sqb compile --json
 | `diagnostics` | Every diagnostic, with its source location |
 | `compile_timings` | Timings and cache counters; see below |
 | `lineage_mode` | The lineage mode used |
-| `artifacts` | Paths of the files written |
+| `artifacts` | Paths of the files written. When the Rules fail, `compiled_sql_dir` is `target/compiled-failed/` and `failed_model_sql` lists each failing model's file |
 
 If compile stops before it can build the report, for example on a model header that doesn't
 parse, `--json` still prints one document with `command`, `has_errors: true`, `stopped: true` and

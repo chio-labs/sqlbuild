@@ -12,6 +12,7 @@ use sqlbuild_host::compile_context::types::CompileTimingsHandle;
 use sqlbuild_rules::custom_host_pool::constants::{
     CUSTOM_RULES_GUARD_KEY, CUSTOM_RULES_INVOCATIONS_KEY, CUSTOM_RULES_MONITOR_KEY,
 };
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use crate::bindings::_helpers::boundary::python_calls::{
@@ -26,7 +27,9 @@ use crate::bindings::_helpers::compile_command::reuse_recording::write_reusable_
 use crate::bindings::_helpers::compile_command::reuse_recording::{
     CompileArtifactWrites, RecordedCompileOutput, compile_reuse_timings, new_artifact_recorder,
 };
-use crate::bindings::_helpers::compile_command::target_writer::write_rule_failed_models;
+use crate::bindings::_helpers::compile_command::target_writer::{
+    remove_failed_compile, restore_models_after_failed_compile, write_rule_failed_models,
+};
 use crate::bindings::_helpers::compile_context::input_reads::record_compile_input_reads;
 use crate::bindings::_helpers::compile_driver::analysis::analyze;
 use crate::bindings::_helpers::compile_driver::phases::{
@@ -359,16 +362,37 @@ fn compiled_with_status<'py>(
         (prepared_artifacts, recorder),
         status,
     )?;
-    if rules_failed && !skip_write {
-        write_rule_failed_models(
+    let written: Bound<'py, PyAny> = if skip_write {
+        written
+    } else if rules_failed {
+        let failing: Vec<String> = write_rule_failed_models(
             &target_dir(&project_dir)?,
             (
                 &native_field(&native_field(&analysis, "graph")?, "project")?,
                 &project_dir,
             ),
             &native_field(&analysis, "diagnostics")?,
+            recorder,
         )?;
-    }
+        replaced(
+            &written,
+            &[
+                (
+                    "failed_compile",
+                    PyBool::new(py, true).to_owned().into_any(),
+                ),
+                ("failed_model_sql", PyTuple::new(py, failing)?.into_any()),
+            ],
+        )?
+    } else {
+        restore_models_after_failed_compile(
+            &target_dir(&project_dir)?,
+            &native_field(&native_field(&analysis, "graph")?, "project")?,
+            recorder,
+        )?;
+        remove_failed_compile(&target_dir(&project_dir)?.extract::<PathBuf>()?)?;
+        written
+    };
     let timings: Bound<'py, PyDict> = timings_ms(
         (&analysis, write_ms),
         (&recorders.detailed_timings, reuse_timings),

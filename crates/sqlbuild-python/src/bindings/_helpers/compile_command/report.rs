@@ -5,6 +5,7 @@ use pyo3::types::{
     PyDict, PyDictMethods, PyList, PySet, PySetMethods, PyString, PyTuple, PyTupleMethods,
 };
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
+use sqlbuild_cache::project_reuse::constants::FAILED_COMPILED_DIRECTORY_NAME;
 use sqlbuild_core::cli_text::main::format_compile_text::format_compile_text as compile_text;
 use sqlbuild_core::cli_text::main::semantic_coverage_notice::semantic_coverage_notice as notice_text;
 use sqlbuild_core::cli_text::models::{
@@ -182,11 +183,15 @@ impl<'py> ReportInputs<'py> {
         coverage_notice(&self.semantic_coverage()?, reader)
     }
 
-    /// `written.target_dir / "compiled"` relative to its `target` directory, POSIX style.
+    /// `written.target_dir / "compiled"`, or `"compiled-failed"` when Rules failed, relative to its `target` directory, POSIX style.
     fn compiled_dir(&self) -> PyResult<Bound<'py, PyAny>> {
         let py: Python<'py> = self.py();
-        let path: Bound<'py, PyAny> =
-            native_field(&self.written, "target_dir")?.div(COMPILED_DIRECTORY)?;
+        let directory: &str = if native_field(&self.written, "failed_compile")?.is_truthy()? {
+            FAILED_COMPILED_DIRECTORY_NAME
+        } else {
+            COMPILED_DIRECTORY
+        };
+        let path: Bound<'py, PyAny> = native_field(&self.written, "target_dir")?.div(directory)?;
         let parts: Bound<'py, PyTuple> = native_field(&path, "parts")?.downcast_into()?;
         for (index, part) in parts.iter().enumerate() {
             if part.eq(TARGET_DIRECTORY)? {
@@ -197,6 +202,16 @@ impl<'py> ReportInputs<'py> {
             }
         }
         path.call_method0("as_posix")
+    }
+
+    /// Each failing model's SQL file under `compiled_dir`, relative like it, when Rules failed.
+    fn failed_model_sql(&self) -> PyResult<Vec<String>> {
+        let directory: String = self.compiled_dir()?.extract()?;
+        Ok(native_field(&self.written, "failed_model_sql")?
+            .extract::<Vec<String>>()?
+            .into_iter()
+            .map(|relative| format!("{directory}/{relative}"))
+            .collect())
     }
 }
 
@@ -392,6 +407,7 @@ pub(crate) fn format_compile_text<'py>(
         error_count: inputs.severity_count(ERROR_SEVERITY)?,
         warning_count: inputs.severity_count(WARNING_SEVERITY)?,
         compiled_dir: reader.text(&inputs.compiled_dir()?)?,
+        failed_model_sql: inputs.failed_model_sql()?,
         manifest: inputs.manifest,
         lineage,
     };
@@ -1036,6 +1052,12 @@ fn compile_json<'py>(
             ),
         ],
     )?;
+    if native_field(&inputs.written, "failed_compile")?.is_truthy()? {
+        artifacts.set_item(
+            "failed_model_sql",
+            PyList::new(py, inputs.failed_model_sql()?)?,
+        )?;
+    }
     let report: Bound<'_, PyDict> = dict(
         py,
         vec![

@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 use crate::project_reuse::_helpers::files::file_digest;
+use crate::project_reuse::constants::FAILED_COMPILED_DIRECTORY_NAME;
 use crate::project_reuse::models::{CompileRecord, RecordedArtifact, ReuseRules};
 use crate::project_snapshot::main::stamp_path::stamp_path;
 use crate::project_snapshot::models::PathStamp;
@@ -20,10 +21,18 @@ fn compiled_root(project_dir: &Path, rules: &ReuseRules) -> PathBuf {
     project_dir.join(&rules.compiled_root)
 }
 
-/// Stat every compiled artifact plus `extra_paths`, keyed by path.
+/// The failed-compile directory beside the compiled directory.
+fn failed_root(project_dir: &Path, rules: &ReuseRules) -> PathBuf {
+    compiled_root(project_dir, rules).with_file_name(FAILED_COMPILED_DIRECTORY_NAME)
+}
+
+/// Stat every compiled and failed-compile artifact plus `extra_paths`, keyed by path.
 fn snapshot_target_files(project_dir: &Path, extra_paths: &[&str], rules: &ReuseRules) -> Stamps {
     let mut stamps: Stamps = BTreeMap::new();
-    let mut pending: Vec<PathBuf> = vec![compiled_root(project_dir, rules)];
+    let mut pending: Vec<PathBuf> = vec![
+        compiled_root(project_dir, rules),
+        failed_root(project_dir, rules),
+    ];
     while let Some(directory) = pending.pop() {
         let Ok(entries) = std::fs::read_dir(&directory) else {
             continue;
@@ -58,21 +67,29 @@ fn target_stamps(project_dir: &Path, paths: &[&str], tree: bool, rules: &ReuseRu
     if !tree {
         return paths.iter().copied().filter_map(keyed_stamp).collect();
     }
-    let prefix: String = compiled_prefix(project_dir, rules);
+    let prefixes: [String; 2] = tree_prefixes(project_dir, rules);
     let extra: Vec<&str> = paths
         .iter()
         .copied()
-        .filter(|path| !path.starts_with(prefix.as_str()))
+        .filter(|path| !in_trees(path, &prefixes))
         .collect();
     snapshot_target_files(project_dir, &extra, rules)
 }
 
-fn compiled_prefix(project_dir: &Path, rules: &ReuseRules) -> String {
-    format!(
-        "{}{}",
-        compiled_root(project_dir, rules).to_string_lossy(),
-        std::path::MAIN_SEPARATOR
-    )
+/// The compiled and failed-compile directories, each with a trailing separator.
+fn tree_prefixes(project_dir: &Path, rules: &ReuseRules) -> [String; 2] {
+    [
+        compiled_root(project_dir, rules),
+        failed_root(project_dir, rules),
+    ]
+    .map(|root| format!("{}{}", root.to_string_lossy(), std::path::MAIN_SEPARATOR))
+}
+
+/// Whether `path` is under one of the `prefixes` directories.
+fn in_trees(path: &str, prefixes: &[String]) -> bool {
+    prefixes
+        .iter()
+        .any(|prefix| path.starts_with(prefix.as_str()))
 }
 
 /// Whether `stamp` shows what this compile left there, and whether that read its content.
@@ -123,13 +140,13 @@ pub(crate) fn verified_target_files(
     since_ns: i64,
     rules: &ReuseRules,
 ) -> Option<Vec<PathStamp>> {
-    let prefix: String = compiled_prefix(project_dir, rules);
+    let prefixes: [String; 2] = tree_prefixes(project_dir, rules);
     let dag_path: Option<&str> = record.dag_path.as_deref();
     let written: bool = record.artifacts_written;
     let expected: BTreeMap<&str, &RecordedArtifact> = record
         .artifacts
         .iter()
-        .filter(|(path, _)| path.starts_with(prefix.as_str()) || Some(path.as_str()) == dag_path)
+        .filter(|(path, _)| in_trees(path, &prefixes) || Some(path.as_str()) == dag_path)
         .map(|(path, artifact)| (path.as_str(), artifact))
         .collect();
     let paths: Vec<&str> = expected.keys().copied().collect();

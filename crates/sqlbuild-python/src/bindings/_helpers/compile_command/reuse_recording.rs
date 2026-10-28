@@ -1,6 +1,7 @@
 //! What one full compile printed and left in each artifact, and storing it for compile reuse.
 
 use sqlbuild_cache::project_reuse::types::ImageSections;
+use sqlbuild_cache::project_snapshot::main::stamp_path::stamp_path;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
@@ -82,6 +83,14 @@ impl CompileArtifactWrites {
 }
 
 impl CompileArtifactWrites {
+    /// Note a file this compile left as an earlier compile wrote it, unless it already recorded the path.
+    pub(crate) fn keep_unrecorded(&self, path: String, (size, mtime_ns): (u64, i64)) {
+        let _ = self
+            .locked()
+            .entry(path)
+            .or_insert(RecordedArtifact::Kept { size, mtime_ns });
+    }
+
     /// Every recorded artifact's absolute path, with its digest when this compile wrote it.
     pub(crate) fn written_digests(&self) -> HashMap<String, Option<String>> {
         self.locked()
@@ -199,6 +208,34 @@ pub(crate) fn artifact_kept(
     recorder
         .get()
         .record(absolute(path)?, RecordedArtifact::Kept { size, mtime_ns });
+    Ok(())
+}
+
+/// Note every file under `root` this compile did not record as kept as an earlier compile left it.
+pub(crate) fn artifact_tree_kept(
+    py: Python<'_>,
+    recorder: ArtifactRecorder<'_>,
+    root: &Path,
+) -> PyResult<()> {
+    let Some(recorder) = recorder else {
+        return Ok(());
+    };
+    let mut pending: Vec<PathBuf> = vec![root.to_path_buf()];
+    while let Some(directory) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(&directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path: PathBuf = entry.path();
+            if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+                pending.push(path);
+            } else if let Some(stamp) = stamp_path(&path) {
+                recorder
+                    .get()
+                    .keep_unrecorded(absolute_path(py, &path)?, (stamp.size, stamp.mtime_ns));
+            }
+        }
+    }
     Ok(())
 }
 

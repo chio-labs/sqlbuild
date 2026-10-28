@@ -1024,6 +1024,8 @@ const WRITTEN_TARGET: RecordSpec = RecordSpec {
         FieldSpec::required("test_count"),
         FieldSpec::required("target_dir"),
         FieldSpec::new("diagnostics", FieldDefault::EmptyTuple),
+        FieldSpec::new("failed_compile", FieldDefault::False),
+        FieldSpec::new("failed_model_sql", FieldDefault::EmptyTuple),
     ],
 };
 const SKILL_MAINTENANCE_RESULT: RecordSpec = RecordSpec {
