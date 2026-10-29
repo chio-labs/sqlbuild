@@ -730,6 +730,16 @@ export class MockPlatformApi implements PlatformApi {
 		return this.#ctx.reply(structuredClone(account));
 	}
 
+	async enableAccount(name: string): Promise<Account> {
+		this.#require('user.manage');
+		const account = this.#data.accounts.find((a) => a.name === name);
+		if (!account) throw new ApiError(`Unknown account ${name}`, 404);
+		if (!account.disabled) throw new ApiError(`${name} is already active`, 409);
+		account.disabled = false;
+		this.#audit('user.manage', { locationId: null, target: null, subject: name }, `Enabled ${name}`, 'disabled', 'active');
+		return this.#ctx.reply(structuredClone(account));
+	}
+
 	async createServiceAccount(request: ServiceAccountRequest): Promise<Account> {
 		this.#require('user.manage');
 		const name = request.name.trim();

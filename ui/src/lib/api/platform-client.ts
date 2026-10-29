@@ -65,6 +65,8 @@ export interface PlatformApi {
 	listAccounts(): Promise<Account[]>;
 	/** Blocks sign-in and revokes the account's sessions. You can't disable yourself. `user.manage` */
 	disableAccount(name: string): Promise<Account>;
+	/** Lets a disabled account sign in again. Sessions revoked on disable stay revoked; its unrevoked API tokens work again. `user.manage` */
+	enableAccount(name: string): Promise<Account>;
 	/** A non-person account that signs in with API tokens only. `user.manage` */
 	createServiceAccount(request: ServiceAccountRequest): Promise<Account>;
 	/** `token.manage` */

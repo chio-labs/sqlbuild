@@ -112,6 +112,11 @@
 		void accountAct(a.name, () => app.client.disableAccount(a.name));
 	}
 
+	function enable(a: Account) {
+		if (!confirm(`Enable ${a.displayName} (${a.name})? They can sign in again, and any unrevoked API tokens work again.`)) return;
+		void accountAct(a.name, () => app.client.enableAccount(a.name));
+	}
+
 	function createService() {
 		void accountAct('create-service', async () => {
 			createdService = await app.client.createServiceAccount({ name: serviceName, description: serviceDescription });
@@ -214,6 +219,8 @@
 									<span class="faint">you</span>
 								{:else if !a.disabled}
 									<GatedButton requires="user.manage" size="xs" variant="destructive" busy={accountBusy === a.name} onclick={() => disable(a)}>Disable</GatedButton>
+								{:else}
+									<GatedButton requires="user.manage" size="xs" busy={accountBusy === a.name} onclick={() => enable(a)}>Enable</GatedButton>
 								{/if}
 							</td>
 						</tr>
