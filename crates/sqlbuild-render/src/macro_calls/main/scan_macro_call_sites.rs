@@ -2,7 +2,7 @@
 
 use crate::macro_calls::_helpers::offsets::char_offsets;
 use crate::macro_calls::_helpers::scanner::{
-    call_name, mentions_typed_reference, nested_names, top_level_calls,
+    call_name, mentions_typed_reference, nested_names, python_argument_syntax, top_level_calls,
 };
 use crate::macro_calls::models::{MacroCallScan, MacroCallSite, MacroScanFailure};
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
@@ -22,7 +22,14 @@ pub fn scan_macro_call_sites(sql: &str, syntax: Option<&LexicalSyntax>) -> Macro
         .zip(offsets.as_chunks::<3>().0)
         .map(|(call, offsets)| {
             let args = &sql[call.open + 1..call.close];
-            let tree_names: Option<Vec<String>> = call_tree_names(&call.name, args, syntax);
+            let python_syntax: LexicalSyntax = python_argument_syntax();
+            let argument_syntax: Option<&LexicalSyntax> = if call.python {
+                Some(&python_syntax)
+            } else {
+                syntax
+            };
+            let tree_names: Option<Vec<String>> =
+                call_tree_names(&call.name, args, argument_syntax);
             MacroCallSite {
                 start: offsets[0],
                 args_start: offsets[1],

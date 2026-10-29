@@ -1379,3 +1379,12 @@ class SqlMacroStringEscapeTestCase:
     adapter_config: str
     string_sql: str
     expected_compiled_fragment: str
+
+
+@dataclass(frozen=True)
+class PythonMacroArgumentErrorTestCase:
+    """An invalid `@py` argument span on Snowflake and the error compile reports for it."""
+
+    description: str
+    call_sql: str
+    expected_message: str

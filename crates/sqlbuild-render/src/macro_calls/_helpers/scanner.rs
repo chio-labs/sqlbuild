@@ -9,6 +9,8 @@ use crate::macro_calls::main::opens_bare_call::opens_bare_call;
 
 /// The prefix of a Python macro call after its `@`.
 const PYTHON_PREFIX: &str = "py.";
+/// The line comment every scan honours, the only one inside `@py.` call arguments.
+const GENERIC_LINE_COMMENT_PREFIX: &str = "--";
 /// The prefix of a SQL macro call after its `@`.
 const SQL_PREFIX: &str = "sql.";
 /// Declaration and SQL test parameter references, which scans read as calls that need no kind.
@@ -22,6 +24,8 @@ pub(crate) struct ScannedCall {
     pub(crate) open: usize,
     pub(crate) close: usize,
     pub(crate) name: String,
+    /// A `@py.` call, whose arguments are Python literals rather than SQL.
+    pub(crate) python: bool,
 }
 
 /// Where Python's scan of the text raises: in the call starting at a byte offset, or between calls.
@@ -218,17 +222,34 @@ fn call_at(
     with_sql: bool,
     syntax: Option<&LexicalSyntax>,
 ) -> Result<ScannedCall, ScanError> {
-    if let Some(error) = kind_error(call_start_at(text, start), with_sql) {
+    let kind: CallStart = call_start_at(text, start);
+    if let Some(error) = kind_error(kind, with_sql) {
         return Err(error);
     }
     let (name, open) = call_header(text, start)?;
-    let close = matching_paren(text.as_bytes(), open, syntax)?;
+    let python: bool = kind == CallStart::Python;
+    let python_syntax: LexicalSyntax = python_argument_syntax();
+    let argument_syntax: Option<&LexicalSyntax> =
+        if python { Some(&python_syntax) } else { syntax };
+    let close = matching_paren(text.as_bytes(), open, argument_syntax)?;
     Ok(ScannedCall {
         start,
         open,
         close,
         name,
+        python,
     })
+}
+
+/// Python's string rules for `@py.` call arguments, with only the generic `--` line comment.
+pub(crate) fn python_argument_syntax() -> LexicalSyntax {
+    LexicalSyntax {
+        backslash_escape_quotes: vec!["'".to_owned(), "\"".to_owned()],
+        raw_string_prefix: true,
+        triple_quoted_strings: true,
+        line_comment_prefixes: vec![GENERIC_LINE_COMMENT_PREFIX.to_owned()],
+        ..LexicalSyntax::default()
+    }
 }
 
 fn call_header(text: &str, start: usize) -> Result<(String, usize), ScanError> {

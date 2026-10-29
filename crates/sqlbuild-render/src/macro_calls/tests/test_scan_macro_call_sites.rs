@@ -350,6 +350,12 @@ fn given_backslash_escapes_when_scanning_macro_calls_then_dialect_quotes_are_tex
             expected_sites: &[(21, 28, "m", Some(&["m"]), false)],
             expected_failure: None,
         },
+        ScanMacroCallSitesTestCase {
+            description: "a dialect line comment marker inside Python arguments is an operator",
+            sql: "@py.m(10 // 3) AS a",
+            expected_sites: &[(0, 14, "m", Some(&["m"]), false)],
+            expected_failure: None,
+        },
     ];
 
     for test_case in test_cases {
