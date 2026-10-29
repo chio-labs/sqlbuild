@@ -276,7 +276,7 @@
 				<!-- provider config: only the providers the selection actually uses -->
 				<div class="text-[var(--sb-text-faint)] mb-2 flex items-center justify-between text-[12px] font-medium">
 					<span>Provider config</span>
-					<a href="/providers" class="text-[var(--sb-text-faint)] hover:text-primary normal-case tracking-normal">durable config →</a>
+					<a href="/connections" class="text-[var(--sb-text-faint)] hover:text-primary normal-case tracking-normal">durable config →</a>
 				</div>
 				{#if relevantProviders.length === 0}
 					<div class="text-[var(--sb-text-faint)] text-[12px]">This selection uses no providers — nothing to configure. Models build against the project target.</div>

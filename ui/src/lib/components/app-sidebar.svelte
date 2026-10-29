@@ -1,47 +1,101 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import BellIcon from '@lucide/svelte/icons/bell';
 	import CheckCircleIcon from '@lucide/svelte/icons/circle-check';
 	import ClockIcon from '@lucide/svelte/icons/clock-3';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import GitBranchIcon from '@lucide/svelte/icons/git-branch';
+	import GitCompareIcon from '@lucide/svelte/icons/git-compare';
+	import KeyRoundIcon from '@lucide/svelte/icons/key-round';
 	import LayoutDashboardIcon from '@lucide/svelte/icons/layout-dashboard';
 	import ListIcon from '@lucide/svelte/icons/list';
+	import MapPinIcon from '@lucide/svelte/icons/map-pin';
 	import PlayIcon from '@lucide/svelte/icons/play';
+	import PlugIcon from '@lucide/svelte/icons/plug';
+	import ScrollTextIcon from '@lucide/svelte/icons/scroll-text';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
-	import SlidersIcon from '@lucide/svelte/icons/sliders-horizontal';
+	import ShieldIcon from '@lucide/svelte/icons/shield';
+	import WrenchIcon from '@lucide/svelte/icons/wrench';
 	import type { Component } from 'svelte';
+	import { ADMIN_CAPABILITIES, hasAnyCapability, type Capability, type NavCounts } from '$lib/api';
+	import { app } from '$lib/state/app.svelte';
+	import ScopeSwitcher from './shell/scope-switcher.svelte';
 
-	type NavItem = { label: string; href: string; icon: Component };
-	type NavGroup = { section: string; items: NavItem[] };
+	type Badge = { value: (counts: NavCounts) => number; tone: 'muted' | 'warning' | 'error' | 'live' };
+	type NavItem = { label: string; href: string; icon: Component; badge?: Badge; requires?: readonly Capability[] };
+	type NavGroup = { section: string | null; items: NavItem[]; requires?: readonly Capability[] };
 
 	const groups: NavGroup[] = [
+		{ section: null, items: [{ label: 'Overview', href: '/', icon: LayoutDashboardIcon }] },
 		{
 			section: 'Build',
 			items: [
-				{ label: 'Overview', href: '/', icon: LayoutDashboardIcon },
 				{ label: 'Lineage', href: '/lineage', icon: GitBranchIcon },
-				{ label: 'Catalog', href: '/catalog', icon: DatabaseIcon }
+				{ label: 'Catalog', href: '/catalog', icon: DatabaseIcon, badge: { value: (c) => c.catalogNodes, tone: 'muted' } },
+				{ label: 'Checks', href: '/checks', icon: CheckCircleIcon, badge: { value: (c) => c.failingChecks, tone: 'warning' } },
+				{ label: 'Changes', href: '/changes', icon: GitCompareIcon }
 			]
 		},
 		{
 			section: 'Operate',
 			items: [
-				{ label: 'Runs', href: '/runs', icon: ListIcon },
+				{ label: 'Runs', href: '/runs', icon: ListIcon, badge: { value: (c) => c.activeRuns, tone: 'live' } },
 				{ label: 'Jobs', href: '/jobs', icon: PlayIcon },
-				{ label: 'Triggers', href: '/triggers', icon: ClockIcon },
-				{ label: 'Checks', href: '/checks', icon: CheckCircleIcon }
+				{ label: 'Triggers', href: '/triggers', icon: ClockIcon, badge: { value: (c) => c.pausedTriggers, tone: 'muted' } },
+				{ label: 'Alerts', href: '/alerts', icon: BellIcon, badge: { value: (c) => c.activeAlerts, tone: 'error' } }
+			]
+		},
+		{
+			section: 'Platform',
+			items: [
+				{ label: 'Locations', href: '/locations', icon: MapPinIcon },
+				{ label: 'Connections', href: '/connections', icon: PlugIcon },
+				{ label: 'Maintenance', href: '/maintenance', icon: WrenchIcon }
+			]
+		},
+		{
+			section: 'Admin',
+			requires: ADMIN_CAPABILITIES,
+			items: [
+				{ label: 'Users & tokens', href: '/admin/users', icon: KeyRoundIcon, requires: ['user.manage', 'token.manage'] },
+				{ label: 'Roles & approvals', href: '/admin/roles', icon: ShieldIcon, requires: ['role.assign'], badge: { value: (c) => c.pendingApprovals, tone: 'warning' } },
+				{ label: 'Audit log', href: '/admin/audit', icon: ScrollTextIcon, requires: ['audit.view'] }
 			]
 		}
 	];
 
-	const footerItems: NavItem[] = [
-		{ label: 'Providers', href: '/providers', icon: SlidersIcon },
-		{ label: 'Settings', href: '/settings', icon: SettingsIcon }
-	];
+	const visibleGroups = $derived(
+		groups
+			.filter((g) => !g.requires || hasAnyCapability(app.capabilities, g.requires))
+			.map((g) => ({ ...g, items: g.items.filter((i) => !i.requires || hasAnyCapability(app.capabilities, i.requires)) }))
+			.filter((g) => g.items.length > 0)
+	);
+
+	const badgeTone: Record<Badge['tone'], string> = {
+		muted: '#707782',
+		warning: 'var(--sb-warning)',
+		error: 'var(--sb-error)',
+		live: 'var(--sb-running)'
+	};
+
+	const initials = $derived(
+		(app.user?.displayName ?? '?')
+			.split(/\s+/)
+			.map((part) => part[0])
+			.join('')
+			.slice(0, 2)
+			.toUpperCase()
+	);
 
 	function isActive(href: string): boolean {
 		if (href === '/') return page.url.pathname === '/';
-		return page.url.pathname.startsWith(href);
+		return page.url.pathname === href || page.url.pathname.startsWith(`${href}/`);
+	}
+
+	function itemClass(href: string): string {
+		return isActive(href)
+			? 'bg-[var(--sidebar-accent)] text-foreground font-medium'
+			: 'text-[var(--sidebar-foreground)] hover:bg-[var(--sb-hover)] hover:text-foreground';
 	}
 </script>
 
@@ -49,63 +103,49 @@
 	<div class="flex items-center gap-2 px-2 pb-4">
 		<img src="/logo.png" alt="SQLBuild" class="logo-dark h-6 w-auto" />
 		<img src="/logo-light.png" alt="SQLBuild" class="logo-light h-6 w-auto" />
-		<span class="text-muted-foreground ml-auto text-[11px]">v0.87</span>
+		{#if app.bootstrap}
+			<span class="text-muted-foreground ml-auto text-[11px]" title="Server version">v{app.bootstrap.serverVersion}</span>
+		{/if}
 	</div>
 
-		<div class="project-row mb-3 flex items-center gap-2.5 rounded-md border border-[var(--sidebar-border)] px-2.5 py-2 text-[13px] font-medium">
-		<span class="bg-secondary text-muted-foreground grid h-5 w-5 place-items-center rounded-[2px] text-[10px] font-semibold">W</span>
-		<span class="flex flex-col leading-tight">waffle-shop<small class="text-muted-foreground text-[11px] font-normal">Snowflake · production</small></span>
-		<span class="ml-auto text-[11px] text-[#626975]">⌄</span>
-	</div>
+	<ScopeSwitcher />
 
-	<nav class="flex flex-1 flex-col gap-px">
-		{#each groups as group (group.section)}
-			<div class="text-muted-foreground px-3 pb-1 pt-4 text-[11.5px] font-medium">
-				{group.section}
-			</div>
+	<nav class="sb-nav flex min-h-0 flex-1 flex-col gap-px overflow-y-auto">
+		{#each visibleGroups as group (group.section ?? 'root')}
+			{#if group.section}
+				<div class="text-muted-foreground px-3 pb-1 pt-4 text-[11.5px] font-medium">{group.section}</div>
+			{/if}
 			{#each group.items as item (item.href)}
 				{@const Glyph = item.icon}
-				<a
-					href={item.href}
-					class="relative flex items-center gap-2.5 rounded-md px-3 py-[7px] text-[13px] {isActive(item.href)
-						? 'bg-[var(--sidebar-accent)] text-foreground font-medium'
-						: 'text-[var(--sidebar-foreground)] hover:bg-[var(--sb-hover)] hover:text-foreground'}"
-				>
+				{@const count = item.badge && app.navCounts ? item.badge.value(app.navCounts) : 0}
+				<a href={item.href} class="relative flex items-center gap-2.5 rounded-md px-3 py-[7px] text-[13px] {itemClass(item.href)}">
 					<span class="grid w-4 place-items-center opacity-80"><Glyph size={15} /></span>
 					{item.label}
-					{#if item.href === '/catalog'}
-						<span class="nav-count ml-auto text-[11.5px]">42</span>
-					{:else if item.href === '/checks'}
-						<span class="ml-auto text-[11.5px] text-[var(--sb-warning)]">3</span>
-					{:else if item.href === '/runs'}
-						<span class="ml-auto h-1.5 w-1.5 rounded-full bg-[var(--sb-success)]"></span>
+					{#if item.badge && count > 0}
+						{#if item.badge.tone === 'live'}
+							<span class="ml-auto flex items-center gap-1.5 text-[11.5px]" style:color={badgeTone.live}>
+								<span class="h-1.5 w-1.5 rounded-full" style:background={badgeTone.live}></span>{count}
+							</span>
+						{:else}
+							<span class="ml-auto text-[11.5px]" style:color={badgeTone[item.badge.tone]}>{count}</span>
+						{/if}
 					{/if}
 				</a>
 			{/each}
 		{/each}
-
-		<div class="flex-1"></div>
-
-		{#each footerItems as item (item.href)}
-			{@const Glyph = item.icon}
-			<a
-				href={item.href}
-				class="text-[var(--sidebar-foreground)] hover:bg-[var(--sb-hover)] hover:text-foreground flex items-center gap-2.5 rounded-md px-3 py-[7px] text-[13px]"
-			>
-				<span class="grid w-4 place-items-center opacity-80"><Glyph size={15} /></span>
-				{item.label}
-			</a>
-		{/each}
 	</nav>
 
-	<div class="mt-2 border-t border-[var(--sidebar-border)] pt-2.5">
-		<div class="text-[var(--sidebar-foreground)] flex items-center gap-2 px-2.5 py-1.5 text-[12.5px]">
-			<span
-				class="bg-primary grid h-[22px] w-[22px] place-items-center rounded-[2px] text-[10px] font-semibold text-white"
-				>AD</span
-			>
-			admin
-		</div>
+	<div class="mt-2 flex flex-col gap-px border-t border-[var(--sidebar-border)] pt-2.5">
+		<a href="/settings" class="flex items-center gap-2.5 rounded-md px-3 py-[7px] text-[13px] {itemClass('/settings')}">
+			<span class="grid w-4 place-items-center opacity-80"><SettingsIcon size={15} /></span>
+			Settings
+		</a>
+		{#if app.user}
+			<div class="text-[var(--sidebar-foreground)] flex items-center gap-2 px-2.5 py-1.5 text-[12.5px]">
+				<span class="bg-primary grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[2px] text-[10px] font-semibold text-white">{initials}</span>
+				<span class="truncate">{app.user.displayName} · <span class="text-muted-foreground">{app.user.role}</span></span>
+			</div>
+		{/if}
 	</div>
 </aside>
 
@@ -118,11 +158,8 @@
 		color: #f1f1ee;
 		box-shadow: none;
 	}
-	.project-row:hover {
-		background: rgba(255, 255, 255, 0.04);
-	}
-	.nav-count {
-		color: #707782;
+	.sb-nav {
+		scrollbar-width: thin;
 	}
 	/* default (light theme): show the dark-colored logo */
 	.logo-dark {

@@ -42,7 +42,7 @@
 	const usedByJobs = ['nightly_build', 'marts_only'];
 </script>
 
-<AppTopbar title="Providers">
+<AppTopbar title="Connections">
 	<Button variant="outline" size="sm">↻ Test connection</Button>
 	<Button variant="outline" size="sm">Edit</Button>
 </AppTopbar>
@@ -50,7 +50,7 @@
 <div class="flex min-h-0 flex-1 flex-col">
 	<!-- header -->
 	<div class="flex items-center gap-3 border-b border-border px-6 py-3.5">
-		<a href="/providers" class="text-muted-foreground hover:text-foreground text-[13px]">← Providers</a>
+		<a href="/connections" class="text-muted-foreground hover:text-foreground text-[13px]">← Connections</a>
 		<span class="font-display text-[17px] font-semibold">{def.name}</span>
 		<span class="text-muted-foreground text-[12px]">{def.kind} · {def.type}</span>
 		<span class="ml-auto inline-flex items-center gap-1.5 text-[11.5px]" style:color={def.status === 'connected' ? 'var(--sb-secondary)' : 'var(--sb-error)'}>
