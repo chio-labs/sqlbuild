@@ -263,6 +263,8 @@ export type NodeChange = {
 export type OrchestrationChange = {
 	kind: 'job' | 'group' | 'trigger' | 'sensor';
 	key: string;
+	/** Triggers and sensors: the trigger ID, while it still exists. */
+	triggerId: string | null;
 	op: ChangeOp;
 	detail: string;
 };
@@ -296,7 +298,7 @@ export type SnapshotChange = {
 	orchestration: OrchestrationChange[];
 	roles: RoleChange[];
 	environment: EnvironmentChange | null;
-	/** Runs on this snapshot, newest first. */
+	/** The first runs after the deploy, oldest first. */
 	followingRuns: Pick<Run, 'id' | 'jobKey' | 'kind' | 'status' | 'startedAt' | 'queuedAt'>[];
 	/** Null when the adapter has no cost data. */
 	costChanges: CostChange[] | null;

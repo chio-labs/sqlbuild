@@ -359,7 +359,7 @@ export type DeploySpec = {
 	minutesAgo: number;
 	publishedBy: Principal;
 	nodes: NodeChange[];
-	orchestration: OrchestrationChange[];
+	orchestration: Omit<OrchestrationChange, 'triggerId'>[];
 	roles: RoleChange[];
 	environment: EnvironmentChange | null;
 };

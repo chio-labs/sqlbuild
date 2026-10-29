@@ -35,6 +35,7 @@ import type {
 import { CHECK_SPECS, COLUMN_EDGES, DEPLOYS, EXTERNAL_BUILDS, NODE_SPECS, PYTHON_SOURCE, sourceFreshness, type CheckSpec } from './build-fixtures';
 import { compileSql, compileSqlBefore, rawSql, rawSqlBefore } from './build-sql';
 import { ancestors, descendants, SNAPSHOT_NODES, snapshotNode } from './operate-graph';
+import { TRIGGER_DEFS, triggerId } from './operate';
 import type { MockOperate } from './operate-store';
 import type { MockPlatformApi } from './platform';
 import { invocationId } from './run-detail';
@@ -603,10 +604,10 @@ export class MockBuild {
 				publishedAt: iso(d.publishedAt),
 				publishedBy: d.publishedBy,
 				nodes: d.nodes.map((n) => ({ ...n, kind: snapshotNode(n.key)?.kind ?? null, columns: [...n.columns] })),
-				orchestration: structuredClone(d.orchestration),
+				orchestration: d.orchestration.map((o) => ({ ...o, triggerId: (o.kind === 'trigger' || o.kind === 'sensor') && TRIGGER_DEFS.some((t) => t.name === o.key) ? triggerId(o.key) : null })),
 				roles: structuredClone(d.roles),
 				environment: d.environment ? { ...d.environment } : null,
-				followingRuns: after.slice(0, 6).map((r) => ({ id: r.id, jobKey: r.jobKey, kind: r.kind, status: r.status, startedAt: r.startedAt, queuedAt: r.queuedAt })),
+				followingRuns: [...after].reverse().slice(0, 6).map((r) => ({ id: r.id, jobKey: r.jobKey, kind: r.kind, status: r.status, startedAt: r.startedAt, queuedAt: r.queuedAt })),
 				costChanges
 			};
 		});
