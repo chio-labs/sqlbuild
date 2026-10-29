@@ -93,8 +93,14 @@
 		}
 	}
 
+	const ownAdmin = $derived((assignments.data ?? []).filter((a) => a.principal.name === app.user?.name && a.role === 'admin' && !a.stale));
+	const isOwnLastAdmin = (a: RoleAssignment) => ownAdmin.length === 1 && ownAdmin[0].id === a.id;
+
 	async function remove(a: RoleAssignment) {
-		if (!confirm(`Remove ${a.role} from ${a.principal.name} (${formatAssignmentScope(a.scope, locations)})?`)) return;
+		const message = isOwnLastAdmin(a)
+			? `This is YOUR LAST ADMIN ASSIGNMENT.\n\nRemoving it would immediately take away your access to users, roles, tokens, locations and the audit log, and nobody could undo it from this account. The server refuses this change; another admin has to make it.\n\nSend the request anyway?`
+			: `Remove ${a.role} from ${a.principal.name} (${formatAssignmentScope(a.scope, locations)})?`;
+		if (!confirm(message)) return;
 		busy = a.id;
 		actionError = null;
 		try {
@@ -250,6 +256,7 @@
 							<td>
 								{a.role}
 								{#if a.stale}<div class="cell-desc warn">Stale: role removed from code; grants nothing</div>{/if}
+								{#if isOwnLastAdmin(a)}<div class="cell-desc warn">Your last admin assignment: removing it locks you out of administration</div>{/if}
 							</td>
 							<td class="muted">{formatAssignmentScope(a.scope, locations)}</td>
 							<td class="muted">{a.source === 'sso' ? `SSO group ${a.ssoGroup}` : 'Manual'}</td>

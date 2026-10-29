@@ -331,6 +331,12 @@ export class MockApiClient implements ApiClient {
 	listAccounts(...args: Parameters<PlatformApi['listAccounts']>) {
 		return this.#platform.listAccounts(...args);
 	}
+	disableAccount(...args: Parameters<PlatformApi['disableAccount']>) {
+		return this.#platform.disableAccount(...args);
+	}
+	createServiceAccount(...args: Parameters<PlatformApi['createServiceAccount']>) {
+		return this.#platform.createServiceAccount(...args);
+	}
 	listApiTokens(...args: Parameters<PlatformApi['listApiTokens']>) {
 		return this.#platform.listApiTokens(...args);
 	}

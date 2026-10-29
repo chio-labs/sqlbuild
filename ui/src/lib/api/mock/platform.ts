@@ -44,6 +44,7 @@ import type {
 	RoleGrant,
 	Scope,
 	ServerSettings,
+	ServiceAccountRequest,
 	SettingField,
 	StateTableName,
 	StateTableSync,
@@ -108,14 +109,14 @@ function createPlatformFixtures(now: number) {
 
 	// ---- accounts ----
 	const accounts: Account[] = [
-		{ ...DEMO_USER, kind: 'user', email: 'demo@example.com', source: 'oidc', ssoGroups: ['data-platform'], createdAt: ago(days(210)), lastSeenAt: ago(0.1), disabled: false, owner: null },
-		{ ...ALEX, kind: 'user', email: 'alex@example.com', source: 'oidc', ssoGroups: ['analytics-eng'], createdAt: ago(days(180)), lastSeenAt: ago(25), disabled: false, owner: null },
-		{ ...SAM, kind: 'user', email: 'sam@example.com', source: 'oidc', ssoGroups: ['analytics-eng', 'finance-analysts'], createdAt: ago(days(95)), lastSeenAt: ago(190), disabled: false, owner: null },
-		{ ...JORDAN, kind: 'user', email: 'jordan@example.com', source: 'password', ssoGroups: [], createdAt: ago(days(40)), lastSeenAt: ago(days(3)), disabled: false, owner: null },
-		{ ...OPS_USER, kind: 'user', email: 'ops-oncall@example.com', source: 'oidc', ssoGroups: ['data-platform'], createdAt: ago(days(150)), lastSeenAt: ago(1.5), disabled: false, owner: null },
-		{ ...RILEY, kind: 'user', email: 'riley@example.com', source: 'oidc', ssoGroups: ['support-ops'], createdAt: ago(days(300)), lastSeenAt: ago(days(61)), disabled: true, owner: null },
-		{ ...CI_ACCOUNT, kind: 'service_account', email: null, source: 'service_account', ssoGroups: [], createdAt: ago(days(200)), lastSeenAt: ago(42), disabled: false, owner: 'data-platform' },
-		{ ...REPORTING, kind: 'service_account', email: null, source: 'service_account', ssoGroups: [], createdAt: ago(days(120)), lastSeenAt: ago(300), disabled: false, owner: 'finance-analysts' }
+		{ ...DEMO_USER, kind: 'user', email: 'demo@example.com', source: 'oidc', ssoGroups: ['data-platform'], createdAt: ago(days(210)), lastSeenAt: ago(0.1), disabled: false, activeSessions: 2, owner: null, description: null },
+		{ ...ALEX, kind: 'user', email: 'alex@example.com', source: 'oidc', ssoGroups: ['analytics-eng'], createdAt: ago(days(180)), lastSeenAt: ago(25), disabled: false, activeSessions: 1, owner: null, description: null },
+		{ ...SAM, kind: 'user', email: 'sam@example.com', source: 'oidc', ssoGroups: ['analytics-eng', 'finance-analysts'], createdAt: ago(days(95)), lastSeenAt: ago(190), disabled: false, activeSessions: 1, owner: null, description: null },
+		{ ...JORDAN, kind: 'user', email: 'jordan@example.com', source: 'password', ssoGroups: [], createdAt: ago(days(40)), lastSeenAt: ago(days(3)), disabled: false, activeSessions: 0, owner: null, description: null },
+		{ ...OPS_USER, kind: 'user', email: 'ops-oncall@example.com', source: 'oidc', ssoGroups: ['data-platform'], createdAt: ago(days(150)), lastSeenAt: ago(1.5), disabled: false, activeSessions: 3, owner: null, description: null },
+		{ ...RILEY, kind: 'user', email: 'riley@example.com', source: 'oidc', ssoGroups: ['support-ops'], createdAt: ago(days(300)), lastSeenAt: ago(days(61)), disabled: true, activeSessions: 0, owner: null, description: null },
+		{ ...CI_ACCOUNT, kind: 'service_account', email: null, source: 'service_account', ssoGroups: [], createdAt: ago(days(200)), lastSeenAt: ago(42), disabled: false, activeSessions: 0, owner: 'data-platform', description: 'Deploys snapshots from CI' },
+		{ ...REPORTING, kind: 'service_account', email: null, source: 'service_account', ssoGroups: [], createdAt: ago(days(120)), lastSeenAt: ago(300), disabled: false, activeSessions: 0, owner: 'finance-analysts', description: 'Refreshes the reporting dashboards' }
 	];
 
 	// ---- tokens ----
@@ -715,6 +716,45 @@ export class MockPlatformApi implements PlatformApi {
 		return this.#ctx.reply(structuredClone(this.#data.accounts));
 	}
 
+	async disableAccount(name: string): Promise<Account> {
+		this.#require('user.manage');
+		const account = this.#data.accounts.find((a) => a.name === name);
+		if (!account) throw new ApiError(`Unknown account ${name}`, 404);
+		if (account.name === this.#ctx.user.name) throw new ApiError("You can't disable your own account", 409);
+		if (account.disabled) throw new ApiError(`${name} is already disabled`, 409);
+		const sessions = account.activeSessions;
+		account.disabled = true;
+		account.activeSessions = 0;
+		const revoked = sessions === 1 ? '1 session' : `${sessions} sessions`;
+		this.#audit('user.manage', { locationId: null, target: null, subject: name }, `Disabled ${name} and revoked ${revoked}`, 'active', 'disabled');
+		return this.#ctx.reply(structuredClone(account));
+	}
+
+	async createServiceAccount(request: ServiceAccountRequest): Promise<Account> {
+		this.#require('user.manage');
+		const name = request.name.trim();
+		if (!/^[a-z][a-z0-9-]{2,39}$/.test(name)) throw new ApiError('Use 3 to 40 lowercase letters, digits or hyphens, starting with a letter', 422);
+		if (this.#data.accounts.some((a) => a.name === name)) throw new ApiError(`An account named ${name} already exists`, 409);
+		const description = request.description.trim();
+		const account: Account = {
+			kind: 'service_account',
+			name,
+			displayName: description || name,
+			email: null,
+			source: 'service_account',
+			ssoGroups: [],
+			createdAt: new Date().toISOString(),
+			lastSeenAt: null,
+			disabled: false,
+			activeSessions: 0,
+			owner: this.#ctx.user.name,
+			description: description || null
+		};
+		this.#data.accounts.push(account);
+		this.#audit('user.manage', { locationId: null, target: null, subject: name }, `Created service account ${name}`, null, name);
+		return this.#ctx.reply(structuredClone(account));
+	}
+
 	async listApiTokens(): Promise<ApiToken[]> {
 		this.#require('token.manage');
 		return this.#ctx.reply(structuredClone(this.#data.apiTokens));
@@ -797,6 +837,12 @@ export class MockPlatformApi implements PlatformApi {
 		if (index < 0) throw new ApiError('Assignment not found', 404);
 		const assignment = this.#data.assignments[index];
 		if (assignment.source === 'sso') throw new ApiError('SSO-derived assignments follow the group mapping in the server config', 409);
+		const ownAdmin = this.#effectiveAssignments(this.#ctx.user.name).filter((a) => a.role === 'admin' && !a.stale);
+		if (assignment.principal.name === this.#ctx.user.name && assignment.role === 'admin' && ownAdmin.length <= 1) {
+			const scope = { ...assignment.scope, subject: assignment.principal.name };
+			this.#audit('role.assign', scope, `Refused removing ${assignment.principal.name}'s last admin assignment`, 'admin', 'admin', 'denied');
+			throw new ApiError("You can't remove your own last admin assignment: you would lose administration immediately. Ask another admin to remove it.", 409);
+		}
 		this.#data.assignments.splice(index, 1);
 		this.#audit('role.assign', { ...assignment.scope, subject: assignment.principal.name }, `Removed ${assignment.role} from ${assignment.principal.name}`, assignment.role, null);
 		return this.#ctx.reply(undefined);
@@ -975,15 +1021,22 @@ export class MockPlatformApi implements PlatformApi {
 		return { token: structuredClone(token), secret };
 	}
 
-	#audit(action: AuditEntry['action'], scope: AuditEntry['scope'], summary: string, before: string | null = null, after: string | null = null) {
+	#audit(
+		action: AuditEntry['action'],
+		scope: AuditEntry['scope'],
+		summary: string,
+		before: string | null = null,
+		after: string | null = null,
+		outcome: AuditEntry['outcome'] = 'allowed'
+	) {
 		this.#data.auditEntries.push({
 			id: `aud-${randomHex(8)}`,
 			at: new Date().toISOString(),
 			actor: this.#ctx.user,
 			action,
-			outcome: 'allowed',
+			outcome,
 			scope,
-			grantingRole: this.#ctx.role,
+			grantingRole: outcome === 'allowed' ? this.#ctx.role : null,
 			evidenceRead: false,
 			summary,
 			before,

@@ -13,7 +13,7 @@
 	import NoAccess from '$lib/components/platform/no-access.svelte';
 	import PageTabs from '$lib/components/platform/page-tabs.svelte';
 	import Panel from '$lib/components/platform/panel.svelte';
-	import type { AccountSource, ApiToken, IssuedToken } from '$lib/api';
+	import type { Account, AccountSource, ApiToken, IssuedToken } from '$lib/api';
 	import { formatAgo, formatIn, formatStamp } from '$lib/format/time';
 	import { errorMessage, tokenLabel, tokenTone } from '$lib/platform/labels';
 	import { app } from '$lib/state/app.svelte';
@@ -84,6 +84,50 @@
 			label = '';
 		});
 	}
+	// ---- account actions ----
+	let accountBusy = $state<string | null>(null);
+	let accountError = $state<string | null>(null);
+	let creatingService = $state(false);
+	let serviceName = $state('');
+	let serviceDescription = $state('');
+	let createdService = $state<Account | null>(null);
+
+	async function accountAct(key: string, action: () => Promise<unknown>) {
+		accountBusy = key;
+		accountError = null;
+		try {
+			await action();
+			accounts.refresh();
+		} catch (error) {
+			accountError = errorMessage(error);
+		} finally {
+			accountBusy = null;
+		}
+	}
+
+	function disable(a: Account) {
+		const sessions = a.activeSessions === 1 ? '1 active session' : `${a.activeSessions} active sessions`;
+		const tokens = a.kind === 'service_account' ? ' Its API tokens stop working.' : '';
+		if (!confirm(`Disable ${a.displayName} (${a.name})? They can no longer sign in, and ${sessions} will be revoked now.${tokens}`)) return;
+		void accountAct(a.name, () => app.client.disableAccount(a.name));
+	}
+
+	function createService() {
+		void accountAct('create-service', async () => {
+			createdService = await app.client.createServiceAccount({ name: serviceName, description: serviceDescription });
+			serviceName = '';
+			serviceDescription = '';
+			creatingService = false;
+		});
+	}
+
+	function issueTokenFor(a: Account) {
+		owner = a.name;
+		label = '';
+		createdService = null;
+		chosen = 'tokens';
+	}
+
 	const rotate = (t: ApiToken) => act(t.id, async () => (issued = await app.client.rotateApiToken(t.id)));
 	function revoke(t: ApiToken) {
 		if (!confirm(`Revoke "${t.label}" (${t.prefix}…)? Anything using it stops working.`)) return;
@@ -111,8 +155,26 @@
 		<ListToolbar bind:query placeholder="Search people, service accounts and groups" total="{shownAccounts.length} of {accounts.data?.length ?? 0} accounts">
 			{#snippet actions()}
 				<span class="note">People appear on first sign-in; SSO groups map to roles in Roles &amp; approvals.</span>
+				<GatedButton requires="user.manage" onclick={() => (creatingService = !creatingService)}>New service account</GatedButton>
 			{/snippet}
 		</ListToolbar>
+		{#if creatingService}
+			<div class="create-bar">
+				<input class="field" placeholder="Name, e.g. svc-exports" bind:value={serviceName} aria-label="Service account name" />
+				<input class="field wide" placeholder="What it is for" bind:value={serviceDescription} aria-label="Description" />
+				<GatedButton requires="user.manage" variant="default" busy={accountBusy === 'create-service'} disabled={!serviceName.trim()} onclick={createService}>Create service account</GatedButton>
+				<Button variant="ghost" size="sm" onclick={() => (creatingService = false)}>Cancel</Button>
+				<span class="note">Signs in with API tokens only; give it roles in Roles &amp; approvals.</span>
+			</div>
+		{/if}
+		{#if createdService}
+			<div class="created">
+				Created service account <code>{createdService.name}</code>. It has no roles or tokens yet.
+				{#if canTokens}<Button variant="outline" size="xs" onclick={() => issueTokenFor(createdService!)}>Issue an API token</Button>{/if}
+				<Button variant="ghost" size="xs" onclick={() => (createdService = null)}>Dismiss</Button>
+			</div>
+		{/if}
+		{#if accountError}<p class="err">{accountError}</p>{/if}
 		<div class="sb-list-wrap">
 			<table class="sb-list static">
 				<thead>
@@ -122,6 +184,7 @@
 						<th>SSO groups</th>
 						<th>Last seen</th>
 						<th>Status</th>
+						<th></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -133,6 +196,7 @@
 									<div class="min-w-0">
 										<strong>{a.displayName}</strong>
 										<div class="cell-desc"><code>{a.name}</code>{#if a.email}&nbsp;· {a.email}{/if}{#if a.owner}&nbsp;· owned by {a.owner}{/if}</div>
+										{#if a.description && a.description !== a.displayName}<div class="cell-desc">{a.description}</div>{/if}
 									</div>
 								</div>
 							</td>
@@ -141,10 +205,20 @@
 								{#each a.ssoGroups as g (g)}<span class="sb-tag group">{g}</span>{:else}<span class="muted">—</span>{/each}
 							</td>
 							<td><RelativeTime value={a.lastSeenAt ? formatAgo(a.lastSeenAt, app.now) : 'Never'} exact={formatStamp(a.lastSeenAt)} /></td>
-							<td><StatusLabel tone={a.disabled ? 'var(--sb-text-faint)' : 'var(--sb-success)'} label={a.disabled ? 'Disabled' : 'Active'} muted={a.disabled} /></td>
+							<td>
+								<StatusLabel tone={a.disabled ? 'var(--sb-text-faint)' : 'var(--sb-success)'} label={a.disabled ? 'Disabled' : 'Active'} muted={a.disabled} />
+								{#if !a.disabled && a.kind === 'user'}<div class="cell-desc">{a.activeSessions === 1 ? '1 session' : `${a.activeSessions} sessions`}</div>{/if}
+							</td>
+							<td class="num">
+								{#if a.name === app.user?.name}
+									<span class="faint">you</span>
+								{:else if !a.disabled}
+									<GatedButton requires="user.manage" size="xs" variant="destructive" busy={accountBusy === a.name} onclick={() => disable(a)}>Disable</GatedButton>
+								{/if}
+							</td>
 						</tr>
 					{:else}
-						<LoadRow colspan={5} resource={accounts} empty="No accounts match the search." />
+						<LoadRow colspan={6} resource={accounts} empty="No accounts match the search." />
 					{/each}
 				</tbody>
 			</table>
@@ -267,6 +341,22 @@
 	}
 	input.field {
 		width: 260px;
+	}
+	input.field.wide {
+		width: 340px;
+	}
+	.created {
+		display: flex;
+		flex: 0 0 auto;
+		align-items: center;
+		gap: 8px;
+		padding: 10px 20px;
+		border-bottom: 1px solid var(--border);
+		font-size: 12.5px;
+	}
+	.faint {
+		color: var(--sb-text-faint);
+		font-size: 12px;
 	}
 	.err {
 		padding: 8px 20px 0;

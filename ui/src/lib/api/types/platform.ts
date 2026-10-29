@@ -337,9 +337,15 @@ export type Account = Principal & {
 	createdAt: Iso;
 	lastSeenAt: Iso | null;
 	disabled: boolean;
+	/** Signed-in browser sessions; disabling the account revokes them. */
+	activeSessions: number;
 	/** Service accounts only: the person or team responsible. */
 	owner: string | null;
+	/** Service accounts only: what the account is for. */
+	description: string | null;
 };
+
+export type ServiceAccountRequest = { name: string; description: string };
 
 export type RoleGrant = { nodes: string[]; permissions: Capability[] };
 

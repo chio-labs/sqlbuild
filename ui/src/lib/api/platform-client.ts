@@ -22,7 +22,8 @@ import type {
 	RoleAssignmentRequest,
 	RoleDefinition,
 	Scope,
-	ServerSettings
+	ServerSettings,
+	ServiceAccountRequest
 } from './types';
 
 /**
@@ -62,6 +63,10 @@ export interface PlatformApi {
 	// ---- users and tokens ----
 	/** `user.manage` */
 	listAccounts(): Promise<Account[]>;
+	/** Blocks sign-in and revokes the account's sessions. You can't disable yourself. `user.manage` */
+	disableAccount(name: string): Promise<Account>;
+	/** A non-person account that signs in with API tokens only. `user.manage` */
+	createServiceAccount(request: ServiceAccountRequest): Promise<Account>;
 	/** `token.manage` */
 	listApiTokens(): Promise<ApiToken[]>;
 	/** `token.manage` */
