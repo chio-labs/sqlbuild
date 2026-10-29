@@ -7,6 +7,7 @@ use sqlbuild_sqltext::header_strings::main::follows_description_key::follows_des
 use sqlbuild_sqltext::header_strings::main::opens_triple_quote::opens_triple_quote;
 use sqlbuild_sqltext::header_strings::main::prose_end::prose_end;
 use sqlbuild_sqltext::header_strings::main::triple_quoted_end::triple_quoted_end;
+use sqlbuild_sqltext::sql_scan::main::dialect_non_code_end::dialect_non_code_end;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::sql_macros::constants::{HEADER_KEYWORD, SQL_KIND_WORD};
@@ -53,6 +54,11 @@ impl Token {
 }
 
 const PUNCTUATION: &[u8] = b"()[]{},.;";
+
+/// Where the quoted text opened at an offset ends.
+type TextEnd<'a> = dyn Fn(&[u8], usize) -> Result<usize, LexError> + 'a;
+/// Where a comment opened at an offset ends, `None` when none opens there.
+type CommentEnd<'a> = dyn Fn(&[u8], usize) -> Result<Option<usize>, LexError> + 'a;
 /// The `@word(...)` declaration forms that are not macro calls.
 pub(crate) const DECLARATION_WORDS: [&str; 3] = ["const", "enum", "param"];
 
@@ -61,32 +67,72 @@ pub(crate) fn tokens(sql: &str) -> Result<Vec<Token>, LexError> {
     tokens_with(sql, None)
 }
 
-/// Every token of `sql`, with `syntax`'s backslash escapes, or as [`tokens`] reads it.
+/// Every token of `sql`, with quoted text ending where `syntax` ends it, or as [`tokens`] reads it.
 pub(crate) fn tokens_with(
     sql: &str,
     syntax: Option<&LexicalSyntax>,
 ) -> Result<Vec<Token>, LexError> {
     if let Some(syntax) = syntax {
-        let escapes = |quote: u8| {
-            syntax
-                .backslash_escape_quotes
-                .iter()
-                .any(|value| value.as_bytes() == [quote])
+        let text_end = |bytes: &[u8], start: usize| match dialect_non_code_end(bytes, start, syntax)
+        {
+            Ok(Some(end)) => Ok(end),
+            _ => Err(LexError::UnclosedQuote(start)),
         };
-        return scanned_tokens(sql, &escapes);
+        let comment_end = |bytes: &[u8], start: usize| dialect_comment_end(bytes, start, syntax);
+        return scanned_tokens(sql, &text_end, &comment_end);
     }
-    match scanned_tokens(sql, &|_| false) {
-        Err(LexError::UnclosedQuote(start)) => {
-            scanned_tokens(sql, &|_| true).map_err(|_| LexError::UnclosedQuote(start))
-        }
+    match scanned_tokens(
+        sql,
+        &|bytes, start| quote_end(bytes, start, false).ok_or(LexError::UnclosedQuote(start)),
+        &generic_comment_end,
+    ) {
+        Err(LexError::UnclosedQuote(start)) => scanned_tokens(
+            sql,
+            &|bytes, start| quote_end(bytes, start, true).ok_or(LexError::UnclosedQuote(start)),
+            &generic_comment_end,
+        )
+        .map_err(|_| LexError::UnclosedQuote(start)),
         scanned => scanned,
     }
 }
 
-/// Every token of `sql`; a backslash escapes inside quotes for which `backslash_escapes` holds.
+/// The end of a `--` or `/* */` comment opening at `start`, if one opens there.
+fn generic_comment_end(bytes: &[u8], start: usize) -> Result<Option<usize>, LexError> {
+    if bytes[start..].starts_with(b"--") {
+        return Ok(Some(
+            bytes[start..]
+                .iter()
+                .position(|byte| *byte == b'\n')
+                .map_or(bytes.len(), |offset| start + offset + 1),
+        ));
+    }
+    if bytes[start..].starts_with(b"/*") {
+        return bytes[start + 2..]
+            .windows(2)
+            .position(|pair| pair == b"*/")
+            .map(|offset| Some(start + 2 + offset + 2))
+            .ok_or(LexError::UnclosedComment(start));
+    }
+    Ok(None)
+}
+
+/// The end of a comment opening at `start` under `syntax`'s comment rules, if one opens there.
+fn dialect_comment_end(
+    bytes: &[u8],
+    start: usize,
+    syntax: &LexicalSyntax,
+) -> Result<Option<usize>, LexError> {
+    if matches!(bytes[start], b'\'' | b'"' | b'`' | b'$') {
+        return Ok(None);
+    }
+    dialect_non_code_end(bytes, start, syntax).map_err(|_| LexError::UnclosedComment(start))
+}
+
+/// Every token of `sql`; `text_end` and `comment_end` find where quoted text and comments end.
 fn scanned_tokens(
     sql: &str,
-    backslash_escapes: &dyn Fn(u8) -> bool,
+    text_end: &TextEnd<'_>,
+    comment_end: &CommentEnd<'_>,
 ) -> Result<Vec<Token>, LexError> {
     let bytes: &[u8] = sql.as_bytes();
     let mut found: Vec<Token> = Vec::new();
@@ -98,19 +144,8 @@ fn scanned_tokens(
             index += 1;
             continue;
         }
-        if byte == b'-' && bytes.get(index + 1) == Some(&b'-') {
-            index = bytes[index..]
-                .iter()
-                .position(|byte| *byte == b'\n')
-                .map_or(bytes.len(), |offset| index + offset + 1);
-            continue;
-        }
-        if byte == b'/' && bytes.get(index + 1) == Some(&b'*') {
-            index = bytes[index + 2..]
-                .windows(2)
-                .position(|pair| pair == b"*/")
-                .map(|offset| index + 2 + offset + 2)
-                .ok_or(LexError::UnclosedComment(index))?;
+        if let Some(end) = comment_end(bytes, index)? {
+            index = end;
             continue;
         }
         let start: usize = index;
@@ -125,13 +160,11 @@ fn scanned_tokens(
                 TokenKind::Quoted
             }
             b'\'' => {
-                index = quote_end(bytes, index, backslash_escapes(byte))
-                    .ok_or(LexError::UnclosedQuote(start))?;
+                index = text_end(bytes, index)?;
                 TokenKind::Text
             }
             b'"' | b'`' => {
-                index = quote_end(bytes, index, backslash_escapes(byte))
-                    .ok_or(LexError::UnclosedQuote(start))?;
+                index = text_end(bytes, index)?;
                 TokenKind::Quoted
             }
             b'$' if dollar_end(bytes, index).is_some() => {

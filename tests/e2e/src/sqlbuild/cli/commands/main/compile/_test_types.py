@@ -1369,3 +1369,13 @@ class SqlTestCacheMissE2ETestCase:
     description: str
     change: Callable[[Path], None]
     expected_debug_line: str
+
+
+@dataclass(frozen=True)
+class SqlMacroStringEscapeTestCase:
+    """A model whose SQL macro call follows a string the adapter ends with its own rules."""
+
+    description: str
+    adapter_config: str
+    string_sql: str
+    expected_compiled_fragment: str
