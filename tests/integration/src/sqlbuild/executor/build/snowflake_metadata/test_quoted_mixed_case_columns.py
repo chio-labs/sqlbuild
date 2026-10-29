@@ -8,6 +8,7 @@ import pytest
 
 from tests.integration.src.sqlbuild.executor.build.snowflake_metadata._test_types import (
     QuotedColumnBuildTestCase,
+    QuotedContractBuildTestCase,
 )
 from tests.integration.src.sqlbuild.executor.build.snowflake_metadata.helpers import (
     SimulatedSnowflakeWarehouse,
@@ -86,6 +87,70 @@ def test_given_quoted_mixed_case_source_columns_when_building_then_planning_bind
     assert tuple(build[0] for build in builds) == (0, 0), output
     assert "B002" not in output, output
     assert any(test_case.expected_fragment in statement for statement in builds[1][1]), builds[1][1]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        QuotedContractBuildTestCase(
+            description="an unquoted declaration matches the quoted camelCase alias",
+            declared_name="listingId",
+            produced_columns=("listingId",),
+        ),
+        QuotedContractBuildTestCase(
+            description="a quoted declaration matches the quoted camelCase alias",
+            declared_name='"listingId"',
+            produced_columns=("listingId",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_enforced_contract_on_quoted_alias_when_building_then_runtime_contract_passes(
+    test_case: QuotedContractBuildTestCase,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    files: dict[str, str] = {
+        **_PROJECT_FILES,
+        "models/listing_export.sql": (
+            "MODEL (\n  description 'Listings in the partner feed format.',\n"
+            "  contract enforced,\n"
+            f"  columns ({test_case.declared_name} (type VARCHAR),),\n);\n\n"
+            'SELECT l.listing_id::VARCHAR AS "listingId"\nFROM __ref("stg_listings") AS l\n'
+        ),
+    }
+    for relative, content in files.items():
+        path: Path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_text(content, encoding="utf-8")
+    warehouse: SimulatedSnowflakeWarehouse = SimulatedSnowflakeWarehouse(
+        relations=(
+            FakeRelation(
+                database="ANALYTICS",
+                schema="RAW",
+                name="LISTINGS",
+                columns=(
+                    FakeColumn(name="listingId", data_type="TEXT"),
+                    FakeColumn(name="unitPriceMinor", data_type="NUMBER"),
+                ),
+            ),
+        ),
+    )
+    warehouse.set_model_columns(
+        model="listing_export",
+        columns=tuple(
+            FakeColumn(name=name, data_type="TEXT") for name in test_case.produced_columns
+        ),
+    )
+
+    exit_code, _statements = build_with_cli(
+        project_dir=tmp_path, warehouse=warehouse, monkeypatch=monkeypatch
+    )
+
+    output: str = capsys.readouterr().out
+    assert exit_code == test_case.expected_exit_code, output
+    assert "runtime contract" not in output, output
 
 
 if __name__ == "__main__":

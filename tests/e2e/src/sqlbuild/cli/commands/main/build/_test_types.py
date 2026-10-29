@@ -1504,3 +1504,12 @@ class QuotedMixedCaseColumnsBuildE2ETestCase:
     expected_export_rows: list[tuple[object, ...]]
     expected_test_fragment: str
     expected_scenario_fragment: str
+
+
+@dataclass(frozen=True)
+class QuotedContractE2ETestCase:
+    """An enforced contract whose declared name the model produces as a quoted camelCase alias."""
+
+    description: str
+    declared_name: str
+    expected_rows: list[tuple[object, ...]]

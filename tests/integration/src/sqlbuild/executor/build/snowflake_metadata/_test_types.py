@@ -109,3 +109,13 @@ class QuotedColumnBuildTestCase:
     description: str
     stored_columns: tuple[str, ...]
     expected_fragment: str
+
+
+@dataclass(frozen=True)
+class QuotedContractBuildTestCase:
+    """An enforced contract declaring a name the model's quoted mixed-case alias produces."""
+
+    description: str
+    declared_name: str
+    produced_columns: tuple[str, ...]
+    expected_exit_code: int = 0

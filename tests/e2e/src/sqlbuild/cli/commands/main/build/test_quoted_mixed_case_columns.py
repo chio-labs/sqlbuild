@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
+    QuotedContractE2ETestCase,
     QuotedMixedCaseColumnsBuildE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
@@ -107,6 +108,57 @@ def test_given_quoted_mixed_case_columns_when_running_commands_then_each_succeed
     assert test_case.expected_test_fragment in tested.stdout, tested.stdout
     assert replayed.returncode == 0, replayed.stdout + replayed.stderr
     assert test_case.expected_scenario_fragment in replayed.stdout, replayed.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        QuotedContractE2ETestCase(
+            description="an unquoted declaration enforces the quoted camelCase alias",
+            declared_name="listingId",
+            expected_rows=[("L1",)],
+        ),
+        QuotedContractE2ETestCase(
+            description="a quoted declaration enforces the quoted camelCase alias",
+            declared_name='"listingId"',
+            expected_rows=[("L1",)],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_enforced_contract_on_quoted_alias_when_building_then_contract_and_types_hold(
+    test_case: QuotedContractE2ETestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="partner_feed",
+        repo_files={
+            **_PROJECT_FILES,
+            "models/listing_export.sql": (
+                "MODEL (\n  description 'Listings in the partner feed format.',\n"
+                "  materialized table,\n  contract enforced,\n"
+                f"  columns ({test_case.declared_name} (type VARCHAR),),\n);\n\n"
+                'SELECT l.listing_id::VARCHAR AS "listingId"\nFROM __ref("stg_listings") AS l\n'
+            ),
+        },
+    )
+    db_path: Path = project_dir / "partner_feed.duckdb"
+    execute_duckdb(
+        db_path=db_path,
+        sql='CREATE TABLE main.raw_listings AS SELECT \'L1\' AS "listingId", 1299::BIGINT AS "unitPriceMinor"',
+    )
+
+    builds: tuple[subprocess.CompletedProcess[str], ...] = tuple(
+        run_sqb(command=("--no-color", "build"), project_dir=project_dir) for _ in range(2)
+    )
+
+    for build in builds:
+        assert build.returncode == 0, build.stdout + build.stderr
+        assert "runtime contract" not in build.stdout, build.stdout
+    rows: list[tuple[object, ...]] = query_duckdb(
+        db_path=db_path, sql='SELECT "listingId" FROM main.listing_export'
+    )
+    assert rows == test_case.expected_rows
 
 
 if __name__ == "__main__":
