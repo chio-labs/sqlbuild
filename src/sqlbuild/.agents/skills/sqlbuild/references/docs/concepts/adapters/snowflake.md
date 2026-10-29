@@ -46,6 +46,12 @@ schema = "RAW"
 
 Connection fields are passed directly to `snowflake.connector.connect()`. See the [Snowflake Connector documentation](https://docs.snowflake.com/en/developer-guide/python-connector/python-connector-connect) for all available options, including key-pair authentication, OAuth, and SSO. Put the authoritative database and schema on the target.
 
+SQLBuild turns off the connector's platform detection by setting
+`SNOWFLAKE_DISABLE_PLATFORM_DETECTION=true` when the variable is unset. Detection runs on every
+connect: it probes cloud metadata endpoints, calls AWS to identify the caller for client
+telemetry, and can print `botocore` warnings when an AWS SSO session has expired. To keep it on,
+set the variable yourself before running `sqb`, for example `SNOWFLAKE_DISABLE_PLATFORM_DETECTION=false`.
+
 ## Session initialization
 
 On connect, SQLBuild applies the connection's role and warehouse, then applies the active

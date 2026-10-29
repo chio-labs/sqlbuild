@@ -24,7 +24,7 @@ export default defineConfig({
 				{ tag: 'meta', attrs: { name: 'twitter:image', content: 'https://sqlbuild.com/assets/og-sqlbuild-docs.png' } },
 			],
 			social: [
-				{ icon: 'github', label: 'GitHub', href: 'https://github.com/chio-labs/sqlbuild' },
+				{ icon: 'github', label: 'GitHub', href: 'https://github.com/sqlstack-io/sqlbuild' },
 				{ icon: 'discord', label: 'Discord', href: 'https://discord.gg/tYU4nXdsT' },
 			],
 			components: {

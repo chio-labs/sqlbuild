@@ -102,6 +102,10 @@ pub(crate) fn compiled_phase<'py>(
                     ),
                     ("resolved_connection", connection_config.clone()),
                     ("analysis_selection", selection),
+                    (
+                        "source_lexical_syntax",
+                        native_field(&options, "source_lexical_syntax")?,
+                    ),
                 ],
             )?),
         )

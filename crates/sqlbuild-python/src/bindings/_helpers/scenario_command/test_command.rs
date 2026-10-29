@@ -427,6 +427,10 @@ pub(crate) fn run_scenario_test_command(
                 ("no_sql_validation", boolean(py, no_sql_validation)),
                 ("source_deferral_enabled", boolean(py, false)),
                 ("connection_config", run.connection_config.clone()),
+                (
+                    "source_lexical_syntax",
+                    native_field(&run.project_adapter, "sql_lexical_syntax")?,
+                ),
             ],
             planning: &planning,
         },

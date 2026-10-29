@@ -106,6 +106,7 @@ pub enum AdapterHost {
     RunRecallCommand,
     InsertRecallRows,
     CloseRecallStore,
+    RelationMetadataCacheScope,
 }
 
 impl AdapterHost {

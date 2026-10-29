@@ -115,6 +115,10 @@ _TARGETS: dict[str, tuple[str, str]] = {
         "sqlbuild.adapters.clickhouse._helpers.recall_store",
         "close_recall_store",
     ),
+    "relation_metadata_cache_scope": (
+        "sqlbuild.adapter.relations.main.relation_metadata_cache_scope",
+        "relation_metadata_cache_scope",
+    ),
     "python_resource_rows": (
         "sqlbuild.compiler.compile._helpers.diagnostics.python_resources",
         "python_resource_rows",

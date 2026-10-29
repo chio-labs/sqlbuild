@@ -533,6 +533,17 @@ fn validate_exception_paths(request: &EvaluateRequest) -> Result<(), String> {
             ));
         }
     }
+    let literal_ignore_paths = request
+        .config
+        .rule_ignores
+        .iter()
+        .flat_map(|entry| &entry.paths)
+        .filter(|path| !path.contains(['*', '?', '[', '{']));
+    for path in literal_ignore_paths {
+        if !root.join(path).exists() {
+            return Err(format!("rule ignore path does not exist: {path}"));
+        }
+    }
     Ok(())
 }
 

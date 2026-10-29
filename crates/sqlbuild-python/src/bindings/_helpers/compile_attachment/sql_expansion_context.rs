@@ -165,6 +165,10 @@ pub(crate) fn sql_expansion_inputs(sources: ExpansionSources<'_>) -> PyResult<Sq
                 "_enforce_explicit_references",
                 native_field(&project_config, "references")?.getattr("enforce_explicit")?,
             ),
+            (
+                "_lexical_syntax",
+                native_field(&value_renderer, "sql_lexical_syntax")?,
+            ),
         ],
     )?;
     Ok(SqlExpansionInputs {

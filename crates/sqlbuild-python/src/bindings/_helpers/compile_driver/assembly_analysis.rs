@@ -38,6 +38,8 @@ use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, function_names};
+use crate::bindings::_helpers::sqltext::lexical_syntax::optional_record_syntax;
+use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 const GENERIC_DIALECT: &str = "generic";
 const UDF_PREFIX: &str = "__sqlbuild_udf_";
@@ -55,6 +57,8 @@ pub(crate) struct AnalysisContext<'py> {
     pub(crate) analyses: Option<ModelAnalyses<'py>>,
     /// The native rows of `column_types`, `nullability` and `complete_schemas`.
     pub(crate) declared: DeclaredShapes,
+    /// The lexical rules the project's SQL is authored in.
+    pub(crate) syntax: Option<LexicalSyntax>,
 }
 
 /// Whether `model_input` is selected for analysis by `names` (`None` selects every model).
@@ -122,6 +126,7 @@ pub(crate) fn analysis_context<'py>(
         dynamic_families,
         analyses: None,
         declared,
+        syntax: optional_record_syntax(&native_field(inputs, "sql_lexical_syntax")?)?,
     };
     if context.sql_analysis_enabled.is_truthy()? {
         let declared: DeclaredShapes = std::mem::take(&mut context.declared);

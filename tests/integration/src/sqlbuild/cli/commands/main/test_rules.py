@@ -3030,6 +3030,20 @@ def required_prefix(*, model: Model, ctx: RuleContext) -> list[Finding]:
             ("rule-ignore selector matches no rules: SQBRZZZ",),
         ),
         EmptyRuleSelectionTestCase(
+            "missing literal ignore path is rejected",
+            '[[rules.rule_ignores]]\nrules = ["SQBRSQL"]\npaths = ["models/orders.sql", "models/gone.sql"]\n'
+            'reason = "Legacy."\n',
+            1,
+            ("rule ignore path does not exist: models/gone.sql",),
+        ),
+        EmptyRuleSelectionTestCase(
+            "ignore paths naming a folder or a glob that matches nothing compile",
+            '[[rules.rule_ignores]]\nrules = ["SQBRSQL"]\npaths = ["models", "models/legacy/**"]\n'
+            'reason = "Legacy."\n',
+            0,
+            (),
+        ),
+        EmptyRuleSelectionTestCase(
             "unknown built-in rule option is rejected",
             "[rules.rule_options.SQBRSQL004]\nnope = 3\n",
             1,

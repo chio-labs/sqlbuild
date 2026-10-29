@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import logging
+import os
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import date, datetime
@@ -49,6 +50,7 @@ from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.main.complete_table_freshness_results import (
     complete_table_freshness_results,
 )
+from sqlbuild.adapter.contract.main.is_quoted_identifier import is_quoted_identifier
 from sqlbuild.adapter.contract.main.normalize_seed_csv_value import normalize_seed_csv_value
 from sqlbuild.adapter.contract.main.run_relation_read_probe import run_relation_read_probe
 from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
@@ -123,6 +125,7 @@ from sqlbuild.adapter.type_system.main.conditional_result_nullability import (
 from sqlbuild.adapter.type_system.main.first_arg_nullability import first_arg_nullability
 from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize_numeric_family
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
+from sqlbuild.adapters.snowflake._helpers.column_names import logical_column_name
 from sqlbuild.adapters.snowflake._helpers.cost import cost_failure_cause
 from sqlbuild.adapters.snowflake._helpers.grants import (
     render_snowflake_view_grants,
@@ -156,6 +159,8 @@ from sqlbuild.adapters.snowflake.constants import (
     MAX_STATEMENT_TIMEOUT_SECONDS,
     MFA_AUTHENTICATOR,
     OAUTH_AUTHORIZATION_CODE_AUTHENTICATOR,
+    PLATFORM_DETECTION_DISABLED,
+    PLATFORM_DETECTION_VARIABLE,
     SECONDARY_ROLES_ALL,
     SECONDARY_ROLES_NONE,
     SHOW_LIKE_ESCAPE_CHARACTER,
@@ -326,6 +331,13 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             connection=connection, database=database, schema=schema
         )
         return {entry.stored_name: entry.relation for entry in listing.entries}
+
+    def relation_listing_scope(
+        self, *, connection: Any, database: str | None, schema: str
+    ) -> SchemaListingScope:
+        """The stored database and schema names that key a build's listing of one schema."""
+
+        return self._listing_scope(connection=connection, database=database, schema=schema)
 
     def _listing_scope(
         self, *, connection: Any, database: str | None, schema: str
@@ -1559,6 +1571,8 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def render_identifier(self, name: str) -> str:
         """Render a logical identifier using Snowflake's unquoted uppercase semantics."""
 
+        if is_quoted_identifier(name):
+            return name
         return '"' + name.upper().replace('"', '""') + '"'
 
     def render_exact_identifier(self, name: str) -> str:
@@ -1904,8 +1918,9 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         return True
 
     def connect(self, config: dict[str, Any]) -> _SnowflakeConnection:
-        """Open a Snowflake connection from the resolved connection config."""
+        """Open a Snowflake connection, with platform detection off unless the user set it."""
 
+        _ = os.environ.setdefault(PLATFORM_DETECTION_VARIABLE, PLATFORM_DETECTION_DISABLED)
         try:
             import snowflake.connector
         except ImportError as error:
@@ -2234,7 +2249,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                         continue
                     columns.setdefault(str(row["table_name"]), []).append(
                         ColumnInfo(
-                            name=str(row["column_name"]).lower(),
+                            name=logical_column_name(str(row["column_name"])),
                             type=show_columns_type(row["data_type"]),
                         )
                     )
@@ -2305,7 +2320,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             for row in rows:
                 columns.setdefault(str(row[0]), []).append(
                     ColumnInfo(
-                        name=str(row[1]).lower(),
+                        name=logical_column_name(str(row[1])),
                         type=information_schema_type(
                             data_type=str(row[2]),
                             numeric_precision=row[3],
@@ -2565,7 +2580,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 continue
             return tuple(
                 ColumnInfo(
-                    name=str(row["column_name"]).lower(),
+                    name=logical_column_name(str(row["column_name"])),
                     type=show_columns_type(row["data_type"]),
                 )
                 for row in rows
@@ -2605,7 +2620,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             cursor.close()
         return tuple(
             ColumnInfo(
-                name=str(row[0]).lower(),
+                name=logical_column_name(str(row[0])),
                 type=self._build_information_schema_type(
                     data_type=str(row[1]),
                     numeric_precision=row[2],
@@ -2655,7 +2670,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             table_name: str = str(row[0]).lower()
             result.setdefault(table_name, []).append(
                 ColumnInfo(
-                    name=str(row[1]).lower(),
+                    name=logical_column_name(str(row[1])),
                     type=self._build_information_schema_type(
                         data_type=str(row[2]),
                         numeric_precision=row[3],
@@ -2722,7 +2737,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         rows: list[tuple[Any, ...]] = run_recorded_inspection_query(sql=query, run=fetch)
         return tuple(
             ColumnInfo(
-                name=str(row[2]).lower(),
+                name=logical_column_name(str(row[2])),
                 type=show_columns_type(row[3]),
             )
             for row in rows
@@ -2755,7 +2770,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                     )
                     result.setdefault(identity, []).append(
                         ColumnInfo(
-                            name=str(row[3]).lower(),
+                            name=logical_column_name(str(row[3])),
                             type=self._build_information_schema_type(
                                 data_type=str(row[4]),
                                 numeric_precision=row[5],
@@ -3926,7 +3941,9 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             rows: list[tuple[Any, ...]] = cursor.fetchall()
         finally:
             cursor.close()
-        return tuple(ColumnInfo(name=str(row[0]).lower(), type=str(row[1])) for row in rows)
+        return tuple(
+            ColumnInfo(name=logical_column_name(str(row[0])), type=str(row[1])) for row in rows
+        )
 
     def build_cursor_filter(
         self,

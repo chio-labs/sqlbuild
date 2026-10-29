@@ -1303,6 +1303,12 @@ const R_MACRO_CONTEXT: RecordSpec = RecordSpec {
             compared: false,
             shown: false,
         },
+        FieldSpec {
+            name: "_lexical_syntax",
+            default: FieldDefault::None,
+            compared: false,
+            shown: false,
+        },
     ],
 };
 const R_DECLARATION_RESOLUTION_CONTEXT: RecordSpec = RecordSpec {

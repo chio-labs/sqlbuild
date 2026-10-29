@@ -72,7 +72,9 @@ reason = "Examples retain intentionally minimal SQL."
 ```
 
 Path ignores accept exact codes and family prefixes. Keep their scope narrow and explain why the
-project differs from the selected requirement.
+project differs from the selected requirement. A path without glob characters must exist, so an
+ignore left behind by a renamed or deleted file fails compilation with
+`rule ignore path does not exist: <path>`; move the ignore to the new path or delete it.
 
 Use `selectors` when the exception follows graph-resource identities or lineage rather than files:
 

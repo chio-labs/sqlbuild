@@ -119,7 +119,7 @@ project and does not change it:
 - raw `edge__*` sources in `sources/edge_cases.yml`, loaded by `python/loaders/edge_cases.py` from
   fixed rows that `data_scale` does not change, so core data and core expectations stay the same.
 
-It has 38 models (7 staging, 22 intermediate, 9 marts), 61 unit tests and 4 scenarios, in four
+It has 38 models (7 staging, 22 intermediate, 9 marts), 62 unit tests and 4 scenarios, in four
 groups:
 
 | Group | Covers |
@@ -145,6 +145,14 @@ Benchmarks and core measurements leave the area out:
   with `--exclude edge_cases`;
 - the construct census counts the core project unless given `--area edge` or `--area all`.
 
+Changes to the core project's compiled SQL, after which benchmark results are not comparable with
+earlier ones:
+
+- `int_cart_funnel`, `int_delivery_slot_utilisation` and `rpt_delivery_exceptions_monthly` give the
+  same results on every run: added SKUs are sorted, the weekday average utilisation is an exact
+  decimal sum over a count, the busiest slot of equally busy ones is the earliest, and the top
+  exception code of equally frequent ones is the first in alphabetical order.
+
 ## Status
 
 Last verified on Snowflake with SQLBuild 0.175.0 at `data_scale = "1"`:
@@ -156,7 +164,7 @@ Last verified on Snowflake with SQLBuild 0.175.0 at `data_scale = "1"`:
 | `sqb test` | 266 of 266 pass |
 | `sqb scenario test` | 8 of 8 pass |
 | `sqb scenario capture` | Captures all 8; snapshots are in `project/tests/_scenario_snapshots/` |
-| `sqb scenario test --local --strict` | In the core copy, 0 of 8 pass: 5 fail in translation, 3 report a stale snapshot |
+| `sqb scenario test --local --strict --exclude edge_cases` | 0 of 8 pass: 5 fail in translation, 3 report a stale snapshot |
 
 Local replay translates each scenario's Snowflake SQL to DuckDB on a best-effort basis. These five
 failures are the baseline that better translation should remove:
@@ -181,12 +189,12 @@ the same rows, apart from the snapshots, which record build times, and three mod
 vary from one run to the next (`int_cart_funnel`, `int_delivery_slot_utilisation` and
 `rpt_delivery_exceptions_monthly`).
 
-The edge-case area, verified on Snowflake with SQLBuild 0.184.0 on the `edge` target:
+The edge-case area, verified on Snowflake with SQLBuild built after 0.185.0 on the `edge` target:
 
 | Step | Result |
 |------|--------|
-| `sqb build --select tag:edge_case --exclude stg_edge_partner_listings+` | Passes; the disabled model is skipped |
-| `sqb test --select tag:edge_case` | 61 of 61 pass |
+| `sqb build --select tag:edge_case` | Passes; the disabled model is skipped |
+| `sqb test --select tag:edge_case` | 62 of 62 pass |
 | `sqb scenario test --select edge_cases` | 4 of 4 pass |
 | Two-load replay of the delivery change log | The merged status equals the full rebuild after each load |
 
@@ -213,15 +221,10 @@ noted here:
 - Compilation accepts SQL that Snowflake rejects: `CONNECT_BY_ISLEAF`, which Snowflake does not
   have, and a CTE whose body is a bare `VALUES` list. `int_category_paths` finds leaf categories
   with a join instead, and test case tables use `SELECT ... FROM VALUES ... AS v(...)`.
-- A source column whose name is quoted mixed case, such as `"listingId"`, cannot be read once the
-  table exists: planning folds the quoted reference to lower case and fails with `B002`. Fixtures
-  cannot name such columns either (`B302` in unit tests, `S510` in scenarios), and a `MODEL`
-  header cannot declare a quoted column name. `stg_edge_partner_listings` has a reviewed
-  `SQBRTEST202` ignore, `rpt_edge_partner_listing_export` a reviewed `SQBRTEST201` ignore, and the
-  edge build excludes `stg_edge_partner_listings+`.
-- Local scenario replay stops at compile (`P001`, unclosed quoted string) on a model with a
-  backslash-escaped quote in a string literal, `'O\'Brien'` in `stg_edge_ticket_notes`, so local
-  replay runs in the core copy.
+- On Snowflake, a model that names a column in quoted mixed case, such as `"unitPrice"`, loses the
+  static types of the columns it reads from a CTE through a table alias (`FROM listings AS l`), so
+  `rpt_edge_partner_listing_export` declares only the name and audits of `"listingId"`, without
+  types.
 - `SQBRSQL018` can only take proof from single-column keys. Append-only feeds redeliver rows, so
   their id is unique only together with `_loaded_at` (the `unique_per_delivery` audit), and the
   staging models that keep the latest delivery carry reviewed exceptions.
