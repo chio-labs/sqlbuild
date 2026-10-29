@@ -197,7 +197,7 @@ export const JOB_DEFS: JobDef[] = [
 	{
 		key: 'customer_segments',
 		kind: 'job',
-		description: 'Customer status segments; run manually or in the close-of-business group',
+		description: 'Customer status segments; hourly and in the close-of-business group',
 		select: 'customer_status',
 		exclude: [],
 		members: [],
@@ -216,7 +216,7 @@ export const JOB_DEFS: JobDef[] = [
 			23,
 			`customer_segments = job(
     "customer_segments",
-    description="Customer status segments; run manually or in the close-of-business group",
+    description="Customer status segments; hourly and in the close-of-business group",
     select="customer_status",
     overlap="allow",
     owner="analytics",
@@ -342,7 +342,13 @@ export function concurrencyGroupsOf(job: JobDef | undefined): ConcurrencyGroup[]
 
 // ---- triggers ----
 
-type ScheduleSpec = { everyMin: number; lastTickAgoMin: number; historyDays: number };
+type ScheduleSpec = {
+	everyMin: number;
+	lastTickAgoMin: number;
+	historyDays: number;
+	/** Nothing has evaluated the due time after the last tick, so the schedule is overdue. */
+	overdue?: boolean;
+};
 
 export type TriggerDef = {
 	name: string;
@@ -429,6 +435,27 @@ export const TRIGGER_DEFS: TriggerDef[] = [
 		targets: ['prod'],
 		catchUp: { mode: 'latest', max: null },
 		schedule: { everyMin: 1440, lastTickAgoMin: 27 * 60, historyDays: 8 }
+	},
+	{
+		name: 'segments_hourly',
+		kind: 'cron_schedule',
+		description: 'Customer segments every hour',
+		jobKey: 'customer_segments',
+		cadence: 'Hourly',
+		defaultState: 'running',
+		state: 'running',
+		sourceFile: 'orchestration/schedules.py',
+		line: 13,
+		code: `segments_hourly = schedule(
+    "segments_hourly",
+    description="Customer segments every hour",
+    job=customer_segments,
+    cron="{cron:segments_hourly}",
+    timezone="UTC",
+)`,
+		targets: null,
+		catchUp: { mode: 'latest', max: null },
+		schedule: { everyMin: 60, lastTickAgoMin: 72, historyDays: 2, overdue: true }
 	},
 	{
 		name: 'marts_hourly',

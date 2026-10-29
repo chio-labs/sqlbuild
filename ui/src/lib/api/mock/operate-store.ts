@@ -922,7 +922,7 @@ export class MockOperate {
 		const last = this.#fx.lastTickAt[name];
 		const out: number[] = [];
 		let t = last + every;
-		while (t <= now) t += every;
+		if (!def.schedule.overdue) while (t <= now) t += every;
 		for (; t <= until && out.length < limit; t += every) out.push(t);
 		return out;
 	}
@@ -946,6 +946,7 @@ export class MockOperate {
 		const isSchedule = def.kind === 'cron_schedule' || def.kind === 'calendar_schedule';
 		const next = isSchedule && rt.state === 'running' ? (this.#upcoming(def.name, Date.now() + 40 * 1440 * MIN, 1)[0] ?? null) : null;
 		const calendarLow = def.kind === 'calendar_schedule' && this.#fx.calendar.storedUntil - Date.now() < 7 * 1440 * MIN;
+		const overdueMin = next != null && next < Date.now() ? Math.floor((Date.now() - next) / MIN) : null;
 		return {
 			id,
 			name: def.name,
@@ -965,9 +966,11 @@ export class MockOperate {
 			definitionChanged: !!def.definitionChanged,
 			warning: calendarLow
 				? `Stored horizon ends ${new Date(this.#fx.calendar.storedUntil).toISOString().slice(0, 10)}, under the 7-day warning level`
-				: def.definitionChanged
-					? 'Sensor code changed since the last evaluation'
-					: null
+				: overdueMin != null
+					? `The tick due ${new Date(next!).toISOString().slice(11, 16)} UTC has not been evaluated (${overdueMin} min overdue)`
+					: def.definitionChanged
+						? 'Sensor code changed since the last evaluation'
+						: null
 		};
 	}
 

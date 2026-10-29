@@ -90,7 +90,7 @@ export function createFixtures(now: number) {
 
 	const platformEvents: PlatformEvent[] = [
 		{ id: 'pe-1', kind: 'location_broken', severity: 'warning', occurredAt: ago(48), active: true, locationId: LOCATION_MARKETING, subject: 'marketing-analytics', message: 'The latest image failed to start; running the last good image.' },
-		{ id: 'pe-2', kind: 'tick_overdue', severity: 'warning', occurredAt: ago(12), active: true, locationId: LOCATION_SHOP, subject: 'activity_microbatch', message: 'Tick is 12 minutes overdue.' },
+		{ id: 'pe-2', kind: 'tick_overdue', severity: 'warning', occurredAt: ago(12), active: true, locationId: LOCATION_SHOP, subject: 'segments_hourly', message: 'Tick is 12 minutes overdue.' },
 		{ id: 'pe-3', kind: 'heartbeat', severity: 'info', occurredAt: ago(1), active: false, locationId: null, subject: null, message: 'Server heartbeat.' }
 	];
 	const extraPlatformEvents: PlatformEvent[] = [

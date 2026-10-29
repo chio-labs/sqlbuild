@@ -412,7 +412,7 @@ function createPlatformFixtures(now: number) {
 				{ key: 'secret_access_key', type: 'secret', required: true, secretSource: 'secret store: exports/bucket', description: 'Access key secret' }
 			],
 			values: { bucket: 'example-exports', region: 'eu-west-1' },
-			usedBy: { nodes: ['daily_revenue_export', 'customer_status_export'], jobs: ['nightly_build'] }
+			usedBy: { nodes: ['export_revenue_csv'], jobs: ['revenue_refresh', 'reporting_exports'] }
 		},
 		{
 			name: 'support_desk',
@@ -511,7 +511,7 @@ function eventDetails(now: number): Record<string, Pick<PlatformEventRecord, 're
 	const shop = { locationId: LOCATION_SHOP, target: 'prod' };
 	return {
 		'pe-1': { resolvedAt: null, target: null, links: [{ kind: 'location', id: LOCATION_MARKETING }], payload: { failed_revision: '9c4b2d1', running_revision: '3e5f7aa', policy: 'fallback' } },
-		'pe-2': { resolvedAt: null, target: 'prod', links: [{ kind: 'trigger', name: 'activity_microbatch', ...shop }], payload: { trigger: 'activity_microbatch', scheduled_for: ago(12), overdue_by: '12m' } },
+		'pe-2': { resolvedAt: null, target: 'prod', links: [{ kind: 'trigger', name: 'segments_hourly', ...shop }], payload: { trigger: 'segments_hourly', scheduled_for: ago(12), overdue_by: '12m' } },
 		'pe-3': { resolvedAt: ago(1), target: null, links: [], payload: { interval: '60s' } },
 		'pe-4': { resolvedAt: null, target: null, links: [], payload: { last_holder: 'sqb-server-1', lease_expired_at: ago(2) } },
 		'pe-5': { resolvedAt: null, target: 'prod', links: [{ kind: 'job', key: 'revenue_refresh', ...shop }, { kind: 'run', id: 'run-a7c1', ...shop }], payload: { job: 'revenue_refresh', attempts: '3', error: 'image pull error' } }
@@ -524,7 +524,7 @@ function historicalEvents(now: number): PlatformEventRecord[] {
 	return [
 		{ id: 'pe-h3', kind: 'launch_failed', severity: 'critical', occurredAt: ago(1500), active: false, locationId: LOCATION_SHOP, subject: 'activity_microbatch', message: 'Run container exited before reporting: worker lost.', resolvedAt: ago(1490), target: 'prod', links: [{ kind: 'job', key: 'activity_microbatch', ...shop }, { kind: 'run', id: 'run-e3f8', ...shop }], payload: { job: 'activity_microbatch', attempts: '1', error: 'worker lost' } },
 		{ id: 'pe-h2', kind: 'scheduler_no_leader', severity: 'critical', occurredAt: ago(2 * 1440 + 30), active: false, locationId: null, subject: null, message: 'No scheduler held the leader lease for 41s during a replica restart.', resolvedAt: ago(2 * 1440 + 29), target: null, links: [], payload: { last_holder: 'sqb-server-2', lease_expired_at: ago(2 * 1440 + 30) } },
-		{ id: 'pe-h1', kind: 'tick_overdue', severity: 'warning', occurredAt: ago(3 * 1440), active: false, locationId: LOCATION_SHOP, subject: 'nightly_build', message: 'Tick was 4 minutes overdue.', resolvedAt: ago(3 * 1440 - 4), target: 'prod', links: [{ kind: 'trigger', name: 'nightly_build', ...shop }], payload: { trigger: 'nightly_build', scheduled_for: ago(3 * 1440), overdue_by: '4m' } }
+		{ id: 'pe-h1', kind: 'tick_overdue', severity: 'warning', occurredAt: ago(3 * 1440), active: false, locationId: LOCATION_SHOP, subject: 'core_build', message: 'Tick was 4 minutes overdue.', resolvedAt: ago(3 * 1440 - 4), target: 'prod', links: [{ kind: 'trigger', name: 'core_build', ...shop }], payload: { trigger: 'core_build', scheduled_for: ago(3 * 1440), overdue_by: '4m' } }
 	];
 }
 
