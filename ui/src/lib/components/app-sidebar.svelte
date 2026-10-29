@@ -57,7 +57,7 @@
 			section: 'Admin',
 			requires: ADMIN_CAPABILITIES,
 			items: [
-				{ label: 'Users & tokens', href: '/admin/users', icon: KeyRoundIcon, requires: ['user.manage', 'token.manage'] },
+				{ label: 'Users & tokens', href: '/admin/users', icon: KeyRoundIcon, requires: ['user.manage', 'token.manage', 'location.manage'] },
 				{ label: 'Roles & approvals', href: '/admin/roles', icon: ShieldIcon, requires: ['role.assign'], badge: { value: (c) => c.pendingApprovals, tone: 'warning' } },
 				{ label: 'Audit log', href: '/admin/audit', icon: ScrollTextIcon, requires: ['audit.view'] }
 			]
