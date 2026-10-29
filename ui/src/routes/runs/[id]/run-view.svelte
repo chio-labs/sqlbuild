@@ -137,7 +137,7 @@
 		{#if run}
 			<span class="sb-status" style:--tone={runStatusTone[run.status]}><span></span>{runStatusLabel[run.status].toLowerCase()}</span>
 			<span class="meta">
-				{#if run.jobKey}<a href="/jobs/{run.jobKey}">{run.jobKey}</a>{:else}ad hoc{/if}
+				{#if run.jobKey}<a href="/jobs/{run.jobKey}">{run.jobKey}</a>{:else}<code>{detail?.provenance.selection.join(' ') || 'whole project'}</code>{/if}
 				· {runKindLabel[run.kind].toLowerCase()} · {run.target} · <code>{run.gitRevision}</code>
 			</span>
 			{#if run.statusReason}<span class="reason" title={run.statusReason}>{run.statusReason}</span>{/if}

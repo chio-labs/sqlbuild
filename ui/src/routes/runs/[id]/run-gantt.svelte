@@ -46,7 +46,7 @@
 	const xOf = (sec: number) => sec * pxPerSec;
 	const tickStep = $derived.by(() => {
 		const raw = total / Math.max(4, Math.floor(trackW / 130));
-		return [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600].find((c) => c >= raw) ?? 3600;
+		return [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600].find((c) => c >= raw) ?? 3600;
 	});
 	const axisTicks = $derived.by(() => {
 		const out: number[] = [];
