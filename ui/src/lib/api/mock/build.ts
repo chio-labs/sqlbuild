@@ -547,20 +547,14 @@ export class MockBuild {
 				evidenceTruncated: (violations ?? 0) > 10
 			};
 		};
-		let latestPlaced = false;
+		// Audits run inside the build, so the node's outcome bounds the check's.
 		const out: CheckEvaluation[] = entries.map((e, i) => {
 			const seed = e.fingerprintRunId ?? invocationIdLike(e.runId ?? spec.id);
 			const base = { runId: e.runId, evaluatedAt: e.startedAt };
-			// A failed build either failed in its audit query or before audits ran.
 			if (e.outcome === 'failed') return spec.errorOnFailure ? at(seed, i, 'error', { ...base, error: e.message }) : at(seed, i, 'skipped', base);
-			const live = Date.parse(e.startedAt) > this.#ctx.now;
-			if (!latestPlaced && !live) {
-				latestPlaced = true;
-				return at(seed, i, spec.latest.outcome, { ...base, violations: spec.latest.violations, measured: spec.latest.measured });
-			}
-			if (live && e.outcome === 'warn' && spec.latest.outcome === 'warn') return at(seed, i, 'warn', { ...base, violations: spec.latest.violations, measured: spec.latest.measured });
-			const warn = spec.severity === 'warn' && spec.history.warnEvery && i % spec.history.warnEvery === spec.history.warnEvery - 1;
-			return at(seed, i, warn ? 'warn' : 'pass', base);
+			const latest = i === 0 ? { violations: spec.latest.violations, measured: spec.latest.measured } : {};
+			if (e.outcome === 'warn' && spec.latest.outcome === 'warn') return at(seed, i, 'warn', { ...base, ...latest, violations: i === 0 ? spec.latest.violations : undefined });
+			return at(seed, i, 'pass', { ...base, ...(spec.latest.outcome === 'pass' ? latest : {}) });
 		});
 		// Older results from builds the scheduler did not run, every four hours.
 		const oldest = out.length ? Date.parse(out[out.length - 1].evaluatedAt) : this.#ctx.now - 30 * MIN;
