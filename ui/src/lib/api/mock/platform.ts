@@ -15,8 +15,6 @@ import type {
 	AuditQuery,
 	BuiltInRole,
 	Capability,
-	Channel,
-	ChannelTestResult,
 	ConnectionTest,
 	ConnectionsOverview,
 	IssuedToken,
@@ -31,6 +29,7 @@ import type {
 	OldNameView,
 	PlatformEvent,
 	PlatformEventLink,
+	PlatformEventReaction,
 	PlatformEventQuery,
 	PlatformEventRecord,
 	PlatformHealth,
@@ -51,6 +50,7 @@ import type {
 	WarehouseConnection
 } from '../types';
 import { LOCATION_MARKETING, LOCATION_SHOP, ROLE_CAPABILITIES } from './fixtures';
+import { triggerId } from './operate';
 import { ALEX, CI_ACCOUNT, DEMO_USER, JORDAN, OPS_USER, REPORTING, RILEY, SAM, SYSTEM } from './principals';
 
 const MIN = 60_000;
@@ -78,7 +78,7 @@ const SELECTOR_NODES: Record<string, string[]> = {
 export type MockPlatformContext = {
 	now: number;
 	role: BuiltInRole;
-	alerts: 'default' | 'none' | 'all';
+	events: 'default' | 'none' | 'all';
 	serverVersion: string;
 	user: Principal;
 	locations: Location[];
@@ -398,7 +398,7 @@ function createPlatformFixtures(now: number) {
 				{ key: 'api_key', type: 'secret', required: true, secretSource: 'env: ORDERS_API_KEY', description: 'API key' }
 			],
 			values: { base_url: 'https://orders.example.com/v2' },
-			usedBy: { nodes: ['raw__orders'], jobs: ['load_sources', 'nightly_all'] }
+			usedBy: { nodes: ['raw__orders'], jobs: ['load_sources', 'nightly_all'], triggers: [] }
 		},
 		{
 			name: 'export_bucket',
@@ -413,7 +413,7 @@ function createPlatformFixtures(now: number) {
 				{ key: 'secret_access_key', type: 'secret', required: true, secretSource: 'secret store: exports/bucket', description: 'Access key secret' }
 			],
 			values: { bucket: 'example-exports', region: 'eu-west-1' },
-			usedBy: { nodes: ['export_revenue_csv'], jobs: ['revenue_refresh', 'reporting_exports'] }
+			usedBy: { nodes: ['export_revenue_csv'], jobs: ['revenue_refresh', 'reporting_exports'], triggers: [] }
 		},
 		{
 			name: 'support_desk',
@@ -426,13 +426,20 @@ function createPlatformFixtures(now: number) {
 				{ key: 'token', type: 'secret', required: true, secretSource: 'env: SUPPORT_DESK_TOKEN', description: 'Access token' }
 			],
 			values: { base_url: 'https://support.example.com/api', include_closed: true },
-			usedBy: { nodes: ['raw__support_tickets'], jobs: ['load_sources'] }
+			usedBy: { nodes: ['raw__support_tickets'], jobs: ['load_sources'], triggers: [] }
+		},
+		{
+			name: 'chat_webhook',
+			type: 'webhook',
+			description: 'Incoming webhook of the team chat room; sensors post messages to it.',
+			sourceFile: 'providers/chat.py',
+			settings: [
+				{ key: 'url', type: 'secret', required: true, secretSource: 'env: CHAT_WEBHOOK_URL', description: 'Webhook URL' },
+				{ key: 'timeout_seconds', type: 'int', default: 10, min: 1, max: 60, description: 'Request timeout' }
+			],
+			values: {},
+			usedBy: { nodes: [], jobs: [], triggers: [{ id: triggerId('platform_health_webhook'), name: 'platform_health_webhook' }] }
 		}
-	];
-	const channels: Channel[] = [
-		{ name: 'team_chat', type: 'slack', description: 'Run failures and platform alerts for the data team.', destinationSource: 'env: CHAT_WEBHOOK_URL', sourceFile: 'orchestration/channels.py', lastTest: { outcome: 'ok', at: ago(days(6)), by: DEMO_USER, message: 'Delivered (HTTP 200)' } },
-		{ name: 'ops_email', type: 'email', description: 'Daily summary to the operations mailbox.', destinationSource: 'secret store: smtp/ops', sourceFile: 'orchestration/channels.py', lastTest: null },
-		{ name: 'incident_hook', type: 'webhook', description: 'Pages on-call for critical platform events.', destinationSource: 'env: INCIDENT_WEBHOOK_URL', sourceFile: 'orchestration/channels.py', lastTest: { outcome: 'failed', at: ago(days(2)), by: ALEX, message: 'HTTP 401 from destination' } }
 	];
 
 	// ---- maintenance ----
@@ -503,19 +510,33 @@ function createPlatformFixtures(now: number) {
 		janitor('jan-3', 'archive', days(16), 'STAGING', 'view', 'WAFFLE_SHOP.STAGING.STG_COUPONS', 'WAFFLE_SHOP.STAGING._SQB_ARCHIVE__20261013T040000Z__STG_COUPONS', days(16), 'run-jan-6d0')
 	];
 
-	return { accounts, apiTokens, locationTokens, roles, assignments, approvals, auditEntries, targetExtras, locationExtras, warehouseByScope, providers, channels, migrations, oldNameViews, janitorEvents };
+	return { accounts, apiTokens, locationTokens, roles, assignments, approvals, auditEntries, targetExtras, locationExtras, warehouseByScope, providers, migrations, oldNameViews, janitorEvents };
+}
+
+/** How the platform-event sensor (see `platform_health_webhook` in operate.ts) handled an event. */
+function reaction(outcome: PlatformEventReaction['outcome'], sequence: number | null, attempts: number, at: string | null): PlatformEventReaction {
+	return {
+		triggerId: triggerId('platform_health_webhook'),
+		triggerName: 'platform_health_webhook',
+		locationId: LOCATION_SHOP,
+		target: 'prod',
+		outcome,
+		evaluationId: sequence === null ? null : `eval-platform-health-webhook-${sequence}`,
+		attempts,
+		at
+	};
 }
 
 /** Enrichment of the shared platform event fixtures, by event ID. */
-function eventDetails(now: number): Record<string, Pick<PlatformEventRecord, 'resolvedAt' | 'target' | 'links' | 'payload'>> {
+function eventDetails(now: number): Record<string, Pick<PlatformEventRecord, 'resolvedAt' | 'target' | 'links' | 'reactions' | 'payload'>> {
 	const ago = (minutes: number) => new Date(now - minutes * MIN).toISOString();
 	const shop = { locationId: LOCATION_SHOP, target: 'prod' };
 	return {
-		'pe-1': { resolvedAt: null, target: null, links: [{ kind: 'location', id: LOCATION_MARKETING }], payload: { failed_revision: '9c4b2d1', running_revision: '3e5f7aa', policy: 'fallback' } },
-		'pe-2': { resolvedAt: null, target: 'prod', links: [{ kind: 'trigger', name: 'segments_hourly', ...shop }], payload: { trigger: 'segments_hourly', scheduled_for: ago(12), overdue_by: '12m' } },
-		'pe-3': { resolvedAt: ago(1), target: null, links: [], payload: { interval: '60s' } },
-		'pe-4': { resolvedAt: null, target: null, links: [], payload: { last_holder: 'sqb-server-1', lease_expired_at: ago(2) } },
-		'pe-5': { resolvedAt: null, target: 'prod', links: [{ kind: 'job', key: 'revenue_refresh', ...shop }, { kind: 'run', id: 'run-a7c1', ...shop }], payload: { job: 'revenue_refresh', attempts: '3', error: 'image pull error' } }
+		'pe-1': { resolvedAt: null, target: null, links: [{ kind: 'location', id: LOCATION_MARKETING }], reactions: [reaction('consumed', 75, 1, ago(48))], payload: { failed_revision: '9c4b2d1', running_revision: '3e5f7aa', policy: 'fallback' } },
+		'pe-2': { resolvedAt: null, target: 'prod', links: [{ kind: 'trigger', id: triggerId('segments_hourly'), name: 'segments_hourly', ...shop }], reactions: [reaction('consumed', 77, 2, ago(11.5))], payload: { trigger: 'segments_hourly', scheduled_for: ago(12), overdue_by: '12m' } },
+		'pe-3': { resolvedAt: ago(1), target: null, links: [], reactions: [], payload: { interval: '60s' } },
+		'pe-4': { resolvedAt: null, target: null, links: [], reactions: [reaction('pending', null, 0, null)], payload: { last_holder: 'sqb-server-1', lease_expired_at: ago(2) } },
+		'pe-5': { resolvedAt: null, target: 'prod', links: [{ kind: 'job', key: 'revenue_refresh', ...shop }, { kind: 'run', id: 'run-a7c1', ...shop }], reactions: [reaction('pending', null, 0, null)], payload: { job: 'revenue_refresh', attempts: '3', error: 'image pull error' } }
 	};
 }
 
@@ -523,9 +544,9 @@ function historicalEvents(now: number): PlatformEventRecord[] {
 	const ago = (minutes: number) => new Date(now - minutes * MIN).toISOString();
 	const shop = { locationId: LOCATION_SHOP, target: 'prod' };
 	return [
-		{ id: 'pe-h3', kind: 'launch_failed', severity: 'critical', occurredAt: ago(1500), active: false, locationId: LOCATION_SHOP, subject: 'activity_microbatch', message: 'Run container exited before reporting: worker lost.', resolvedAt: ago(1490), target: 'prod', links: [{ kind: 'job', key: 'activity_microbatch', ...shop }, { kind: 'run', id: 'run-e3f8', ...shop }], payload: { job: 'activity_microbatch', attempts: '1', error: 'worker lost' } },
-		{ id: 'pe-h2', kind: 'scheduler_no_leader', severity: 'critical', occurredAt: ago(2 * 1440 + 30), active: false, locationId: null, subject: null, message: 'No scheduler held the leader lease for 41s during a replica restart.', resolvedAt: ago(2 * 1440 + 29), target: null, links: [], payload: { last_holder: 'sqb-server-2', lease_expired_at: ago(2 * 1440 + 30) } },
-		{ id: 'pe-h1', kind: 'tick_overdue', severity: 'warning', occurredAt: ago(3 * 1440), active: false, locationId: LOCATION_SHOP, subject: 'core_build', message: 'Tick was 4 minutes overdue.', resolvedAt: ago(3 * 1440 - 4), target: 'prod', links: [{ kind: 'trigger', name: 'core_build', ...shop }], payload: { trigger: 'core_build', scheduled_for: ago(3 * 1440), overdue_by: '4m' } }
+		{ id: 'pe-h3', kind: 'launch_failed', severity: 'critical', occurredAt: ago(1500), active: false, locationId: LOCATION_SHOP, subject: 'activity_microbatch', message: 'Run container exited before reporting: worker lost.', resolvedAt: ago(1490), target: 'prod', links: [{ kind: 'job', key: 'activity_microbatch', ...shop }, { kind: 'run', id: 'run-e3f8', ...shop }], reactions: [reaction('consumed', 52, 1, ago(1499))], payload: { job: 'activity_microbatch', attempts: '1', error: 'worker lost' } },
+		{ id: 'pe-h2', kind: 'scheduler_no_leader', severity: 'critical', occurredAt: ago(2 * 1440 + 30), active: false, locationId: null, subject: null, message: 'No scheduler held the leader lease for 41s during a replica restart.', resolvedAt: ago(2 * 1440 + 29), target: null, links: [], reactions: [reaction('consumed', 41, 1, ago(2 * 1440 + 29))], payload: { last_holder: 'sqb-server-2', lease_expired_at: ago(2 * 1440 + 30) } },
+		{ id: 'pe-h1', kind: 'tick_overdue', severity: 'warning', occurredAt: ago(3 * 1440), active: false, locationId: LOCATION_SHOP, subject: 'core_build', message: 'Tick was 4 minutes overdue.', resolvedAt: ago(3 * 1440 - 4), target: 'prod', links: [{ kind: 'trigger', id: triggerId('core_build'), name: 'core_build', ...shop }], reactions: [reaction('consumed', 33, 1, ago(3 * 1440 - 1))], payload: { trigger: 'core_build', scheduled_for: ago(3 * 1440), overdue_by: '4m' } }
 	];
 }
 
@@ -533,7 +554,6 @@ function historicalEvents(now: number): PlatformEventRecord[] {
 export class MockPlatformApi implements PlatformApi {
 	readonly #ctx: MockPlatformContext;
 	readonly #data: ReturnType<typeof createPlatformFixtures>;
-	readonly #channelTests = new Map<string, ChannelTestResult>();
 	readonly #connectionTests = new Map<string, ConnectionTest>();
 
 	constructor(ctx: MockPlatformContext) {
@@ -551,16 +571,16 @@ export class MockPlatformApi implements PlatformApi {
 		return this.#data.approvals.filter((a) => a.state === 'pending').length;
 	}
 
-	// ---- alerts ----
+	// ---- health ----
 
 	async platformHealth(): Promise<PlatformHealth> {
-		const { now, alerts } = this.#ctx;
+		const { now, events } = this.#ctx;
 		const ago = (minutes: number) => new Date(now - minutes * MIN).toISOString();
 		const ahead = (seconds: number) => new Date(Date.now() + seconds * 1000).toISOString();
 		// The heartbeat fires every minute; the mock reports the latest one.
 		const beat = new Date(Date.now() - ((Date.now() - now + 37_000) % 60_000)).toISOString();
-		const noLeader = alerts === 'all';
-		const failing = alerts === 'all';
+		const noLeader = events === 'all';
+		const failing = events === 'all';
 		return this.#ctx.reply({
 			scheduler: {
 				lease: noLeader ? null : { holder: 'sqb-server-1', acquiredAt: ago(2 * 1440 + 29), renewedAt: new Date(Date.now() - 4000).toISOString(), expiresAt: ahead(26) },
@@ -588,7 +608,7 @@ export class MockPlatformApi implements PlatformApi {
 		const details = eventDetails(this.#ctx.now);
 		const current: PlatformEventRecord[] = this.#ctx.platformEvents().map((event) => ({
 			...event,
-			...(details[event.id] ?? { resolvedAt: null, target: null, links: [], payload: {} })
+			...(details[event.id] ?? { resolvedAt: null, target: null, links: [], reactions: [], payload: {} })
 		}));
 		let events = [...current, ...historicalEvents(this.#ctx.now)];
 		if (query.kinds?.length) events = events.filter((e) => query.kinds!.includes(e.kind));
@@ -596,21 +616,6 @@ export class MockPlatformApi implements PlatformApi {
 		events.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
 		if (query.limit) events = events.slice(0, query.limit);
 		return this.#ctx.reply(events);
-	}
-
-	async testChannel(scope: Scope, name: string): Promise<ChannelTestResult> {
-		this.#require('connection.test');
-		const channel = this.#data.channels.find((c) => c.name === name);
-		if (!channel) throw new ApiError(`Unknown channel ${name}`, 404);
-		const result: ChannelTestResult = {
-			outcome: name === 'incident_hook' ? 'failed' : 'ok',
-			at: new Date().toISOString(),
-			by: this.#ctx.user,
-			message: name === 'incident_hook' ? 'HTTP 401 from destination' : 'Test message delivered'
-		};
-		this.#channelTests.set(`${scope.locationId}/${scope.target}/${name}`, result);
-		this.#audit('connection.test', { ...scope, subject: name }, `Sent a test message to channel ${name} (${result.outcome})`);
-		return this.#ctx.reply(result);
 	}
 
 	// ---- locations ----
@@ -696,12 +701,8 @@ export class MockPlatformApi implements PlatformApi {
 			...c,
 			lastTest: this.#connectionTests.get(`${scope.locationId}/${scope.target}/${c.name}`) ?? c.lastTest
 		}));
-		const channels = this.#data.channels.map((c) => ({
-			...c,
-			lastTest: this.#channelTests.get(`${scope.locationId}/${scope.target}/${c.name}`) ?? c.lastTest
-		}));
 		const providers = scope.locationId === LOCATION_SHOP ? this.#data.providers : [];
-		return this.#ctx.reply(structuredClone({ warehouse, providers, channels: scope.locationId === LOCATION_SHOP ? channels : [] }));
+		return this.#ctx.reply(structuredClone({ warehouse, providers }));
 	}
 
 	// ---- maintenance ----

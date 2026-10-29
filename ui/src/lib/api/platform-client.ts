@@ -6,7 +6,6 @@ import type {
 	ApiTokenRequest,
 	AuditEntry,
 	AuditQuery,
-	ChannelTestResult,
 	ConnectionTest,
 	ConnectionsOverview,
 	IssuedToken,
@@ -27,18 +26,16 @@ import type {
 } from './types';
 
 /**
- * Platform (alerts, locations, connections, maintenance) and admin (users,
+ * Platform (health, locations, connections, maintenance) and admin (users,
  * tokens, roles, audit, settings) endpoints. Part of `ApiClient`.
  *
  * Mutations are audited server-side; the capability noted on each is the
  * server's check, mirrored in the UI only to hide or disable controls.
  */
 export interface PlatformApi {
-	// ---- alerts ----
+	// ---- health ----
 	platformHealth(): Promise<PlatformHealth>;
 	listPlatformEventHistory(query?: PlatformEventQuery): Promise<PlatformEventRecord[]>;
-	/** `connection.test` */
-	testChannel(scope: Scope, name: string): Promise<ChannelTestResult>;
 
 	// ---- locations ----
 	listLocations(): Promise<LocationSummary[]>;

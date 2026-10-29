@@ -6,7 +6,7 @@
 	import { theme, toggleTheme } from '$lib/theme.svelte';
 	import { formatAgo } from '$lib/format/time';
 	import { app } from '$lib/state/app.svelte';
-	import PlatformAlertBanner from './shell/platform-alert-banner.svelte';
+	import PlatformEventBanner from './shell/platform-event-banner.svelte';
 	import WarehouseSyncStatus from './shell/warehouse-sync-status.svelte';
 
 	type Props = { title: string; children?: Snippet };
@@ -59,7 +59,7 @@
 		</button>
 	</div>
 </div>
-<PlatformAlertBanner />
+<PlatformEventBanner />
 
 <style>
 	.app-topbar {

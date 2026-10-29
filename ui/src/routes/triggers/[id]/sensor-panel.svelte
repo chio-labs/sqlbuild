@@ -41,6 +41,9 @@
 	<p class="faint">
 		{sensor.minimumIntervalSeconds ? `Minimum interval ${sensor.minimumIntervalSeconds}s, from the start of the last evaluation` : 'Evaluated on each matching event'}{sensor.timeoutSeconds ? ` · killed and recorded as timed_out after ${sensor.timeoutSeconds}s` : ''}
 	</p>
+	{#if trigger.kind === 'platform_sensor'}
+		<p class="faint">Consumes platform events. <a href="/health">See the events and how this sensor handled them in Health</a>.</p>
+	{/if}
 	{#if changed}
 		<p class="warn">Code changed since the last evaluation: fingerprint <code>{sensor.lastEvaluatedFingerprint}</code> → <code>{sensor.currentFingerprint}</code>. The next evaluation uses the new code.</p>
 	{/if}

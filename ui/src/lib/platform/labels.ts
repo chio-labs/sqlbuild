@@ -6,6 +6,8 @@ import type {
 	Location,
 	PlatformEventKind,
 	PlatformEventLink,
+	PlatformEventReaction,
+	PlatformEventReactionOutcome,
 	PlatformEventSeverity,
 	RelationName,
 	TestOutcome,
@@ -39,6 +41,23 @@ export const severityTone: Record<PlatformEventSeverity, string> = {
 	warning: 'var(--sb-warning)',
 	info: 'var(--sb-text-faint)'
 };
+
+export const reactionTone: Record<PlatformEventReactionOutcome, string> = {
+	consumed: 'var(--sb-success)',
+	failed: 'var(--sb-error)',
+	pending: 'var(--sb-text-faint)'
+};
+
+export const reactionLabel: Record<PlatformEventReactionOutcome, string> = {
+	consumed: 'handled',
+	failed: 'failing',
+	pending: 'pending'
+};
+
+/** Deep link to the sensor that reacted, scoped to its location and target. */
+export function reactionHref(reaction: PlatformEventReaction): string {
+	return `/triggers/${encodeURIComponent(reaction.triggerId)}?location=${encodeURIComponent(reaction.locationId)}&target=${encodeURIComponent(reaction.target)}`;
+}
 
 export const testTone: Record<TestOutcome, string> = { ok: 'var(--sb-success)', failed: 'var(--sb-error)' };
 export const testLabel: Record<TestOutcome, string> = { ok: 'Passed', failed: 'Failed' };
@@ -78,7 +97,7 @@ export function formatAssignmentScope(scope: AssignmentScope, locations: readonl
 export function eventLinkHref(link: PlatformEventLink): string {
 	if (link.kind === 'location') return `/locations/${link.id}`;
 	const scope = `location=${encodeURIComponent(link.locationId)}&target=${encodeURIComponent(link.target)}`;
-	if (link.kind === 'trigger') return `/triggers?${scope}`;
+	if (link.kind === 'trigger') return `/triggers/${encodeURIComponent(link.id)}?${scope}`;
 	if (link.kind === 'job') return `/jobs/${encodeURIComponent(link.key)}?${scope}`;
 	return `/runs/${encodeURIComponent(link.id)}?${scope}`;
 }

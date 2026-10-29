@@ -40,7 +40,7 @@ import { MockBuild } from './build';
 export type MockOptions = {
 	role?: BuiltInRole;
 	/** `default` shows two warnings; `none` is all clear; `all` adds critical events. */
-	alerts?: 'default' | 'none' | 'all';
+	events?: 'default' | 'none' | 'all';
 	/** Simulated request latency in milliseconds. */
 	latencyMs?: number;
 	/** How long a simulated warehouse sync takes. */
@@ -62,7 +62,7 @@ export class MockApiClient implements ApiClient {
 	constructor(options: MockOptions = {}) {
 		this.#options = {
 			role: options.role ?? 'admin',
-			alerts: options.alerts ?? 'default',
+			events: options.events ?? 'default',
 			latencyMs: options.latencyMs ?? 120,
 			syncDurationMs: options.syncDurationMs ?? 8000
 		};
@@ -78,7 +78,7 @@ export class MockApiClient implements ApiClient {
 		this.#platform = new MockPlatformApi({
 			now: this.#createdAt,
 			role: this.#options.role,
-			alerts: this.#options.alerts,
+			events: this.#options.events,
 			serverVersion: '0.185.0',
 			user: DEMO_USER,
 			locations: this.#fixtures.locations,
@@ -121,7 +121,7 @@ export class MockApiClient implements ApiClient {
 			failingChecks: this.#build.failingCheckCount(scope),
 			activeRuns: this.#operate.activeRunCount(),
 			pausedTriggers: this.#operate.pausedTriggerCount(scope),
-			activeAlerts: this.#platformEvents().filter((e) => e.active).length,
+			activePlatformEvents: this.#platformEvents().filter((e) => e.active).length,
 			pendingApprovals: this.#platform.pendingApprovalCount()
 		});
 	}
@@ -305,9 +305,6 @@ export class MockApiClient implements ApiClient {
 	listPlatformEventHistory(...args: Parameters<PlatformApi['listPlatformEventHistory']>) {
 		return this.#platform.listPlatformEventHistory(...args);
 	}
-	testChannel(...args: Parameters<PlatformApi['testChannel']>) {
-		return this.#platform.testChannel(...args);
-	}
 	listLocations(...args: Parameters<PlatformApi['listLocations']>) {
 		return this.#platform.listLocations(...args);
 	}
@@ -424,8 +421,8 @@ export class MockApiClient implements ApiClient {
 
 	#platformEvents(): PlatformEvent[] {
 		const { platformEvents, extraPlatformEvents } = this.#fixtures;
-		if (this.#options.alerts === 'none') return platformEvents.filter((e) => !e.active);
-		if (this.#options.alerts === 'all') return [...extraPlatformEvents, ...platformEvents];
+		if (this.#options.events === 'none') return platformEvents.filter((e) => !e.active);
+		if (this.#options.events === 'all') return [...extraPlatformEvents, ...platformEvents];
 		return platformEvents;
 	}
 

@@ -79,7 +79,7 @@
 						<div>{l.liveInstances} live</div>
 						<RelativeTime value="seen {formatAgo(l.lastSeenAt, app.now)}" exact={formatStamp(l.lastSeenAt)} />
 					</td>
-					<td class="muted">{l.brokenDeployPolicy === 'fallback' ? 'Fall back to last good image' : 'Queue runs and alert'}</td>
+					<td class="muted">{l.brokenDeployPolicy === 'fallback' ? 'Fall back to last good image' : 'Queue runs until a deploy publishes'}</td>
 				</tr>
 			{:else}
 				<LoadRow colspan={5} resource={locations} empty={all.length ? 'No locations match the filter.' : 'No code locations are registered.'} />

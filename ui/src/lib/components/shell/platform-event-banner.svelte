@@ -35,7 +35,7 @@
 				</li>
 			{/each}
 		</ul>
-		<a href="/alerts">Alerts →</a>
+		<a href="/health">Health →</a>
 	</div>
 {/if}
 

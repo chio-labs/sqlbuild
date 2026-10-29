@@ -5,10 +5,9 @@
 	import AppTopbar from '$lib/components/app-topbar.svelte';
 	import Button from '$lib/components/ui/button/button.svelte';
 	import LoadRow from '$lib/components/list/load-row.svelte';
-	import ChannelList from '$lib/components/platform/channel-list.svelte';
 	import ConnectionTest from '$lib/components/platform/connection-test.svelte';
 	import Panel from '$lib/components/platform/panel.svelte';
-	import type { SettingField, WarehouseConnection } from '$lib/api';
+	import type { ProviderConnection, SettingField, WarehouseConnection } from '$lib/api';
 	import { app } from '$lib/state/app.svelte';
 	import { createResource } from '$lib/state/resource.svelte';
 
@@ -16,7 +15,19 @@
 
 	const warehouse = $derived(connections.data?.warehouse ?? []);
 	const providers = $derived(connections.data?.providers ?? []);
-	const channels = $derived(connections.data?.channels ?? []);
+
+	function usedBySummary(p: ProviderConnection): string {
+		const parts = [
+			plural(p.usedBy.nodes.length, 'node'),
+			plural(p.usedBy.jobs.length, 'job'),
+			p.usedBy.triggers.length ? plural(p.usedBy.triggers.length, 'sensor') : null
+		];
+		return parts.filter(Boolean).join(' · ');
+	}
+
+	function plural(count: number, noun: string): string {
+		return `${count} ${noun}${count === 1 ? '' : 's'}`;
+	}
 
 	function shownValue(c: WarehouseConnection, field: SettingField): string {
 		if (field.type === 'secret') return field.secretSource ?? 'not set';
@@ -82,9 +93,7 @@
 							</div>
 						</td>
 						<td><code>{p.type}</code></td>
-						<td class="muted">
-							{p.usedBy.nodes.length} {p.usedBy.nodes.length === 1 ? 'node' : 'nodes'} · {p.usedBy.jobs.length} {p.usedBy.jobs.length === 1 ? 'job' : 'jobs'}
-						</td>
+						<td class="muted">{usedBySummary(p)}</td>
 						<td class="muted"><code>{p.sourceFile}</code></td>
 					</tr>
 				{:else}
@@ -93,12 +102,6 @@
 			</tbody>
 		</table>
 	</Panel>
-
-	{#if channels.length}
-		<Panel title="Channels" note="Optional notification conveniences for sensors and alerts">
-			<ChannelList {channels} ontested={() => connections.refresh()} />
-		</Panel>
-	{/if}
 </div>
 
 <style>

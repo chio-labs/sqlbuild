@@ -142,7 +142,7 @@ export type NavCounts = {
 	failingChecks: number;
 	activeRuns: number;
 	pausedTriggers: number;
-	activeAlerts: number;
+	activePlatformEvents: number;
 	pendingApprovals: number;
 };
 

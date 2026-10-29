@@ -75,8 +75,8 @@ export function attentionView(item: AttentionItem, now: number): AttentionView {
 				title: `${eventKindLabel[item.event.kind]}${item.event.subject ? ` · ${item.event.subject}` : ''}`,
 				detail: item.event.message,
 				since: formatAgo(item.event.occurredAt, now),
-				href: '/alerts',
-				action: 'View alert'
+				href: '/health',
+				action: 'View in Health'
 			};
 		case 'queue_blocked':
 			return {

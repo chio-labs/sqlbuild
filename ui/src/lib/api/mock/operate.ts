@@ -568,19 +568,19 @@ def business_days(window, holidays):
 	{
 		name: 'platform_health_webhook',
 		kind: 'platform_sensor',
-		description: 'Forward platform health events to the team webhook',
+		description: 'Post platform events to the team chat room',
 		jobKey: null,
 		cadence: 'On tick_overdue, scheduler_no_leader, location_broken, launch_failed',
 		defaultState: 'running',
 		state: 'running',
-		sourceFile: 'orchestration/alerts.py',
+		sourceFile: 'orchestration/health.py',
 		line: 4,
 		code: `@sensor(when=platform_event(kinds=[K.TICK_OVERDUE, K.SCHEDULER_NO_LEADER,
                                     K.LOCATION_BROKEN, K.LAUNCH_FAILED]),
-        description="Forward platform health events to the team webhook")
-def platform_health_webhook(ctx, chat_alerts):
+        description="Post platform events to the team chat room")
+def platform_health_webhook(ctx, chat_webhook):
     for event in ctx.events:
-        chat_alerts.post(event.summary())`,
+        chat_webhook.post(event.summary())`,
 		targets: null,
 		catchUp: null,
 		sensor: {
@@ -1064,7 +1064,7 @@ export function createOperateFixtures(now: number): OperateFixtures {
 		const name = 'platform_health_webhook';
 		evaluations[name] = [
 			evalOf(name, 77, ago(11.5), 'completed', { cursorBefore: 'platform_event:1201', cursorAfter: 'platform_event:1202', skipReason: null }),
-			evalOf(name, 76, ago(12.2), 'failed', { cursorBefore: 'platform_event:1201', cursorAfter: null, error: 'chat_alerts returned HTTP 503; the cursor was not advanced' }),
+			evalOf(name, 76, ago(11.9), 'failed', { cursorBefore: 'platform_event:1201', cursorAfter: null, error: 'chat_webhook returned HTTP 503; the cursor was not advanced' }),
 			evalOf(name, 75, ago(48), 'completed', { cursorBefore: 'platform_event:1200', cursorAfter: 'platform_event:1201' }),
 			evalOf(name, 74, ago(300), 'completed', { cursorBefore: 'platform_event:1198', cursorAfter: 'platform_event:1200' })
 		];

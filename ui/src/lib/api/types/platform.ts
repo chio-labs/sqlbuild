@@ -1,4 +1,4 @@
-// Wire types for the Platform (Alerts, Locations, Connections, Maintenance) and
+// Wire types for the Platform (Health, Locations, Connections, Maintenance) and
 // Admin (users, tokens, roles, audit, settings) areas.
 
 import type {
@@ -11,7 +11,7 @@ import type {
 	Snapshot
 } from '../types';
 
-// ---- alerts: platform health ----
+// ---- health: system status and platform events ----
 
 export type SchedulerInstance = {
 	/** Server replica ID, e.g. the container host name. */
@@ -42,6 +42,7 @@ export type HeartbeatStatus = {
 };
 
 export type SinkKind = 'webhook' | 'kafka';
+/** The server-side platform-event sink. Server config; read-only in the UI. */
 export type SinkStatus = {
 	kind: SinkKind;
 	/** Where the destination comes from, never the value, e.g. `env: SQB_EVENT_SINK_URL`. */
@@ -64,15 +65,37 @@ export type PlatformHealth = {
 };
 
 export type PlatformEventLink =
-	| { kind: 'trigger'; name: string; locationId: string; target: string }
+	| { kind: 'trigger'; id: string; name: string; locationId: string; target: string }
 	| { kind: 'job'; key: string; locationId: string; target: string }
 	| { kind: 'run'; id: string; locationId: string; target: string }
 	| { kind: 'location'; id: string };
+
+/**
+ * How a sensor that consumes platform events handled one event: `consumed`
+ * once an evaluation advanced its cursor past it, `failed` while the latest
+ * evaluation covering it failed, `pending` until an evaluation reaches it.
+ */
+export type PlatformEventReactionOutcome = 'consumed' | 'failed' | 'pending';
+
+export type PlatformEventReaction = {
+	triggerId: string;
+	triggerName: string;
+	locationId: string;
+	target: string;
+	outcome: PlatformEventReactionOutcome;
+	/** The evaluation that consumed the event, or the latest one that tried. */
+	evaluationId: string | null;
+	/** Evaluations that covered the event, including failed attempts. */
+	attempts: number;
+	at: Iso | null;
+};
 
 export type PlatformEventRecord = PlatformEvent & {
 	resolvedAt: Iso | null;
 	target: string | null;
 	links: PlatformEventLink[];
+	/** Sensors whose `platform_event` condition matches this event's kind. */
+	reactions: PlatformEventReaction[];
 	/** Typed payload fields of the event kind, rendered as key/value pairs. */
 	payload: Record<string, string>;
 };
@@ -83,27 +106,9 @@ export type PlatformEventQuery = {
 	limit?: number;
 };
 
-// ---- channels (optional notification conveniences) ----
-
-export type ChannelType = 'slack' | 'email' | 'webhook';
-export type TestOutcome = 'ok' | 'failed';
-export type ChannelTestResult = {
-	outcome: TestOutcome;
-	at: Iso;
-	by: Principal;
-	message: string;
-};
-export type Channel = {
-	name: string;
-	type: ChannelType;
-	description: string;
-	/** Where the destination comes from, e.g. `env: CHAT_WEBHOOK_URL`. */
-	destinationSource: string;
-	sourceFile: string;
-	lastTest: ChannelTestResult | null;
-};
-
 // ---- locations ----
+
+export type TestOutcome = 'ok' | 'failed';
 
 export type BrokenDeployPolicy = 'fallback' | 'queue';
 
@@ -257,13 +262,13 @@ export type ProviderConnection = {
 	sourceFile: string;
 	settings: SettingField[];
 	values: Record<string, string | number | boolean>;
-	usedBy: { nodes: string[]; jobs: string[] };
+	/** `triggers` are sensors whose code uses the provider, by trigger ID and name. */
+	usedBy: { nodes: string[]; jobs: string[]; triggers: { id: string; name: string }[] };
 };
 
 export type ConnectionsOverview = {
 	warehouse: WarehouseConnection[];
 	providers: ProviderConnection[];
-	channels: Channel[];
 };
 
 // ---- maintenance (synced warehouse state tables) ----

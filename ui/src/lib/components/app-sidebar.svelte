@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import BellIcon from '@lucide/svelte/icons/bell';
 	import CheckCircleIcon from '@lucide/svelte/icons/circle-check';
 	import ClockIcon from '@lucide/svelte/icons/clock-3';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import GitBranchIcon from '@lucide/svelte/icons/git-branch';
 	import GitCompareIcon from '@lucide/svelte/icons/git-compare';
+	import HeartPulseIcon from '@lucide/svelte/icons/heart-pulse';
 	import KeyRoundIcon from '@lucide/svelte/icons/key-round';
 	import LayoutDashboardIcon from '@lucide/svelte/icons/layout-dashboard';
 	import ListIcon from '@lucide/svelte/icons/list';
@@ -41,13 +41,13 @@
 			items: [
 				{ label: 'Runs', href: '/runs', icon: ListIcon, badge: { value: (c) => c.activeRuns, tone: 'live' } },
 				{ label: 'Jobs', href: '/jobs', icon: PlayIcon },
-				{ label: 'Triggers', href: '/triggers', icon: ClockIcon, badge: { value: (c) => c.pausedTriggers, tone: 'muted' } },
-				{ label: 'Alerts', href: '/alerts', icon: BellIcon, badge: { value: (c) => c.activeAlerts, tone: 'error' } }
+				{ label: 'Triggers', href: '/triggers', icon: ClockIcon, badge: { value: (c) => c.pausedTriggers, tone: 'muted' } }
 			]
 		},
 		{
 			section: 'Platform',
 			items: [
+				{ label: 'Health', href: '/health', icon: HeartPulseIcon, badge: { value: (c) => c.activePlatformEvents, tone: 'error' } },
 				{ label: 'Locations', href: '/locations', icon: MapPinIcon },
 				{ label: 'Connections', href: '/connections', icon: PlugIcon },
 				{ label: 'Maintenance', href: '/maintenance', icon: WrenchIcon }

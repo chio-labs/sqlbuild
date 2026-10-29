@@ -19,7 +19,7 @@
 
 	type Tab = 'settings' | 'uses';
 	let tab = $state<Tab>('settings');
-	const usedCount = $derived(provider ? provider.usedBy.nodes.length + provider.usedBy.jobs.length : 0);
+	const usedCount = $derived(provider ? provider.usedBy.nodes.length + provider.usedBy.jobs.length + provider.usedBy.triggers.length : 0);
 </script>
 
 <AppTopbar title="Connections">
@@ -85,6 +85,16 @@
 								{/each}
 							</div>
 						</div>
+						{#if provider.usedBy.triggers.length}
+							<div>
+								<div class="text-[var(--sb-text-faint)] mb-2 text-[12px] font-medium">Sensors · {provider.usedBy.triggers.length}</div>
+								<div class="flex flex-wrap gap-1.5">
+									{#each provider.usedBy.triggers as t (t.id)}
+										<a href="/triggers/{t.id}" class="bg-secondary hover:bg-[var(--sb-hover)] rounded-[2px] border border-border px-2.5 py-1.5 text-[12px]">{t.name}</a>
+									{/each}
+								</div>
+							</div>
+						{/if}
 					</div>
 				{/if}
 			</div>

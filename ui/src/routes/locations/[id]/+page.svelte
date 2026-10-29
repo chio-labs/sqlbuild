@@ -70,7 +70,7 @@
 								A deploy becomes current only once it publishes a valid snapshot. Policy <code>{detail.brokenDeployPolicy}</code>:
 								{detail.brokenDeployPolicy === 'fallback'
 									? 'scheduled runs keep starting from the last good snapshot and image.'
-									: 'scheduled runs wait, and a platform alert stays open.'}
+									: 'scheduled runs wait, and a location_broken platform event stays active.'}
 							</p>
 							<pre>{detail.failedDeploy.error}</pre>
 						</div>
@@ -195,7 +195,7 @@
 					rows={[
 						{ label: 'ID', value: detail.id, mono: true },
 						{ label: 'Created', value: formatAgo(detail.createdAt, app.now), title: formatStamp(detail.createdAt) },
-						{ label: 'Broken deploys', value: detail.brokenDeployPolicy === 'fallback' ? 'Fall back to last good image' : 'Queue runs and alert' },
+						{ label: 'Broken deploys', value: detail.brokenDeployPolicy === 'fallback' ? 'Fall back to last good image' : 'Queue runs until a deploy publishes' },
 						{ label: 'Targets', value: detail.targets.map((t) => t.name).join(', ') }
 					]}
 				/>
