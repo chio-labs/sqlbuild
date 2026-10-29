@@ -16,7 +16,7 @@ from sqlbuild.adapter.relations.classes.relation_metadata_cache import RelationM
 from sqlbuild.adapter.relations.constants import (
     INSPECTION_DESCRIBED_NAME_LIMIT,
     INSPECTION_IN_LIST_LIMIT,
-    PLANNER_LISTING_MAX_AGE_SECONDS,
+    SCHEMA_LISTING_MAX_AGE_SECONDS,
 )
 from sqlbuild.adapter.relations.main.run_bounded_inspections import run_bounded_inspections
 from sqlbuild.adapter.relations.models import (
@@ -338,7 +338,7 @@ class InspectionCatalog:
             ),
             relations={entry.stored_name: entry.relation for entry in listing.entries},
             versions=versions,
-            max_age_seconds=PLANNER_LISTING_MAX_AGE_SECONDS,
+            max_age_seconds=SCHEMA_LISTING_MAX_AGE_SECONDS,
         )
         return listing
 

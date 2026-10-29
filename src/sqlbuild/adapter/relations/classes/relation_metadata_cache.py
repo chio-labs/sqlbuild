@@ -13,7 +13,10 @@ from sqlbuild._native import (
     statement_metadata_effect,
 )
 from sqlbuild.adapter.contract.models import RelationInfo
-from sqlbuild.adapter.relations.constants import SCHEMA_LISTING_LOOKUP_THRESHOLD
+from sqlbuild.adapter.relations.constants import (
+    SCHEMA_LISTING_LOOKUP_THRESHOLD,
+    SCHEMA_LISTING_MAX_AGE_SECONDS,
+)
 from sqlbuild.adapter.relations.models import RunSchemaListing, StatementMetadataEffect
 from sqlbuild.adapter.relations.types import (
     RelationCacheKey,
@@ -98,10 +101,15 @@ class RelationMetadataCache:
     def refresh_schema_listing(
         self, *, scope: SchemaListingScope, read_listing: Callable[[], dict[str, RelationInfo]]
     ) -> RunSchemaListing:
-        """List the schema again; every relation in it is current as of this listing."""
+        """List the schema again; every relation in it is current as of this listing, for a time."""
 
         versions: tuple[int, dict[str, int]] = self.listing_versions()
-        return self.keep_schema_listing(scope=scope, relations=read_listing(), versions=versions)
+        return self.keep_schema_listing(
+            scope=scope,
+            relations=read_listing(),
+            versions=versions,
+            max_age_seconds=SCHEMA_LISTING_MAX_AGE_SECONDS,
+        )
 
     def listing_versions(self) -> tuple[int, dict[str, int]]:
         """The cache versions a listing read from now on is current as of."""

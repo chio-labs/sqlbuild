@@ -25,7 +25,7 @@ _SCHEMA_LISTING: re.Pattern[str] = re.compile(
     r"^SHOW (?P<kind>TABLES|VIEWS) IN SCHEMA (?P<scope>\S+)"
 )
 _PLANNER_LISTING_MAX_AGE: str = (
-    "sqlbuild.adapter.relations.classes.inspection_catalog.PLANNER_LISTING_MAX_AGE_SECONDS"
+    "sqlbuild.adapter.relations.classes.inspection_catalog.SCHEMA_LISTING_MAX_AGE_SECONDS"
 )
 _ONE_LISTING_EACH: dict[str, int] = {
     'TABLES "ANALYTICS"."MARTS"': 1,
