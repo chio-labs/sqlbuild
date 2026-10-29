@@ -51,8 +51,7 @@ export const tickOutcomeLabel: Record<TickOutcome, string> = {
 	requested: 'Run requested',
 	skipped: 'Skipped',
 	covered: 'Covered by a waiting run',
-	failed: 'Tick failed',
-	deferred: 'Deferred'
+	failed: 'Tick failed'
 };
 
 export const triggerStateLabel: Record<TriggerState, string> = {

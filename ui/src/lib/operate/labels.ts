@@ -122,16 +122,14 @@ export const tickOutcomeTone: Record<TickOutcome, string> = {
 	requested: 'var(--sb-success)',
 	skipped: 'var(--sb-text-faint)',
 	covered: 'var(--sb-running)',
-	failed: 'var(--sb-error)',
-	deferred: 'var(--sb-warning)'
+	failed: 'var(--sb-error)'
 };
 
 export const tickOutcomeText: Record<TickOutcome, string> = {
 	requested: 'requested',
 	skipped: 'skipped',
 	covered: 'covered',
-	failed: 'failed',
-	deferred: 'deferred'
+	failed: 'failed'
 };
 
 export const evaluationTone: Record<SensorEvaluationOutcome, string> = {

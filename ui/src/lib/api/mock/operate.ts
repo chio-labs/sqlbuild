@@ -931,7 +931,7 @@ export function createOperateFixtures(now: number): OperateFixtures {
 				continue;
 			}
 			if (t.name === 'nightly_all' && i === 4) {
-				tick(t.name, due, 'deferred', { reason: 'Code location unavailable at evaluation; no run was requested for this time' });
+				tick(t.name, due, 'failed', { reason: 'Code location unavailable at evaluation; no run was requested for this time' });
 				continue;
 			}
 			const id = genId(rand);

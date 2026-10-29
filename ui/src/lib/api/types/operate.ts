@@ -465,7 +465,7 @@ export type TriggerKind =
 	/** Custom `@sensor` evaluated in the code location. */
 	| 'custom_sensor';
 
-export const TICK_OUTCOMES = ['requested', 'skipped', 'covered', 'failed', 'deferred'] as const;
+export const TICK_OUTCOMES = ['requested', 'skipped', 'covered', 'failed'] as const;
 export type TickOutcome = (typeof TICK_OUTCOMES)[number];
 
 export type Tick = {
