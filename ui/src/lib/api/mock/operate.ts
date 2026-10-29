@@ -568,7 +568,7 @@ def platform_health_webhook(ctx, chat_alerts):
 		kind: 'custom_sensor',
 		description: 'Load each new partner order file once',
 		jobKey: 'load_sources',
-		cadence: 'Custom @sensor, every 5 minutes',
+		cadence: 'Every 5 minutes (minimum interval)',
 		defaultState: 'running',
 		state: 'running',
 		sourceFile: 'orchestration/sensors.py',
