@@ -119,3 +119,16 @@ class QuotedContractBuildTestCase:
     declared_name: str
     produced_columns: tuple[str, ...]
     expected_exit_code: int = 0
+
+
+@dataclass(frozen=True)
+class QuotedConfiguredColumnTestCase:
+    """A snapshot key and a microbatch cursor configured for quoted mixed-case columns."""
+
+    description: str
+    unique_key: str
+    updated_at: str
+    cursor: str
+    expected_exit_code: int
+    expected_fragments: tuple[str, ...] = ()
+    expected_errors: tuple[str, ...] = ()

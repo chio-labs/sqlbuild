@@ -1513,3 +1513,14 @@ class QuotedContractE2ETestCase:
     description: str
     declared_name: str
     expected_rows: list[tuple[object, ...]]
+
+
+@dataclass(frozen=True)
+class QuotedConfiguredColumnsE2ETestCase:
+    """A snapshot key and a microbatch cursor configured with quoted camelCase names."""
+
+    description: str
+    unique_key: str
+    cursor: str
+    expected_history_rows: list[tuple[object, ...]]
+    expected_activity_rows: list[tuple[object, ...]]
