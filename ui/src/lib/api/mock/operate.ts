@@ -938,11 +938,9 @@ export function createOperateFixtures(now: number): OperateFixtures {
 			if (job.kind === 'group') {
 				const failing = rand() < 0.15;
 				const stages = t.jobKey === 'nightly_all' ? nightlyStages : [['revenue_refresh'], ['activity_microbatch', 'customer_segments']];
-				groupRun(
-					{ id, kind: 'schedule', job: t.jobKey, trigger: t.name, by: SCHEDULER, queuedAgo: ageMin, startedAgo: ageMin - 0.15 },
-					failing ? { activity_microbatch: { fail: ['daily_activity_rollup'], errors: { daily_activity_rollup: 'Statement timed out after max_duration' } } } : {},
-					stages
-				);
+				const childSeeds: Partial<Record<string, Partial<Seed>>> = Object.fromEntries(stages.flat().map((m) => [m, { durationMin: 2 + rand() * 5 }]));
+				if (failing) childSeeds.activity_microbatch = { ...childSeeds.activity_microbatch, fail: ['daily_activity_rollup'], errors: { daily_activity_rollup: 'Statement timed out after max_duration' } };
+				groupRun({ id, kind: 'schedule', job: t.jobKey, trigger: t.name, by: SCHEDULER, queuedAgo: ageMin, startedAgo: ageMin - 0.15 }, childSeeds, stages);
 			} else {
 				record({ id, kind: 'schedule', job: t.jobKey, trigger: t.name, by: SCHEDULER, queuedAgo: ageMin, startedAgo: ageMin - 0.15, durationMin: typical * (0.7 + rand() * 0.6), ...pick(rand, t.jobKey) });
 			}

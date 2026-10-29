@@ -401,6 +401,7 @@ export type Job = {
 	onFailure: OnFailure;
 	concurrencyGroups: string[];
 	priority: number;
+	owner: string | null;
 	sourceFile: string;
 	triggerIds: string[];
 	lastRun: RunRef | null;
@@ -430,8 +431,6 @@ export type JobDetail = Job & {
 	concurrency: ConcurrencyGroup[];
 	/** Null when the job applies to every target. */
 	targets: string[] | null;
-	owner: string | null;
-	members: string[];
 	groupMembers: JobGroupMember[];
 	criticalNodes: string[];
 	/** Groups this job belongs to. */
