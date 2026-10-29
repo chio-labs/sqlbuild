@@ -24,6 +24,8 @@ import type {
 } from '../types';
 import { createFixtures, DEMO_USER, ROLE_CAPABILITIES, type Fixtures } from './fixtures';
 import { buildTimelineBars, TIMELINE_JOB_KEYS } from './timeline';
+import type { PlatformApi } from '../platform-client';
+import { MockPlatformApi } from './platform';
 
 export type MockOptions = {
 	role?: BuiltInRole;
@@ -48,6 +50,7 @@ export class MockApiClient implements ApiClient {
 	readonly #syncs = new Map<string, WarehouseSync>();
 	readonly #syncTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	#timelineBars: TimelineBar[] | null = null;
+	readonly #platform: MockPlatformApi;
 
 	constructor(options: MockOptions = {}) {
 		this.#options = {
@@ -57,13 +60,24 @@ export class MockApiClient implements ApiClient {
 			syncDurationMs: options.syncDurationMs ?? 8000
 		};
 		this.#fixtures = createFixtures(this.#createdAt);
+		this.#platform = new MockPlatformApi({
+			now: this.#createdAt,
+			role: this.#options.role,
+			alerts: this.#options.alerts,
+			serverVersion: '0.185.0',
+			user: DEMO_USER,
+			locations: this.#fixtures.locations,
+			changes: this.changes,
+			platformEvents: () => this.#platformEvents(),
+			reply: (value) => this.#reply(value)
+		});
 	}
 
 	async bootstrap(): Promise<Bootstrap> {
 		const user: CurrentUser = { ...DEMO_USER, kind: 'user', role: this.#options.role };
 		return this.#reply({
 			serverVersion: '0.185.0',
-			authMode: 'disabled',
+			authMode: 'oidc',
 			user,
 			capabilities: ROLE_CAPABILITIES[this.#options.role],
 			locations: this.#fixtures.locations.map((location) => ({
@@ -85,7 +99,7 @@ export class MockApiClient implements ApiClient {
 			activeRuns: this.#fixtures.runs.filter((r) => ACTIVE_RUN.has(r.status)).length,
 			pausedTriggers: triggers.filter((t) => t.state === 'paused').length,
 			activeAlerts: this.#platformEvents().filter((e) => e.active).length,
-			pendingApprovals: 1
+			pendingApprovals: this.#platform.pendingApprovalCount()
 		});
 	}
 
@@ -201,6 +215,7 @@ export class MockApiClient implements ApiClient {
 
 	async requestWarehouseSync(scope: Scope): Promise<WarehouseSyncRequestResult> {
 		this.#location(scope);
+		this.#require('warehouse.sync');
 		const key = scopeKey(scope);
 		const sync = this.#sync(scope);
 		if (sync.state === 'running') {
@@ -212,6 +227,89 @@ export class MockApiClient implements ApiClient {
 		this.#startSync(key, sync);
 		return this.#reply({ outcome: 'started', sync: { ...sync } });
 	}
+
+	// ---- platform and admin: delegated to MockPlatformApi (mock/platform.ts) ----
+
+	platformHealth(...args: Parameters<PlatformApi['platformHealth']>) {
+		return this.#platform.platformHealth(...args);
+	}
+	listPlatformEventHistory(...args: Parameters<PlatformApi['listPlatformEventHistory']>) {
+		return this.#platform.listPlatformEventHistory(...args);
+	}
+	testChannel(...args: Parameters<PlatformApi['testChannel']>) {
+		return this.#platform.testChannel(...args);
+	}
+	listLocations(...args: Parameters<PlatformApi['listLocations']>) {
+		return this.#platform.listLocations(...args);
+	}
+	getLocation(...args: Parameters<PlatformApi['getLocation']>) {
+		return this.#platform.getLocation(...args);
+	}
+	testConnection(...args: Parameters<PlatformApi['testConnection']>) {
+		return this.#platform.testConnection(...args);
+	}
+	listLocationTokens(...args: Parameters<PlatformApi['listLocationTokens']>) {
+		return this.#platform.listLocationTokens(...args);
+	}
+	createLocationToken(...args: Parameters<PlatformApi['createLocationToken']>) {
+		return this.#platform.createLocationToken(...args);
+	}
+	rotateLocationToken(...args: Parameters<PlatformApi['rotateLocationToken']>) {
+		return this.#platform.rotateLocationToken(...args);
+	}
+	revokeLocationToken(...args: Parameters<PlatformApi['revokeLocationToken']>) {
+		return this.#platform.revokeLocationToken(...args);
+	}
+	connections(...args: Parameters<PlatformApi['connections']>) {
+		return this.#platform.connections(...args);
+	}
+	maintenanceHistory(...args: Parameters<PlatformApi['maintenanceHistory']>) {
+		return this.#platform.maintenanceHistory(...args);
+	}
+	listAccounts(...args: Parameters<PlatformApi['listAccounts']>) {
+		return this.#platform.listAccounts(...args);
+	}
+	listApiTokens(...args: Parameters<PlatformApi['listApiTokens']>) {
+		return this.#platform.listApiTokens(...args);
+	}
+	createApiToken(...args: Parameters<PlatformApi['createApiToken']>) {
+		return this.#platform.createApiToken(...args);
+	}
+	rotateApiToken(...args: Parameters<PlatformApi['rotateApiToken']>) {
+		return this.#platform.rotateApiToken(...args);
+	}
+	revokeApiToken(...args: Parameters<PlatformApi['revokeApiToken']>) {
+		return this.#platform.revokeApiToken(...args);
+	}
+	listRoles(...args: Parameters<PlatformApi['listRoles']>) {
+		return this.#platform.listRoles(...args);
+	}
+	listRoleAssignments(...args: Parameters<PlatformApi['listRoleAssignments']>) {
+		return this.#platform.listRoleAssignments(...args);
+	}
+	createRoleAssignment(...args: Parameters<PlatformApi['createRoleAssignment']>) {
+		return this.#platform.createRoleAssignment(...args);
+	}
+	deleteRoleAssignment(...args: Parameters<PlatformApi['deleteRoleAssignment']>) {
+		return this.#platform.deleteRoleAssignment(...args);
+	}
+	listRoleApprovals(...args: Parameters<PlatformApi['listRoleApprovals']>) {
+		return this.#platform.listRoleApprovals(...args);
+	}
+	decideRoleApproval(...args: Parameters<PlatformApi['decideRoleApproval']>) {
+		return this.#platform.decideRoleApproval(...args);
+	}
+	listAuditEntries(...args: Parameters<PlatformApi['listAuditEntries']>) {
+		return this.#platform.listAuditEntries(...args);
+	}
+	explainAccess(...args: Parameters<PlatformApi['explainAccess']>) {
+		return this.#platform.explainAccess(...args);
+	}
+	serverSettings(...args: Parameters<PlatformApi['serverSettings']>) {
+		return this.#platform.serverSettings(...args);
+	}
+
+	// ---- end platform and admin ----
 
 	#startSync(key: string, sync: WarehouseSync) {
 		sync.state = 'running';

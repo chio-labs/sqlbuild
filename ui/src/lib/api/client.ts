@@ -16,6 +16,7 @@ import type {
 	WarehouseSyncRequestResult
 } from './types';
 import type { ChangeSubscription } from './signals';
+import type { PlatformApi } from './platform-client';
 
 /**
  * Everything the UI reads from or asks of the server.
@@ -24,7 +25,7 @@ import type { ChangeSubscription } from './signals';
  * the server's OpenAPI client exists; that client is wrapped to implement the
  * same interface.
  */
-export interface ApiClient {
+export interface ApiClient extends PlatformApi {
 	bootstrap(): Promise<Bootstrap>;
 
 	navCounts(scope: Scope): Promise<NavCounts>;

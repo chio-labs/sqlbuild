@@ -22,6 +22,7 @@ export const CAPABILITIES = [
 	'sensor.reset_cursor',
 	'run.adhoc',
 	'connection.test',
+	'warehouse.sync',
 	'plan.preview',
 	'location.manage',
 	'user.manage',
@@ -349,3 +350,5 @@ export type Timeline = {
 	jobKeys: string[];
 	bars: TimelineBar[];
 };
+
+export * from './types/platform';
