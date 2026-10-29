@@ -329,6 +329,18 @@ def test_given_sql_when_querying_then_returns_normalized_query_result(
             name="raw_orders",
             expected_exists=True,
         ),
+        RelationExistsTestCase(
+            description="a search path naming the schema in another case resolves as DuckDB does",
+            setup_sql=(
+                "CREATE SCHEMA staging",
+                "CREATE TABLE staging.raw_orders (id INTEGER)",
+                "SET search_path = 'STAGING'",
+            ),
+            database=None,
+            schema=None,
+            name="raw_orders",
+            expected_exists=True,
+        ),
     ],
     ids=lambda case: case.description,
 )
