@@ -8,7 +8,10 @@ import pytest
 
 from sqlbuild.runtime.user_code.classes.source_only_loader import SourceOnlyLoader
 from sqlbuild.runtime.user_code.classes.user_code_finder import UserCodeFinder
-from tests.unit.src.sqlbuild.runtime.user_code.classes._test_types import FinderSpecTestCase
+from tests.unit.src.sqlbuild.runtime.user_code.classes._test_types import (
+    FinderSpecTestCase,
+    FinderWorkingDirectoryTestCase,
+)
 
 
 @pytest.mark.parametrize(
@@ -53,6 +56,46 @@ def test_given_module_name_when_finding_spec_then_only_project_modules_load_from
 
     source_only: bool = spec is not None and isinstance(spec.loader, SourceOnlyLoader)
     assert source_only == test_case.expected_source_only
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FinderWorkingDirectoryTestCase(
+            description="moving into the project makes its modules load from source",
+            first_directory="elsewhere",
+            second_directory="project",
+            expected_source_only=(False, True),
+        ),
+        FinderWorkingDirectoryTestCase(
+            description="moving out of the project leaves its modules to normal import",
+            first_directory="project",
+            second_directory="elsewhere",
+            expected_source_only=(True, False),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_working_directory_entry_when_directory_changes_then_finder_follows_it(
+    test_case: FinderWorkingDirectoryTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project: Path = tmp_path / "project"
+    project.mkdir()
+    _ = (project / "order_rules.py").write_text("LIMIT: int = 1\n", encoding="utf-8")
+    (tmp_path / "elsewhere").mkdir()
+    monkeypatch.setattr(sys, "path", ["", *sys.path])
+    finder: UserCodeFinder = UserCodeFinder()
+    finder.roots.add(project.resolve())
+
+    monkeypatch.chdir(tmp_path / test_case.first_directory)
+    first: ModuleSpec | None = finder.find_spec("order_rules")
+    monkeypatch.chdir(tmp_path / test_case.second_directory)
+    second: ModuleSpec | None = finder.find_spec("order_rules")
+
+    assert (
+        first is not None and isinstance(first.loader, SourceOnlyLoader),
+        second is not None and isinstance(second.loader, SourceOnlyLoader),
+    ) == test_case.expected_source_only
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 """A meta-path finder that loads modules under registered project roots from source."""
 
+import os
 import sys
 import sysconfig
 from collections.abc import Sequence
@@ -26,7 +27,7 @@ class UserCodeFinder:
                 *sysconfig.get_paths().values(),
             }
         )
-        self._project_entries: dict[str, bool] = {}
+        self._project_entries: dict[tuple[str, str], bool] = {}
         self._entry_roots: frozenset[Path] = frozenset()
 
     def find_spec(
@@ -59,7 +60,8 @@ class UserCodeFinder:
         if roots != self._entry_roots:
             self._project_entries = {}
             self._entry_roots = roots
-        known: bool | None = self._project_entries.get(entry)
+        directory: str = "" if os.path.isabs(entry) else os.getcwd()
+        known: bool | None = self._project_entries.get((entry, directory))
         if known is not None:
             return known
         try:
@@ -69,5 +71,5 @@ class UserCodeFinder:
         under_root: bool = any(
             resolved.is_relative_to(root) or root.is_relative_to(resolved) for root in roots
         )
-        self._project_entries[entry] = under_root
+        self._project_entries[(entry, directory)] = under_root
         return under_root

@@ -11,3 +11,13 @@ class FinderSpecTestCase:
     module_name: str
     earlier_entries: tuple[str, ...]
     expected_source_only: bool
+
+
+@dataclass(frozen=True)
+class FinderWorkingDirectoryTestCase:
+    """A lookup through the working-directory path entry before and after changing directory."""
+
+    description: str
+    first_directory: str
+    second_directory: str
+    expected_source_only: tuple[bool, bool]
