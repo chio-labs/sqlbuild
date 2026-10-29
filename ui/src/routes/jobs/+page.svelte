@@ -18,13 +18,13 @@
 	const jobs = createResource((client, scope) => client.listJobs(scope), ['jobs', 'runs']);
 	const triggers = createResource((client, scope) => client.listTriggers(scope), ['triggers']);
 
-	const triggerByName = $derived(new Map((triggers.data ?? []).map((t) => [t.name, t])));
+	const triggerByName = $derived(new Map((triggers.data ?? []).map((t) => [t.id, t])));
 	const canToggle = $derived(app.can('trigger.toggle'));
 
 	async function toggle(trigger: Trigger) {
 		const scope = app.scope;
 		if (!scope) return;
-		await app.client.setTriggerState(scope, trigger.name, trigger.state === 'running' ? 'paused' : 'running');
+		await app.client.setTriggerStates(scope, [trigger.id], trigger.state === 'running' ? 'paused' : 'running');
 	}
 
 	let query = $state('');
@@ -36,7 +36,7 @@
 			return j.key.toLowerCase().includes(q) || j.description.toLowerCase().includes(q) || (j.select ?? '').toLowerCase().includes(q);
 		})
 	);
-	const scheduledCount = $derived(all.filter((j) => j.triggerNames.some((n) => triggerByName.get(n)?.state === 'running')).length);
+	const scheduledCount = $derived(all.filter((j) => j.triggerIds.some((n: string) => triggerByName.get(n)?.state === 'running')).length);
 	const failingCount = $derived(all.filter((j) => j.lastRun && isProblemRun(j.lastRun.status)).length);
 </script>
 
@@ -73,7 +73,7 @@
 		</thead>
 		<tbody>
 			{#each filtered as j (j.key)}
-				{@const jobTriggers = j.triggerNames.map((n) => triggerByName.get(n)).filter((t) => t !== undefined)}
+				{@const jobTriggers = j.triggerIds.map((n: string) => triggerByName.get(n)).filter((t) => t !== undefined)}
 				<tr onclick={() => goto(`/jobs/${j.key}`)}>
 					<td>
 						<div class="cell-name">

@@ -4,6 +4,8 @@
 // OpenAPI schema can replace them later. Timestamps are ISO-8601 strings and IDs
 // are opaque strings.
 
+import type { Run } from './types/operate';
+
 export type Iso = string;
 
 // ---- identity, roles and capabilities ----
@@ -113,118 +115,6 @@ export type Bootstrap = {
 	locations: Location[];
 };
 
-// ---- runs ----
-
-export const RUN_STATUSES = [
-	'queued',
-	'launched',
-	'running',
-	'unresponsive',
-	'success',
-	'warn',
-	'partial',
-	'failed',
-	'cancelled',
-	'presumed_failed'
-] as const;
-export type RunStatus = (typeof RUN_STATUSES)[number];
-
-export type RunKind = 'job' | 'group' | 'adhoc' | 'rerun' | 'sensor' | 'schedule';
-
-export type NodeCounts = {
-	success: number;
-	warn: number;
-	failed: number;
-	skipped: number;
-	running: number;
-	pending: number;
-};
-
-export type Run = {
-	id: string;
-	kind: RunKind;
-	status: RunStatus;
-	statusReason: string | null;
-	/** Job or group key; null for ad-hoc runs. */
-	jobKey: string | null;
-	parentRunId: string | null;
-	triggerName: string | null;
-	rerunOfRunId: string | null;
-	requestedBy: Principal;
-	locationId: string;
-	target: string;
-	snapshotId: string;
-	gitRevision: string;
-	queuedAt: Iso;
-	startedAt: Iso | null;
-	endedAt: Iso | null;
-	nodeCounts: NodeCounts;
-};
-
-export type RunListQuery = {
-	jobKey?: string;
-	statuses?: RunStatus[];
-	since?: Iso;
-	until?: Iso;
-	limit?: number;
-};
-
-// ---- jobs, groups and triggers ----
-
-export type OverlapPolicy = 'coalesce' | 'queue' | 'allow';
-export type OnFailure = 'skip_dependents' | 'skip_downstream_jobs' | 'stop_group';
-export type JobKind = 'job' | 'group';
-
-export type Job = {
-	key: string;
-	kind: JobKind;
-	description: string;
-	/** Selector for jobs; null for groups. */
-	select: string | null;
-	/** Member jobs for groups. */
-	members: string[];
-	nodeCount: number;
-	overlap: OverlapPolicy;
-	onFailure: OnFailure;
-	concurrencyGroups: string[];
-	sourceFile: string;
-	triggerNames: string[];
-	lastRun: Pick<Run, 'id' | 'status' | 'startedAt' | 'endedAt'> | null;
-};
-
-export type TriggerState = 'running' | 'paused';
-export type TriggerType = 'schedule' | 'sensor';
-export type TickOutcome = 'requested' | 'skipped' | 'covered' | 'failed' | 'deferred';
-
-export type Tick = {
-	id: string;
-	scheduledFor: Iso;
-	outcome: TickOutcome;
-	runId: string | null;
-	coveredByRunId: string | null;
-	reason: string | null;
-};
-
-export type Trigger = {
-	name: string;
-	type: TriggerType;
-	description: string;
-	/** Job or group this trigger launches. */
-	jobKey: string;
-	/** Human-readable cadence or condition. */
-	cadence: string;
-	cron: string | null;
-	timezone: string | null;
-	/** State declared in code. */
-	defaultState: TriggerState;
-	/** Effective runtime state, after any override. */
-	state: TriggerState;
-	nextTickAt: Iso | null;
-	lastTick: Tick | null;
-	lastRun: Pick<Run, 'id' | 'status' | 'startedAt' | 'endedAt'> | null;
-	sourceFile: string;
-};
-
 // ---- checks ----
 
 export type CheckResult = 'pass' | 'warn' | 'fail';
@@ -331,21 +221,4 @@ export type NavCounts = {
 	pendingApprovals: number;
 };
 
-// ---- timeline ----
-
-export type TimelineBar = {
-	/** Null for projected (future) ticks. */
-	runId: string | null;
-	jobKey: string;
-	kind: RunKind;
-	status: RunStatus | 'projected';
-	start: Iso;
-	/** For running runs, the time the window was read; for projected ticks, start plus typical duration. */
-	end: Iso;
-};
-
-export type Timeline = {
-	now: Iso;
-	jobKeys: string[];
-	bars: TimelineBar[];
-};
+export * from './types/operate';

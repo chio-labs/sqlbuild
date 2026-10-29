@@ -23,7 +23,7 @@
 	async function toggleTrig(trigger: Trigger) {
 		const scope = app.scope;
 		if (!scope) return;
-		await app.client.setTriggerState(scope, trigger.name, trigger.state === 'running' ? 'paused' : 'running');
+		await app.client.setTriggerStates(scope, [trigger.id], trigger.state === 'running' ? 'paused' : 'running');
 	}
 
 	const onFailureLabel: Record<OnFailure, string> = {

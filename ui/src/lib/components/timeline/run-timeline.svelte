@@ -3,7 +3,7 @@
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import type { Snippet } from 'svelte';
-	import type { TimelineBar } from '$lib/api';
+	import type { TimelineBar, TimelineTickMarker } from '$lib/api';
 	import { createResource } from '$lib/state/resource.svelte';
 	import { runKindLabel, runStatusLabel, runStatusRank, runStatusTone } from '$lib/status';
 
@@ -106,6 +106,18 @@
 		if (out.length > 1 && out[0].left === 0 && out[1].left < 14) out.shift();
 		return out;
 	});
+
+	type Marker = TimelineTickMarker & { atMs: number };
+	const markersByJob = $derived.by(() => {
+		const m = new Map<string, Marker[]>();
+		for (const k of timeline.data?.markers ?? []) {
+			const atMs = Date.parse(k.scheduledFor);
+			if (atMs < start || atMs > end) continue;
+			m.set(k.jobKey, [...(m.get(k.jobKey) ?? []), { ...k, atMs }]);
+		}
+		return m;
+	});
+	let markerHover = $state<{ marker: Marker; x: number; y: number } | null>(null);
 
 	const visibleRuns = $derived(bars.filter((r) => r.endMs > start && r.startMs < end));
 	const runsByJob = $derived.by(() => {
@@ -211,6 +223,16 @@
 								aria-label="{r.jobKey} {label(r)} {clock(r.startMs)}"
 							></a>
 						{/each}
+						{#each markersByJob.get(job.name) ?? [] as m (m.tickId)}
+							<a
+								class="marker {m.outcome}"
+								href="/triggers/{m.triggerId}"
+								style:left="{pct(m.atMs)}%"
+								onmouseenter={(e) => (markerHover = { marker: m, x: e.clientX, y: e.clientY })}
+								onmouseleave={() => (markerHover = null)}
+								aria-label="{m.triggerName} tick {m.outcome} {clock(m.atMs)}"
+							></a>
+						{/each}
 					</div>
 				</div>
 			{:else}
@@ -233,6 +255,19 @@
 			<div><dt>{r.status === 'projected' ? 'Next tick' : 'Started'}</dt><dd>{clock(r.startMs)}</dd></div>
 			<div><dt>Duration</dt><dd>{r.status === 'projected' ? `~${duration(r)} typical` : r.status === 'running' ? `${duration(r)} so far` : duration(r)}</dd></div>
 			<div><dt>Kind</dt><dd>{runKindLabel[r.kind]}</dd></div>
+			{#if r.triggerName}<div><dt>Trigger</dt><dd>{r.triggerName}</dd></div>{/if}
+		</dl>
+	</div>
+{/if}
+
+{#if markerHover}
+	{@const m = markerHover.marker}
+	<div class="tl-tip" style:left="{markerHover.x + 270 > innerW ? markerHover.x - 254 : markerHover.x + 14}px" style:top="{markerHover.y + 16}px">
+		<div class="tip-head"><i style:background={m.outcome === 'covered' ? 'var(--sb-running)' : 'var(--sb-text-faint)'}></i><b>Tick {m.outcome}</b><span>{m.triggerName}</span></div>
+		<dl>
+			<div><dt>Due</dt><dd>{clock(m.atMs)}</dd></div>
+			{#if m.coveredByRunId}<div><dt>Covered by</dt><dd class="mono">{m.coveredByRunId}</dd></div>{/if}
+			{#if m.reason}<div><dt>Reason</dt><dd>{m.reason}</dd></div>{/if}
 		</dl>
 	</div>
 {/if}
@@ -474,6 +509,25 @@
 		outline: 0;
 		border-color: var(--primary);
 	}
+	.marker {
+		position: absolute;
+		z-index: 2;
+		top: 9px;
+		width: 9px;
+		height: 9px;
+		margin-left: -4.5px;
+		transform: rotate(45deg);
+		border: 1.5px solid var(--sb-running);
+		background: var(--card);
+	}
+	.marker.skipped {
+		border-color: var(--sb-text-faint);
+		border-style: dashed;
+	}
+	.marker:hover {
+		background: var(--sb-hover);
+		border-color: var(--primary);
+	}
 	.empty {
 		padding: 28px;
 		color: var(--muted-foreground);
@@ -512,7 +566,7 @@
 	}
 	.tl-tip dl div {
 		display: grid;
-		grid-template-columns: 70px 1fr;
+		grid-template-columns: 78px 1fr;
 		padding: 2px 0;
 	}
 	.tl-tip dt {

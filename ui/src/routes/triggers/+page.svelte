@@ -24,7 +24,7 @@
 		all.filter((t) => {
 			if (!query.trim()) return true;
 			const q = query.toLowerCase();
-			return t.name.toLowerCase().includes(q) || t.jobKey.toLowerCase().includes(q) || t.cadence.toLowerCase().includes(q);
+			return t.name.toLowerCase().includes(q) || (t.jobKey ?? '').toLowerCase().includes(q) || t.cadence.toLowerCase().includes(q);
 		})
 	);
 
@@ -45,7 +45,7 @@
 		if (!scope) return;
 		actionError = null;
 		try {
-			for (const name of names) await app.client.setTriggerState(scope, name, state);
+			await app.client.setTriggerStates(scope, names, state);
 		} catch (error) {
 			actionError = error instanceof Error ? error.message : String(error);
 		}
@@ -60,9 +60,9 @@
 	function nextTick(t: Trigger): string {
 		if (t.type === 'sensor') return '—';
 		if (t.state === 'paused') return 'Paused';
-		if (!t.nextTickAt) return '—';
-		if (Date.parse(t.nextTickAt) < app.now) return `Overdue, due ${formatAgo(t.nextTickAt, app.now)}`;
-		return formatIn(t.nextTickAt, app.now);
+		if (!t.nextDueAt) return '—';
+		if (Date.parse(t.nextDueAt) < app.now) return `Overdue, due ${formatAgo(t.nextDueAt, app.now)}`;
+		return formatIn(t.nextDueAt, app.now);
 	}
 </script>
 

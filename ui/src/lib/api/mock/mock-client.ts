@@ -2,28 +2,38 @@ import type { ApiClient } from '../client';
 import { ApiError } from '../client';
 import { LocalChangeBus } from '../signals';
 import type {
+	AdhocRunCheck,
+	AdhocRunRequest,
 	Bootstrap,
 	BuiltInRole,
-	Capability,
 	Check,
 	Connection,
 	CurrentUser,
 	Job,
+	JobDetail,
+	JobLaunchOptions,
 	NavCounts,
 	Overview,
 	PlatformEvent,
+	QueueEntry,
+	RerunMode,
 	Run,
+	RunDetail,
+	RunEventPage,
 	RunListQuery,
+	RunOutputLine,
+	RunStatement,
 	Scope,
+	SnapshotNode,
 	Timeline,
-	TimelineBar,
 	Trigger,
+	TriggerDetail,
 	TriggerState,
 	WarehouseSync,
 	WarehouseSyncRequestResult
 } from '../types';
 import { createFixtures, DEMO_USER, ROLE_CAPABILITIES, type Fixtures } from './fixtures';
-import { buildTimelineBars, TIMELINE_JOB_KEYS } from './timeline';
+import { MockOperate } from './operate-store';
 
 export type MockOptions = {
 	role?: BuiltInRole;
@@ -35,19 +45,15 @@ export type MockOptions = {
 	syncDurationMs?: number;
 };
 
-const ACTIVE_RUN = new Set(['queued', 'launched', 'running', 'unresponsive']);
-
 /** In-memory `ApiClient` with neutral example data. Mutations persist per page load. */
 export class MockApiClient implements ApiClient {
 	readonly changes = new LocalChangeBus();
 	readonly #options: Required<MockOptions>;
 	readonly #fixtures: Fixtures;
 	readonly #createdAt = Date.now();
-	/** Trigger state per scope, so pausing in one target doesn't leak into another. */
-	readonly #triggers = new Map<string, Trigger[]>();
+	readonly #operate: MockOperate;
 	readonly #syncs = new Map<string, WarehouseSync>();
 	readonly #syncTimers = new Map<string, ReturnType<typeof setTimeout>>();
-	#timelineBars: TimelineBar[] | null = null;
 
 	constructor(options: MockOptions = {}) {
 		this.#options = {
@@ -57,6 +63,14 @@ export class MockApiClient implements ApiClient {
 			syncDurationMs: options.syncDurationMs ?? 8000
 		};
 		this.#fixtures = createFixtures(this.#createdAt);
+		this.#operate = new MockOperate({
+			changes: this.changes,
+			role: () => this.#options.role,
+			can: (capability) => ROLE_CAPABILITIES[this.#options.role].includes(capability),
+			user: () => DEMO_USER,
+			adapter: (scope) => this.#location(scope).targets.find((t) => t.name === scope.target)?.adapter ?? '',
+			reply: (value) => this.#reply(value)
+		});
 	}
 
 	async bootstrap(): Promise<Bootstrap> {
@@ -78,12 +92,11 @@ export class MockApiClient implements ApiClient {
 
 	async navCounts(scope: Scope): Promise<NavCounts> {
 		this.#location(scope);
-		const triggers = this.#triggersFor(scope);
 		return this.#reply({
 			catalogNodes: 42,
 			failingChecks: this.#fixtures.checks.filter((c) => c.result !== 'pass').length,
-			activeRuns: this.#fixtures.runs.filter((r) => ACTIVE_RUN.has(r.status)).length,
-			pausedTriggers: triggers.filter((t) => t.state === 'paused').length,
+			activeRuns: this.#operate.activeRunCount(),
+			pausedTriggers: this.#operate.pausedTriggerCount(scope),
 			activeAlerts: this.#platformEvents().filter((e) => e.active).length,
 			pendingApprovals: 1
 		});
@@ -91,7 +104,8 @@ export class MockApiClient implements ApiClient {
 
 	async overview(scope: Scope): Promise<Overview> {
 		this.#location(scope);
-		const { runs, checks, changes } = this.#fixtures;
+		const { checks, changes } = this.#fixtures;
+		const runs = this.#operate.topLevelRuns(scope);
 		const dayAgo = this.#createdAt - 24 * 3600_000;
 		const recent = runs.filter((r) => r.startedAt && Date.parse(r.startedAt) >= dayAgo);
 		const succeeded = recent.filter((r) => r.status === 'success' || r.status === 'warn').length;
@@ -105,7 +119,7 @@ export class MockApiClient implements ApiClient {
 				{ label: 'Stale', value: '2', detail: 'of 42', note: '4.8% of project', tone: 'stale' }
 			],
 			attention: [
-				{ id: 'att-1', tone: 'error', title: 'nightly_build partially failed', detail: 'hourly_activity_ctx · expression_is_true', since: '18 minutes ago', href: '/runs/run-4f2a', action: 'View run' },
+				{ id: 'att-1', tone: 'error', title: 'core_build partially failed', detail: 'dim_customers · numeric value out of range', since: '18 minutes ago', href: '/runs/run-4f2a', action: 'View run' },
 				{ id: 'att-2', tone: 'stale', title: '2 models are stale', detail: 'daily_revenue · customer_status', since: 'changed since the last build', href: '/catalog', action: 'View catalog' },
 				{ id: 'att-3', tone: 'warning', title: 'Source freshness warning', detail: 'raw.payments is 23m behind', since: 'threshold 15 minutes', href: '/checks', action: 'View check' }
 			],
@@ -117,67 +131,114 @@ export class MockApiClient implements ApiClient {
 		});
 	}
 
+	// ---- OPERATE: delegated to the operate store (operate-store.ts) ----
+
 	async listRuns(scope: Scope, query: RunListQuery = {}): Promise<Run[]> {
 		this.#location(scope);
-		let runs = this.#fixtures.runs.map((run) => ({ ...run, locationId: scope.locationId, target: scope.target }));
-		if (query.jobKey) runs = runs.filter((r) => r.jobKey === query.jobKey);
-		if (query.statuses?.length) runs = runs.filter((r) => query.statuses!.includes(r.status));
-		if (query.limit) runs = runs.slice(0, query.limit);
-		return this.#reply(runs);
+		return this.#operate.listRuns(scope, query);
 	}
 
 	async getRun(scope: Scope, runId: string): Promise<Run | null> {
-		const runs = await this.listRuns(scope);
-		return runs.find((r) => r.id === runId) ?? null;
+		this.#location(scope);
+		return this.#operate.getRun(scope, runId);
+	}
+
+	async getRunDetail(scope: Scope, runId: string): Promise<RunDetail | null> {
+		this.#location(scope);
+		return this.#operate.getRunDetail(scope, runId);
+	}
+
+	async listRunEvents(scope: Scope, runId: string, query?: { after?: number; limit?: number }): Promise<RunEventPage> {
+		this.#location(scope);
+		return this.#operate.listRunEvents(scope, runId, query);
+	}
+
+	async listRunStatements(scope: Scope, runId: string): Promise<RunStatement[]> {
+		this.#location(scope);
+		return this.#operate.listRunStatements(scope, runId);
+	}
+
+	async listRunOutput(scope: Scope, runId: string): Promise<RunOutputLine[]> {
+		this.#location(scope);
+		return this.#operate.listRunOutput(scope, runId);
+	}
+
+	async listQueue(scope: Scope): Promise<QueueEntry[]> {
+		this.#location(scope);
+		return this.#operate.listQueue(scope);
 	}
 
 	async timeline(scope: Scope, window: { since: string; until: string }): Promise<Timeline> {
 		this.#location(scope);
-		this.#timelineBars ??= [
-			...buildTimelineBars(this.#createdAt),
-			...this.#fixtures.runs
-				.filter((r) => r.jobKey && r.startedAt)
-				.map(
-					(r): TimelineBar => ({
-						runId: r.id,
-						jobKey: r.jobKey!,
-						kind: r.kind,
-						status: r.status,
-						start: r.startedAt!,
-						end: r.endedAt ?? new Date(this.#createdAt).toISOString()
-					})
-				)
-		];
-		const bars = this.#timelineBars.filter((b) => b.end > window.since && b.start < window.until);
-		const jobKeys = [...new Set([...TIMELINE_JOB_KEYS, ...this.#fixtures.jobs.map((j) => j.key)])];
-		return this.#reply({ now: new Date(this.#createdAt).toISOString(), jobKeys, bars });
+		return this.#operate.timeline(scope, window);
+	}
+
+	async cancelRun(scope: Scope, runId: string): Promise<Run> {
+		this.#location(scope);
+		return this.#operate.cancelRun(scope, runId);
+	}
+
+	async rerunRun(scope: Scope, runId: string, mode: RerunMode): Promise<Run> {
+		this.#location(scope);
+		return this.#operate.rerunRun(scope, runId, mode);
+	}
+
+	async listSnapshotNodes(scope: Scope): Promise<SnapshotNode[]> {
+		this.#location(scope);
+		return this.#operate.listSnapshotNodes(scope);
+	}
+
+	async checkAdhocRun(scope: Scope, request: AdhocRunRequest): Promise<AdhocRunCheck> {
+		this.#location(scope);
+		return this.#operate.checkAdhocRun(scope, request);
+	}
+
+	async launchAdhocRun(scope: Scope, request: AdhocRunRequest): Promise<Run> {
+		this.#location(scope);
+		return this.#operate.launchAdhocRun(scope, request);
 	}
 
 	async listJobs(scope: Scope): Promise<Job[]> {
 		this.#location(scope);
-		return this.#reply(structuredClone(this.#fixtures.jobs));
+		return this.#operate.listJobs(scope);
 	}
 
-	async getJob(scope: Scope, key: string): Promise<Job | null> {
-		const jobs = await this.listJobs(scope);
-		return jobs.find((j) => j.key === key) ?? null;
+	async getJob(scope: Scope, key: string): Promise<JobDetail | null> {
+		this.#location(scope);
+		return this.#operate.getJob(scope, key);
+	}
+
+	async launchJob(scope: Scope, key: string, options?: JobLaunchOptions): Promise<Run> {
+		this.#location(scope);
+		return this.#operate.launchJob(scope, key, options);
 	}
 
 	async listTriggers(scope: Scope): Promise<Trigger[]> {
 		this.#location(scope);
-		return this.#reply(structuredClone(this.#triggersFor(scope)));
+		return this.#operate.listTriggers(scope);
 	}
 
-	async setTriggerState(scope: Scope, name: string, state: TriggerState): Promise<Trigger> {
-		this.#require('trigger.toggle');
-		const triggers = this.#triggersFor(scope);
-		const trigger = triggers.find((t) => t.name === name);
-		if (!trigger) throw new ApiError(`Unknown trigger ${name}`, 404);
-		trigger.state = state;
-		trigger.nextTickAt = state === 'paused' || !trigger.cron ? null : new Date(Date.now() + 15 * 60_000).toISOString();
-		this.changes.emit('triggers');
-		return this.#reply(structuredClone(trigger));
+	async getTrigger(scope: Scope, id: string): Promise<TriggerDetail | null> {
+		this.#location(scope);
+		return this.#operate.getTrigger(scope, id);
 	}
+
+	async setTriggerStates(scope: Scope, ids: string[], state: TriggerState, reason?: string | null): Promise<Trigger[]> {
+		this.#location(scope);
+		return this.#operate.setTriggerStates(scope, ids, state, reason ?? null);
+	}
+
+	async resetTriggerToDefault(scope: Scope, id: string): Promise<Trigger> {
+		this.#location(scope);
+		return this.#operate.resetTriggerToDefault(scope, id);
+	}
+
+	async resetSensorCursor(scope: Scope, id: string, reason?: string | null): Promise<TriggerDetail> {
+		this.#location(scope);
+		return this.#operate.resetSensorCursor(scope, id, reason ?? null);
+	}
+
+	// ---- end OPERATE ----
 
 	async listChecks(scope: Scope): Promise<Check[]> {
 		this.#location(scope);
@@ -246,23 +307,6 @@ export class MockApiClient implements ApiClient {
 		return sync;
 	}
 
-	#triggersFor(scope: Scope): Trigger[] {
-		const key = scopeKey(scope);
-		let triggers = this.#triggers.get(key);
-		if (!triggers) {
-			triggers = structuredClone(this.#fixtures.triggers);
-			// Development targets start with every trigger paused.
-			if (scope.target === 'dev') {
-				for (const t of triggers) {
-					t.state = 'paused';
-					t.nextTickAt = null;
-				}
-			}
-			this.#triggers.set(key, triggers);
-		}
-		return triggers;
-	}
-
 	#platformEvents(): PlatformEvent[] {
 		const { platformEvents, extraPlatformEvents } = this.#fixtures;
 		if (this.#options.alerts === 'none') return platformEvents.filter((e) => !e.active);
@@ -276,12 +320,6 @@ export class MockApiClient implements ApiClient {
 			throw new ApiError(`Unknown location or target: ${scope.locationId} / ${scope.target}`, 404);
 		}
 		return location;
-	}
-
-	#require(capability: Capability) {
-		if (!ROLE_CAPABILITIES[this.#options.role].includes(capability)) {
-			throw new ApiError(`Missing permission: ${capability}`, 403);
-		}
 	}
 
 	#reply<T>(value: T): Promise<T> {
