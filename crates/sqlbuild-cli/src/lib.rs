@@ -4,6 +4,7 @@
 
 pub mod argv;
 pub mod compute_logs;
+pub mod cost_store;
 pub mod diff_report;
 pub mod dispatch;
 pub mod launcher;

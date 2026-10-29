@@ -25,6 +25,21 @@ pub(crate) struct RulesOptions {
     pub(crate) json: bool,
 }
 
+/// Raw `sqb cost` options; only a pending warehouse refresh needs the Python adapter edge.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CostOptions {
+    pub(crate) selector: String,
+    pub(crate) limit: Option<i64>,
+    pub(crate) no_limit: bool,
+    pub(crate) sort: Option<String>,
+    pub(crate) descending: bool,
+    pub(crate) since: Option<String>,
+    pub(crate) until: Option<String>,
+    pub(crate) json: bool,
+    pub(crate) json_path: Option<PathBuf>,
+    pub(crate) no_color: bool,
+}
+
 /// A command that runs without Python.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum NativeCommand {
@@ -33,6 +48,7 @@ pub(crate) enum NativeCommand {
     Init,
     Skills(SkillsOptions),
     Rules(RulesOptions),
+    Cost(CostOptions),
 }
 
 /// One parsed invocation `sqb` serves without Python.

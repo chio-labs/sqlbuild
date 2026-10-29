@@ -3,3 +3,4 @@
 pub(crate) mod connections;
 pub(crate) mod host;
 pub(crate) mod registration;
+pub(crate) mod results;

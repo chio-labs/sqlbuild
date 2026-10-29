@@ -19,11 +19,13 @@ path = "src/bin/sqlbuild.rs"
 blake3.workspace = true
 getrandom.workspace = true
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["arbitrary_precision"] }
 sqlbuild-build-features.workspace = true
 sqlbuild-cache.workspace = true
 sqlbuild-config.workspace = true
 sqlbuild-core.workspace = true
+sqlbuild-cursor.workspace = true
+sqlbuild-model-config.workspace = true
 sqlbuild-rules.workspace = true
 
 [target.'cfg(unix)'.dependencies]

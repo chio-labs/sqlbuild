@@ -2,6 +2,8 @@
 
 use std::path::PathBuf;
 
+use sqlbuild_core::json::models::JsonInteger;
+
 use crate::types::ResultEnum;
 
 /// Whether a build succeeded. Mirrors `sqlbuild.executor.build.types.BuildStatus`.
@@ -454,6 +456,13 @@ pub struct MicrobatchAccountingInterval {
     pub event_id: Option<String>,
 }
 
+/// A measured number without coercing integer values to floating point.
+#[derive(Clone, Debug, PartialEq)]
+pub enum MeasuredValue {
+    Integer(JsonInteger),
+    Float(f64),
+}
+
 /// One executed audit. Mirrors `sqlbuild.executor.auditing.models.AuditExecutionResult`; `V` is a host value.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AuditExecutionResult<V> {
@@ -470,7 +479,7 @@ pub struct AuditExecutionResult<V> {
     pub attached_column_name: Option<String>,
     pub reused: bool,
     pub evaluation_mode: AuditEvaluationMode,
-    pub measured_value: Option<f64>,
+    pub measured_value: Option<MeasuredValue>,
     pub sample_count: Option<i64>,
     pub sample_unit: Option<String>,
     pub minimum_samples: Option<i64>,
