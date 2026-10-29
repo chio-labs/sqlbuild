@@ -7,8 +7,15 @@
 	import AppTopbar from '$lib/components/app-topbar.svelte';
 	import Button from '$lib/components/ui/button/button.svelte';
 	import { layoutGraph } from '$lib/lineage/layout';
+	import { app } from '$lib/state/app.svelte';
+	import { createResource } from '$lib/state/resource.svelte';
+	import { formatDuration, formatStamp } from '$lib/format/time';
+	import { isActiveRun, isProblemRun, runKindLabel, runStatusLabel, runStatusTone } from '$lib/status';
 
-	const runId = $derived(page.params.id ?? 'run-4f2a');
+	const runId = $derived(page.params.id ?? '');
+	const runResource = createResource((client, scope) => client.getRun(scope, runId), ['runs']);
+	const run = $derived(runResource.data ?? null);
+	// The execution detail below is still prototype data until the run-events API exists.
 
 	type ExecStatus = 'ok' | 'fail' | 'warn' | 'skip' | 'run';
 	type ExecRow = { id: string; name: string; status: ExecStatus; start: number; dur: number; kind: string; icon: string };
@@ -399,8 +406,14 @@ audit expression_is_true: FAILED`;
 </script>
 
 <AppTopbar title="Runs">
-	<Button variant="outline" size="sm">↻ Rerun</Button>
-	<Button size="sm">▷ Rerun from failure</Button>
+	{#if run && isActiveRun(run.status)}
+		<Button variant="outline" size="sm" disabled={!app.can('run.cancel')} title={app.can('run.cancel') ? undefined : 'Requires run.cancel'}>Cancel run</Button>
+	{:else}
+		<Button variant="outline" size="sm" disabled={!run || !app.can('run.rerun')} title={app.can('run.rerun') ? undefined : 'Requires run.rerun'}>↻ Rerun</Button>
+		{#if run && isProblemRun(run.status)}
+			<Button size="sm" disabled={!app.can('run.rerun')} title={app.can('run.rerun') ? undefined : 'Requires run.rerun'}>▷ Rerun from failure</Button>
+		{/if}
+	{/if}
 </AppTopbar>
 
 <div class="flex min-h-0 flex-1 flex-col">
@@ -408,12 +421,18 @@ audit expression_is_true: FAILED`;
 	<div class="flex items-center gap-3 border-b border-border px-6 py-3.5">
 		<a href="/runs" class="text-muted-foreground hover:text-foreground text-[13px]">← Runs</a>
 		<span class="font-display text-[17px] font-semibold">{runId}</span>
-		<span class="sb-status" style="--tone:var(--sb-error)">
-			<span class="h-1.5 w-1.5 rounded-[2px]" style="background:var(--sb-error)"></span>failed
-		</span>
-		<span class="text-muted-foreground text-[12px]">nightly_build · schedule · prod · a3f19c2</span>
+		{#if run}
+			<span class="sb-status" style:--tone={runStatusTone[run.status]} title={run.statusReason ?? undefined}>
+				<span class="h-1.5 w-1.5 rounded-[2px]" style:background={runStatusTone[run.status]}></span>{runStatusLabel[run.status].toLowerCase()}
+			</span>
+			<span class="text-muted-foreground text-[12px]">{run.jobKey ?? 'ad hoc'} · {runKindLabel[run.kind].toLowerCase()} · {run.target} · {run.gitRevision}</span>
+		{:else if runResource.error}
+			<span class="text-[12px] text-[var(--sb-error)]">Couldn't load run: {runResource.error}</span>
+		{:else if runResource.data === null}
+			<span class="text-muted-foreground text-[12px]">Not found in this target</span>
+		{/if}
 		<div class="text-[var(--sb-text-faint)] ml-auto flex items-center gap-2 text-[11.5px]">
-			<span>11:46:09 · 1.42s · @scheduler</span>
+			{#if run}<span>{formatStamp(run.startedAt ?? run.queuedAt)} · {formatDuration(run.startedAt, run.endedAt, app.now)} · {run.requestedBy.name}</span>{/if}
 			<span class="text-[var(--sb-text-faint)]">·</span>
 			<span class="text-foreground">8 ok</span>
 			<button

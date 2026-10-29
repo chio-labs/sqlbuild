@@ -417,6 +417,10 @@
 .sb-toggle.on::after {
 	left: 14px;
 }
+.sb-toggle:disabled {
+	cursor: not-allowed;
+	opacity: 0.55;
+}
 /* Prism token theme — mapped to SQLBuild syntax tokens (works light + dark) */
 .token.comment,
 .token.prolog,

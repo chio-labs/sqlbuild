@@ -1,74 +1,60 @@
 <script lang="ts">
 	import WorkflowIcon from '@lucide/svelte/icons/workflow';
+	import LayersIcon from '@lucide/svelte/icons/layers';
 	import ListToolbar from '$lib/components/list/list-toolbar.svelte';
 	import FilterButton from '$lib/components/list/filter-button.svelte';
 	import StatusLabel from '$lib/components/list/status-label.svelte';
 	import RelativeTime from '$lib/components/list/relative-time.svelte';
+	import LoadRow from '$lib/components/list/load-row.svelte';
 	import { goto } from '$app/navigation';
 	import AppTopbar from '$lib/components/app-topbar.svelte';
 	import Button from '$lib/components/ui/button/button.svelte';
+	import type { Trigger } from '$lib/api';
+	import { app } from '$lib/state/app.svelte';
+	import { createResource } from '$lib/state/resource.svelte';
+	import { formatAgo, formatStamp } from '$lib/format/time';
+	import { isProblemRun, runStatusLabel, runStatusTone } from '$lib/status';
 
-	type Status = 'ok' | 'fail' | 'warn' | 'never';
-	type Job = {
-		name: string;
-		desc: string;
-		select: string; // the --select expression
-		nodes: number;
-		schedule: string; // human cadence or 'manual'
-		enabled: boolean; // schedule on/off (manual jobs have no schedule to toggle)
-		lastStatus: Status;
-		lastRun: string;
-		lastRunId: string;
-	};
+	const jobs = createResource((client, scope) => client.listJobs(scope), ['jobs', 'runs']);
+	const triggers = createResource((client, scope) => client.listTriggers(scope), ['triggers']);
 
-	// Jobs = named --select groupings (CLI-level selection + settings).
-	let jobs = $state<Job[]>([
-		{ name: 'nightly_build', desc: 'Full project build', select: '+', nodes: 16, schedule: 'daily 02:00', enabled: true, lastStatus: 'fail', lastRun: '14m ago', lastRunId: 'run-9d21' },
-		{ name: 'marts_only', desc: 'Marts and their upstreams', select: '+marts', nodes: 9, schedule: 'manual', enabled: false, lastStatus: 'ok', lastRun: '1h ago', lastRunId: 'run-91cd' },
-		{ name: 'load_sources', desc: 'Ingest loaders + sources', select: 'tag:ingest', nodes: 3, schedule: 'hourly', enabled: true, lastStatus: 'ok', lastRun: '3h ago', lastRunId: 'run-88e1' },
-		{ name: 'checks_only', desc: 'Run audits across all models', select: '* --checks-only', nodes: 14, schedule: 'manual', enabled: false, lastStatus: 'ok', lastRun: '18h ago', lastRunId: 'run-c40e' },
-		{ name: 'activity_microbatch', desc: 'Incremental activity models', select: '+hourly_activity_ctx', nodes: 5, schedule: 'every 15m', enabled: true, lastStatus: 'warn', lastRun: '4h ago', lastRunId: 'run-1a05' },
-		{ name: 'revenue_refresh', desc: 'Daily revenue + downstream BI', select: 'daily_revenue+', nodes: 4, schedule: 'daily 03:00', enabled: false, lastStatus: 'never', lastRun: '—', lastRunId: '' }
-	]);
+	const triggerByName = $derived(new Map((triggers.data ?? []).map((t) => [t.name, t])));
+	const canToggle = $derived(app.can('trigger.toggle'));
 
-	function toggleSchedule(name: string) {
-		jobs = jobs.map((j) => (j.name === name ? { ...j, enabled: !j.enabled } : j));
+	async function toggle(trigger: Trigger) {
+		const scope = app.scope;
+		if (!scope) return;
+		await app.client.setTriggerState(scope, trigger.name, trigger.state === 'running' ? 'paused' : 'running');
 	}
 
-	const statusColor: Record<Status, string> = {
-		ok: 'var(--sb-success)',
-		fail: 'var(--sb-error)',
-		warn: 'var(--sb-warning)',
-		never: 'var(--sb-text-faint)'
-	};
-	const statusLabel: Record<Status, string> = { ok: 'Success', fail: 'Failed', warn: 'Warning', never: 'Never run' };
-
 	let query = $state('');
+	const all = $derived(jobs.data ?? []);
 	const filtered = $derived(
-		jobs.filter((j) => {
+		all.filter((j) => {
 			if (!query.trim()) return true;
 			const q = query.toLowerCase();
-			return j.name.toLowerCase().includes(q) || j.desc.toLowerCase().includes(q) || j.select.toLowerCase().includes(q);
+			return j.key.toLowerCase().includes(q) || j.description.toLowerCase().includes(q) || (j.select ?? '').toLowerCase().includes(q);
 		})
 	);
+	const scheduledCount = $derived(all.filter((j) => j.triggerNames.some((n) => triggerByName.get(n)?.state === 'running')).length);
+	const failingCount = $derived(all.filter((j) => j.lastRun && isProblemRun(j.lastRun.status)).length);
 </script>
 
 <AppTopbar title="Jobs">
-	<Button variant="outline" size="sm">↻ Refresh</Button>
-	<Button size="sm">+ New job</Button>
+	<Button variant="outline" size="sm" onclick={() => (jobs.refresh(), triggers.refresh())}>↻ Refresh</Button>
 </AppTopbar>
 
 <ListToolbar
 	bind:query
 	placeholder="Search jobs"
-	total="{filtered.length} of {jobs.length} jobs"
+	total="{filtered.length} of {all.length} jobs and groups"
 	counts={[
-		{ tone: 'var(--sb-success)', count: jobs.filter((j) => j.enabled).length, label: 'scheduled' },
-		{ tone: 'var(--sb-error)', count: jobs.filter((j) => j.lastStatus === 'fail').length, label: 'failing' }
+		{ tone: 'var(--sb-success)', count: scheduledCount, label: 'with a running trigger' },
+		{ tone: 'var(--sb-error)', count: failingCount, label: 'failing' }
 	]}
 >
 	{#snippet filters()}
-		<FilterButton label="Schedule" />
+		<FilterButton label="Kind" />
 		<FilterButton label="Last run" />
 	{/snippet}
 </ListToolbar>
@@ -80,55 +66,73 @@
 				<th>Job</th>
 				<th>Selector</th>
 				<th class="num">Nodes</th>
-				<th>Schedule</th>
+				<th>Triggers</th>
 				<th>Last run</th>
 				<th>When</th>
 			</tr>
 		</thead>
 		<tbody>
-			{#each filtered as j (j.name)}
-				<tr onclick={() => goto(`/jobs/${j.name}`)}>
+			{#each filtered as j (j.key)}
+				{@const jobTriggers = j.triggerNames.map((n) => triggerByName.get(n)).filter((t) => t !== undefined)}
+				<tr onclick={() => goto(`/jobs/${j.key}`)}>
 					<td>
 						<div class="cell-name">
-							<WorkflowIcon size={15} strokeWidth={1.75} />
+							{#if j.kind === 'group'}<LayersIcon size={15} strokeWidth={1.75} />{:else}<WorkflowIcon size={15} strokeWidth={1.75} />{/if}
 							<div class="min-w-0">
-								<a href="/jobs/{j.name}" onclick={(e) => e.stopPropagation()}>{j.name}</a>
-								<div class="cell-desc">{j.desc}</div>
+								<a href="/jobs/{j.key}" onclick={(e) => e.stopPropagation()}>{j.key}</a>
+								<div class="cell-desc">{j.description}</div>
 							</div>
 						</div>
 					</td>
-					<td><code>{j.select}</code></td>
-					<td class="num muted">{j.nodes}</td>
 					<td>
-						{#if j.schedule === 'manual'}
+						{#if j.kind === 'group'}
+							<span class="muted">Group · {j.members.join(' → ')}</span>
+						{:else}
+							<code>{j.select}</code>
+						{/if}
+					</td>
+					<td class="num muted">{j.nodeCount}</td>
+					<td>
+						{#if jobTriggers.length === 0}
 							<span class="muted">Manual</span>
 						{:else}
-							<div class="flex items-center gap-2.5">
-								<button
-									class="sb-toggle"
-									class:on={j.enabled}
-									onclick={(e) => {
-										e.stopPropagation();
-										toggleSchedule(j.name);
-									}}
-									title={j.enabled ? 'Pause schedule' : 'Enable schedule'}
-									aria-label="Toggle schedule for {j.name}"
-								></button>
-								<span class:muted={!j.enabled}>{j.schedule}</span>
+							<div class="flex flex-col gap-1">
+								{#each jobTriggers as t (t.name)}
+									<div class="flex items-center gap-2.5">
+										<button
+											class="sb-toggle"
+											class:on={t.state === 'running'}
+											disabled={!canToggle}
+											onclick={(e) => {
+												e.stopPropagation();
+												void toggle(t);
+											}}
+											title={canToggle ? (t.state === 'running' ? 'Pause trigger' : 'Resume trigger') : 'Requires trigger.toggle'}
+											aria-label="Toggle trigger {t.name}"
+										></button>
+										<span class:muted={t.state === 'paused'}>{t.cadence}</span>
+									</div>
+								{/each}
 							</div>
 						{/if}
 					</td>
 					<td>
-						{#if j.lastStatus === 'never'}
-							<span class="muted">Never run</span>
+						{#if j.lastRun}
+							<StatusLabel tone={runStatusTone[j.lastRun.status]} label={runStatusLabel[j.lastRun.status]} />
 						{:else}
-							<StatusLabel tone={statusColor[j.lastStatus]} label={statusLabel[j.lastStatus]} />
+							<span class="muted">Never run</span>
 						{/if}
 					</td>
-					<td><RelativeTime value={j.lastRun} /></td>
+					<td>
+						{#if j.lastRun}
+							<RelativeTime value={formatAgo(j.lastRun.startedAt, app.now)} exact={formatStamp(j.lastRun.startedAt)} />
+						{:else}
+							<span class="muted">—</span>
+						{/if}
+					</td>
 				</tr>
 			{:else}
-				<tr><td colspan="6" class="empty">No jobs match the filter.</td></tr>
+				<LoadRow colspan={6} resource={jobs} empty={all.length ? 'No jobs match the filter.' : 'No jobs are defined in this snapshot.'} />
 			{/each}
 		</tbody>
 	</table>

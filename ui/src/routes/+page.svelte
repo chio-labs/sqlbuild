@@ -10,49 +10,21 @@
 	import AppTopbar from '$lib/components/app-topbar.svelte';
 	import Button from '$lib/components/ui/button/button.svelte';
 	import RunTimeline from '$lib/components/timeline/run-timeline.svelte';
-	import { page } from '$app/state';
+	import type { AttentionTone, ChangeKind } from '$lib/api';
+	import { app } from '$lib/state/app.svelte';
+	import { createResource } from '$lib/state/resource.svelte';
+	import { formatAgo } from '$lib/format/time';
+	import { runStatusLabel } from '$lib/status';
 
+	const overview = createResource((client, scope) => client.overview(scope), ['runs', 'checks', 'node_status']);
+	const data = $derived(overview.data ?? null);
 
-	const stats = [
-		{ label: 'Models', value: '42', detail: '7 views', note: '+3 this week', tone: 'success' },
-		{ label: 'Runs · 24h', value: '18', detail: '17 successful', note: '94.4% success' },
-		{ label: 'Checks passing', value: '63', detail: 'of 66', note: '3 need attention', tone: 'warning' },
-		{ label: 'Stale', value: '2', detail: 'of 42', note: '4.8% of project', tone: 'stale' },
-		{ label: 'Compute · 24h', value: '$8.42', detail: 'est.', note: '12% below average', tone: 'success' }
-	];
-
-	// prototype: ?healthy=1 shows the all-clear state
-	const healthy = $derived(page.url.searchParams.get('healthy') === '1');
-	const attention = [
-		{
-			title: 'nightly_build failed',
-			detail: 'fact_orders · audit unique_order_id',
-			when: '18 minutes ago',
-			tone: 'error',
-			icon: AlertCircleIcon,
-			href: '/runs/run-4f2a',
-			action: 'View run'
-		},
-		{
-			title: '2 models are stale',
-			detail: 'daily_revenue · customer_status',
-			when: 'since the last applied build',
-			tone: 'stale',
-			icon: HistoryIcon,
-			href: '/catalog',
-			action: 'Rebuild'
-		},
-		{
-			title: 'Source freshness warning',
-			detail: 'raw.payments is 23m behind',
-			when: 'threshold 15 minutes',
-			tone: 'warning',
-			icon: TriangleAlertIcon,
-			href: '/checks',
-			action: 'View check'
-		}
-	];
-	const issues = $derived(healthy ? [] : attention);
+	const attentionIcon: Record<AttentionTone, typeof AlertCircleIcon> = {
+		error: AlertCircleIcon,
+		stale: HistoryIcon,
+		warning: TriangleAlertIcon
+	};
+	const issues = $derived(data?.attention ?? []);
 	const healthTone = $derived(
 		issues.some((i) => i.tone === 'error')
 			? 'var(--sb-error)'
@@ -60,18 +32,21 @@
 				? 'var(--sb-warning)'
 				: 'var(--sb-success)'
 	);
+	const latest = $derived(data?.latestRun ?? null);
+	const latestText = $derived(
+		latest ? `Last run ${runStatusLabel[latest.status].toLowerCase()} ${formatAgo(latest.endedAt, app.now)}` : 'No runs yet'
+	);
 
-	const changes = [
-		{ kind: 'deploy', title: 'Deployed 7d2e41a to production', detail: '3 models changed · fact_orders, stg_payments, dim_customers', who: '@analytics', when: '3d ago', href: '/runs/run-77b3' },
-		{ kind: 'macro', title: 'Macro cents_to_dollars updated', detail: 'Used by 3 models · stg_payments, fact_orders, daily_revenue', who: '@analytics', when: '5h ago', href: '/catalog/stg_payments?tab=sql' },
-		{ kind: 'model', title: 'New model customer_status', detail: 'marts · view', who: '@analytics', when: '1d ago', href: '/catalog/customer_status' },
-		{ kind: 'column', title: 'Column added dim_customers.lifetime_value', detail: 'decimal(18,2)', who: '@analytics', when: '1d ago', href: '/catalog/dim_customers?tab=columns' }
-	];
-	const changeIcon = { deploy: RocketIcon, macro: BracesIcon, model: PlusIcon, column: ColumnsIcon } as const;
+	const changeIcon: Record<ChangeKind, typeof RocketIcon> = {
+		snapshot: RocketIcon,
+		macro: BracesIcon,
+		model_added: PlusIcon,
+		column_added: ColumnsIcon
+	};
 </script>
 
 <AppTopbar title="Overview">
-	<Button variant="outline" size="sm">↻ Refresh</Button>
+	<Button variant="outline" size="sm" onclick={() => overview.refresh()}>↻ Refresh</Button>
 </AppTopbar>
 
 <div class="min-h-0 flex-1 overflow-y-auto px-5 pb-16 pt-[18px]">
@@ -82,27 +57,27 @@
 					{#if issues.length}<AlertCircleIcon size={15} />{:else}<ActivityIcon size={15} />{/if}
 				</div>
 				<div class="health-copy">
-					<strong>{issues.length ? `Production needs attention` : 'Production is healthy'}</strong>
-					<span>{issues.length ? `${issues.length} issues · last build failed 18 minutes ago` : 'Last build completed 18 minutes ago'}</span>
+					<strong>{issues.length ? `${app.targetName} needs attention` : `${app.targetName} is healthy`}</strong>
+					<span>{issues.length ? `${issues.length} issues · ${latestText}` : latestText}</span>
 				</div>
 				<div class="health-facts">
-					<span><i class="status-dot success"></i><b>40</b> current</span>
-					{#if !healthy}
-						<span><i class="status-dot stale"></i><b>2</b> stale</span>
-						<span><i class="status-dot error"></i><b>1</b> failed check</span>
+					{#if data}
+						<span><i class="status-dot success"></i><b>{data.currentNodes}</b> current</span>
+						{#if data.staleNodes}<span><i class="status-dot stale"></i><b>{data.staleNodes}</b> stale</span>{/if}
+						{#if data.failingChecks}<span><i class="status-dot error"></i><b>{data.failingChecks}</b> failed {data.failingChecks === 1 ? 'check' : 'checks'}</span>{/if}
 					{/if}
 				</div>
-				<a href="/runs/run-4f2a">View latest run →</a>
+				{#if latest}<a href="/runs/{latest.id}">View latest run →</a>{/if}
 			</div>
 			{#if issues.length}
 				<div class="issues">
-					{#each issues as item (item.title)}
-						{@const Glyph = item.icon}
+					{#each issues as item (item.id)}
+						{@const Glyph = attentionIcon[item.tone]}
 						<a class="issue" href={item.href}>
 							<span class="issue-icon {item.tone}"><Glyph size={14} /></span>
 							<strong>{item.title}</strong>
 							<span class="issue-detail">{item.detail}</span>
-							<small>{item.when}</small>
+							<small>{item.since}</small>
 							<b>{item.action} →</b>
 						</a>
 					{/each}
@@ -111,7 +86,7 @@
 		</section>
 
 		<section class="metric-strip">
-			{#each stats as stat (stat.label)}
+			{#each data?.metrics ?? [] as stat (stat.label)}
 				<div class="metric">
 					<span class="metric-label">{stat.label}</span>
 					<div><strong class:stale-value={stat.tone === 'stale'}>{stat.value}</strong><small>{stat.detail}</small></div>
@@ -133,7 +108,7 @@
 		<div class="lower-grid">
 		<section class="surface-panel freshness-panel">
 			<div class="panel-heading">
-				<div><h2>Warehouse freshness</h2><span>42 models · production</span></div>
+				<div><h2>Warehouse freshness</h2><span>42 models · {app.targetName}</span></div>
 				<a href="/catalog">Open catalog →</a>
 			</div>
 			<div class="freshness-body">
@@ -157,16 +132,16 @@
 		</section>
 		<section class="surface-panel changes-panel">
 			<div class="panel-heading">
-				<div><h2>Recent changes</h2><span>Deploys and definition changes</span></div>
-				<a href="/runs">View runs →</a>
+				<div><h2>Recent changes</h2><span>Snapshots and definition changes</span></div>
+				<a href="/changes">All changes →</a>
 			</div>
 			<div>
-				{#each changes as c (c.title)}
-					{@const Glyph = changeIcon[c.kind as keyof typeof changeIcon]}
+				{#each data?.recentChanges ?? [] as c (c.id)}
+					{@const Glyph = changeIcon[c.kind]}
 					<a class="change" href={c.href}>
 						<span class="change-icon {c.kind}"><Glyph size={14} /></span>
 						<span class="change-copy"><strong>{c.title}</strong><span>{c.detail}</span></span>
-						<small>{c.who} · {c.when}</small>
+						<small>{c.actor.name} · {formatAgo(c.at, app.now)}</small>
 					</a>
 				{/each}
 			</div>
@@ -198,7 +173,7 @@
 	.change:hover { background: var(--sb-hover); }
 	.change-icon { display: grid; width: 26px; height: 26px; place-items: center; border-radius: 2px; color: var(--muted-foreground); background: var(--sb-hover); }
 	.change-icon.macro { color: var(--sb-warning); background: color-mix(in srgb, var(--sb-warning) 11%, transparent); }
-	.change-icon.deploy { color: var(--primary); background: color-mix(in srgb, var(--primary) 11%, transparent); }
+	.change-icon.snapshot { color: var(--primary); background: color-mix(in srgb, var(--primary) 11%, transparent); }
 	.change-copy { min-width: 0; }
 	.change-copy strong, .change-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.change-copy strong { font-size: 12.5px; font-weight: 600; }
@@ -213,7 +188,7 @@
 	.health-facts span, .freshness-legend span { display: flex; align-items: center; gap: 6px; }
 	.health-facts b { color: var(--foreground); font-weight: 500; }
 	.health-head > a, .panel-heading > a { margin-left: auto; color: var(--primary); font: 500 12.5px var(--font-sans); }
-	.metric-strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); overflow: hidden; }
+	.metric-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: hidden; }
 	.metric { min-width: 0; padding: 15px 16px 14px; border-right: 1px solid var(--border); }
 	.metric:last-child { border-right: 0; }
 	.metric-label { display: block; color: var(--muted-foreground); font: 500 12px var(--font-sans); }
