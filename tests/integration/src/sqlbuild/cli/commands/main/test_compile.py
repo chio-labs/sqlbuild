@@ -382,7 +382,8 @@ def test_given_sql_test_chain_when_compiling_then_native_planner_writes_complete
         encoding="utf-8",
     )
 
-    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+    arguments: list[str] = ["--project-dir", str(tmp_path), "compile", "--json"]
+    exit_code: int = main(arguments)
     result: dict[str, object] = json.loads(capsys.readouterr().out)
     artifact_path: Path = (
         tmp_path
@@ -408,6 +409,37 @@ def test_given_sql_test_chain_when_compiling_then_native_planner_writes_complete
     assert '__ref("stg_orders")' not in artifact_sql
     assert "SELECT 2 AS order_id, 20 AS amount" in second_artifact_sql
     assert "SELECT 1 AS order_id, 10 AS amount" not in second_artifact_sql
+
+    cache_path: Path = (
+        tmp_path / "target" / "cache" / "compiler-native-v1" / "sql-test-artifacts.json"
+    )
+    snapshot_text: str = cache_path.read_text(encoding="utf-8")
+    snapshot: dict = json.loads(snapshot_text)
+    assert snapshot["version"] == 5
+    assert len(snapshot["records"]) == test_case.expected_count
+    assert snapshot_text == json.dumps(snapshot, sort_keys=True, separators=(",", ":"))
+
+    config: Path = tmp_path / "sqlbuild_project.toml"
+    original_config: str = config.read_text(encoding="utf-8")
+    config.write_text(original_config + '\n[vars]\nrevision = "1"\n', encoding="utf-8")
+    snapshot["version"] = 5.0
+    cache_path.write_text(json.dumps(snapshot), encoding="utf-8")
+    assert main(arguments) == 0, capsys.readouterr()
+    _ = capsys.readouterr()
+    assert json.loads(cache_path.read_text(encoding="utf-8"))["records"] == snapshot["records"]
+    assert artifact_path.read_text(encoding="utf-8") == artifact_sql
+
+    broken_snapshot: dict = json.loads(cache_path.read_text(encoding="utf-8"))
+    next(iter(broken_snapshot["records"].values()))["size"] = True
+    cache_path.write_text(json.dumps(broken_snapshot), encoding="utf-8")
+    config.write_text(original_config + '\n[vars]\nrevision = "2"\n', encoding="utf-8")
+    assert main(arguments) == 0, capsys.readouterr()
+    _ = capsys.readouterr()
+    assert json.loads(cache_path.read_text(encoding="utf-8"))["records"] == snapshot["records"]
+    assert artifact_path.read_text(encoding="utf-8") == artifact_sql
+    assert artifact_path.with_name("orders_chain_second.sql").read_text(encoding="utf-8") == (
+        second_artifact_sql
+    )
 
 
 if __name__ == "__main__":

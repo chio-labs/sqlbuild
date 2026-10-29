@@ -13,7 +13,9 @@ use sqlbuild_analysis::target_paths::main::runtime_sql_text::runtime_sql_text;
 use sqlbuild_analysis::target_paths::main::sql_test_output_path::sql_test_output_path;
 use sqlbuild_analysis::target_paths::models::SqlTestPathFacts;
 use sqlbuild_core::text::main::python_isspace::python_isspace;
-use sqlbuild_host::models::{BuildExecutionResult, LifeCycleEvent, LifeCycleEventKind};
+use sqlbuild_host::models::{
+    BuildExecutionResult, LifeCycleEvent, LifeCycleEventKind, SqlTestExecutionResult,
+};
 
 use crate::bindings::_helpers::analysis::sql_test_comparisons::single_comparison_sql;
 use crate::bindings::_helpers::boundary::python_calls::imported;
@@ -174,11 +176,19 @@ pub(crate) fn write_runtime_target(
 pub(crate) fn write_test_runtime_target(
     (target_dir, adapter): (&Bound<'_, PyAny>, &Bound<'_, PyAny>),
     plan: &Bound<'_, PyAny>,
-    results: &Bound<'_, PyAny>,
+    results: &[SqlTestExecutionResult<Bound<'_, PyAny>>],
 ) -> PyResult<()> {
     let mut executed: HashSet<TestKey> = HashSet::new();
-    for result in results.try_iter()? {
-        executed.insert(test_key(&result?, "test_name")?);
+    for result in results {
+        executed.insert(TestKey {
+            name: result.test_name.clone(),
+            source_path: result.source_path.as_ref().map(|path| {
+                path.to_string_lossy()
+                    .replace(std::path::MAIN_SEPARATOR, "/")
+            }),
+            block_index: result.block_index,
+            case_name: result.case_name.clone(),
+        });
     }
     let tests_dir: Bound<'_, PyAny> = target_dir.div(RUN_DIR)?.div(TESTS_DIR)?;
     for entry in native_field(plan, "test_entries")?.try_iter()? {

@@ -120,22 +120,6 @@ pub(crate) fn plain_json(value: &Bound<'_, PyAny>) -> PyResult<String> {
     )
 }
 
-/// `json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True)`.
-pub(crate) fn compact_sorted_json(value: &Bound<'_, PyAny>) -> PyResult<String> {
-    let mut conversion: Conversion = Conversion::default();
-    let converted: JsonValue = conversion.json_value(value)?;
-    if let Some(error) = conversion.stdlib_error {
-        return Err(error);
-    }
-    emitted(
-        &converted,
-        &JsonDialect::Stdlib(StdlibJsonOptions {
-            sort_keys: true,
-            ..StdlibJsonOptions::new(None).with_separators(",", ":")
-        }),
-    )
-}
-
 fn emitted(value: &JsonValue, dialect: &JsonDialect) -> PyResult<String> {
     dumps(value, dialect).map_err(|error| PyTypeError::new_err(format!("{error:?}")))
 }

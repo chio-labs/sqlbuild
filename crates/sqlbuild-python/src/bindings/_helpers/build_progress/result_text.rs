@@ -279,22 +279,29 @@ fn test_step_text(step: &StepResult) -> TestStepText {
 
 fn test_result_text(test: &SqlTestExecutionResult<Bound<'_, PyAny>>) -> PyResult<TestResultText> {
     Ok(TestResultText {
-        label: test_label_values(
-            &test.test_name,
-            test.source_path
-                .as_ref()
-                .map(|path| {
-                    path.to_string_lossy()
-                        .replace(std::path::MAIN_SEPARATOR, "/")
-                })
-                .as_deref(),
-            &test.parameter_schema,
-            &test.parameter_values,
-        )?,
+        label: test_result_label(test)?,
         outcome: test.outcome.value().to_owned(),
         steps: test.step_results.iter().map(test_step_text).collect(),
         error: error(&test.error_code, &test.error_message, &test.error_help),
     })
+}
+
+/// The shared progress/footer/command label of an already-converted executor test result.
+pub(crate) fn test_result_label(
+    test: &SqlTestExecutionResult<Bound<'_, PyAny>>,
+) -> PyResult<String> {
+    test_label_values(
+        &test.test_name,
+        test.source_path
+            .as_ref()
+            .map(|path| {
+                path.to_string_lossy()
+                    .replace(std::path::MAIN_SEPARATOR, "/")
+            })
+            .as_deref(),
+        &test.parameter_schema,
+        &test.parameter_values,
+    )
 }
 
 pub(crate) fn python_node_text(node: &Bound<'_, PyAny>) -> PyResult<PythonNodeText> {

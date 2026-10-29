@@ -552,9 +552,17 @@ pub(crate) fn format_test_execution_json<'py>(
     py: Python<'py>,
     results: Bound<'py, PyAny>,
 ) -> PyResult<String> {
-    let projection: Projection<'py> = Projection::installed(py)?;
     let all = Vec::<SqlTestExecutionResult<_>>::read(&results)?;
-    let results = projection.retained(&all)?;
+    test_execution_json(py, &all)
+}
+
+/// The test command's document from the executor's already-converted results.
+pub(crate) fn test_execution_json<'py>(
+    py: Python<'py>,
+    all: &[SqlTestExecutionResult<Bound<'py, PyAny>>],
+) -> PyResult<String> {
+    let projection: Projection<'py> = Projection::installed(py)?;
+    let results = projection.retained(all)?;
     let pass_count = results
         .iter()
         .filter(|result| result.outcome == SqlTestOutcome::Pass)

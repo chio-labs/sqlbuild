@@ -433,7 +433,7 @@ fn planned_artifacts<'py>(
 /// Each test's cache slot and artifact identity, hashed together without holding the interpreter.
 fn test_identities<'py>(
     tests: &[Bound<'py, PyAny>],
-    context: &IdentityContext<'py>,
+    context: &IdentityContext,
     chains: &Bound<'py, PyAny>,
 ) -> PyResult<Vec<(String, String)>> {
     let Some(first) = tests.first() else {
@@ -482,10 +482,10 @@ fn plan_tests<'py>(
     let cache_dir: Bound<'py, PyAny> = native_field(project, "compile_cache_dir")?;
     let cached: HashMap<String, SqlTestArtifactRecord> = read_cache(&cache_dir)?;
     let tests: Bound<'py, PyAny> = native_field(project, "sql_tests")?;
-    let caching: Option<(IdentityContext<'py>, Bound<'py, PyAny>)> = if cache_dir.is_none() {
+    let caching: Option<(IdentityContext, Bound<'py, PyAny>)> = if cache_dir.is_none() {
         None
     } else {
-        let context: IdentityContext<'py> = identity_context(project, adapter)?;
+        let context: IdentityContext = identity_context(project, adapter)?;
         count_stage(py, SQL_TEST_MODEL_CHAINS, 1)?;
         let chains: Bound<'py, PyAny> =
             sql_test_model_chain_names_by_key(project, &tests)?.into_any();
