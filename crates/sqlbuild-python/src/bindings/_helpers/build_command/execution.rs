@@ -9,6 +9,7 @@ use sqlbuild_core::build_command::main::render_run_context::render_run_context;
 use sqlbuild_core::build_command::models::{RunContextFacts, SelectorFileFact};
 use sqlbuild_core::cli_text::models::CliStyle;
 use sqlbuild_host::entries::models::ExecutorHost;
+use sqlbuild_host::models::{BuildExecutionResult, BuildStatus, ExecutionStatus};
 
 use crate::bindings::_helpers::boundary::python_calls::{call_with, keywords, within};
 use crate::bindings::_helpers::build_command::invocation::BuildContext;
@@ -35,6 +36,7 @@ use crate::bindings::_helpers::cursor::overrides::{cursor_integer, cursor_timest
 use crate::bindings::_helpers::freshness::publication::append_freshness_records;
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::results::ReadResult;
 use crate::bindings::_helpers::planner_resolution::cursor_overrides::type_cursor_overrides;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -44,14 +46,13 @@ use crate::bindings::_helpers::sql_test_command::test_command::timeout_record;
 use crate::bindings::_helpers::sql_test_command::timeouts::{TimeoutKind, resolve_run_timeout};
 
 const EXECUTION_COMMAND: &str = "sqb build";
-const SUCCESS_STATUS: &str = "success";
 const NODE_START: [&str; 2] = ["name", "resource_kind"];
 const CONNECTION_TIMING: [&str; 2] = ["connection_count", "elapsed_seconds"];
 
 /// Prepared callbacks, concurrency, cursors and Python lifecycle.
 pub(crate) struct Preparation<'py> {
     pub(crate) callbacks: Bound<'py, PyAny>,
-    pub(crate) concurrency: Bound<'py, PyAny>,
+    pub(crate) concurrency: i64,
     connection_progress: Bound<'py, PyAny>,
     lifecycle: Bound<'py, DirectPythonLifecycle>,
     cursors: [Bound<'py, PyAny>; 4],
@@ -59,7 +60,8 @@ pub(crate) struct Preparation<'py> {
 
 /// The build result and its finalized Python node results.
 pub(crate) struct Outcome<'py> {
-    pub(crate) result: Bound<'py, PyAny>,
+    pub(crate) result: BuildExecutionResult<Bound<'py, PyAny>>,
+    pub(crate) executor_result: Bound<'py, PyAny>,
     pub(crate) python_results: Bound<'py, PyAny>,
 }
 
@@ -225,7 +227,7 @@ pub(crate) fn prepare_build_execution<'py>(
     )
     .and_then(|value| pyo3::Bound::new(py, value))
     .map(pyo3::Bound::into_any)?;
-    let concurrency: Bound<'py, PyAny> = context.concurrency()?.limit.into_pyobject(py)?.into_any();
+    let concurrency = context.concurrency()?.limit;
     if context.verbose {
         write_run_context(context, pipeline)?;
     } else {
@@ -237,7 +239,7 @@ pub(crate) fn prepare_build_execution<'py>(
                     ("stream", context.stream.clone()),
                     ("command", text(py, EXECUTION_COMMAND)),
                     ("target", none(py)),
-                    ("concurrency", concurrency.clone()),
+                    ("concurrency", concurrency.into_pyobject(py)?.into_any()),
                     ("use_color", boolean(py, context.use_color)),
                 ],
             )?),
@@ -329,7 +331,10 @@ pub(crate) fn execute_build_plan<'py>(
             ("run_tests", request("run_tests")?),
             ("run_audits", request("run_audits")?),
             ("fail_fast", request("fail_fast")?),
-            ("max_concurrency", preparation.concurrency.clone()),
+            (
+                "max_concurrency",
+                preparation.concurrency.into_pyobject(py)?.into_any(),
+            ),
             ("loader_is_reload", request("reload_sources")?),
             ("start_cursor_ts", start_ts.clone()),
             ("end_cursor_ts", end_ts.clone()),
@@ -438,15 +443,23 @@ pub(crate) fn execute_build_plan<'py>(
             ("initial_state", initial_state),
         ],
     )?;
+    let native_result = BuildExecutionResult::read(&result)?;
+    let successful_models: Vec<String> = native_result
+        .model_results
+        .iter()
+        .filter(|model| model.status == ExecutionStatus::Success)
+        .map(|model| model.model_name.clone())
+        .collect();
     append_freshness_records(
-        (&plan, &result),
+        (&plan, &successful_models),
         &adapter,
         &connection_config,
         &native_field(&project, "run_id")?,
     )?;
     lifecycle.finalize(py)?;
     Ok(Outcome {
-        result,
+        result: native_result,
+        executor_result: result,
         python_results: lifecycle.python_results(py)?,
     })
 }
@@ -520,13 +533,13 @@ pub(crate) fn run_post_build_python_checks<'py>(
     providers: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = context.py();
-    let result: &Bound<'py, PyAny> = &outcome.result;
-    if native_field(result, "status")?.str()?.extract::<String>()? != SUCCESS_STATUS {
+    let result = &outcome.result;
+    if result.status != BuildStatus::Success {
         return tuple(py, &[]);
     }
     let discovered: Bound<'py, PyAny> = context.get("discovered_inputs")?;
     let plan: Bound<'py, PyAny> = native_field(pipeline, "plan_output")?;
-    let load_results: Bound<'py, PyAny> = native_field(result, "load_results")?;
+    let load_results: Bound<'py, PyAny> = native_field(&outcome.executor_result, "load_results")?;
     let graph: Bound<'py, PyAny> = python_node_graph(&discovered)?;
     let by_loader = || -> PyResult<Bound<'py, PyAny>> {
         Ok(
@@ -538,13 +551,24 @@ pub(crate) fn run_post_build_python_checks<'py>(
     for name in by_loader()?.try_iter()? {
         dependencies.push(name?);
     }
-    let mut completed: Vec<Bound<'py, PyAny>> =
-        names_of(&native_field(result, "model_results")?, "model_name")?;
-    completed.extend(names_of(
-        &native_field(result, "seed_results")?,
-        "seed_name",
-    )?);
-    completed.extend(names_of(&load_results, "source_name")?);
+    let completed: Vec<Bound<'py, PyAny>> = result
+        .model_results
+        .iter()
+        .map(|model| model.model_name.as_str())
+        .chain(
+            result
+                .seed_results
+                .iter()
+                .map(|seed| seed.seed_name.as_str()),
+        )
+        .chain(
+            result
+                .load_results
+                .iter()
+                .map(|load| load.source_name.as_str()),
+        )
+        .map(|name| text(py, name))
+        .collect();
     let checks: Vec<Bound<'py, PyAny>> = relevant_check_functions(
         &discovered,
         &graph,

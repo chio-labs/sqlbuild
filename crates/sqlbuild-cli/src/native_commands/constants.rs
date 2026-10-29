@@ -34,6 +34,9 @@ pub(crate) const HOME_VARIABLE: &str = "HOME";
 pub(crate) const HOME_VARIABLE: &str = "USERPROFILE";
 /// The command name compute logs record for a bare `sqb`.
 pub(crate) const UNKNOWN_COMMAND: &str = "unknown";
+/// The supported Python ISO grammar, independent of whether a Python process is started.
+pub(crate) const COST_ISO_PYTHON_MINOR: u8 = 12;
+pub(crate) const RUNNING_BUILD_STATUS: &str = "running";
 /// Commands with no handler: observed, then successful.
 pub(crate) const CLEAN_COMMAND: &str = "clean";
 pub(crate) const INIT_COMMAND: &str = "init";

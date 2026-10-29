@@ -20,6 +20,7 @@ use crate::native_commands::_helpers::skills::{run_skills, skill_freshness_notic
 use crate::native_commands::_helpers::terminal::{finish_lost_stdout, write_output};
 use crate::native_commands::constants::{UNCAUGHT_EXCEPTION_STATUS, UNKNOWN_COMMAND};
 use crate::native_commands::errors::PythonNeeded;
+use crate::native_commands::main::_run_cost::run_cost;
 use crate::native_commands::models::{
     CommandOutput, InstalledPackage, LostStdout, NativeCommand, NativeInvocation, ProjectLocation,
 };
@@ -95,6 +96,7 @@ fn observed_output(
     command: &NativeCommand,
     project: &ProjectLocation,
     package: &InstalledPackage,
+    error_color: bool,
 ) -> Result<CommandOutput, PythonNeeded> {
     if !has_no_runtime_extensions(&project.given) {
         return Err(PythonNeeded::Project);
@@ -103,6 +105,7 @@ fn observed_output(
         NativeCommand::Nothing => Ok(CommandOutput::default()),
         NativeCommand::Skills(options) => run_skills(&project.resolved, package, options),
         NativeCommand::Rules(options) => run_rules(&project.resolved, options),
+        NativeCommand::Cost(options) => run_cost(&project.given, options, error_color),
         NativeCommand::Init => Err(PythonNeeded::Command),
     }
 }
@@ -124,7 +127,8 @@ pub(crate) fn run_command(
         return Ok(finish_lost_stdout(lost.as_ref(), output.exit_code));
     }
     let started_at: SystemTime = SystemTime::now();
-    let output: CommandOutput = observed_output(&invocation.command, &project, &package)?;
+    let output: CommandOutput =
+        observed_output(&invocation.command, &project, &package, error_color)?;
     Ok(finish_observed(
         invocation,
         (&project, &package),

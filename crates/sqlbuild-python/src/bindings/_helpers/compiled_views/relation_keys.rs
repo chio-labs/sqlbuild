@@ -168,8 +168,6 @@ fn unique_key(values: &Bound<'_, PyDict>) -> PyResult<Option<Vec<String>>> {
 }
 
 /// The key row of a seed, source or hand-built model from its config values and schema entry.
-#[pyfunction(name = "relation_key_row")]
-#[pyo3(signature = (kind, name, values, entry))]
 pub(crate) fn entry_relation_key_row(
     kind: &str,
     name: String,
@@ -347,7 +345,6 @@ fn declared_relation(row: RelationKeyRow) -> DeclaredRelation {
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(entry_relation_key_row, module)?)?;
     module.add_function(wrap_pyfunction!(declared_relation_keys, module)?)?;
     module.add_function(wrap_pyfunction!(compiled_relation_keys, module)?)
 }

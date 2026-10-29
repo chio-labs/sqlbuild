@@ -13,11 +13,11 @@ use sqlbuild_analysis::target_paths::main::runtime_sql_text::runtime_sql_text;
 use sqlbuild_analysis::target_paths::main::sql_test_output_path::sql_test_output_path;
 use sqlbuild_analysis::target_paths::models::SqlTestPathFacts;
 use sqlbuild_core::text::main::python_isspace::python_isspace;
-use sqlbuild_host::entries::models::AdapterHost;
+use sqlbuild_host::models::{BuildExecutionResult, LifeCycleEvent, LifeCycleEventKind};
 
 use crate::bindings::_helpers::analysis::sql_test_comparisons::single_comparison_sql;
 use crate::bindings::_helpers::boundary::python_calls::imported;
-use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::results::ReadResult;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 const RUN_DIR: &str = "run";
@@ -107,19 +107,6 @@ fn write_text(path: &Bound<'_, PyAny>, text: &str) -> PyResult<()> {
     Ok(())
 }
 
-fn sql_statements(result: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
-    let sql_kind: Bound<'_, PyAny> =
-        host::entry(result.py(), AdapterHost::LifeCycleEventKind)?.getattr("SQL")?;
-    let mut statements: Vec<String> = Vec::new();
-    for event in native_field(result, "lifecycle_events")?.try_iter()? {
-        let event: Bound<'_, PyAny> = event?;
-        if native_field(&event, "kind")?.eq(&sql_kind)? {
-            statements.push(native_field(&event, "content")?.extract()?);
-        }
-    }
-    Ok(statements)
-}
-
 fn entry_paths<T>(
     entries: &Bound<'_, PyAny>,
     path_of: impl Fn(&Bound<'_, PyAny>) -> PyResult<T>,
@@ -142,7 +129,7 @@ fn relative_posix(entry: &Bound<'_, PyAny>) -> PyResult<String> {
 pub(crate) fn write_runtime_target(
     target_dir: &Bound<'_, PyAny>,
     plan: &Bound<'_, PyAny>,
-    result: &Bound<'_, PyAny>,
+    result: &BuildExecutionResult<Bound<'_, PyAny>>,
 ) -> PyResult<()> {
     let run_dir: Bound<'_, PyAny> = target_dir.div(RUN_DIR)?;
     let models: HashMap<String, String> =
@@ -158,20 +145,26 @@ pub(crate) fn write_runtime_target(
                     .extract::<String>()?,
             ))
         })?;
-    for (results, name_field, paths) in [
-        ("model_results", "model_name", &models),
-        ("function_results", "function_name", &functions),
-    ] {
-        for item in native_field(result, results)?.try_iter()? {
-            let item: Bound<'_, PyAny> = item?;
-            let statements: Vec<String> = sql_statements(&item)?;
-            if statements.is_empty() {
-                continue;
-            }
-            let name: String = native_field(&item, name_field)?.extract()?;
-            if let Some(path) = paths.get(&name) {
-                write_text(&run_dir.div(path)?, &runtime_sql_text(&statements))?;
-            }
+    let models = result.model_results.iter().map(|model| {
+        (
+            models.get(&model.model_name),
+            model.lifecycle_events.as_slice(),
+        )
+    });
+    let functions = result.function_results.iter().map(|function| {
+        (
+            functions.get(&function.function_name),
+            function.lifecycle_events.as_slice(),
+        )
+    });
+    for (path, events) in models.chain(functions) {
+        let statements: Vec<String> = events
+            .iter()
+            .filter(|event: &&LifeCycleEvent| event.kind == LifeCycleEventKind::Sql)
+            .map(|event| event.content.clone())
+            .collect();
+        if let Some(path) = path.filter(|_| !statements.is_empty()) {
+            write_text(&run_dir.div(path)?, &runtime_sql_text(&statements))?;
         }
     }
     Ok(())
@@ -265,7 +258,11 @@ fn write_runtime_target_binding(
     plan_output: &Bound<'_, PyAny>,
     result: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
-    write_runtime_target(target_dir, plan_output, result)
+    write_runtime_target(
+        target_dir,
+        plan_output,
+        &BuildExecutionResult::read(result)?,
+    )
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

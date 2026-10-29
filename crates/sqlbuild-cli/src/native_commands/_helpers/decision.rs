@@ -12,8 +12,9 @@ use crate::native_commands::constants::{
 };
 use crate::native_commands::errors::PythonNeeded;
 use crate::native_commands::models::{
-    NativeCommand, NativeInvocation, RulesAction, RulesOptions, SkillsOptions,
+    CostOptions, NativeCommand, NativeInvocation, RulesAction, RulesOptions, SkillsOptions,
 };
+use sqlbuild_core::cost_command::constants::DESCENDING_ORDER;
 
 /// Whether `sqb review --json` failed to parse, which Python reports as a JSON document.
 pub(crate) fn review_json_failure(arguments: &[String], outcome: &ArgvOutcome) -> bool {
@@ -76,6 +77,24 @@ fn native_command(
             force: flag(namespace, "skills_force"),
         })),
         Some(RULES_COMMAND) => rules_command(namespace),
+        Some("cost") => Ok(NativeCommand::Cost(CostOptions {
+            selector: text(namespace, "cost_selector").unwrap_or_else(|| "latest".to_owned()),
+            limit: match namespace.get("cost_limit") {
+                None | Some(Value::None) => None,
+                Some(Value::Int(value)) => {
+                    Some(value.parse().map_err(|_| PythonNeeded::Arguments)?)
+                }
+                _ => return Err(PythonNeeded::Arguments),
+            },
+            no_limit: flag(namespace, "cost_no_limit"),
+            sort: text(namespace, "cost_sort"),
+            descending: text(namespace, "cost_order").is_none_or(|order| order == DESCENDING_ORDER),
+            since: text(namespace, "cost_since"),
+            until: text(namespace, "cost_until"),
+            json: flag(namespace, "json"),
+            json_path: text(namespace, "json_output").map(PathBuf::from),
+            no_color: flag(namespace, "no_color"),
+        })),
         Some(_) => Err(PythonNeeded::Command),
     }
 }
