@@ -3,13 +3,9 @@
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import type { Snippet } from 'svelte';
-	import {
-		TIMELINE_JOBS,
-		TIMELINE_NOW,
-		TIMELINE_RUNS,
-		type TimelineRun,
-		type TimelineStatus
-	} from '$lib/mock/timeline';
+	import type { TimelineBar } from '$lib/api';
+	import { createResource } from '$lib/state/resource.svelte';
+	import { runKindLabel, runStatusLabel, runStatusRank, runStatusTone } from '$lib/status';
 
 	let {
 		query = $bindable(''),
@@ -46,12 +42,35 @@
 	let windowKey = $state<WindowKey>(initialWindow);
 	let pan = $state(0); // number of half-windows moved into the past
 
+	// The server's clock at load; the window is anchored to it so history and
+	// projected ticks line up.
+	let anchor = $state(Date.now());
 	const span = $derived(WINDOWS[windowKey].span);
 	// keep a little future on screen so upcoming ticks are visible
-	const end = $derived(TIMELINE_NOW + span * 0.08 - pan * (span / 2));
+	const end = $derived(anchor + span * 0.08 - pan * (span / 2));
 	const start = $derived(end - span);
 	const pct = (t: number) => ((t - start) / span) * 100;
-	const nowPct = $derived(pct(TIMELINE_NOW));
+
+	const timeline = createResource(
+		(client, scope) =>
+			client.timeline(scope, { since: new Date(start).toISOString(), until: new Date(end).toISOString() }),
+		['runs', 'ticks']
+	);
+	const now = $derived(timeline.data ? Date.parse(timeline.data.now) : anchor);
+	$effect(() => {
+		if (timeline.data) anchor = Date.parse(timeline.data.now);
+	});
+	const nowPct = $derived(pct(now));
+
+	type Bar = TimelineBar & { startMs: number; endMs: number; key: string };
+	const bars = $derived<Bar[]>(
+		(timeline.data?.bars ?? []).map((b) => ({
+			...b,
+			startMs: Date.parse(b.start),
+			endMs: Date.parse(b.end),
+			key: `${b.runId ?? 'tick'}-${b.jobKey}-${b.start}`
+		}))
+	);
 
 	const ticks = $derived.by(() => {
 		const step = WINDOWS[windowKey].tick;
@@ -88,51 +107,40 @@
 		return out;
 	});
 
-	const visibleRuns = $derived(TIMELINE_RUNS.filter((r) => r.end > start && r.start < end));
+	const visibleRuns = $derived(bars.filter((r) => r.endMs > start && r.startMs < end));
 	const runsByJob = $derived.by(() => {
-		const m = new Map<string, TimelineRun[]>();
-		for (const r of visibleRuns) m.set(r.job, [...(m.get(r.job) ?? []), r]);
+		const m = new Map<string, Bar[]>();
+		for (const r of visibleRuns) m.set(r.jobKey, [...(m.get(r.jobKey) ?? []), r]);
 		return m;
 	});
 	const counts = $derived({
 		running: visibleRuns.filter((r) => r.status === 'running').length,
-		ok: visibleRuns.filter((r) => r.status === 'ok').length,
+		ok: visibleRuns.filter((r) => r.status === 'success').length,
 		warn: visibleRuns.filter((r) => r.status === 'warn').length,
-		fail: visibleRuns.filter((r) => r.status === 'fail').length
+		fail: visibleRuns.filter((r) => r.status === 'failed' || r.status === 'partial' || r.status === 'presumed_failed').length
 	});
 
 	// jobs with problems in the window first, then alphabetical
-	const RANK: Partial<Record<TimelineStatus, number>> = { fail: 3, running: 2, warn: 1 };
 	const severity = (job: string) =>
-		Math.max(0, ...(runsByJob.get(job) ?? []).map((r) => RANK[r.status] ?? 0));
+		Math.max(0, ...(runsByJob.get(job) ?? []).map((r) => (r.status === 'projected' ? 0 : runStatusRank(r.status))));
 	const q = $derived(query.trim().toLowerCase());
 	const jobs = $derived(
-		TIMELINE_JOBS.filter((j) => !q || j.name.includes(q)).sort(
-			(a, b) => severity(b.name) - severity(a.name) || a.name.localeCompare(b.name)
-		)
+		(timeline.data?.jobKeys ?? [])
+			.filter((j) => !q || j.includes(q))
+			.sort((a, b) => severity(b) - severity(a) || a.localeCompare(b))
+			.map((name) => ({ name }))
 	);
 
-	const tone: Record<TimelineStatus, string> = {
-		ok: 'var(--sb-success)',
-		warn: 'var(--sb-warning)',
-		fail: 'var(--sb-error)',
-		running: 'var(--sb-running)',
-		scheduled: 'transparent'
-	};
-	const label: Record<TimelineStatus, string> = {
-		ok: 'Success',
-		warn: 'Warning',
-		fail: 'Failed',
-		running: 'Running',
-		scheduled: 'Scheduled'
-	};
+	const tone = (r: Bar) => (r.status === 'projected' ? 'transparent' : runStatusTone[r.status]);
+	const label = (r: Bar) => (r.status === 'projected' ? 'Scheduled' : runStatusLabel[r.status]);
+	const barClass = (r: Bar) => (r.status === 'projected' ? 'scheduled' : r.status === 'success' ? 'ok' : r.status);
 
 	let innerW = $state(1600);
-	let hover = $state<{ run: TimelineRun; x: number; y: number } | null>(null);
+	let hover = $state<{ run: Bar; x: number; y: number } | null>(null);
 	const clock = (t: number) =>
 		new Date(t).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-	function duration(r: TimelineRun) {
-		const m = Math.round((r.end - r.start) / MIN);
+	function duration(r: Bar) {
+		const m = Math.round((r.endMs - r.startMs) / MIN);
 		return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
 	}
 </script>
@@ -189,24 +197,26 @@
 				<div class="row">
 					<a class="gutter job" href="/jobs/{job.name}" title={job.name}>{job.name}</a>
 					<div class="track">
-						{#each runsByJob.get(job.name) ?? [] as r (r.id + r.start)}
-							{@const left = Math.max(0, pct(r.start))}
+						{#each runsByJob.get(job.name) ?? [] as r (r.key)}
+							{@const left = Math.max(0, pct(r.startMs))}
 							<a
-								class="bar {r.status}"
-								href={r.status === 'scheduled' ? `/jobs/${r.job}` : `/runs/${r.id}`}
+								class="bar {barClass(r)}"
+								href={r.runId ? `/runs/${r.runId}` : `/jobs/${r.jobKey}`}
 								style:left="{left}%"
-								style:width="{Math.min(100, pct(r.end)) - left}%"
-								style:--c={tone[r.status]}
+								style:width="{Math.min(100, pct(r.endMs)) - left}%"
+								style:--c={tone(r)}
 								onmouseenter={(e) => (hover = { run: r, x: e.clientX, y: e.clientY })}
 								onmousemove={(e) => (hover = { run: r, x: e.clientX, y: e.clientY })}
 								onmouseleave={() => (hover = null)}
-								aria-label="{r.job} {label[r.status]} {clock(r.start)}"
+								aria-label="{r.jobKey} {label(r)} {clock(r.startMs)}"
 							></a>
 						{/each}
 					</div>
 				</div>
 			{:else}
-				<div class="empty">No jobs match “{query}”.</div>
+				<div class="empty">
+					{#if timeline.error}Couldn't load the timeline: {timeline.error}{:else if !timeline.data}Loading…{:else if query}No jobs match “{query}”.{:else}No runs in this window.{/if}
+				</div>
 			{/each}
 		</div>
 	</div>
@@ -217,12 +227,12 @@
 {#if hover}
 	{@const r = hover.run}
 	<div class="tl-tip" style:left="{hover.x + 270 > innerW ? hover.x - 254 : hover.x + 14}px" style:top="{hover.y + 16}px">
-		<div class="tip-head"><i style:background={r.status === 'scheduled' ? 'var(--sb-text-faint)' : tone[r.status]}></i><b>{label[r.status]}</b><span>{r.job}</span></div>
+		<div class="tip-head"><i style:background={r.status === 'projected' ? 'var(--sb-text-faint)' : tone(r)}></i><b>{label(r)}</b><span>{r.jobKey}</span></div>
 		<dl>
-			{#if r.status !== 'scheduled'}<div><dt>Run</dt><dd class="mono">{r.id}</dd></div>{/if}
-			<div><dt>{r.status === 'scheduled' ? 'Next tick' : 'Started'}</dt><dd>{clock(r.start)}</dd></div>
-			<div><dt>Duration</dt><dd>{r.status === 'scheduled' ? `~${duration(r)} typical` : r.status === 'running' ? `${duration(r)} so far` : duration(r)}</dd></div>
-			<div><dt>Trigger</dt><dd>{r.trigger}</dd></div>
+			{#if r.runId}<div><dt>Run</dt><dd class="mono">{r.runId}</dd></div>{/if}
+			<div><dt>{r.status === 'projected' ? 'Next tick' : 'Started'}</dt><dd>{clock(r.startMs)}</dd></div>
+			<div><dt>Duration</dt><dd>{r.status === 'projected' ? `~${duration(r)} typical` : r.status === 'running' ? `${duration(r)} so far` : duration(r)}</dd></div>
+			<div><dt>Kind</dt><dd>{runKindLabel[r.kind]}</dd></div>
 		</dl>
 	</div>
 {/if}
