@@ -221,9 +221,10 @@ noted here:
 - Compilation accepts SQL that Snowflake rejects: `CONNECT_BY_ISLEAF`, which Snowflake does not
   have, and a CTE whose body is a bare `VALUES` list. `int_category_paths` finds leaf categories
   with a join instead, and test case tables use `SELECT ... FROM VALUES ... AS v(...)`.
-- Static type inference cannot follow a quoted mixed-case column, such as `"unitPrice"`, from a CTE
-  through `SELECT *` on Snowflake, so `rpt_edge_partner_listing_export` declares only the name and
-  audits of `"listingId"`, without types.
+- On Snowflake, a model that names a column in quoted mixed case, such as `"unitPrice"`, loses the
+  static types of the columns it reads from a CTE through a table alias (`FROM listings AS l`), so
+  `rpt_edge_partner_listing_export` declares only the name and audits of `"listingId"`, without
+  types.
 - `SQBRSQL018` can only take proof from single-column keys. Append-only feeds redeliver rows, so
   their id is unique only together with `_loaded_at` (the `unique_per_delivery` audit), and the
   staging models that keep the latest delivery carry reviewed exceptions.
