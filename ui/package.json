@@ -20,6 +20,7 @@
 		"@sveltejs/vite-plugin-svelte": "^7.0.0",
 		"@tailwindcss/typography": "^0.5.19",
 		"@tailwindcss/vite": "^4.2.2",
+		"@types/node": "^20.19.43",
 		"@types/prismjs": "^1.26.6",
 		"bits-ui": "^2.18.1",
 		"clsx": "^2.1.1",

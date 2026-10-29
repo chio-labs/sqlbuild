@@ -618,8 +618,8 @@
 			multiSelectionKey={['Shift', 'Meta', 'Control']}
 			selectionKey="Shift"
 			proOptions={{ hideAttribution: true }}
-			onnodemouseenter={(_e, node) => (hoveredId = node.id)}
-			onnodemouseleave={() => (hoveredId = null)}
+			onnodepointerenter={({ node }) => (hoveredId = node.id)}
+			onnodepointerleave={() => (hoveredId = null)}
 		>
 			<FlowController bind:fitView={fitFlow} bind:viewport bind:setViewport={setFlowViewport} />
 			<Background gap={64} bgColor="var(--sb-inset)" patternColor="var(--sb-grid)" />

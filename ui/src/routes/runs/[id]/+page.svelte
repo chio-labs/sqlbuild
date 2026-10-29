@@ -53,7 +53,8 @@
 	// We measure a dedicated zero-content element pinned to the pane, so its size can
 	// NEVER be influenced by the scaled timeline content (which would feed back).
 	let viewportW = $state(900);
-	let measureEl: HTMLDivElement;
+	let measureEl = $state<HTMLDivElement>();
+	let gutterW = $state(250);
 
 	// available timeline width = viewport minus gutter minus right pad
 	const trackBaseW = $derived(Math.max(120, viewportW - gutterW - 24));
@@ -91,7 +92,7 @@
 	}
 	function resetZoom() {
 		zoom = 1;
-		if (timelineEl) timelineEl.scrollLeft = 0;
+		if (ganttEl) ganttEl.scrollLeft = 0;
 	}
 
 	// ---- step selection + gantt-side filtering (scales to 100s of models) ----
@@ -156,7 +157,7 @@
 	const GUTTER_PAD = 24 + 12 + 8 + 16;
 
 	let gutterDragging = $state(false);
-	let ganttEl: HTMLDivElement;
+	let ganttEl = $state<HTMLDivElement>();
 
 	// auto-fit the gutter to the longest step name
 	function autoFitGutter(): number {
@@ -170,17 +171,17 @@
 		return Math.min(GUTTER_AUTOFIT_CAP, Math.max(GUTTER_MIN, Math.ceil(widest) + GUTTER_PAD));
 	}
 
-	let gutterW = $state(250);
 	onMount(() => {
 		gutterW = autoFitGutter();
 		// measure a dedicated zero-content element (never the scrollable content),
 		// so zoom can't feed back into the measurement and grow without bound.
-		if (measureEl) {
+		const el = measureEl;
+		if (el) {
 			const measure = () => {
-				viewportW = measureEl.clientWidth;
+				viewportW = el.clientWidth;
 			};
 			const ro = new ResizeObserver(measure);
-			ro.observe(measureEl);
+			ro.observe(el);
 			measure();
 			return () => ro.disconnect();
 		}
