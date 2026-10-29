@@ -21,3 +21,12 @@ class FinderWorkingDirectoryTestCase:
     first_directory: str
     second_directory: str
     expected_source_only: tuple[bool, bool]
+
+
+@dataclass(frozen=True)
+class FinderDeletedDirectoryTestCase:
+    """A lookup while the working directory, on the search path as "", has been deleted."""
+
+    description: str
+    module_name: str
+    expected_spec: None = None

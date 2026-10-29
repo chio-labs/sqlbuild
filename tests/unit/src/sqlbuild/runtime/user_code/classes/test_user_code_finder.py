@@ -9,6 +9,7 @@ import pytest
 from sqlbuild.runtime.user_code.classes.source_only_loader import SourceOnlyLoader
 from sqlbuild.runtime.user_code.classes.user_code_finder import UserCodeFinder
 from tests.unit.src.sqlbuild.runtime.user_code.classes._test_types import (
+    FinderDeletedDirectoryTestCase,
     FinderSpecTestCase,
     FinderWorkingDirectoryTestCase,
 )
@@ -96,6 +97,37 @@ def test_given_working_directory_entry_when_directory_changes_then_finder_follow
         first is not None and isinstance(first.loader, SourceOnlyLoader),
         second is not None and isinstance(second.loader, SourceOnlyLoader),
     ) == test_case.expected_source_only
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FinderDeletedDirectoryTestCase(
+            description="a project module is left to normal import", module_name="order_rules"
+        ),
+        FinderDeletedDirectoryTestCase(
+            description="a standard-library module is left to normal import", module_name="json"
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_deleted_working_directory_when_finding_spec_then_relative_entry_is_skipped(
+    test_case: FinderDeletedDirectoryTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project: Path = tmp_path / "project"
+    project.mkdir()
+    _ = (project / "order_rules.py").write_text("LIMIT: int = 1\n", encoding="utf-8")
+    deleted: Path = tmp_path / "deleted"
+    deleted.mkdir()
+    monkeypatch.setattr(sys, "path", ["", *sys.path])
+    finder: UserCodeFinder = UserCodeFinder()
+    finder.roots.add(project.resolve())
+    monkeypatch.chdir(deleted)
+    deleted.rmdir()
+
+    spec: ModuleSpec | None = finder.find_spec(test_case.module_name)
+
+    assert spec == test_case.expected_spec
 
 
 if __name__ == "__main__":

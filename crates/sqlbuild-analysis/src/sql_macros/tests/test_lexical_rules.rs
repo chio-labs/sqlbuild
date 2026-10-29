@@ -31,7 +31,7 @@ fn given_adapter_lexical_rules_when_finding_sql_macro_calls_then_strings_end_whe
             expected_calls: &["order_total"],
         },
         LexicalRulesCallsTestCase {
-            description: "a raw string ending in a backslash on BigQuery",
+            description: "a raw string ending in a backslash under raw-string prefix rules",
             syntax: raw_prefix_rules(),
             sql: "SELECT r'C:\\' AS path, @sql.order_total(1) AS b",
             expected_calls: &["order_total"],

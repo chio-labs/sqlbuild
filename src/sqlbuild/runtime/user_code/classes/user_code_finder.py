@@ -60,7 +60,10 @@ class UserCodeFinder:
         if roots != self._entry_roots:
             self._project_entries = {}
             self._entry_roots = roots
-        directory: str = "" if os.path.isabs(entry) else os.getcwd()
+        try:
+            directory: str = "" if os.path.isabs(entry) else os.getcwd()
+        except OSError:
+            return False
         known: bool | None = self._project_entries.get((entry, directory))
         if known is not None:
             return known
