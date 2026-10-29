@@ -113,6 +113,8 @@ export function describeWait(wait: QueueWait): WaitPart[] {
 			];
 		case 'upstream_job':
 			return [{ text: 'Waiting for ' }, { text: wait.jobKey || wait.runId, href: `/runs/${wait.runId}`, code: true }, { text: ' to finish first' }];
+		case 'group_parent':
+			return [{ text: 'Group run ' }, { text: wait.runId, href: `/runs/${wait.runId}`, code: true }, { text: ` (${wait.jobKey}) hasn't been claimed yet` }];
 	}
 }
 

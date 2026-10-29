@@ -276,7 +276,9 @@ export type QueueWait =
 	| { kind: 'write_claim'; runId: string; jobKey: string | null; nodeKey: string; otherNodes: number }
 	| { kind: 'concurrency_group'; group: string; limit: number; holders: string[] }
 	| { kind: 'priority'; aheadRunIds: string[] }
-	| { kind: 'upstream_job'; runId: string; jobKey: string };
+	| { kind: 'upstream_job'; runId: string; jobKey: string }
+	/** A child run waits for its group run to be claimed. */
+	| { kind: 'group_parent'; runId: string; jobKey: string };
 
 export type OverlapOutcome = {
 	policy: OverlapPolicy;

@@ -20,3 +20,14 @@ npm run dev
 npm run check
 npm run build   # writes static assets to build/
 ```
+
+## Generated files
+
+The run panel's verbs and flags come from the CLI's command table
+(`crates/sqlbuild-cli/src/argv/command_table.json`). After changing CLI flags,
+regenerate the extract; `check:command-table` fails when it is stale.
+
+```sh
+npm run gen:command-table
+npm run check:command-table
+```

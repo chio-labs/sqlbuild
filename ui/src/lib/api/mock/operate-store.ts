@@ -668,7 +668,7 @@ export class MockOperate {
 						if (sibling && isActive(sibling.run.status)) waits.push({ kind: 'upstream_job', runId: sibling.run.id, jobKey: up.jobKey });
 					}
 				}
-				if (parent && parent.run.status === 'queued') waits.push({ kind: 'upstream_job', runId: parent.run.id, jobKey: parent.run.jobKey ?? '' });
+				if (parent && parent.run.status === 'queued') waits.push({ kind: 'group_parent', runId: parent.run.id, jobKey: parent.run.jobKey ?? '' });
 			}
 			out.set(rec.run.id, waits);
 			ahead.push(rec);
