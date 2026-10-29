@@ -1,11 +1,9 @@
 // Neutral example data for the mock client: a fictional waffle shop's orders,
 // customers and payments. Times are relative to `now` so ages stay realistic.
 
-import type { BuiltInRole, Capability, Change, Check, Connection, Location, PlatformEvent, Snapshot } from '../types';
+import type { BuiltInRole, Capability, Change, Check, Location, PlatformEvent, Snapshot } from '../types';
 import { CAPABILITIES } from '../types';
 import { CI_ACCOUNT } from './principals';
-
-export { SCHEDULER, SENSOR_DAEMON, CI_ACCOUNT, DEMO_USER } from './principals';
 
 const MIN = 60_000;
 
@@ -79,15 +77,6 @@ export function createFixtures(now: number) {
 		{ name: 'revenue reconciles to source', node: null, checkType: 'standalone', severity: 'error', runScopePhase: 'final', result: 'pass', detail: 'within 0.1%', lastRunId: 'run-c40e', evaluatedAt: ago(1079) }
 	];
 
-	const connections: Connection[] = [
-		{ id: 'snowflake_prod', name: 'snowflake · prod', kind: 'warehouse', type: 'snowflake', status: 'ok', usedBy: 16, summary: 'Production warehouse for the prod target.' },
-		{ id: 'duckdb_dev', name: 'duckdb · dev', kind: 'warehouse', type: 'duckdb', status: 'ok', usedBy: 16, summary: 'Local DuckDB file for the dev target.' },
-		{ id: 'orders_api', name: 'orders_api', kind: 'provider', type: 'rest', status: 'ok', usedBy: 1, summary: 'Source loader connection for raw__orders ingestion.' },
-		{ id: 's3_archive', name: 's3_archive', kind: 'provider', type: 's3', status: 'untested', usedBy: 2, summary: 'Object storage bucket for CSV exports and backups.' },
-		{ id: 'chat_alerts', name: 'chat_alerts', kind: 'channel', type: 'webhook', status: 'ok', usedBy: 1, summary: 'Posts run-failure alerts to the team channel.' },
-		{ id: 'warehouse_eu', name: 'warehouse · eu', kind: 'warehouse', type: 'bigquery', status: 'error', usedBy: 0, summary: 'Service account credentials expired.' }
-	];
-
 	const platformEvents: PlatformEvent[] = [
 		{ id: 'pe-1', kind: 'location_broken', severity: 'warning', occurredAt: ago(48), active: true, locationId: LOCATION_MARKETING, subject: 'marketing-analytics', message: 'The latest image failed to start; running the last good image.' },
 		{ id: 'pe-2', kind: 'tick_overdue', severity: 'warning', occurredAt: ago(12), active: true, locationId: LOCATION_SHOP, subject: 'segments_hourly', message: 'Tick is 12 minutes overdue.' },
@@ -105,7 +94,7 @@ export function createFixtures(now: number) {
 		{ id: 'ch-4', kind: 'snapshot', title: 'Snapshot 7d2e41a published to prod', detail: '3 models changed · fact_orders, stg_payments, dim_customers', actor: CI_ACCOUNT, at: ago(4320), href: '/runs/run-77b3' }
 	];
 
-	return { locations, checks, connections, platformEvents, extraPlatformEvents, changes };
+	return { locations, checks, platformEvents, extraPlatformEvents, changes };
 }
 
 export type Fixtures = ReturnType<typeof createFixtures>;

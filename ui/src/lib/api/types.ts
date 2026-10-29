@@ -134,20 +134,6 @@ export type Check = {
 	evaluatedAt: Iso;
 };
 
-// ---- connections ----
-
-export type ConnectionKind = 'warehouse' | 'provider' | 'channel';
-export type ConnectionStatus = 'ok' | 'error' | 'untested';
-export type Connection = {
-	id: string;
-	name: string;
-	kind: ConnectionKind;
-	type: string;
-	status: ConnectionStatus;
-	usedBy: number;
-	summary: string;
-};
-
 // ---- platform events ----
 
 export type PlatformEventKind =

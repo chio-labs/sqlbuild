@@ -3,7 +3,6 @@ import type {
 	AdhocRunRequest,
 	Bootstrap,
 	Check,
-	Connection,
 	Job,
 	JobDetail,
 	JobLaunchOptions,
@@ -77,7 +76,6 @@ export interface ApiClient extends PlatformApi {
 	// ---- end OPERATE ----
 
 	listChecks(scope: Scope): Promise<Check[]>;
-	listConnections(scope: Scope): Promise<Connection[]>;
 
 	listPlatformEvents(query: { activeOnly: boolean }): Promise<PlatformEvent[]>;
 

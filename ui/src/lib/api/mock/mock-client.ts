@@ -8,7 +8,6 @@ import type {
 	BuiltInRole,
 	Capability,
 	Check,
-	Connection,
 	CurrentUser,
 	Job,
 	JobDetail,
@@ -33,7 +32,8 @@ import type {
 	WarehouseSync,
 	WarehouseSyncRequestResult
 } from '../types';
-import { createFixtures, DEMO_USER, ROLE_CAPABILITIES, type Fixtures } from './fixtures';
+import { createFixtures, ROLE_CAPABILITIES, type Fixtures } from './fixtures';
+import { DEMO_USER } from './principals';
 import { MockOperate } from './operate-store';
 import type { PlatformApi } from '../platform-client';
 import { MockPlatformApi } from './platform';
@@ -258,11 +258,6 @@ export class MockApiClient implements ApiClient {
 	async listChecks(scope: Scope): Promise<Check[]> {
 		this.#location(scope);
 		return this.#reply(structuredClone(this.#fixtures.checks));
-	}
-
-	async listConnections(scope: Scope): Promise<Connection[]> {
-		this.#location(scope);
-		return this.#reply(structuredClone(this.#fixtures.connections));
 	}
 
 	async listPlatformEvents(query: { activeOnly: boolean }): Promise<PlatformEvent[]> {
