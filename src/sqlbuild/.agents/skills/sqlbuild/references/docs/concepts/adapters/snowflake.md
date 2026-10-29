@@ -10,6 +10,7 @@ Online: https://sqlbuild.com/docs/concepts/adapters/snowflake/
 
 - Connection config
 - Session initialization
+- Case-sensitive column names
 - Planning metadata
 - Build metadata
 - State tables
@@ -62,6 +63,29 @@ The warehouse can differ by command. A target's `[targets.<name>.warehouses]` se
 one warehouse for build-style commands and another for ad-hoc commands such as `sqb query` and
 `sqb diff`, and `--warehouse` overrides both for one invocation. See
 [command-group warehouses](../project-configuration.md#command-group-warehouses).
+
+## Case-sensitive column names
+
+Snowflake stores an unquoted column name in upper case, so `order_id` and `ORDER_ID` name the
+same column. A column created with a quoted name in mixed or lower case, such as `"orderId"`,
+keeps its exact case, and only the quoted name reads it.
+
+Model settings that name such a column (`unique_key`, `updated_at`, `observed_at`,
+`check_columns`, `cursor` and `merge_exclude_columns`) take the quoted name inside a string:
+
+```sql
+MODEL (
+  description 'Order history.',
+  materialized snapshot,
+  unique_key ['"orderId"'],
+  snapshot_strategy timestamp,
+  updated_at '"updatedAt"',
+);
+```
+
+A snapshot or microbatch build stops when an unquoted setting names a case-sensitive column, with
+an error such as
+`unique_key 'orderId' names the case-sensitive column "orderId"; write it with its quotes, as '"orderId"'`.
 
 ## Planning metadata
 

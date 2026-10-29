@@ -119,7 +119,7 @@ project and does not change it:
 - raw `edge__*` sources in `sources/edge_cases.yml`, loaded by `python/loaders/edge_cases.py` from
   fixed rows that `data_scale` does not change, so core data and core expectations stay the same.
 
-It has 38 models (7 staging, 22 intermediate, 9 marts), 62 unit tests and 4 scenarios, in four
+It has 39 models (7 staging, 22 intermediate, 10 marts), 63 unit tests and 4 scenarios, in four
 groups:
 
 | Group | Covers |
@@ -127,7 +127,7 @@ groups:
 | Semi-structured | JSON null against SQL NULL and missing keys; document text with sorted, case-differing and escaped keys; JSON number fidelity and casts out of `VARIANT`; path-like keys (`''`, `*`, `$`-prefixed, dotted) with `GET` and `GET_IGNORE_CASE`; `OBJECT_CONSTRUCT_KEEP_NULL`, `OBJECT_INSERT`, `OBJECT_DELETE`, `OBJECT_PICK`; array builders, `ARRAY_EXCEPT` and number spellings in `ARRAY_POSITION`; `FLATTEN` outer; lenient and malformed `TRY_PARSE_JSON`; typed lambdas |
 | Dates and times | `TRY_TO_TIMESTAMP_NTZ` and its siblings over free text; epoch milliseconds as numbers and text; daylight-saving gaps and overlaps; fractional offsets; nanosecond truncation and epoch parts after 2242; pre-1970 text with sub-microsecond digits; date-part normalisation; month ends and leap days; week numbering across a year; sentinel timestamps |
 | Ordering, numbers and text | NULL ordering under `DESC`; ties in ordered aggregates, `MAX_BY`, `MODE` and `ANY_VALUE`; default window frames; `UNION ALL BY NAME`; `ROUND` half-way values, decimal division, `MOD` and 38-digit amounts; integers past 2^53 against `FLOAT`; regular expressions and backslash escapes; `LIKE ... ESCAPE` and `ILIKE ANY`; `SPLIT_PART` and `SUBSTR` before the start; `NOT IN` with a NULL; names in many scripts |
-| Scenarios and lifecycle | typed values across model boundaries; `VARIANT` expected output; a star under a lower-case contract and a quoted camelCase export; a cursor-window incremental model over far-apart fixture loads; a change log merged across two loads, checked against a full rebuild |
+| Scenarios and lifecycle | typed values across model boundaries; `VARIANT` expected output; a star under a lower-case contract and a quoted camelCase export; a snapshot keyed and compared on quoted camelCase columns; a cursor-window incremental model over far-apart fixture loads; a change log merged across two loads, checked against a full rebuild |
 
 Unit-test expectations in the edge-case area were captured on Snowflake under the `edge` target's
 pinned session, rather than derived by hand; scenario expectations, and the assertions in tests
