@@ -6,7 +6,7 @@
 	import type { Resource } from '$lib/state/resource.svelte';
 	import { app } from '$lib/state/app.svelte';
 	import { formatAgo, formatStamp } from '$lib/format/time';
-	import { runKindLabel } from '$lib/status';
+	import { runKindOriginLabel } from '$lib/status';
 	import { describeWait, overlapHelp } from '$lib/operate/labels';
 
 	let { entries, resource }: { entries: QueueEntry[]; resource: Resource<unknown> } = $props();
@@ -50,7 +50,7 @@
 					<td class="num muted">{q.position}</td>
 					<td>
 						<a class="code" href="/runs/{q.run.id}" onclick={(e) => e.stopPropagation()}>{q.run.id}</a>
-						<div class="cell-desc">{runKindLabel[q.run.kind]} · {q.run.requestedBy.name}</div>
+						<div class="cell-desc">{runKindOriginLabel(q.run)} · {q.run.requestedBy.name}</div>
 					</td>
 					<td>
 						{#if q.run.jobKey}<a class="link" href="/jobs/{q.run.jobKey}" onclick={(e) => e.stopPropagation()}>{q.run.jobKey}</a>{:else}<span class="muted">Ad hoc</span>{/if}

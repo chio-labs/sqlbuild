@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { RUN_KINDS, RUN_STATUSES, type Run, type RunKind, type RunStatus } from '$lib/api';
+	import { RUN_KINDS, RUN_ORIGINS, RUN_STATUSES, type Run, type RunKind, type RunOrigin, type RunStatus } from '$lib/api';
 	import AppTopbar from '$lib/components/app-topbar.svelte';
 	import ChoiceFilter from '$lib/components/list/choice-filter.svelte';
 	import ListToolbar from '$lib/components/list/list-toolbar.svelte';
@@ -11,7 +11,7 @@
 	import Button from '$lib/components/ui/button/button.svelte';
 	import RunPanel from '$lib/run/run-panel.svelte';
 	import { createResource } from '$lib/state/resource.svelte';
-	import { isActiveRun, isProblemRun, runKindLabel, runStatusLabel } from '$lib/status';
+	import { isActiveRun, isProblemRun, runKindLabel, runOriginLabel, runStatusLabel } from '$lib/status';
 	import RunList from './run-list.svelte';
 	import RunQueue from './run-queue.svelte';
 
@@ -25,6 +25,7 @@
 	let query = $state('');
 	let status = $state<StatusFilter | ''>('');
 	let kind = $state<RunKind | ''>('');
+	let origin = $state<RunOrigin | ''>('');
 	let period = $state<Window | ''>('24h');
 	let panelOpen = $state(false);
 
@@ -58,7 +59,7 @@
 	const filtered = $derived(
 		topLevel
 			.filter((r) => {
-				if (!statusMatches(r) || (kind && r.kind !== kind)) return false;
+				if (!statusMatches(r) || (kind && r.kind !== kind) || (origin && r.origin !== origin)) return false;
 				const q = query.trim().toLowerCase();
 				return !q || `${r.id} ${r.jobKey ?? ''} ${r.triggerName ?? ''} ${r.requestedBy.name} ${r.runKey ?? ''}`.toLowerCase().includes(q);
 			})
@@ -73,6 +74,7 @@
 		...RUN_STATUSES.map((s) => ({ value: s, label: runStatusLabel[s], count: topLevel.filter((r) => r.status === s).length }))
 	]);
 	const kindOptions = $derived(RUN_KINDS.map((k) => ({ value: k, label: runKindLabel[k], count: topLevel.filter((r) => r.kind === k).length })));
+	const originOptions = $derived(RUN_ORIGINS.map((o) => ({ value: o, label: runOriginLabel[o], count: topLevel.filter((r) => r.origin === o).length })));
 	const queueEntries = $derived(queue.data ?? []);
 	const queueFiltered = $derived(
 		queueEntries.filter((e) => {
@@ -110,6 +112,7 @@
 		{#if view === 'list'}
 			<ChoiceFilter label="Status" bind:value={status} options={statusOptions} />
 			<ChoiceFilter label="Kind" bind:value={kind} options={kindOptions} />
+			<ChoiceFilter label="Origin" bind:value={origin} options={originOptions} />
 			<ChoiceFilter label="Queued" bind:value={period} all="Any time" options={[{ value: '24h', label: 'Last 24h' }, { value: '7d', label: 'Last 7 days' }]} />
 		{/if}
 	{/snippet}

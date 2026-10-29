@@ -22,8 +22,13 @@ export const RUN_STATUSES = [
 ] as const;
 export type RunStatus = (typeof RUN_STATUSES)[number];
 
-export const RUN_KINDS = ['job', 'group', 'adhoc', 'rerun', 'sensor', 'schedule'] as const;
+/** What runs: a job, a job group (parent of one child run per member) or an ad-hoc selection. */
+export const RUN_KINDS = ['job', 'group', 'adhoc'] as const;
 export type RunKind = (typeof RUN_KINDS)[number];
+
+/** Why the run was requested. Group children inherit their parent's origin. */
+export const RUN_ORIGINS = ['manual', 'schedule', 'sensor', 'rerun'] as const;
+export type RunOrigin = (typeof RUN_ORIGINS)[number];
 
 export type NodeCounts = {
 	success: number;
@@ -45,6 +50,7 @@ export type RunCost = {
 export type Run = {
 	id: string;
 	kind: RunKind;
+	origin: RunOrigin;
 	status: RunStatus;
 	statusReason: string | null;
 	/** Job or group key; null for ad-hoc runs. */
@@ -81,6 +87,7 @@ export type RunListQuery = {
 	jobKey?: string;
 	statuses?: RunStatus[];
 	kinds?: RunKind[];
+	origins?: RunOrigin[];
 	/** Children of this group run. */
 	parentRunId?: string;
 	/** Hide child runs; group parents carry `childRunCount`. */
@@ -301,6 +308,7 @@ export type TimelineBar = {
 	runId: string | null;
 	jobKey: string;
 	kind: RunKind;
+	origin: RunOrigin;
 	status: RunStatus | 'projected';
 	/** The schedule or calendar a projected tick belongs to. */
 	triggerName: string | null;

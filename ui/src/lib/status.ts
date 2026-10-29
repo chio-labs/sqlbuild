@@ -1,4 +1,4 @@
-import type { CheckResult, NodeCounts, RunKind, RunStatus, TickOutcome, TriggerState } from '$lib/api/types';
+import type { CheckResult, NodeCounts, RunKind, RunOrigin, RunStatus, TickOutcome, TriggerState } from '$lib/api/types';
 
 export const runStatusTone: Record<RunStatus, string> = {
 	queued: 'var(--sb-text-faint)',
@@ -87,8 +87,17 @@ export function formatNodeCounts(counts: NodeCounts): string {
 export const runKindLabel: Record<RunKind, string> = {
 	job: 'Job',
 	group: 'Group',
-	adhoc: 'Ad hoc',
-	rerun: 'Rerun',
-	sensor: 'Sensor',
-	schedule: 'Schedule'
+	adhoc: 'Ad hoc'
 };
+
+export const runOriginLabel: Record<RunOrigin, string> = {
+	manual: 'Manual',
+	schedule: 'Schedule',
+	sensor: 'Sensor',
+	rerun: 'Rerun'
+};
+
+/** One-line "what · why" label, e.g. "Group · Schedule". */
+export function runKindOriginLabel(run: { kind: RunKind; origin: RunOrigin }): string {
+	return `${runKindLabel[run.kind]} · ${runOriginLabel[run.origin]}`;
+}

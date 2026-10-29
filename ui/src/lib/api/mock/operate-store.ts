@@ -134,6 +134,7 @@ export class MockOperate {
 		let runs = recs.map((r) => this.#view(r, scope));
 		if (query.statuses?.length) runs = runs.filter((r) => query.statuses!.includes(r.status));
 		if (query.kinds?.length) runs = runs.filter((r) => query.kinds!.includes(r.kind));
+		if (query.origins?.length) runs = runs.filter((r) => query.origins!.includes(r.origin));
 		runs.sort((a, b) => b.queuedAt.localeCompare(a.queuedAt));
 		if (query.limit) runs = runs.slice(0, query.limit);
 		return this.#ctx.reply(runs);
@@ -228,7 +229,7 @@ export class MockOperate {
 			const end = r.endedAt ?? new Date(now).toISOString();
 			if (end <= window.since || r.startedAt >= window.until) continue;
 			const view = this.#view(rec, scope);
-			bars.push({ runId: r.id, jobKey: r.jobKey, kind: r.kind, status: view.status, triggerName: r.triggerName, start: r.startedAt, end });
+			bars.push({ runId: r.id, jobKey: r.jobKey, kind: r.kind, origin: r.origin, status: view.status, triggerName: r.triggerName, start: r.startedAt, end });
 		}
 		// Only schedules and calendars have due times to project; sensors fire on events.
 		const until = Date.parse(window.until);
@@ -240,7 +241,8 @@ export class MockOperate {
 				bars.push({
 					runId: null,
 					jobKey: t.jobKey,
-					kind: 'schedule',
+					kind: jobDef(t.jobKey)?.kind === 'group' ? 'group' : 'job',
+					origin: 'schedule',
 					status: 'projected',
 					triggerName: t.name,
 					start: new Date(due).toISOString(),
@@ -314,10 +316,10 @@ export class MockOperate {
 		if (job?.kind === 'group') {
 			const members = this.#children(source).filter((c) => mode === 'all' || affected(c).length);
 			if (!members.length) throw new ApiError('Nothing to rerun: no node failed or was skipped', 409);
-			const parent = this.#create({ id, kind: 'rerun', jobKey: job.key, rerunOf: runId, by: user, select: [], exclude: [], flags: {}, nodes: [], priority: job.priority });
+			const parent = this.#create({ id, origin: 'rerun', jobKey: job.key, rerunOf: runId, by: user, select: [], exclude: [], flags: {}, nodes: [], priority: job.priority });
 			members.forEach((c, i) => {
 				const nodes = mode === 'all' ? c.script.nodes : affected(c);
-				this.#create({ id: `${id}-${i + 1}`, kind: 'job', jobKey: c.run.jobKey, parent: id, rerunOf: c.run.id, by: user, select: mode === 'all' ? c.script.select : nodes, exclude: mode === 'all' ? c.script.exclude : [], flags: c.script.flags, nodes, priority: job.priority });
+				this.#create({ id: `${id}-${i + 1}`, origin: 'rerun', jobKey: c.run.jobKey, parent: id, rerunOf: c.run.id, by: user, select: mode === 'all' ? c.script.select : nodes, exclude: mode === 'all' ? c.script.exclude : [], flags: c.script.flags, nodes, priority: job.priority });
 			});
 			parent.run.childRunCount = members.length;
 			this.#ctx.changes.emit('runs');
@@ -327,7 +329,7 @@ export class MockOperate {
 		if (!nodes.length) throw new ApiError('Nothing to rerun: no node failed or was skipped', 409);
 		const rec = this.#create({
 			id,
-			kind: 'rerun',
+			origin: 'rerun',
 			jobKey: source.run.jobKey,
 			rerunOf: runId,
 			by: user,
@@ -358,16 +360,16 @@ export class MockOperate {
 		const user = this.#ctx.user();
 		const id = this.#newId();
 		if (job.kind === 'group') {
-			const parent = this.#create({ id, kind: 'group', jobKey: key, by: user, select: [], exclude: [], flags, nodes: [], priority: job.priority });
+			const parent = this.#create({ id, origin: 'manual', jobKey: key, by: user, select: [], exclude: [], flags, nodes: [], priority: job.priority });
 			job.members.forEach((m, i) => {
 				const member = jobDef(m)!;
-				this.#create({ id: `${id}-${i + 1}`, kind: 'job', jobKey: m, parent: id, by: user, select: selectorTerms(member), exclude: member.exclude, flags: { ...flags, ...Object.fromEntries(Object.entries(member.settings).map(([k, v]) => [k, v === true ? true : String(v)])) }, nodes: jobNodes(m), priority: job.priority });
+				this.#create({ id: `${id}-${i + 1}`, origin: 'manual', jobKey: m, parent: id, by: user, select: selectorTerms(member), exclude: member.exclude, flags: { ...flags, ...Object.fromEntries(Object.entries(member.settings).map(([k, v]) => [k, v === true ? true : String(v)])) }, nodes: jobNodes(m), priority: job.priority });
 			});
 			parent.run.childRunCount = job.members.length;
 			this.#ctx.changes.emit('runs');
 			return this.#ctx.reply(this.#view(parent, scope));
 		}
-		const rec = this.#create({ id, kind: 'job', jobKey: key, by: user, select: selectorTerms(job), exclude: job.exclude, flags, nodes: jobNodes(key), priority: job.priority });
+		const rec = this.#create({ id, origin: 'manual', jobKey: key, by: user, select: selectorTerms(job), exclude: job.exclude, flags, nodes: jobNodes(key), priority: job.priority });
 		this.#ctx.changes.emit('runs');
 		return this.#ctx.reply(this.#view(rec, scope));
 	}
@@ -383,7 +385,7 @@ export class MockOperate {
 		if (!check.ok) throw new ApiError(check.problems[0]?.message ?? 'Invalid request', 422);
 		const rec = this.#create({
 			id: this.#newId(),
-			kind: 'adhoc',
+			origin: 'manual',
 			jobKey: null,
 			by: this.#ctx.user(),
 			select: request.select,
@@ -702,7 +704,7 @@ export class MockOperate {
 
 	#create(spec: {
 		id: string;
-		kind: Run['kind'];
+		origin: Run['origin'];
 		jobKey: string | null;
 		by: Principal;
 		select: string[];
@@ -719,7 +721,8 @@ export class MockOperate {
 		const rec: RunRecord = {
 			run: {
 				id: spec.id,
-				kind: spec.kind,
+				kind: spec.jobKey === null ? 'adhoc' : job?.kind === 'group' ? 'group' : 'job',
+				origin: spec.origin,
 				status: 'queued',
 				statusReason: null,
 				jobKey: spec.jobKey,

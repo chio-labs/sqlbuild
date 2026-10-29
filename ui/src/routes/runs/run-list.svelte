@@ -9,7 +9,7 @@
 	import type { Resource } from '$lib/state/resource.svelte';
 	import { app } from '$lib/state/app.svelte';
 	import { formatAgo, formatDuration, formatStamp } from '$lib/format/time';
-	import { formatNodeCounts, runKindLabel, runStatusLabel, runStatusTone } from '$lib/status';
+	import { formatNodeCounts, runKindLabel, runOriginLabel, runStatusLabel, runStatusTone } from '$lib/status';
 	import { formatCost } from '$lib/operate/labels';
 
 	let {
@@ -66,7 +66,8 @@
 			{/if}
 		</td>
 		<td class="muted">
-			{runKindLabel[r.kind]}{#if r.rerunOfRunId}<span> of <a class="link code" href="/runs/{r.rerunOfRunId}" onclick={(e) => e.stopPropagation()}>{r.rerunOfRunId}</a></span>{/if}
+			{runKindLabel[r.kind]}
+			<div class="cell-desc">{runOriginLabel[r.origin]}{#if r.rerunOfRunId}<span> of <a class="link code" href="/runs/{r.rerunOfRunId}" onclick={(e) => e.stopPropagation()}>{r.rerunOfRunId}</a></span>{/if}</div>
 		</td>
 		<td>
 			{#if r.triggerId && r.triggerName}

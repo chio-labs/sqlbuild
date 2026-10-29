@@ -7,7 +7,7 @@
 	import { app } from '$lib/state/app.svelte';
 	import { createResource } from '$lib/state/resource.svelte';
 	import { formatAgo, formatDuration, formatStamp } from '$lib/format/time';
-	import { formatNodeCounts, runKindLabel, runStatusLabel, runStatusTone } from '$lib/status';
+	import { formatNodeCounts, runOriginLabel, runStatusLabel, runStatusTone } from '$lib/status';
 	import { formatCost, onFailureHelp, overlapHelp } from '$lib/operate/labels';
 	import GroupOrder from './group-order.svelte';
 	import LaunchForm from './launch-form.svelte';
@@ -103,7 +103,7 @@
 									<tr onclick={() => goto(`/runs/${r.id}`)}>
 										<td><i style:background={runStatusTone[r.status]}></i>{runStatusLabel[r.status]}</td>
 										<td><a href="/runs/{r.id}" class="mono">{r.id}</a></td>
-										<td class="faint">{runKindLabel[r.kind]}{r.parentRunId ? ` in ${r.parentRunId}` : r.triggerName ? ` · ${r.triggerName}` : ''}</td>
+										<td class="faint">{runOriginLabel[r.origin]}{r.parentRunId ? ` in ${r.parentRunId}` : r.triggerName ? ` · ${r.triggerName}` : ''}</td>
 										<td class="faint">{formatNodeCounts(r.nodeCounts)}</td>
 										<td class="faint">{r.startedAt ? formatDuration(r.startedAt, r.endedAt, app.now) : '—'}</td>
 										<td class="faint" title={formatStamp(r.queuedAt)}>{formatAgo(r.startedAt ?? r.queuedAt, app.now)}</td>

@@ -11,7 +11,7 @@ import type {
 	LaunchVerb,
 	Principal,
 	Run,
-	RunKind,
+	RunOrigin,
 	SensorEvaluation,
 	SensorRunRequest,
 	Tick,
@@ -608,7 +608,7 @@ export function cronFor(everyMin: number, lastTick: number): string {
 
 type Seed = {
 	id: string;
-	kind: RunKind;
+	origin: RunOrigin;
 	job: string | null;
 	trigger?: string;
 	tick?: number;
@@ -728,7 +728,8 @@ export function createOperateFixtures(now: number): OperateFixtures {
 		};
 		const run: Run = {
 			id: seed.id,
-			kind: seed.kind,
+			kind: seed.job === null ? 'adhoc' : job?.kind === 'group' ? 'group' : 'job',
+			origin: seed.origin,
 			// Terminal statuses are derived from node outcomes by the store.
 			status: ended ? 'success' : started != null ? 'running' : launched != null ? 'launched' : 'queued',
 			statusReason: seed.reason ?? null,
@@ -776,7 +777,7 @@ export function createOperateFixtures(now: number): OperateFixtures {
 				children.push(
 					record({
 						id: `${seed.id}-${member.slice(0, 3)}`,
-						kind: 'job',
+						origin: seed.origin,
 						job: member,
 						by: seed.by,
 						parent: seed.id,
@@ -801,35 +802,35 @@ export function createOperateFixtures(now: number): OperateFixtures {
 		return (now - t) / MIN - delaySec / 60;
 	};
 
-	record({ id: 'run-9d21', kind: 'job', job: 'core_build', by: OPS_USER, queuedAgo: 3.2, startedAgo: 3, durationMin: 9, running: true, warn: ['stg_payments'] });
-	record({ id: 'run-6b02', kind: 'sensor', job: 'load_sources', trigger: 'partner_feed_poll', runKey: 'orders_part_0412.csv', by: SENSOR_DAEMON, queuedAgo: 7.5, startedAgo: 7.2, durationMin: 12, running: true, cancel: { requestedAgoSec: 20, by: OPS_USER, sigtermAgoSec: 19, done: false } });
-	record({ id: 'run-6a90', kind: 'schedule', job: 'activity_microbatch', trigger: 'activity_microbatch', tick: 2, by: SCHEDULER, queuedAgo: at('activity_microbatch', 2, 0), startedAgo: at('activity_microbatch', 2, 6), durationMin: 60, running: true, lastHeartbeatAgoSec: 95 });
-	record({ id: 'run-5f31', kind: 'schedule', job: 'activity_microbatch', trigger: 'activity_microbatch', tick: 1, by: SCHEDULER, queuedAgo: at('activity_microbatch', 1, 0) });
-	record({ id: 'run-5e10', kind: 'job', job: 'revenue_refresh', by: DEMO_USER, queuedAgo: 1 });
-	record({ id: 'run-5f77', kind: 'job', job: 'reporting_exports', by: CI_ACCOUNT, queuedAgo: 2.4, priority: 10 });
-	record({ id: 'run-5f80', kind: 'job', job: 'reporting_exports', by: DEMO_USER, queuedAgo: 0.6, priority: 0 });
-	record({ id: 'run-3c88', kind: 'rerun', job: 'core_build', by: OPS_USER, queuedAgo: 1.5, rerunOf: 'run-4f2a', select: ['dim_customers', 'customer_status'], nodes: ['dim_customers', 'customer_status'] });
+	record({ id: 'run-9d21', origin: 'manual', job: 'core_build', by: OPS_USER, queuedAgo: 3.2, startedAgo: 3, durationMin: 9, running: true, warn: ['stg_payments'] });
+	record({ id: 'run-6b02', origin: 'sensor', job: 'load_sources', trigger: 'partner_feed_poll', runKey: 'orders_part_0412.csv', by: SENSOR_DAEMON, queuedAgo: 7.5, startedAgo: 7.2, durationMin: 12, running: true, cancel: { requestedAgoSec: 20, by: OPS_USER, sigtermAgoSec: 19, done: false } });
+	record({ id: 'run-6a90', origin: 'schedule', job: 'activity_microbatch', trigger: 'activity_microbatch', tick: 2, by: SCHEDULER, queuedAgo: at('activity_microbatch', 2, 0), startedAgo: at('activity_microbatch', 2, 6), durationMin: 60, running: true, lastHeartbeatAgoSec: 95 });
+	record({ id: 'run-5f31', origin: 'schedule', job: 'activity_microbatch', trigger: 'activity_microbatch', tick: 1, by: SCHEDULER, queuedAgo: at('activity_microbatch', 1, 0) });
+	record({ id: 'run-5e10', origin: 'manual', job: 'revenue_refresh', by: DEMO_USER, queuedAgo: 1 });
+	record({ id: 'run-5f77', origin: 'manual', job: 'reporting_exports', by: CI_ACCOUNT, queuedAgo: 2.4, priority: 10 });
+	record({ id: 'run-5f80', origin: 'manual', job: 'reporting_exports', by: DEMO_USER, queuedAgo: 0.6, priority: 0 });
+	record({ id: 'run-3c88', origin: 'rerun', job: 'core_build', by: OPS_USER, queuedAgo: 1.5, rerunOf: 'run-4f2a', select: ['dim_customers', 'customer_status'], nodes: ['dim_customers', 'customer_status'] });
 
 	record({
-		id: 'run-4f2a', kind: 'schedule', job: 'core_build', trigger: 'core_build', tick: 0, by: SCHEDULER,
+		id: 'run-4f2a', origin: 'schedule', job: 'core_build', trigger: 'core_build', tick: 0, by: SCHEDULER,
 		queuedAgo: at('core_build', 0, 0), startedAgo: at('core_build', 0, 10), durationMin: 6,
 		warn: ['stg_payments'], fail: ['dim_customers'], errors: { dim_customers: 'Numeric value out of range in lifetime_value' }
 	});
-	record({ id: 'run-2b70', kind: 'schedule', job: 'core_build', trigger: 'core_build', tick: 1, by: SCHEDULER, queuedAgo: at('core_build', 1, 0), startedAgo: at('core_build', 1, 9), durationMin: 7 });
-	record({ id: 'run-2b71', kind: 'sensor', job: 'reporting_exports', trigger: 'after_core_build', runKey: 'run-2b70', by: SENSOR_DAEMON, queuedAgo: at('core_build', 1, 9) - 7.2, startedAgo: at('core_build', 1, 9) - 7.4, durationMin: 3 });
-	record({ id: 'run-0c7d', kind: 'rerun', job: 'core_build', by: CI_ACCOUNT, rerunOf: 'run-2b70', queuedAgo: 600, startedAgo: 599.8, durationMin: 3, end: 'cancelled', cancel: { requestedAgoSec: 75, by: CI_ACCOUNT, sigtermAgoSec: 74, done: true }, reason: 'Cancelled by svc-ci' });
-	record({ id: 'run-91cd', kind: 'job', job: 'marts_only', by: DEMO_USER, queuedAgo: 97, startedAgo: 96.8, durationMin: 5 });
-	record({ id: 'run-3b22', kind: 'adhoc', job: null, by: DEMO_USER, queuedAgo: 120, startedAgo: 119.8, durationMin: 2, select: ['stg_customers', 'dim_customers'] });
-	record({ id: 'run-88e1', kind: 'sensor', job: 'marts_only', trigger: 'on_payments_landed', runKey: 'raw__payments@81204', by: SENSOR_DAEMON, queuedAgo: 206, startedAgo: 205.8, durationMin: 4 });
-	record({ id: 'run-1a05', kind: 'schedule', job: 'activity_microbatch', trigger: 'activity_microbatch', tick: 3, by: SCHEDULER, queuedAgo: at('activity_microbatch', 3, 0), startedAgo: at('activity_microbatch', 3, 7), durationMin: 3, warn: ['hourly_order_activity'] });
-	record({ id: 'run-c40e', kind: 'job', job: 'marts_only', by: CI_ACCOUNT, queuedAgo: 1080, startedAgo: 1079.8, durationMin: 4 });
-	record({ id: 'run-e3f8', kind: 'schedule', job: 'activity_microbatch', trigger: 'activity_microbatch', tick: 101, by: SCHEDULER, queuedAgo: at('activity_microbatch', 101, 0), startedAgo: at('activity_microbatch', 101, 6), durationMin: 11, end: 'presumed_failed', lastHeartbeatAgoSec: (at('activity_microbatch', 101, 6) - 0.6) * 60, reason: 'No heartbeat for 10 minutes; worker killed' });
-	record({ id: 'run-a7c1', kind: 'schedule', job: 'revenue_refresh', trigger: 'revenue_refresh', tick: 0, by: SCHEDULER, queuedAgo: at('revenue_refresh', 0, 0), startedAgo: at('revenue_refresh', 0, 8), durationMin: 2, fail: ['daily_revenue'], errors: { daily_revenue: 'Warehouse error: the warehouse was suspended while the statement ran' } });
-	record({ id: 'run-f1a9', kind: 'sensor', job: 'load_sources', trigger: 'partner_feed_poll', runKey: 'orders_part_0398.csv', by: SENSOR_DAEMON, queuedAgo: 50 * 60, end: 'never_started', reason: 'Never started: no start report within 2 minutes of launch (image pull failed)', image: PREVIOUS_IMAGE_ID, generation: 41 });
+	record({ id: 'run-2b70', origin: 'schedule', job: 'core_build', trigger: 'core_build', tick: 1, by: SCHEDULER, queuedAgo: at('core_build', 1, 0), startedAgo: at('core_build', 1, 9), durationMin: 7 });
+	record({ id: 'run-2b71', origin: 'sensor', job: 'reporting_exports', trigger: 'after_core_build', runKey: 'run-2b70', by: SENSOR_DAEMON, queuedAgo: at('core_build', 1, 9) - 7.2, startedAgo: at('core_build', 1, 9) - 7.4, durationMin: 3 });
+	record({ id: 'run-0c7d', origin: 'rerun', job: 'core_build', by: CI_ACCOUNT, rerunOf: 'run-2b70', queuedAgo: 600, startedAgo: 599.8, durationMin: 3, end: 'cancelled', cancel: { requestedAgoSec: 75, by: CI_ACCOUNT, sigtermAgoSec: 74, done: true }, reason: 'Cancelled by svc-ci' });
+	record({ id: 'run-91cd', origin: 'manual', job: 'marts_only', by: DEMO_USER, queuedAgo: 97, startedAgo: 96.8, durationMin: 5 });
+	record({ id: 'run-3b22', origin: 'manual', job: null, by: DEMO_USER, queuedAgo: 120, startedAgo: 119.8, durationMin: 2, select: ['stg_customers', 'dim_customers'] });
+	record({ id: 'run-88e1', origin: 'sensor', job: 'marts_only', trigger: 'on_payments_landed', runKey: 'raw__payments@81204', by: SENSOR_DAEMON, queuedAgo: 206, startedAgo: 205.8, durationMin: 4 });
+	record({ id: 'run-1a05', origin: 'schedule', job: 'activity_microbatch', trigger: 'activity_microbatch', tick: 3, by: SCHEDULER, queuedAgo: at('activity_microbatch', 3, 0), startedAgo: at('activity_microbatch', 3, 7), durationMin: 3, warn: ['hourly_order_activity'] });
+	record({ id: 'run-c40e', origin: 'manual', job: 'marts_only', by: CI_ACCOUNT, queuedAgo: 1080, startedAgo: 1079.8, durationMin: 4 });
+	record({ id: 'run-e3f8', origin: 'schedule', job: 'activity_microbatch', trigger: 'activity_microbatch', tick: 101, by: SCHEDULER, queuedAgo: at('activity_microbatch', 101, 0), startedAgo: at('activity_microbatch', 101, 6), durationMin: 11, end: 'presumed_failed', lastHeartbeatAgoSec: (at('activity_microbatch', 101, 6) - 0.6) * 60, reason: 'No heartbeat for 10 minutes; worker killed' });
+	record({ id: 'run-a7c1', origin: 'schedule', job: 'revenue_refresh', trigger: 'revenue_refresh', tick: 0, by: SCHEDULER, queuedAgo: at('revenue_refresh', 0, 0), startedAgo: at('revenue_refresh', 0, 8), durationMin: 2, fail: ['daily_revenue'], errors: { daily_revenue: 'Warehouse error: the warehouse was suspended while the statement ran' } });
+	record({ id: 'run-f1a9', origin: 'sensor', job: 'load_sources', trigger: 'partner_feed_poll', runKey: 'orders_part_0398.csv', by: SENSOR_DAEMON, queuedAgo: 50 * 60, end: 'never_started', reason: 'Never started: no start report within 2 minutes of launch (image pull failed)', image: PREVIOUS_IMAGE_ID, generation: 41 });
 
 	const nightlyStages = [['load_sources'], ['core_build'], ['activity_microbatch'], ['reporting_exports']];
 	groupRun(
-		{ id: 'run-b7a0', kind: 'schedule', job: 'nightly_all', trigger: 'nightly_all', tick: 0, by: SCHEDULER, queuedAgo: at('nightly_all', 0, 0), startedAgo: at('nightly_all', 0, 9) },
+		{ id: 'run-b7a0', origin: 'schedule', job: 'nightly_all', trigger: 'nightly_all', tick: 0, by: SCHEDULER, queuedAgo: at('nightly_all', 0, 0), startedAgo: at('nightly_all', 0, 9) },
 		{
 			load_sources: { durationMin: 3 },
 			core_build: { durationMin: 7, fail: ['daily_revenue'], errors: { daily_revenue: 'Division by zero in revenue_per_order' } },
@@ -839,7 +840,7 @@ export function createOperateFixtures(now: number): OperateFixtures {
 		nightlyStages
 	);
 	groupRun(
-		{ id: 'run-77b3', kind: 'schedule', job: 'nightly_all', trigger: 'nightly_all', tick: 1, by: SCHEDULER, queuedAgo: at('nightly_all', 1, 0), startedAgo: at('nightly_all', 1, 9) },
+		{ id: 'run-77b3', origin: 'schedule', job: 'nightly_all', trigger: 'nightly_all', tick: 1, by: SCHEDULER, queuedAgo: at('nightly_all', 1, 0), startedAgo: at('nightly_all', 1, 9) },
 		{ load_sources: { durationMin: 3 }, core_build: { durationMin: 8 }, activity_microbatch: { durationMin: 6 }, reporting_exports: { durationMin: 3 } },
 		nightlyStages
 	);
@@ -912,7 +913,7 @@ export function createOperateFixtures(now: number): OperateFixtures {
 				for (const m of missed.slice(0, -cap)) tick(t.name, m, 'skipped', { evaluatedAt: new Date(downtime.to + 2000).toISOString(), lateBySeconds: Math.round((downtime.to - m) / 1000), catchUp: true, reason: `Beyond the catch-up limit of ${cap} missed times` });
 				const runId = genId(rand);
 				const startAgo = (now - downtime.to) / MIN - 0.1;
-				record({ id: runId, kind: 'schedule', job: t.jobKey, trigger: t.name, by: SCHEDULER, queuedAgo: startAgo + 0.05, startedAgo: startAgo, durationMin: 6, reason: 'Catch-up run after scheduler downtime' }, { queued: downtime.to + 1000, started: downtime.to + 5000 });
+				record({ id: runId, origin: 'schedule', job: t.jobKey, trigger: t.name, by: SCHEDULER, queuedAgo: startAgo + 0.05, startedAgo: startAgo, durationMin: 6, reason: 'Catch-up run after scheduler downtime' }, { queued: downtime.to + 1000, started: downtime.to + 5000 });
 				const rec = records[records.length - 1];
 				rec.run.tickScheduledFor = new Date(caught[0]).toISOString();
 				rec.run.tickId = tickId(t.name, caught[0]);
@@ -940,9 +941,9 @@ export function createOperateFixtures(now: number): OperateFixtures {
 				const stages = t.jobKey === 'nightly_all' ? nightlyStages : [['revenue_refresh'], ['activity_microbatch', 'customer_segments']];
 				const childSeeds: Partial<Record<string, Partial<Seed>>> = Object.fromEntries(stages.flat().map((m) => [m, { durationMin: 2 + rand() * 5 }]));
 				if (failing) childSeeds.activity_microbatch = { ...childSeeds.activity_microbatch, fail: ['daily_activity_rollup'], errors: { daily_activity_rollup: 'Statement timed out after max_duration' } };
-				groupRun({ id, kind: 'schedule', job: t.jobKey, trigger: t.name, by: SCHEDULER, queuedAgo: ageMin, startedAgo: ageMin - 0.15 }, childSeeds, stages);
+				groupRun({ id, origin: 'schedule', job: t.jobKey, trigger: t.name, by: SCHEDULER, queuedAgo: ageMin, startedAgo: ageMin - 0.15 }, childSeeds, stages);
 			} else {
-				record({ id, kind: 'schedule', job: t.jobKey, trigger: t.name, by: SCHEDULER, queuedAgo: ageMin, startedAgo: ageMin - 0.15, durationMin: typical * (0.7 + rand() * 0.6), ...pick(rand, t.jobKey) });
+				record({ id, origin: 'schedule', job: t.jobKey, trigger: t.name, by: SCHEDULER, queuedAgo: ageMin, startedAgo: ageMin - 0.15, durationMin: typical * (0.7 + rand() * 0.6), ...pick(rand, t.jobKey) });
 			}
 			const rec = records.find((r) => r.run.id === id)!;
 			rec.run.tickScheduledFor = new Date(due).toISOString();
@@ -992,7 +993,7 @@ export function createOperateFixtures(now: number): OperateFixtures {
 	{
 		const name = 'after_core_build';
 		const builds = records
-			.filter((r) => r.run.jobKey === 'core_build' && r.run.kind === 'schedule' && !r.run.parentRunId && r.run.endedAt)
+			.filter((r) => r.run.jobKey === 'core_build' && r.run.origin === 'schedule' && !r.run.parentRunId && r.run.endedAt)
 			.sort((a, b) => a.run.queuedAt.localeCompare(b.run.queuedAt));
 		const list: SensorEvaluation[] = [];
 		const reqs: SensorRunRequest[] = [];
@@ -1004,7 +1005,7 @@ export function createOperateFixtures(now: number): OperateFixtures {
 			if (ok && !runId) {
 				runId = genId(rand);
 				const startAgo = (now - t) / MIN - 0.1;
-				record({ id: runId, kind: 'sensor', job: 'reporting_exports', trigger: name, runKey: b.run.id, by: SENSOR_DAEMON, queuedAgo: startAgo + 0.05, startedAgo: startAgo, durationMin: 3 });
+				record({ id: runId, origin: 'sensor', job: 'reporting_exports', trigger: name, runKey: b.run.id, by: SENSOR_DAEMON, queuedAgo: startAgo + 0.05, startedAgo: startAgo, durationMin: 3 });
 			}
 			const evaluationId = `eval-after-core-build-${300 + i}`;
 			list.push(

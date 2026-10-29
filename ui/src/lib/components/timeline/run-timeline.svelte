@@ -5,7 +5,7 @@
 	import type { Snippet } from 'svelte';
 	import type { TimelineBar, TimelineTickMarker } from '$lib/api';
 	import { createResource } from '$lib/state/resource.svelte';
-	import { runKindLabel, runStatusLabel, runStatusRank, runStatusTone } from '$lib/status';
+	import { runKindLabel, runOriginLabel, runStatusLabel, runStatusRank, runStatusTone } from '$lib/status';
 
 	let {
 		query = $bindable(''),
@@ -255,6 +255,7 @@
 			<div><dt>{r.status === 'projected' ? 'Next tick' : 'Started'}</dt><dd>{clock(r.startMs)}</dd></div>
 			<div><dt>Duration</dt><dd>{r.status === 'projected' ? `~${duration(r)} typical` : r.status === 'running' ? `${duration(r)} so far` : duration(r)}</dd></div>
 			<div><dt>Kind</dt><dd>{runKindLabel[r.kind]}</dd></div>
+			<div><dt>Origin</dt><dd>{runOriginLabel[r.origin]}</dd></div>
 			{#if r.triggerName}<div><dt>Trigger</dt><dd>{r.triggerName}</dd></div>{/if}
 		</dl>
 	</div>

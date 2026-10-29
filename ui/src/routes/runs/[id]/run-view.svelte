@@ -7,7 +7,7 @@
 	import { app } from '$lib/state/app.svelte';
 	import { createResource } from '$lib/state/resource.svelte';
 	import { formatDuration, formatStamp } from '$lib/format/time';
-	import { isActiveRun, runKindLabel, runStatusLabel, runStatusTone } from '$lib/status';
+	import { isActiveRun, runKindOriginLabel, runStatusLabel, runStatusTone } from '$lib/status';
 	import { formatCost, NODE_STATUS_ORDER, nodeStatusLabel, nodeStatusTone } from '$lib/operate/labels';
 	import RunFacts from './run-facts.svelte';
 	import RunGantt from './run-gantt.svelte';
@@ -138,7 +138,7 @@
 			<span class="sb-status" style:--tone={runStatusTone[run.status]}><span></span>{runStatusLabel[run.status].toLowerCase()}</span>
 			<span class="meta">
 				{#if run.jobKey}<a href="/jobs/{run.jobKey}">{run.jobKey}</a>{:else}<code>{detail?.provenance.selection.join(' ') || 'whole project'}</code>{/if}
-				· {runKindLabel[run.kind].toLowerCase()} · {run.target} · <code>{run.gitRevision}</code>
+				· {runKindOriginLabel(run).toLowerCase()} · {run.target} · <code>{run.gitRevision}</code>
 			</span>
 			{#if run.statusReason}<span class="reason" title={run.statusReason}>{run.statusReason}</span>{/if}
 			<span class="right">
