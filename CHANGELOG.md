@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.186.0](https://github.com/sqlstack-io/sqlbuild/compare/v0.185.0...v0.186.0) (2026-10-29)
+
+
+### Features
+
+* support quoted mixed-case columns and read SQL with adapter lexical rules ([#1270](https://github.com/sqlstack-io/sqlbuild/issues/1270)) ([c3a2295](https://github.com/sqlstack-io/sqlbuild/commit/c3a2295864bb52432093ec9cedb7cfcc775d75fd))
+
 ## [0.185.0](https://github.com/chio-labs/sqlbuild/compare/v0.184.1...v0.185.0) (2026-10-28)
 
 
