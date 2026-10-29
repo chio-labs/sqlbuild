@@ -1,5 +1,134 @@
 <script lang="ts">
-	import NotBuilt from '$lib/components/not-built.svelte';
+	import AppTopbar from '$lib/components/app-topbar.svelte';
+	import ExplainAccess from '$lib/components/platform/explain-access.svelte';
+	import KeyValues from '$lib/components/platform/key-values.svelte';
+	import Panel from '$lib/components/platform/panel.svelte';
+	import { CAPABILITIES, type AuthMode } from '$lib/api';
+	import { formatAgo, formatStamp } from '$lib/format/time';
+	import { app } from '$lib/state/app.svelte';
+	import { createResource } from '$lib/state/resource.svelte';
+
+	const settings = createResource((client) => client.serverSettings());
+	const s = $derived(settings.data ?? null);
+
+	const authLabel: Record<AuthMode, string> = {
+		oidc: 'SSO (OIDC)',
+		trusted_proxy: 'Trusted proxy',
+		password: 'Password',
+		disabled: 'Disabled (loopback only)'
+	};
 </script>
 
-<NotBuilt title="Settings" area="Settings" description="Will hold personal preferences and API tokens." />
+<AppTopbar title="Settings" />
+
+<div class="min-h-0 flex-1 overflow-auto px-6 pt-5">
+	<div class="columns">
+		<div>
+			<Panel title="Server" note="Read-only; set in the server config and at start-up">
+				{#if settings.error}
+					<p class="err">Couldn't load: {settings.error}</p>
+				{:else if s}
+					<KeyValues
+						rows={[
+							{ label: 'Version', value: s.serverVersion },
+							{ label: 'Storage', value: s.storage === 'postgresql' ? 'PostgreSQL' : 'SQLite' },
+							{
+								label: 'Schema migration',
+								value: `${s.schemaVersion} of ${s.latestSchemaVersion}${s.schemaVersion === s.latestSchemaVersion ? ' (up to date)' : ''} · migrated ${formatAgo(s.schemaMigratedAt, app.now)}`,
+								title: formatStamp(s.schemaMigratedAt),
+								tone: s.schemaVersion === s.latestSchemaVersion ? undefined : 'var(--sb-warning)'
+							},
+							{ label: 'Authentication', value: authLabel[s.authMode] },
+							{
+								label: 'Scheduler',
+								value: s.schedulerEnabled ? 'On' : 'Off (--no-scheduler)',
+								tone: s.schedulerEnabled ? undefined : 'var(--sb-warning)'
+							}
+						]}
+					/>
+				{:else}
+					<p class="muted">Loading…</p>
+				{/if}
+			</Panel>
+
+			<Panel title="Retention">
+				<table class="sb-list static framed">
+					<tbody>
+						{#each s?.retention ?? [] as r (r.name)}
+							<tr>
+								<td>
+									{r.name}
+									<div class="cell-desc">{r.description}</div>
+								</td>
+								<td class="num">{r.value}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</Panel>
+		</div>
+
+		<div>
+			<Panel title="Your access" note="Capabilities from your roles; the server checks every action">
+				{#if app.user}
+					<KeyValues
+						rows={[
+							{ label: 'Signed in as', value: `${app.user.displayName} (${app.user.name})` },
+							{ label: 'Role', value: app.user.role }
+						]}
+					/>
+					<div class="caps">
+						{#each CAPABILITIES as c (c)}
+							<span class="cap" class:on={app.can(c)} title={app.can(c) ? 'Granted' : 'Not granted'}>{c}</span>
+						{/each}
+					</div>
+				{/if}
+			</Panel>
+			<Panel title="Why can or can't I?">
+				<ExplainAccess />
+			</Panel>
+		</div>
+	</div>
+</div>
+
+<style>
+	.columns {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		gap: 0 40px;
+		max-width: 1280px;
+	}
+	.err {
+		color: var(--sb-error);
+		font-size: 12.5px;
+	}
+	.muted {
+		color: var(--muted-foreground);
+		font-size: 12.5px;
+	}
+	.framed {
+		border-top: 1px solid var(--border);
+	}
+	:global(.sb-list.static tbody tr) {
+		cursor: default;
+	}
+	.caps {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+		margin-top: 12px;
+	}
+	.cap {
+		padding: 2px 7px;
+		border-radius: 2px;
+		background: var(--sb-hover);
+		color: var(--sb-text-faint);
+		font-family: var(--font-mono);
+		font-size: 11.5px;
+		text-decoration: line-through;
+	}
+	.cap.on {
+		color: var(--foreground);
+		text-decoration: none;
+	}
+</style>

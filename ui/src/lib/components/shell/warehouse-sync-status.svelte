@@ -7,6 +7,7 @@
 
 	const sync = $derived(app.warehouseSync);
 	const running = $derived(sync?.state === 'running');
+	const canSync = $derived(app.can('warehouse.sync'));
 
 	const text = $derived.by(() => {
 		if (!sync) return 'Warehouse sync —';
@@ -17,13 +18,14 @@
 
 	const title = $derived.by(() => {
 		if (!sync) return '';
+		if (!canSync) return 'Requires warehouse.sync';
 		if (running && sync.followUpQueued) return 'A follow-up sync is queued; further refreshes merge into it.';
 		if (running) return 'Refresh queues one follow-up sync after this one.';
 		return sync.lastError ?? 'Sync warehouse metadata now';
 	});
 
 	async function refresh() {
-		if (requesting) return;
+		if (requesting || !canSync) return;
 		requesting = true;
 		try {
 			await app.requestWarehouseSync();
@@ -40,7 +42,8 @@
 		class="refresh"
 		aria-label={running ? 'Queue a follow-up warehouse sync' : 'Sync warehouse now'}
 		onclick={refresh}
-		disabled={!sync || requesting}
+		disabled={!sync || requesting || !canSync}
+		title={canSync ? undefined : 'Requires warehouse.sync'}
 	>
 		<RefreshCwIcon size={12} class={running ? 'animate-spin' : ''} />
 	</button>

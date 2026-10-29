@@ -24,6 +24,7 @@ export const CAPABILITIES = [
 	'sensor.reset_cursor',
 	'run.adhoc',
 	'connection.test',
+	'warehouse.sync',
 	'plan.preview',
 	'location.manage',
 	'user.manage',
@@ -222,3 +223,4 @@ export type NavCounts = {
 };
 
 export * from './types/operate';
+export * from './types/platform';

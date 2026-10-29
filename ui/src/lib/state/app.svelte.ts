@@ -99,6 +99,10 @@ class AppState {
 		this.warehouseSync = result.sync;
 	}
 
+	refreshNavCounts(): void {
+		void this.#loadNavCounts();
+	}
+
 	#scopeChanged() {
 		if (browser) localStorage.setItem(SCOPE_KEY, JSON.stringify(this.scope));
 		this.navCounts = null;
