@@ -2,7 +2,7 @@ import type { Edge, Node } from '@xyflow/svelte';
 
 // Synthetic warehouse-shaped lineage for scale testing (?models=N on /lineage).
 // Deterministic: the same N always produces the same graph. Models carry the
-// same fields as the hand-written lineage mock (kind, icon, checks, drift,
+// same fields as the catalog-backed lineage cards (kind, icon, checks, stale,
 // owner, tags, ...) so the real cards render in full.
 
 const LAYERS = ['raw', 'stg', 'int', 'int', 'fct', 'dim', 'mart', 'rpt'] as const;
@@ -14,7 +14,7 @@ const DOMAIN_NAMES = [
 	'loyalty', 'marketing', 'finance', 'pricing', 'reviews', 'support', 'ops', 'forecasting', 'logistics',
 	'events', 'web', 'mobile', 'franchise', 'quality', 'audit'
 ];
-const OWNERS = ['@analytics', '@finance-data', '@growth', '@platform', '@ops'];
+const OWNERS = ['analytics', 'finance-data', 'growth', 'platform', 'ops'];
 const TAGS = ['core', 'finance', 'pii', 'daily', 'hourly', 'reporting'];
 
 export const domainName = (i: number) =>
@@ -93,7 +93,7 @@ export function scaleGraph(total: number): { nodes: Node[]; edges: Edge[] } {
 					kind,
 					icon,
 					status: isSource ? 'src' : fail ? 'fail' : 'ok',
-					freshness: fail ? 'failed' : `${1 + Math.floor(rand() * 59)}m ago`,
+					lastBuiltAt: new Date(Date.now() - (1 + Math.floor(rand() * 59)) * 60_000).toISOString(),
 					...(fail
 						? { checks: '✕ 1', checksColor: 'var(--sb-error)' }
 						: warn
@@ -105,7 +105,7 @@ export function scaleGraph(total: number): { nodes: Node[]; edges: Edge[] } {
 						? {}
 						: {
 								columnCount: 3 + Math.floor(rand() * 20),
-								owner: rand() < 0.6 ? pick(OWNERS) : undefined,
+								owner: rand() < 0.6 ? [pick(OWNERS)] : undefined,
 								tags: rand() < 0.4 ? [pick(TAGS)] : undefined,
 								description: rand() < 0.5 ? `${layer} model for ${domainName(domain)}.` : undefined
 							})
@@ -134,12 +134,12 @@ export function scaleGraph(total: number): { nodes: Node[]; edges: Edge[] } {
 		made += count;
 	});
 
-	// Drift: a few models changed since the last build in this target (direct SQL
-	// change, or compiled-only change); everything downstream of them is stale
-	// with upstream drift. Drift implies stale, never the reverse.
+	// Staleness: a few models changed since the last build in this target (direct
+	// SQL change, or compiled-only change); everything downstream of them is stale
+	// with an upstream change. Staleness is shown separately from the last outcome.
 	const byId = new Map(nodes.map((n) => [n.id, n]));
 	const driftSources = nodes.filter((n) => n.data.status !== 'src' && rand() < 0.008);
-	for (const n of driftSources) n.data = { ...n.data, drift: rand() < 0.75 ? 'direct' : 'compiled' };
+	for (const n of driftSources) n.data = { ...n.data, stale: rand() < 0.75 ? 'changed' : 'compiled' };
 	const stack = driftSources.flatMap((n) => downstream.get(n.id) ?? []);
 	const seen = new Set<string>();
 	while (stack.length) {
@@ -147,12 +147,8 @@ export function scaleGraph(total: number): { nodes: Node[]; edges: Edge[] } {
 		if (seen.has(id)) continue;
 		seen.add(id);
 		const n = byId.get(id)!;
-		if (!n.data.drift) n.data = { ...n.data, drift: 'upstream' };
+		if (!n.data.stale) n.data = { ...n.data, stale: 'upstream' };
 		stack.push(...(downstream.get(id) ?? []));
 	}
-	for (const n of nodes) {
-		if (n.data.drift && n.data.status === 'ok') n.data = { ...n.data, status: 'stale' };
-	}
-
 	return { nodes, edges };
 }

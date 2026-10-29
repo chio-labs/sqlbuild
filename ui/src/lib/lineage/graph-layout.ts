@@ -17,7 +17,6 @@ export type GraphNode = {
 	name: string;
 	status: string;
 	kind: string;
-	freshness: string;
 	depth: number;
 	x: number;
 	y: number;
@@ -42,9 +41,8 @@ export function layoutDag(nodes: Node[], edges: Edge[], sweeps = 6): GraphLayout
 		byId.set(n.id, {
 			id: n.id,
 			name: String(d.name),
-			status: String(d.status),
+			status: d.stale ? 'stale' : String(d.status),
 			kind: String(d.kind),
-			freshness: String(d.freshness ?? ''),
 			depth: 0,
 			x: 0,
 			y: 0

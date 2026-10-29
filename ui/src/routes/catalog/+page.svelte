@@ -1,154 +1,102 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import {
-		Database,
-		Download,
-		Sprout,
-		Table2,
-		Workflow,
-		Box,
-		ShieldCheck,
-		FunctionSquare,
-		type Icon as IconType
-	} from '@lucide/svelte';
+	import { page } from '$app/state';
+	import type { CatalogNode, NodeKind } from '$lib/api';
 	import ListToolbar from '$lib/components/list/list-toolbar.svelte';
 	import SegmentedFilter from '$lib/components/list/segmented-filter.svelte';
-	import FilterButton from '$lib/components/list/filter-button.svelte';
+	import ChoiceFilter from '$lib/components/list/choice-filter.svelte';
 	import StatusLabel from '$lib/components/list/status-label.svelte';
 	import RelativeTime from '$lib/components/list/relative-time.svelte';
+	import LoadRow from '$lib/components/list/load-row.svelte';
 	import AppTopbar from '$lib/components/app-topbar.svelte';
 	import Button from '$lib/components/ui/button/button.svelte';
+	import GatedButton from '$lib/components/operate/gated-button.svelte';
+	import StaleBadges from '$lib/components/build-area/stale-badges.svelte';
+	import RunPanel from '$lib/run/run-panel.svelte';
+	import { app } from '$lib/state/app.svelte';
+	import { createResource } from '$lib/state/resource.svelte';
+	import { formatAgo, formatStamp } from '$lib/format/time';
+	import { nodeOutcomeLabel, nodeOutcomeTone } from '$lib/status';
+	import { NODE_KINDS, kindLine, nodeIcon, nodeIconKey, nodeKindPlural, shortRunId } from '$lib/build-area/labels';
 
-	type Status = 'fresh' | 'stale' | 'warn' | 'fail' | 'source';
-	// node type = first-class SQLBuild DAG node kind
-	type NodeType = 'model' | 'source' | 'loader' | 'seed' | 'task' | 'asset' | 'check' | 'udf';
-	type Model = {
-		name: string;
-		desc: string;
-		kind: string; // display sub-kind (e.g. 'view', 'incremental · merge', 'python')
-		nodeType: NodeType;
-		tags: string[];
-		status: Status;
-		built: string;
-		checks: string;
-		checksStatus: 'ok' | 'warn' | 'fail' | 'none';
-	};
+	type StatusFilter = 'stale' | 'changed' | 'behind' | 'failed' | 'warn';
 
-	const models: Model[] = [
-		{ name: 'raw__customers', desc: 'External customer source table', kind: 'source', nodeType: 'source', tags: [], status: 'source', built: '8m ago', checks: '—', checksStatus: 'none' },
-		{ name: 'raw__orders', desc: 'External orders source (merge)', kind: 'source · merge', nodeType: 'source', tags: [], status: 'source', built: '8m ago', checks: '—', checksStatus: 'none' },
-		{ name: 'raw__payments', desc: 'External payments source', kind: 'source', nodeType: 'source', tags: [], status: 'source', built: '8m ago', checks: '—', checksStatus: 'none' },
-		{ name: 'load_raw_orders', desc: 'Python loader: incremental orders from API', kind: 'loader · delete_insert', nodeType: 'loader', tags: ['ingest'], status: 'fresh', built: '8m ago', checks: '—', checksStatus: 'none' },
-		{ name: 'load__waffle_cust', desc: 'Python loader: customer extract', kind: 'loader · table', nodeType: 'loader', tags: ['ingest'], status: 'fresh', built: '8m ago', checks: '—', checksStatus: 'none' },
-		{ name: 'waffle_types', desc: 'Seed of waffle product types', kind: 'seed', nodeType: 'seed', tags: [], status: 'fresh', built: '8m ago', checks: '—', checksStatus: 'none' },
-		{ name: 'grant_target', desc: 'Python UDF: grant SELECT on target', kind: 'udf · python', nodeType: 'udf', tags: [], status: 'fresh', built: '8m ago', checks: '—', checksStatus: 'none' },
-		{ name: 'fn_customer_ltv', desc: 'SQL table function: customer lifetime value', kind: 'udf · table', nodeType: 'udf', tags: [], status: 'fresh', built: '6m ago', checks: '—', checksStatus: 'none' },
-		{ name: 'stg_customers', desc: 'Cleaned customers from raw', kind: 'view', nodeType: 'model', tags: [], status: 'fresh', built: '6m ago', checks: '3 / 3', checksStatus: 'ok' },
-		{ name: 'stg_orders', desc: 'Cleaned orders from raw', kind: 'view', nodeType: 'model', tags: [], status: 'fresh', built: '6m ago', checks: '4 / 4', checksStatus: 'ok' },
-		{ name: 'stg_payments', desc: 'Cleaned payments from raw', kind: 'view', nodeType: 'model', tags: [], status: 'warn', built: '6m ago', checks: '0 / 1', checksStatus: 'warn' },
-		{ name: 'fact_orders', desc: 'One row per order with payment + customer', kind: 'table', nodeType: 'model', tags: ['finance', 'core'], status: 'fresh', built: '4m ago', checks: '1 / 1', checksStatus: 'ok' },
-		{ name: 'daily_revenue', desc: 'Daily revenue rollup by completed orders', kind: 'table', nodeType: 'model', tags: ['finance', 'revenue'], status: 'fresh', built: '6m ago', checks: '1 / 1', checksStatus: 'ok' },
-		{ name: 'dim_customers', desc: 'Customer dimension with first/last order', kind: 'table', nodeType: 'model', tags: ['core'], status: 'fresh', built: '4m ago', checks: '2 / 2', checksStatus: 'ok' },
-		{ name: 'customer_status', desc: 'Upserted customer status snapshot', kind: 'incremental · merge', nodeType: 'model', tags: [], status: 'stale', built: '2d ago', checks: '2 / 2', checksStatus: 'ok' },
-		{ name: 'order_status_idx', desc: 'Order status index', kind: 'incremental · delete_insert', nodeType: 'model', tags: [], status: 'fresh', built: '5m ago', checks: '—', checksStatus: 'none' },
-		{ name: 'hourly_order_act', desc: 'Hourly order activity (microbatch)', kind: 'incremental · delete_insert', nodeType: 'model', tags: ['activity'], status: 'fresh', built: '5m ago', checks: '—', checksStatus: 'none' },
-		{ name: 'daily_activity', desc: 'Daily activity rollup (microbatch)', kind: 'incremental · delete_insert', nodeType: 'model', tags: ['activity'], status: 'stale', built: '1d ago', checks: '2 / 2', checksStatus: 'ok' },
-		{ name: 'hourly_activity_ctx', desc: 'Hourly activity with daily context', kind: 'incremental · delete_insert', nodeType: 'model', tags: ['activity'], status: 'fail', built: 'failed', checks: '0 / 1', checksStatus: 'fail' },
-		{ name: 'export_revenue_csv', desc: 'Python task: export revenue to S3', kind: 'task · python', nodeType: 'task', tags: ['export'], status: 'fresh', built: '3m ago', checks: '—', checksStatus: 'none' },
-		{ name: 'revenue_dashboard', desc: 'Python asset: refresh BI dashboard', kind: 'asset · python', nodeType: 'asset', tags: ['bi'], status: 'fresh', built: '3m ago', checks: '1 / 1', checksStatus: 'ok' },
-		{ name: 'check_revenue_reconciles', desc: 'Standalone check: revenue reconciliation', kind: 'check', nodeType: 'check', tags: ['finance'], status: 'fresh', built: '3m ago', checks: '1 / 1', checksStatus: 'ok' }
-	];
+	const catalog = createResource((client, scope) => client.listCatalogNodes(scope), ['runs', 'checks', 'snapshot', 'node_status']);
+	const all = $derived(catalog.data ?? []);
 
-	const statusColor: Record<Status, string> = {
-		fresh: 'var(--sb-success)',
-		stale: 'var(--sb-stale)',
-		warn: 'var(--sb-warning)',
-		fail: 'var(--sb-error)',
-		source: 'var(--sb-text-faint)'
-	};
-	const statusLabel: Record<Status, string> = {
-		fresh: 'Fresh',
-		stale: 'Stale',
-		warn: 'Warning',
-		fail: 'Failed',
-		source: 'External'
-	};
-	const typeIcon: Record<NodeType, typeof IconType> = {
-		source: Database,
-		loader: Download,
-		seed: Sprout,
-		model: Table2,
-		task: Workflow,
-		asset: Box,
-		check: ShieldCheck,
-		udf: FunctionSquare
-	};
-	const checkColor: Record<string, string> = {
-		ok: 'var(--sb-success)',
-		warn: 'var(--sb-warning)',
-		fail: 'var(--sb-error)',
-		none: 'var(--sb-text-faint)'
-	};
-	let query = $state('');
-	// filter by node type (first-class SQLBuild DAG node kinds), not dbt-style folder layers
-	let typeFilter = $state<'all' | NodeType>('all');
-	const nodeTypes: ('all' | NodeType)[] = ['all', 'source', 'seed', 'loader', 'model', 'task', 'asset', 'check', 'udf'];
-	const typeLabel: Record<'all' | NodeType, string> = {
-		all: 'All',
-		model: 'Models',
-		source: 'Sources',
-		seed: 'Seeds',
-		loader: 'Loaders',
-		task: 'Tasks',
-		asset: 'Assets',
-		check: 'Checks',
-		udf: 'UDFs'
-	};
+	const params = page.url.searchParams;
+	let query = $state(params.get('q') ?? '');
+	let kindFilter = $state<'all' | NodeKind>((NODE_KINDS as string[]).includes(params.get('kind') ?? '') ? (params.get('kind') as NodeKind) : 'all');
+	let ownerFilter = $state(params.get('owner') ?? '');
+	let groupFilter = $state(params.get('group') ?? '');
+	let statusFilter = $state<StatusFilter | ''>(params.get('stale') ? 'stale' : '');
+
+	const matchesStatus = (n: CatalogNode, f: StatusFilter | '') =>
+		!f ||
+		(f === 'stale' && n.stale.length > 0) ||
+		(f === 'changed' && n.stale.some((s) => s.reason !== 'behind')) ||
+		(f === 'behind' && n.stale.some((s) => s.reason === 'behind')) ||
+		(f === 'failed' && n.lastOutcome === 'failed') ||
+		(f === 'warn' && n.lastOutcome === 'warn');
 
 	const filtered = $derived(
-		models.filter((m) => {
-			if (typeFilter !== 'all' && m.nodeType !== typeFilter) return false;
-			if (query.trim()) {
-				const q = query.toLowerCase();
-				return (
-					m.name.toLowerCase().includes(q) ||
-					m.desc.toLowerCase().includes(q) ||
-					m.kind.toLowerCase().includes(q) ||
-					m.tags.some((t) => t.toLowerCase().includes(q))
-				);
-			}
-			return true;
+		all.filter((n) => {
+			if (kindFilter !== 'all' && n.kind !== kindFilter) return false;
+			if (ownerFilter && !n.owner.includes(ownerFilter)) return false;
+			if (groupFilter && n.group !== groupFilter) return false;
+			if (!matchesStatus(n, statusFilter)) return false;
+			const q = query.trim().toLowerCase();
+			return !q || [n.key, n.description, kindLine(n), ...n.tags, ...n.owner].some((s) => s.toLowerCase().includes(q));
 		})
 	);
 
+	const kinds = $derived(NODE_KINDS.filter((k) => all.some((n) => n.kind === k)));
+	const owners = $derived([...new Set(all.flatMap((n) => n.owner))].sort());
+	const groups = $derived([...new Set(all.map((n) => n.group))]);
 	const counts = $derived({
-		total: models.length,
-		fresh: models.filter((m) => m.status === 'fresh').length,
-		stale: models.filter((m) => m.status === 'stale').length,
-		warn: models.filter((m) => m.status === 'warn').length,
-		fail: models.filter((m) => m.status === 'fail').length
+		failed: all.filter((n) => n.lastOutcome === 'failed').length,
+		warn: all.filter((n) => n.lastOutcome === 'warn').length,
+		changed: all.filter((n) => matchesStatus(n, 'changed')).length,
+		behind: all.filter((n) => matchesStatus(n, 'behind')).length
 	});
+	const statusOptions: { value: StatusFilter; label: string }[] = [
+		{ value: 'stale', label: 'Stale' },
+		{ value: 'changed', label: 'Stale · changed' },
+		{ value: 'behind', label: 'Stale · behind' },
+		{ value: 'failed', label: 'Last build failed' },
+		{ value: 'warn', label: 'Last build warned' }
+	];
+
+	const filteredRunnable = $derived(filtered.filter((n) => n.kind !== 'source').map((n) => n.key));
+	const narrowed = $derived(filtered.length !== all.length);
+	let runOpen = $state(false);
 </script>
 
 <AppTopbar title="Catalog">
-	<Button variant="outline" size="sm">↻ Refresh</Button>
-	<Button size="sm">▷ Execute</Button>
+	<Button variant="outline" size="sm" onclick={() => catalog.refresh()}>↻ Refresh</Button>
+	<GatedButton requires="run.adhoc" variant="default" onclick={() => (runOpen = true)}>▷ Execute{narrowed ? ` ${filteredRunnable.length}` : ''}</GatedButton>
 </AppTopbar>
+
+<RunPanel bind:open={runOpen} selection={narrowed ? filteredRunnable : []} />
 
 <ListToolbar
 	bind:query
 	placeholder="Search catalog"
-	total="{filtered.length} of {counts.total} nodes"
+	total="{filtered.length} of {all.length} nodes"
 	counts={[
-		{ tone: 'var(--sb-success)', count: counts.fresh, label: 'fresh' },
-		{ tone: 'var(--sb-stale)', count: counts.stale, label: 'stale' },
-		{ tone: 'var(--sb-warning)', count: counts.warn, label: 'warning' },
-		{ tone: 'var(--sb-error)', count: counts.fail, label: 'failed' }
+		{ tone: 'var(--sb-stale)', count: counts.changed, label: 'changed' },
+		{ tone: 'var(--sb-warning)', count: counts.behind, label: 'behind' },
+		{ tone: 'var(--sb-error)', count: counts.failed, label: 'failed' }
 	]}
 >
 	{#snippet filters()}
-		<SegmentedFilter bind:value={typeFilter} options={nodeTypes.map((t) => ({ value: t, label: typeLabel[t] }))} />
-		<FilterButton label="Tags" />
+		<SegmentedFilter
+			bind:value={kindFilter}
+			options={[{ value: 'all' as const, label: 'All', count: all.length }, ...kinds.map((k) => ({ value: k, label: nodeKindPlural[k], count: all.filter((n) => n.kind === k).length }))]}
+		/>
+		<ChoiceFilter label="Status" bind:value={statusFilter} options={statusOptions.map((o) => ({ ...o, count: all.filter((n) => matchesStatus(n, o.value)).length }))} />
+		<ChoiceFilter label="Owner" bind:value={ownerFilter} options={owners.map((o) => ({ value: o, label: o, count: all.filter((n) => n.owner.includes(o)).length }))} />
+		<ChoiceFilter label="Group" bind:value={groupFilter} options={groups.map((g) => ({ value: g, label: g, count: all.filter((n) => n.group === g).length }))} />
 	{/snippet}
 </ListToolbar>
 
@@ -158,37 +106,53 @@
 			<tr>
 				<th>Name</th>
 				<th>Kind</th>
-				<th>Tags</th>
-				<th>Status</th>
+				<th>Owner</th>
+				<th>Last outcome</th>
+				<th>Stale</th>
 				<th class="num">Checks</th>
 				<th>Last built</th>
 			</tr>
 		</thead>
 		<tbody>
-			{#each filtered as m (m.name)}
-				{@const Glyph = typeIcon[m.nodeType]}
-				<tr onclick={() => goto(`/catalog/${m.name}`)}>
+			{#each filtered as n (n.key)}
+				{@const Glyph = nodeIcon[nodeIconKey(n)] ?? nodeIcon.table}
+				<tr onclick={() => goto(`/catalog/${n.key}`)}>
 					<td>
 						<div class="cell-name">
 							<Glyph size={15} strokeWidth={1.75} />
 							<div class="min-w-0">
-								<a href="/catalog/{m.name}" onclick={(e) => e.stopPropagation()}>{m.name}</a>
-								<div class="cell-desc">{m.desc}</div>
+								<a href="/catalog/{n.key}" onclick={(e) => e.stopPropagation()}>{n.key}</a>
+								<div class="cell-desc">{n.description}</div>
 							</div>
 						</div>
 					</td>
-					<td class="muted">{m.kind}</td>
+					<td class="muted">{kindLine(n)}<div class="cell-desc">{n.group}</div></td>
 					<td>
-						{#if m.tags.length}
-							<div class="flex flex-wrap gap-1">{#each m.tags as t (t)}<span class="sb-tag">{t}</span>{/each}</div>
+						{#if n.owner.length}<div class="flex flex-wrap gap-1">{#each n.owner as o (o)}<span class="sb-tag">{o}</span>{/each}</div>
 						{:else}<span class="muted">—</span>{/if}
 					</td>
-					<td><StatusLabel tone={statusColor[m.status]} label={statusLabel[m.status]} muted={m.status === 'source'} /></td>
-					<td class="num" style:color={m.checksStatus === 'none' ? 'var(--muted-foreground)' : checkColor[m.checksStatus]}>{m.checks}</td>
-					<td><RelativeTime value={m.built} /></td>
+					<td>
+						{#if n.kind === 'source'}
+							{#if n.sourceFreshness}<StatusLabel tone={n.sourceFreshness.status === 'pass' ? 'var(--sb-success)' : n.sourceFreshness.status === 'warn' ? 'var(--sb-warning)' : 'var(--sb-error)'} label="Freshness {n.sourceFreshness.status}" />
+							{:else}<span class="muted">External</span>{/if}
+						{:else if n.lastOutcome}
+							<StatusLabel tone={nodeOutcomeTone[n.lastOutcome]} label={nodeOutcomeLabel[n.lastOutcome]} />
+						{:else}<span class="muted">Not built</span>{/if}
+					</td>
+					<td><StaleBadges reasons={n.stale} empty="—" /></td>
+					<td class="num" style:color={n.checks.failing ? 'var(--sb-error)' : n.checks.warning ? 'var(--sb-warning)' : 'var(--muted-foreground)'}>
+						{n.checks.total ? `${n.checks.passing} / ${n.checks.total}` : '—'}
+					</td>
+					<td>
+						{#if n.kind === 'source'}
+							<RelativeTime value={n.sourceFreshness?.loadedAt ? `loaded ${formatAgo(n.sourceFreshness.loadedAt, app.now)}` : '—'} exact={formatStamp(n.sourceFreshness?.loadedAt)} />
+						{:else if n.lastBuild}
+							<RelativeTime value={formatAgo(n.lastBuild.builtAt, app.now)} exact="{formatStamp(n.lastBuild.builtAt)} · {n.lastBuild.runId ?? `outside the scheduler · ${shortRunId(n.lastBuild.fingerprintRunId)}`}" />
+						{:else}<span class="muted">Never</span>{/if}
+					</td>
 				</tr>
 			{:else}
-				<tr><td colspan="6" class="empty">No nodes match the filter.</td></tr>
+				<LoadRow colspan={7} resource={catalog} empty={all.length ? 'No nodes match the filter.' : 'No nodes in this snapshot.'} />
 			{/each}
 		</tbody>
 	</table>

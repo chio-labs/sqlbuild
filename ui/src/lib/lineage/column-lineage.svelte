@@ -69,8 +69,7 @@
 	const nameOf = (id: string) => models.find((m) => m.id === id)?.name ?? id;
 	const kindOf = (id: string) => models.find((m) => m.id === id)?.kind ?? 'table';
 	const statusOf = (id: string) => models.find((m) => m.id === id)?.status ?? 'ok';
-	const incomingLens = new Map<string, Lens>();
-	for (const [, t, lens] of colEdges) incomingLens.set(t, lens);
+	const incomingLens = $derived(new Map<string, Lens>(colEdges.map(([, t, lens]) => [t, lens])));
 
 	const focalModel = $derived(models.find((m) => m.id === focal));
 	let colQuery = $state('');
@@ -332,6 +331,11 @@
 				const el = (e.target as HTMLElement).closest('[data-colid]') as HTMLElement | null;
 				hoverNode = el?.dataset.colid ?? null;
 			}}
+			onfocus={(e) => {
+				const el = (e.target as HTMLElement).closest('[data-colid]') as HTMLElement | null;
+				hoverNode = el?.dataset.colid ?? null;
+			}}
+			onblur={() => (hoverNode = null)}
 			onmouseout={(e) => {
 				const to = (e.relatedTarget as HTMLElement | null)?.closest?.('[data-colid]');
 				if (!to) hoverNode = null;

@@ -12,7 +12,7 @@
 {#if !build}
 	<span class="muted">Never built in this target</span>
 {:else if build.runId}
-	<a class="run" href="/runs/{build.runId}">{build.runId}</a>{#if time}<span class="muted" title={formatStamp(build.builtAt)}> · {formatAgo(build.builtAt, app.now)}</span>{/if}
+	<a class="run" href="/runs/{build.runId}">{build.runId}</a>{#if time}<span class="muted" title={formatStamp(build.builtAt)}>{` · ${formatAgo(build.builtAt, app.now)}`}</span>{/if}
 {:else}
 	<span class="muted" title="Fingerprint run {build.fingerprintRunId} · {formatStamp(build.builtAt)}">Outside the scheduler · <code>{shortRunId(build.fingerprintRunId)}</code>{#if time} · {formatAgo(build.builtAt, app.now)}{/if}</span>
 {/if}

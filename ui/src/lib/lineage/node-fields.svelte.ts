@@ -6,7 +6,7 @@ export type NodeFieldKey =
 	| 'kind'
 	| 'status'
 	| 'checks'
-	| 'freshness'
+	| 'lastBuilt'
 	| 'description'
 	| 'owner'
 	| 'tags'
@@ -18,7 +18,7 @@ export const NODE_FIELDS: NodeField[] = [
 	{ key: 'kind', label: 'Kind' },
 	{ key: 'status', label: 'Status' },
 	{ key: 'checks', label: 'Checks' },
-	{ key: 'freshness', label: 'Freshness' },
+	{ key: 'lastBuilt', label: 'Last built' },
 	{ key: 'description', label: 'Description' },
 	{ key: 'owner', label: 'Owner' },
 	{ key: 'tags', label: 'Tags' },
@@ -29,7 +29,7 @@ const DEFAULTS: Record<NodeFieldKey, boolean> = {
 	kind: true,
 	status: true,
 	checks: true,
-	freshness: false,
+	lastBuilt: true,
 	description: false,
 	owner: false,
 	tags: false,
@@ -43,7 +43,8 @@ function load(): Record<NodeFieldKey, boolean> {
 	try {
 		const raw = localStorage.getItem(STORAGE_KEY);
 		if (!raw) return { ...DEFAULTS };
-		return { ...DEFAULTS, ...JSON.parse(raw) };
+		const saved = JSON.parse(raw) as Partial<Record<string, boolean>>;
+		return Object.fromEntries(Object.keys(DEFAULTS).map((k) => [k, saved[k] ?? DEFAULTS[k as NodeFieldKey]])) as Record<NodeFieldKey, boolean>;
 	} catch {
 		return { ...DEFAULTS };
 	}

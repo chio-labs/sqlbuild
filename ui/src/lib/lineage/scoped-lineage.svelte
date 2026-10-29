@@ -9,9 +9,23 @@
 	import FlowController from '$lib/lineage/flow-controller.svelte';
 	import { tick } from 'svelte';
 
-	type GraphNode = { id: string; name: string; kind: string; status: 'ok' | 'fail' | 'warn' | 'stale' | 'src'; icon?: string };
+	import { app } from '$lib/state/app.svelte';
 
-	let { focal, graphNodes, graphEdges }: { focal: string; graphNodes: GraphNode[]; graphEdges: [string, string][] } = $props();
+	/** A lineage card: `data` is the asset card's data (see catalog-graph.ts). */
+	type GraphNode = { id: string; name: string; data: Record<string, unknown> };
+
+	let {
+		focal,
+		graphNodes,
+		graphEdges,
+		onExecute
+	}: {
+		focal: string;
+		graphNodes: GraphNode[];
+		graphEdges: [string, string][];
+		/** Opens the run panel on the selection. */
+		onExecute?: (selection: string[]) => void;
+	} = $props();
 
 	const nodeTypes = { asset: AssetNode };
 
@@ -71,7 +85,6 @@
 		return keep;
 	});
 
-	const statusToNode: Record<string, string> = { ok: 'ok', fail: 'fail', warn: 'warn', stale: 'stale', src: 'src' };
 
 	let nodes = $state.raw<Node[]>([]);
 	let edges = $state.raw<Edge[]>([]);
@@ -92,7 +105,7 @@
 				type: 'asset',
 				position: { x: 0, y: 0 },
 				selected: n.id === focal,
-				data: { name: n.name, kind: n.kind, status: statusToNode[n.status], icon: n.icon }
+				data: { ...n.data }
 			}));
 		edges = graphEdges
 			.filter(([s, t]) => keep.has(s) && keep.has(t))
@@ -168,7 +181,12 @@
 
 		<div class="ml-auto flex items-center gap-2.5">
 			<span class="text-[var(--sb-text-faint)] text-[12px]">--select <span class="text-muted-foreground">{selectExpr}</span></span>
-			<button class="bg-primary rounded-[2px] px-3 py-1 text-[12px] font-medium text-white">▷ Execute {effectiveSelection.length > 1 ? `(${effectiveSelection.length})` : ''}</button>
+			<button
+				class="bg-primary rounded-[2px] px-3 py-1 text-[12px] font-medium text-white disabled:opacity-50"
+				disabled={!app.can('run.adhoc')}
+				title={app.can('run.adhoc') ? undefined : 'Requires run.adhoc'}
+				onclick={() => onExecute?.(effectiveSelection.map((id) => graphNodes.find((n) => n.id === id)?.name ?? id))}>▷ Execute {effectiveSelection.length > 1 ? `(${effectiveSelection.length})` : ''}</button
+			>
 		</div>
 	</div>
 

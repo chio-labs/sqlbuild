@@ -10,19 +10,15 @@
 	import PanelRightIcon from '@lucide/svelte/icons/panel-right';
 	import SearchIcon from '@lucide/svelte/icons/search';
 	import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
-	import CopyIcon from '@lucide/svelte/icons/copy';
-	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
 	import RotateCcwIcon from '@lucide/svelte/icons/rotate-ccw';
 	import { layoutGraph } from '$lib/lineage/layout';
 	import { nodeFields } from '$lib/lineage/node-fields.svelte';
 	import { neighbourEdgeIds, tracePath } from '$lib/lineage/trace';
 	import { outlineSql } from '$lib/sql/outline';
-	import { mockModelSql, modelVersions, MODEL_DRIFT } from '$lib/mock/model-sql';
 	import GitCompareIcon from '@lucide/svelte/icons/git-compare';
 	import SqlViewer from '$lib/components/code/sql-viewer.svelte';
 	import CodePreview from '$lib/components/code/code-preview.svelte';
 	import InspectorSection from '$lib/components/lineage/inspector-section.svelte';
-	import Maximize2Icon from '@lucide/svelte/icons/maximize-2';
 	import { tick, untrack } from 'svelte';
 	import FlowController from '$lib/lineage/flow-controller.svelte';
 	import RunPanel from '$lib/run/run-panel.svelte';
@@ -31,6 +27,19 @@
 	import { layoutDag } from '$lib/lineage/graph-layout';
 	import { drawFar, hitTest } from '$lib/lineage/graph-draw';
 	import type { Viewport } from '@xyflow/svelte';
+	import type { CatalogNode } from '$lib/api';
+	import ChoiceFilter from '$lib/components/list/choice-filter.svelte';
+	import StatusLabel from '$lib/components/list/status-label.svelte';
+	import GatedButton from '$lib/components/operate/gated-button.svelte';
+	import BuildSource from '$lib/components/build-area/build-source.svelte';
+	import OutcomeStrip from '$lib/components/build-area/outcome-strip.svelte';
+	import StaleBadges from '$lib/components/build-area/stale-badges.svelte';
+	import { app } from '$lib/state/app.svelte';
+	import { createResource } from '$lib/state/resource.svelte';
+	import { formatAgo, formatStamp } from '$lib/format/time';
+	import { checkOutcomeTone, nodeOutcomeLabel, nodeOutcomeTone, staleReasonDetail, staleReasonLabel } from '$lib/status';
+	import { NODE_KINDS, formatCredits, formatMs, formatNumber, kindLine, nodeKindPlural, relationName, runScopePhaseLabel, shortRunId, sqlVersions } from '$lib/build-area/labels';
+	import { catalogGraph, cardData } from '$lib/lineage/catalog-graph';
 
 	let runOpen = $state(false);
 	let browserOpen = $state(false);
@@ -40,58 +49,32 @@
 
 	const nodeTypes = { asset: AssetNode };
 
-	// Positions are computed by dagre; start at 0,0 and let layout place them.
-	const P = { x: 0, y: 0 };
-
-	// drift is computed by the backend against the last build in this target
-	const withDrift = (ns: Node[]) => ns.map((n) => (MODEL_DRIFT[n.id] ? { ...n, data: { ...n.data, drift: MODEL_DRIFT[n.id] } } : n));
-	let nodes = $state.raw<Node[]>(withDrift([
-		// sources
-		{ id: 'raw_customers', type: 'asset', position: { ...P }, data: { name: 'raw__customers', kind: 'source', status: 'src', icon: 'source' } },
-		{ id: 'raw_orders', type: 'asset', position: { ...P }, data: { name: 'raw__orders', kind: 'source · merge', status: 'src', icon: 'loader', freshness: '8m ago' } },
-		{ id: 'raw_payments', type: 'asset', position: { ...P }, data: { name: 'raw__payments', kind: 'source', status: 'src', icon: 'source' } },
-		{ id: 'load_cust', type: 'asset', position: { ...P }, data: { name: 'load__waffle_cust', kind: 'loader · table', status: 'ok', icon: 'loader', freshness: '8m ago' } },
-		{ id: 'waffle_types', type: 'asset', position: { ...P }, data: { name: 'waffle_types', kind: 'seed', status: 'ok', icon: 'seed' } },
-		// staging
-		{ id: 'stg_customers', type: 'asset', position: { ...P }, data: { name: 'stg_customers', kind: 'view', status: 'ok', checks: '✓ 3', icon: 'view', freshness: '6m ago', columnCount: 5, description: 'Cleaned customers from raw.' } },
-		{ id: 'stg_orders', type: 'asset', position: { ...P }, data: { name: 'stg_orders', kind: 'view', status: 'ok', checks: '✓ 4', icon: 'view', freshness: '6m ago', columnCount: 8, description: 'Cleaned orders from raw.' } },
-		{ id: 'stg_payments', type: 'asset', position: { ...P }, data: { name: 'stg_payments', kind: 'view', status: 'stale', checks: '! 1', checksColor: 'var(--sb-warning)', icon: 'view', freshness: '6m ago', columnCount: 4, description: 'Cleaned payments from raw.' } },
-		// marts mid
-		{ id: 'daily_revenue', type: 'asset', position: { ...P }, data: { name: 'daily_revenue', kind: 'table', status: 'ok', checks: '✓ 1', icon: 'table', freshness: '6m ago', owner: '@analytics', description: 'Daily revenue rollup by completed orders.', columnCount: 3, tags: ['finance'] } },
-		{ id: 'fact_orders', type: 'asset', selected: true, position: { ...P }, data: { name: 'fact_orders', kind: 'table', status: 'stale', checks: '✓ 1', icon: 'table', freshness: '4m ago', owner: '@analytics', description: 'One row per order with payment + customer.', columnCount: 7, tags: ['finance', 'core'] } },
-		// right column
-		{ id: 'dim_customers', type: 'asset', position: { ...P }, data: { name: 'dim_customers', kind: 'table', status: 'stale', checks: '✓ 2', icon: 'table', freshness: '4m ago', owner: '@analytics', description: 'Customer dimension with first/last order.', columnCount: 6, tags: ['core'] } },
-		{ id: 'customer_status', type: 'asset', position: { ...P }, data: { name: 'customer_status', kind: 'incremental · merge', status: 'stale', checks: '✓ 2', icon: 'merge', freshness: '2d ago', owner: '@analytics', description: 'Upserted customer status snapshot.', columnCount: 4 } },
-		{ id: 'order_status_idx', type: 'asset', position: { ...P }, data: { name: 'order_status_idx', kind: 'incremental · delete_insert', status: 'stale', icon: 'delete_insert', freshness: '5m ago', columnCount: 3 } },
-		// far right
-		{ id: 'hourly_order', type: 'asset', position: { ...P }, data: { name: 'hourly_order_act', kind: 'incremental · delete_insert', status: 'stale', icon: 'microbatch', freshness: '5m ago', columnCount: 5 } },
-		{ id: 'daily_activity', type: 'asset', position: { ...P }, data: { name: 'daily_activity', kind: 'incremental · delete_insert', status: 'stale', checks: '✓ 2', icon: 'microbatch', freshness: '1d ago', columnCount: 4 } },
-		{ id: 'hourly_ctx', type: 'asset', position: { ...P }, data: { name: 'hourly_activity_ctx', kind: 'incremental · delete_insert', status: 'fail', checks: '✕ 1', checksColor: 'var(--sb-error)', icon: 'microbatch', freshness: 'failed', columnCount: 6 } }
-	]));
-
-	const E = (s: string, t: string): Edge => ({
-		id: `${s}-${t}`,
-		source: s,
-		target: t,
-		type: 'bezier'
+	// The graph is the catalog: every node in the current snapshot with its
+	// build state. Later refreshes update card data in place so positions,
+	// selection and focus survive.
+	const catalog = createResource((client, scope) => client.listCatalogNodes(scope), ['runs', 'checks', 'snapshot', 'node_status']);
+	const catalogByKey = $derived(new Map((catalog.data ?? []).map((n) => [n.key, n])));
+	const initialFocus = page.url.searchParams.get('select');
+	let nodes = $state.raw<Node[]>([]);
+	let edges = $state.raw<Edge[]>([]);
+	$effect(() => {
+		const data = catalog.data;
+		if (!data || scaleMode) return;
+		untrack(() => {
+			if (!nodes.length) {
+				const graph = catalogGraph(data);
+				const focus = data.some((n) => n.key === initialFocus) ? initialFocus : 'fact_orders';
+				nodes = graph.nodes.map((n) => (n.id === focus ? { ...n, selected: true } : n));
+				edges = graph.edges;
+				return;
+			}
+			const byKey = new Map(data.map((n) => [n.key, n]));
+			nodes = nodes.map((n) => {
+				const fresh = byKey.get(n.id);
+				return fresh ? { ...n, data: { ...cardData(fresh), dimmed: n.data.dimmed } } : n;
+			});
+		});
 	});
-
-	let edges = $state.raw<Edge[]>([
-		E('raw_customers', 'stg_customers'),
-		E('raw_orders', 'stg_orders'),
-		E('raw_payments', 'stg_payments'),
-		E('load_cust', 'stg_customers'),
-		E('stg_customers', 'fact_orders'),
-		E('stg_orders', 'fact_orders'),
-		E('stg_payments', 'fact_orders'),
-		E('stg_customers', 'daily_revenue'),
-		E('fact_orders', 'dim_customers'),
-		E('fact_orders', 'customer_status'),
-		E('fact_orders', 'order_status_idx'),
-		E('fact_orders', 'hourly_order'),
-		E('fact_orders', 'daily_activity'),
-		E('fact_orders', 'hourly_ctx')
-	]);
 
 	// Scale testing: /lineage?models=2000 swaps in a synthetic warehouse-shaped graph.
 	// Positions are precomputed (stand-in for `sqb compile` output) instead of
@@ -112,8 +95,8 @@
 			return { ...n, position: { x: g.x, y: g.y }, hidden: true, initialWidth: 236, initialHeight: 61 };
 		});
 		scaleStartId =
-			(nodes.find((n) => n.data.drift === 'direct' && /^(fct|dim|mart)/.test(String(n.data.name))) ??
-				nodes.find((n) => n.data.drift === 'direct') ??
+			(nodes.find((n) => n.data.stale === 'changed' && /^(fct|dim|mart)/.test(String(n.data.name))) ??
+				nodes.find((n) => n.data.stale === 'changed') ??
 				nodes[nodes.length - 1]).id;
 		nodes = nodes.map((n) => (n.id === scaleStartId ? { ...n, selected: true } : n));
 		edges = synthetic.edges.map((e) => ({ ...e, hidden: true }));
@@ -243,8 +226,9 @@
 		if (edgesChanged) edges = nextEdges;
 
 		let nodesChanged = false;
+		const filtering = filterActive;
 		const nextNodes = nodes.map((n) => {
-			const dimmed = !!l && !l.nodes.has(n.id);
+			const dimmed = (!!l && !l.nodes.has(n.id)) || (filtering && !matchesFilter(n));
 			if (n.data.dimmed !== dimmed) nodesChanged = true;
 			return dimmed === n.data.dimmed ? n : { ...n, data: { ...n.data, dimmed } };
 		});
@@ -258,49 +242,64 @@
 	const runSelection = $derived(selectedNodes.slice(0, 50).map((n) => n.data.name as string));
 	const primary = $derived(selectedNodes[0] ?? nodes.find((n) => n.id === scaleStartId));
 	const primarySlug = $derived(primary?.data.name ?? '');
-	const primaryStatus = $derived(String(primary?.data.status ?? 'src'));
-	const primaryStatusLabel = $derived(
-		primaryStatus === 'ok'
-			? 'current'
-			: primaryStatus === 'warn'
-				? 'warning'
-				: primaryStatus === 'stale'
-					? 'stale'
-					: primaryStatus === 'fail'
-						? 'failed'
-						: 'source'
+	// Inspector detail for the primary selection; the scale-test graph is synthetic, so it has none.
+	const detail = createResource(
+		(client, scope) => (scaleMode || !primarySlug ? Promise.resolve(null) : client.getCatalogNode(scope, String(primarySlug))),
+		['runs', 'checks', 'snapshot', 'node_status']
 	);
-	const primaryStatusColor = $derived(
-		primaryStatus === 'ok'
-			? 'var(--sb-success)'
-			: primaryStatus === 'warn'
-				? 'var(--sb-warning)'
-				: primaryStatus === 'stale'
-					? 'var(--sb-stale)'
-					: primaryStatus === 'fail'
-						? 'var(--sb-error)'
-						: 'var(--sb-text-faint)'
-	);
-	// sources/seeds/loaders have no model SQL
-	const primaryKind = $derived(String(primary?.data.kind ?? '').toLowerCase());
-	const hasSql = $derived(!/source|seed|loader/.test(primaryKind));
-	const groupOf = (name: string) =>
-		/^(raw__|load)/.test(name) || name === 'waffle_types' ? 'sources' : name.startsWith('stg_') ? 'staging' : 'marts';
+	const d = $derived(detail.data && detail.data.key === primarySlug ? detail.data : null);
+	const isSource = $derived(d?.kind === 'source');
+	const hasSql = $derived(!!d?.sql);
+
+	// ---- toolbar filters: non-matching nodes are dimmed ----
+	let kindFilter = $state('');
+	let groupFilter = $state('');
+	let ownerFilter = $state('');
+	let statusFilter = $state<'' | 'stale' | 'changed' | 'behind' | 'failed'>('');
+	const filterActive = $derived(!!(kindFilter || groupFilter || ownerFilter || statusFilter));
+	function matchesFilter(n: Node): boolean {
+		const c = catalogByKey.get(n.id);
+		if (!c) return !filterActive;
+		if (kindFilter && c.kind !== kindFilter) return false;
+		if (groupFilter && c.group !== groupFilter) return false;
+		if (ownerFilter && !c.owner.includes(ownerFilter)) return false;
+		return matchesFilterStatus(c, statusFilter);
+	}
+	function matchesFilterStatus(c: CatalogNode, f: typeof statusFilter): boolean {
+		if (f === 'stale') return c.stale.length > 0;
+		if (f === 'changed') return c.stale.some((r) => r.reason !== 'behind');
+		if (f === 'behind') return c.stale.some((r) => r.reason === 'behind');
+		if (f === 'failed') return c.lastOutcome === 'failed';
+		return true;
+	}
+	const catalogNodes = $derived<CatalogNode[]>(catalog.data ?? []);
+	const kindOptions = $derived(NODE_KINDS.filter((k) => catalogNodes.some((n) => n.kind === k)).map((k) => ({ value: k, label: nodeKindPlural[k], count: catalogNodes.filter((n) => n.kind === k).length })));
+	const groupOptions = $derived([...new Set(catalogNodes.map((n) => n.group))].map((g) => ({ value: g, label: g, count: catalogNodes.filter((n) => n.group === g).length })));
+	const ownerOptions = $derived([...new Set(catalogNodes.flatMap((n) => n.owner))].sort().map((o) => ({ value: o, label: o, count: catalogNodes.filter((n) => n.owner.includes(o)).length })));
+	const statusOptions = [
+		{ value: 'stale' as const, label: 'Stale' },
+		{ value: 'changed' as const, label: 'Stale · changed' },
+		{ value: 'behind' as const, label: 'Stale · behind' },
+		{ value: 'failed' as const, label: 'Last build failed' }
+	];
+
+	const groupOf = (node: Node) => String(node.data.group ?? (String(node.data.kind).startsWith('source') ? 'sources' : 'models'));
 	let collapsedGroups = $state<Set<string>>(new Set());
 	function toggleGroup(g: string) {
 		const next = new Set(collapsedGroups);
 		next.has(g) ? next.delete(g) : next.add(g);
 		collapsedGroups = next;
 	}
-	const browserGroups = $derived(
-		['sources', 'staging', 'marts']
-			.map((g) => ({ name: g, nodes: browserNodes.filter((n) => groupOf(String(n.data.name)) === g) }))
-			.filter((g) => g.nodes.length)
-	);
 	const browserNodes = $derived(
 		[...nodes]
 			.filter((node) => String(node.data.name ?? '').toLowerCase().includes(modelQuery.trim().toLowerCase()))
 			.sort((left, right) => String(left.data.name).localeCompare(String(right.data.name)))
+	);
+
+	const browserGroups = $derived(
+		[...new Set(browserNodes.map(groupOf))]
+			.map((g) => ({ name: g, nodes: browserNodes.filter((n) => groupOf(n) === g) }))
+			.filter((g) => g.nodes.length)
 	);
 
 	// immediate upstream/downstream of the selected model (for the Lineage tab)
@@ -308,40 +307,23 @@
 	const upstream = $derived(primary ? edges.filter((e) => e.target === primary.id).map((e) => nameOf(e.source)) : []);
 	const downstream = $derived(primary ? edges.filter((e) => e.source === primary.id).map((e) => nameOf(e.target)) : []);
 
-	// --- mock model detail (Columns / SQL / Runs) ---
-	type Col = { name: string; type: string; desc: string; flags: string[] };
-	const columns: Col[] = [
-		{ name: 'order_id', type: 'BIGINT', desc: 'Primary key, one row per order', flags: ['pk', 'not_null', 'unique'] },
-		{ name: 'customer_id', type: 'BIGINT', desc: 'FK to dim_customers', flags: ['not_null', 'rel'] },
-		{ name: 'order_status', type: 'VARCHAR', desc: 'completed | pending | cancelled', flags: ['accepted_values'] },
-		{ name: 'total_cents', type: 'INTEGER', desc: 'Order total in cents', flags: [] },
-		{ name: 'payment_method', type: 'VARCHAR', desc: 'card | cash | voucher', flags: [] },
-		{ name: 'ordered_at', type: 'TIMESTAMP', desc: 'Order creation time (UTC)', flags: ['not_null'] },
-		{ name: 'is_first_order', type: 'BOOLEAN', desc: 'First order for this customer', flags: [] }
-	];
-	const flagColor: Record<string, string> = {
-		pk: 'var(--primary)',
-		not_null: 'var(--sb-success)',
-		unique: 'var(--sb-secondary)',
-		rel: 'var(--sb-stale)',
-		accepted_values: 'var(--sb-warning)'
-	};
-
 	let sqlMode = $state<'raw' | 'compiled'>('raw');
-	const sqlRaw = $derived(mockModelSql(String(primary?.data.name ?? ''), String(primary?.data.kind ?? 'table'), upstream.map(String), String(primary?.data.description ?? primary?.data.name ?? '')));
+	const sqlRaw = $derived(d?.sql?.raw ?? '');
 	let sqlOpen = $state(false);
 	let viewerMode = $state<'raw' | 'compiled' | 'diff' | 'drift'>('raw');
-	const primaryDrift = $derived(primary ? (MODEL_DRIFT[primary.id] ?? (primary.data.drift as typeof MODEL_DRIFT[string] | undefined)) : undefined);
-	const sqlVersions = $derived(modelVersions(String(primary?.data.name ?? ''), sqlRaw));
-	const upstreamDriftNote = $derived(
-		primaryDrift === 'upstream'
-			? `${upstream.filter((u) => MODEL_DRIFT[String(nodes.find((n) => n.data.name === u)?.id)]).join(', ') || 'an upstream model'} changed since this model’s last build.`
-			: undefined
+	const changed = $derived(d?.stale.find((r) => r.reason === 'changed'));
+	const primaryDrift = $derived(
+		changed && changed.reason === 'changed' ? (changed.change === 'compiled' ? 'compiled' : 'direct') : d?.stale.some((r) => r.reason === 'changed_upstream') ? 'upstream' : undefined
 	);
+	const versions = $derived(d ? sqlVersions(d.builds, app.now) : []);
+	const upstreamDriftNote = $derived.by(() => {
+		const r = d?.stale.find((s) => s.reason === 'changed_upstream');
+		return r && r.reason === 'changed_upstream' ? `${r.upstream.join(', ')} changed since this model’s last build.` : undefined;
+	});
 	const driftLabel: Record<string, string> = {
-		direct: 'Direct change',
+		direct: 'Definition changed',
 		compiled: 'Compiled SQL differs',
-		upstream: 'Upstream changed'
+		upstream: 'Upstream definition changed'
 	};
 	const sqlOutline = $derived(outlineSql(sqlRaw));
 	function openSql(mode: 'raw' | 'compiled' | 'diff' | 'drift' = sqlMode) {
@@ -352,35 +334,6 @@
 		const id = nodes.find((node) => node.data.name === name)?.id;
 		if (id) selectModel(id);
 	}
-	const checkRows = [
-		{ name: 'not_null(order_id)', ok: true, phase: 'pre-promotion' },
-		{ name: 'unique(order_id)', ok: true, phase: 'pre-promotion' },
-		{ name: 'relationships(customer_id)', ok: true, phase: 'pre-promotion' }
-	];
-	const recentBuilds = ['ok', 'ok', 'ok', 'ok', 'warn', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'fail', 'ok', 'ok', 'ok', 'ok', 'ok', 'warn', 'ok', 'ok', 'ok', 'ok', 'ok'];
-
-	type MiniRun = {
-		id: string;
-		job: string;
-		status: 'ok' | 'fail' | 'warn';
-		when: string;
-		duration: string;
-		barHeight: number;
-		detail?: string;
-	};
-	const modelRuns: MiniRun[] = [
-		{ id: 'run-9d21', job: 'nightly_build', status: 'ok', when: '4m ago', duration: '0.04s', barHeight: 10 },
-		{ id: 'run-91cd', job: 'marts_only', status: 'ok', when: '1h ago', duration: '0.05s', barHeight: 12 },
-		{ id: 'run-2b70', job: 'nightly_build', status: 'fail', when: '3h ago', duration: '0.08s', barHeight: 24, detail: 'Audit unique_order_id returned 3 rows' },
-		{ id: 'run-7a14', job: 'nightly_build', status: 'warn', when: '5h ago', duration: '0.06s', barHeight: 16, detail: 'Source freshness threshold exceeded' },
-		{ id: 'run-c40e', job: 'checks_only', status: 'ok', when: 'Yesterday', duration: '0.05s', barHeight: 12 }
-	];
-	const runStatusColor: Record<string, string> = {
-		ok: 'var(--sb-success)',
-		fail: 'var(--sb-error)',
-		warn: 'var(--sb-warning)'
-	};
-	const runStatusLabel: Record<string, string> = { ok: 'Success', fail: 'Failed', warn: 'Warning' };
 
 	async function selectModel(id: string) {
 		neighbourhoodOnly = false;
@@ -501,8 +454,8 @@
 </script>
 
 <AppTopbar title="Lineage">
-	<Button variant="outline" size="sm">↻ Refresh</Button>
-	<Button size="sm" onclick={() => (runOpen = true)}>▷ Execute</Button>
+	<Button variant="outline" size="sm" onclick={() => catalog.refresh()}>↻ Refresh</Button>
+	<GatedButton requires="run.adhoc" variant="default" onclick={() => (runOpen = true)}>▷ Execute{runSelection.length ? ` ${runSelection.length}` : ''}</GatedButton>
 </AppTopbar>
 
 <RunPanel bind:open={runOpen} selection={runSelection} />
@@ -537,11 +490,14 @@
 			</div>
 		{/if}
 	</div>
-	<div class="toolbar-group">
-		{#each ['Kind', 'Group', 'Status'] as f (f)}
-			<button class="toolbar-filter">{f} <ChevronDownIcon size={13} /></button>
-		{/each}
-	</div>
+	{#if !scaleMode}
+		<div class="toolbar-group">
+			<ChoiceFilter label="Kind" bind:value={kindFilter} options={kindOptions} />
+			<ChoiceFilter label="Group" bind:value={groupFilter} options={groupOptions} />
+			<ChoiceFilter label="Owner" bind:value={ownerFilter} options={ownerOptions} />
+			<ChoiceFilter label="Status" bind:value={statusFilter} options={statusOptions.map((o) => ({ ...o, count: catalogNodes.filter((c) => matchesFilterStatus(c, o.value)).length }))} />
+		</div>
+	{/if}
 	<span class="toolbar-sep"></span>
 	<NodeFieldsPopover />
 	<button
@@ -555,9 +511,9 @@
 	</button>
 	<button onclick={resetLayout} class="toolbar-action" title="Reset layout"><RotateCcwIcon size={13} /> Reset</button>
 	<div class="status-summary ml-auto">
-		{#each [['ok', 'var(--sb-success)'], ['warn', 'var(--sb-warning)'], ['stale', 'var(--sb-stale)'], ['fail', 'var(--sb-error)']] as [st, c] (st)}
-			{@const n = nodes.filter((x) => x.data.status === st).length}
-			{#if n}<span><i style:background={c}></i>{n}</span>{/if}
+		{#each [['ok', 'var(--sb-success)', 'last build succeeded'], ['warn', 'var(--sb-warning)', 'last build warned'], ['stale', 'var(--sb-stale)', 'stale'], ['fail', 'var(--sb-error)', 'last build failed']] as [st, c, label] (st)}
+			{@const n = nodes.filter((x) => (st === 'stale' ? !!x.data.stale : x.data.status === st)).length}
+			{#if n}<span title="{n} {label}"><i style:background={c}></i>{n}</span>{/if}
 		{/each}
 	</div>
 	<button
@@ -631,9 +587,9 @@
 		{/if}
 	</div>
 
-	{#if sqlOpen && hasSql}
+	{#if sqlOpen && d?.sql}
 		<div class="sql-drawer">
-			<SqlViewer name={String(primary?.data.name ?? '')} raw={sqlRaw} bind:mode={viewerMode} versions={sqlVersions} upstreamNote={upstreamDriftNote} onRef={selectByName} onClose={() => (sqlOpen = false)} />
+			<SqlViewer name={d.key} raw={d.sql.raw} compiled={d.sql.compiled} bind:mode={viewerMode} {versions} upstreamNote={upstreamDriftNote} onRef={selectByName} onClose={() => (sqlOpen = false)} />
 		</div>
 	{/if}
 
@@ -663,99 +619,117 @@
 			<div class="inspector-head">
 				<div class="flex items-center gap-2">
 					<span class="truncate text-[15px] font-semibold">{primary?.data.name}</span>
-					<a href="/catalog/{primarySlug}" class="head-link ml-auto" title="Open in Catalog">Catalog ↗</a>
+					{#if d}<a href="/catalog/{primarySlug}" class="head-link ml-auto" title="Open in Catalog">Catalog ↗</a>{/if}
 				</div>
 				<div class="inspector-meta">
-					<span>{primary?.data.kind}</span>
-					<span>marts</span>
-					<span>@analytics</span>
+					<span>{d ? kindLine(d) : primary?.data.kind}</span>
+					{#if d}<span>{d.group}</span>{#if d.owner.length}<span>{d.owner.join(', ')}</span>{/if}{/if}
 				</div>
 			</div>
 		{/if}
 		<div class="insp-body">
-			{#if hasSql}
-				<InspectorSection title="Latest build">
-					{#snippet meta()}<a class="section-link" href="/runs/run-9d21">View run →</a>{/snippet}
-					<div class="status-top">
-						<span class="status-chip" style:--tone={primaryStatusColor}><i></i>{primaryStatus === 'ok' ? 'Materialized' : primaryStatusLabel.charAt(0).toUpperCase() + primaryStatusLabel.slice(1)}</span>
-						<span class="status-when">{primary?.data.freshness ?? '—'}</span>
-					</div>
-					<div class="status-stats">
-						<div><span>Duration</span><b>0.04s</b></div>
-						<div><span>Rows</span><b>1,284</b><em class="up">+12</em></div>
-						<div><span>Checks</span><b>{checkRows.filter((c) => c.ok).length}/{checkRows.length}</b></div>
-					</div>
-					<div class="build-strip" title="Last 24 builds">
-						{#each recentBuilds as b, i (i)}<i class={b}></i>{/each}
-					</div>
-					<div class="build-strip-caption"><span>Last 24 builds</span><span>now</span></div>
-					{#if primaryDrift}
-						<button class="drift-hint {primaryDrift}" onclick={() => openSql('drift')}>
-							<GitCompareIcon size={14} />
-							<span><b>Drift</b> · {driftLabel[primaryDrift]} since the last build</span>
-							<em>View drift →</em>
-						</button>
-					{/if}
+			{#if scaleMode}
+				<InspectorSection title="Scale test">
+					<p class="insp-description">A synthetic graph for layout and rendering at scale; nodes have no catalog detail.</p>
+				</InspectorSection>
+			{:else if !d}
+				<InspectorSection title="Details"><p class="insp-description">{detail.error ?? 'Loading…'}</p></InspectorSection>
+			{:else if isSource}
+				<InspectorSection title="Source">
 					<dl class="kv">
-						<div><dt>Run</dt><dd><a class="mono link" href="/runs/run-9d21">run-9d21</a></dd></div>
-						<div><dt>Job</dt><dd><a class="link" href="/jobs/nightly_build">nightly_build</a> <span class="muted">· schedule</span></dd></div>
-						<div><dt>Started</dt><dd>2026-05-31 11:56 <span class="muted">· {primary?.data.freshness ?? ''}</span></dd></div>
-						<div><dt>Target</dt><dd class="mono">waffle_shop.prod.{primarySlug}</dd></div>
+						<div><dt>Relation</dt><dd class="mono">{relationName(d.relation)}</dd></div>
+						<div><dt>Freshness</dt><dd>{d.sourceFreshness ? d.sourceFreshness.status : 'no check'}</dd></div>
+						<div><dt>Newest data</dt><dd>{d.sourceFreshness?.loadedAt ? `loaded ${formatAgo(d.sourceFreshness.loadedAt, app.now)}` : '—'}</dd></div>
+						<div><dt>Thresholds</dt><dd>{d.sourceFreshness ? `warn ${Math.round((d.sourceFreshness.warnAfterSeconds ?? 0) / 60)}m · error ${Math.round((d.sourceFreshness.errorAfterSeconds ?? 0) / 60)}m` : '—'}</dd></div>
 					</dl>
 				</InspectorSection>
 			{:else}
-				<InspectorSection title="Source">
+				<InspectorSection title="Last build">
+					{#snippet meta()}{#if d.lastBuild?.runId}<a class="section-link" href="/runs/{d.lastBuild.runId}">View run →</a>{/if}{/snippet}
+					<div class="status-top">
+						{#if d.lastOutcome}<StatusLabel tone={nodeOutcomeTone[d.lastOutcome]} label={nodeOutcomeLabel[d.lastOutcome]} />{:else}<StatusLabel tone="var(--sb-text-faint)" label="Not built" muted />{/if}
+						<StaleBadges reasons={d.stale} />
+					</div>
+					<div class="status-stats">
+						<div><span>Duration</span><b>{formatMs(d.lastDurationMs)}</b></div>
+						<div><span>Rows</span><b>{formatNumber(d.lastRows)}</b>{#if d.rowsDelta}<em class:up={d.rowsDelta > 0}>{d.rowsDelta > 0 ? '+' : ''}{formatNumber(d.rowsDelta)}</em>{/if}</div>
+						<div><span>Checks</span><b>{d.checks.total ? `${d.checks.passing}/${d.checks.total}` : '—'}</b></div>
+						{#if d.cost}<div><span>Cost</span><b>{formatCredits(d.cost.perBuild)}</b></div>{/if}
+					</div>
+					{#if d.recentOutcomes.length}
+						<div class="strip-wrap"><OutcomeStrip outcomes={d.recentOutcomes} tones={nodeOutcomeTone} caption="Last {d.recentOutcomes.length} builds" /></div>
+					{/if}
+					{#each d.stale as r, i (i)}
+						<button class="drift-hint {r.reason === 'changed_upstream' ? 'upstream' : r.reason}" onclick={() => (r.reason === 'behind' ? undefined : openSql('drift'))} disabled={r.reason === 'behind' || !hasSql}>
+							<GitCompareIcon size={14} />
+							<span><b>Stale · {staleReasonLabel(r)}</b> · {staleReasonDetail(r)}</span>
+							{#if r.reason !== 'behind' && hasSql}<em>View drift →</em>{/if}
+						</button>
+					{/each}
 					<dl class="kv">
-						<div><dt>Location</dt><dd class="mono">raw.{primary?.data.name}</dd></div>
-						<div><dt>Freshness</dt><dd>{primary?.data.freshness ?? 'unknown'}</dd></div>
-						<div><dt>Loaded by</dt><dd>external</dd></div>
+						<div><dt>Last built</dt><dd><BuildSource build={d.lastBuild} /></dd></div>
+						{#if d.lastBuild?.jobKey}<div><dt>Job</dt><dd><a class="link" href="/jobs/{d.lastBuild.jobKey}">{d.lastBuild.jobKey}</a></dd></div>{/if}
+						{#if d.lastBuild}<div><dt>Started</dt><dd>{formatStamp(d.lastBuild.builtAt)}</dd></div>{/if}
+						<div><dt>Relation</dt><dd class="mono">{relationName(d.relation)}</dd></div>
 					</dl>
 				</InspectorSection>
 			{/if}
 
-			{#if primary?.data.description}
+			{#if d?.description}
 				<InspectorSection title="Description">
-					<p class="insp-description">{primary.data.description}</p>
+					<p class="insp-description">{d.description}</p>
 				</InspectorSection>
 			{/if}
 
-			{#if hasSql}
+			{#if d?.sql}
 				<InspectorSection title="SQL">
 					{#snippet meta()}<span>{sqlRaw.split('\n').length} lines</span><button class="section-link" onclick={() => openSql()}>Open →</button>{/snippet}
-					<CodePreview file="{primarySlug}.sql" code={sqlRaw} bind:mode={sqlMode} maxLines={14} onOpen={() => openSql()} />
+					<CodePreview file="{primarySlug}.sql" code={d.sql.raw} compiled={d.sql.compiled} bind:mode={sqlMode} maxLines={14} onOpen={() => openSql()} />
+				</InspectorSection>
+			{:else if d?.code}
+				<InspectorSection title="Code">
+					<CodePreview file={d.code.file} code={d.code.source} language="text" maxLines={14} />
 				</InspectorSection>
 			{/if}
 
-			<InspectorSection title="Checks">
-				{#snippet meta()}<span>{checkRows.filter((c) => c.ok).length} of {checkRows.length} passing</span>{/snippet}
-				{#each checkRows as c (c.name)}
-					<div class="check-row">
-						<i style:background={c.ok ? 'var(--sb-success)' : 'var(--sb-error)'}></i><code>{c.name}</code>
-						<span>{c.phase}</span>
-					</div>
-				{/each}
-			</InspectorSection>
-
-			<InspectorSection title="Columns">
-				{#snippet meta()}<a class="section-link" href="/catalog/{primarySlug}?tab=columns">All {columns.length} →</a>{/snippet}
-				<dl class="kv">
-					{#each columns.slice(0, 6) as c (c.name)}
-						<div><dt class="mono fg">{c.name}</dt><dd class="muted">{c.desc}</dd><dd class="mono muted type">{c.type.toLowerCase()}</dd></div>
+			{#if d?.checkResults.length}
+				<InspectorSection title="Checks">
+					{#snippet meta()}<span>{d.checks.passing} of {d.checks.total} passing</span>{/snippet}
+					{#each d.checkResults as c (c.id)}
+						<a class="check-row" href="/checks/{c.id}">
+							<i style:background={checkOutcomeTone[c.latest?.outcome ?? 'skipped']}></i><code>{c.name}</code>
+							<span>{runScopePhaseLabel[c.runScopePhase]}</span>
+						</a>
 					{/each}
-				</dl>
-			</InspectorSection>
+				</InspectorSection>
+			{/if}
 
-			<InspectorSection title="Recent runs">
-				{#snippet meta()}<a class="section-link" href="/catalog/{primarySlug}?tab=runs">All →</a>{/snippet}
-				{#each modelRuns.slice(0, 3) as run (run.id)}
-					<a class="mini-run" href="/runs/{run.id}">
-						<i style:background={runStatusColor[run.status]}></i>
-						<span class="mini-run-main"><b>{runStatusLabel[run.status]}</b><span>{run.job}</span></span>
-						<span class="mini-run-meta">{run.duration} · {run.when}</span>
-						{#if run.detail}<em>{run.detail}</em>{/if}
-					</a>
-				{/each}
-			</InspectorSection>
+			{#if d?.columns.length}
+				<InspectorSection title="Columns">
+					{#snippet meta()}<a class="section-link" href="/catalog/{primarySlug}?tab=columns">All {d.columns.length} →</a>{/snippet}
+					<dl class="kv">
+						{#each d.columns.slice(0, 6) as c (c.name)}
+							<div><dt class="mono fg">{c.name}</dt><dd class="muted">{c.description}</dd><dd class="mono muted type">{c.type}</dd></div>
+						{/each}
+					</dl>
+				</InspectorSection>
+			{/if}
+
+			{#if d && !isSource}
+				<InspectorSection title="Recent runs">
+					{#snippet meta()}<a class="section-link" href="/catalog/{primarySlug}?tab=runs">All →</a>{/snippet}
+					{#each d.runs.slice(0, 3) as run, i (i)}
+						<a class="mini-run" href={run.runId ? `/runs/${run.runId}` : undefined}>
+							<i style:background={nodeOutcomeTone[run.outcome]}></i>
+							<span class="mini-run-main"><b>{nodeOutcomeLabel[run.outcome]}</b><span>{run.jobKey ?? (run.runId ? 'ad hoc' : `outside the scheduler · ${shortRunId(run.fingerprintRunId ?? '')}`)}</span></span>
+							<span class="mini-run-meta">{formatMs(run.durationMs)} · {formatAgo(run.startedAt, app.now)}</span>
+							{#if run.message}<em>{run.message}</em>{/if}
+						</a>
+					{:else}
+						<span class="section-meta">No builds recorded in this target.</span>
+					{/each}
+				</InspectorSection>
+			{/if}
 
 			<InspectorSection title="Dependencies">
 				{#snippet meta()}<span>{upstream.length} up · {downstream.length} down</span>{/snippet}
@@ -775,13 +749,18 @@
 				</div>
 			</InspectorSection>
 
-			<InspectorSection title="Definition">
-				<dl class="kv">
-					{#each [['Materialized', sqlOutline.config.find((c) => c.key === 'materialized')?.value ?? 'table'], ['Unique key', sqlOutline.config.find((c) => c.key === 'unique_key')?.value ?? '—'], ['Group', 'marts'], ['Owner', '@analytics'], ['Tags', 'finance, core'], ['Fingerprint', 'a3f1…9c2']] as [k, v] (k)}
-						<div><dt>{k}</dt><dd class:mono={k === 'Fingerprint' || k === 'Unique key'}>{v}</dd></div>
-					{/each}
-				</dl>
-			</InspectorSection>
+			{#if d}
+				<InspectorSection title="Definition">
+					<dl class="kv">
+						<div><dt>Kind</dt><dd>{kindLine(d)}</dd></div>
+						<div><dt>Unique key</dt><dd class="mono">{sqlOutline.config.find((c) => c.key === 'unique_key')?.value ?? '—'}</dd></div>
+						<div><dt>Group</dt><dd>{d.group}</dd></div>
+						<div><dt>Owner</dt><dd>{d.owner.join(', ') || '—'}</dd></div>
+						<div><dt>Tags</dt><dd>{d.tags.join(', ') || '—'}</dd></div>
+						<div><dt>Fingerprint</dt><dd class="mono" title="As built in this target">{d.lastBuild?.fingerprint.slice(0, 12) ?? '—'}</dd></div>
+					</dl>
+				</InspectorSection>
+			{/if}
 		</div>
 	</aside>
 	</div>
@@ -1326,31 +1305,9 @@
 		gap: 10px;
 		font-size: 12.5px;
 	}
-	.status-chip {
-		display: inline-flex;
-		align-items: center;
-		gap: 7px;
-		color: var(--foreground);
-		font-weight: 600;
-	}
-	.status-chip i {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background: var(--tone);
-		box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 20%, transparent);
-	}
-	.status-when {
-		color: var(--muted-foreground);
-	}
-	.status-run {
-		margin-left: auto;
-		color: var(--primary);
-		font: 12px var(--font-mono);
-	}
 	.status-stats {
 		display: grid;
-		grid-template-columns: repeat(3, 1fr);
+		grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
 		gap: 12px;
 		margin-top: 14px;
 	}
@@ -1371,31 +1328,6 @@
 	}
 	.status-stats em.up {
 		color: var(--sb-success);
-	}
-	.build-strip {
-		display: flex;
-		gap: 2px;
-		height: 14px;
-		margin-top: 14px;
-	}
-	.build-strip i {
-		flex: 1;
-		border-radius: 2px;
-		background: var(--sb-success);
-		opacity: 0.7;
-	}
-	.build-strip i.warn {
-		background: var(--sb-warning);
-	}
-	.build-strip i.fail {
-		background: var(--sb-error);
-	}
-	.build-strip-caption {
-		display: flex;
-		justify-content: space-between;
-		margin-top: 5px;
-		color: var(--sb-text-faint);
-		font-size: 11px;
 	}
 	.deps {
 		display: grid;
@@ -1557,6 +1489,24 @@
 	}
 	.drift-hint.upstream {
 		border-style: dashed;
+	}
+	.drift-hint.behind {
+		border-color: color-mix(in srgb, var(--sb-warning) 35%, var(--border));
+	}
+	.drift-hint.behind :global(svg) {
+		color: var(--sb-warning);
+	}
+	.drift-hint:disabled {
+		cursor: default;
+	}
+	.drift-hint:disabled:hover {
+		background: transparent;
+	}
+	.strip-wrap {
+		margin-top: 14px;
+	}
+	.status-top {
+		flex-wrap: wrap;
 	}
 	.drift-hint b {
 		font-weight: 600;

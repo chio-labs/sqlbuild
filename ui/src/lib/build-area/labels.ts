@@ -134,8 +134,8 @@ export function buildSourceLabel(build: Pick<NodeBuild, 'runId' | 'fingerprintRu
 export function sqlVersions(builds: BuiltDefinition[], now: number): SqlVersion[] {
 	return builds.map((b, i) => ({
 		id: i === 0 ? 'built' : b.build.fingerprintRunId,
-		label: i === 0 ? 'Last build' : `Build ${b.build.runId ?? shortRunId(b.build.fingerprintRunId)}`,
-		detail: `${buildSourceLabel(b.build)} · ${formatAgo(b.build.builtAt, now)} · ${formatStamp(b.build.builtAt)}`,
+		label: i === 0 ? 'Last build' : b.build.runId ? `Build ${b.build.runId}` : 'Build outside the scheduler',
+		detail: `${i === 0 || !b.build.runId ? `${buildSourceLabel(b.build)} · ` : ''}${formatAgo(b.build.builtAt, now)} · ${formatStamp(b.build.builtAt)}`,
 		raw: b.raw,
 		compiled: b.compiled
 	}));

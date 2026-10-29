@@ -13,24 +13,30 @@
 		Repeat,
 		Columns3,
 		User,
+		Workflow,
 		type Icon as IconType
 	} from '@lucide/svelte';
 	import { nodeFields } from '$lib/lineage/node-fields.svelte';
+	import { formatAgo } from '$lib/format/time';
+	import { app } from '$lib/state/app.svelte';
 
 	type AssetData = {
 		name: string;
 		kind: string;
-		status: 'ok' | 'fail' | 'warn' | 'stale' | 'run' | 'src';
+		/** The last build outcome; staleness is shown separately. */
+		status: 'ok' | 'fail' | 'warn' | 'run' | 'src' | 'none';
+		/** The main stale reason, if any. */
+		stale?: 'changed' | 'compiled' | 'upstream' | 'behind';
 		checks?: string;
 		checksColor?: string;
 		dimmed?: boolean;
 		icon?: string;
-		freshness?: string;
+		/** When the node was last built, or a source last loaded. */
+		lastBuiltAt?: string;
 		description?: string;
-		owner?: string;
+		owner?: string[];
 		tags?: string[];
 		columnCount?: number;
-		drift?: 'direct' | 'compiled' | 'upstream';
 	};
 
 	let { data, selected }: NodeProps = $props();
@@ -41,17 +47,24 @@
 		ok: 'var(--sb-success)',
 		fail: 'var(--sb-error)',
 		warn: 'var(--sb-warning)',
-		stale: 'var(--sb-stale)',
 		run: 'var(--sb-running)',
-		src: 'var(--sb-text-faint)'
+		src: 'var(--sb-text-faint)',
+		none: 'var(--sb-text-faint)'
 	};
 	const statusLabel: Record<string, string> = {
-		ok: 'Materialized',
+		ok: 'Success',
 		fail: 'Failed',
 		warn: 'Warning',
-		stale: 'Stale',
 		run: 'Running',
-		src: 'External source'
+		src: 'Source',
+		none: 'Not built'
+	};
+	const staleLabel: Record<string, string> = { changed: 'changed', compiled: 'changed', upstream: 'upstream', behind: 'behind' };
+	const staleTitle: Record<string, string> = {
+		changed: 'Stale · changed: the definition differs from what was last built in this target',
+		compiled: 'Stale · changed: the compiled SQL differs from what was last built in this target',
+		upstream: 'Stale · changed (upstream): an upstream definition changed since the last build',
+		behind: 'Stale · behind: upstream has newer data than the last build'
 	};
 	const icons: Record<string, typeof IconType> = {
 		source: Database,
@@ -62,17 +75,18 @@
 		merge: GitMerge,
 		delete_insert: Repeat,
 		microbatch: Layers,
+		task: Workflow,
 		fn: FunctionSquare
 	};
 	const Glyph = $derived(icons[d.icon ?? ''] ?? Table2);
-	const tone = $derived(statusColor[d.status]);
+	const tone = $derived(statusColor[d.status] ?? statusColor.none);
 	const kindShort = $derived(d.kind.split(' · ')[0]);
-	const when = $derived(d.status === 'src' ? '' : d.status === 'fail' ? '' : (d.freshness ?? ''));
+	const when = $derived(d.lastBuiltAt ? (d.status === 'src' ? `loaded ${formatAgo(d.lastBuiltAt, app.now)}` : formatAgo(d.lastBuiltAt, app.now)) : '');
 
 	const hasDetail = $derived(
 		!!(
 			(f.description && d.description) ||
-			(f.owner && d.owner) ||
+			(f.owner && d.owner?.length) ||
 			(f.tags && d.tags?.length) ||
 			(f.columns && d.columnCount != null)
 		)
@@ -91,21 +105,21 @@
 	{#if hasDetail}
 		<div class="detail">
 			{#if f.description && d.description}<p>{d.description}</p>{/if}
-			{#if f.owner && d.owner}<span><User size={11} /> {d.owner}</span>{/if}
+			{#if f.owner && d.owner?.length}<span><User size={11} /> {d.owner.join(', ')}</span>{/if}
 			{#if f.columns && d.columnCount != null}<span><Columns3 size={11} /> {d.columnCount} columns</span>{/if}
 			{#if f.tags && d.tags?.length}<span>{d.tags.join(', ')}</span>{/if}
 		</div>
 	{/if}
 
-	{#if f.status || (f.checks && d.checks) || (f.freshness && when)}
+	{#if f.status || (f.checks && d.checks) || (f.lastBuilt && when) || d.stale}
 		<div class="status" style:--tone={tone}>
 			{#if f.status}
 				<i></i>
 				<span class="label">{statusLabel[d.status]}</span>
 			{/if}
-			{#if f.status && when}<span class="when">{when}</span>{/if}
-			{#if d.drift}
-				<span class="drift" class:upstream={d.drift === 'upstream'} title={d.drift === 'upstream' ? 'Stale because an upstream model changed since the last build' : 'Stale because this model’s SQL changed since the last build'}><GitCompareIcon size={10} strokeWidth={2} />{d.drift === 'upstream' ? 'upstream' : 'drift'}</span>
+			{#if f.lastBuilt && when}<span class="when" class:first={!f.status}>{when}</span>{/if}
+			{#if d.stale}
+				<span class="drift {d.stale}" title={staleTitle[d.stale]}><GitCompareIcon size={10} strokeWidth={2} />{staleLabel[d.stale]}</span>
 			{/if}
 			{#if f.checks && d.checks}
 				<span class="checks" style:color={d.checksColor ?? 'var(--muted-foreground)'}>{d.checks}</span>
@@ -183,6 +197,13 @@
 		border: 1px dashed color-mix(in srgb, var(--sb-stale) 55%, transparent);
 		background: transparent;
 		font-weight: 500;
+	}
+	.drift.behind {
+		background: color-mix(in srgb, var(--sb-warning) 14%, transparent);
+		color: var(--sb-warning);
+	}
+	.when.first::before {
+		content: none;
 	}
 	.detail {
 		display: flex;

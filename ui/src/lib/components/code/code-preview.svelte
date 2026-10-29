@@ -7,6 +7,7 @@
 		code,
 		language = 'sql',
 		maxLines = 12,
+		compiled,
 		mode = $bindable<'raw' | 'compiled'>('raw'),
 		onOpen
 	}: {
@@ -14,11 +15,13 @@
 		code: string;
 		language?: 'sql' | 'text';
 		maxLines?: number;
+		/** Compiled SQL from the server; defaults to substituting refs in `code`. */
+		compiled?: string;
 		mode?: 'raw' | 'compiled';
 		onOpen?: () => void;
 	} = $props();
 
-	const shown = $derived(language === 'sql' && mode === 'compiled' ? compileRefs(code) : code);
+	const shown = $derived(language === 'sql' && mode === 'compiled' ? (compiled ?? compileRefs(code)) : code);
 	const lines = $derived(
 		language === 'sql'
 			? highlightLines(shown, false)
