@@ -72,8 +72,8 @@ impl<H: InterpolationHost> Interpolation<'_, H> {
         let mut index = 0;
         while index < bytes.len() {
             let non_code = match self.host.lexical_syntax() {
-                Some(syntax) => dialect_non_code_end(bytes, index, syntax),
-                None => python_non_code_end(bytes, index),
+                Some(syntax) if bytes[index] != b'`' => dialect_non_code_end(bytes, index, syntax),
+                _ => python_non_code_end(bytes, index),
             };
             let text_end = match non_code {
                 Ok(Some(end)) => end,
