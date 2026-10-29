@@ -5,13 +5,14 @@
 	import WrapTextIcon from '@lucide/svelte/icons/wrap-text';
 	import { compileRefs, highlightLines, outlineSql } from '$lib/sql/outline';
 	import { diffLines, diffStats, foldDiff, type DiffLine, type DiffRow } from '$lib/sql/diff';
-	import type { SqlVersion } from '$lib/mock/model-sql';
+	import type { SqlVersion } from '$lib/sql/versions';
 
 	type Mode = 'raw' | 'compiled' | 'diff' | 'drift';
 
 	let {
 		name,
 		raw,
+		compiled: compiledSql,
 		mode = $bindable<Mode>('raw'),
 		versions = [],
 		upstreamNote,
@@ -20,6 +21,8 @@
 	}: {
 		name: string;
 		raw: string;
+		/** Compiled SQL from the server; defaults to substituting refs in `raw`. */
+		compiled?: string;
 		mode?: Mode;
 		versions?: SqlVersion[];
 		upstreamNote?: string;
@@ -41,12 +44,13 @@
 		localStorage.setItem(LAYOUT_KEY, v);
 	}
 	let showAll = $state(false);
+	const compiled = $derived(compiledSql ?? compileRefs(raw));
 	const baseline = $derived(versions.find((v) => v.id === baselineId) ?? versions[0]);
 	const baseCompiled = $derived(baseline ? (baseline.compiled ?? compileRefs(baseline.raw)) : '');
 	const rawDrift = $derived(!!baseline && baseline.raw !== raw);
-	const compiledDrift = $derived(!!baseline && baseCompiled !== compileRefs(raw));
+	const compiledDrift = $derived(!!baseline && baseCompiled !== compiled);
 	const driftBefore = $derived(driftSide === 'raw' ? (baseline?.raw ?? '') : baseCompiled);
-	const driftAfter = $derived(driftSide === 'raw' ? raw : compileRefs(raw));
+	const driftAfter = $derived(driftSide === 'raw' ? raw : compiled);
 	const driftLines = $derived(diffLines(driftBefore, driftAfter));
 	const driftRows = $derived(foldDiff(driftLines, showAll ? Number.MAX_SAFE_INTEGER : 3));
 	const stats = $derived(diffStats(driftLines));
@@ -92,7 +96,6 @@
 	let activeLine = $state<number | null>(null);
 	let codeEl = $state<HTMLDivElement>();
 
-	const compiled = $derived(compileRefs(raw));
 	const outline = $derived(outlineSql(raw));
 	const rawLines = $derived(highlightLines(raw, true));
 	const compiledLines = $derived(highlightLines(compiled, false));

@@ -9,13 +9,14 @@
 	import AppTopbar from '$lib/components/app-topbar.svelte';
 	import Button from '$lib/components/ui/button/button.svelte';
 	import LoadRow from '$lib/components/list/load-row.svelte';
-	import type { CheckResult, RunScopePhase } from '$lib/api';
+	import type { CheckOutcome, RunScopePhase } from '$lib/api';
 	import { app } from '$lib/state/app.svelte';
 	import { createResource } from '$lib/state/resource.svelte';
 	import { formatAgo, formatStamp } from '$lib/format/time';
-	import { checkResultLabel as resultLabel, checkResultTone as resultColor } from '$lib/status';
+	import { checkOutcomeLabel as resultLabel, checkOutcomeTone as resultColor } from '$lib/status';
 
-	type Result = CheckResult;
+	type Result = 'pass' | 'warn' | 'fail';
+	const outcome = (c: { latest: { outcome: CheckOutcome } | null }): CheckOutcome => c.latest?.outcome ?? 'skipped';
 
 	const checks = createResource((client, scope) => client.listChecks(scope), ['checks', 'runs']);
 	const all = $derived(checks.data ?? []);
@@ -29,10 +30,10 @@
 
 	const filtered = $derived(
 		all.filter((c) => {
-			if (resultFilter !== 'all' && c.result !== resultFilter) return false;
+			if (resultFilter !== 'all' && outcome(c) !== resultFilter) return false;
 			if (query.trim()) {
 				const q = query.toLowerCase();
-				return c.name.toLowerCase().includes(q) || (c.node ?? '').toLowerCase().includes(q) || c.checkType.toLowerCase().includes(q);
+				return c.name.toLowerCase().includes(q) || (c.node ?? '').toLowerCase().includes(q) || (c.definition ?? c.kind).toLowerCase().includes(q);
 			}
 			return true;
 		})
@@ -40,9 +41,9 @@
 
 	const counts = $derived({
 		total: all.length,
-		pass: all.filter((c) => c.result === 'pass').length,
-		fail: all.filter((c) => c.result === 'fail').length,
-		warn: all.filter((c) => c.result === 'warn').length
+		pass: all.filter((c) => outcome(c) === 'pass').length,
+		fail: all.filter((c) => outcome(c) === 'fail' || outcome(c) === 'error').length,
+		warn: all.filter((c) => outcome(c) === 'warn').length
 	});
 </script>
 
@@ -86,20 +87,20 @@
 		</thead>
 		<tbody>
 			{#each filtered as c (c.name + (c.node ?? ''))}
-				<tr onclick={() => goto(`/runs/${c.lastRunId}`)}>
+				<tr onclick={() => c.latest?.runId && goto(`/runs/${c.latest.runId}`)}>
 					<td>
 						<div class="cell-name">
 							<ShieldCheckIcon size={15} strokeWidth={1.75} />
 							<code class="check-name">{c.name}</code>
 						</div>
 					</td>
-					<td><StatusLabel tone={resultColor[c.result]} label={resultLabel[c.result]} /></td>
+					<td><StatusLabel tone={resultColor[outcome(c)]} label={resultLabel[outcome(c)]} /></td>
 					<td>{#if c.node === null}<span class="muted">Standalone</span>{:else}<a href="/catalog/{c.node}" class="link" onclick={(e) => e.stopPropagation()}>{c.node}</a>{/if}</td>
-					<td class="muted">{c.checkType}</td>
+					<td class="muted">{c.definition ?? c.kind}</td>
 					<td class="muted capitalize">{c.severity}</td>
 					<td class="muted">{phaseLabel[c.runScopePhase]}</td>
-					<td style:color={c.result === 'fail' ? 'var(--sb-error)' : c.result === 'warn' ? 'var(--sb-warning)' : 'var(--muted-foreground)'}>{c.detail}</td>
-					<td><RelativeTime value={formatAgo(c.evaluatedAt, app.now)} exact={formatStamp(c.evaluatedAt)} /></td>
+					<td style:color={outcome(c) === 'fail' ? 'var(--sb-error)' : outcome(c) === 'warn' ? 'var(--sb-warning)' : 'var(--muted-foreground)'}>{c.latest?.violationCount ?? c.latest?.measuredValue ?? '—'}</td>
+					<td><RelativeTime value={formatAgo(c.latest?.evaluatedAt, app.now)} exact={formatStamp(c.latest?.evaluatedAt)} /></td>
 				</tr>
 			{:else}
 				<LoadRow colspan={8} resource={checks} empty={all.length ? 'No checks match the filter.' : 'No checks are defined in this snapshot.'} />

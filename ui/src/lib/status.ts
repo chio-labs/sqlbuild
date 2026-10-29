@@ -1,4 +1,4 @@
-import type { CheckResult, NodeCounts, RunKind, RunOrigin, RunStatus, TickOutcome, TriggerState } from '$lib/api/types';
+import type { CheckOutcome, NodeCounts, NodeOutcome, StaleReason, RunKind, RunOrigin, RunStatus, TickOutcome, TriggerState } from '$lib/api/types';
 
 export const runStatusTone: Record<RunStatus, string> = {
 	queued: 'var(--sb-text-faint)',
@@ -59,17 +59,51 @@ export const triggerStateLabel: Record<TriggerState, string> = {
 	paused: 'Paused'
 };
 
-export const checkResultTone: Record<CheckResult, string> = {
+export const checkOutcomeTone: Record<CheckOutcome, string> = {
 	pass: 'var(--sb-success)',
+	warn: 'var(--sb-warning)',
 	fail: 'var(--sb-error)',
-	warn: 'var(--sb-warning)'
+	error: 'var(--sb-error)',
+	insufficient: 'var(--sb-text-faint)',
+	skipped: 'var(--sb-text-faint)'
 };
 
-export const checkResultLabel: Record<CheckResult, string> = {
+export const checkOutcomeLabel: Record<CheckOutcome, string> = {
 	pass: 'Passed',
+	warn: 'Warning',
 	fail: 'Failed',
-	warn: 'Warning'
+	error: 'Error',
+	insufficient: 'Insufficient data',
+	skipped: 'Skipped'
 };
+
+export const nodeOutcomeTone: Record<NodeOutcome, string> = {
+	success: 'var(--sb-success)',
+	warn: 'var(--sb-warning)',
+	failed: 'var(--sb-error)',
+	skipped: 'var(--sb-text-faint)'
+};
+
+export const nodeOutcomeLabel: Record<NodeOutcome, string> = {
+	success: 'Success',
+	warn: 'Warning',
+	failed: 'Failed',
+	skipped: 'Skipped'
+};
+
+/** Short label for a stale reason, e.g. `changed`, `changed (upstream)`, `behind`. */
+export function staleReasonLabel(reason: StaleReason): string {
+	if (reason.reason === 'changed') return reason.change === 'compiled' ? 'changed (compiled)' : 'changed';
+	if (reason.reason === 'changed_upstream') return 'changed (upstream)';
+	return 'behind';
+}
+
+/** One-line explanation of a stale reason. */
+export function staleReasonDetail(reason: StaleReason): string {
+	if (reason.reason === 'changed') return reason.detail;
+	if (reason.reason === 'changed_upstream') return `Upstream definition changed: ${reason.upstream.join(', ')}`;
+	return `Newer data in ${reason.upstream.join(', ')}`;
+}
 
 /** e.g. `8 ok · 1 warn · 1 failed · 3 skipped`, or `4 running · 10 pending`. */
 export function formatNodeCounts(counts: NodeCounts): string {

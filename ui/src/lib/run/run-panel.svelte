@@ -13,7 +13,16 @@
 	import { VERBS, verbSpec } from './command-table';
 	import { applySuggestion, parseCommand, suggest, withVerb, type Suggestion } from './command';
 
-	let { open = $bindable(false), selection = [] }: { open?: boolean; selection?: string[] } = $props();
+	let {
+		open = $bindable(false),
+		selection = [],
+		verb: initialVerb = 'build'
+	}: {
+		open?: boolean;
+		selection?: string[];
+		/** The verb the command line opens with, e.g. `audit` for a check-only run. */
+		verb?: LaunchVerb;
+	} = $props();
 
 	const snapshotNodes = createResource((client, scope) => client.listSnapshotNodes(scope), ['snapshot']);
 
@@ -22,7 +31,7 @@
 	let wasOpen = false;
 	$effect(() => {
 		if (open && !wasOpen) {
-			cmd = `sqb build ${selection.length ? `--select ${selection.join(' ')} ` : ''}`;
+			cmd = `sqb ${initialVerb} ${selection.length ? `--select ${selection.join(' ')} ` : ''}`;
 			check = null;
 			launchError = null;
 			queueMicrotask(() => cmdEl?.focus());

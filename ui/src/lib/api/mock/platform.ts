@@ -541,6 +541,12 @@ export class MockPlatformApi implements PlatformApi {
 		this.#data = createPlatformFixtures(ctx.now);
 	}
 
+	/** Records an audited read of check evidence (`view.evidence`). */
+	recordEvidenceRead(scope: Scope, subject: string, summary: string): void {
+		this.#audit('view.evidence', { ...scope, subject }, summary);
+		this.#data.auditEntries[this.#data.auditEntries.length - 1].evidenceRead = true;
+	}
+
 	pendingApprovalCount(): number {
 		return this.#data.approvals.filter((a) => a.state === 'pending').length;
 	}

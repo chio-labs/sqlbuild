@@ -7,13 +7,11 @@ import type {
 	Bootstrap,
 	BuiltInRole,
 	Capability,
-	Check,
 	CurrentUser,
 	Job,
 	JobDetail,
 	JobLaunchOptions,
 	NavCounts,
-	Overview,
 	PlatformEvent,
 	QueueEntry,
 	RerunMode,
@@ -37,6 +35,7 @@ import { DEMO_USER } from './principals';
 import { MockOperate } from './operate-store';
 import type { PlatformApi } from '../platform-client';
 import { MockPlatformApi } from './platform';
+import { MockBuild } from './build';
 
 export type MockOptions = {
 	role?: BuiltInRole;
@@ -58,6 +57,7 @@ export class MockApiClient implements ApiClient {
 	readonly #syncs = new Map<string, WarehouseSync>();
 	readonly #syncTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	readonly #platform: MockPlatformApi;
+	readonly #build: MockBuild;
 
 	constructor(options: MockOptions = {}) {
 		this.#options = {
@@ -86,6 +86,15 @@ export class MockApiClient implements ApiClient {
 			platformEvents: () => this.#platformEvents(),
 			reply: (value) => this.#reply(value)
 		});
+		this.#build = new MockBuild({
+			now: this.#createdAt,
+			can: (capability) => ROLE_CAPABILITIES[this.#options.role].includes(capability),
+			adapter: (scope) => this.#location(scope).targets.find((t) => t.name === scope.target)?.adapter ?? '',
+			reply: (value) => this.#reply(value),
+			operate: this.#operate,
+			platform: this.#platform,
+			platformEvents: () => this.#platformEvents()
+		});
 	}
 
 	async bootstrap(): Promise<Bootstrap> {
@@ -108,8 +117,8 @@ export class MockApiClient implements ApiClient {
 	async navCounts(scope: Scope): Promise<NavCounts> {
 		this.#location(scope);
 		return this.#reply({
-			catalogNodes: 42,
-			failingChecks: this.#fixtures.checks.filter((c) => c.result !== 'pass').length,
+			catalogNodes: this.#build.nodeCount(),
+			failingChecks: this.#build.failingCheckCount(scope),
 			activeRuns: this.#operate.activeRunCount(),
 			pausedTriggers: this.#operate.pausedTriggerCount(scope),
 			activeAlerts: this.#platformEvents().filter((e) => e.active).length,
@@ -117,34 +126,42 @@ export class MockApiClient implements ApiClient {
 		});
 	}
 
-	async overview(scope: Scope): Promise<Overview> {
-		this.#location(scope);
-		const { checks, changes } = this.#fixtures;
-		const runs = this.#operate.topLevelRuns(scope);
-		const dayAgo = this.#createdAt - 24 * 3600_000;
-		const recent = runs.filter((r) => r.startedAt && Date.parse(r.startedAt) >= dayAgo);
-		const succeeded = recent.filter((r) => r.status === 'success' || r.status === 'warn').length;
-		const failingChecks = checks.filter((c) => c.result === 'fail').length;
-		const latest = runs.find((r) => r.endedAt) ?? null;
-		return this.#reply({
-			metrics: [
-				{ label: 'Models', value: '42', detail: '7 views', note: '+3 this week', tone: 'success' },
-				{ label: 'Runs · 24h', value: String(recent.length), detail: `${succeeded} successful`, note: `${Math.round((succeeded / Math.max(1, recent.length)) * 100)}% success` },
-				{ label: 'Checks passing', value: String(checks.filter((c) => c.result === 'pass').length), detail: `of ${checks.length}`, note: `${checks.length - checks.filter((c) => c.result === 'pass').length} need attention`, tone: 'warning' },
-				{ label: 'Stale', value: '2', detail: 'of 42', note: '4.8% of project', tone: 'stale' }
-			],
-			attention: [
-				{ id: 'att-1', tone: 'error', title: 'core_build partially failed', detail: 'dim_customers · numeric value out of range', since: '18 minutes ago', href: '/runs/run-4f2a', action: 'View run' },
-				{ id: 'att-2', tone: 'stale', title: '2 models are stale', detail: 'daily_revenue · customer_status', since: 'changed since the last build', href: '/catalog', action: 'View catalog' },
-				{ id: 'att-3', tone: 'warning', title: 'Source freshness warning', detail: 'raw.payments is 23m behind', since: 'threshold 15 minutes', href: '/checks', action: 'View check' }
-			],
-			currentNodes: 40,
-			staleNodes: 2,
-			failingChecks,
-			latestRun: latest && { id: latest.id, status: latest.status, endedAt: latest.endedAt },
-			recentChanges: [...changes].sort((a, b) => b.at.localeCompare(a.at))
-		});
+	// ---- BUILD: delegated to the build store (build.ts) ----
+
+	overview(...args: Parameters<ApiClient['overview']>) {
+		this.#location(args[0]);
+		return this.#build.overview(...args);
 	}
+	listCatalogNodes(...args: Parameters<ApiClient['listCatalogNodes']>) {
+		this.#location(args[0]);
+		return this.#build.listCatalogNodes(...args);
+	}
+	getCatalogNode(...args: Parameters<ApiClient['getCatalogNode']>) {
+		this.#location(args[0]);
+		return this.#build.getCatalogNode(...args);
+	}
+	getColumnLineage(...args: Parameters<ApiClient['getColumnLineage']>) {
+		this.#location(args[0]);
+		return this.#build.getColumnLineage(...args);
+	}
+	listChecks(...args: Parameters<ApiClient['listChecks']>) {
+		this.#location(args[0]);
+		return this.#build.listChecks(...args);
+	}
+	getCheck(...args: Parameters<ApiClient['getCheck']>) {
+		this.#location(args[0]);
+		return this.#build.getCheck(...args);
+	}
+	async getCheckEvidence(...args: Parameters<ApiClient['getCheckEvidence']>) {
+		this.#location(args[0]);
+		return this.#build.getCheckEvidence(...args);
+	}
+	listSnapshotChanges(...args: Parameters<ApiClient['listSnapshotChanges']>) {
+		this.#location(args[0]);
+		return this.#build.listSnapshotChanges(...args);
+	}
+
+	// ---- end BUILD ----
 
 	// ---- OPERATE: delegated to the operate store (operate-store.ts) ----
 
@@ -254,11 +271,6 @@ export class MockApiClient implements ApiClient {
 	}
 
 	// ---- end OPERATE ----
-
-	async listChecks(scope: Scope): Promise<Check[]> {
-		this.#location(scope);
-		return this.#reply(structuredClone(this.#fixtures.checks));
-	}
 
 	async listPlatformEvents(query: { activeOnly: boolean }): Promise<PlatformEvent[]> {
 		const events = this.#platformEvents();

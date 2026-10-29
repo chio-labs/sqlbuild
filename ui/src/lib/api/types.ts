@@ -4,8 +4,6 @@
 // OpenAPI schema can replace them later. Timestamps are ISO-8601 strings and IDs
 // are opaque strings.
 
-import type { Run } from './types/operate';
-
 export type Iso = string;
 
 // ---- identity, roles and capabilities ----
@@ -116,24 +114,6 @@ export type Bootstrap = {
 	locations: Location[];
 };
 
-// ---- checks ----
-
-export type CheckResult = 'pass' | 'warn' | 'fail';
-export type CheckSeverity = 'error' | 'warn';
-export type RunScopePhase = 'delta_and_final' | 'final';
-export type Check = {
-	name: string;
-	/** Attached node; null for standalone checks. */
-	node: string | null;
-	checkType: string;
-	severity: CheckSeverity;
-	runScopePhase: RunScopePhase;
-	result: CheckResult;
-	detail: string;
-	lastRunId: string;
-	evaluatedAt: Iso;
-};
-
 // ---- platform events ----
 
 export type PlatformEventKind =
@@ -155,48 +135,6 @@ export type PlatformEvent = {
 	message: string;
 };
 
-// ---- overview and change feed ----
-
-export type ChangeKind = 'snapshot' | 'macro' | 'model_added' | 'column_added';
-export type Change = {
-	id: string;
-	kind: ChangeKind;
-	title: string;
-	detail: string;
-	actor: Principal;
-	at: Iso;
-	href: string;
-};
-
-export type AttentionTone = 'error' | 'warning' | 'stale';
-export type AttentionItem = {
-	id: string;
-	tone: AttentionTone;
-	title: string;
-	detail: string;
-	since: string;
-	href: string;
-	action: string;
-};
-
-export type OverviewMetric = {
-	label: string;
-	value: string;
-	detail: string;
-	note: string;
-	tone?: 'success' | 'warning' | 'stale';
-};
-
-export type Overview = {
-	metrics: OverviewMetric[];
-	attention: AttentionItem[];
-	currentNodes: number;
-	staleNodes: number;
-	failingChecks: number;
-	latestRun: Pick<Run, 'id' | 'status' | 'endedAt'> | null;
-	recentChanges: Change[];
-};
-
 // ---- navigation ----
 
 export type NavCounts = {
@@ -209,4 +147,5 @@ export type NavCounts = {
 };
 
 export * from './types/operate';
+export * from './types/build';
 export * from './types/platform';

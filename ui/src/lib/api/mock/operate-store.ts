@@ -477,6 +477,35 @@ export class MockOperate {
 			.sort((a, b) => b.queuedAt.localeCompare(a.queuedAt));
 	}
 
+	// ---- synchronous reads for the BUILD mock (mock/build.ts) ----
+
+	/** Every run that executed `nodeKey`, with that node's result, newest first. */
+	nodeHistory(scope: Scope, nodeKey: string): { run: Run; node: RunNode }[] {
+		const now = Date.now();
+		return this.#records
+			.filter((r) => r.script.nodes.includes(nodeKey))
+			.flatMap((r) => {
+				const node = computeNodes(r, this.#siblings(r), now).find((n) => n.nodeKey === nodeKey);
+				return node ? [{ run: this.#view(r, scope), node }] : [];
+			})
+			.sort((a, b) => (b.node.startedAt ?? b.run.queuedAt).localeCompare(a.node.startedAt ?? a.run.queuedAt));
+	}
+
+	/** Jobs and groups whose selection includes `nodeKey`. */
+	jobsCovering(nodeKey: string): { key: string; kind: 'job' | 'group'; triggerIds: string[] }[] {
+		return JOB_DEFS.filter((j) => (j.kind === 'group' ? jobNodes(j.key) : resolveJobSelection(j).nodes).includes(nodeKey)).map((j) => ({
+			key: j.key,
+			kind: j.kind,
+			triggerIds: TRIGGER_DEFS.filter((t) => t.jobKey === j.key).map((t) => triggerId(t.name))
+		}));
+	}
+
+	/** Liveness of an active run, for the overview's unresponsive item. */
+	lastHeartbeat(runId: string): string | null {
+		const rec = this.#byId(runId);
+		return rec ? (liveness(rec, Date.now())?.lastHeartbeatAt ?? null) : null;
+	}
+
 	// ---- internals: records ----
 
 	#byId(id: string): RunRecord | undefined {

@@ -2,7 +2,12 @@ import type {
 	AdhocRunCheck,
 	AdhocRunRequest,
 	Bootstrap,
+	CatalogNode,
+	CatalogNodeDetail,
 	Check,
+	CheckDetail,
+	CheckEvidence,
+	ColumnLineage,
 	Job,
 	JobDetail,
 	JobLaunchOptions,
@@ -18,6 +23,7 @@ import type {
 	RunOutputLine,
 	RunStatement,
 	Scope,
+	SnapshotChange,
 	SnapshotNode,
 	Timeline,
 	Trigger,
@@ -40,7 +46,23 @@ export interface ApiClient extends PlatformApi {
 	bootstrap(): Promise<Bootstrap>;
 
 	navCounts(scope: Scope): Promise<NavCounts>;
+
+	// ---- BUILD: overview, catalog and lineage, checks, changes (types/build.ts) ----
+	/** Health, attention items, metrics, build status by group and recent changes. */
 	overview(scope: Scope): Promise<Overview>;
+	/** Every node in the current snapshot with its build state; also the lineage graph. */
+	listCatalogNodes(scope: Scope): Promise<CatalogNode[]>;
+	getCatalogNode(scope: Scope, key: string): Promise<CatalogNodeDetail | null>;
+	/** The snapshot's column lineage around one node. */
+	getColumnLineage(scope: Scope, key: string): Promise<ColumnLineage | null>;
+	/** Every audit and check with its latest result. */
+	listChecks(scope: Scope): Promise<Check[]>;
+	getCheck(scope: Scope, id: string): Promise<CheckDetail | null>;
+	/** Sample rows stored with a result. `view.evidence`; every read is audited. */
+	getCheckEvidence(scope: Scope, checkId: string, evaluationId: string): Promise<CheckEvidence>;
+	/** The change feed: one entry per published snapshot, newest first. */
+	listSnapshotChanges(scope: Scope, query?: { limit?: number }): Promise<SnapshotChange[]>;
+	// ---- end BUILD ----
 
 	// ---- OPERATE: runs, queue, run panel, jobs and triggers (types/operate.ts) ----
 	listRuns(scope: Scope, query?: RunListQuery): Promise<Run[]>;
@@ -74,8 +96,6 @@ export interface ApiClient extends PlatformApi {
 	resetTriggerToDefault(scope: Scope, id: string): Promise<Trigger>;
 	resetSensorCursor(scope: Scope, id: string, reason?: string | null): Promise<TriggerDetail>;
 	// ---- end OPERATE ----
-
-	listChecks(scope: Scope): Promise<Check[]>;
 
 	listPlatformEvents(query: { activeOnly: boolean }): Promise<PlatformEvent[]>;
 
