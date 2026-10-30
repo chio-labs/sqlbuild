@@ -1,33 +1,16 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
 	import DatabaseIcon from '@lucide/svelte/icons/database';
-	import PlugIcon from '@lucide/svelte/icons/plug';
 	import AppTopbar from '$lib/components/app-topbar.svelte';
 	import Button from '$lib/components/ui/button/button.svelte';
-	import LoadRow from '$lib/components/list/load-row.svelte';
 	import ConnectionTest from '$lib/components/platform/connection-test.svelte';
 	import Panel from '$lib/components/platform/panel.svelte';
-	import type { ProviderConnection, SettingField, WarehouseConnection } from '$lib/api';
+	import type { SettingField, WarehouseConnection } from '$lib/api';
 	import { app } from '$lib/state/app.svelte';
 	import { createResource } from '$lib/state/resource.svelte';
 
-	const connections = createResource((client, scope) => client.connections(scope));
+	const connections = createResource((client, scope) => client.listWarehouseConnections(scope));
 
-	const warehouse = $derived(connections.data?.warehouse ?? []);
-	const providers = $derived(connections.data?.providers ?? []);
-
-	function usedBySummary(p: ProviderConnection): string {
-		const parts = [
-			plural(p.usedBy.nodes.length, 'node'),
-			plural(p.usedBy.jobs.length, 'job'),
-			p.usedBy.triggers.length ? plural(p.usedBy.triggers.length, 'sensor') : null
-		];
-		return parts.filter(Boolean).join(' · ');
-	}
-
-	function plural(count: number, noun: string): string {
-		return `${count} ${noun}${count === 1 ? '' : 's'}`;
-	}
+	const warehouse = $derived(connections.data ?? []);
 
 	function shownValue(c: WarehouseConnection, field: SettingField): string {
 		if (field.type === 'secret') return field.secretSource ?? 'not set';
@@ -41,19 +24,22 @@
 </AppTopbar>
 
 <div class="min-h-0 flex-1 overflow-auto px-6 pt-5">
-	<p class="lede">Defined in project code and config. Values are read-only here; secrets show only where they come from.</p>
+	<p class="lede">
+		How SQLBuild reaches the warehouse for target <b>{app.targetName}</b>. Set in the project config and read-only here; secrets show only where they come from, never their value.
+		APIs, storage and webhooks are under <a href="/providers">Providers</a>.
+	</p>
 
 	{#if connections.error}
 		<p class="err">Couldn't load connections: {connections.error} <button class="retry" onclick={() => connections.refresh()}>Retry</button></p>
 	{/if}
 
-	<Panel title="Warehouse" note="Connections of target {app.targetName}; tested with sqb debug">
+	<Panel title="Warehouse" note="Test a connection to check SQLBuild can sign in and reach the warehouse (the same check as sqb debug)">
 		{#each warehouse as c (c.name)}
 			<div class="warehouse">
 				<div class="warehouse-head">
 					<DatabaseIcon size={15} strokeWidth={1.75} />
 					<a href="/connections/{c.name}" class="name">{c.name}</a>
-					<span class="muted">{c.adapter} · {c.purpose === 'catalog' ? 'catalog_connection for the warehouse sync' : `target ${c.target}`} · {c.sourceFile}</span>
+					<span class="muted" title={c.purpose === 'catalog' ? 'catalog_connection' : undefined}>{c.adapter} · {c.purpose === 'catalog' ? 'used to read SQLBuild’s own tables back (warehouse sync)' : `builds target ${c.target}`} · {c.sourceFile}</span>
 				</div>
 				<dl class="settings">
 					{#each c.settings as f (f.key)}
@@ -66,42 +52,10 @@
 				<ConnectionTest scope={{ locationId: app.locationId, target: app.targetName }} connection={c.name} last={c.lastTest} />
 			</div>
 		{:else}
-			<p class="muted">{connections.data ? 'No warehouse connection is configured for this target.' : connections.error ? '' : 'Loading…'}</p>
+			<p class="muted">{connections.data ? 'This target has no warehouse connection. Add one to the target in the project config.' : connections.error ? '' : 'Loading…'}</p>
 		{/each}
 	</Panel>
 
-	<Panel title="Providers" note="Settings schema and where each provider is used">
-		<table class="sb-list framed">
-			<thead>
-				<tr>
-					<th>Provider</th>
-					<th>Type</th>
-					<th>Used by</th>
-					<th>Source</th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each providers as p (p.name)}
-					<tr onclick={() => goto(`/connections/${p.name}`)}>
-						<td>
-							<div class="cell-name">
-								<PlugIcon size={15} strokeWidth={1.75} />
-								<div class="min-w-0">
-									<a href="/connections/{p.name}" onclick={(e) => e.stopPropagation()}>{p.name}</a>
-									<div class="cell-desc">{p.description}</div>
-								</div>
-							</div>
-						</td>
-						<td><code>{p.type}</code></td>
-						<td class="muted">{usedBySummary(p)}</td>
-						<td class="muted"><code>{p.sourceFile}</code></td>
-					</tr>
-				{:else}
-					<LoadRow colspan={4} resource={connections} empty="No providers are defined in this snapshot." />
-				{/each}
-			</tbody>
-		</table>
-	</Panel>
 </div>
 
 <style>
@@ -174,7 +128,7 @@
 		font-family: var(--font-mono);
 		font-size: 12px;
 	}
-	.framed {
-		border-top: 1px solid var(--border);
+	.lede a {
+		color: var(--primary);
 	}
 </style>

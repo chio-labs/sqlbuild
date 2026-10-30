@@ -350,8 +350,11 @@ export class MockApiClient implements ApiClient {
 	revokeLocationToken(...args: Parameters<PlatformApi['revokeLocationToken']>) {
 		return this.#platform.revokeLocationToken(...args);
 	}
-	connections(...args: Parameters<PlatformApi['connections']>) {
-		return this.#platform.connections(...args);
+	listWarehouseConnections(...args: Parameters<PlatformApi['listWarehouseConnections']>) {
+		return this.#platform.listWarehouseConnections(...args);
+	}
+	listProviders(...args: Parameters<PlatformApi['listProviders']>) {
+		return this.#platform.listProviders(...args);
 	}
 	maintenanceHistory(...args: Parameters<PlatformApi['maintenanceHistory']>) {
 		return this.#platform.maintenanceHistory(...args);

@@ -11,6 +11,7 @@
 	import MapPinIcon from '@lucide/svelte/icons/map-pin';
 	import PlayIcon from '@lucide/svelte/icons/play';
 	import PlugIcon from '@lucide/svelte/icons/plug';
+	import PuzzleIcon from '@lucide/svelte/icons/puzzle';
 	import ScrollTextIcon from '@lucide/svelte/icons/scroll-text';
 	import SettingsIcon from '@lucide/svelte/icons/settings';
 	import ShieldIcon from '@lucide/svelte/icons/shield';
@@ -48,6 +49,7 @@
 			items: [
 				{ label: 'Locations', href: '/locations', icon: MapPinIcon, badge: { value: (c) => c.activePlatformEvents, tone: 'error' } },
 				{ label: 'Connections', href: '/connections', icon: PlugIcon },
+				{ label: 'Providers', href: '/providers', icon: PuzzleIcon },
 				{ label: 'Maintenance', href: '/maintenance', icon: WrenchIcon }
 			]
 		},

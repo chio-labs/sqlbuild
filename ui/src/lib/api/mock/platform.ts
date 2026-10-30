@@ -16,7 +16,6 @@ import type {
 	BuiltInRole,
 	Capability,
 	ConnectionTest,
-	ConnectionsOverview,
 	IssuedToken,
 	JanitorEvent,
 	Location,
@@ -700,13 +699,16 @@ export class MockPlatformApi implements PlatformApi {
 
 	// ---- connections ----
 
-	async connections(scope: Scope): Promise<ConnectionsOverview> {
+	async listWarehouseConnections(scope: Scope): Promise<WarehouseConnection[]> {
 		const warehouse = this.#warehouse(scope).map((c) => ({
 			...c,
 			lastTest: this.#connectionTests.get(`${scope.locationId}/${scope.target}/${c.name}`) ?? c.lastTest
 		}));
-		const providers = scope.locationId === LOCATION_SHOP ? this.#data.providers : [];
-		return this.#ctx.reply(structuredClone({ warehouse, providers }));
+		return this.#ctx.reply(structuredClone(warehouse));
+	}
+
+	async listProviders(scope: Scope): Promise<ProviderConnection[]> {
+		return this.#ctx.reply(structuredClone(scope.locationId === LOCATION_SHOP ? this.#data.providers : []));
 	}
 
 	// ---- maintenance ----

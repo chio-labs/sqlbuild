@@ -7,7 +7,6 @@ import type {
 	AuditEntry,
 	AuditQuery,
 	ConnectionTest,
-	ConnectionsOverview,
 	IssuedToken,
 	LocationDetail,
 	LocationSummary,
@@ -16,13 +15,15 @@ import type {
 	PlatformEventQuery,
 	PlatformEventRecord,
 	PlatformHealth,
+	ProviderConnection,
 	RoleApproval,
 	RoleAssignment,
 	RoleAssignmentRequest,
 	RoleDefinition,
 	Scope,
 	ServerSettings,
-	ServiceAccountRequest
+	ServiceAccountRequest,
+	WarehouseConnection
 } from './types';
 
 /**
@@ -54,8 +55,11 @@ export interface PlatformApi {
 	/** `location.manage` */
 	revokeLocationToken(tokenId: string): Promise<LocationToken>;
 
-	// ---- connections ----
-	connections(scope: Scope): Promise<ConnectionsOverview>;
+	// ---- warehouse connections and providers ----
+	/** Warehouse connections of the selected target. */
+	listWarehouseConnections(scope: Scope): Promise<WarehouseConnection[]>;
+	/** Providers declared in the project, with where each one is used. Read-only. */
+	listProviders(scope: Scope): Promise<ProviderConnection[]>;
 
 	// ---- maintenance ----
 	maintenanceHistory(scope: Scope): Promise<MaintenanceHistory>;

@@ -262,6 +262,7 @@ export type WarehouseConnection = {
 	lastTest: ConnectionTest | null;
 };
 
+/** A connection to something other than the warehouse (an API, object storage, a chat webhook), declared in project code. */
 export type ProviderConnection = {
 	name: string;
 	type: string;
@@ -271,11 +272,6 @@ export type ProviderConnection = {
 	values: Record<string, string | number | boolean>;
 	/** `triggers` are sensors whose code uses the provider, by trigger ID and name. */
 	usedBy: { nodes: string[]; jobs: string[]; triggers: { id: string; name: string }[] };
-};
-
-export type ConnectionsOverview = {
-	warehouse: WarehouseConnection[];
-	providers: ProviderConnection[];
 };
 
 // ---- maintenance (synced warehouse state tables) ----
