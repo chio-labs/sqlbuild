@@ -71,12 +71,12 @@ export function kindLine(node: Pick<CatalogNode, 'kind' | 'materialization'>): s
 }
 
 export const runScopePhaseLabel: Record<RunScopePhase, string> = {
-	delta_and_final: 'New rows, then whole table',
-	final: 'Whole table'
+	delta_and_final: 'Each new batch before it is written, then the whole table',
+	final: 'Whole table, after writing'
 };
 
 export const evaluationModeLabel: Record<EvaluationMode, string> = {
-	violations: 'Counts failing rows',
+	violations: 'Fails if any rows break the rule',
 	measurement: 'Measures a value'
 };
 
