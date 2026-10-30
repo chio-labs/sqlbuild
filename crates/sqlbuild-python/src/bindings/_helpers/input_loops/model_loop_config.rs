@@ -2,6 +2,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple};
@@ -13,9 +14,11 @@ use sqlbuild_model_config::config_presence::main::mutable_config_value::mutable_
 use crate::bindings::_helpers::input_loops::model_loop::{LoopContext, config_error};
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::config_classes::{ConfigClasses, config_fields, view};
+use crate::bindings::_helpers::model_config::config_nodes::carried_node;
 use crate::bindings::_helpers::model_config::model_config_builder::{
     BuiltConfig, ConfigBuild, NativeModelConfigBuilder,
 };
+use crate::bindings::_helpers::model_config::typed_config::BuiltConfigValues;
 
 const COLUMNS_KEY: &str = "columns";
 const DESCRIPTION_KEY: &str = "description";
@@ -30,6 +33,7 @@ struct InheritedLayer<'py> {
 struct ReusedConfig<'py> {
     values: Bound<'py, PyDict>,
     fields: Bound<'py, PyDict>,
+    nodes: Option<BuiltConfigValues>,
 }
 
 /// `_ReusableModelConfigCache` for one compile.
@@ -66,7 +70,8 @@ impl<'py> ModelConfigs<'py> {
         {
             let values: Bound<'py, PyDict> = cached.values.copy()?;
             values.update(metadata.as_mapping())?;
-            return view(classes, &values, &cached.fields);
+            let nodes = metadata_nodes(cached.nodes.as_ref(), metadata, metadata)?;
+            return view(classes, &values, &cached.fields, nodes.as_ref());
         }
         let built: ConfigBuild<'py> =
             builder.built(py, (header, facts), matched.as_deref(), name)?;
@@ -78,9 +83,9 @@ impl<'py> ModelConfigs<'py> {
         };
         let fields: Bound<'py, PyDict> = config_fields(classes, &built, matched.as_deref())?;
         if reusable && let Some(metadata) = &metadata {
-            self.remember(&matched, metadata, &built.values, &fields)?;
+            self.remember(&matched, metadata, &built, &fields)?;
         }
-        view(classes, &built.values, &fields)
+        view(classes, &built.values, &fields, built.nodes.as_ref())
     }
 
     /// `_is_reusable`: no templates in the inherited values or the target namespace, nothing mutable.
@@ -116,9 +121,10 @@ impl<'py> ModelConfigs<'py> {
         &self,
         matched: &Option<String>,
         metadata: &Bound<'py, PyDict>,
-        values: &Bound<'py, PyDict>,
+        built: &BuiltConfig<'py>,
         fields: &Bound<'py, PyDict>,
     ) -> PyResult<()> {
+        let values = &built.values;
         let py: Python<'py> = values.py();
         let layers = self.layers.borrow();
         let Some(inherited) = layers.get(matched) else {
@@ -140,10 +146,34 @@ impl<'py> ModelConfigs<'py> {
             ReusedConfig {
                 values: reusable_values,
                 fields: fields.clone(),
+                nodes: metadata_nodes(built.nodes.as_ref(), metadata, &inherited.values)?,
             },
         );
         Ok(())
     }
+}
+
+/// Replace only one model's metadata in a reused tree, without opening unused containers.
+fn metadata_nodes(
+    base: Option<&BuiltConfigValues>,
+    metadata: &Bound<'_, PyDict>,
+    replacements: &Bound<'_, PyDict>,
+) -> PyResult<Option<BuiltConfigValues>> {
+    let Some(base) = base else {
+        return Ok(None);
+    };
+    let mut nodes = base.as_ref().clone();
+    for key in metadata.keys() {
+        let Ok(text) = key.downcast_exact::<PyString>() else {
+            return Ok(None);
+        };
+        let text = text.to_str()?;
+        nodes.remove(text);
+        if let Some(value) = replacements.get_item(&key)? {
+            nodes.insert(text.to_owned(), Arc::new(carried_node(&value)?));
+        }
+    }
+    Ok(Some(Arc::new(nodes)))
 }
 
 /// `_reusable_metadata`: the header when only plain columns and description vary, else `None`.

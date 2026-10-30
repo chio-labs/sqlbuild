@@ -1025,19 +1025,20 @@ def diagnostics_by_model(diagnostics: list[dict[str, object]]) -> dict[str, str]
 
 
 def typed_config_reads(*, project_dir: Path, extra_header: str) -> int:
-    """How many config values planning converted into typed nodes for three cursor models."""
+    """Config conversions for a fresh build, an inherited build and a reused config."""
 
     project_dir.mkdir(parents=True)
     (project_dir / "sqlbuild_project.toml").write_text(
         'name = "orders"\nadapter = "duckdb"\ndefault_target = "dev"\n\n'
-        '[connections.local]\ndatabase = ":memory:"\n\n[targets.dev]\nschema = "main"\n',
+        '[connections.local]\ndatabase = ":memory:"\n\n[defaults]\nmaterialized = "table"\n\n'
+        '[targets.dev]\nschema = "main"\n',
         encoding="utf-8",
     )
     models_dir: Path = project_dir / "models"
     models_dir.mkdir()
-    for index in range(3):
+    for index, own_config in enumerate((', materialized table, tags ["daily"]', "", "")):
         (models_dir / f"orders_{index}.sql").write_text(
-            f'MODEL (description "Orders.", materialized table, tags ["daily"]{extra_header});\n\n'
+            f'MODEL (description "Orders {index}."{own_config}{extra_header});\n\n'
             f"SELECT {index} AS order_id, 1 AS loaded_at\n",
             encoding="utf-8",
         )
