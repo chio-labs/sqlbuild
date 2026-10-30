@@ -25,11 +25,12 @@ use crate::bindings::_helpers::model_config::config_classes::{ConfigClasses, bui
 use crate::bindings::_helpers::model_config::config_errors::config_exception;
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 use crate::bindings::_helpers::model_config::config_nodes::{
-    HostHandle, PyConfigEntries, PyConfigNode, config_dict, config_entries, config_node,
-    config_object, hook_entry, is_exact_container, opaque_container,
+    HostHandle, PyConfigEntries, PyConfigNode, carried_node, config_dict, config_entries,
+    config_node, config_object, hook_entry, is_exact_container,
 };
 use crate::bindings::_helpers::model_config::errors::NativeConfigError;
 use crate::bindings::_helpers::model_config::project_defaults::project_defaults_mapping;
+use crate::bindings::_helpers::model_config::typed_config::{BuiltConfigValues, built_values};
 
 /// The config keys a model's context values read.
 const CONTEXT_KEYS: [&str; 3] = ["database", "schema", "alias"];
@@ -46,6 +47,7 @@ pub(crate) struct NativeModelConfigBuilder {
 /// One model's built config before Python wraps it in `CompileModelConfig`.
 pub(crate) struct BuiltConfig<'py> {
     pub(crate) values: Bound<'py, PyDict>,
+    pub(crate) nodes: Option<BuiltConfigValues>,
     pub(crate) header_keys: Vec<String>,
     pub(crate) logical_schema: Option<Bound<'py, PyAny>>,
     pub(crate) layer_schema_configured: bool,
@@ -159,7 +161,7 @@ fn header_entries(
                 .downcast_exact::<PyString>()
                 .is_ok_and(|key| key.to_str().is_ok_and(|key| carried_whole(key, facts)));
         let node: PyConfigNode = if whole {
-            opaque_container(&value)?
+            carried_node(&value)?
         } else {
             config_node(&value)?
         };
@@ -297,6 +299,7 @@ fn projected_build<'py>(
     let py: Python<'py> = header.py();
     Ok(BuiltConfig {
         values: own_values_dict(header, &built)?,
+        nodes: built_values(built.values),
         header_keys: built.header_keys,
         logical_schema: projected(py, built.logical_schema)?,
         layer_schema_configured: built.layer_schema_configured,
