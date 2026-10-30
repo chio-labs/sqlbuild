@@ -3,7 +3,6 @@
 import sqlite3
 import subprocess
 import sys
-from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
 from datetime import UTC, datetime
 from pathlib import Path
@@ -142,6 +141,31 @@ def test_given_project_directory_when_opening_sqlite_history_then_local_wal_is_h
     inspection.close()
     assert journal_mode == "wal"
     storage.close()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows filenames cannot contain a colon")
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SQLitePathCase(
+            description="literal file scheme prefix", expected_filename="file:history.sqlite3"
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_uri_shaped_filename_when_opening_history_then_exact_literal_file_is_used(
+    tmp_path: Path, test_case: SQLitePathCase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert test_case.expected_filename is not None
+    path: Path = Path(test_case.expected_filename)
+
+    with SQLiteExecutionHistory(path=path) as storage:
+        assert storage.check_health() is True
+        assert storage.path == path
+
+    assert path.is_file()
+    assert not Path("history.sqlite3").exists()
 
 
 @pytest.mark.parametrize(
@@ -598,31 +622,13 @@ def test_given_post_connect_setup_failure_when_constructing_then_open_connection
     test_case: SQLitePersistenceCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    opened: list[sqlite3.Connection] = []
-    real_connect: Callable[..., sqlite3.Connection] = sqlite3.connect
+    opened: list[Any] = []
 
-    def tracked_connect(
-        database: str,
-        *,
-        timeout: float,
-        isolation_level: None,
-        check_same_thread: bool,
-    ) -> sqlite3.Connection:
-        connection: sqlite3.Connection = real_connect(
-            database,
-            timeout=timeout,
-            isolation_level=isolation_level,
-            check_same_thread=check_same_thread,
-        )
-        opened.append(connection)
-        return connection
+    def reject_migration(storage: SQLiteExecutionHistory) -> None:
+        opened.append(storage._connection)
+        raise OSError("controlled post-connect setup failure")
 
-    monkeypatch.setattr(sqlite3, "connect", tracked_connect)
-    monkeypatch.setattr(
-        SQLiteExecutionHistory,
-        "_migrate",
-        Mock(side_effect=OSError("controlled post-connect setup failure")),
-    )
+    monkeypatch.setattr(SQLiteExecutionHistory, "_migrate", reject_migration)
 
     with pytest.raises(ExecutionHistoryStorageError, match="cannot open SQLite history"):
         SQLiteExecutionHistory(path=tmp_path / "history.sqlite3")
@@ -631,6 +637,42 @@ def test_given_post_connect_setup_failure_when_constructing_then_open_connection
         opened[0].execute("SELECT 1")
     assert len(opened) == test_case.expected_event_count + 1
     assert test_case.expected_run_count == 0
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        SQLitePersistenceCase(
+            description="native driver persists and reopens without Python connect",
+            expected_event_count=1,
+            expected_run_count=1,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_python_driver_unavailable_when_persisting_then_native_history_reopens(
+    tmp_path: Path,
+    test_case: SQLitePersistenceCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path: Path = tmp_path / "history.sqlite3"
+    event: LifecycleEvent = lifecycle_event("native-driver")
+    monkeypatch.setattr(
+        sqlite3, "connect", Mock(side_effect=RuntimeError("Python driver unavailable"))
+    )
+
+    with SQLiteExecutionHistory(path=path) as storage:
+        stored: StoredEvent = storage.append_event(event)
+        storage.project((stored,))
+
+    with SQLiteExecutionHistory(path=path) as reopened:
+        page: EventPage = reopened.get_events(event_filter=EventFilter())
+        runs: RunPage = reopened.get_runs(run_filter=RunFilter())
+        assert reopened.check_health() is True
+
+    assert len(page.records) == test_case.expected_event_count
+    assert page.records[0].event == stored.event
+    assert len(runs.records) == test_case.expected_run_count
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="subprocess SIGINT delivery requires POSIX")
