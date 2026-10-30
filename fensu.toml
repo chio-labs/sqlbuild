@@ -1574,6 +1574,12 @@ rule = "FPRSL105"
 path = "crates/sqlbuild-analysis/src/sql_tokens/main/builtin_function_names.rs"
 reason = "This test-support entry exists only for the SQL lint tests in sqlbuild-rules, which the analyzer does not count as importers."
 
+[[targets.rust.rule_exceptions]]
+rule = "FPRSS130"
+path = "crates/sqlbuild-python/src/bindings/_helpers/native_threads/exit_signal.rs"
+symbols = ["signal_interpreter_exit"]
+reason = "The existing interpreter-exit signal is process-wide and monotonic: every native daemon wait must observe any exit hook before Python finalization. The atomic replaces the same global threading.Event, not per-command lifecycle state."
+
 [targets.rust.rule_options.FPRSR311]
 allowed_entries = [
     "Cargo.toml",
@@ -1990,7 +1996,6 @@ pending_budgets = [
     "crates/sqlbuild-python/src/bindings/_helpers/model_config/template_data.rs=4",
     "crates/sqlbuild-python/src/bindings/_helpers/model_config/typed_config.rs=2",
     "crates/sqlbuild-python/src/bindings/_helpers/model_config/unicode_environment.rs=4",
-    "crates/sqlbuild-python/src/bindings/_helpers/native_threads/exit_signal.rs=4",
     "crates/sqlbuild-python/src/bindings/_helpers/output_capture/context.rs=6",
     "crates/sqlbuild-python/src/bindings/_helpers/output_capture/dispatcher.rs=33",
     "crates/sqlbuild-python/src/bindings/_helpers/output_capture/records.rs=16",
