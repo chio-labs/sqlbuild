@@ -216,9 +216,11 @@ export type LocationToken = {
 	state: TokenState;
 };
 
+/** A long-lived token of a service account. People don't have API tokens: they use `sqb login`. */
 export type ApiToken = {
 	id: string;
 	label: string;
+	/** The service account the token signs in as. */
 	owner: Principal;
 	prefix: string;
 	createdAt: Iso;
@@ -232,7 +234,7 @@ export type ApiToken = {
 /** Returned once on create or rotate; the server stores only a hash. */
 export type IssuedToken<T> = { token: T; secret: string };
 
-export type ApiTokenRequest = { label: string; owner: string; expiresInDays: number | null };
+export type ApiTokenRequest = { label: string; expiresInDays: number | null };
 
 // ---- connections ----
 

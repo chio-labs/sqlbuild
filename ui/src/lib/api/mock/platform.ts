@@ -122,8 +122,7 @@ function createPlatformFixtures(now: number) {
 	const apiTokens: ApiToken[] = [
 		{ id: 'tok-1', label: 'CI deploys', owner: CI_ACCOUNT, prefix: 'sqbt_4c1e', createdAt: ago(days(90)), createdBy: DEMO_USER, expiresAt: ahead(days(275)), lastUsedAt: ago(42), revokedAt: null, state: 'active' },
 		{ id: 'tok-2', label: 'Dashboard refresh', owner: REPORTING, prefix: 'sqbt_9a07', createdAt: ago(300), createdBy: DEMO_USER, expiresAt: ahead(days(30)), lastUsedAt: ago(120), revokedAt: null, state: 'active' },
-		{ id: 'tok-3', label: 'Laptop CLI', owner: DEMO_USER, prefix: 'sqbt_e26b', createdAt: ago(days(14)), createdBy: DEMO_USER, expiresAt: null, lastUsedAt: ago(75), revokedAt: null, state: 'active' },
-		{ id: 'tok-4', label: 'Old laptop', owner: ALEX, prefix: 'sqbt_51d2', createdAt: ago(days(160)), createdBy: ALEX, expiresAt: null, lastUsedAt: ago(days(70)), revokedAt: ago(days(65)), state: 'revoked' },
+		{ id: 'tok-4', label: 'Old CI runner', owner: CI_ACCOUNT, prefix: 'sqbt_51d2', createdAt: ago(days(160)), createdBy: DEMO_USER, expiresAt: null, lastUsedAt: ago(days(70)), revokedAt: ago(days(65)), state: 'revoked' },
 		{ id: 'tok-5', label: 'Load test', owner: CI_ACCOUNT, prefix: 'sqbt_0f8c', createdAt: ago(days(100)), createdBy: DEMO_USER, expiresAt: ago(days(70)), lastUsedAt: ago(days(71)), revokedAt: null, state: 'expired' }
 	];
 	const locationTokens: LocationToken[] = [
@@ -778,22 +777,24 @@ export class MockPlatformApi implements PlatformApi {
 		return this.#ctx.reply(structuredClone(account));
 	}
 
-	async listApiTokens(): Promise<ApiToken[]> {
+	async listServiceAccountTokens(): Promise<ApiToken[]> {
 		this.#require('token.manage');
 		return this.#ctx.reply(structuredClone(this.#data.apiTokens));
 	}
 
-	async createApiToken(request: ApiTokenRequest): Promise<IssuedToken<ApiToken>> {
+	async createServiceAccountToken(account: string, request: ApiTokenRequest): Promise<IssuedToken<ApiToken>> {
 		this.#require('token.manage');
-		const owner = this.#data.accounts.find((a) => a.name === request.owner);
-		if (!owner) throw new ApiError(`Unknown principal ${request.owner}`, 404);
+		const owner = this.#data.accounts.find((a) => a.name === account);
+		if (!owner) throw new ApiError(`Unknown account ${account}`, 404);
+		if (owner.kind !== 'service_account') throw new ApiError('Only service accounts have API tokens; people sign in with sqb login', 422);
+		if (owner.disabled) throw new ApiError(`${account} is disabled; enable it first`, 409);
 		if (!request.label.trim()) throw new ApiError('A label is required', 422);
 		const issued = this.#issueApiToken(request.label.trim(), owner, request.expiresInDays);
 		this.#audit('token.manage', { locationId: null, target: null, subject: issued.token.id }, `Created token "${issued.token.label}" for ${owner.name}`, null, issued.token.prefix);
 		return this.#ctx.reply(issued);
 	}
 
-	async rotateApiToken(tokenId: string): Promise<IssuedToken<ApiToken>> {
+	async rotateServiceAccountToken(tokenId: string): Promise<IssuedToken<ApiToken>> {
 		this.#require('token.manage');
 		const old = this.#data.apiTokens.find((t) => t.id === tokenId && t.state === 'active');
 		if (!old) throw new ApiError('Token not found or not active', 404);
@@ -806,7 +807,7 @@ export class MockPlatformApi implements PlatformApi {
 		return this.#ctx.reply(issued);
 	}
 
-	async revokeApiToken(tokenId: string): Promise<ApiToken> {
+	async revokeServiceAccountToken(tokenId: string): Promise<ApiToken> {
 		this.#require('token.manage');
 		const token = this.#data.apiTokens.find((t) => t.id === tokenId && t.state === 'active');
 		if (!token) throw new ApiError('Token not found or not active', 404);

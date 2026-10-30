@@ -1,6 +1,7 @@
 // Labels, tones and pure helpers shared by the Platform and Admin pages.
 
 import type {
+	AccountSource,
 	AssignmentScope,
 	LocationHealth,
 	Location,
@@ -85,6 +86,13 @@ export const tokenTone: Record<TokenState, string> = {
 	expired: 'var(--sb-text-faint)'
 };
 export const tokenLabel: Record<TokenState, string> = { active: 'Active', revoked: 'Revoked', expired: 'Expired' };
+
+export const accountSourceLabel: Record<AccountSource, string> = {
+	oidc: 'Single sign-on',
+	trusted_proxy: 'Company proxy sign-in',
+	password: 'Password',
+	service_account: 'API tokens'
+};
 
 /** `SCHEMA.NAME`, or `DB.SCHEMA.NAME` when `withDatabase`. */
 export function formatRelation(relation: RelationName, withDatabase = false): string {

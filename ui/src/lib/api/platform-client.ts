@@ -64,23 +64,23 @@ export interface PlatformApi {
 	// ---- maintenance ----
 	maintenanceHistory(scope: Scope): Promise<MaintenanceHistory>;
 
-	// ---- users and tokens ----
+	// ---- people, service accounts and their tokens ----
 	/** `user.manage` */
 	listAccounts(): Promise<Account[]>;
 	/** Blocks sign-in and revokes the account's sessions. You can't disable yourself. `user.manage` */
 	disableAccount(name: string): Promise<Account>;
 	/** Lets a disabled account sign in again. Sessions revoked on disable stay revoked; its unrevoked API tokens work again. `user.manage` */
 	enableAccount(name: string): Promise<Account>;
-	/** A non-person account that signs in with API tokens only. `user.manage` */
+	/** A non-person account for scripts and CI; it signs in with API tokens only. `user.manage` */
 	createServiceAccount(request: ServiceAccountRequest): Promise<Account>;
+	/** Tokens of every service account; people have none. `token.manage` */
+	listServiceAccountTokens(): Promise<ApiToken[]>;
+	/** Issues a token for a service account; the secret is returned once. `token.manage` */
+	createServiceAccountToken(account: string, request: ApiTokenRequest): Promise<IssuedToken<ApiToken>>;
+	/** Issues a new token with the same label and revokes the old one. `token.manage` */
+	rotateServiceAccountToken(tokenId: string): Promise<IssuedToken<ApiToken>>;
 	/** `token.manage` */
-	listApiTokens(): Promise<ApiToken[]>;
-	/** `token.manage` */
-	createApiToken(request: ApiTokenRequest): Promise<IssuedToken<ApiToken>>;
-	/** `token.manage` */
-	rotateApiToken(tokenId: string): Promise<IssuedToken<ApiToken>>;
-	/** `token.manage` */
-	revokeApiToken(tokenId: string): Promise<ApiToken>;
+	revokeServiceAccountToken(tokenId: string): Promise<ApiToken>;
 
 	// ---- roles and approvals ----
 	/** `role.assign` */

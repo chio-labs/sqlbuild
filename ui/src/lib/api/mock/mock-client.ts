@@ -371,17 +371,17 @@ export class MockApiClient implements ApiClient {
 	createServiceAccount(...args: Parameters<PlatformApi['createServiceAccount']>) {
 		return this.#platform.createServiceAccount(...args);
 	}
-	listApiTokens(...args: Parameters<PlatformApi['listApiTokens']>) {
-		return this.#platform.listApiTokens(...args);
+	listServiceAccountTokens(...args: Parameters<PlatformApi['listServiceAccountTokens']>) {
+		return this.#platform.listServiceAccountTokens(...args);
 	}
-	createApiToken(...args: Parameters<PlatformApi['createApiToken']>) {
-		return this.#platform.createApiToken(...args);
+	createServiceAccountToken(...args: Parameters<PlatformApi['createServiceAccountToken']>) {
+		return this.#platform.createServiceAccountToken(...args);
 	}
-	rotateApiToken(...args: Parameters<PlatformApi['rotateApiToken']>) {
-		return this.#platform.rotateApiToken(...args);
+	rotateServiceAccountToken(...args: Parameters<PlatformApi['rotateServiceAccountToken']>) {
+		return this.#platform.rotateServiceAccountToken(...args);
 	}
-	revokeApiToken(...args: Parameters<PlatformApi['revokeApiToken']>) {
-		return this.#platform.revokeApiToken(...args);
+	revokeServiceAccountToken(...args: Parameters<PlatformApi['revokeServiceAccountToken']>) {
+		return this.#platform.revokeServiceAccountToken(...args);
 	}
 	listRoles(...args: Parameters<PlatformApi['listRoles']>) {
 		return this.#platform.listRoles(...args);
