@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.186.1](https://github.com/sqlstack-io/sqlbuild/compare/v0.186.0...v0.186.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* match configured snapshot keys and cursors to quoted columns ([#1273](https://github.com/sqlstack-io/sqlbuild/issues/1273)) ([2116208](https://github.com/sqlstack-io/sqlbuild/commit/2116208e354c27cf946c0252f494d0404ab1cf76))
+
 ## [0.186.0](https://github.com/sqlstack-io/sqlbuild/compare/v0.185.0...v0.186.0) (2026-10-29)
 
 

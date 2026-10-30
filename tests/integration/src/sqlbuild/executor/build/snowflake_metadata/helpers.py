@@ -801,3 +801,42 @@ def schema_listing_counts(statements: tuple[str, ...]) -> dict[str, int]:
     ]
     matches: list[re.Match[str]] = list(filter(None, searches))
     return dict(Counter(f"{match['kind']} {match['scope']}" for match in matches))
+
+
+def quoted_configured_column_files(
+    *, unique_key: str, updated_at: str, cursor: str
+) -> dict[str, str]:
+    """A snapshot and a microbatch model over listings stored with quoted camelCase columns."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "partner_feed"\nadapter = "snowflake"\n\n'
+            '[connection]\naccount = "example"\nuser = "example"\n'
+            'database = "analytics"\nschema = "marts"\n\n'
+            '[defaults]\ndatabase = "analytics"\nschema = "marts"\nmaterialized = "table"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n"
+            "  - name: raw_listings\n    description: Partner listings in quoted camelCase.\n"
+            "    database: analytics\n    schema: raw\n    table: listings\n"
+            "  - name: raw_listing_events\n    description: Partner listing events.\n"
+            "    database: analytics\n    schema: raw\n    table: listing_events\n"
+        ),
+        "models/listing_history.sql": (
+            "MODEL (\n  description 'Listing price history.',\n  materialized snapshot,\n"
+            f"  unique_key [{unique_key}],\n  snapshot_strategy timestamp,\n"
+            f"  updated_at {updated_at},\n);\n\n"
+            'SELECT "listingId", "unitPrice", "updatedAt" FROM __source("raw_listings")\n'
+        ),
+        "models/listing_activity.sql": (
+            "MODEL (\n  description 'Listing events by hour.',\n  materialized incremental,\n"
+            "  incremental_strategy delete_insert,\n  incremental_mode microbatch,\n"
+            "  microbatch_strategy watermark,\n  cursor_watermark_mode all,\n"
+            f"  cursor {cursor},\n  cursor_type timestamp,\n  cursor_grain day,\n"
+            "  cursor_start '2026-01-01',\n  cursor_end '2026-01-03',\n"
+            "  cursor_inputs (\n"
+            "    raw_listing_events (column '\"eventAt\"', roles [filter, watermark]),\n  ),\n"
+            "  batch_size 1d,\n);\n\n"
+            'SELECT "listingId", "eventAt" FROM __source("raw_listing_events")\n'
+        ),
+    }

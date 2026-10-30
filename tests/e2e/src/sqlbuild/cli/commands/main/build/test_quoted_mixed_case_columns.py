@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import subprocess
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
+    QuotedConfiguredColumnsE2ETestCase,
     QuotedContractE2ETestCase,
     QuotedMixedCaseColumnsBuildE2ETestCase,
 )
@@ -159,6 +161,99 @@ def test_given_enforced_contract_on_quoted_alias_when_building_then_contract_and
         db_path=db_path, sql='SELECT "listingId" FROM main.listing_export'
     )
     assert rows == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        QuotedConfiguredColumnsE2ETestCase(
+            description="a quoted snapshot key and microbatch cursor build twice",
+            unique_key="'\"listingId\"'",
+            cursor="'\"eventAt\"'",
+            expected_history_rows=[("L1", 1299, True), ("L1", 1499, False)],
+            expected_activity_rows=[
+                ("L1", datetime(2026, 1, 1, 0, 30)),
+                ("L2", datetime(2026, 1, 1, 1, 30)),
+                ("L3", datetime(2026, 1, 1, 2, 30)),
+            ],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_quoted_configured_columns_when_building_twice_then_snapshot_and_batches_apply(
+    test_case: QuotedConfiguredColumnsE2ETestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="partner_feed",
+        repo_files={
+            "sqlbuild_project.toml": _PROJECT_FILES["sqlbuild_project.toml"],
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw_listings\n    description: Partner listings.\n"
+                "    schema: main\n    table: raw_listings\n"
+                "  - name: raw_listing_events\n    description: Partner listing events.\n"
+                "    schema: main\n    table: raw_listing_events\n"
+            ),
+            "models/listing_history.sql": (
+                "MODEL (\n  description 'Listing price history.',\n  materialized snapshot,\n"
+                f"  unique_key [{test_case.unique_key}],\n  snapshot_strategy timestamp,\n"
+                "  updated_at '\"updatedAt\"',\n);\n\n"
+                'SELECT "listingId", "unitPriceMinor", "updatedAt" FROM __source("raw_listings")\n'
+            ),
+            "models/listing_activity.sql": (
+                "MODEL (\n  description 'Listing events by hour.',\n  materialized incremental,\n"
+                "  incremental_strategy delete_insert,\n  incremental_mode microbatch,\n"
+                "  microbatch_strategy watermark,\n  cursor_watermark_mode all,\n"
+                f"  cursor {test_case.cursor},\n  cursor_type timestamp,\n  cursor_grain hour,\n"
+                "  cursor_inputs (\n"
+                '    raw_listing_events (column "eventAt", roles [filter, watermark]),\n  ),\n'
+                "  batch_size 1h,\n);\n\n"
+                'SELECT "listingId", "eventAt" FROM __source("raw_listing_events")\n'
+            ),
+        },
+    )
+    db_path: Path = project_dir / "partner_feed.duckdb"
+    execute_duckdb(
+        db_path=db_path,
+        sql=(
+            "CREATE TABLE main.raw_listings AS SELECT 'L1' AS \"listingId\", "
+            '1299::BIGINT AS "unitPriceMinor", TIMESTAMP \'2026-01-01 00:00:00\' AS "updatedAt";\n'
+            "CREATE TABLE main.raw_listing_events AS SELECT * FROM (VALUES "
+            "('L1', TIMESTAMP '2026-01-01 00:30:00'), ('L2', TIMESTAMP '2026-01-01 01:30:00')) "
+            'AS v("listingId", "eventAt")'
+        ),
+    )
+    first: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    execute_duckdb(
+        db_path=db_path,
+        sql=(
+            'UPDATE main.raw_listings SET "unitPriceMinor" = 1499, '
+            "\"updatedAt\" = TIMESTAMP '2026-01-02 00:00:00';\n"
+            "INSERT INTO main.raw_listing_events VALUES ('L3', TIMESTAMP '2026-01-01 02:30:00')"
+        ),
+    )
+    second: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+
+    for build in (first, second):
+        assert build.returncode == 0, build.stdout + build.stderr
+    history: list[tuple[object, ...]] = query_duckdb(
+        db_path=db_path,
+        sql=(
+            'SELECT "listingId", "unitPriceMinor", valid_to IS NOT NULL '
+            "FROM main.listing_history ORDER BY valid_from"
+        ),
+    )
+    activity: list[tuple[object, ...]] = query_duckdb(
+        db_path=db_path,
+        sql='SELECT "listingId", "eventAt" FROM main.listing_activity ORDER BY "eventAt"',
+    )
+    assert history == test_case.expected_history_rows
+    assert activity == test_case.expected_activity_rows
 
 
 if __name__ == "__main__":

@@ -49,6 +49,7 @@ from sqlbuild.adapter.contract.constants import (
     QUALIFIED_NAME_SEPARATOR,
 )
 from sqlbuild.adapter.contract.exceptions import AdapterUserError, ViewRenameRefusedError
+from sqlbuild.adapter.contract.main.column_name_key import column_name_key
 from sqlbuild.adapter.contract.main.is_quoted_identifier import is_quoted_identifier
 from sqlbuild.adapter.contract.main.run_relation_read_probe import run_relation_read_probe
 from sqlbuild.adapter.contract.main.same_view_definition import same_view_definition
@@ -2079,7 +2080,7 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         exclude_columns: tuple[str, ...] = (),
     ) -> tuple[str, ...]:
         immutable_columns: frozenset[str] = frozenset(
-            column.lower() for column in (*unique_key, *exclude_columns)
+            column_name_key(column) for column in (*unique_key, *exclude_columns)
         )
         join_condition: str = " AND ".join(
             f"__target.{self.render_identifier(k)} = __source.{self.render_identifier(k)}"
@@ -2088,7 +2089,7 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         update_assignments: str = ", ".join(
             f"{self.render_identifier(col)} = __source.{self.render_identifier(col)}"
             for col in source_columns
-            if col.lower() not in immutable_columns
+            if column_name_key(col) not in immutable_columns
         )
         insert_columns: str = ", ".join(self.render_identifier(col) for col in source_columns)
         insert_values: str = ", ".join(
