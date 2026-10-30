@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { RunNode } from '$lib/api';
-	import { formatSeconds, nodeStatusTone } from '$lib/operate/labels';
+	import { nodeStatusTone } from '$lib/operate/labels';
+	import { axisTicks as ticksFor, formatSpan, formatTick, tickStep as stepFor } from './utils';
 
 	export type GanttGroup = { runId: string; label: string; tone: string; href: string };
 
@@ -9,18 +10,19 @@
 		nodes,
 		origin,
 		now,
-		selected = null,
+		selected = [],
 		groups = [],
 		onselect
 	}: {
 		nodes: RunNode[];
-		/** Time zero of the axis (ms). */
+		/** Time zero of the axis (ms): the first node's start. */
 		origin: number;
 		now: number;
-		selected?: string | null;
+		selected?: string[];
 		/** Child runs of a group, to section the rows. */
 		groups?: GanttGroup[];
-		onselect: (nodeKey: string) => void;
+		/** `add` is true for Ctrl-, Cmd- or Shift-click. */
+		onselect: (nodeKey: string, add: boolean) => void;
 	} = $props();
 
 	const startOf = (n: RunNode) => (n.startedAt ? (Date.parse(n.startedAt) - origin) / 1000 : null);
@@ -44,15 +46,8 @@
 	const trackW = $derived(trackBaseW * zoom);
 	const pxPerSec = $derived(trackW / (total * 1.08));
 	const xOf = (sec: number) => sec * pxPerSec;
-	const tickStep = $derived.by(() => {
-		const raw = total / Math.max(4, Math.floor(trackW / 130));
-		return [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600].find((c) => c >= raw) ?? 3600;
-	});
-	const axisTicks = $derived.by(() => {
-		const out: number[] = [];
-		for (let t = 0; t <= total + 1e-9; t += tickStep) out.push(t);
-		return out;
-	});
+	const tickStep = $derived(stepFor(total, Math.max(4, Math.floor(trackW / 110))));
+	const axisTicks = $derived(ticksFor(total, tickStep));
 
 	function autoFit(): number {
 		const ctx = document.createElement('canvas').getContext('2d');
@@ -93,10 +88,11 @@
 	function skipText(n: RunNode): string {
 		if (n.status === 'skipped' && n.skippedBecauseOf) {
 			const across = n.skippedBecauseOf.runId !== n.runId;
-			return `skipped because of ${n.skippedBecauseOf.nodeKey}${across ? ` in ${n.skippedBecauseOf.jobKey ?? n.skippedBecauseOf.runId}` : ''}`;
+			return `skipped: ${n.skippedBecauseOf.nodeKey} failed${across ? ` in ${n.skippedBecauseOf.jobKey ?? n.skippedBecauseOf.runId}` : ''}`;
 		}
-		if (n.status === 'pending') return 'pending';
+		if (n.status === 'pending') return 'not started yet';
 		if (n.status === 'not_run') return 'not run: the run ended first';
+		if (n.status === 'cancelled') return 'not run: cancelled';
 		return n.status;
 	}
 </script>
@@ -109,7 +105,7 @@
 		<input type="range" min={ZOOM_MIN} max={ZOOM_MAX} step="0.1" bind:value={zoom} title="Zoom" />
 		<button onclick={() => zoomBy(1.5)} disabled={zoom >= ZOOM_MAX} title="Zoom in">+</button>
 	</div>
-	<button class="fit" onclick={() => ((zoom = 1), ganttEl && (ganttEl.scrollLeft = 0))} disabled={zoom === 1}>fit</button>
+	<button class="fit" onclick={() => ((zoom = 1), ganttEl && (ganttEl.scrollLeft = 0))} disabled={zoom === 1}>Fit</button>
 </div>
 
 <div class="pane">
@@ -122,7 +118,7 @@
 			<div class="axis">
 				<div class="gutter axis-gutter" class:shadow={scrolledX} style:width="{gutterW}px">Node</div>
 				<div class="axis-track" style:width="{trackW}px">
-					{#each axisTicks as tk (tk)}<span class:first={tk === 0} style:left="{xOf(tk)}px">{formatSeconds(tk)}</span>{/each}
+					{#each axisTicks as tk (tk)}<span class:first={tk === 0} style:left="{xOf(tk)}px">{formatTick(tk, tickStep)}</span>{/each}
 				</div>
 			</div>
 			<div
@@ -152,7 +148,7 @@
 					{@const n = row.node}
 					{@const s = startOf(n)}
 					{@const e = endOf(n)}
-					<button class="row" class:sel={selected === n.nodeKey} onclick={() => onselect(n.nodeKey)}>
+					<button class="row" class:sel={selected.includes(n.nodeKey)} onclick={(ev) => onselect(n.nodeKey, ev.metaKey || ev.ctrlKey || ev.shiftKey)}>
 						<span
 							class="gutter cell"
 							class:shadow={scrolledX}
@@ -160,15 +156,15 @@
 							style:color={n.status === 'failed' ? 'var(--sb-error)' : s == null ? 'var(--sb-text-faint)' : undefined}
 							title={n.nodeKey}
 						>
-							{#if selected === n.nodeKey}<span class="sel-bar"></span>{/if}
-							{n.nodeKey}{#if n.critical}<em title="critical: a failure stops the group">critical</em>{/if}
+							{#if selected.includes(n.nodeKey)}<span class="sel-bar"></span>{/if}
+							{n.nodeKey}{#if n.critical}<em title="Marked critical: if it fails, the whole group stops">critical</em>{/if}
 						</span>
 						<span class="track" style:width="{trackW}px">
 							{#if s == null || e == null}
 								<span class="note">{skipText(n)}</span>
 							{:else}
 								<span class="bar" class:live={n.status === 'running'} style:left="{xOf(s)}px" style:width="{Math.max(xOf(e - s), 3)}px" style:background={nodeStatusTone[n.status]}></span>
-								<span class="dur" style:left="{xOf(e) > trackW - 56 ? xOf(s) - 8 : xOf(e) + 8}px" class:flip={xOf(e) > trackW - 56}>{formatSeconds(e - s)}{n.status === 'running' ? ' so far' : ''}</span>
+								<span class="dur" style:left="{xOf(e) > trackW - 56 ? xOf(s) - 8 : xOf(e) + 8}px" class:flip={xOf(e) > trackW - 56}>{formatSpan(e - s)}{n.status === 'running' ? ' so far' : ''}</span>
 							{/if}
 						</span>
 					</button>

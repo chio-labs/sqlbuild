@@ -117,6 +117,8 @@ export function computeNodes(record: RunRecord, siblings: RunRecord[], now: numb
 		rowsAffected: null,
 		errorCode: null,
 		errorMessage: null,
+		errorLocation: null,
+		errorDetail: null,
 		skippedBecauseOf: null,
 		critical: script.critical.includes(key)
 	});
@@ -148,13 +150,15 @@ export function computeNodes(record: RunRecord, siblings: RunRecord[], now: numb
 			const fails = script.fail.includes(key);
 			const status: RunNodeStatus = fails ? 'failed' : script.warn.includes(key) ? 'warn' : 'success';
 			if (fails) failed.set(key, { nodeKey: key, runId: run.id, jobKey: run.jobKey, at: e });
+			const message = fails ? (script.errors[key] ?? 'Statement failed in the warehouse') : null;
 			return {
 				...base(key, status),
 				startedAt: iso(s),
 				endedAt: iso(e),
 				rowsAffected: fails || snapshotNode(key)?.kind === 'view' ? null : 120 + (hash(key + run.id) % 48000),
 				errorCode: fails ? 'E2103' : null,
-				errorMessage: fails ? (script.errors[key] ?? 'Statement failed in the warehouse') : null
+				errorMessage: message,
+				...(fails ? failureDetail(key, run, message ?? '') : {})
 			};
 		};
 		if (terminal && script.end === 'complete') return finish();
@@ -167,13 +171,44 @@ export function computeNodes(record: RunRecord, siblings: RunRecord[], now: numb
 					startedAt: iso(s),
 					endedAt: run.endedAt,
 					errorCode: 'worker_lost',
-					errorMessage: 'The worker stopped sending heartbeats and was killed'
+					errorMessage: 'Lost contact with the run while this node was building',
+					errorDetail: 'The run stopped sending heartbeats while this node was building and was marked failed.\nThe warehouse statement may still have finished; rerunning is safe because the write is idempotent.'
 				};
 			return { ...base(key, 'cancelled'), startedAt: iso(s), endedAt: run.endedAt };
 		}
 		if (!terminal) return base(key, 'pending');
 		return base(key, script.end === 'cancelled' ? 'cancelled' : 'not_run');
 	});
+}
+
+/** Mock failure location and full text: the model file, and a line inside its main statement. */
+function failureDetail(key: string, run: Run, message: string): Pick<RunNode, 'errorLocation' | 'errorDetail'> {
+	const file = snapshotNode(key)?.path ?? `models/${key}.sql`;
+	const line = 4 + (hash(key) % 30);
+	const queryId = queryIdOf(statementIdOf(run, key));
+	return {
+		errorLocation: { file, line },
+		errorDetail: [
+			`error[E2103]: ${message}`,
+			`  --> ${file}:${line}`,
+			`   |`,
+			`${String(line).padStart(3)} |   ${key.includes('revenue') ? 'sum(amount) / count(distinct order_id) as revenue_per_order' : 'cast(lifetime_value as number(10, 2)) as lifetime_value'}`,
+			`   |   ${'^'.repeat(24)}`,
+			``,
+			`Warehouse query ${queryId} failed after ${1 + (hash(key) % 40)}s.`,
+			`Statement: ${STATEMENT_KIND[snapshotNode(key)?.kind ?? 'table'] ?? 'create_table_as'} ${key}`
+		].join('\n')
+	};
+}
+
+export function statementIdOf(run: Run, nodeKey: string): string {
+	return `stmt-${run.id.replace(/^run-/, '')}-${nodeKey}`;
+}
+
+/** A warehouse-style query ID, stable per statement. */
+export function queryIdOf(statementId: string): string {
+	const h = (n: number) => hash(`${statementId}:${n}`).toString(16).padStart(8, '0');
+	return `${h(1)}-0000-${h(2).slice(0, 4)}-${h(3).slice(0, 4)}-${h(4)}${h(5).slice(0, 4)}`;
 }
 
 export function countNodes(nodes: RunNode[]): NodeCounts {
@@ -288,7 +323,7 @@ const STATEMENT_KIND: Partial<Record<string, string>> = {
 	loader: 'loader_insert'
 };
 
-function sqlFor(key: string, kind: string, target: string): string {
+export function sqlFor(key: string, kind: string, target: string): string {
 	const rel = `${target === 'dev' ? 'dev_demo' : 'analytics'}.${key}`;
 	const n = snapshotNode(key);
 	const from = (n?.upstream ?? []).map((u) => `analytics.${u}`);
@@ -303,7 +338,12 @@ function sqlFor(key: string, kind: string, target: string): string {
 
 export type RunExecution = { events: RunEvent[]; statements: RunStatement[]; output: RunOutputLine[] };
 
-export function execution(record: RunRecord, nodes: RunNode[]): RunExecution {
+/** Mock: SQL capture misses a few statements, as when capture was off or retention dropped the text. */
+export function sqlRecorded(statementId: string): boolean {
+	return hash(statementId) % 11 !== 0;
+}
+
+export function execution(record: RunRecord, nodes: RunNode[], now?: number): RunExecution {
 	const { run, script } = record;
 	type Draft = Omit<RunEvent, 'id' | 'storageId' | 'level' | 'runId' | 'producer'> & { producer?: RunEvent['producer'] };
 	const drafts: Draft[] = [];
@@ -346,21 +386,25 @@ export function execution(record: RunRecord, nodes: RunNode[]): RunExecution {
 			ev('resource_attempt_started', s, n.nodeKey, `Started ${k} ${n.nodeKey}`);
 			const kind = STATEMENT_KIND[k];
 			if (kind) {
-				const statementId = `stmt-${run.id.replace(/^run-/, '')}-${n.nodeKey}`;
+				const statementId = statementIdOf(run, n.nodeKey);
 				const stEnd = e != null ? e - 120 : null;
 				const failed = n.status === 'failed';
+				const running = n.status === 'running';
 				statements.push({
 					id: statementId,
 					runId: run.id,
 					invocationId: inv,
+					sequence: statements.length + 1,
 					nodeKey: n.nodeKey,
 					kind,
-					status: n.status === 'running' ? 'running' : n.status === 'cancelled' ? 'cancelled' : failed ? 'failed' : 'completed',
+					status: running ? 'running' : n.status === 'cancelled' ? 'cancelled' : failed ? 'failed' : 'completed',
 					startedAt: iso(s + 60),
 					endedAt: stEnd == null ? null : iso(stEnd),
 					rowsAffected: n.rowsAffected,
-					sql: sqlFor(n.nodeKey, kind, run.target),
-					error: failed ? n.errorMessage : null
+					rowsSoFar: running ? Math.round(((now ?? s) - s) / 1000) * (37 + (hash(n.nodeKey) % 400)) : null,
+					queryId: run.target === 'dev' ? null : queryIdOf(statementId),
+					sqlRecorded: sqlRecorded(statementId),
+					error: failed ? (n.errorDetail ?? n.errorMessage) : null
 				});
 				ev('statement_submitted', s + 40, n.nodeKey, `${kind} submitted`, statementId);
 				ev('statement_started', s + 60, n.nodeKey, `${kind} running`, statementId);

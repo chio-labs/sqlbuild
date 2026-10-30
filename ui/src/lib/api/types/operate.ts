@@ -208,6 +208,10 @@ export type RunNode = {
 	rowsAffected: number | null;
 	errorCode: string | null;
 	errorMessage: string | null;
+	/** Where in the project the failure points, e.g. the model file and line of the failing statement. */
+	errorLocation: { file: string; line: number } | null;
+	/** Full error text (warehouse message, statement, trace); `errorMessage` is its first line. */
+	errorDetail: string | null;
 	skippedBecauseOf: SkippedBecauseOf | null;
 	/** Node failure stops the whole group (`critical = true`). */
 	critical: boolean;
@@ -270,15 +274,25 @@ export type RunStatement = {
 	id: string;
 	runId: string;
 	invocationId: string;
+	/** 1-based order within the run. */
+	sequence: number;
 	nodeKey: string;
 	kind: string;
 	status: 'running' | 'completed' | 'failed' | 'cancelled';
 	startedAt: Iso;
 	endedAt: Iso | null;
 	rowsAffected: number | null;
-	sql: string;
+	/** Rows processed so far while running, when the warehouse reports progress. */
+	rowsSoFar: number | null;
+	/** The warehouse's own ID for the query, for its query history; null when the adapter has none. */
+	queryId: string | null;
+	/** False when SQL capture was off or the text was dropped by retention. */
+	sqlRecorded: boolean;
 	error: string | null;
 };
+
+/** One statement's SQL, loaded on demand. Null when it was not recorded. */
+export type StatementSql = { statementId: string; sql: string | null };
 
 export type RunOutputLine = {
 	invocationId: string;
@@ -350,6 +364,10 @@ export type RunDetail = {
 	waits: QueueWait[];
 	/** Nodes a rerun from failure would run: the failed ones plus exactly those skipped. */
 	rerunFromFailureNodes: string[];
+	/** The run this one reruns. */
+	rerunOf: Run | null;
+	/** Later runs that rerun this one, newest first. */
+	reruns: Run[];
 };
 
 // ---- queue ----
@@ -463,7 +481,8 @@ export type JobLaunchOptions = {
 	fullRefresh?: boolean;
 };
 
-export type RerunMode = 'all' | 'from_failure';
+/** `selected` reruns exactly the nodes passed with the request. */
+export type RerunMode = 'all' | 'from_failure' | 'selected';
 
 // ---- jobs and job groups ----
 

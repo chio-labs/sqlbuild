@@ -29,6 +29,7 @@ import type {
 	Scope,
 	SnapshotChange,
 	SnapshotNode,
+	StatementSql,
 	Timeline,
 	Trigger,
 	TriggerDetail,
@@ -82,13 +83,16 @@ export interface ApiClient extends PlatformApi {
 	/** Recall events and scheduler facts in storage order, paged by `after`. */
 	listRunEvents(scope: Scope, runId: string, query?: { after?: number; limit?: number }): Promise<RunEventPage>;
 	listRunStatements(scope: Scope, runId: string): Promise<RunStatement[]>;
+	/** One statement's SQL, fetched when its row is expanded. `view.sql` */
+	getStatementSql(scope: Scope, runId: string, statementId: string): Promise<StatementSql>;
 	listRunOutput(scope: Scope, runId: string): Promise<RunOutputLine[]>;
 	/** Queued runs in claim order, with why each one waits. */
 	listQueue(scope: Scope): Promise<QueueEntry[]>;
 	timeline(scope: Scope, window: { since: string; until: string }): Promise<Timeline>;
 	/** Writes a `cancel_requested` fact; the scheduler then signals the worker. */
 	cancelRun(scope: Scope, runId: string): Promise<Run>;
-	rerunRun(scope: Scope, runId: string, mode: RerunMode): Promise<Run>;
+	/** `nodes` is required for `selected` and ignored otherwise. */
+	rerunRun(scope: Scope, runId: string, mode: RerunMode, nodes?: string[]): Promise<Run>;
 
 	listSnapshotNodes(scope: Scope): Promise<SnapshotNode[]>;
 	/** The server's pre-launch check: resolution, write set and authorization. */

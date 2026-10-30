@@ -32,6 +32,7 @@ import type {
 	RunTabCounts,
 	Scope,
 	SnapshotNode,
+	StatementSql,
 	Tick,
 	Timeline,
 	TimelineBar,
@@ -71,6 +72,7 @@ import {
 	isActive,
 	isTerminal,
 	liveness,
+	sqlFor,
 	statusReason,
 	type RunRecord
 } from './run-detail';
@@ -275,7 +277,12 @@ export class MockOperate {
 				command: rec.script.nodes.length ? commandOf(rec) : `group ${rec.run.jobKey}: ${this.#children(rec).length} child runs`
 			},
 			waits: rec.run.status === 'queued' ? this.#queue().get(rec.run.id) ?? [] : [],
-			rerunFromFailureNodes: nodes.filter((n) => n.status === 'failed' || n.status === 'skipped').map((n) => n.nodeKey)
+			rerunFromFailureNodes: nodes.filter((n) => n.status === 'failed' || n.status === 'skipped').map((n) => n.nodeKey),
+			rerunOf: rec.run.rerunOfRunId ? ((r) => (r ? this.#view(r, scope) : null))(this.#byId(rec.run.rerunOfRunId)) : null,
+			reruns: this.#records
+				.filter((r) => r.run.rerunOfRunId === rec.run.id)
+				.map((r) => this.#view(r, scope))
+				.sort((a, b) => b.queuedAt.localeCompare(a.queuedAt))
 		};
 		return this.#ctx.reply(detail);
 	}
@@ -297,7 +304,18 @@ export class MockOperate {
 	listRunStatements(scope: Scope, runId: string): Promise<RunStatement[]> {
 		const rec = this.#require(runId);
 		const now = Date.now();
-		return this.#ctx.reply([rec, ...this.#children(rec)].flatMap((r) => execution(r, this.#nodesOf(r, now)).statements));
+		return this.#ctx.reply([rec, ...this.#children(rec)].flatMap((r) => execution(r, this.#nodesOf(r, now), now).statements));
+	}
+
+	getStatementSql(scope: Scope, runId: string, statementId: string): Promise<StatementSql> {
+		this.#need('view.sql');
+		const rec = this.#require(runId);
+		const now = Date.now();
+		const statement = [rec, ...this.#children(rec)]
+			.flatMap((r) => execution(r, this.#nodesOf(r, now), now).statements)
+			.find((st) => st.id === statementId);
+		if (!statement) throw new ApiError(`Unknown statement ${statementId}`, 404);
+		return this.#ctx.reply({ statementId, sql: statement.sqlRecorded ? sqlFor(statement.nodeKey, statement.kind, scope.target) : null });
 	}
 
 	listRunOutput(scope: Scope, runId: string): Promise<RunOutputLine[]> {
@@ -399,15 +417,16 @@ export class MockOperate {
 		return this.#ctx.reply(this.#view(rec, scope));
 	}
 
-	rerunRun(scope: Scope, runId: string, mode: RerunMode): Promise<Run> {
+	rerunRun(scope: Scope, runId: string, mode: RerunMode, selectedNodes: string[] = []): Promise<Run> {
 		this.#need('run.rerun');
 		const source = this.#require(runId);
 		if (isActive(source.run.status)) throw new ApiError(`${runId} is still active`, 409);
 		if (source.run.rewriteHistory) this.#need('run.rewrite_history');
+		if (mode === 'selected' && !selectedNodes.length) throw new ApiError('Choose at least one node to rerun', 422);
 		const now = Date.now();
 		const affected = (rec: RunRecord) =>
 			this.#nodesOf(rec, now)
-				.filter((n) => n.status === 'failed' || n.status === 'skipped')
+				.filter((n) => (mode === 'selected' ? selectedNodes.includes(n.nodeKey) : n.status === 'failed' || n.status === 'skipped'))
 				.map((n) => n.nodeKey);
 		const user = this.#ctx.user();
 		const id = this.#newId();
