@@ -1,6 +1,7 @@
 //! SQL test artifact paths, and the executed SQL and Python check results written to `target/run`.
 
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python, pyfunction,
@@ -87,14 +88,14 @@ pub(crate) fn planned_sql_test_path<'py>(entry: &Bound<'py, PyAny>) -> PyResult<
 }
 
 /// The target path of one compiled SQL test from its chain's model names.
-pub(crate) fn compiled_sql_test_path<'py>(
-    test: &Bound<'py, PyAny>,
-    model_names: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    path_object(
-        test.py(),
-        &sql_test_output_path(&path_facts(test, model_names.extract()?)?),
-    )
+pub(crate) fn compiled_sql_test_path(
+    test: &Bound<'_, PyAny>,
+    model_names: Vec<String>,
+) -> PyResult<PathBuf> {
+    Ok(PathBuf::from(sql_test_output_path(&path_facts(
+        test,
+        model_names,
+    )?)))
 }
 
 fn write_text(path: &Bound<'_, PyAny>, text: &str) -> PyResult<()> {

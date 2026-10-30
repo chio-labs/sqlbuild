@@ -196,16 +196,18 @@ pub(crate) fn artifact_written_at(
 
 /// Note an earlier artifact kept as-is after its size and mtime were validated.
 pub(crate) fn artifact_kept(
+    py: Python<'_>,
     recorder: ArtifactRecorder<'_>,
-    path: &Bound<'_, PyAny>,
+    path: &Path,
     (size, mtime_ns): (u64, i64),
 ) -> PyResult<()> {
     let Some(recorder) = recorder else {
         return Ok(());
     };
-    recorder
-        .get()
-        .record(absolute(path)?, RecordedArtifact::Kept { size, mtime_ns });
+    recorder.get().record(
+        absolute_path(py, path)?,
+        RecordedArtifact::Kept { size, mtime_ns },
+    );
     Ok(())
 }
 
