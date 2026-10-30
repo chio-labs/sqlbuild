@@ -684,3 +684,71 @@ pub struct BuildExecutionResult<V> {
     pub audit_result_projection_failed_count: i64,
     pub timings: BuildExecutionTimings,
 }
+
+/// The outcome of a local scenario replay.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScenarioLocalRunStatus {
+    Pass,
+    Fail,
+    Error,
+    Skip,
+}
+
+impl ResultEnum for ScenarioLocalRunStatus {
+    const ALL: &'static [Self] = &[Self::Pass, Self::Fail, Self::Error, Self::Skip];
+
+    fn value(self) -> &'static str {
+        match self {
+            Self::Pass => "PASS",
+            Self::Fail => "FAIL",
+            Self::Error => "ERROR",
+            Self::Skip => "SKIP",
+        }
+    }
+}
+
+/// The executor's comparison outcome; absent counts mean the comparison did not run.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ScenarioExpectedExpectationExecutionResult {
+    pub model_name: String,
+    pub status: ExecutionStatus,
+    pub actual_row_count: Option<i64>,
+    pub expected_row_count: Option<i64>,
+    pub mismatched_row_count: Option<i64>,
+    pub missing_row_count: Option<i64>,
+    pub error_code: Option<String>,
+    pub error_help: Option<String>,
+    pub error_message: Option<String>,
+}
+
+/// The executor's zero-row assertion outcome; only warehouse cell values remain host-owned.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ScenarioAssertionExpectationExecutionResult<V> {
+    pub name: String,
+    pub status: ExecutionStatus,
+    pub failing_row_count: Option<i64>,
+    pub sample_rows: Vec<Vec<V>>,
+    pub error_code: Option<String>,
+    pub error_help: Option<String>,
+    pub error_message: Option<String>,
+}
+
+/// The completed scenario fields consumed by command reporting; runtime artifact publication stays at the executor callback edge.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ScenarioRunResult<V> {
+    pub scenario_name: String,
+    pub status: ExecutionStatus,
+    pub retained: bool,
+    pub local_status: Option<ScenarioLocalRunStatus>,
+    pub local_duckdb_path: Option<PathBuf>,
+    pub retained_relations: Option<Vec<sqlbuild_core::scenario_command::models::RetainedRelation>>,
+    pub seed_results: Vec<SeedExecutionResult>,
+    pub function_results: Vec<FunctionExecutionResult>,
+    pub model_results: Vec<ModelExecutionResult<V>>,
+    pub expected_results: Vec<ScenarioExpectedExpectationExecutionResult>,
+    pub assertion_results: Vec<ScenarioAssertionExpectationExecutionResult<V>>,
+    pub error_code: Option<String>,
+    pub error_help: Option<String>,
+    pub error_message: Option<String>,
+    pub duration_ms: Option<f64>,
+}

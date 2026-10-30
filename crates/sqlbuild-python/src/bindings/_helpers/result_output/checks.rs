@@ -4,8 +4,8 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 use sqlbuild_core::json::models::JsonValue;
 use sqlbuild_host::models::{
-    AuditEvaluationMode, AuditExecutionResult, AuditOutcome, MeasuredValue,
-    SqlTestDifferenceSample, SqlTestExecutionResult, SqlTestOutcome, StepResult,
+    AuditEvaluationMode, AuditExecutionResult, AuditOutcome, ExecutionStatus, MeasuredValue,
+    ScenarioRunResult, SqlTestDifferenceSample, SqlTestExecutionResult, SqlTestOutcome, StepResult,
 };
 use sqlbuild_host::types::ResultEnum;
 
@@ -15,17 +15,10 @@ use crate::bindings::_helpers::result_output::assets::{or_none, without_none};
 use crate::bindings::_helpers::result_output::projection::{Projection, ResultIdentity, rounded};
 use crate::bindings::_helpers::scopes::scope_report_objects::json_to_python;
 
-const SUCCESS_STATUS: &str = "success";
 const DECIMAL_KIND: &str = "decimal";
 const SCALAR_KINDS: [&str; 5] = ["string", "integer", "boolean", "float", "null"];
 const COLLECTION_KINDS: [&str; 2] = ["list", "set"];
 const ERROR_FIELDS: [&str; 3] = ["error_code", "error_help", "error_message"];
-const EXPECTED_COUNT_FIELDS: [&str; 4] = [
-    "actual_row_count",
-    "expected_row_count",
-    "mismatched_row_count",
-    "missing_row_count",
-];
 const COMPARISON_COMPLETED: &str = "completed";
 const COMPARISON_NOT_RUN: &str = "not_run";
 
@@ -426,17 +419,23 @@ fn with_errors<'py>(
 }
 
 /// The scenario check with its expected-result and assertion outcomes.
-pub(crate) fn scenario_check<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
-    let py: Python<'py> = result.py();
-    let name: String = text(&native_field(result, "scenario_name")?)?;
-    let status: Bound<'py, PyAny> = value(result, "status")?;
+pub(crate) fn scenario_check<'py>(
+    py: Python<'py>,
+    result: &ScenarioRunResult<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let name = &result.scenario_name;
     let mut expected: Vec<Bound<'py, PyDict>> = Vec::new();
-    for item in items(&native_field(result, "expected_results")?)? {
-        let counts: Vec<(&'static str, Bound<'py, PyAny>)> = fields(&item, &EXPECTED_COUNT_FIELDS)?;
-        let compared: bool = counts.iter().all(|(_, count)| !count.is_none());
+    for item in &result.expected_results {
+        let counts = [
+            ("actual_row_count", item.actual_row_count),
+            ("expected_row_count", item.expected_row_count),
+            ("mismatched_row_count", item.mismatched_row_count),
+            ("missing_row_count", item.missing_row_count),
+        ];
+        let compared = counts.iter().all(|(_, count)| count.is_some());
         let mut entries: Vec<(&'static str, Bound<'py, PyAny>)> = vec![
-            ("model_name", native_field(&item, "model_name")?),
-            ("status", value(&item, "status")?),
+            ("model_name", any(py, &item.model_name)?),
+            ("status", any(py, item.status.value())?),
             (
                 "comparison_status",
                 any(
@@ -449,9 +448,14 @@ pub(crate) fn scenario_check<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<
                 )?,
             ),
         ];
-        entries.extend(counts);
+        for (name, count) in counts {
+            entries.push((name, any(py, count)?));
+        }
         let result: Bound<'py, PyDict> = dict(py, entries)?;
-        for (name, error) in fields(&item, &ERROR_FIELDS)? {
+        for (name, error) in scenario_errors(
+            py,
+            (&item.error_code, &item.error_help, &item.error_message),
+        )? {
             if !error.is_none() {
                 result.set_item(name, error)?;
             }
@@ -459,9 +463,8 @@ pub(crate) fn scenario_check<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<
         expected.push(result);
     }
     let mut assertions: Vec<Bound<'py, PyDict>> = Vec::new();
-    for item in items(&native_field(result, "assertion_results")?)? {
-        let failing: Bound<'py, PyAny> = native_field(&item, "failing_row_count")?;
-        let ran: &str = if failing.is_none() {
+    for item in &result.assertion_results {
+        let ran: &str = if item.failing_row_count.is_none() {
             COMPARISON_NOT_RUN
         } else {
             COMPARISON_COMPLETED
@@ -469,72 +472,95 @@ pub(crate) fn scenario_check<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<
         let result: Bound<'py, PyDict> = dict(
             py,
             vec![
-                ("name", native_field(&item, "name")?),
-                ("status", value(&item, "status")?),
+                ("name", any(py, &item.name)?),
+                ("status", any(py, item.status.value())?),
                 ("query_status", any(py, ran)?),
-                ("failing_row_count", failing),
-                ("sample_rows", native_field(&item, "sample_rows")?),
+                ("failing_row_count", any(py, item.failing_row_count)?),
+                ("sample_rows", any(py, &item.sample_rows)?),
             ],
         )?;
-        for (name, error) in fields(&item, &ERROR_FIELDS)? {
+        for (name, error) in scenario_errors(
+            py,
+            (&item.error_code, &item.error_help, &item.error_message),
+        )? {
             if !error.is_none() {
                 result.set_item(name, error)?;
             }
         }
         assertions.push(result);
     }
-    with_errors(
-        result,
-        vec![
-            ("kind", any(py, "scenario")?),
-            ("name", any(py, name.as_str())?),
-            ("check_id", any(py, format!("sql_scenario:{name}"))?),
-            ("passed", any(py, status.eq(SUCCESS_STATUS)?)?),
-            ("status", status),
-            ("expected_results", tuple_of(py, expected)?),
-            ("assertion_results", tuple_of(py, assertions)?),
-        ],
-    )
+    let mut entries = vec![
+        ("kind", any(py, "scenario")?),
+        ("name", any(py, name.as_str())?),
+        ("check_id", any(py, format!("sql_scenario:{name}"))?),
+        (
+            "passed",
+            any(py, result.status == ExecutionStatus::Success)?,
+        ),
+        ("status", any(py, result.status.value())?),
+        ("expected_results", tuple_of(py, expected)?),
+        ("assertion_results", tuple_of(py, assertions)?),
+    ];
+    entries.extend(scenario_errors(
+        py,
+        (
+            &result.error_code,
+            &result.error_help,
+            &result.error_message,
+        ),
+    )?);
+    without_none(py, entries)
 }
 
-fn rounded_duration<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let duration: Bound<'py, PyAny> = native_field(result, "duration_ms")?;
-    if duration.is_none() {
-        return Ok(duration);
-    }
-    rounded(result.py(), duration.extract()?)
+fn scenario_errors<'py>(
+    py: Python<'py>,
+    (code, help, message): (&Option<String>, &Option<String>, &Option<String>),
+) -> PyResult<Vec<(&'static str, Bound<'py, PyAny>)>> {
+    Ok(vec![
+        ("error_code", any(py, code)?),
+        ("error_help", any(py, help)?),
+        ("error_message", any(py, message)?),
+    ])
 }
 
 /// The run outcome of one scenario.
-pub(crate) fn scenario_result<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
-    let py: Python<'py> = result.py();
-    let path: Bound<'py, PyAny> = native_field(result, "local_duckdb_path")?;
-    let local_status: Bound<'py, PyAny> = native_field(result, "local_status")?;
-    with_errors(
-        result,
-        vec![
-            ("name", native_field(result, "scenario_name")?),
-            ("status", value(result, "status")?),
-            ("duration_ms", rounded_duration(result)?),
-            (
-                "local_status",
-                if local_status.is_truthy()? {
-                    native_field(&local_status, "value")?
-                } else {
-                    py.None().into_bound(py)
-                },
-            ),
-            ("retained", native_field(result, "retained")?),
-            (
-                "local_duckdb_path",
-                if path.is_truthy()? {
-                    path.str()?.into_any()
-                } else {
-                    py.None().into_bound(py)
-                },
-            ),
-        ],
-    )
+pub(crate) fn scenario_result<'py>(
+    py: Python<'py>,
+    result: &ScenarioRunResult<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let duration = match result.duration_ms {
+        Some(duration) => rounded(py, duration)?,
+        None => py.None().into_bound(py),
+    };
+    let mut entries = vec![
+        ("name", any(py, &result.scenario_name)?),
+        ("status", any(py, result.status.value())?),
+        ("duration_ms", duration),
+        (
+            "local_status",
+            any(py, result.local_status.map(|status| status.value()))?,
+        ),
+        ("retained", any(py, result.retained)?),
+        (
+            "local_duckdb_path",
+            any(
+                py,
+                result
+                    .local_duckdb_path
+                    .as_ref()
+                    .map(|path| path.as_os_str()),
+            )?,
+        ),
+    ];
+    entries.extend(scenario_errors(
+        py,
+        (
+            &result.error_code,
+            &result.error_help,
+            &result.error_message,
+        ),
+    )?);
+    without_none(py, entries)
 }
 
 /// The capture outcome of one scenario snapshot sync or refresh.

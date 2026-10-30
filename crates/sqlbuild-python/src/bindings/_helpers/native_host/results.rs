@@ -6,19 +6,24 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::PyInt;
 use sqlbuild_core::json::models::JsonInteger;
+use sqlbuild_core::scenario_command::models::RetainedRelation;
 use sqlbuild_host::models::{
     AttachedAuditTargetKind, AuditAttachmentKind, AuditEvaluationMode, AuditExecutionResult,
     AuditOutcome, AuditRunScope, AuditSeverity, BuildExecutionResult, BuildExecutionTimings,
     BuildStatus, CancellationOutcome, ExecutionPhase, ExecutionResourceKind, ExecutionStatus,
     FunctionExecutionResult, HookExecutionResult, HookPhase, ItemKind, ItemTimeoutReport,
     LifeCycleEvent, LifeCycleEventKind, LoadExecutionResult, MeasuredValue,
-    MicrobatchAccountingInterval, MicrobatchLimitAction, ModelExecutionResult, SeedExecutionResult,
-    SkipMode, SqlTestColumnDifference, SqlTestDifferenceSample, SqlTestExecutionResult,
-    SqlTestOutcome, StepResult,
+    MicrobatchAccountingInterval, MicrobatchLimitAction, ModelExecutionResult,
+    ScenarioAssertionExpectationExecutionResult, ScenarioExpectedExpectationExecutionResult,
+    ScenarioLocalRunStatus, ScenarioRunResult, SeedExecutionResult, SkipMode,
+    SqlTestColumnDifference, SqlTestDifferenceSample, SqlTestExecutionResult, SqlTestOutcome,
+    StepResult,
 };
 use sqlbuild_host::types::ResultEnum;
 
+use crate::bindings::_helpers::records::construct::enum_from_value;
 use crate::bindings::_helpers::records::fields::field;
+use crate::bindings::_helpers::records::ids::RecordId;
 
 /// Extraction at the permanent Python executor edge, including nested result records.
 pub(crate) trait ReadResult<'py>: Sized {
@@ -109,6 +114,7 @@ enums!(
     ItemKind,
     CancellationOutcome,
     MicrobatchLimitAction,
+    ScenarioLocalRunStatus,
 );
 
 macro_rules! record {
@@ -235,6 +241,66 @@ record!(BuildExecutionResult<V> {
 
 fn mapping<'py>(value: &Bound<'py, PyAny>) -> PyResult<Vec<(String, Bound<'py, PyAny>)>> {
     Vec::read(&value.call_method0("items")?)
+}
+
+record!(ScenarioExpectedExpectationExecutionResult {
+    model_name,
+    status,
+    actual_row_count,
+    expected_row_count,
+    mismatched_row_count,
+    missing_row_count,
+    error_code,
+    error_help,
+    error_message,
+});
+record!(ScenarioAssertionExpectationExecutionResult<V> {
+    name, status, failing_row_count, sample_rows, error_code, error_help, error_message,
+});
+
+impl<'py> ReadResult<'py> for ScenarioRunResult<Bound<'py, PyAny>> {
+    fn read(value: &Bound<'py, PyAny>) -> PyResult<Self> {
+        let relation_map = field(value, "relation_map")?;
+        Ok(Self {
+            scenario_name: ReadResult::read(&field(value, "scenario_name")?)?,
+            status: ReadResult::read(&field(value, "status")?)?,
+            retained: ReadResult::read(&field(value, "retained")?)?,
+            local_status: ReadResult::read(&field(value, "local_status")?)?,
+            local_duckdb_path: ReadResult::read(&field(value, "local_duckdb_path")?)?,
+            retained_relations: if relation_map.is_none() {
+                None
+            } else {
+                Some(
+                    field(&relation_map, "artifacts")?
+                        .try_iter()?
+                        .map(|artifact| {
+                            let artifact = artifact?;
+                            let identity = field(&artifact, "identity")?;
+                            let kind = enum_from_value(
+                                value.py(),
+                                RecordId::ScenarioArtifactKind,
+                                field(&identity, "kind")?,
+                            )?;
+                            Ok(RetainedRelation {
+                                kind: field(&kind, "value")?.extract()?,
+                                logical_name: field(&identity, "logical_name")?.extract()?,
+                                physical_name: field(&artifact, "physical_name")?.extract()?,
+                            })
+                        })
+                        .collect::<PyResult<_>>()?,
+                )
+            },
+            seed_results: ReadResult::read(&field(value, "seed_results")?)?,
+            function_results: ReadResult::read(&field(value, "function_results")?)?,
+            model_results: ReadResult::read(&field(value, "model_results")?)?,
+            expected_results: ReadResult::read(&field(value, "expected_results")?)?,
+            assertion_results: ReadResult::read(&field(value, "assertion_results")?)?,
+            error_code: ReadResult::read(&field(value, "error_code")?)?,
+            error_help: ReadResult::read(&field(value, "error_help")?)?,
+            error_message: ReadResult::read(&field(value, "error_message")?)?,
+            duration_ms: ReadResult::read(&field(value, "duration_ms")?)?,
+        })
+    }
 }
 
 impl<'py> ReadResult<'py> for AuditExecutionResult<Bound<'py, PyAny>> {

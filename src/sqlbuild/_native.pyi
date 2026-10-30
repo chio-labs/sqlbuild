@@ -2978,8 +2978,9 @@ class _ExecutionHistoryStorage:
     ) -> bool | None: ...
 
 class SQLiteExecutionHistory(_ExecutionHistoryStorage):
-    """Project-local SQLite implementation of event-log and run-projection storage contracts."""
+    """Project-local event-log and run-projection storage with a Rust-owned SQLite driver."""
 
+    # Native connection by default; DB-API overrides retain their existing dispatch boundary.
     _connection: Any
     def __init__(
         self,
