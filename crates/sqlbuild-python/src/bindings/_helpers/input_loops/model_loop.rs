@@ -391,12 +391,8 @@ impl NativeModelLoop {
                     local: (enums.as_any(), constants.as_any()),
                 },
             )?;
-            let config: Bound<'py, PyAny> = configs.effective(
-                &context,
-                &record.header_value_dict(py)?,
-                (name, relative_path),
-                row.header.as_ref(),
-            )?;
+            let config: Bound<'py, PyAny> =
+                configs.effective(&context, record, (name, relative_path), row.header.as_ref())?;
             let model: LoopModel<'_, 'py> = LoopModel {
                 row: &row,
                 config,
@@ -784,6 +780,7 @@ impl NativeModelLoop {
         let source: HeaderSource<'_, 'py> = HeaderSource {
             name,
             values: &values,
+            config: &config,
             model_file: model_file.get(),
             relative_path,
             visible: (&visible.declarations, &visible.consumer),

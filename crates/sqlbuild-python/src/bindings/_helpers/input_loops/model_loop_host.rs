@@ -237,8 +237,8 @@ pub(crate) fn finished_record<'py>(
         model_schema: schema.model_schema.clone(),
         host: SchemaHandles {
             columns: schema.columns.clone(),
-            audits: schema.audits.clone().unbind(),
-            dynamic_columns: schema.dynamic_columns.clone().unbind(),
+            audits: schema.audits.clone(),
+            dynamic_columns: schema.dynamic_columns.clone(),
         },
     });
     let authored: Arc<str> = authored_query_sql.clone();

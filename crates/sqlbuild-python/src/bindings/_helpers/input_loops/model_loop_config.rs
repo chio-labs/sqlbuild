@@ -6,11 +6,14 @@ use std::sync::Arc;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple};
+use sqlbuild_discovery::model_files::main::config_value::config_value;
 use sqlbuild_discovery::model_files::models::HeaderFacts;
 use sqlbuild_model_config::config_presence::main::blocks_config_reuse::blocks_config_reuse;
 use sqlbuild_model_config::config_presence::main::contains_template::contains_template;
 use sqlbuild_model_config::config_presence::main::mutable_config_value::mutable_config_value;
+use sqlbuild_sqltext::compiler::models::AuthoredValue;
 
+use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::input_loops::model_loop::{LoopContext, config_error};
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::config_classes::{ConfigClasses, config_fields, view};
@@ -48,18 +51,22 @@ impl<'py> ModelConfigs<'py> {
     pub(crate) fn effective(
         &self,
         context: &LoopContext<'_, 'py>,
-        header: &Bound<'py, PyDict>,
+        model_file: &NativeModelFile,
         model: (&str, &str),
         facts: Option<&HeaderFacts>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let (name, relative_path) = model;
-        let py: Python<'py> = header.py();
+        let py: Python<'py> = context.host.py();
+        let header = model_file.header_value_dict(py)?;
+        let authored = model_file
+            .native_header_values()
+            .map(|values| values.as_ref());
         let classes: &ConfigClasses<'py> = &context.classes.config;
         let builder: &NativeModelConfigBuilder = classes.builder.get();
         let matched: Option<String> = builder
             .selected_path_default(py, relative_path)?
             .map_err(|error| config_error(error.bind(py).as_any(), None))?;
-        let metadata: Option<Bound<'py, PyDict>> = reusable_metadata(header, facts)?;
+        let metadata: Option<Bound<'py, PyDict>> = reusable_metadata(&header, facts)?;
         let reusable: bool = match metadata {
             Some(_) => self.reusable(context, &matched)?,
             None => false,
@@ -70,11 +77,11 @@ impl<'py> ModelConfigs<'py> {
         {
             let values: Bound<'py, PyDict> = cached.values.copy()?;
             values.update(metadata.as_mapping())?;
-            let nodes = metadata_nodes(cached.nodes.as_ref(), metadata, metadata)?;
+            let nodes = metadata_nodes(cached.nodes.as_ref(), metadata, metadata, authored)?;
             return view(classes, &values, &cached.fields, nodes.as_ref());
         }
         let built: ConfigBuild<'py> =
-            builder.built(py, (header, facts), matched.as_deref(), name)?;
+            builder.built(py, (&header, facts, authored), matched.as_deref(), name)?;
         let built: BuiltConfig<'py> = match built {
             ConfigBuild::Built(built) => built,
             ConfigBuild::Rejected(error) => {
@@ -146,7 +153,7 @@ impl<'py> ModelConfigs<'py> {
             ReusedConfig {
                 values: reusable_values,
                 fields: fields.clone(),
-                nodes: metadata_nodes(built.nodes.as_ref(), metadata, &inherited.values)?,
+                nodes: metadata_nodes(built.nodes.as_ref(), metadata, &inherited.values, None)?,
             },
         );
         Ok(())
@@ -158,6 +165,7 @@ fn metadata_nodes(
     base: Option<&BuiltConfigValues>,
     metadata: &Bound<'_, PyDict>,
     replacements: &Bound<'_, PyDict>,
+    authored: Option<&[(String, AuthoredValue)]>,
 ) -> PyResult<Option<BuiltConfigValues>> {
     let Some(base) = base else {
         return Ok(None);
@@ -170,7 +178,14 @@ fn metadata_nodes(
         let text = text.to_str()?;
         nodes.remove(text);
         if let Some(value) = replacements.get_item(&key)? {
-            nodes.insert(text.to_owned(), Arc::new(carried_node(&value)?));
+            let native = authored
+                .and_then(|entries| entries.iter().rev().find(|(key, _)| key == text))
+                .and_then(|(_, value)| config_value(value));
+            let node = match native {
+                Some(node) => node,
+                None => carried_node(&value)?,
+            };
+            nodes.insert(text.to_owned(), Arc::new(node));
         }
     }
     Ok(Some(Arc::new(nodes)))

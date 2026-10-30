@@ -1,4 +1,5 @@
 pub mod classify_selection_staleness;
+pub mod execution_upstream;
 pub mod expected_graph_identity_hashes;
 pub mod function_fingerprint_sql;
 pub mod graph_write_identity_hashes;
