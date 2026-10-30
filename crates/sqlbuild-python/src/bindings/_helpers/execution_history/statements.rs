@@ -43,19 +43,6 @@ pub(crate) fn fetch_all<'py>(cursor: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'
     cursor.call_method0("fetchall")?.try_iter()?.collect()
 }
 
-/// Run `body` while holding the Python `lock`, releasing it on every exit.
-pub(crate) fn locked<T>(
-    lock: &Bound<'_, PyAny>,
-    body: impl FnOnce() -> PyResult<T>,
-) -> PyResult<T> {
-    lock.call_method0("acquire")?;
-    let result: PyResult<T> = body();
-    let released = lock.call_method0("release");
-    let value: T = result?;
-    released?;
-    Ok(value)
-}
-
 /// `row[name]`.
 pub(crate) fn column<'py>(row: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyAny>> {
     row.get_item(name)
