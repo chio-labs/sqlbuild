@@ -67,9 +67,16 @@ export const overlapLabel: Record<OverlapPolicy, string> = {
 };
 
 export const overlapHelp: Record<OverlapPolicy, string> = {
-	coalesce: 'At most one run waits; further ticks merge into it and are recorded as covered',
-	queue: 'Every request gets its own run, in order',
-	allow: 'Runs alongside existing runs, still subject to the write-set rule'
+	coalesce: 'At most one run waits; new requests merge into it instead of starting another run',
+	queue: 'Every request gets its own run; they run one after another, in order',
+	allow: 'Can run alongside other runs of this job, as long as they don’t update the same data'
+};
+
+/** Short plain wording of an overlap policy; the policy name goes in a tooltip. */
+export const overlapPlain: Record<OverlapPolicy, string> = {
+	coalesce: 'Merge new requests',
+	queue: 'One run per request, in order',
+	allow: 'Can run side by side'
 };
 
 export const onFailureLabel: Record<OnFailure, string> = {
@@ -79,42 +86,84 @@ export const onFailureLabel: Record<OnFailure, string> = {
 };
 
 export const onFailureHelp: Record<OnFailure, string> = {
-	skip_dependents: 'Only dependents of a failed node are skipped, across jobs',
-	skip_downstream_jobs: 'Jobs downstream of a failed job are skipped',
-	stop_group: 'Any failure stops the group'
+	skip_dependents: 'When a node fails, only what depends on it is skipped, even in other jobs',
+	skip_downstream_jobs: 'When a job fails, the jobs after it are skipped',
+	stop_group: 'Any failure stops the whole group'
+};
+
+/** Short plain wording of an on-failure policy. */
+export const onFailurePlain: Record<OnFailure, string> = {
+	skip_dependents: 'Skip what depends on a failure',
+	skip_downstream_jobs: 'Skip later jobs',
+	stop_group: 'Stop the group'
 };
 
 export type WaitPart = { text: string; href?: string; code?: boolean };
 
-/** A queue wait as a sentence of linkable parts. */
+/** `run-4f2a` → `4f2a`: the short form shown in lists; the full ID stays in links and copies. */
+export function shortRunId(id: string): string {
+	return id.replace(/^run-/, '');
+}
+
+/** A concurrency group's slots in words, e.g. `warehouse_heavy` → `warehouse heavy`, `target:prod` → `prod target`. */
+export function slotLabel(group: string): string {
+	if (group.startsWith('target:')) return `${group.slice('target:'.length)} target`;
+	return group.replace(/[_-]+/g, ' ');
+}
+
+const runLink = (id: string): WaitPart => ({ text: `run ${shortRunId(id)}`, href: `/runs/${id}` });
+
+/** A queue wait as a plain sentence of linkable parts, e.g. "Waiting: run 7f3a is updating orders". */
 export function describeWait(wait: QueueWait): WaitPart[] {
 	switch (wait.kind) {
 		case 'write_claim':
 			return [
-				{ text: 'Write claim held by ' },
-				{ text: wait.runId, href: `/runs/${wait.runId}`, code: true },
-				...(wait.jobKey ? [{ text: ` (${wait.jobKey})` }] : []),
-				{ text: ' on ' },
-				{ text: wait.nodeKey, href: `/catalog/${wait.nodeKey}`, code: true },
-				...(wait.otherNodes ? [{ text: ` and ${wait.otherNodes} more node${wait.otherNodes === 1 ? '' : 's'}` }] : [])
+				{ text: 'Waiting: ' },
+				runLink(wait.runId),
+				{ text: ' is updating ' },
+				{ text: wait.nodeKey, href: `/catalog/${wait.nodeKey}` },
+				...(wait.otherNodes ? [{ text: ` and ${wait.otherNodes} more` }] : [])
 			];
 		case 'concurrency_group':
 			return [
-				{ text: 'Concurrency group ' },
-				{ text: wait.group, code: true },
-				{ text: ` is full (${wait.holders.length}/${wait.limit}): ` },
-				...wait.holders.flatMap((id, i) => [...(i ? [{ text: ', ' }] : []), { text: id, href: `/runs/${id}`, code: true }])
+				{ text: `Waiting: ${wait.holders.length} of ${wait.limit} ${slotLabel(wait.group)} slot${wait.limit === 1 ? '' : 's'} in use` },
+				...(wait.holders.length ? [{ text: ' (by ' }, ...wait.holders.flatMap((id, i) => [...(i ? [{ text: ', ' }] : []), runLink(id)]), { text: ')' }] : [])
 			];
 		case 'priority':
 			return [
-				{ text: 'Behind ' },
-				...wait.aheadRunIds.flatMap((id, i) => [...(i ? [{ text: ', ' }] : []), { text: id, href: `/runs/${id}`, code: true }]),
-				{ text: ' for the same slot (higher priority or queued earlier)' }
+				{ text: `Waiting: behind ${wait.aheadRunIds.length} earlier run${wait.aheadRunIds.length === 1 ? '' : 's'} (` },
+				...wait.aheadRunIds.flatMap((id, i) => [...(i ? [{ text: ', ' }] : []), runLink(id)]),
+				{ text: ')' }
 			];
 		case 'upstream_job':
-			return [{ text: 'Waiting for ' }, { text: wait.jobKey || wait.runId, href: `/runs/${wait.runId}`, code: true }, { text: ' to finish first' }];
+			return [{ text: 'Waiting for ' }, { text: wait.jobKey || shortRunId(wait.runId), href: `/runs/${wait.runId}` }, { text: ' to finish first' }];
 		case 'group_parent':
-			return [{ text: 'Group run ' }, { text: wait.runId, href: `/runs/${wait.runId}`, code: true }, { text: ` (${wait.jobKey}) hasn't been claimed yet` }];
+			return [{ text: 'Waiting for its group run ' }, { text: shortRunId(wait.runId), href: `/runs/${wait.runId}` }, { text: ' to start' }];
+	}
+}
+
+/** The wait as one plain line without links, for status lines and summaries. */
+export function waitText(wait: QueueWait): string {
+	if (wait.kind === 'concurrency_group') return `Waiting: ${wait.holders.length} of ${wait.limit} ${slotLabel(wait.group)} slot${wait.limit === 1 ? '' : 's'} in use`;
+	if (wait.kind === 'priority') return `Waiting: behind ${wait.aheadRunIds.length} earlier run${wait.aheadRunIds.length === 1 ? '' : 's'}`;
+	return describeWait(wait)
+		.map((p) => p.text)
+		.join('');
+}
+
+/** The scheduler's own name for a wait, for tooltips and debugging. */
+export function waitTechnical(wait: QueueWait): string {
+	switch (wait.kind) {
+		case 'write_claim':
+			return `write claim held by ${wait.runId} on ${wait.nodeKey}${wait.otherNodes ? ` (+${wait.otherNodes})` : ''}`;
+		case 'concurrency_group':
+			return `concurrency group ${wait.group} full (${wait.holders.length}/${wait.limit}): ${wait.holders.join(', ')}`;
+		case 'priority':
+			return `behind ${wait.aheadRunIds.join(', ')} for the same slot (priority, then queue order)`;
+		case 'upstream_job':
+			return `upstream job ${wait.jobKey} (${wait.runId}) still active`;
+		case 'group_parent':
+			return `group run ${wait.runId} not claimed yet`;
 	}
 }
 

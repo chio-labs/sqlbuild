@@ -15,15 +15,29 @@ export const runStatusTone: Record<RunStatus, string> = {
 
 export const runStatusLabel: Record<RunStatus, string> = {
 	queued: 'Queued',
-	launched: 'Launched',
+	launched: 'Starting',
 	running: 'Running',
-	unresponsive: 'Unresponsive',
-	success: 'Success',
-	warn: 'Warning',
+	unresponsive: 'No signal',
+	success: 'Succeeded',
+	warn: 'Warnings',
 	partial: 'Partial',
 	failed: 'Failed',
 	cancelled: 'Cancelled',
-	presumed_failed: 'Presumed failed'
+	presumed_failed: 'Lost contact'
+};
+
+/** Tooltip for each status: what it means, with the server's status name for debugging. */
+export const runStatusHelp: Record<RunStatus, string> = {
+	queued: 'Waiting for its turn (queued)',
+	launched: 'The container was started and hasn’t reported in yet (launched)',
+	running: 'Running (running)',
+	unresponsive: 'The run stopped sending heartbeats; it is marked failed if the silence continues (unresponsive)',
+	success: 'Every node succeeded (success)',
+	warn: 'Finished; some checks warned (warn)',
+	partial: 'Some nodes failed or were skipped; the rest finished (partial)',
+	failed: 'Failed (failed)',
+	cancelled: 'Cancelled (cancelled)',
+	presumed_failed: 'The run went silent and was marked failed; rerunning is safe (presumed_failed)'
 };
 
 const ACTIVE: ReadonlySet<RunStatus> = new Set(['queued', 'launched', 'running', 'unresponsive']);

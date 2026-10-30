@@ -1,6 +1,6 @@
 import type { ApiClient } from '../client';
 import { ApiError } from '../client';
-import { LocalChangeBus } from '../signals';
+import { LocalChangeBus, type ConnectionState } from '../signals';
 import type {
 	AdhocRunCheck,
 	AdhocRunRequest,
@@ -45,6 +45,8 @@ export type MockOptions = {
 	latencyMs?: number;
 	/** How long a simulated warehouse sync takes. */
 	syncDurationMs?: number;
+	/** Simulated state of the live-signal connection. */
+	connection?: ConnectionState;
 };
 
 /** In-memory `ApiClient` with neutral example data. Mutations persist per page load. */
@@ -64,8 +66,10 @@ export class MockApiClient implements ApiClient {
 			role: options.role ?? 'admin',
 			events: options.events ?? 'default',
 			latencyMs: options.latencyMs ?? 120,
-			syncDurationMs: options.syncDurationMs ?? 8000
+			syncDurationMs: options.syncDurationMs ?? 8000,
+			connection: options.connection ?? 'live'
 		};
+		this.changes.setState(this.#options.connection);
 		this.#fixtures = createFixtures(this.#createdAt);
 		this.#operate = new MockOperate({
 			changes: this.changes,
@@ -168,6 +172,21 @@ export class MockApiClient implements ApiClient {
 	async listRuns(scope: Scope, query: RunListQuery = {}): Promise<Run[]> {
 		this.#location(scope);
 		return this.#operate.listRuns(scope, query);
+	}
+
+	listRunRows(...args: Parameters<ApiClient['listRunRows']>) {
+		this.#location(args[0]);
+		return this.#operate.listRunRows(...args);
+	}
+
+	runTabCounts(...args: Parameters<ApiClient['runTabCounts']>) {
+		this.#location(args[0]);
+		return this.#operate.runTabCounts(...args);
+	}
+
+	cancelMatchingRuns(...args: Parameters<ApiClient['cancelMatchingRuns']>) {
+		this.#location(args[0]);
+		return this.#operate.cancelMatchingRuns(...args);
 	}
 
 	async getRun(scope: Scope, runId: string): Promise<Run | null> {

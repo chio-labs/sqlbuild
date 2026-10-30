@@ -10,16 +10,20 @@ export { hasCapability, hasAnyCapability, ADMIN_CAPABILITIES } from './capabilit
 
 const ROLES: readonly BuiltInRole[] = ['viewer', 'operator', 'developer', 'admin'];
 const EVENTS: readonly NonNullable<MockOptions['events']>[] = ['default', 'none', 'all'];
+const LIVE: readonly NonNullable<MockOptions['connection']>[] = ['live', 'reconnecting', 'offline'];
 
 /**
  * The client the app uses. Until the server API exists this is the mock;
- * `?as=<role>` and `?events=none|all` on first load adjust the mock for demos.
+ * `?as=<role>`, `?events=none|all` and `?live=reconnecting|offline` on first
+ * load adjust the mock for demos.
  */
 export function createClient(search: URLSearchParams): ApiClient {
 	const role = search.get('as');
 	const events = search.get('events');
+	const live = search.get('live');
 	return new MockApiClient({
 		role: ROLES.find((r) => r === role),
-		events: EVENTS.find((e) => e === events)
+		events: EVENTS.find((e) => e === events),
+		connection: LIVE.find((l) => l === live)
 	});
 }

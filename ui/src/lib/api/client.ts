@@ -2,6 +2,7 @@ import type {
 	AdhocRunCheck,
 	AdhocRunRequest,
 	Bootstrap,
+	BulkRunResult,
 	CatalogNode,
 	CatalogNodeDetail,
 	Check,
@@ -21,7 +22,10 @@ import type {
 	RunEventPage,
 	RunListQuery,
 	RunOutputLine,
+	RunRowPage,
+	RunRowQuery,
 	RunStatement,
+	RunTabCounts,
 	Scope,
 	SnapshotChange,
 	SnapshotNode,
@@ -66,6 +70,12 @@ export interface ApiClient extends PlatformApi {
 
 	// ---- OPERATE: runs, queue, run panel, jobs and triggers (types/operate.ts) ----
 	listRuns(scope: Scope, query?: RunListQuery): Promise<Run[]>;
+	/** One page of the runs list, newest first, with the facts each row's status line needs. */
+	listRunRows(scope: Scope, query?: RunRowQuery): Promise<RunRowPage>;
+	/** Active and queued counts for the status tabs; fetched apart from the rows. */
+	runTabCounts(scope: Scope, query?: RunRowQuery): Promise<RunTabCounts>;
+	/** Requests a cancel of every active run matching the query ("Cancel all"). `run.cancel` */
+	cancelMatchingRuns(scope: Scope, query: RunRowQuery): Promise<BulkRunResult>;
 	getRun(scope: Scope, runId: string): Promise<Run | null>;
 	/** Nodes, children, liveness, cancel progress and provenance for one run. */
 	getRunDetail(scope: Scope, runId: string): Promise<RunDetail | null>;

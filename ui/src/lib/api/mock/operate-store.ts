@@ -9,6 +9,7 @@ import type {
 	AdhocRunCheck,
 	AdhocRunRequest,
 	BuiltInRole,
+	BulkRunResult,
 	Capability,
 	JobDetail,
 	JobGroupMember,
@@ -24,7 +25,11 @@ import type {
 	RunListQuery,
 	RunNode,
 	RunOutputLine,
+	RunRow,
+	RunRowPage,
+	RunRowQuery,
 	RunStatement,
+	RunTabCounts,
 	Scope,
 	SnapshotNode,
 	Tick,
@@ -138,6 +143,100 @@ export class MockOperate {
 		runs.sort((a, b) => b.queuedAt.localeCompare(a.queuedAt));
 		if (query.limit) runs = runs.slice(0, query.limit);
 		return this.#ctx.reply(runs);
+	}
+
+	listRunRows(scope: Scope, query: RunRowQuery = {}): Promise<RunRowPage> {
+		const now = Date.now();
+		const matching = this.#matching(scope, query);
+		const offset = query.cursor ? Number(query.cursor.replace(/^c/, '')) || 0 : 0;
+		const limit = query.limit ?? 50;
+		const page = matching.slice(offset, offset + limit);
+		const waits = this.#queue();
+		const rows: RunRow[] = page.map(({ rec, view }) => {
+			const nodes = this.#nodesOf(rec, now);
+			const done = nodes.filter((n) => n.status !== 'pending' && n.status !== 'running').length;
+			const cancel = rec.script.cancel;
+			return {
+				run: view,
+				progress: { done, total: nodes.length },
+				waits: view.status === 'queued' ? (waits.get(view.id) ?? []) : [],
+				lastContactAt: view.status === 'unresponsive' || view.status === 'presumed_failed' ? (liveness(rec, now)?.lastHeartbeatAt ?? null) : null,
+				lostContactLimitSeconds: PRESUMED_FAILED_MS / 1000,
+				cancelRequestedAt: cancel && !cancel.terminatedAt ? cancel.requestedAt : null,
+				selection: view.kind === 'adhoc' ? rec.script.select : [],
+				rerunFromFailureCount: nodes.filter((n) => n.status === 'failed' || n.status === 'skipped').length
+			};
+		});
+		const next = offset + limit < matching.length ? `c${offset + limit}` : null;
+		return this.#ctx.reply({ rows, nextCursor: next });
+	}
+
+	runTabCounts(scope: Scope, query: RunRowQuery = {}): Promise<RunTabCounts> {
+		const base = this.#matching(scope, { ...query, tab: 'all' });
+		return this.#ctx.reply({
+			active: base.filter(({ view }) => isActive(view.status)).length,
+			queued: base.filter(({ view }) => view.status === 'queued').length
+		});
+	}
+
+	cancelMatchingRuns(scope: Scope, query: RunRowQuery): Promise<BulkRunResult> {
+		this.#need('run.cancel');
+		const targets = this.#matching(scope, query).filter(({ view }) => isActive(view.status));
+		const result: BulkRunResult = { done: [], failed: [] };
+		for (const { rec } of targets) {
+			try {
+				void this.cancelRun(scope, rec.run.id);
+				result.done.push(rec.run.id);
+			} catch (e) {
+				result.failed.push({ runId: rec.run.id, error: e instanceof Error ? e.message : String(e) });
+			}
+		}
+		return this.#ctx.reply(result);
+	}
+
+	/** Records matching a runs-list query, newest first. */
+	#matching(scope: Scope, query: RunRowQuery): { rec: RunRecord; view: Run }[] {
+		const f = query.filter ?? {};
+		const lower = (xs?: string[]) => (xs?.length ? xs.map((x) => x.toLowerCase()) : null);
+		const ids = lower(f.ids)?.map((id) => id.replace(/^run-/, ''));
+		const jobs = lower(f.jobKeys);
+		const schedules = lower(f.schedules);
+		const sensors = lower(f.sensors);
+		const by = lower(f.requestedBy);
+		const nodeKeys = lower(f.nodeKeys);
+		const text = f.text?.trim().toLowerCase() ?? '';
+		const tab = query.tab ?? 'all';
+		const out: { rec: RunRecord; view: Run }[] = [];
+		for (const rec of this.#records) {
+			const r = rec.run;
+			if (query.parentRunId) {
+				if (r.parentRunId !== query.parentRunId) continue;
+			} else if (!query.includeChildren && r.parentRunId) continue;
+			if (query.since && r.queuedAt < query.since) continue;
+			if (query.until && r.queuedAt >= query.until) continue;
+			if (f.kinds?.length && !f.kinds.includes(r.kind)) continue;
+			if (f.origins?.length && !f.origins.includes(r.origin)) continue;
+			if (ids && !ids.some((id) => r.id.replace(/^run-/, '').toLowerCase().startsWith(id))) continue;
+			if (jobs && !jobs.includes((r.jobKey ?? '').toLowerCase())) continue;
+			const trigger = triggerDef(r.triggerName);
+			const isSchedule = trigger?.kind === 'cron_schedule' || trigger?.kind === 'calendar_schedule';
+			if (schedules && !(isSchedule && schedules.includes((r.triggerName ?? '').toLowerCase()))) continue;
+			if (sensors && !(trigger && !isSchedule && sensors.includes((r.triggerName ?? '').toLowerCase()))) continue;
+			if (by && !by.includes(r.requestedBy.name.toLowerCase())) continue;
+			if (nodeKeys) {
+				const nodes = new Set([rec, ...this.#children(rec)].flatMap((x) => x.script.nodes.map((n) => n.toLowerCase())));
+				if (!nodeKeys.some((n) => nodes.has(n))) continue;
+			}
+			if (text && !`${r.id} ${r.jobKey ?? ''} ${r.triggerName ?? ''} ${r.requestedBy.name} ${r.requestedBy.displayName} ${r.runKey ?? ''}`.toLowerCase().includes(text)) continue;
+			const view = this.#view(rec, scope);
+			if (f.statuses?.length && !f.statuses.includes(view.status)) continue;
+			if (tab === 'active' && !isActive(view.status)) continue;
+			if (tab === 'queued' && view.status !== 'queued') continue;
+			if (tab === 'failed' && !['failed', 'partial', 'presumed_failed'].includes(view.status)) continue;
+			if (tab === 'cancelled' && view.status !== 'cancelled') continue;
+			out.push({ rec, view });
+		}
+		return out.sort((a, b) => b.view.queuedAt.localeCompare(a.view.queuedAt) || a.view.id.localeCompare(b.view.id));
 	}
 
 	getRun(scope: Scope, runId: string): Promise<Run | null> {
@@ -715,13 +814,13 @@ export class MockOperate {
 			return {
 				policy: 'coalesce',
 				coveredTicks: covered,
-				detail: covered ? `${covered} later tick${covered === 1 ? '' : 's'} merged into this run` : 'Further ticks merge into this run while it waits'
+				detail: covered ? `${covered} later request${covered === 1 ? '' : 's'} merged into this run` : 'New requests merge into this run while it waits'
 			};
 		if (job.overlap === 'queue') {
 			const before = queued.filter((q) => q.run.jobKey === job.key && q.run.queuedAt < rec.run.queuedAt);
-			return { policy: 'queue', coveredTicks: 0, detail: before.length ? `Runs after ${before.map((b) => b.run.id).join(', ')} (one run per request, in order)` : 'One run per request, in order' };
+			return { policy: 'queue', coveredTicks: 0, detail: before.length ? `Goes after ${before.map((b) => b.run.id.replace(/^run-/, '')).join(', ')}` : 'Next in line for this job' };
 		}
-		return { policy: 'allow', coveredTicks: 0, detail: 'May run alongside other runs of this job, subject to the write-set rule' };
+		return { policy: 'allow', coveredTicks: 0, detail: 'Waits only for runs updating the same data' };
 	}
 
 	#newId(): string {

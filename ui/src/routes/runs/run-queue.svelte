@@ -7,7 +7,7 @@
 	import { app } from '$lib/state/app.svelte';
 	import { formatAgo, formatStamp } from '$lib/format/time';
 	import { runKindOriginLabel } from '$lib/status';
-	import { describeWait, overlapHelp } from '$lib/operate/labels';
+	import { describeWait, overlapHelp, overlapPlain, shortRunId, waitTechnical } from '$lib/operate/labels';
 
 	let { entries, resource }: { entries: QueueEntry[]; resource: Resource<unknown> } = $props();
 
@@ -37,10 +37,10 @@
 				<th class="num">#</th>
 				<th>Run</th>
 				<th>Job</th>
-				<th class="num">Priority</th>
-				<th>Queued</th>
+				<th class="num" title="Higher priority runs go first; equal priority runs go in queue order">Priority</th>
+				<th>Waiting since</th>
 				<th>Why it waits</th>
-				<th>Overlap</th>
+				<th>If more requests arrive</th>
 				<th></th>
 			</tr>
 		</thead>
@@ -49,26 +49,26 @@
 				<tr onclick={() => goto(`/runs/${q.run.id}`)}>
 					<td class="num muted">{q.position}</td>
 					<td>
-						<a class="code" href="/runs/{q.run.id}" onclick={(e) => e.stopPropagation()}>{q.run.id}</a>
+						<a class="code" href="/runs/{q.run.id}" title={q.run.id} onclick={(e) => e.stopPropagation()}>{shortRunId(q.run.id)}</a>
 						<div class="cell-desc">{runKindOriginLabel(q.run)} · {q.run.requestedBy.name}</div>
 					</td>
 					<td>
 						{#if q.run.jobKey}<a class="link" href="/jobs/{q.run.jobKey}" onclick={(e) => e.stopPropagation()}>{q.run.jobKey}</a>{:else}<span class="muted">Ad hoc</span>{/if}
-						{#if q.run.parentRunId}<div class="cell-desc">in <a class="link code" href="/runs/{q.run.parentRunId}" onclick={(e) => e.stopPropagation()}>{q.run.parentRunId}</a></div>{/if}
+						{#if q.run.parentRunId}<div class="cell-desc">in group run <a class="link code" href="/runs/{q.run.parentRunId}" onclick={(e) => e.stopPropagation()}>{shortRunId(q.run.parentRunId)}</a></div>{/if}
 					</td>
 					<td class="num">{q.run.priority}</td>
 					<td class="muted" title={formatStamp(q.run.queuedAt)}>{formatAgo(q.run.queuedAt, app.now)}</td>
 					<td class="waits">
 						{#each q.waits as w, i (i)}
-							<div class="wait">
+							<div class="wait" title={waitTechnical(w)}>
 								{#each describeWait(w) as part, j (j)}{#if part.href}<a class="link" class:code={part.code} href={part.href} onclick={(e) => e.stopPropagation()}>{part.text}</a>{:else if part.code}<code>{part.text}</code>{:else}{part.text}{/if}{/each}
 							</div>
 						{:else}
-							<span class="muted">Claimable; launching on the next pass</span>
+							<span class="muted">Nothing in the way; it starts on the next scheduler pass</span>
 						{/each}
 					</td>
 					<td class="muted" title={q.overlap ? overlapHelp[q.overlap.policy] : undefined}>
-						{#if q.overlap}<code>{q.overlap.policy}</code><div class="cell-desc">{q.overlap.detail}</div>{:else}—{/if}
+						{#if q.overlap}<span title="Overlap policy: {q.overlap.policy}">{overlapPlain[q.overlap.policy]}</span><div class="cell-desc">{q.overlap.detail}</div>{:else}—{/if}
 					</td>
 					<td class="num">
 						<!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -79,7 +79,7 @@
 					</td>
 				</tr>
 			{:else}
-				<LoadRow colspan={8} {resource} empty="Nothing is queued. Runs wait here while a write claim, concurrency group or upstream job holds them." />
+				<LoadRow colspan={8} {resource} empty="Nothing is waiting. Runs wait here while another run is updating the same data, all slots are in use, or an earlier job hasn't finished." />
 			{/each}
 		</tbody>
 	</table>

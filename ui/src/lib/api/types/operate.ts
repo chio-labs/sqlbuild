@@ -98,6 +98,81 @@ export type RunListQuery = {
 	limit?: number;
 };
 
+// ---- runs list (cursor-paged rows with a plain status line) ----
+
+/** Status tabs of the runs list. `active` is queued, launched, running or unresponsive; `failed` includes partial and lost runs. */
+export const RUN_TABS = ['all', 'active', 'queued', 'failed', 'cancelled'] as const;
+export type RunTab = (typeof RUN_TABS)[number];
+
+/** Structured filter parsed from the list's search tokens; every field narrows (AND), values within a field are OR. */
+export type RunFilter = {
+	kinds?: RunKind[];
+	origins?: RunOrigin[];
+	statuses?: RunStatus[];
+	jobKeys?: string[];
+	/** Schedule names (trigger type `schedule`). */
+	schedules?: string[];
+	/** Sensor names (trigger type `sensor`). */
+	sensors?: string[];
+	/** Runs that execute any of these nodes. */
+	nodeKeys?: string[];
+	/** Run ID prefixes, with or without the `run-` prefix. */
+	ids?: string[];
+	/** Principal names that requested the run. */
+	requestedBy?: string[];
+	/** Free text matched against IDs, jobs, triggers, run keys and principals. */
+	text?: string;
+};
+
+export type RunRowQuery = {
+	tab?: RunTab;
+	filter?: RunFilter;
+	/** Queued at or after. */
+	since?: Iso;
+	/** Queued before. */
+	until?: Iso;
+	/** Include group children as their own rows; otherwise only top-level runs. */
+	includeChildren?: boolean;
+	/** Only the children of this group run (inline expansion). */
+	parentRunId?: string;
+	/** Opaque cursor from the previous page. */
+	cursor?: string | null;
+	limit?: number;
+};
+
+export type RunRow = {
+	run: Run;
+	/** Nodes finished (any outcome) out of the run's planned nodes, across children for groups. */
+	progress: { done: number; total: number };
+	/** Why a queued run waits, as on the Queue view. */
+	waits: QueueWait[];
+	/** Last heartbeat, set while the run is unresponsive or once it was marked failed for silence. */
+	lastContactAt: Iso | null;
+	/** Heartbeat silence after which the scheduler marks a run failed. */
+	lostContactLimitSeconds: number;
+	/** Cancel requested and not yet finished. */
+	cancelRequestedAt: Iso | null;
+	/** Ad-hoc runs: the selection as typed. */
+	selection: string[];
+	/** Nodes a rerun from failure would run; empty when nothing failed. */
+	rerunFromFailureCount: number;
+};
+
+export type RunRowPage = {
+	rows: RunRow[];
+	/** Pass back as `cursor` for the next page; null on the last page. */
+	nextCursor: string | null;
+};
+
+/** Counts for the in-flight tabs, under the same filter as the rows. */
+export type RunTabCounts = { active: number; queued: number };
+
+export type BulkRunResult = {
+	/** Runs the request applied to. */
+	done: string[];
+	failed: { runId: string; error: string }[];
+};
+
 // ---- run detail ----
 
 export type RunNodeStatus =
