@@ -1,5 +1,6 @@
 //! A compiled model, read from the native compiled project that owns it.
 
+use crate::bindings::_helpers::model_config::header_audits::HeaderAudits;
 use sqlbuild_project::models as project_models;
 use sqlbuild_project::models::{DestinationFact, ModelMetadataTexts};
 use sqlbuild_project::types::InferredRow;
@@ -7,7 +8,7 @@ use std::sync::Arc;
 
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple, PyTupleMethods};
+use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple};
 use pyo3::{FromPyObject, pyclass, pymethods};
 
 use sqlbuild_analysis::assembly::analysis_session::main::contract_proof_json::contract_proof_json;
@@ -60,7 +61,7 @@ pub(crate) struct SqlRuleKey {
 }
 
 /// A schema's entry audits, column specs and each audited column's index and name.
-pub(crate) type AuditedSchema = (Py<PyTuple>, Arc<HeaderColumns>, Vec<(usize, String)>);
+pub(crate) type AuditedSchema = (Arc<HeaderAudits>, Arc<HeaderColumns>, Vec<(usize, String)>);
 
 /// `(name, type)` of a declared column.
 pub(crate) type DeclaredRow = (String, Option<String>);
@@ -367,7 +368,7 @@ impl NativeCompiledModel {
                 .map(|(index, column)| (index, column.name.clone()))
                 .collect();
             Ok(Some((
-                schema.host.audits.clone_ref(py),
+                schema.host.audits.clone(),
                 schema.host.columns.clone(),
                 audited,
             )))
@@ -665,11 +666,11 @@ impl NativeCompiledModel {
     /// Whether the attached schema declares dynamic columns.
     #[getter(has_dynamic_columns)]
     pub(crate) fn dynamic_columns_declared(&self, py: Python<'_>) -> PyResult<bool> {
-        self.read(py, |record, py| {
+        self.read(py, |record, _py| {
             Ok(record
                 .schema
                 .as_ref()
-                .is_some_and(|schema| !schema.host.dynamic_columns.bind(py).is_empty()))
+                .is_some_and(|schema| !schema.host.dynamic_columns.specs.is_empty()))
         })
     }
 

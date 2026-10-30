@@ -32,6 +32,9 @@ const UNIQUE_AUDIT_COLUMN_ARGUMENT: &str = "column";
 const RELATION_KIND_SEED: &str = "seed";
 const RELATION_KIND_SOURCE: &str = "source";
 
+/// Native declared columns and model audits used to derive relation keys.
+type DeclaredKeyFacts<'a> = (&'a [SchemaColumnFact], Vec<(String, Option<String>)>);
+
 positional_record! {
     extract, into;
     /// `(kind, name, materialized, mode, strategy, cursor, unique key, columns, audits)`.
@@ -53,7 +56,7 @@ pub(crate) fn relation_key_row(
     kind: &str,
     name: String,
     values: &Bound<'_, PyDict>,
-    declared: Option<(&[SchemaColumnFact], &Bound<'_, PyAny>)>,
+    declared: Option<DeclaredKeyFacts<'_>>,
 ) -> PyResult<RelationKeyRow> {
     let mut columns: Vec<(String, Vec<String>, bool)> = Vec::new();
     let mut audits: Vec<(String, Option<String>)> = Vec::new();
@@ -65,7 +68,7 @@ pub(crate) fn relation_key_row(
                 column.nullable == Some(false),
             ));
         }
-        audits = audit_key_rows(declared_audits)?;
+        audits = declared_audits;
     }
     Ok(RelationKeyRow {
         kind: kind.to_owned(),
@@ -180,7 +183,12 @@ pub(crate) fn entry_relation_key_row(
     let columns: Vec<SchemaColumnFact> =
         python_column_facts(&declared_specs(entry, "columns")?, None)?;
     let audits: Bound<'_, PyAny> = declared_specs(entry, "audits")?;
-    relation_key_row(kind, name, values, Some((&columns, &audits)))
+    relation_key_row(
+        kind,
+        name,
+        values,
+        Some((&columns, audit_key_rows(&audits)?)),
+    )
 }
 
 /// `getattr(entry, name, None) or ()`.

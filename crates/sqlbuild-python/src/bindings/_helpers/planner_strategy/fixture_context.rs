@@ -16,6 +16,7 @@ use crate::bindings::_helpers::compiled_views::project_reads;
 use crate::bindings::_helpers::compiled_views::resource_reads;
 use crate::bindings::_helpers::compiled_views::seed_reads;
 use crate::bindings::_helpers::compiled_views::source_reads;
+use crate::bindings::_helpers::native_host::model_lookup::ModelHandle;
 use crate::bindings::_helpers::planner_strategy::constants::{
     MODEL_REFERENCE_KIND, SEED_REFERENCE_KIND, SOURCE_REFERENCE_KIND,
 };
@@ -52,22 +53,28 @@ pub(crate) fn planning_context(
 ) -> PyResult<RelationFixturePlanningContext> {
     let py = project.py();
     work_counts(py)?.borrow_mut().context_builds += 1;
-    let model_map = match models_by_name {
-        Some(models) => models,
+    let model_map: HashMap<String, ModelHandle> = match models_by_name {
+        Some(models) => models
+            .iter()
+            .map(|(name, model)| Ok((name.extract()?, ModelHandle::read(&model))))
+            .collect::<PyResult<_>>()?,
         None => {
-            let models = PyDict::new(py);
+            let mut models: HashMap<String, ModelHandle> = HashMap::new();
             for model in project_reads::models(project)?.try_iter()? {
                 let model = model?;
-                models.set_item(model_reads::name_object(&model)?, &model)?;
+                models.insert(
+                    model_reads::name_object(&model)?.extract()?,
+                    ModelHandle::read(&model),
+                );
             }
             models
         }
     };
     let mut relations: HashMap<FixtureKey, FixtureRelation> = HashMap::new();
-    for (name, model) in model_map.iter() {
+    for (name, model) in &model_map {
         relations.insert(
-            (MODEL_REFERENCE_KIND.to_owned(), name.extract()?),
-            model_fixture_relation(&model)?,
+            (MODEL_REFERENCE_KIND.to_owned(), name.clone()),
+            model_fixture_relation(&model.bind(py))?,
         );
     }
     for (kind, source) in [(SOURCE_REFERENCE_KIND, true), (SEED_REFERENCE_KIND, false)] {
@@ -99,14 +106,14 @@ pub(crate) fn planning_context(
         }
     }
     Ok(context_of(
-        model_map.unbind(),
+        model_map,
         relations,
         Py::new(py, FixtureColumnInferences::new())?.into_any(),
     ))
 }
 
 fn context_of(
-    models_by_name: Py<PyDict>,
+    models_by_name: HashMap<String, ModelHandle>,
     relations: HashMap<FixtureKey, FixtureRelation>,
     fixture_inferences: Py<PyAny>,
 ) -> RelationFixturePlanningContext {
@@ -143,9 +150,10 @@ impl RelationFixturePlanningContext {
         if let Some(found) = self.facts_cache()?.get(name) {
             return Ok(Some(Arc::clone(found)));
         }
-        let Some(model) = self.models_by_name.bind(py).get_item(name)? else {
+        let Some(model) = self.models_by_name.get(name) else {
             return Ok(None);
         };
+        let model = model.bind(py);
         let facts = Arc::new(ModelFixtureFacts {
             reads: lineage_reads(&model)?,
             projections: projections(&model)?,
@@ -194,7 +202,10 @@ impl RelationFixturePlanningContext {
             );
         }
         Ok(context_of(
-            models_by_name.unbind(),
+            models_by_name
+                .iter()
+                .map(|(name, model)| Ok((name.extract()?, ModelHandle::read(&model))))
+                .collect::<PyResult<_>>()?,
             known,
             Py::new(py, FixtureColumnInferences::new())?.into_any(),
         ))
