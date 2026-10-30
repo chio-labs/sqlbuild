@@ -78,15 +78,20 @@ pub(crate) fn emit_json_report(report: &Bound<'_, PyAny>) -> PyResult<String> {
     })
 }
 
-/// `orjson.dumps(value, option=OPT_SORT_KEYS)`, raising orjson's `TypeError`.
-pub(crate) fn orjson_sorted(value: &Bound<'_, PyAny>) -> PyResult<String> {
+/// A Python value in orjson's supported domain, converted once at its data boundary.
+pub(crate) fn orjson_value(value: &Bound<'_, PyAny>) -> PyResult<JsonValue> {
     let mut conversion: Conversion = Conversion::default();
     let converted: JsonValue = conversion.json_value(value)?;
     if let Some(error) = conversion.orjson_error {
         return Err(PyTypeError::new_err(error));
     }
+    Ok(converted)
+}
+
+/// `orjson.dumps(value, option=OPT_SORT_KEYS)` for an already-native payload.
+pub(crate) fn orjson_sorted(value: &JsonValue) -> PyResult<String> {
     emitted(
-        &converted,
+        value,
         &JsonDialect::Orjson(OrjsonOptions {
             indent_2: false,
             sort_keys: true,
