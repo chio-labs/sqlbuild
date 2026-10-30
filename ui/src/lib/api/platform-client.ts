@@ -26,15 +26,18 @@ import type {
 } from './types';
 
 /**
- * Platform (health, locations, connections, maintenance) and admin (users,
- * tokens, roles, audit, settings) endpoints. Part of `ApiClient`.
+ * Platform (server status, locations, connections, providers, maintenance)
+ * and admin (users, service accounts, roles, audit, settings) endpoints.
+ * Part of `ApiClient`.
  *
  * Mutations are audited server-side; the capability noted on each is the
  * server's check, mirrored in the UI only to hide or disable controls.
  */
 export interface PlatformApi {
-	// ---- health ----
+	// ---- server status and problems (shown on Locations) ----
+	/** Scheduler, server replicas, heartbeat and event forwarding. */
 	platformHealth(): Promise<PlatformHealth>;
+	/** Problems recorded as platform events, newest first; by location, or server-wide with `locationId: null`. */
 	listPlatformEventHistory(query?: PlatformEventQuery): Promise<PlatformEventRecord[]>;
 
 	// ---- locations ----

@@ -2,7 +2,7 @@
 
 import type { AttentionItem } from '$lib/api';
 import { describeWait } from '$lib/operate/labels';
-import { eventKindLabel } from '$lib/platform/labels';
+import { eventKindLabel, problemHref } from '$lib/platform/labels';
 import { formatAgo } from '$lib/format/time';
 import { runStatusLabel } from '$lib/status';
 
@@ -75,8 +75,8 @@ export function attentionView(item: AttentionItem, now: number): AttentionView {
 				title: `${eventKindLabel[item.event.kind]}${item.event.subject ? ` · ${item.event.subject}` : ''}`,
 				detail: item.event.message,
 				since: formatAgo(item.event.occurredAt, now),
-				href: '/health',
-				action: 'View in Health'
+				href: problemHref(item.event),
+				action: item.event.locationId ? 'View location' : 'View server status'
 			};
 		case 'queue_blocked':
 			return {

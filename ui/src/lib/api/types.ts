@@ -121,6 +121,7 @@ export type PlatformEventKind =
 	| 'scheduler_no_leader'
 	| 'location_broken'
 	| 'launch_failed'
+	| 'connection_test_failed'
 	| 'heartbeat';
 export type PlatformEventSeverity = 'info' | 'warning' | 'critical';
 export type PlatformEvent = {

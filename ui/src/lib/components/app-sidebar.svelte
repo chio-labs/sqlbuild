@@ -5,7 +5,6 @@
 	import DatabaseIcon from '@lucide/svelte/icons/database';
 	import GitBranchIcon from '@lucide/svelte/icons/git-branch';
 	import GitCompareIcon from '@lucide/svelte/icons/git-compare';
-	import HeartPulseIcon from '@lucide/svelte/icons/heart-pulse';
 	import KeyRoundIcon from '@lucide/svelte/icons/key-round';
 	import LayoutDashboardIcon from '@lucide/svelte/icons/layout-dashboard';
 	import ListIcon from '@lucide/svelte/icons/list';
@@ -47,8 +46,7 @@
 		{
 			section: 'Platform',
 			items: [
-				{ label: 'Health', href: '/health', icon: HeartPulseIcon, badge: { value: (c) => c.activePlatformEvents, tone: 'error' } },
-				{ label: 'Locations', href: '/locations', icon: MapPinIcon },
+				{ label: 'Locations', href: '/locations', icon: MapPinIcon, badge: { value: (c) => c.activePlatformEvents, tone: 'error' } },
 				{ label: 'Connections', href: '/connections', icon: PlugIcon },
 				{ label: 'Maintenance', href: '/maintenance', icon: WrenchIcon }
 			]

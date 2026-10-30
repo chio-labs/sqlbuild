@@ -10,6 +10,8 @@
 	import KeyValues from '$lib/components/platform/key-values.svelte';
 	import LocationTokens from '$lib/components/platform/location-tokens.svelte';
 	import Panel from '$lib/components/platform/panel.svelte';
+	import ProblemList from '$lib/components/platform/problem-list.svelte';
+	import SegmentedFilterProblems from '$lib/components/list/segmented-filter.svelte';
 	import type { LocationInstance } from '$lib/api';
 	import { formatAgo, formatStamp } from '$lib/format/time';
 	import { healthLabel, healthTone, shortImage } from '$lib/platform/labels';
@@ -18,7 +20,11 @@
 
 	const id = $derived(page.params.id ?? '');
 	const location = createResource((client) => client.getLocation(id), ['snapshot', 'warehouse_sync']);
+	const problems = createResource((client) => client.listPlatformEventHistory({ locationId: id }), ['platform_events']);
 	const detail = $derived(location.data ?? null);
+	let problemView = $state<'open' | 'all'>('all');
+	const problemRows = $derived((problems.data ?? []).filter((e) => problemView === 'all' || e.active));
+	const openProblems = $derived((problems.data ?? []).filter((e) => e.active).length);
 
 	let syncTarget = $state('');
 	const syncTargetName = $derived(detail?.targets.some((t) => t.name === syncTarget) ? syncTarget : (detail?.targets.find((t) => t.isDefault) ?? detail?.targets[0])?.name ?? '');
@@ -33,7 +39,7 @@
 </script>
 
 <AppTopbar title="Locations">
-	<Button variant="outline" size="sm" onclick={() => location.refresh()}>↻ Refresh</Button>
+	<Button variant="outline" size="sm" onclick={() => (location.refresh(), problems.refresh())}>↻ Refresh</Button>
 </AppTopbar>
 
 <div class="flex min-h-0 flex-1 flex-col">
@@ -42,6 +48,7 @@
 		<span class="font-display text-[17px] font-semibold">{detail?.name ?? ''}</span>
 		{#if detail}
 			<StatusLabel tone={healthTone[detail.health]} label={healthLabel[detail.health]} />
+			{#if openProblems}<a class="text-[12.5px] text-[var(--sb-warning)]" href="#problems">{openProblems} open problem{openProblems === 1 ? '' : 's'}</a>{/if}
 		{/if}
 	</div>
 
@@ -59,40 +66,57 @@
 						<TriangleAlertIcon size={15} />
 						<div class="min-w-0 flex-1">
 							<div class="headline">
-								Deploy <code>{detail.failedDeploy.gitRevision}</code> (image <code>{shortImage(detail.failedDeploy.imageId)}</code>) failed {formatAgo(detail.failedDeploy.attemptedAt, app.now)},
+								The deploy of commit <code>{detail.failedDeploy.gitRevision}</code> failed {formatAgo(detail.failedDeploy.attemptedAt, app.now)}.
 								{#if detail.brokenDeployPolicy === 'fallback'}
-									running on <code>{current?.snapshot?.gitRevision ?? '—'}</code> (image <code>{shortImage(current?.imageId ?? null)}</code>)
+									Still running the previous version{current?.snapshot ? ` (version ${current.snapshot.generation}, commit ${current.snapshot.gitRevision})` : ''}.
 								{:else}
-									scheduled runs are queued until a deploy publishes
+									Scheduled runs wait until a deploy works.
 								{/if}
 							</div>
-							<p>
-								A deploy becomes current only once it publishes a valid snapshot. Policy <code>{detail.brokenDeployPolicy}</code>:
-								{detail.brokenDeployPolicy === 'fallback'
-									? 'scheduled runs keep starting from the last good snapshot and image.'
-									: 'scheduled runs wait, and a location_broken platform event stays active.'}
-							</p>
+							<p>Fix the error below and deploy again. A deploy only takes over once it loads without errors.</p>
 							<pre>{detail.failedDeploy.error}</pre>
+							<details>
+								<summary>Details</summary>
+								<p>
+									Failed image <code>{shortImage(detail.failedDeploy.imageId)}</code>; running image <code>{shortImage(current?.imageId ?? null)}</code>. Broken-deploy policy
+									<code>{detail.brokenDeployPolicy}</code>: {detail.brokenDeployPolicy === 'fallback' ? 'scheduled runs keep starting from the last good version.' : 'scheduled runs wait, and the problem stays open.'}
+								</p>
+							</details>
 						</div>
 					</div>
 				{:else if detail.lastLoadError}
 					<div class="fallback">
 						<TriangleAlertIcon size={15} />
 						<div class="min-w-0 flex-1">
-							<div class="headline">Last load error</div>
+							<div class="headline">The last load reported an error</div>
 							<pre>{detail.lastLoadError}</pre>
 						</div>
 					</div>
 				{/if}
 
-				<Panel title="Targets" note="Current snapshot and the connection test run after each publish">
+				<div id="problems">
+					<Panel title="Problems" note="Overdue schedules, failed deploys, runs that couldn't start and failed connection tests, with the sensors that reacted">
+						{#snippet actions()}
+							<SegmentedFilterProblems
+								bind:value={problemView}
+								options={[
+									{ value: 'open', label: 'Open', count: openProblems },
+									{ value: 'all', label: 'History', count: problems.data?.length ?? 0 }
+								]}
+							/>
+						{/snippet}
+						<ProblemList events={problemRows} resource={problems} currentLocationId={id} empty={problemView === 'open' ? 'No open problems. Everything is running normally.' : 'No problems recorded for this location.'} />
+					</Panel>
+				</div>
+
+				<Panel title="Targets" note="The deployed version per target, and the warehouse connection test run after each deploy">
 					<table class="sb-list static">
 						<thead>
 							<tr>
 								<th>Target</th>
-								<th>Current snapshot</th>
+								<th>Deployed version</th>
 								<th>Image</th>
-								<th>Connection test</th>
+								<th>Warehouse connection</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -104,15 +128,15 @@
 									</td>
 									<td>
 										{#if t.snapshot}
-											<div>Generation {t.snapshot.generation} · <code>{t.snapshot.gitRevision}</code>{#if t.snapshot.gitDirty}<span class="warn"> (uncommitted changes)</span>{/if}</div>
+											<div title="Snapshot {t.snapshot.id}, generation {t.snapshot.generation}">Version {t.snapshot.generation} · commit <code>{t.snapshot.gitRevision}</code>{#if t.snapshot.gitDirty}<span class="warn"> (with uncommitted changes)</span>{/if}</div>
 											<div class="cell-desc" title={formatStamp(t.snapshot.publishedAt)}>
-												{t.snapshot.gitAuthor} · published {formatAgo(t.snapshot.publishedAt, app.now)} · sqb {t.snapshot.sqbVersion}
+												by {t.snapshot.gitAuthor} · deployed {formatAgo(t.snapshot.publishedAt, app.now)} · sqb {t.snapshot.sqbVersion}
 											</div>
 										{:else}
-											<span class="muted">No snapshot published</span>
+											<span class="muted">Nothing deployed yet</span>
 										{/if}
 									</td>
-									<td>{#if t.imageId}<code title={t.imageId}>{shortImage(t.imageId)}</code>{:else}<span class="muted" title="Runs start as local subprocesses">local</span>{/if}</td>
+									<td>{#if t.imageId}<code title={t.imageId}>{shortImage(t.imageId)}</code>{:else}<span class="muted" title="Runs start as local processes, not containers">local</span>{/if}</td>
 									<td class="test-cell">
 										<ConnectionTest scope={{ locationId: detail.id, target: t.name }} connection={t.warehouseConnection} last={t.connectionTest} />
 									</td>
@@ -122,7 +146,7 @@
 					</table>
 				</Panel>
 
-				<Panel title="Warehouse sync" note="SQLBuild state tables synced from the warehouse by the location">
+				<Panel title="Warehouse sync" note="SQLBuild's own tables in the warehouse, read back by the location so this UI shows what was built">
 					{#snippet actions()}
 						{#if detail.targets.length > 1}
 							<SegmentedFilter bind:value={() => syncTargetName, (v) => (syncTarget = v)} options={detail.targets.map((t) => ({ value: t.name, label: t.name }))} />
@@ -131,11 +155,11 @@
 					<table class="sb-list static">
 						<thead>
 							<tr>
-								<th>State table</th>
+								<th>Table</th>
 								<th class="num">Schemas</th>
 								<th>Last synced</th>
-								<th class="num">Rows last pass</th>
-								<th class="num">Cost · 24h</th>
+								<th class="num" title="Rows read by the last sync">New rows</th>
+								<th class="num" title="Warehouse cost of the sync queries in the last 24 hours">Cost, 24h</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -148,7 +172,7 @@
 									<td class="num muted">{row.schemas}</td>
 									<td>
 										{#if row.lastError}
-											<StatusLabel tone="var(--sb-error)" label="Failing since {formatAgo(row.lastSyncedAt, app.now)}" />
+											<StatusLabel tone="var(--sb-error)" label="Failing; last worked {formatAgo(row.lastSyncedAt, app.now)}" />
 										{:else}
 											<RelativeTime value={formatAgo(row.lastSyncedAt, app.now)} exact={formatStamp(row.lastSyncedAt)} />
 										{/if}
@@ -163,13 +187,13 @@
 					</table>
 				</Panel>
 
-				<Panel title="Instances" note="Location processes registered with the server">
+				<Panel title="Location processes" note="Running copies of this location that load the code and start runs">
 					<table class="sb-list static">
 						<thead>
 							<tr>
-								<th>Instance</th>
+								<th>Process</th>
 								<th>Image</th>
-								<th>Revision</th>
+								<th>Commit</th>
 								<th>Started</th>
 								<th>Last seen</th>
 							</tr>
@@ -195,12 +219,12 @@
 					rows={[
 						{ label: 'ID', value: detail.id, mono: true },
 						{ label: 'Created', value: formatAgo(detail.createdAt, app.now), title: formatStamp(detail.createdAt) },
-						{ label: 'Broken deploys', value: detail.brokenDeployPolicy === 'fallback' ? 'Fall back to last good image' : 'Queue runs until a deploy publishes' },
+						{ label: 'If a deploy fails', value: detail.brokenDeployPolicy === 'fallback' ? 'Keep running the previous version' : 'Hold scheduled runs until a deploy works' },
 						{ label: 'Targets', value: detail.targets.map((t) => t.name).join(', ') }
 					]}
 				/>
 				<div class="rail-title mt-6">Location tokens</div>
-				<p class="rail-note">Allow only registering this location, publishing its snapshots and reporting health.</p>
+				<p class="rail-note">A location token lets this location's processes connect to the server, deploy new versions and report problems. It can't do anything else.</p>
 				<LocationTokens locationId={detail.id} />
 			</aside>
 		</div>
@@ -228,6 +252,16 @@
 	.fallback p {
 		margin: 4px 0 8px;
 		color: var(--muted-foreground);
+	}
+	.fallback details {
+		margin-top: 6px;
+		color: var(--muted-foreground);
+	}
+	.fallback summary {
+		cursor: pointer;
+	}
+	#problems {
+		scroll-margin-top: 12px;
 	}
 	pre {
 		overflow: auto;

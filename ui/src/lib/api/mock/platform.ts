@@ -544,9 +544,10 @@ function historicalEvents(now: number): PlatformEventRecord[] {
 	const ago = (minutes: number) => new Date(now - minutes * MIN).toISOString();
 	const shop = { locationId: LOCATION_SHOP, target: 'prod' };
 	return [
-		{ id: 'pe-h3', kind: 'launch_failed', severity: 'critical', occurredAt: ago(1500), active: false, locationId: LOCATION_SHOP, subject: 'activity_microbatch', message: 'Run container exited before reporting: worker lost.', resolvedAt: ago(1490), target: 'prod', links: [{ kind: 'job', key: 'activity_microbatch', ...shop }, { kind: 'run', id: 'run-e3f8', ...shop }], reactions: [reaction('consumed', 52, 1, ago(1499))], payload: { job: 'activity_microbatch', attempts: '1', error: 'worker lost' } },
-		{ id: 'pe-h2', kind: 'scheduler_no_leader', severity: 'critical', occurredAt: ago(2 * 1440 + 30), active: false, locationId: null, subject: null, message: 'No scheduler held the leader lease for 41s during a replica restart.', resolvedAt: ago(2 * 1440 + 29), target: null, links: [], reactions: [reaction('consumed', 41, 1, ago(2 * 1440 + 29))], payload: { last_holder: 'sqb-server-2', lease_expired_at: ago(2 * 1440 + 30) } },
-		{ id: 'pe-h1', kind: 'tick_overdue', severity: 'warning', occurredAt: ago(3 * 1440), active: false, locationId: LOCATION_SHOP, subject: 'core_build', message: 'Tick was 4 minutes overdue.', resolvedAt: ago(3 * 1440 - 4), target: 'prod', links: [{ kind: 'trigger', id: triggerId('core_build'), name: 'core_build', ...shop }], reactions: [reaction('consumed', 33, 1, ago(3 * 1440 - 1))], payload: { trigger: 'core_build', scheduled_for: ago(3 * 1440), overdue_by: '4m' } }
+		{ id: 'pe-h3', kind: 'launch_failed', severity: 'critical', occurredAt: ago(1500), active: false, locationId: LOCATION_SHOP, subject: 'activity_microbatch', message: 'A run of activity_microbatch stopped reporting in and was marked failed.', resolvedAt: ago(1490), target: 'prod', links: [{ kind: 'job', key: 'activity_microbatch', ...shop }, { kind: 'run', id: 'run-e3f8', ...shop }], reactions: [reaction('consumed', 52, 1, ago(1499))], payload: { job: 'activity_microbatch', attempts: '1', error: 'worker lost' } },
+		{ id: 'pe-h2', kind: 'scheduler_no_leader', severity: 'critical', occurredAt: ago(2 * 1440 + 30), active: false, locationId: null, subject: null, message: 'No server ran the scheduler for 41s while a server restarted.', resolvedAt: ago(2 * 1440 + 29), target: null, links: [], reactions: [reaction('consumed', 41, 1, ago(2 * 1440 + 29))], payload: { last_holder: 'sqb-server-2', lease_expired_at: ago(2 * 1440 + 30) } },
+		{ id: 'pe-h4', kind: 'connection_test_failed', severity: 'warning', occurredAt: ago(2 * 1440 + 400), active: false, locationId: LOCATION_MARKETING, subject: 'prod', message: 'The warehouse connection test after publishing failed: password authentication failed for user sqb_builder.', resolvedAt: ago(2 * 1440 + 380), target: 'prod', links: [{ kind: 'location', id: LOCATION_MARKETING }], reactions: [], payload: { connection: 'prod', trigger: 'publish', error: 'password authentication failed' } },
+		{ id: 'pe-h1', kind: 'tick_overdue', severity: 'warning', occurredAt: ago(3 * 1440), active: false, locationId: LOCATION_SHOP, subject: 'core_build', message: 'The core_build schedule started 4 minutes late.', resolvedAt: ago(3 * 1440 - 4), target: 'prod', links: [{ kind: 'trigger', id: triggerId('core_build'), name: 'core_build', ...shop }], reactions: [reaction('consumed', 33, 1, ago(3 * 1440 - 1))], payload: { trigger: 'core_build', scheduled_for: ago(3 * 1440), overdue_by: '4m' } }
 	];
 }
 
@@ -612,6 +613,8 @@ export class MockPlatformApi implements PlatformApi {
 		}));
 		let events = [...current, ...historicalEvents(this.#ctx.now)];
 		if (query.kinds?.length) events = events.filter((e) => query.kinds!.includes(e.kind));
+		else if (!query.includeHeartbeats) events = events.filter((e) => e.kind !== 'heartbeat');
+		if (query.locationId !== undefined) events = events.filter((e) => e.locationId === query.locationId);
 		if (query.activeOnly) events = events.filter((e) => e.active);
 		events.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
 		if (query.limit) events = events.slice(0, query.limit);
@@ -629,6 +632,7 @@ export class MockPlatformApi implements PlatformApi {
 				health: d.health,
 				brokenDeployPolicy: d.brokenDeployPolicy,
 				failedDeploy: d.failedDeploy,
+				activeProblems: this.#ctx.platformEvents().filter((e) => e.active && e.locationId === d.id && e.kind !== 'heartbeat').length,
 				liveInstances: d.instances.filter((i) => i.state === 'live').length,
 				lastSeenAt: d.instances.map((i) => i.lastSeenAt).sort().at(-1) ?? null,
 				targets: d.targets.map((t) => ({ name: t.name, snapshot: t.snapshot, connectionTest: t.connectionTest }))

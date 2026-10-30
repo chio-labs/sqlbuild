@@ -1,21 +1,8 @@
 <script lang="ts">
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import ChevronsUpDownIcon from '@lucide/svelte/icons/chevrons-up-down';
-	import type { LocationHealth } from '$lib/api';
+	import { healthLabel, healthTone } from '$lib/platform/labels';
 	import { app } from '$lib/state/app.svelte';
-
-	const healthTone: Record<LocationHealth, string> = {
-		healthy: 'var(--sb-success)',
-		degraded: 'var(--sb-warning)',
-		falling_back: 'var(--sb-warning)',
-		broken: 'var(--sb-error)'
-	};
-	const healthLabel: Record<LocationHealth, string> = {
-		healthy: 'Healthy',
-		degraded: 'Degraded',
-		falling_back: 'Falling back to last good image',
-		broken: 'Broken'
-	};
 
 	const locations = $derived(app.bootstrap?.locations ?? []);
 </script>

@@ -1,17 +1,10 @@
 <script lang="ts">
 	import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 	import OctagonAlertIcon from '@lucide/svelte/icons/octagon-alert';
-	import type { PlatformEvent, PlatformEventKind } from '$lib/api';
+	import type { PlatformEvent } from '$lib/api';
 	import { formatAgo } from '$lib/format/time';
+	import { eventKindLabel, problemHref } from '$lib/platform/labels';
 	import { app } from '$lib/state/app.svelte';
-
-	const kindLabel: Record<PlatformEventKind, string> = {
-		scheduler_no_leader: 'No scheduler leader',
-		location_broken: 'Location falling back',
-		tick_overdue: 'Tick overdue',
-		launch_failed: 'Launches failing',
-		heartbeat: 'Heartbeat'
-	};
 
 	const rank = (e: PlatformEvent) => (e.severity === 'critical' ? 2 : e.severity === 'warning' ? 1 : 0);
 	const events = $derived(
@@ -28,14 +21,13 @@
 		<ul>
 			{#each events as event (event.id)}
 				<li>
-					<strong>{kindLabel[event.kind]}</strong>
-					{#if event.subject}<code>{event.subject}</code>{/if}
-					<span>{event.message}</span>
+					<strong>{eventKindLabel[event.kind]}</strong>
+					<span title={event.message}>{event.message}</span>
 					<small>{formatAgo(event.occurredAt, app.now)}</small>
+					<a href={problemHref(event)}>{event.locationId ? 'View location →' : 'View server status →'}</a>
 				</li>
 			{/each}
 		</ul>
-		<a href="/health">Health →</a>
 	</div>
 {/if}
 
@@ -80,9 +72,6 @@
 		font-weight: 600;
 		white-space: nowrap;
 	}
-	li code {
-		font-size: 11.5px;
-	}
 	li span {
 		overflow: hidden;
 		color: var(--muted-foreground);
@@ -95,6 +84,7 @@
 		white-space: nowrap;
 	}
 	a {
+		margin-left: auto;
 		color: var(--primary);
 		font-weight: 500;
 		line-height: 20px;

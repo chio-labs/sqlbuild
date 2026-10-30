@@ -65,13 +65,13 @@ export function createFixtures(now: number) {
 	];
 
 	const platformEvents: PlatformEvent[] = [
-		{ id: 'pe-1', kind: 'location_broken', severity: 'warning', occurredAt: ago(48), active: true, locationId: LOCATION_MARKETING, subject: 'marketing-analytics', message: 'The latest image failed to start; running the last good image.' },
-		{ id: 'pe-2', kind: 'tick_overdue', severity: 'warning', occurredAt: ago(12), active: true, locationId: LOCATION_SHOP, subject: 'segments_hourly', message: 'Tick is 12 minutes overdue.' },
+		{ id: 'pe-1', kind: 'location_broken', severity: 'warning', occurredAt: ago(48), active: true, locationId: LOCATION_MARKETING, subject: 'marketing-analytics', message: 'The latest deploy failed to load; still running the previous version.' },
+		{ id: 'pe-2', kind: 'tick_overdue', severity: 'warning', occurredAt: ago(12), active: true, locationId: LOCATION_SHOP, subject: 'segments_hourly', message: 'The segments_hourly schedule should have started a run 12 minutes ago.' },
 		{ id: 'pe-3', kind: 'heartbeat', severity: 'info', occurredAt: ago(1), active: false, locationId: null, subject: null, message: 'Server heartbeat.' }
 	];
 	const extraPlatformEvents: PlatformEvent[] = [
-		{ id: 'pe-4', kind: 'scheduler_no_leader', severity: 'critical', occurredAt: ago(2), active: true, locationId: null, subject: null, message: 'No scheduler holds the leader lease; ticks are not being evaluated.' },
-		{ id: 'pe-5', kind: 'launch_failed', severity: 'critical', occurredAt: ago(6), active: true, locationId: LOCATION_SHOP, subject: 'revenue_refresh', message: 'Three consecutive launches failed: image pull error.' }
+		{ id: 'pe-4', kind: 'scheduler_no_leader', severity: 'critical', occurredAt: ago(2), active: true, locationId: null, subject: null, message: 'No server is running the scheduler, so schedules and sensors aren’t starting runs.' },
+		{ id: 'pe-5', kind: 'launch_failed', severity: 'critical', occurredAt: ago(6), active: true, locationId: LOCATION_SHOP, subject: 'revenue_refresh', message: 'The last 3 runs couldn’t start: the image couldn’t be downloaded.' }
 	];
 
 	return { locations, platformEvents, extraPlatformEvents };

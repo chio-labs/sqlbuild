@@ -1,5 +1,6 @@
-// Wire types for the Platform (Health, Locations, Connections, Maintenance) and
-// Admin (users, tokens, roles, audit, settings) areas.
+// Wire types for the Platform (Locations with server status, Connections,
+// Providers, Maintenance) and Admin (users, service accounts, roles, audit,
+// settings) areas.
 
 import type {
 	AuthMode,
@@ -103,6 +104,10 @@ export type PlatformEventRecord = PlatformEvent & {
 export type PlatformEventQuery = {
 	kinds?: PlatformEvent['kind'][];
 	activeOnly?: boolean;
+	/** Events of one location; `null` for server-wide events only (no location). */
+	locationId?: string | null;
+	/** Heartbeats are left out unless asked for. */
+	includeHeartbeats?: boolean;
 	limit?: number;
 };
 
@@ -188,6 +193,8 @@ export type LocationDetail = {
 };
 
 export type LocationSummary = Pick<LocationDetail, 'id' | 'name' | 'health' | 'brokenDeployPolicy' | 'failedDeploy'> & {
+	/** Unresolved platform events of this location. */
+	activeProblems: number;
 	liveInstances: number;
 	lastSeenAt: Iso | null;
 	targets: Pick<LocationTarget, 'name' | 'snapshot' | 'connectionTest'>[];

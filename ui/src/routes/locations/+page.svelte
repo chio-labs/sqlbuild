@@ -8,21 +8,25 @@
 	import RelativeTime from '$lib/components/list/relative-time.svelte';
 	import StatusLabel from '$lib/components/list/status-label.svelte';
 	import { formatAgo, formatStamp } from '$lib/format/time';
-	import { healthLabel, healthTone, testTone } from '$lib/platform/labels';
+	import { healthTone, healthWords, testTone } from '$lib/platform/labels';
 	import { app } from '$lib/state/app.svelte';
 	import { createResource } from '$lib/state/resource.svelte';
+	import ServerStatus from './server-status.svelte';
 
-	const locations = createResource((client) => client.listLocations(), ['snapshot']);
+	const locations = createResource((client) => client.listLocations(), ['snapshot', 'platform_events']);
+	let status = $state<ServerStatus>();
 
 	let query = $state('');
 	const all = $derived(locations.data ?? []);
 	const filtered = $derived(all.filter((l) => !query.trim() || l.name.toLowerCase().includes(query.trim().toLowerCase())));
-	const unhealthy = $derived(all.filter((l) => l.health !== 'healthy').length);
+	const unhealthy = $derived(all.filter((l) => l.health !== 'healthy' || l.activeProblems > 0).length);
 </script>
 
 <AppTopbar title="Locations">
-	<Button variant="outline" size="sm" onclick={() => locations.refresh()}>↻ Refresh</Button>
+	<Button variant="outline" size="sm" onclick={() => (locations.refresh(), status?.refresh())}>↻ Refresh</Button>
 </AppTopbar>
+
+<ServerStatus bind:this={status} />
 
 <ListToolbar
 	bind:query
@@ -37,9 +41,9 @@
 			<tr>
 				<th>Location</th>
 				<th>Health</th>
-				<th>Current snapshots</th>
-				<th>Instances</th>
-				<th>Broken deploys</th>
+				<th>Deployed versions</th>
+				<th>Location processes</th>
+				<th title="What happens when a deploy fails to load">If a deploy fails</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -50,39 +54,39 @@
 							<MapPinIcon size={15} strokeWidth={1.75} />
 							<div class="min-w-0">
 								<a href="/locations/{l.id}" onclick={(e) => e.stopPropagation()}>{l.name}</a>
-								<div class="cell-desc"><code>{l.id}</code></div>
+								<div class="cell-desc" title="Location ID">{l.targets.length} target{l.targets.length === 1 ? '' : 's'}</div>
 							</div>
 						</div>
 					</td>
 					<td>
-						<StatusLabel tone={healthTone[l.health]} label={healthLabel[l.health]} />
-						{#if l.failedDeploy}
-							<div class="cell-desc warn">Deploy {l.failedDeploy.gitRevision} failed</div>
+						<StatusLabel tone={l.failedDeploy || l.activeProblems ? healthTone[l.health === 'healthy' ? 'degraded' : l.health] : healthTone[l.health]} label={healthWords(l)} />
+						{#if l.activeProblems}
+							<div class="cell-desc"><a class="link" href="/locations/{l.id}#problems" onclick={(e) => e.stopPropagation()}>{l.activeProblems} open problem{l.activeProblems === 1 ? '' : 's'}</a></div>
 						{/if}
 					</td>
 					<td>
 						<div class="targets">
 							{#each l.targets as t (t.name)}
-								<span class="target" title={t.snapshot ? `Published ${formatStamp(t.snapshot.publishedAt)} by ${t.snapshot.gitAuthor}` : undefined}>
-									<i style:background={t.connectionTest ? testTone[t.connectionTest.outcome] : 'var(--sb-text-faint)'} title="Connection test"></i>
+								<span class="target" title={t.snapshot ? `Commit ${t.snapshot.gitRevision} by ${t.snapshot.gitAuthor}, deployed ${formatStamp(t.snapshot.publishedAt)} (snapshot generation ${t.snapshot.generation})` : undefined}>
+									<i style:background={t.connectionTest ? testTone[t.connectionTest.outcome] : 'var(--sb-text-faint)'} title={t.connectionTest ? `Warehouse connection test ${t.connectionTest.outcome === 'ok' ? 'passed' : 'failed'} ${formatAgo(t.connectionTest.at, app.now)}` : 'Connection not tested yet'}></i>
 									<b>{t.name}</b>
 									{#if t.snapshot}
-										<span class="muted">gen {t.snapshot.generation} · <code>{t.snapshot.gitRevision}</code> · {formatAgo(t.snapshot.publishedAt, app.now)}</span>
+										<span class="muted">Version {t.snapshot.generation}, deployed {formatAgo(t.snapshot.publishedAt, app.now)}</span>
 									{:else}
-										<span class="muted">no snapshot</span>
+										<span class="muted">nothing deployed yet</span>
 									{/if}
 								</span>
 							{/each}
 						</div>
 					</td>
 					<td>
-						<div>{l.liveInstances} live</div>
-						<RelativeTime value="seen {formatAgo(l.lastSeenAt, app.now)}" exact={formatStamp(l.lastSeenAt)} />
+						<div>{l.liveInstances} running</div>
+						<RelativeTime value="last seen {formatAgo(l.lastSeenAt, app.now)}" exact={formatStamp(l.lastSeenAt)} />
 					</td>
-					<td class="muted">{l.brokenDeployPolicy === 'fallback' ? 'Fall back to last good image' : 'Queue runs until a deploy publishes'}</td>
+					<td class="muted">{l.brokenDeployPolicy === 'fallback' ? 'Keep running the previous version' : 'Hold scheduled runs until a deploy works'}</td>
 				</tr>
 			{:else}
-				<LoadRow colspan={5} resource={locations} empty={all.length ? 'No locations match the filter.' : 'No code locations are registered.'} />
+				<LoadRow colspan={5} resource={locations} empty={all.length ? 'No locations match the search.' : 'No code locations yet. Register one with the server using a location token.'} />
 			{/each}
 		</tbody>
 	</table>
@@ -107,8 +111,5 @@
 	}
 	.target b {
 		font-weight: 500;
-	}
-	.warn {
-		color: var(--sb-warning) !important;
 	}
 </style>

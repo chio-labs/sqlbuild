@@ -4,6 +4,7 @@ import type {
 	AssignmentScope,
 	LocationHealth,
 	Location,
+	LocationSummary,
 	PlatformEventKind,
 	PlatformEventLink,
 	PlatformEventReaction,
@@ -23,18 +24,34 @@ export const healthTone: Record<LocationHealth, string> = {
 
 export const healthLabel: Record<LocationHealth, string> = {
 	healthy: 'Healthy',
-	degraded: 'Degraded',
-	falling_back: 'Falling back',
-	broken: 'Broken'
+	degraded: 'Needs attention',
+	falling_back: 'Running previous version',
+	broken: 'Not starting scheduled runs'
 };
 
+/** A location's health in words, e.g. "Deploy failed — running previous version 17". */
+export function healthWords(location: Pick<LocationSummary, 'health' | 'failedDeploy' | 'brokenDeployPolicy' | 'targets'>): string {
+	const version = location.targets.find((t) => t.snapshot)?.snapshot?.generation;
+	if (location.failedDeploy) {
+		if (location.brokenDeployPolicy === 'fallback') return `Deploy failed — running previous version${version != null ? ` ${version}` : ''}`;
+		return 'Deploy failed — scheduled runs wait until a deploy works';
+	}
+	return healthLabel[location.health];
+}
+
 export const eventKindLabel: Record<PlatformEventKind, string> = {
-	tick_overdue: 'Tick overdue',
-	scheduler_no_leader: 'No scheduler leader',
-	location_broken: 'Location broken',
-	launch_failed: 'Launch failed',
-	heartbeat: 'Heartbeat'
+	tick_overdue: 'Schedule overdue',
+	scheduler_no_leader: 'Scheduler stopped',
+	location_broken: 'Deploy failed',
+	launch_failed: 'Couldn’t start runs',
+	connection_test_failed: 'Connection test failed',
+	heartbeat: 'Server heartbeat'
 };
+
+/** Where a problem is explained: its location's problem history, or the server status on Locations. */
+export function problemHref(event: { locationId: string | null }): string {
+	return event.locationId ? `/locations/${event.locationId}#problems` : '/locations#server';
+}
 
 export const severityTone: Record<PlatformEventSeverity, string> = {
 	critical: 'var(--sb-error)',
@@ -51,7 +68,7 @@ export const reactionTone: Record<PlatformEventReactionOutcome, string> = {
 export const reactionLabel: Record<PlatformEventReactionOutcome, string> = {
 	consumed: 'handled',
 	failed: 'failing',
-	pending: 'pending'
+	pending: 'not yet'
 };
 
 /** Deep link to the sensor that reacted, scoped to its location and target. */
@@ -104,9 +121,9 @@ export function eventLinkHref(link: PlatformEventLink): string {
 
 export function eventLinkLabel(link: PlatformEventLink, locations: readonly Location[] | undefined): string {
 	if (link.kind === 'location') return `Location ${locationName(locations, link.id)}`;
-	if (link.kind === 'trigger') return `Trigger ${link.name}`;
+	if (link.kind === 'trigger') return link.name;
 	if (link.kind === 'job') return `Job ${link.key}`;
-	return `Run ${link.id}`;
+	return `Run ${link.id.replace(/^run-/, '')}`;
 }
 
 export function errorMessage(error: unknown): string {
