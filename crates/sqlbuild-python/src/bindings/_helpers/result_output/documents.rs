@@ -189,20 +189,14 @@ pub(crate) fn format_build_execution_json<'py>(
 }
 
 /// The audit-history projection counts, flagged as degraded when any write failed.
-fn audit_projection<'py>(
+pub(crate) fn audit_projection<'py>(
     py: Python<'py>,
-    result: &BuildExecutionResult<Bound<'py, PyAny>>,
+    (attempted, written, failed): (i64, i64, i64),
 ) -> PyResult<Vec<(&'static str, Bound<'py, PyAny>)>> {
     let counts: Vec<(&str, Bound<'py, PyAny>)> = [
-        (
-            "attempted_count",
-            result.audit_result_projection_attempted_count,
-        ),
-        (
-            "written_count",
-            result.audit_result_projection_written_count,
-        ),
-        ("failed_count", result.audit_result_projection_failed_count),
+        ("attempted_count", attempted),
+        ("written_count", written),
+        ("failed_count", failed),
     ]
     .into_iter()
     .map(|(key, value)| Ok((key, any(py, value)?)))
@@ -263,8 +257,15 @@ fn degradable_build_json<'py>(
     result: &BuildExecutionResult<Bound<'py, PyAny>>,
 ) -> PyResult<String> {
     let execution_succeeded: bool = arguments.flag("execution_succeeded")?;
-    let rendered: PyResult<String> = audit_projection(py, result)
-        .and_then(|trailing| build_json(py, arguments, result, trailing));
+    let rendered: PyResult<String> = audit_projection(
+        py,
+        (
+            result.audit_result_projection_attempted_count,
+            result.audit_result_projection_written_count,
+            result.audit_result_projection_failed_count,
+        ),
+    )
+    .and_then(|trailing| build_json(py, arguments, result, trailing));
     let error: pyo3::PyErr = match rendered {
         Ok(payload) => return Ok(payload),
         Err(error) => error,
@@ -602,11 +603,21 @@ pub(crate) fn format_audit_execution_json<'py>(
     configured_concurrency: Option<Bound<'py, PyAny>>,
     worker_count: Option<Bound<'py, PyAny>>,
 ) -> PyResult<String> {
+    let all = Vec::<AuditExecutionResult<_>>::read(&results)?;
+    audit_execution_json(py, &all, (configured_concurrency, worker_count), Vec::new())
+}
+
+/// Audit reporting from already-converted executor results, before the document is serialized.
+pub(crate) fn audit_execution_json<'py>(
+    py: Python<'py>,
+    all: &[AuditExecutionResult<Bound<'py, PyAny>>],
+    (configured_concurrency, worker_count): (Option<Bound<'py, PyAny>>, Option<Bound<'py, PyAny>>),
+    trailing: Vec<(&'static str, Bound<'py, PyAny>)>,
+) -> PyResult<String> {
     let configured_concurrency: Bound<'py, PyAny> =
         configured_concurrency.map_or_else(|| any(py, 1_i64), Ok)?;
     let projection: Projection<'py> = Projection::installed(py)?;
-    let all = Vec::<AuditExecutionResult<_>>::read(&results)?;
-    let results = projection.retained(&all)?;
+    let results = projection.retained(all)?;
     let fail_count = results
         .iter()
         .filter(|result| result.outcome == AuditOutcome::Error)
@@ -655,6 +666,7 @@ pub(crate) fn format_audit_execution_json<'py>(
                     ("worker_count", workers),
                 ],
             )?),
+            trailing,
             ..Extras::default()
         },
     )
