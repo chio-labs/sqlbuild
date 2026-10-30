@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.186.2](https://github.com/sqlstack-io/sqlbuild/compare/v0.186.1...v0.186.2) (2026-10-30)
+
+
+### Bug Fixes
+
+* retain native planner data through graph traversal ([#1280](https://github.com/sqlstack-io/sqlbuild/issues/1280)) ([90b3a9b](https://github.com/sqlstack-io/sqlbuild/commit/90b3a9b1ca6a895b1f511188448f2114daab472d))
+
 ## [0.186.1](https://github.com/sqlstack-io/sqlbuild/compare/v0.186.0...v0.186.1) (2026-10-29)
 
 
