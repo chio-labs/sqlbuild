@@ -16,7 +16,7 @@
 	<KeyRoundIcon size={15} />
 	<div class="min-w-0 flex-1">
 		<div class="title">{label}</div>
-		<p>Copy it now. It is shown only once; the server keeps only a hash.</p>
+		<p>Copy it now: it's shown only this once and can't be retrieved later. If it's lost, rotate the token.</p>
 		<code>{secret}</code>
 	</div>
 	<div class="actions">

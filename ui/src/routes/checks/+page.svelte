@@ -96,11 +96,11 @@
 				<th>Outcome</th>
 				<th>Attached to</th>
 				<th>Severity</th>
-				<th>Run scope</th>
-				<th>Mode</th>
+				<th>Checks</th>
+				<th>Result type</th>
 				<th class="num">Result</th>
 				<th>Recent</th>
-				<th>Evaluated</th>
+				<th>Last checked</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -129,7 +129,7 @@
 					<td><RelativeTime value={formatAgo(c.latest?.evaluatedAt, app.now)} exact={formatStamp(c.latest?.evaluatedAt)} /></td>
 				</tr>
 			{:else}
-				<LoadRow colspan={9} resource={checks} empty={all.length ? 'No checks match the filter.' : 'No checks are defined in this snapshot.'} />
+				<LoadRow colspan={9} resource={checks} empty={all.length ? 'No checks match the filter.' : 'No checks yet. Add audits or tests to a model and they show up here after the next deploy.'} />
 			{/each}
 		</tbody>
 	</table>

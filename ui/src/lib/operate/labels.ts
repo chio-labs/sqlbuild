@@ -175,10 +175,18 @@ export const tickOutcomeTone: Record<TickOutcome, string> = {
 };
 
 export const tickOutcomeText: Record<TickOutcome, string> = {
-	requested: 'requested',
+	requested: 'started a run',
 	skipped: 'skipped',
-	covered: 'covered',
+	covered: 'merged',
 	failed: 'failed'
+};
+
+/** What each tick outcome means, with the scheduler's own name for debugging. */
+export const tickOutcomeHelp: Record<TickOutcome, string> = {
+	requested: 'It was due and started a run (requested)',
+	skipped: 'It was due but didn’t start a run, e.g. it was paused or caught up (skipped)',
+	covered: 'A run of this job was already waiting, so this one merged into it (covered)',
+	failed: 'The scheduler couldn’t start a run for it (failed)'
 };
 
 export const evaluationTone: Record<SensorEvaluationOutcome, string> = {
@@ -190,20 +198,29 @@ export const evaluationTone: Record<SensorEvaluationOutcome, string> = {
 };
 
 export const triggerKindLabel: Record<TriggerKind, string> = {
-	cron_schedule: 'Cron schedule',
+	cron_schedule: 'Schedule',
 	calendar_schedule: 'Calendar schedule',
-	job_sensor: 'Job sensor',
-	node_sensor: 'Node sensor',
-	platform_sensor: 'Platform-event sensor',
-	custom_sensor: 'Custom @sensor'
+	job_sensor: 'When a job finishes',
+	node_sensor: 'When data changes',
+	platform_sensor: 'When a problem happens',
+	custom_sensor: 'Custom sensor'
+};
+
+export const triggerKindHelp: Record<TriggerKind, string> = {
+	cron_schedule: 'Runs at times set by a cron expression (cron_schedule)',
+	calendar_schedule: 'Runs at times listed by a calendar, computed ahead of time (calendar_schedule)',
+	job_sensor: 'Starts a run when another job or group finishes (job_sensor)',
+	node_sensor: 'Starts a run when a model or source is rebuilt, fails or gets new data (node_sensor)',
+	platform_sensor: 'Runs code when a problem is recorded, e.g. to post a message (platform_sensor)',
+	custom_sensor: 'Your own @sensor function decides when to start runs (custom_sensor)'
 };
 
 export const stateEventLabel: Record<TriggerStateEventKind, string> = {
-	enabled: 'Enabled',
+	enabled: 'Turned on',
 	paused: 'Paused',
-	reset_to_default: 'Reset to code default',
-	cursor_set: 'Cursor set',
-	cursor_reset: 'Cursor reset'
+	reset_to_default: 'Set back to what the code says',
+	cursor_set: 'Position set',
+	cursor_reset: 'Started over'
 };
 
 export const eventTone = (event: RunEvent): string =>

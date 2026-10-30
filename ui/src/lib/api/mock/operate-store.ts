@@ -410,7 +410,7 @@ export class MockOperate {
 			if (r.script.nodes.length && !r.run.startedAt) {
 				// Not started yet: nothing to signal, so the run ends straight away.
 				r.script.cancel.terminatedAt = r.script.cancel.requestedAt;
-				this.#finish(r, now, 'cancelled', `Cancelled by ${this.#ctx.user().name} before it started`);
+				this.#finish(r, now, 'cancelled', `Cancelled by ${this.#ctx.user().displayName} before it started`);
 			}
 		}
 		this.#emit(rec);
@@ -689,7 +689,7 @@ export class MockOperate {
 		}
 		if (run.status === 'running' && script.lastHeartbeatAt != null && now - script.lastHeartbeatAt > UNRESPONSIVE_MS) {
 			run.status = 'unresponsive';
-			run.statusReason = `No heartbeat for ${Math.round((now - script.lastHeartbeatAt) / 1000)}s`;
+			run.statusReason = `No signal for ${Math.round((now - script.lastHeartbeatAt) / 1000)}s`;
 		}
 	}
 
@@ -720,7 +720,7 @@ export class MockOperate {
 				} else if (cancel.sigtermAt && now - Date.parse(cancel.sigtermAt) > CANCEL_EXIT_MS) {
 					cancel.exitCode = 143;
 					cancel.terminatedAt = new Date(now).toISOString();
-					this.#finish(rec, now, 'cancelled', `Cancelled by ${cancel.requestedBy.name}`);
+					this.#finish(rec, now, 'cancelled', `Cancelled by ${cancel.requestedBy.displayName}`);
 					changed.add(rec);
 				}
 				continue;
@@ -738,7 +738,7 @@ export class MockOperate {
 					changed.add(rec);
 				}
 			} else if (run.status === 'unresponsive' && script.lastHeartbeatAt != null && now - script.lastHeartbeatAt > PRESUMED_FAILED_MS) {
-				this.#finish(rec, script.lastHeartbeatAt + PRESUMED_FAILED_MS, 'presumed_failed', 'No heartbeat for 10 minutes; worker killed');
+				this.#finish(rec, script.lastHeartbeatAt + PRESUMED_FAILED_MS, 'presumed_failed', 'Lost contact: no heartbeat for 10 minutes, so the run was stopped and marked failed');
 				changed.add(rec);
 			}
 		}
@@ -1112,11 +1112,11 @@ export class MockOperate {
 			sourceFile: def.sourceFile,
 			definitionChanged: !!def.definitionChanged,
 			warning: calendarLow
-				? `Stored horizon ends ${new Date(this.#fx.calendar.storedUntil).toISOString().slice(0, 10)}, under the 7-day warning level`
+				? `The calendar only has dates until ${new Date(this.#fx.calendar.storedUntil).toISOString().slice(0, 10)}, less than 7 days ahead`
 				: overdueMin != null
-					? `The tick due ${new Date(next!).toISOString().slice(11, 16)} UTC has not been evaluated (${overdueMin} min overdue)`
+					? `Should have started a run at ${new Date(next!).toISOString().slice(11, 16)} UTC; ${overdueMin} min late`
 					: def.definitionChanged
-						? 'Sensor code changed since the last evaluation'
+						? 'Its code changed since it last checked'
 						: null
 		};
 	}

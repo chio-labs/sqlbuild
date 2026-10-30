@@ -13,7 +13,7 @@
 </script>
 
 <table class="sb-list">
-	<thead><tr><th>Check</th><th>Outcome</th><th>Severity</th><th>Run scope</th><th>Mode</th><th class="num">Result</th><th>Evaluated</th></tr></thead>
+	<thead><tr><th>Check</th><th>Outcome</th><th>Severity</th><th>Checks</th><th>Result type</th><th class="num">Result</th><th>Last checked</th></tr></thead>
 	<tbody>
 		{#each node.checkResults as c (c.id)}
 			{@const o = c.latest?.outcome ?? 'skipped'}

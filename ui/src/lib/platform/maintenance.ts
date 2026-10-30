@@ -14,11 +14,11 @@ export function oldNameStatus(view: OldNameView, now: number): OldNameStatus {
 }
 
 export const oldNameStatusLabel: Record<OldNameStatus, string> = {
-	pending: 'Pending',
-	not_kept: 'No view kept',
-	live: 'Live',
-	expired: 'Expired',
-	dropped: 'Dropped'
+	pending: 'Being set up',
+	not_kept: 'Old name not kept',
+	live: 'Old name works',
+	expired: 'Past its end date',
+	dropped: 'Old name removed'
 };
 
 export const oldNameStatusTone: Record<OldNameStatus, string> = {
@@ -30,18 +30,18 @@ export const oldNameStatusTone: Record<OldNameStatus, string> = {
 };
 
 export const oldNameStepLabel: Record<OldNameEventType, string> = {
-	required: 'Required',
+	required: 'Planned',
 	origin_archived: 'Old table archived',
-	view_created: 'View created',
-	view_dropped: 'View dropped'
+	view_created: 'Old name view added',
+	view_dropped: 'Old name view removed'
 };
 
 export const decisionLabel: Record<MigrationDecision, string> = {
-	migrate: 'Migrated',
-	redo: 'Redone',
-	superseded_replace: 'Superseded replace',
-	forced_replace: 'Forced replace',
-	renamed: 'Renamed'
+	migrate: 'Data moved across',
+	redo: 'Rebuilt in the new place',
+	superseded_replace: 'Replaced (a newer move took over)',
+	forced_replace: 'Replaced on request',
+	renamed: 'Renamed in place'
 };
 
 /** A move changes schema (or database); a rename keeps it. */

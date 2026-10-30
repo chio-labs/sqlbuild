@@ -8,7 +8,7 @@
 
 	type Props = {
 		title: string;
-		/** Navigation area the page belongs to, e.g. `Platform › Health`. */
+		/** Navigation area the page belongs to, e.g. `Platform › Locations`. */
 		area: string;
 		/** What the page will show once built. */
 		description: string;

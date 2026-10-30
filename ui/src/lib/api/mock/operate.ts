@@ -851,9 +851,9 @@ export function createOperateFixtures(now: number): OperateFixtures {
 	record({ id: 'run-88e1', origin: 'sensor', job: 'marts_only', trigger: 'on_payments_landed', runKey: 'raw__payments@81204', by: SENSOR_DAEMON, queuedAgo: 206, startedAgo: 205.8, durationMin: 4 });
 	record({ id: 'run-1a05', origin: 'schedule', job: 'activity_microbatch', trigger: 'activity_microbatch', tick: 3, by: SCHEDULER, queuedAgo: at('activity_microbatch', 3, 0), startedAgo: at('activity_microbatch', 3, 7), durationMin: 3, warn: ['hourly_order_activity'] });
 	record({ id: 'run-c40e', origin: 'manual', job: 'marts_only', by: CI_ACCOUNT, queuedAgo: 1080, startedAgo: 1079.8, durationMin: 4 });
-	record({ id: 'run-e3f8', origin: 'schedule', job: 'activity_microbatch', trigger: 'activity_microbatch', tick: 101, by: SCHEDULER, queuedAgo: at('activity_microbatch', 101, 0), startedAgo: at('activity_microbatch', 101, 6), durationMin: 11, end: 'presumed_failed', lastHeartbeatAgoSec: (at('activity_microbatch', 101, 6) - 0.6) * 60, reason: 'No heartbeat for 10 minutes; worker killed' });
+	record({ id: 'run-e3f8', origin: 'schedule', job: 'activity_microbatch', trigger: 'activity_microbatch', tick: 101, by: SCHEDULER, queuedAgo: at('activity_microbatch', 101, 0), startedAgo: at('activity_microbatch', 101, 6), durationMin: 11, end: 'presumed_failed', lastHeartbeatAgoSec: (at('activity_microbatch', 101, 6) - 0.6) * 60, reason: 'Lost contact: no heartbeat for 10 minutes, so the run was stopped and marked failed' });
 	record({ id: 'run-a7c1', origin: 'schedule', job: 'revenue_refresh', trigger: 'revenue_refresh', tick: 0, by: SCHEDULER, queuedAgo: at('revenue_refresh', 0, 0), startedAgo: at('revenue_refresh', 0, 8), durationMin: 2, fail: ['daily_revenue'], errors: { daily_revenue: 'Warehouse error: the warehouse was suspended while the statement ran' } });
-	record({ id: 'run-f1a9', origin: 'sensor', job: 'load_sources', trigger: 'partner_feed_poll', runKey: 'orders_part_0398.csv', by: SENSOR_DAEMON, queuedAgo: 50 * 60, end: 'never_started', reason: 'Never started: no start report within 2 minutes of launch (image pull failed)', image: PREVIOUS_IMAGE_ID, generation: 41 });
+	record({ id: 'run-f1a9', origin: 'sensor', job: 'load_sources', trigger: 'partner_feed_poll', runKey: 'orders_part_0398.csv', by: SENSOR_DAEMON, queuedAgo: 50 * 60, end: 'never_started', reason: 'Couldn’t start: the run didn’t report in within 2 minutes of launch (the image couldn’t be downloaded)', image: PREVIOUS_IMAGE_ID, generation: 41 });
 
 	const nightlyStages = [['load_sources'], ['core_build'], ['activity_microbatch'], ['reporting_exports']];
 	groupRun(
@@ -940,12 +940,12 @@ export function createOperateFixtures(now: number): OperateFixtures {
 				for (const m of missed.slice(0, -cap)) tick(t.name, m, 'skipped', { evaluatedAt: new Date(downtime.to + 2000).toISOString(), lateBySeconds: Math.round((downtime.to - m) / 1000), catchUp: true, reason: `Beyond the catch-up limit of ${cap} missed times` });
 				const runId = genId(rand);
 				const startAgo = (now - downtime.to) / MIN - 0.1;
-				record({ id: runId, origin: 'schedule', job: t.jobKey, trigger: t.name, by: SCHEDULER, queuedAgo: startAgo + 0.05, startedAgo: startAgo, durationMin: 6, reason: 'Catch-up run after scheduler downtime' }, { queued: downtime.to + 1000, started: downtime.to + 5000 });
+				record({ id: runId, origin: 'schedule', job: t.jobKey, trigger: t.name, by: SCHEDULER, queuedAgo: startAgo + 0.05, startedAgo: startAgo, durationMin: 6, reason: 'Made up after the scheduler was down' }, { queued: downtime.to + 1000, started: downtime.to + 5000 });
 				const rec = records[records.length - 1];
 				rec.run.tickScheduledFor = new Date(caught[0]).toISOString();
 				rec.run.tickId = tickId(t.name, caught[0]);
-				tick(t.name, caught[0], 'requested', { runId, evaluatedAt: new Date(downtime.to + 1000).toISOString(), lateBySeconds: Math.round((downtime.to - caught[0]) / 1000), catchUp: true, reason: 'Missed while no scheduler held the lease' });
-				for (const c of caught.slice(1)) tick(t.name, c, 'covered', { coveredByRunId: runId, evaluatedAt: new Date(downtime.to + 1000).toISOString(), lateBySeconds: Math.round((downtime.to - c) / 1000), catchUp: true, reason: 'Missed time merged into the catch-up run (overlap = coalesce)' });
+				tick(t.name, caught[0], 'requested', { runId, evaluatedAt: new Date(downtime.to + 1000).toISOString(), lateBySeconds: Math.round((downtime.to - caught[0]) / 1000), catchUp: true, reason: 'Missed while no server was running the scheduler' });
+				for (const c of caught.slice(1)) tick(t.name, c, 'covered', { coveredByRunId: runId, evaluatedAt: new Date(downtime.to + 1000).toISOString(), lateBySeconds: Math.round((downtime.to - c) / 1000), catchUp: true, reason: 'Missed time merged into the make-up run (overlap = coalesce)' });
 				missed.length = 0;
 			}
 			if (skip.has(due)) {
@@ -958,7 +958,7 @@ export function createOperateFixtures(now: number): OperateFixtures {
 				continue;
 			}
 			if (t.name === 'nightly_all' && i === 4) {
-				tick(t.name, due, 'failed', { reason: 'Code location unavailable at evaluation; no run was requested for this time' });
+				tick(t.name, due, 'failed', { reason: 'The code location was unavailable, so no run started for this time' });
 				continue;
 			}
 			const id = genId(rand);

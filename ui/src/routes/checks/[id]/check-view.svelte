@@ -63,20 +63,20 @@
 			<span class="faint">{c.severity} severity · {runScopePhaseLabel[c.runScopePhase].toLowerCase()} · {evaluationModeLabel[c.evaluationMode].toLowerCase()}</span>
 		{/if}
 	</div>
-	{#if res.error}<div class="msg err">Couldn't load this check: {res.error}</div>{:else if res.data === null}<div class="msg">No check <code>{id}</code> in this target's snapshot.</div>{/if}
+	{#if res.error}<div class="msg err">Couldn't load this check: {res.error}</div>{:else if res.data === null}<div class="msg">There's no check <code>{id}</code> in the version deployed to {app.targetName}.</div>{/if}
 
 	{#if c}
 		<div class="flex min-h-0 flex-1">
 			<div class="main sb-scroll">
 				{#if c.description}<p class="description">{c.description}</p>{/if}
-				<Panel title="Recent results" note="{c.history.length} evaluations">
-					<OutcomeStrip outcomes={[...c.history].reverse().map((e) => e.outcome)} tones={checkOutcomeTone} caption="Last {c.history.length} evaluations" />
+				<Panel title="Recent results" note="Last {c.history.length} times it ran">
+					<OutcomeStrip outcomes={[...c.history].reverse().map((e) => e.outcome)} tones={checkOutcomeTone} caption="Last {c.history.length} results" />
 				</Panel>
 
-				<Panel title="History" note="From synced audit results; builds outside the scheduler show their fingerprint run">
+				<Panel title="History" note="Read back from the warehouse, so results of builds from the command line show too">
 					<table class="sb-list">
 						<thead>
-							<tr><th>Evaluated</th><th>Outcome</th><th class="num">{c.evaluationMode === 'measurement' ? 'Measured' : 'Violations'}</th><th>Run</th><th>Evidence</th></tr>
+							<tr><th>Checked</th><th>Outcome</th><th class="num">{c.evaluationMode === 'measurement' ? 'Measured' : 'Violations'}</th><th>Run</th><th>Evidence</th></tr>
 						</thead>
 						<tbody>
 							{#each c.history as e (e.id)}
@@ -89,7 +89,7 @@
 									<td class="num">{checkValue(e, c.evaluationMode)}</td>
 									<td>
 										{#if e.runId}<a class="mono link" href="/runs/{e.runId}">{e.runId}</a>
-										{:else}<span class="faint" title="Fingerprint run {e.fingerprintRunId}">outside the scheduler · <code>{shortRunId(e.fingerprintRunId)}</code></span>{/if}
+										{:else}<span class="faint" title="Built by sqb outside this server, e.g. from a laptop or CI (fingerprint run {e.fingerprintRunId})">from the command line · <code>{shortRunId(e.fingerprintRunId)}</code></span>{/if}
 									</td>
 									<td>
 										{#if e.evidenceCount}
@@ -120,11 +120,11 @@
 					</Panel>
 				{/if}
 
-				<Panel title="Executed SQL" note="Latest evaluation">
+				<Panel title="SQL that ran" note="The latest time">
 					{#if c.sql}
 						<CodePreview file="{c.id}.sql" code={c.sql} maxLines={30} />
 					{:else}
-						<p class="faint locked"><LockIcon size={13} /> Requires view.sql</p>
+						<p class="faint locked"><LockIcon size={13} /> You don't have permission to see SQL (view.sql)</p>
 					{/if}
 				</Panel>
 			</div>
@@ -134,10 +134,10 @@
 					rows={[
 						{ label: 'Kind', value: c.kind === 'audit' ? `audit · ${c.definition ?? 'custom'}` : c.kind.replace('_', ' ') },
 						{ label: 'Attached to', value: c.node ? `${c.node}${c.column ? `.${c.column}` : ''}` : attachmentLabel[c.attachment], mono: !!c.node },
-						{ label: 'Attachment', value: attachmentLabel[c.attachment] },
+						{ label: 'Target type', value: attachmentLabel[c.attachment] },
 						{ label: 'Severity', value: c.severity },
-						{ label: 'Run scope', value: `${runScopePhaseLabel[c.runScopePhase]} (${c.runScopePhase})` },
-						{ label: 'Evaluation', value: `${evaluationModeLabel[c.evaluationMode]} (${c.evaluationMode})` },
+						{ label: 'Checks', value: runScopePhaseLabel[c.runScopePhase], title: c.runScopePhase },
+						{ label: 'Result type', value: evaluationModeLabel[c.evaluationMode], title: c.evaluationMode },
 						{ label: 'Thresholds', value: c.thresholds.length ? c.thresholds.map(thresholdLabel).join(' · ') : '—' }
 					]}
 				/>
@@ -151,8 +151,8 @@
 						rows={[
 							{ label: 'Outcome', value: checkOutcomeLabel[c.latest.outcome], tone: checkOutcomeTone[c.latest.outcome] },
 							{ label: 'Result', value: checkValue(c.latest, c.evaluationMode) },
-							{ label: 'Evaluated', value: `${formatAgo(c.latest.evaluatedAt, app.now)} · ${formatStamp(c.latest.evaluatedAt)}` },
-							{ label: 'Run', value: c.latest.runId ?? `outside the scheduler · ${shortRunId(c.latest.fingerprintRunId)}`, mono: true }
+							{ label: 'Last checked', value: `${formatAgo(c.latest.evaluatedAt, app.now)} · ${formatStamp(c.latest.evaluatedAt)}` },
+							{ label: 'Run', value: c.latest.runId ?? `from the command line · ${shortRunId(c.latest.fingerprintRunId)}`, mono: true }
 						]}
 					/>
 				{/if}

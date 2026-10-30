@@ -20,6 +20,6 @@
 	const allowed = $derived(app.can(requires));
 </script>
 
-<Button {variant} {size} disabled={!allowed || disabled || busy} title={allowed ? title : `Requires ${requires}`} {onclick}>
+<Button {variant} {size} disabled={!allowed || disabled || busy} title={allowed ? title : `You don't have permission to do this (${requires})`} {onclick}>
 	{@render children()}
 </Button>

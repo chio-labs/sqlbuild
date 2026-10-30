@@ -8,7 +8,7 @@
 	import { createResource } from '$lib/state/resource.svelte';
 	import { formatAgo, formatDuration, formatStamp } from '$lib/format/time';
 	import { formatNodeCounts, runOriginLabel, runStatusLabel, runStatusTone } from '$lib/status';
-	import { formatCost, onFailureHelp, overlapHelp } from '$lib/operate/labels';
+	import { formatCost, onFailureHelp, onFailurePlain, overlapHelp, overlapPlain, shortRunId, slotLabel } from '$lib/operate/labels';
 	import GroupOrder from './group-order.svelte';
 	import LaunchForm from './launch-form.svelte';
 
@@ -56,9 +56,9 @@
 			requires="job.run"
 			variant="default"
 			disabled={!def || targetBlocked}
-			reason={targetBlocked ? `Limited to targets ${def?.targets?.join(', ')}` : undefined}
+			reason={targetBlocked ? `This job only runs on ${def?.targets?.join(', ')}` : undefined}
 			onclick={() => (launchOpen = !launchOpen)}
-		>▷ Launch</GatedButton>
+		>▷ Run now</GatedButton>
 		{#if launchOpen && def}<LaunchForm job={def} onclose={() => (launchOpen = false)} />{/if}
 	</div>
 </AppTopbar>
@@ -75,7 +75,7 @@
 	{#if job.error}
 		<div class="msg err">Couldn't load this job: {job.error}</div>
 	{:else if job.data === null}
-		<div class="msg">No job or group named <code>{name}</code> in this target's snapshot.</div>
+		<div class="msg">There's no job or group named <code>{name}</code> in the version deployed to {app.targetName}.</div>
 	{/if}
 	{#if actionError}<div class="msg err">{actionError}</div>{/if}
 
@@ -83,13 +83,13 @@
 		<div class="flex min-h-0 flex-1">
 			<div class="main sb-scroll">
 				<section>
-					<h3>Declaration <span>read-only; defined in code</span></h3>
+					<h3>Code <span>read-only; change it in the project and deploy</span></h3>
 					<CodePreview file="{def.declaration.sourceFile}:{def.declaration.line}" code={def.declaration.code} language="text" maxLines={24} />
 				</section>
 
 				{#if def.kind === 'group'}
 					<section>
-						<h3>Members and order <span>derived from lineage, plus <code>after</code></span></h3>
+						<h3>Jobs in this group, in order <span>from the data each job reads and writes, plus any <code>after</code> in the code</span></h3>
 						<GroupOrder job={def} />
 					</section>
 				{/if}
@@ -102,31 +102,31 @@
 								{#each runs as r (r.id)}
 									<tr onclick={() => goto(`/runs/${r.id}`)}>
 										<td><i style:background={runStatusTone[r.status]}></i>{runStatusLabel[r.status]}</td>
-										<td><a href="/runs/{r.id}" class="mono">{r.id}</a></td>
-										<td class="faint">{runOriginLabel[r.origin]}{r.parentRunId ? ` in ${r.parentRunId}` : r.triggerName ? ` · ${r.triggerName}` : ''}</td>
+										<td><a href="/runs/{r.id}" class="mono" title={r.id}>{shortRunId(r.id)}</a></td>
+										<td class="faint">{runOriginLabel[r.origin]}{r.parentRunId ? ` in group run ${shortRunId(r.parentRunId)}` : r.triggerName ? ` · ${r.triggerName}` : ''}</td>
 										<td class="faint">{formatNodeCounts(r.nodeCounts)}</td>
 										<td class="faint">{r.startedAt ? formatDuration(r.startedAt, r.endedAt, app.now) : '—'}</td>
 										<td class="faint" title={formatStamp(r.queuedAt)}>{formatAgo(r.startedAt ?? r.queuedAt, app.now)}</td>
 										<td class="faint">{r.requestedBy.name}</td>
-										<td class="faint num">{formatCost(r.cost)}</td>
+										<td class="faint num" title={r.cost ? `Estimated warehouse cost: ${r.cost.source}` : 'No cost reported'}>{formatCost(r.cost)}</td>
 									</tr>
 								{/each}
 							</tbody>
 						</table>
 					{:else}
-						<p class="faint">{jobRuns.loading ? 'Loading…' : 'No runs yet.'}</p>
+						<p class="faint">{jobRuns.loading ? 'Loading…' : 'No runs yet. Use Run now, or turn on a schedule.'}</p>
 					{/if}
 				</section>
 
 				<section>
-					<h3>Resolved nodes · {def.resolvedNodes.length} <span>{def.select ? `--select ${def.select}` : 'union of the members'}{def.exclude.length ? ` --exclude ${def.exclude.join(' ')}` : ''}</span></h3>
+					<h3>What it builds · {def.resolvedNodes.length} nodes <span>{def.select ? `--select ${def.select}` : 'everything its jobs build'}{def.exclude.length ? ` --exclude ${def.exclude.join(' ')}` : ''}</span></h3>
 					<div class="nodes">
 						{#each def.resolvedNodes as n (n)}
 							<a href="/catalog/{n}" class="node">
 								<i style:background={KIND_TONE[kindOf.get(n) ?? ''] ?? 'var(--sb-text-faint)'}></i>
 								<span>{n}</span>
 								<em>{kindOf.get(n) ?? ''}</em>
-								{#if def.criticalNodes.includes(n)}<b title="critical">critical</b>{/if}
+								{#if def.criticalNodes.includes(n)}<b title="Marked critical: if it fails, the whole group stops">critical</b>{/if}
 							</a>
 						{/each}
 					</div>
@@ -134,56 +134,55 @@
 			</div>
 
 			<aside class="rail sb-scroll">
-				<h3>Definition</h3>
+				<h3>How it runs</h3>
 				<dl>
-					<div><dt>Kind</dt><dd>{def.kind}</dd></div>
+					<div><dt>Kind</dt><dd>{def.kind === 'group' ? 'Group of jobs' : 'Job'}</dd></div>
 					{#if def.select}<div><dt>Selection</dt><dd><code>{def.select}</code></dd></div>{/if}
-					<div><dt>overlap</dt><dd title={overlapHelp[def.overlap]}><code>{def.overlap}</code></dd></div>
-					<div><dt>on_failure</dt><dd title={onFailureHelp[def.onFailure]}><code>{def.onFailure}</code></dd></div>
-					<div><dt>Priority</dt><dd>{def.priority}</dd></div>
+					<div><dt>If already running</dt><dd title="overlap = {def.overlap}">{overlapPlain[def.overlap]}</dd></div>
+					<div><dt>If something fails</dt><dd title="on_failure = {def.onFailure}">{onFailurePlain[def.onFailure]}</dd></div>
+					<div><dt>Priority</dt><dd title="Higher priority runs go first when they wait for the same slot">{def.priority}</dd></div>
 					<div><dt>Targets</dt><dd>{def.targets?.join(', ') ?? 'all targets'}</dd></div>
 					<div><dt>Owner</dt><dd>{def.owner ?? '—'}</dd></div>
-					<div><dt>Source</dt><dd><code>{def.sourceFile}</code></dd></div>
+					<div><dt>Defined in</dt><dd><code>{def.sourceFile}</code></dd></div>
 					{#if def.memberOf.length}
 						<div><dt>In groups</dt><dd>{#each def.memberOf as g, i (g)}{i ? ', ' : ''}<a href="/jobs/{g}">{g}</a>{/each}</dd></div>
 					{/if}
 				</dl>
 				<p class="help">{overlapHelp[def.overlap]}. {onFailureHelp[def.onFailure]}.</p>
 
-				<h3>Settings</h3>
+				<h3>Extra options</h3>
 				{#if Object.keys(def.settings).length}
 					{#each Object.entries(def.settings) as [flag, value] (flag)}
 						<p class="setting"><code>{flag}{value === true ? '' : ` ${value}`}</code></p>
 					{/each}
 				{:else}
-					<p class="faint">No extra flags.</p>
+					<p class="faint">None; it runs with the defaults.</p>
 				{/if}
 
-				<h3>Concurrency groups</h3>
+				<h3>Shared slots</h3>
 				{#if def.concurrency.length}
 					{#each def.concurrency as g (g.key)}
-						<p class="setting">
-							<code>{g.key}</code>
-							<span class="faint">{g.holders.length}/{g.limit} in use</span>
-							{#each g.holders as h (h)}<a class="mono" href="/runs/{h}">{h}</a>{/each}
+						<p class="setting" title="Concurrency group {g.key}: at most {g.limit} runs at once">
+							<span>{g.holders.length} of {g.limit} {slotLabel(g.key)} slot{g.limit === 1 ? '' : 's'} in use</span>
+							{#each g.holders as h (h)}<a class="mono" href="/runs/{h}" title={h}>{shortRunId(h)}</a>{/each}
 						</p>
 					{/each}
 				{:else}
-					<p class="faint">None; only the write-set rule applies.</p>
+					<p class="faint">None. It only waits for runs that update the same data.</p>
 				{/if}
 
-				<h3>Triggers · {jobTriggers.length}</h3>
+				<h3>Schedules and sensors · {jobTriggers.length}</h3>
 				{#if jobTriggers.length === 0}
-					<p class="faint">No trigger; launched manually{def.memberOf.length ? ' or by its groups' : ''}.</p>
+					<p class="faint">Nothing starts it automatically. Run it by hand{def.memberOf.length ? ', or through its groups' : ''}.</p>
 				{:else}
 					{#each jobTriggers as t (t.id)}
 						<div class="trigger" class:off={t.state === 'paused'}>
 							<div class="min-w-0">
 								<a href="/triggers/{t.id}">{t.name}</a>
-								<div class="faint">{t.cadence}{t.state !== t.defaultState ? ` · code default ${t.defaultState}` : ''}</div>
+								<div class="faint">{t.cadence}{t.state !== t.defaultState ? ` · ${t.defaultState === 'running' ? 'on' : 'paused'} in the code` : ''}</div>
 							</div>
-							<span title={canToggle ? (t.state === 'running' ? 'Pause' : 'Enable') : 'Requires trigger.toggle'}>
-								<button class="sb-toggle" class:on={t.state === 'running'} disabled={!canToggle} onclick={() => toggleTrigger(t)} aria-label="Toggle {t.name}"></button>
+							<span title={canToggle ? (t.state === 'running' ? 'Pause: stop starting runs' : 'Turn on') : "You don't have permission to pause or turn on schedules and sensors (trigger.toggle)"}>
+								<button class="sb-toggle" class:on={t.state === 'running'} disabled={!canToggle} onclick={() => toggleTrigger(t)} aria-label="{t.state === 'running' ? 'Pause' : 'Turn on'} {t.name}"></button>
 							</span>
 						</div>
 					{/each}

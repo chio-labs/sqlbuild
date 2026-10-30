@@ -28,7 +28,7 @@
 	} = $props();
 
 	const needed = $derived((Array.isArray(requires) ? requires : [requires]).filter((c) => !app.can(c)));
-	const title = $derived(needed.length ? `Requires ${needed.join(' and ')}` : disabled ? reason : undefined);
+	const title = $derived(needed.length ? `You don't have permission to do this (${needed.join(', ')})` : disabled ? reason : undefined);
 </script>
 
 <span class="gated" {title}>

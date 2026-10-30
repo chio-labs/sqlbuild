@@ -47,11 +47,11 @@
 {:else}
 	<div class="toolbar">
 		<select class="field" bind:value={actor} aria-label="Actor">
-			<option value="">Any actor</option>
+			<option value="">Anyone</option>
 			{#each actors as a (a)}<option value={a}>{a}</option>{/each}
 		</select>
 		<select class="field" bind:value={action} aria-label="Action">
-			<option value="">Any action</option>
+			<option value="">Any permission</option>
 			{#each actions as a (a)}<option value={a}>{a}</option>{/each}
 		</select>
 		<SegmentedFilter
@@ -64,7 +64,7 @@
 		/>
 		<label class="check">
 			<input type="checkbox" class="sb-check" bind:checked={evidenceOnly} />
-			Evidence reads only
+			Only reads of sample rows
 		</label>
 		<span class="total">{rows.length} entries</span>
 	</div>
@@ -74,12 +74,12 @@
 			<thead>
 				<tr>
 					<th>When</th>
-					<th>Actor</th>
-					<th>Action</th>
-					<th>Scope</th>
-					<th>Outcome</th>
-					<th>Granted by</th>
-					<th>Detail</th>
+					<th>Who</th>
+					<th title="The permission the request needed">Permission</th>
+					<th>Where</th>
+					<th>Result</th>
+					<th>Allowed by role</th>
+					<th>What happened</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -92,7 +92,7 @@
 						</td>
 						<td>
 							<code>{e.action}</code>
-							{#if e.evidenceRead}<span class="evidence" title="Read of evidence (sample or failing rows)"><EyeIcon size={12} /> evidence</span>{/if}
+							{#if e.evidenceRead}<span class="evidence" title="They looked at stored sample or failing rows (evidence)"><EyeIcon size={12} /> read sample rows</span>{/if}
 						</td>
 						<td class="muted">
 							{formatAssignmentScope(e.scope, locations)}
@@ -109,7 +109,7 @@
 						</td>
 					</tr>
 				{:else}
-					<LoadRow colspan={7} resource={entries} empty="No audit entries match the filters." />
+					<LoadRow colspan={7} resource={entries} empty="Nothing matches these filters." />
 				{/each}
 			</tbody>
 		</table>

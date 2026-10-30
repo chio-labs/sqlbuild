@@ -138,7 +138,7 @@
 	const canLaunch = $derived(fresh && !!check?.ok && parsed.errors.length === 0);
 	const blockedReason = $derived(
 		parsed.errors[0] ??
-			(!fresh ? 'Waiting for the server check' : check && !check.adhoc.allowed ? 'Refused: run.adhoc must cover every node it writes' : check?.rewriteHistory.required && !check.rewriteHistory.allowed ? 'Requires run.rewrite_history' : check?.problems[0]?.message)
+			(!fresh ? 'Checking with the server…' : check && !check.adhoc.allowed ? 'You need permission to build every node this run would update (run.adhoc)' : check?.rewriteHistory.required && !check.rewriteHistory.allowed ? "You don't have permission to rebuild history (run.rewrite_history)" : check?.problems[0]?.message)
 	);
 
 	async function launch() {
@@ -195,39 +195,39 @@
 				{/if}
 				{#if check}
 					<div class="block" class:stale={!fresh}>
-						<h5>Selection <span>{check.resolvedNodes.length} node{check.resolvedNodes.length === 1 ? '' : 's'}{parsed.request.select.length ? '' : ' · whole project'}</span></h5>
+						<h5>Picks <span>{check.resolvedNodes.length} node{check.resolvedNodes.length === 1 ? '' : 's'}{parsed.request.select.length ? '' : ' · whole project'}</span></h5>
 						{@render chips(check.resolvedNodes)}
 					</div>
 					<div class="block" class:stale={!fresh}>
-						<h5>Write set <span>{check.writeSet.length ? `${check.writeSet.length} node${check.writeSet.length === 1 ? '' : 's'}` : 'none'}</span></h5>
-						{#if check.writeSet.length}{@render chips(check.writeSet)}{:else}<p class="faint">sqb {verb} writes no nodes; nothing is claimed.</p>{/if}
+						<h5 title="The write set: nodes this run updates and reserves while it runs">Updates <span>{check.writeSet.length ? `${check.writeSet.length} node${check.writeSet.length === 1 ? '' : 's'}` : 'nothing'}</span></h5>
+						{#if check.writeSet.length}{@render chips(check.writeSet)}{:else}<p class="faint">sqb {verb} only reads, so it doesn't wait for other runs.</p>{/if}
 					</div>
 					<div class="block" class:stale={!fresh}>
-						<h5>
-							<code>run.adhoc</code>
-							{#if check.adhoc.allowed}<span class="ok-text">covers every node in the write set</span>{:else}<span class="bad-text">refused as a whole</span>{/if}
+						<h5 title="run.adhoc">
+							Permission
+							{#if check.adhoc.allowed}<span class="ok-text">you can update all of these</span>{:else}<span class="bad-text">the whole run would be refused</span>{/if}
 						</h5>
 						{#if !check.adhoc.allowed}
 							<p class="faint">
-								{app.can('run.adhoc') ? `Your grants don't cover ${check.adhoc.outOfScope.length} of the nodes this run would write. Narrow the selection or ask for a wider role.` : 'You have no run.adhoc grant in this target.'}
+								{app.can('run.adhoc') ? `You can't update ${check.adhoc.outOfScope.length} of the nodes this run would update. Narrow the selection, or ask for a role that covers them (run.adhoc).` : "You don't have permission to start runs by hand in this target (run.adhoc)."}
 							</p>
 							{@render chips(check.adhoc.outOfScope, 'bad')}
 						{/if}
 					</div>
 					{#if check.rewriteHistory.required}
 						<div class="block" class:stale={!fresh}>
-							<h5>
-								<code>run.rewrite_history</code>
-								{#if check.rewriteHistory.allowed}<span class="ok-text">granted</span>{:else}<span class="bad-text">required</span>{/if}
+							<h5 title="run.rewrite_history">
+								Rebuilds history
+								{#if check.rewriteHistory.allowed}<span class="ok-text">you're allowed to</span>{:else}<span class="bad-text">you need permission</span>{/if}
 							</h5>
-							<p class="faint">Full refresh and explicit cursor windows rewrite history: {check.rewriteHistory.reasons.join(', ')}</p>
+							<p class="faint">These options replace data that was already built: {check.rewriteHistory.reasons.join(', ')}</p>
 						</div>
 					{/if}
 					{#if check.claimConflicts.length}
 						<div class="block" class:stale={!fresh}>
-							<h5>Would queue <span>write claims are held</span></h5>
+							<h5 title="Write claims are held by other runs">Will wait <span>other runs are updating the same data</span></h5>
 							{#each check.claimConflicts.slice(0, 6) as c (c.runId + c.nodeKey)}
-								<p class="faint">Behind <a href="/runs/{c.runId}" onclick={() => (open = false)}>{c.runId}</a> on <code>{c.nodeKey}</code></p>
+								<p class="faint">Run <a href="/runs/{c.runId}" onclick={() => (open = false)}>{c.runId.replace(/^run-/, '')}</a> is updating <code>{c.nodeKey}</code></p>
 							{/each}
 						</div>
 					{/if}
@@ -238,7 +238,7 @@
 			</div>
 
 			<div class="flags sb-scroll">
-				<div class="section-title">Flags · sqb {verb}</div>
+				<div class="section-title">Options · sqb {verb}</div>
 				{#each spec.flags.filter((f) => f.flag !== '--select' && f.flag !== '--exclude') as f (f.flag)}
 					<button onclick={() => insertFlag(f.flag)} title={f.description}>
 						<code class:rewrite={f.rewritesHistory}>{f.flag}</code>
@@ -246,7 +246,7 @@
 					</button>
 				{/each}
 				<p class="faint note">
-					From the CLI's command table. Type <code>--</code> for flags, or a node name, <code>tag:</code>, <code>group:</code>, <code>kind:</code> or <code>path:</code> after <code>--select</code>; <code>+</code> before or after adds upstream or downstream nodes.
+					The same options as the command line. Type <code>--</code> for options, or a node name, <code>tag:</code>, <code>group:</code>, <code>kind:</code> or <code>path:</code> after <code>--select</code>; <code>+</code> before or after adds upstream or downstream nodes.
 				</p>
 			</div>
 		</div>
@@ -276,7 +276,7 @@
 				/>
 				<span class="locked" title="Set by the target switcher"><LockIcon size={11} /> --target {app.targetName}</span>
 				<span title={canLaunch ? undefined : blockedReason}>
-					<GatedButton requires="run.adhoc" variant="default" disabled={!canLaunch} reason={blockedReason} busy={launching} onclick={launch}>▷ Launch</GatedButton>
+					<GatedButton requires="run.adhoc" variant="default" disabled={!canLaunch} reason={blockedReason} busy={launching} onclick={launch}>▷ Run</GatedButton>
 				</span>
 			</div>
 			{#if launchError}<p class="problem">{launchError}</p>{:else if !canLaunch && blockedReason && fresh}<p class="faint hint">{blockedReason}</p>{/if}

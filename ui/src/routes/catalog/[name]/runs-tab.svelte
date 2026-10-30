@@ -23,9 +23,9 @@
 				</td>
 				<td>
 					{#if r.runId}<a class="mono link" href="/runs/{r.runId}">{r.runId}</a>
-					{:else}<span class="muted" title="Fingerprint run {r.fingerprintRunId}">outside the scheduler · <code>{shortRunId(r.fingerprintRunId ?? '')}</code></span>{/if}
+					{:else}<span class="muted" title="Built by sqb outside this server, e.g. from a laptop or CI (fingerprint run {r.fingerprintRunId})">from the command line · <code>{shortRunId(r.fingerprintRunId ?? '')}</code></span>{/if}
 				</td>
-				<td>{#if r.jobKey}<a class="link" href="/jobs/{r.jobKey}">{r.jobKey}</a>{:else}<span class="muted">{r.runId ? 'ad hoc' : '—'}</span>{/if}</td>
+				<td>{#if r.jobKey}<a class="link" href="/jobs/{r.jobKey}">{r.jobKey}</a>{:else}<span class="muted">{r.runId ? 'started by hand' : '—'}</span>{/if}</td>
 				<td class="num muted">{formatNumber(r.rows)}</td>
 				<td class="num muted">{formatMs(r.durationMs)}</td>
 				<td><RelativeTime value={formatAgo(r.startedAt, app.now)} exact={formatStamp(r.startedAt)} /></td>

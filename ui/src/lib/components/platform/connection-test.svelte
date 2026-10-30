@@ -28,21 +28,21 @@
 	}
 
 	function origin(t: ConnectionTest): string {
-		return t.trigger === 'publish' ? 'after publish' : `by ${t.by?.name ?? 'unknown'}`;
+		return t.trigger === 'publish' ? 'after the last deploy' : `by ${t.by?.name ?? 'unknown'}`;
 	}
 </script>
 
 <div class="connection-test">
 	<div class="min-w-0 flex-1">
 		{#if testing}
-			<StatusLabel tone="var(--sb-running)" label="Testing… (sqb debug)" />
+			<span title="Runs the same check as sqb debug"><StatusLabel tone="var(--sb-running)" label="Testing…" /></span>
 		{:else if shown}
 			<span title="{formatStamp(shown.at)} · {shown.durationMs} ms">
 				<StatusLabel tone={testTone[shown.outcome]} label="{testLabel[shown.outcome]} {formatAgo(shown.at, app.now)} {origin(shown)}" />
 			</span>
 			<div class="message">{shown.message}</div>
 		{:else}
-			<StatusLabel tone="var(--sb-text-faint)" label="Not tested" muted />
+			<StatusLabel tone="var(--sb-text-faint)" label="Not tested yet" muted />
 		{/if}
 		{#if failure}<div class="message err">{failure}</div>{/if}
 	</div>

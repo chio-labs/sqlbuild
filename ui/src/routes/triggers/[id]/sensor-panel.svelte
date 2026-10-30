@@ -4,7 +4,9 @@
 	import { app } from '$lib/state/app.svelte';
 	import { formatAgo, formatStamp } from '$lib/format/time';
 	import { runStatusLabel, runStatusTone } from '$lib/status';
-	import { evaluationTone } from '$lib/operate/labels';
+	import { evaluationTone, shortRunId } from '$lib/operate/labels';
+
+	const outcomeText: Record<string, string> = { requested: 'checking…', completed: 'done', failed: 'failed', timed_out: 'took too long', abandoned: 'gave up' };
 
 	let { trigger }: { trigger: TriggerDetail } = $props();
 	const sensor = $derived(trigger.sensor!);
@@ -35,33 +37,33 @@
 </script>
 
 <section>
-	<h3>Condition</h3>
+	<h3>When it starts a run</h3>
 	<p><code>{sensor.condition}</code></p>
 	{#each sensor.nodeConditions as c (c)}<p class="faint">and {c}</p>{/each}
 	<p class="faint">
-		{sensor.minimumIntervalSeconds ? `Minimum interval ${sensor.minimumIntervalSeconds}s, from the start of the last evaluation` : 'Evaluated on each matching event'}{sensor.timeoutSeconds ? ` · killed and recorded as timed_out after ${sensor.timeoutSeconds}s` : ''}
+		{sensor.minimumIntervalSeconds ? `Checks at most every ${sensor.minimumIntervalSeconds}s` : 'Checks each time something relevant happens'}{sensor.timeoutSeconds ? ` · a check is stopped if it takes over ${sensor.timeoutSeconds}s` : ''}
 	</p>
 	{#if trigger.kind === 'platform_sensor'}
-		<p class="faint">Consumes platform events. <a href="/locations/{app.locationId}#problems">See the problems and how this sensor handled them on the location page</a>.</p>
+		<p class="faint">Reacts to problems such as failed deploys or late schedules. <a href="/locations/{app.locationId}#problems">See the problems and how it handled them on the location page</a>.</p>
 	{/if}
 	{#if changed}
-		<p class="warn">Code changed since the last evaluation: fingerprint <code>{sensor.lastEvaluatedFingerprint}</code> → <code>{sensor.currentFingerprint}</code>. The next evaluation uses the new code.</p>
+		<p class="warn" title="Fingerprint {sensor.lastEvaluatedFingerprint} → {sensor.currentFingerprint}">Its code changed since it last checked. The next check uses the new code.</p>
 	{/if}
 </section>
 
 <section>
-	<h3>Cursor</h3>
+	<h3 title="The sensor's cursor">Where it's up to</h3>
 	<div class="cursor">
-		<code>{sensor.cursor ?? '(none: starts from the beginning)'}</code>
+		<code>{sensor.cursor ?? '(the start: nothing handled yet)'}</code>
 		{#if sensor.cursorUpdatedAt}<span class="faint" title={formatStamp(sensor.cursorUpdatedAt)}>updated {formatAgo(sensor.cursorUpdatedAt, app.now)}</span>{/if}
-		<GatedButton requires="sensor.reset_cursor" size="xs" disabled={sensor.cursor === null} reason="The cursor is already empty" onclick={() => (confirmReset = !confirmReset)}>Reset cursor</GatedButton>
+		<GatedButton requires="sensor.reset_cursor" size="xs" disabled={sensor.cursor === null} reason="It's already at the start" onclick={() => (confirmReset = !confirmReset)}>Start over</GatedButton>
 	</div>
 	{#if confirmReset}
 		<div class="confirm">
-			<p>The next evaluation starts from the beginning of the event stream. Run requests are still de-duplicated by run key, so runs already requested are not requested again.</p>
-			<input bind:value={reason} placeholder="Reason (recorded with the reset)" />
+			<p>The next check looks at everything again from the start. Anything it already started a run for (same run key) doesn't start a second run.</p>
+			<input bind:value={reason} placeholder="Why? (saved in the history)" />
 			<div class="row">
-				<GatedButton requires="sensor.reset_cursor" variant="default" size="sm" {busy} onclick={resetCursor}>Reset cursor</GatedButton>
+				<GatedButton requires="sensor.reset_cursor" variant="default" size="sm" {busy} onclick={resetCursor}>Start over</GatedButton>
 				<button class="ghost" onclick={() => (confirmReset = false)}>Cancel</button>
 			</div>
 		</div>
@@ -70,24 +72,24 @@
 </section>
 
 <section>
-	<h3>Evaluations · {trigger.evaluations.length}</h3>
+	<h3 title="Each time the sensor ran its check (an evaluation)">Checks · {trigger.evaluations.length}</h3>
 	<table>
-		<thead><tr><th>#</th><th>Requested</th><th>Outcome</th><th>Cursor</th><th class="num">Run requests</th><th>Detail</th></tr></thead>
+		<thead><tr><th>#</th><th>When</th><th>Result</th><th title="Cursor before → after">Position</th><th class="num">Runs started</th><th>Detail</th></tr></thead>
 		<tbody>
 			{#each trigger.evaluations.slice(0, shown) as e (e.id)}
 				<tr>
 					<td class="faint">{e.sequence}</td>
 					<td class="nowrap" title={formatStamp(e.requestedAt)}>{formatAgo(e.requestedAt, app.now)}</td>
-					<td><span class="outcome" style:--c={evaluationTone[e.outcome]}>{e.outcome === 'requested' ? 'in flight' : e.outcome}</span></td>
+					<td><span class="outcome" style:--c={evaluationTone[e.outcome]} title="{e.outcome} · {e.id}">{outcomeText[e.outcome] ?? e.outcome}</span></td>
 					<td class="mono faint">{e.cursorBefore ?? '∅'}{#if e.cursorAfter && e.cursorAfter !== e.cursorBefore} → {e.cursorAfter}{/if}</td>
 					<td class="num">{e.runRequests}</td>
 					<td class:err={!!e.error} class:faint={!e.error}>
 						{e.error ?? e.skipReason ?? ''}
-						{#if e.definitionFingerprint !== sensor.currentFingerprint}<span class="tag" title="Evaluated with fingerprint {e.definitionFingerprint}">older code</span>{/if}
+						{#if e.definitionFingerprint !== sensor.currentFingerprint}<span class="tag" title="Checked with code fingerprint {e.definitionFingerprint}">older code</span>{/if}
 					</td>
 				</tr>
 			{:else}
-				<tr><td colspan="6" class="empty">No evaluations yet.</td></tr>
+				<tr><td colspan="6" class="empty">It hasn't checked yet.</td></tr>
 			{/each}
 		</tbody>
 	</table>
@@ -95,7 +97,7 @@
 </section>
 
 <section>
-	<h3>Run requests by run key · {trigger.runRequests.length}</h3>
+	<h3 title="Run requests by run key">Runs it started · {trigger.runRequests.length}</h3>
 	{#if trigger.runRequests.length}
 		<table>
 			<thead><tr><th>Run key</th><th>Run</th><th>Status</th><th>Requested</th></tr></thead>
@@ -103,16 +105,16 @@
 				{#each trigger.runRequests as r (r.runKey)}
 					<tr>
 						<td class="mono">{r.runKey}</td>
-						<td class="mono"><a href="/runs/{r.runId}">{r.runId}</a></td>
+						<td class="mono"><a href="/runs/{r.runId}" title={r.runId}>{shortRunId(r.runId)}</a></td>
 						<td><i class="dot" style:background={runStatusTone[r.runStatus]}></i>{runStatusLabel[r.runStatus]}</td>
 						<td class="faint" title={formatStamp(r.requestedAt)}>{formatAgo(r.requestedAt, app.now)}</td>
 					</tr>
 				{/each}
 			</tbody>
 		</table>
-		<p class="faint small">One run per run key: a repeated key never requests a second run.</p>
+		<p class="faint small">One run per run key: the same key never starts a second run.</p>
 	{:else}
-		<p class="faint">{trigger.jobKey ? 'No run requests yet.' : 'This sensor only runs code; it requests no runs.'}</p>
+		<p class="faint">{trigger.jobKey ? 'It hasn’t started any runs yet.' : 'This sensor only runs its own code; it doesn’t start runs.'}</p>
 	{/if}
 </section>
 

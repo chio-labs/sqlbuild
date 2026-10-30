@@ -21,7 +21,7 @@
 	<Panel title="Renames and moves" note={h.migrations.length ? `${h.migrations.length} recorded in this target` : undefined}>
 		{#if h.migrations.length}
 			<table class="sb-list">
-				<thead><tr><th>When</th><th>Change</th><th>From</th><th>To</th><th>Decision</th><th>Run</th></tr></thead>
+				<thead><tr><th>When</th><th>Change</th><th>From</th><th>To</th><th>What happened</th><th>Run</th></tr></thead>
 				<tbody>
 					{#each h.migrations as m (m.eventId)}
 						<tr>
@@ -41,9 +41,9 @@
 	</Panel>
 
 	{#if h.oldNameViews.length}
-		<Panel title="Old-name views" note="Views kept under the previous name so readers keep working">
+		<Panel title="Views under the old name" note="Kept so queries that use the old name keep working">
 			<table class="sb-list">
-				<thead><tr><th>Old name</th><th>Status</th><th>Retention</th><th>Column aliases</th><th>Steps</th></tr></thead>
+				<thead><tr><th>Old name</th><th>Status</th><th>Kept for</th><th>Renamed columns</th><th>History</th></tr></thead>
 				<tbody>
 					{#each h.oldNameViews as v (v.migrationEventId)}
 						{@const status = oldNameStatus(v, app.now)}

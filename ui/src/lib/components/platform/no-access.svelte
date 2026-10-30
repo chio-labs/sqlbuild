@@ -10,6 +10,6 @@
 			<LockIcon size={16} />
 		</div>
 		<h2 class="text-[14px] font-semibold">You don't have access to {what}</h2>
-		<p class="text-muted-foreground mt-1.5 text-[13px]">Requires <code>{requires}</code>. Ask an administrator for a role that grants it.</p>
+		<p class="text-muted-foreground mt-1.5 text-[13px]">Ask an administrator for a role that allows it (<code>{requires}</code>).</p>
 	</div>
 </div>

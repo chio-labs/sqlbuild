@@ -45,14 +45,14 @@
 
 	function viewDetail(v: OldNameView): string {
 		const status = oldNameStatus(v, app.now);
-		if (status === 'live') return `Expires ${formatIn(v.expiresAt, app.now)}`;
-		if (status === 'expired') return `Expired ${formatAgo(v.expiresAt, app.now)}; janitor drops it on its next run`;
-		if (status === 'dropped') return v.dropReason ?? 'Dropped';
-		if (status === 'not_kept') return 'old_name_view false; the old table was left for janitor';
+		if (status === 'live') return v.expiresAt ? `Removed ${formatIn(v.expiresAt, app.now)}` : 'Kept until removed by hand';
+		if (status === 'expired') return `Ended ${formatAgo(v.expiresAt, app.now)}; the next clean-up removes it`;
+		if (status === 'dropped') return v.dropReason ?? 'Removed';
+		if (status === 'not_kept') return 'Set not to keep the old name; clean-up removes the old table';
 		return 'Waiting for the move to finish';
 	}
 
-	const total = $derived(tab === 'migrations' ? `${shownMigrations.length} of ${migrations.length} moves` : tab === 'views' ? `${shownViews.length} of ${views.length} views` : `${shownJanitor.length} of ${janitor.length} events`);
+	const total = $derived(tab === 'migrations' ? `${shownMigrations.length} of ${migrations.length} renames and moves` : tab === 'views' ? `${shownViews.length} of ${views.length} old names` : `${shownJanitor.length} of ${janitor.length} clean-ups`);
 </script>
 
 <AppTopbar title="Maintenance">
@@ -63,8 +63,8 @@
 	bind:value={tab}
 	tabs={[
 		{ value: 'migrations', label: 'Renames & moves', count: migrations.length },
-		{ value: 'views', label: 'Old-name views', count: views.length },
-		{ value: 'janitor', label: 'Janitor', count: janitor.length }
+		{ value: 'views', label: 'Old names kept working', count: views.length },
+		{ value: 'janitor', label: 'Clean-up', count: janitor.length }
 	]}
 />
 
@@ -74,16 +74,15 @@
 	{total}
 	counts={tab === 'views'
 		? [
-				{ tone: 'var(--sb-success)', count: liveViews, label: 'live' },
-				{ tone: 'var(--sb-warning)', count: expiredViews, label: 'expired' }
+				{ tone: 'var(--sb-success)', count: liveViews, label: 'working' },
+				{ tone: 'var(--sb-warning)', count: expiredViews, label: 'past their end date' }
 			]
 		: []}
 >
 	{#snippet actions()}
 		<span class="note">
-			Read-only. Runs from
-			{#if tab === 'janitor'}<code>sqb janitor</code>{:else}<code>sqb rename</code>, <code>sqb mv</code>{/if}
-			or a job; synced from the warehouse.
+			{#if tab === 'janitor'}Tables and views SQLBuild archived or deleted when cleaning up (<code>sqb janitor</code>).{:else if tab === 'views'}After a rename or move, a view under the old name keeps old queries working until its end date.{:else}Models renamed or moved to another schema (<code>sqb rename</code>, <code>sqb mv</code>).{/if}
+			Read-only; read back from the warehouse.
 		</span>
 	{/snippet}
 </ListToolbar>
@@ -93,11 +92,11 @@
 		<table class="sb-list static">
 			<thead>
 				<tr>
-					<th>Recorded</th>
-					<th>Kind</th>
+					<th>When</th>
+					<th>What</th>
 					<th>From</th>
 					<th>To</th>
-					<th>Decision</th>
+					<th>What happened to the data</th>
 					<th>Run</th>
 				</tr>
 			</thead>
@@ -107,7 +106,7 @@
 						<td><RelativeTime value={formatAgo(m.createdAt, app.now)} exact={formatStamp(m.createdAt)} /></td>
 						<td>
 							<span class="sb-tag">{migrationKind(m) === 'move' ? 'Move' : 'Rename'}</span>
-							<div class="cell-desc">{m.discovery === 'automatic' ? 'Discovered automatically' : 'migrate_from'}</div>
+							<div class="cell-desc" title={m.discovery === 'automatic' ? undefined : 'Declared with migrate_from'}>{m.discovery === 'automatic' ? 'Spotted automatically' : 'Set in the code'}</div>
 						</td>
 						<td>
 							<span class="model">{m.originModel}</span>
@@ -117,11 +116,11 @@
 							<a class="model link" href="/catalog/{m.destinationModel}">{m.destinationModel}</a>
 							<div class="cell-desc"><code>{formatRelation(m.destination)}</code></div>
 						</td>
-						<td class="muted">{decisionLabel[m.decision]}</td>
-						<td class="nowrap"><code class="muted" title="Invocation that recorded the move">{m.runId}</code></td>
+						<td class="muted" title="decision = {m.decision}">{decisionLabel[m.decision]}</td>
+						<td class="nowrap"><code class="muted" title="The run that did it: {m.runId}">{m.runId.replace(/^run-/, '')}</code></td>
 					</tr>
 				{:else}
-					<LoadRow colspan={6} resource={history} empty={migrations.length ? 'No moves match the search.' : 'No renames or moves recorded in this target.'} />
+					<LoadRow colspan={6} resource={history} empty={migrations.length ? 'Nothing matches the search.' : 'No models have been renamed or moved in this target.'} />
 				{/each}
 			</tbody>
 		</table>
@@ -130,11 +129,11 @@
 			<thead>
 				<tr>
 					<th>Old name</th>
-					<th>Reads from</th>
+					<th>Now points to</th>
 					<th>Status</th>
-					<th>Column aliases</th>
-					<th class="num">Grants copied</th>
-					<th>Steps</th>
+					<th title="Old column names kept as aliases">Renamed columns</th>
+					<th class="num" title="Access grants copied to the old name">Grants copied</th>
+					<th>History</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -143,7 +142,7 @@
 					<tr class:sb-row-off={status === 'dropped' || status === 'not_kept'}>
 						<td title={v.archiveName ? `Old table archived as ${v.archiveName}` : undefined}>
 							<code>{formatRelation(v.old)}</code>
-							<div class="cell-desc">Retention {v.retention === 'false' ? 'off' : v.retention}</div>
+							<div class="cell-desc" title="retention = {v.retention}">{v.retention === 'false' ? 'Not kept' : `Kept for ${v.retention}`}</div>
 						</td>
 						<td>
 							<a class="model link" href="/catalog/{v.destinationModel}">{v.destinationModel}</a>
@@ -170,7 +169,7 @@
 						</td>
 					</tr>
 				{:else}
-					<LoadRow colspan={6} resource={history} empty={views.length ? 'No views match the search.' : 'No old-name compatibility views in this target.'} />
+					<LoadRow colspan={6} resource={history} empty={views.length ? 'Nothing matches the search.' : 'No old names are being kept working in this target.'} />
 				{/each}
 			</tbody>
 		</table>
@@ -179,9 +178,9 @@
 			<thead>
 				<tr>
 					<th>When</th>
-					<th>Action</th>
-					<th>Original</th>
-					<th>Archive</th>
+					<th>What</th>
+					<th>Original name</th>
+					<th>Archived as</th>
 					<th>Archived</th>
 					<th>Run</th>
 				</tr>
@@ -194,13 +193,13 @@
 							<StatusLabel tone={j.eventType === 'delete' ? 'var(--sb-error)' : 'var(--sb-warning)'} label={j.eventType === 'delete' ? 'Deleted' : 'Archived'} />
 							<div class="cell-desc">{j.relationType ?? 'relation'} in {j.relationSchema}</div>
 						</td>
-						<td>{#if j.originalQualifiedName}<code>{j.originalQualifiedName}</code>{:else}<span class="muted">Staging table</span>{/if}</td>
+						<td>{#if j.originalQualifiedName}<code>{j.originalQualifiedName}</code>{:else}<span class="muted" title="A temporary table SQLBuild used while building">Temporary build table</span>{/if}</td>
 						<td><code class="muted">{j.archiveQualifiedName}</code></td>
 						<td><RelativeTime value={formatAgo(j.archivedAt, app.now)} exact={formatStamp(j.archivedAt)} /></td>
-						<td class="nowrap"><code class="muted">{j.runId}</code></td>
+						<td class="nowrap"><code class="muted" title={j.runId}>{j.runId.replace(/^run-/, '')}</code></td>
 					</tr>
 				{:else}
-					<LoadRow colspan={6} resource={history} empty={janitor.length ? 'No events match the search.' : 'No janitor archives or deletes recorded in this target.'} />
+					<LoadRow colspan={6} resource={history} empty={janitor.length ? 'Nothing matches the search.' : 'Nothing has been archived or deleted by clean-up in this target.'} />
 				{/each}
 			</tbody>
 		</table>

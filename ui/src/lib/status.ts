@@ -62,14 +62,14 @@ export function runStatusRank(status: RunStatus): number {
 }
 
 export const tickOutcomeLabel: Record<TickOutcome, string> = {
-	requested: 'Run requested',
+	requested: 'Started a run',
 	skipped: 'Skipped',
-	covered: 'Covered by a waiting run',
-	failed: 'Tick failed'
+	covered: 'Merged into a waiting run',
+	failed: 'Couldn’t start a run'
 };
 
 export const triggerStateLabel: Record<TriggerState, string> = {
-	running: 'Running',
+	running: 'On',
 	paused: 'Paused'
 };
 

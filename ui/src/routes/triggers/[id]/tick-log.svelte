@@ -2,7 +2,7 @@
 	import { TICK_OUTCOMES, type Tick, type TickOutcome } from '$lib/api';
 	import ChoiceFilter from '$lib/components/list/choice-filter.svelte';
 	import { formatStamp } from '$lib/format/time';
-	import { formatSeconds, tickOutcomeText, tickOutcomeTone } from '$lib/operate/labels';
+	import { formatSeconds, shortRunId, tickOutcomeHelp, tickOutcomeText, tickOutcomeTone } from '$lib/operate/labels';
 
 	let { ticks }: { ticks: Tick[] } = $props();
 
@@ -20,31 +20,31 @@
 		bind:value={outcome}
 		options={[
 			...TICK_OUTCOMES.map((o) => ({ value: o, label: tickOutcomeText[o], count: ticks.filter((t) => t.outcome === o).length })),
-			{ value: 'late' as const, label: 'Late or caught up', count: ticks.filter((t) => t.lateBySeconds > LATE_AFTER_SECONDS || t.catchUp).length }
+			{ value: 'late' as const, label: 'Late, or made up after downtime', count: ticks.filter((t) => t.lateBySeconds > LATE_AFTER_SECONDS || t.catchUp).length }
 		]}
 	/>
-	<span class="faint">{filtered.length} ticks · one per due time</span>
+	<span class="faint" title="One entry (tick) per due time">{filtered.length} times due</span>
 </div>
 <table>
 	<thead>
-		<tr><th>Due</th><th>Evaluated</th><th>Outcome</th><th>Run</th><th>Late</th><th>Reason</th></tr>
+		<tr><th>Due</th><th title="When the scheduler handled it">Handled</th><th>What happened</th><th>Run</th><th>Late by</th><th>Why</th></tr>
 	</thead>
 	<tbody>
 		{#each filtered.slice(0, shown) as t (t.id)}
 			<tr>
 				<td class="nowrap">{formatStamp(t.scheduledFor)}</td>
 				<td class="nowrap faint">{t.evaluatedAt ? formatStamp(t.evaluatedAt) : 'not yet'}</td>
-				<td><span class="outcome" style:--c={tickOutcomeTone[t.outcome]}>{tickOutcomeText[t.outcome]}</span>{#if t.catchUp}<span class="tag">catch-up</span>{/if}</td>
+				<td title={tickOutcomeHelp[t.outcome]}><span class="outcome" style:--c={tickOutcomeTone[t.outcome]}>{tickOutcomeText[t.outcome]}</span>{#if t.catchUp}<span class="tag" title="Made up after the scheduler was down (catch-up)">made up</span>{/if}</td>
 				<td class="mono">
-					{#if t.runId}<a href="/runs/{t.runId}">{t.runId}</a>
-					{:else if t.coveredByRunId}covered by <a href="/runs/{t.coveredByRunId}">{t.coveredByRunId}</a>
+					{#if t.runId}<a href="/runs/{t.runId}" title={t.runId}>{shortRunId(t.runId)}</a>
+					{:else if t.coveredByRunId}<span class="sans">Merged into run <a href="/runs/{t.coveredByRunId}" title={t.coveredByRunId}>{shortRunId(t.coveredByRunId)}</a> (already waiting)</span>
 					{:else}<span class="faint">—</span>{/if}
 				</td>
 				<td class="faint nowrap">{t.lateBySeconds > LATE_AFTER_SECONDS ? formatSeconds(t.lateBySeconds) : '—'}</td>
-				<td class="faint">{t.reason ?? ''}</td>
+				<td class="faint" title={t.reason ?? undefined}>{t.outcome === 'covered' ? '' : (t.reason ?? '')}</td>
 			</tr>
 		{:else}
-			<tr><td colspan="6" class="empty">{ticks.length ? 'No ticks match the filter.' : 'No ticks recorded yet.'}</td></tr>
+			<tr><td colspan="6" class="empty">{ticks.length ? 'Nothing matches the filter.' : 'It hasn’t been due yet.'}</td></tr>
 		{/each}
 	</tbody>
 </table>
@@ -53,6 +53,9 @@
 {/if}
 
 <style>
+	.sans {
+		font-family: var(--font-sans);
+	}
 	.bar {
 		display: flex;
 		align-items: center;

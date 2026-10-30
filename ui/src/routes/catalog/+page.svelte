@@ -147,12 +147,12 @@
 						{#if n.kind === 'source'}
 							<RelativeTime value={n.sourceFreshness?.loadedAt ? `loaded ${formatAgo(n.sourceFreshness.loadedAt, app.now)}` : '—'} exact={formatStamp(n.sourceFreshness?.loadedAt)} />
 						{:else if n.lastBuild}
-							<RelativeTime value={formatAgo(n.lastBuild.builtAt, app.now)} exact="{formatStamp(n.lastBuild.builtAt)} · {n.lastBuild.runId ?? `outside the scheduler · ${shortRunId(n.lastBuild.fingerprintRunId)}`}" />
+							<RelativeTime value={formatAgo(n.lastBuild.builtAt, app.now)} exact="{formatStamp(n.lastBuild.builtAt)} · {n.lastBuild.runId ? `run ${shortRunId(n.lastBuild.runId)}` : `from the command line · ${shortRunId(n.lastBuild.fingerprintRunId)}`}" />
 						{:else}<span class="muted">Never</span>{/if}
 					</td>
 				</tr>
 			{:else}
-				<LoadRow colspan={7} resource={catalog} empty={all.length ? 'No nodes match the filter.' : 'No nodes in this snapshot.'} />
+				<LoadRow colspan={7} resource={catalog} empty={all.length ? 'No nodes match the filter.' : 'Nothing deployed yet. Deploy the project to see its models, sources and seeds here.'} />
 			{/each}
 		</tbody>
 	</table>

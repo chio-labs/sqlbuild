@@ -12,10 +12,10 @@
 	const s = $derived(settings.data ?? null);
 
 	const authLabel: Record<AuthMode, string> = {
-		oidc: 'SSO (OIDC)',
-		trusted_proxy: 'Trusted proxy',
+		oidc: 'Single sign-on (OIDC)',
+		trusted_proxy: 'Company proxy sign-in',
 		password: 'Password',
-		disabled: 'Disabled (loopback only)'
+		disabled: 'Off: only reachable from this machine'
 	};
 </script>
 
@@ -33,15 +33,15 @@
 							{ label: 'Version', value: s.serverVersion },
 							{ label: 'Storage', value: s.storage === 'postgresql' ? 'PostgreSQL' : 'SQLite' },
 							{
-								label: 'Schema migration',
-								value: `${s.schemaVersion} of ${s.latestSchemaVersion}${s.schemaVersion === s.latestSchemaVersion ? ' (up to date)' : ''} · migrated ${formatAgo(s.schemaMigratedAt, app.now)}`,
+								label: 'Database',
+								value: s.schemaVersion === s.latestSchemaVersion ? `Up to date (schema ${s.schemaVersion}), updated ${formatAgo(s.schemaMigratedAt, app.now)}` : `Needs upgrading: schema ${s.schemaVersion} of ${s.latestSchemaVersion}`,
 								title: formatStamp(s.schemaMigratedAt),
 								tone: s.schemaVersion === s.latestSchemaVersion ? undefined : 'var(--sb-warning)'
 							},
 							{ label: 'Authentication', value: authLabel[s.authMode] },
 							{
 								label: 'Scheduler',
-								value: s.schedulerEnabled ? 'On' : 'Off (--no-scheduler)',
+								value: s.schedulerEnabled ? 'Runs on this server' : 'Not on this server (started with --no-scheduler)',
 								tone: s.schedulerEnabled ? undefined : 'var(--sb-warning)'
 							}
 						]}
@@ -51,7 +51,7 @@
 				{/if}
 			</Panel>
 
-			<Panel title="Retention">
+			<Panel title="How long things are kept">
 				<table class="sb-list static framed">
 					<tbody>
 						{#each s?.retention ?? [] as r (r.name)}
@@ -69,7 +69,7 @@
 		</div>
 
 		<div>
-			<Panel title="Your access" note="Capabilities from your roles; the server checks every action">
+			<Panel title="Your access" note="What your roles allow; the server checks every action">
 				{#if app.user}
 					<KeyValues
 						rows={[
@@ -79,9 +79,10 @@
 					/>
 					<div class="caps">
 						{#each CAPABILITIES as c (c)}
-							<span class="cap" class:on={app.can(c)} title={app.can(c) ? 'Granted' : 'Not granted'}>{c}</span>
+							<span class="cap" class:on={app.can(c)} title={app.can(c) ? 'You can' : 'You can’t'}>{c}</span>
 						{/each}
 					</div>
+					<p class="cli">On the command line, sign in with <code>sqb login</code>: it opens this browser and keeps a short-lived session, so you don't need an API token.</p>
 				{/if}
 			</Panel>
 			<Panel title="Why can or can't I?">
@@ -92,6 +93,15 @@
 </div>
 
 <style>
+	.cli {
+		margin-top: 12px;
+		color: var(--muted-foreground);
+		font-size: 12.5px;
+	}
+	.cli code {
+		font-family: var(--font-mono);
+		font-size: 12px;
+	}
 	.columns {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

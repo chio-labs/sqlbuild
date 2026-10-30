@@ -8,7 +8,7 @@
 	import { createResource } from '$lib/state/resource.svelte';
 	import { formatAgo, formatIn, formatStamp } from '$lib/format/time';
 	import { runStatusLabel, runStatusTone } from '$lib/status';
-	import { stateEventLabel, triggerKindLabel } from '$lib/operate/labels';
+	import { shortRunId, stateEventLabel, triggerKindHelp, triggerKindLabel } from '$lib/operate/labels';
 	import SensorPanel from './sensor-panel.svelte';
 	import TickLog from './tick-log.svelte';
 
@@ -46,29 +46,29 @@
 
 <AppTopbar title="Triggers">
 	{#if t}
-		<input class="reason" bind:value={reason} placeholder="Reason (recorded)" aria-label="Reason for the change" />
+		<input class="reason" bind:value={reason} placeholder="Why? (saved in the history)" aria-label="Reason for the change" />
 		{#if t.state !== t.defaultState}
-			<GatedButton requires="trigger.toggle" {busy} onclick={resetDefault}>Reset to code default ({t.defaultState})</GatedButton>
+			<GatedButton requires="trigger.toggle" {busy} onclick={resetDefault}>Set back to the code ({t.defaultState === 'running' ? 'on' : 'paused'})</GatedButton>
 		{/if}
 		{#if t.state === 'running'}
 			<GatedButton requires="trigger.toggle" {busy} onclick={() => setState('paused')}>Pause</GatedButton>
 		{:else}
-			<GatedButton requires="trigger.toggle" variant="default" {busy} onclick={() => setState('running')}>Enable</GatedButton>
+			<GatedButton requires="trigger.toggle" variant="default" {busy} onclick={() => setState('running')}>Turn on</GatedButton>
 		{/if}
 	{/if}
 </AppTopbar>
 
 <div class="flex min-h-0 flex-1 flex-col">
 	<div class="head">
-		<a href="/triggers" class="back">← Triggers</a>
+		<a href="/triggers" class="back">← Schedules and sensors</a>
 		<span class="font-display text-[17px] font-semibold">{t?.name ?? id}</span>
 		{#if t}
-			<span class="sb-status" style:--tone={t.state === 'running' ? 'var(--sb-success)' : 'var(--sb-text-faint)'}><span></span>{t.state}</span>
-			<span class="faint">{t.state === t.defaultState ? 'matches the code default' : `code default ${t.defaultState}`}</span>
-			<span class="faint">· {triggerKindLabel[t.kind]} · {t.cadence}</span>
+			<span class="sb-status" style:--tone={t.state === 'running' ? 'var(--sb-success)' : 'var(--sb-text-faint)'}><span></span>{t.state === 'running' ? 'on' : 'paused'}</span>
+			<span class="faint">{t.state === t.defaultState ? 'as in the code' : `switched here; the code says ${t.defaultState === 'running' ? 'on' : 'paused'}`}</span>
+			<span class="faint" title={triggerKindHelp[t.kind]}>· {triggerKindLabel[t.kind]} · {t.cadence}</span>
 		{/if}
 	</div>
-	{#if res.error}<div class="msg err">Couldn't load this trigger: {res.error}</div>{:else if res.data === null}<div class="msg">No trigger <code>{id}</code> in this target's snapshot.</div>{/if}
+	{#if res.error}<div class="msg err">Couldn't load this: {res.error}</div>{:else if res.data === null}<div class="msg">There's no schedule or sensor <code>{id}</code> in the version deployed to {app.targetName}.</div>{/if}
 	{#if error}<div class="msg err">{error}</div>{/if}
 
 	{#if t}
@@ -79,63 +79,63 @@
 			<div class="main sb-scroll">
 				{#if isSchedule}
 					<section>
-						<h3>Ticks · {t.ticks.length}</h3>
+						<h3 title="Each time it was due (a tick) and what happened">Times due · {t.ticks.length}</h3>
 						<TickLog ticks={t.ticks} />
 					</section>
 				{:else}
 					<SensorPanel trigger={t} />
 				{/if}
 				<section>
-					<h3>Declaration <span>read-only; defined in code</span></h3>
+					<h3>Code <span>read-only; change it in the project and deploy</span></h3>
 					<CodePreview file="{t.declaration.sourceFile}:{t.declaration.line}" code={t.declaration.code} language="text" maxLines={20} />
 				</section>
 			</div>
 
 			<aside class="rail sb-scroll">
-				<h3>Definition</h3>
+				<h3>How it works</h3>
 				<dl>
-					<div><dt>Kind</dt><dd>{triggerKindLabel[t.kind]}</dd></div>
-					<div><dt>Launches</dt><dd>{#if t.jobKey}<a href="/jobs/{t.jobKey}">{t.jobKey}</a>{:else}code action only{/if}</dd></div>
+					<div><dt>Kind</dt><dd title={triggerKindHelp[t.kind]}>{triggerKindLabel[t.kind]}</dd></div>
+					<div><dt>Runs</dt><dd>{#if t.jobKey}<a href="/jobs/{t.jobKey}">{t.jobKey}</a>{:else}its own code only{/if}</dd></div>
 					{#if t.cron}<div><dt>Cron</dt><dd><code>{t.cron}</code></dd></div>{/if}
 					{#if t.timezone}<div><dt>Time zone</dt><dd>{t.timezone}</dd></div>{/if}
-					{#if t.catchUp}<div><dt>Catch-up</dt><dd>{t.catchUp.mode === 'latest' ? 'latest missed time' : `every missed time, up to ${t.catchUp.max}`}</dd></div>{/if}
+					{#if t.catchUp}<div><dt>After downtime</dt><dd title="Catch-up policy: {t.catchUp.mode}">{t.catchUp.mode === 'latest' ? 'runs once for the latest missed time' : `runs for each missed time, up to ${t.catchUp.max}`}</dd></div>{/if}
 					<div><dt>Targets</dt><dd>{t.targets?.join(', ') ?? 'all targets'}</dd></div>
-					<div><dt>Code default</dt><dd>{t.defaultState}</dd></div>
-					<div><dt>Source</dt><dd><code>{t.sourceFile}</code></dd></div>
+					<div><dt>In the code</dt><dd>{t.defaultState === 'running' ? 'on' : 'paused'}</dd></div>
+					<div><dt>Defined in</dt><dd><code>{t.sourceFile}</code></dd></div>
 				</dl>
 
 				{#if isSchedule}
-					<h3>Next due</h3>
+					<h3>Next runs</h3>
 					{#if t.state === 'paused'}
-						<p class="faint">Paused: no ticks are evaluated. Enabling catches up per the catch-up policy.</p>
+						<p class="faint">Paused, so it isn't starting runs. When you turn it back on, it makes up missed times as set under “After downtime”.</p>
 					{:else if t.upcoming.length}
 						{#each t.upcoming as due, i (due)}
 							<p class:faint={i > 0}>{formatStamp(due)} <span class="faint">{formatIn(due, app.now)}</span></p>
 						{/each}
 					{:else}
-						<p class="faint">No upcoming times stored.</p>
+						<p class="faint">No upcoming times. Check the calendar below.</p>
 					{/if}
 				{/if}
 
 				{#if t.calendar}
-					<h3>Calendar horizon</h3>
+					<h3 title="Calendar horizon">Calendar</h3>
 					<dl>
-						<div><dt>Computed ahead</dt><dd>{t.calendar.horizon}</dd></div>
-						<div><dt>Stored until</dt><dd class:warn={t.calendar.low}>{formatStamp(t.calendar.storedUntil)}</dd></div>
-						<div><dt>Last refreshed</dt><dd>{formatAgo(t.calendar.lastRefreshedAt, app.now)}</dd></div>
-						<div><dt>Warns below</dt><dd>{t.calendar.lowHorizonWarningBelow}</dd></div>
+						<div><dt>Worked out ahead</dt><dd>{t.calendar.horizon}</dd></div>
+						<div><dt>Known until</dt><dd class:warn={t.calendar.low}>{formatStamp(t.calendar.storedUntil)}</dd></div>
+						<div><dt>Last updated</dt><dd>{formatAgo(t.calendar.lastRefreshedAt, app.now)}</dd></div>
+						<div><dt>Warns when under</dt><dd>{t.calendar.lowHorizonWarningBelow}</dd></div>
 					</dl>
-					<p class="help">The calendar function runs in the code location on publish and on a refresh cadence; the scheduler ticks from the stored times.</p>
+					<p class="help">The calendar's code runs in the location after each deploy and on a regular refresh, and the dates it returns are saved. If they run out, the schedule stops starting runs.</p>
 				{/if}
 
 				<h3>Last run</h3>
 				{#if t.lastRun}
-					<p><i class="dot" style:background={runStatusTone[t.lastRun.status]}></i><a class="mono" href="/runs/{t.lastRun.id}">{t.lastRun.id}</a> <span class="faint">{runStatusLabel[t.lastRun.status]}{t.lastRun.startedAt ? ` · ${formatAgo(t.lastRun.startedAt, app.now)}` : ''}</span></p>
+					<p><i class="dot" style:background={runStatusTone[t.lastRun.status]}></i><a class="mono" href="/runs/{t.lastRun.id}" title={t.lastRun.id}>{shortRunId(t.lastRun.id)}</a> <span class="faint">{runStatusLabel[t.lastRun.status]}{t.lastRun.startedAt ? ` · ${formatAgo(t.lastRun.startedAt, app.now)}` : ''}</span></p>
 				{:else}
 					<p class="faint">No runs yet.</p>
 				{/if}
 
-				<h3>State history</h3>
+				<h3>On/off history</h3>
 				{#if t.stateHistory.length}
 					{#each t.stateHistory as e (e.id)}
 						<div class="event">
@@ -145,7 +145,7 @@
 						</div>
 					{/each}
 				{:else}
-					<p class="faint">No overrides: the state comes from code.</p>
+					<p class="faint">Never switched here: it's on or paused as the code says.</p>
 				{/if}
 			</aside>
 		</div>

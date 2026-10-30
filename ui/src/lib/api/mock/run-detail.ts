@@ -239,15 +239,15 @@ export function statusReason(status: RunStatus, nodes: RunNode[]): string | null
 	const c = countNodes(nodes);
 	if (status === 'partial')
 		return c.failed
-			? `${c.failed} node${c.failed === 1 ? '' : 's'} failed; ${c.skipped} dependent${c.skipped === 1 ? '' : 's'} skipped; ${c.success + c.warn} others completed`
-			: `${c.skipped} node${c.skipped === 1 ? '' : 's'} skipped because of upstream failures; ${c.success + c.warn} others completed`;
+			? `${c.failed} node${c.failed === 1 ? '' : 's'} failed and ${c.skipped} that depend on ${c.failed === 1 ? 'it' : 'them'} were skipped; the other ${c.success + c.warn} finished`
+			: `${c.skipped} node${c.skipped === 1 ? '' : 's'} skipped because something they depend on failed; the other ${c.success + c.warn} finished`;
 	if (status === 'failed' && c.failed) {
 		const first = nodes.find((n) => n.status === 'failed');
 		return first ? `${first.nodeKey} failed: ${first.errorMessage}` : null;
 	}
 	if (status === 'failed' && c.skipped) {
 		const why = nodes.find((n) => n.skippedBecauseOf)?.skippedBecauseOf;
-		return why ? `All nodes skipped: ${why.nodeKey} failed in ${why.runId}` : null;
+		return why ? `Every node was skipped: ${why.nodeKey} failed in run ${why.runId.replace(/^run-/, '')}` : null;
 	}
 	return null;
 }
@@ -357,14 +357,14 @@ export function execution(record: RunRecord, nodes: RunNode[], now?: number): Ru
 	const out = (stream: RunOutputLine['stream'], at: number, text: string) => inv && output.push({ invocationId: inv, stream, at: iso(at), text });
 
 	const queued = Date.parse(run.queuedAt);
-	fact('requested', queued - 200, `Requested by ${run.requestedBy.name}${run.triggerName ? ` via ${run.triggerName}` : ''}`);
+	fact('requested', queued - 200, `Requested by ${run.requestedBy.displayName}${run.triggerName ? ` via ${run.triggerName}` : ''}`);
 	fact('queued', queued, `Queued at priority ${run.priority}`);
 	if (run.launchedAt) {
 		const launched = Date.parse(run.launchedAt);
 		fact('claimed', launched - 300, script.nodes.length ? `Claimed ${script.nodes.length} write-set nodes${script.concurrencyGroups.length ? ` and a slot in ${script.concurrencyGroups.join(', ')}` : ''}` : 'Claimed');
 		fact('launched', launched, script.nodes.length ? `Container started from image ${script.imageId.slice(0, 19)}` : `Started ${run.childRunCount} child runs in order`);
 	}
-	if (script.cancel) fact('cancel_requested', script.cancel.requestedAt, `Cancel requested by ${script.cancel.requestedBy.name}`);
+	if (script.cancel) fact('cancel_requested', script.cancel.requestedAt, `Cancel requested by ${script.cancel.requestedBy.displayName}`);
 
 	if (inv && run.startedAt) {
 		const start = Date.parse(run.startedAt);
@@ -375,7 +375,7 @@ export function execution(record: RunRecord, nodes: RunNode[], now?: number): Ru
 			const k = snapshotNode(n.nodeKey)?.kind ?? 'table';
 			if (n.status === 'skipped' && n.endedAt) {
 				const why = n.skippedBecauseOf;
-				const msg = why ? `Skipped: depends on ${why.nodeKey}${why.runId !== run.id ? ` (failed in ${why.runId})` : ''}` : 'Skipped';
+				const msg = why ? `Skipped: ${why.nodeKey} failed${why.runId !== run.id ? ` in run ${why.runId.replace(/^run-/, '')}` : ''}` : 'Skipped';
 				ev('resource_attempt_skipped', Date.parse(n.endedAt), n.nodeKey, msg);
 				out('stdout', Date.parse(n.endedAt), `SKIP  ${n.nodeKey}  ${msg.toLowerCase()}`);
 				continue;
@@ -426,7 +426,7 @@ export function execution(record: RunRecord, nodes: RunNode[], now?: number): Ru
 				out('stdout', e, `FAIL  ${n.nodeKey}  ${dur}s`);
 				out('stderr', e, `error[${n.errorCode}] ${n.nodeKey}: ${n.errorMessage}`);
 			} else if (n.status === 'cancelled') {
-				ev('resource_attempt_failed', e, n.nodeKey, 'Cancelled: statement cancelled on SIGTERM');
+				ev('resource_attempt_failed', e, n.nodeKey, 'Cancelled: its query was stopped by the cancel');
 				out('stderr', e, `${n.nodeKey}: statement cancelled`);
 			} else {
 				ev('resource_attempt_completed', e, n.nodeKey, `${n.status === 'warn' ? 'Completed with warnings' : 'Completed'} in ${dur}s`);

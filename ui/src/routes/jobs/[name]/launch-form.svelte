@@ -21,8 +21,8 @@
 			(!start && !end
 				? 'Give a start or an end'
 				: job.cursorType === 'integer'
-					? [start, end].some((v) => v && !/^\d+$/.test(v)) && 'Cursor values must be whole numbers'
-					: [start, end].some((v) => v && Number.isNaN(Date.parse(v))) && 'Use ISO timestamps')
+					? [start, end].some((v) => v && !/^\d+$/.test(v)) && 'Use whole numbers'
+					: [start, end].some((v) => v && Number.isNaN(Date.parse(v))) && 'Use a date and time like 2026-10-01T00:00:00Z')
 	);
 
 	async function launch() {
@@ -46,19 +46,19 @@
 </script>
 
 <div class="launch">
-	<p class="title">Launch {job.kind === 'group' ? 'group' : 'job'} <code>{job.key}</code></p>
+	<p class="title">Run {job.kind === 'group' ? 'group' : 'job'} <code>{job.key}</code> now</p>
 	<p class="faint">
-		{job.kind === 'group' ? `A parent run with one child run per member (${job.members.length}).` : `${job.nodeCount} nodes, with the job's settings.`} It queues behind any run holding write claims on the same nodes.
+		{job.kind === 'group' ? `Starts a group run, with one run per job in it (${job.members.length}).` : `Builds ${job.nodeCount} nodes with the job's options.`} If another run is updating the same data, it waits for it to finish.
 	</p>
-	<div class="opts" title={canRewrite ? undefined : 'Requires run.rewrite_history'}>
+	<div class="opts" title={canRewrite ? undefined : "You don't have permission to rebuild history (run.rewrite_history)"}>
 		<label class:off={!canRewrite}>
 			<input type="checkbox" class="sb-check" bind:checked={fullRefresh} disabled={!canRewrite} />
-			Full refresh <code>--full-refresh</code>
+			Rebuild from scratch <code title="Same as sqb --full-refresh">--full-refresh</code>
 		</label>
 		{#if job.cursorType}
 			<label class:off={!canRewrite}>
 				<input type="checkbox" class="sb-check" bind:checked={useWindow} disabled={!canRewrite} />
-				Cursor window ({job.cursorType})
+				Only a range of {job.cursorType === 'integer' ? 'IDs' : 'time'} <span class="faint" title="A cursor window: incremental models and loaders process only this range">(cursor window)</span>
 			</label>
 			{#if useWindow}
 				<div class="window">
@@ -69,11 +69,11 @@
 				{#if windowInvalid}<p class="err">{windowInvalid}</p>{/if}
 			{/if}
 		{/if}
-		{#if !canRewrite}<p class="faint">Full refresh and cursor windows require <code>run.rewrite_history</code>.</p>{:else if rewrites}<p class="warn">This run rewrites history: it is recorded with run.rewrite_history.</p>{/if}
+		{#if !canRewrite}<p class="faint">Rebuilding or reprocessing a range needs extra permission (<code>run.rewrite_history</code>).</p>{:else if rewrites}<p class="warn">This replaces data that was already built. It's recorded in the audit log.</p>{/if}
 	</div>
 	{#if error}<p class="err">{error}</p>{/if}
 	<div class="row">
-		<Button size="sm" onclick={launch} disabled={busy || !!windowInvalid}>▷ Launch</Button>
+		<Button size="sm" onclick={launch} disabled={busy || !!windowInvalid}>▷ Run</Button>
 		<Button size="sm" variant="ghost" onclick={onclose}>Cancel</Button>
 	</div>
 </div>

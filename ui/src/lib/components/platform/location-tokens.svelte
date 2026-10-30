@@ -46,13 +46,13 @@
 	const create = () => act('create', async () => (issued = await app.client.createLocationToken(locationId)));
 	const rotate = (t: LocationToken) => act(t.id, async () => (issued = await app.client.rotateLocationToken(t.id)));
 	function revoke(t: LocationToken) {
-		if (!confirm(`Revoke ${t.prefix}…? The location can't register or publish with it again.`)) return;
+		if (!confirm(`Revoke ${t.prefix}…? Location processes using it can't connect or deploy any more.`)) return;
 		void act(t.id, () => app.client.revokeLocationToken(t.id));
 	}
 </script>
 
 {#if !canManage}
-	<p class="muted">Location tokens are visible to holders of <code>location.manage</code>.</p>
+	<p class="muted">You don't have permission to see location tokens (<code>location.manage</code>).</p>
 {:else}
 	{#if issued}
 		<div class="issued-wrap">
@@ -80,7 +80,7 @@
 				</div>
 			</li>
 		{:else}
-			<li class="muted">{tokens ? 'No tokens issued.' : 'Loading…'}</li>
+			<li class="muted">{tokens ? 'No tokens yet. Create one and give it to the location so it can connect.' : 'Loading…'}</li>
 		{/each}
 	</ul>
 	<div class="create">

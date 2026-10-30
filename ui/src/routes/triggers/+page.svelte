@@ -18,7 +18,7 @@
 	import { createResource } from '$lib/state/resource.svelte';
 	import { formatAgo, formatIn, formatStamp } from '$lib/format/time';
 	import { runStatusLabel, runStatusTone } from '$lib/status';
-	import { tickOutcomeText, tickOutcomeTone, triggerKindLabel } from '$lib/operate/labels';
+	import { shortRunId, tickOutcomeHelp, tickOutcomeText, tickOutcomeTone, triggerKindHelp, triggerKindLabel } from '$lib/operate/labels';
 
 	const triggers = createResource((client, scope) => client.listTriggers(scope), ['triggers', 'ticks', 'runs']);
 	const canToggle = $derived(app.can('trigger.toggle'));
@@ -86,10 +86,10 @@
 	const overriddenCount = $derived(all.filter((t) => t.state !== t.defaultState).length);
 
 	function nextDue(t: Trigger): string {
-		if (t.type === 'sensor') return t.state === 'paused' ? 'Paused' : 'On events';
+		if (t.type === 'sensor') return t.state === 'paused' ? 'Paused' : 'When its condition is met';
 		if (t.state === 'paused') return 'Paused';
 		if (!t.nextDueAt) return '—';
-		if (Date.parse(t.nextDueAt) < app.now) return `Overdue, due ${formatAgo(t.nextDueAt, app.now)}`;
+		if (Date.parse(t.nextDueAt) < app.now) return `Late: was due ${formatAgo(t.nextDueAt, app.now)}`;
 		return formatIn(t.nextDueAt, app.now);
 	}
 </script>
@@ -100,12 +100,12 @@
 
 <ListToolbar
 	bind:query
-	placeholder="Search triggers, jobs, conditions"
-	total="{filtered.length} of {all.length} triggers"
+	placeholder="Search schedules, sensors and jobs"
+	total="{filtered.length} of {all.length} schedules and sensors"
 	counts={[
-		{ tone: 'var(--sb-success)', count: runningCount, label: 'running' },
+		{ tone: 'var(--sb-success)', count: runningCount, label: 'on' },
 		{ tone: 'var(--sb-text-faint)', count: all.length - runningCount, label: 'paused' },
-		{ tone: 'var(--sb-warning)', count: overriddenCount, label: 'differ from code' }
+		{ tone: 'var(--sb-warning)', count: overriddenCount, label: 'switched from what the code says' }
 	]}
 >
 	{#snippet filters()}
@@ -122,17 +122,17 @@
 			label="Status"
 			bind:value={stateFilter}
 			options={[
-				{ value: 'running', label: 'Running' },
+				{ value: 'running', label: 'On' },
 				{ value: 'paused', label: 'Paused' },
-				{ value: 'overridden', label: 'Differs from code default' }
+				{ value: 'overridden', label: 'Switched from what the code says' }
 			]}
 		/>
 	{/snippet}
 	{#snippet actions()}
 		{#if selected.size}
 			<span class="bulk">{selected.size} selected</span>
-			<input class="reason" bind:value={reason} placeholder="Reason (recorded)" aria-label="Reason" />
-			<button class="bulk-btn" disabled={!canToggle || busy} onclick={() => bulk('running')}>Enable</button>
+			<input class="reason" bind:value={reason} placeholder="Why? (saved in the history)" aria-label="Reason" />
+			<button class="bulk-btn" disabled={!canToggle || busy} onclick={() => bulk('running')}>Turn on</button>
 			<button class="bulk-btn" disabled={!canToggle || busy} onclick={() => bulk('paused')}>Pause</button>
 		{/if}
 		{#if actionError}<span class="bulk error">{actionError}</span>{/if}
@@ -143,15 +143,15 @@
 	<table class="sb-list">
 		<thead>
 			<tr>
-				<th class="check-col" title={canToggle ? undefined : 'Requires trigger.toggle'}>
+				<th class="check-col" title={canToggle ? undefined : "You don't have permission to pause or turn on schedules and sensors (trigger.toggle)"}>
 					<input type="checkbox" checked={allSelected} onchange={toggleAll} class="sb-check" aria-label="Select all" disabled={!canToggle} />
 				</th>
-				<th>Trigger</th>
+				<th>Name</th>
 				<th>Kind</th>
-				<th>Launches</th>
+				<th>Runs</th>
 				<th>Status</th>
-				<th>Next due</th>
-				<th>Last tick</th>
+				<th>Next run</th>
+				<th title="What happened the last time it was due (its last tick)">Last time due</th>
 				<th>Last run</th>
 			</tr>
 		</thead>
@@ -160,12 +160,12 @@
 				<tr class:sb-row-off={t.state === 'paused'} onclick={() => goto(`/triggers/${t.id}`)}>
 					<!-- svelte-ignore a11y_click_events_have_key_events -->
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<td class="check-col" onclick={(e) => e.stopPropagation()} title={canToggle ? undefined : 'Requires trigger.toggle'}>
+					<td class="check-col" onclick={(e) => e.stopPropagation()} title={canToggle ? undefined : "You don't have permission to pause or turn on schedules and sensors (trigger.toggle)"}>
 						<input type="checkbox" checked={selected.has(t.id)} onchange={() => toggleSel(t.id)} class="sb-check" aria-label="Select {t.name}" disabled={!canToggle} />
 					</td>
 					<td>
 						<div class="cell-name">
-							<span title={canToggle ? (t.state === 'running' ? 'Pause' : 'Enable') : 'Requires trigger.toggle'}>
+							<span title={canToggle ? (t.state === 'running' ? 'Pause: stop starting runs' : 'Turn on') : "You don't have permission to pause or turn on schedules and sensors (trigger.toggle)"}>
 								<button
 									class="sb-toggle"
 									class:on={t.state === 'running'}
@@ -174,7 +174,7 @@
 										e.stopPropagation();
 										void setStates([t.id], t.state === 'running' ? 'paused' : 'running');
 									}}
-									aria-label="Toggle {t.name}"
+									aria-label="{t.state === 'running' ? 'Pause' : 'Turn on'} {t.name}"
 								></button>
 							</span>
 							<div class="min-w-0">
@@ -185,37 +185,37 @@
 						</div>
 					</td>
 					<td>
-						<span class="type-cell">
+						<span class="type-cell" title={triggerKindHelp[t.kind]}>
 							{#if t.kind === 'cron_schedule'}<ClockIcon size={14} />{:else if t.kind === 'calendar_schedule'}<CalendarIcon size={14} />{:else if t.kind === 'custom_sensor'}<CodeIcon size={14} />{:else}<RadioIcon size={14} />{/if}
 							{triggerKindLabel[t.kind]}
 						</span>
 					</td>
 					<td>
-						{#if t.jobKey}<a class="link" href="/jobs/{t.jobKey}" onclick={(e) => e.stopPropagation()}>{t.jobKey}</a>{:else}<span class="muted">Code action only</span>{/if}
+						{#if t.jobKey}<a class="link" href="/jobs/{t.jobKey}" onclick={(e) => e.stopPropagation()}>{t.jobKey}</a>{:else}<span class="muted" title="It runs its own code, e.g. to post a message, and starts no job">Runs its own code</span>{/if}
 					</td>
 					<td>
-						<span class:muted={t.state === 'paused'}>{t.state}</span>
+						<span class:muted={t.state === 'paused'}>{t.state === 'running' ? 'On' : 'Paused'}</span>
 						{#if t.state !== t.defaultState}
-							<div class="cell-desc override">
-								code default {t.defaultState} ·
+							<div class="cell-desc override" title="Someone switched it here; the code says {t.defaultState}">
+								code says {t.defaultState === 'running' ? 'on' : 'paused'} ·
 								{#if canToggle}
 									<button class="reset" onclick={(e) => (e.stopPropagation(), resetDefault(t))}>reset</button>
 								{:else}
-									<span title="Requires trigger.toggle">reset</span>
+									<span title="You don't have permission to pause or turn on schedules and sensors (trigger.toggle)">reset</span>
 								{/if}
 							</div>
 						{:else}
-							<div class="cell-desc">code default</div>
+							<div class="cell-desc">as in the code</div>
 						{/if}
 					</td>
 					<td class="muted" title={t.nextDueAt ? formatStamp(t.nextDueAt) : undefined}>{nextDue(t)}</td>
-					<td class="muted" title={t.lastTick?.reason ?? undefined}>
+					<td class="muted" title={t.lastTick ? `${tickOutcomeHelp[t.lastTick.outcome]}${t.lastTick.reason ? `\n${t.lastTick.reason}` : ''}` : undefined}>
 						{#if t.lastTick}
 							<span class="tick" style:--c={tickOutcomeTone[t.lastTick.outcome]}>{tickOutcomeText[t.lastTick.outcome]}</span>
-							{#if t.lastTick.coveredByRunId}by <a class="link code" href="/runs/{t.lastTick.coveredByRunId}" onclick={(e) => e.stopPropagation()}>{t.lastTick.coveredByRunId}</a>{/if}
+							{#if t.lastTick.coveredByRunId}into run <a class="link code" href="/runs/{t.lastTick.coveredByRunId}" onclick={(e) => e.stopPropagation()}>{shortRunId(t.lastTick.coveredByRunId)}</a>{/if}
 							<div class="cell-desc">{formatAgo(t.lastTick.scheduledFor, app.now)}</div>
 						{:else}
-							{t.type === 'sensor' ? 'See evaluations' : 'No ticks yet'}
+							{t.type === 'sensor' ? 'See its checks' : 'Not due yet'}
 						{/if}
 					</td>
 					<td>
@@ -230,7 +230,7 @@
 					</td>
 				</tr>
 			{:else}
-				<LoadRow colspan={8} resource={triggers} empty={all.length ? 'No triggers match the filter.' : 'No triggers are defined in this snapshot.'} />
+				<LoadRow colspan={8} resource={triggers} empty={all.length ? 'Nothing matches the filter.' : 'No schedules or sensors yet. Declare them in the project code and deploy.'} />
 			{/each}
 		</tbody>
 	</table>

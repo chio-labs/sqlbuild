@@ -52,7 +52,7 @@
 						<span class="flex min-w-0 flex-col">
 							<span class="truncate">{target.name}{target.isDefault ? ' · default' : ''}</span>
 							<small class="text-muted-foreground text-[11px]">
-								{target.adapter}{target.snapshot ? ` · generation ${target.snapshot.generation}` : ' · no snapshot'}
+								{target.adapter}{target.snapshot ? ` · version ${target.snapshot.generation}` : ' · nothing deployed'}
 							</small>
 						</span>
 					</DropdownMenu.RadioItem>

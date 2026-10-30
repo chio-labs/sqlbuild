@@ -721,7 +721,7 @@
 					{#each d.runs.slice(0, 3) as run, i (i)}
 						<a class="mini-run" href={run.runId ? `/runs/${run.runId}` : undefined}>
 							<i style:background={nodeOutcomeTone[run.outcome]}></i>
-							<span class="mini-run-main"><b>{nodeOutcomeLabel[run.outcome]}</b><span>{run.jobKey ?? (run.runId ? 'ad hoc' : `outside the scheduler · ${shortRunId(run.fingerprintRunId ?? '')}`)}</span></span>
+							<span class="mini-run-main"><b>{nodeOutcomeLabel[run.outcome]}</b><span>{run.jobKey ?? (run.runId ? 'started by hand' : `from the command line · ${shortRunId(run.fingerprintRunId ?? '')}`)}</span></span>
 							<span class="mini-run-meta">{formatMs(run.durationMs)} · {formatAgo(run.startedAt, app.now)}</span>
 							{#if run.message}<em>{run.message}</em>{/if}
 						</a>
@@ -757,7 +757,7 @@
 						<div><dt>Group</dt><dd>{d.group}</dd></div>
 						<div><dt>Owner</dt><dd>{d.owner.join(', ') || '—'}</dd></div>
 						<div><dt>Tags</dt><dd>{d.tags.join(', ') || '—'}</dd></div>
-						<div><dt>Fingerprint</dt><dd class="mono" title="As built in this target">{d.lastBuild?.fingerprint.slice(0, 12) ?? '—'}</dd></div>
+						<div><dt>Build version</dt><dd class="mono" title="Fingerprint of the last build in this target">{d.lastBuild?.fingerprint.slice(0, 12) ?? '—'}</dd></div>
 					</dl>
 				</InspectorSection>
 			{/if}

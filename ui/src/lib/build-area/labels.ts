@@ -71,13 +71,13 @@ export function kindLine(node: Pick<CatalogNode, 'kind' | 'materialization'>): s
 }
 
 export const runScopePhaseLabel: Record<RunScopePhase, string> = {
-	delta_and_final: 'Delta and final',
-	final: 'Final'
+	delta_and_final: 'New rows, then whole table',
+	final: 'Whole table'
 };
 
 export const evaluationModeLabel: Record<EvaluationMode, string> = {
-	violations: 'Violations',
-	measurement: 'Measurement'
+	violations: 'Counts failing rows',
+	measurement: 'Measures a value'
 };
 
 export const attachmentLabel: Record<CheckAttachment, string> = {
@@ -125,16 +125,16 @@ export function shortRunId(id: string): string {
 	return id.length > 12 ? id.slice(0, 8) : id;
 }
 
-/** "run-4f2a" for scheduler builds, "outside the scheduler · 0f9a3c27" otherwise. */
+/** "run-4f2a" for scheduler builds, "from the command line · 0f9a3c27" otherwise. */
 export function buildSourceLabel(build: Pick<NodeBuild, 'runId' | 'fingerprintRunId'>): string {
-	return build.runId ?? `outside the scheduler · ${shortRunId(build.fingerprintRunId)}`;
+	return build.runId ?? `from the command line · ${shortRunId(build.fingerprintRunId)}`;
 }
 
 /** Versions for the SQL viewer's drift mode, newest first. */
 export function sqlVersions(builds: BuiltDefinition[], now: number): SqlVersion[] {
 	return builds.map((b, i) => ({
 		id: i === 0 ? 'built' : b.build.fingerprintRunId,
-		label: i === 0 ? 'Last build' : b.build.runId ? `Build ${b.build.runId}` : 'Build outside the scheduler',
+		label: i === 0 ? 'Last build' : b.build.runId ? `Build ${b.build.runId}` : 'Build from the command line',
 		detail: `${i === 0 || !b.build.runId ? `${buildSourceLabel(b.build)} · ` : ''}${formatAgo(b.build.builtAt, now)} · ${formatStamp(b.build.builtAt)}`,
 		raw: b.raw,
 		compiled: b.compiled

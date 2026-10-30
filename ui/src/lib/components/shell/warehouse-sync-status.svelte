@@ -18,10 +18,10 @@
 
 	const title = $derived.by(() => {
 		if (!sync) return '';
-		if (!canSync) return 'Requires warehouse.sync';
-		if (running && sync.followUpQueued) return 'A follow-up sync is queued; further refreshes merge into it.';
-		if (running) return 'Refresh queues one follow-up sync after this one.';
-		return sync.lastError ?? 'Sync warehouse metadata now';
+		if (!canSync) return "Reads what's in the warehouse (what was built, checks, freshness). You don't have permission to refresh it (warehouse.sync).";
+		if (running && sync.followUpQueued) return 'Another sync is already lined up after this one; more clicks join it.';
+		if (running) return 'Click to sync again as soon as this one finishes.';
+		return sync.lastError ?? "Reads what's in the warehouse (what was built, checks, freshness). Click to sync now.";
 	});
 
 	async function refresh() {
@@ -37,13 +37,13 @@
 
 <span class="sync" class:failed={sync?.state === 'failed'} {title}>
 	<span>{text}</span>
-	{#if running && sync?.followUpQueued}<span class="queued">+1 queued</span>{/if}
+	{#if running && sync?.followUpQueued}<span class="queued" title="Another sync runs right after this one">+1 next</span>{/if}
 	<button
 		class="refresh"
-		aria-label={running ? 'Queue a follow-up warehouse sync' : 'Sync warehouse now'}
+		aria-label={running ? 'Sync again after this one' : 'Sync with the warehouse now'}
 		onclick={refresh}
 		disabled={!sync || requesting || !canSync}
-		title={canSync ? undefined : 'Requires warehouse.sync'}
+		title={canSync ? undefined : "You don't have permission to refresh (warehouse.sync)"}
 	>
 		<RefreshCwIcon size={12} class={running ? 'animate-spin' : ''} />
 	</button>

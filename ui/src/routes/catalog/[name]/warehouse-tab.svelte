@@ -53,7 +53,7 @@
 		{/if}
 	</div>
 
-	<Panel title="Columns" note={mismatched ? `${mismatched} differ from the declaration` : 'Match the declaration'}>
+	<Panel title="Columns" note={mismatched ? `${mismatched} differ from the code` : 'All match the code'}>
 		<table class="sb-list">
 			<thead><tr><th>Column</th><th>Declared</th><th>In the warehouse</th><th>State</th></tr></thead>
 			<tbody>
@@ -70,7 +70,7 @@
 	</Panel>
 
 	{#if microbatch}
-		<Panel title="Microbatch coverage" note="{microbatch.cursorColumn} · {microbatch.batchSize} batches · contiguous to {formatStamp(microbatch.contiguousFrontier)}">
+		<Panel title="Microbatch coverage" note="{microbatch.cursorColumn} · {microbatch.batchSize} batches · complete up to {formatStamp(microbatch.contiguousFrontier)}">
 			<div class="batches">
 				{#each microbatch.batches as b (b.start)}
 					<a class="batch" href={b.runId ? `/runs/${b.runId}` : undefined} style:background={batchTone[b.state]} title="{formatStamp(b.start)} – {formatStamp(b.end)} · {batchLabel[b.state]}{b.runId ? ` · ${b.runId}` : ''}"><span class="sr-only">{batchLabel[b.state]}</span></a>

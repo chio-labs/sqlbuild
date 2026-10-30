@@ -48,7 +48,7 @@
 	<Button variant="outline" size="sm" onclick={() => changes.refresh()}>↻ Refresh</Button>
 </AppTopbar>
 
-<ListToolbar bind:query placeholder="Search nodes, revisions, authors" total="{filtered.length} of {all.length} snapshots">
+<ListToolbar bind:query placeholder="Search nodes, commits, authors" total="{filtered.length} of {all.length} deploys">
 	{#snippet filters()}
 		<SegmentedFilter bind:value={area} options={areaOptions.map((o) => ({ ...o, count: all.filter((c) => hasArea(c, o.value)).length }))} />
 	{/snippet}
@@ -61,13 +61,13 @@
 			<header>
 				<span class="icon"><GitCommitIcon size={15} /></span>
 				<div class="title">
-					<strong>Generation {c.generation}</strong>
-					<code>{c.gitRevision}{c.gitDirty ? ' · dirty' : ''}</code>
+					<strong title="Snapshot {c.snapshotId}, generation {c.generation}">Version {c.generation}</strong>
+					<code title="Commit">{c.gitRevision}{c.gitDirty ? ' · with uncommitted changes' : ''}</code>
 					<span class="faint">{summarizeChange(c)}</span>
 				</div>
 				<div class="who">
 					<span>{c.gitAuthor}</span>
-					<span class="faint">published by {c.publishedBy.displayName} · <span title={formatStamp(c.publishedAt)}>{formatAgo(c.publishedAt, app.now)}</span></span>
+					<span class="faint">deployed by {c.publishedBy.displayName} · <span title={formatStamp(c.publishedAt)}>{formatAgo(c.publishedAt, app.now)}</span></span>
 				</div>
 			</header>
 
@@ -155,18 +155,18 @@
 								<a class="run" href="/runs/{r.id}" title="{runStatusLabel[r.status]} · {formatStamp(r.startedAt ?? r.queuedAt)}">
 									<i style:background={runStatusTone[r.status]}></i>
 									<code>{r.id}</code>
-									<span class="faint">{r.jobKey ?? 'ad hoc'} · {formatAgo(r.startedAt ?? r.queuedAt, app.now)}</span>
+									<span class="faint">{r.jobKey ?? 'started by hand'} · {formatAgo(r.startedAt ?? r.queuedAt, app.now)}</span>
 								</a>
 							{/each}
 						</div>
 					{:else}
-						<p class="faint">No runs on this snapshot yet.</p>
+						<p class="faint">No runs of this version yet.</p>
 					{/if}
 				</section>
 			</div>
 		</article>
 	{:else}
-		<div class="msg">{changes.loading ? 'Loading…' : all.length ? 'No snapshots match the filter.' : 'No snapshots have been published to this target.'}</div>
+		<div class="msg">{changes.loading ? 'Loading…' : all.length ? 'No deploys match the filter.' : 'Nothing has been deployed to this target yet.'}</div>
 	{/each}
 </div>
 

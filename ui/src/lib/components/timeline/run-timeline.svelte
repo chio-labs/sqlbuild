@@ -230,7 +230,7 @@
 								style:left="{pct(m.atMs)}%"
 								onmouseenter={(e) => (markerHover = { marker: m, x: e.clientX, y: e.clientY })}
 								onmouseleave={() => (markerHover = null)}
-								aria-label="{m.triggerName} tick {m.outcome} {clock(m.atMs)}"
+								aria-label="{m.triggerName} due {clock(m.atMs)}: {m.outcome === 'covered' ? 'merged into a waiting run' : 'skipped'}"
 							></a>
 						{/each}
 					</div>
@@ -251,12 +251,11 @@
 	<div class="tl-tip" style:left="{hover.x + 270 > innerW ? hover.x - 254 : hover.x + 14}px" style:top="{hover.y + 16}px">
 		<div class="tip-head"><i style:background={r.status === 'projected' ? 'var(--sb-text-faint)' : tone(r)}></i><b>{label(r)}</b><span>{r.jobKey}</span></div>
 		<dl>
-			{#if r.runId}<div><dt>Run</dt><dd class="mono">{r.runId}</dd></div>{/if}
-			<div><dt>{r.status === 'projected' ? 'Next tick' : 'Started'}</dt><dd>{clock(r.startMs)}</dd></div>
+			{#if r.runId}<div><dt>Run</dt><dd class="mono">{r.runId.replace(/^run-/, '')}</dd></div>{/if}
+			<div><dt>{r.status === 'projected' ? 'Due' : 'Started'}</dt><dd>{clock(r.startMs)}</dd></div>
 			<div><dt>Duration</dt><dd>{r.status === 'projected' ? `~${duration(r)} typical` : r.status === 'running' ? `${duration(r)} so far` : duration(r)}</dd></div>
 			<div><dt>Kind</dt><dd>{runKindLabel[r.kind]}</dd></div>
-			<div><dt>Origin</dt><dd>{runOriginLabel[r.origin]}</dd></div>
-			{#if r.triggerName}<div><dt>Trigger</dt><dd>{r.triggerName}</dd></div>{/if}
+			<div><dt>Started by</dt><dd>{r.triggerName ?? runOriginLabel[r.origin]}</dd></div>
 		</dl>
 	</div>
 {/if}
@@ -264,11 +263,11 @@
 {#if markerHover}
 	{@const m = markerHover.marker}
 	<div class="tl-tip" style:left="{markerHover.x + 270 > innerW ? markerHover.x - 254 : markerHover.x + 14}px" style:top="{markerHover.y + 16}px">
-		<div class="tip-head"><i style:background={m.outcome === 'covered' ? 'var(--sb-running)' : 'var(--sb-text-faint)'}></i><b>Tick {m.outcome}</b><span>{m.triggerName}</span></div>
+		<div class="tip-head"><i style:background={m.outcome === 'covered' ? 'var(--sb-running)' : 'var(--sb-text-faint)'}></i><b>{m.outcome === 'covered' ? 'Merged into a waiting run' : 'Skipped'}</b><span>{m.triggerName}</span></div>
 		<dl>
 			<div><dt>Due</dt><dd>{clock(m.atMs)}</dd></div>
-			{#if m.coveredByRunId}<div><dt>Covered by</dt><dd class="mono">{m.coveredByRunId}</dd></div>{/if}
-			{#if m.reason}<div><dt>Reason</dt><dd>{m.reason}</dd></div>{/if}
+			{#if m.coveredByRunId}<div><dt>Merged into</dt><dd class="mono">run {m.coveredByRunId.replace(/^run-/, '')} (already waiting)</dd></div>{/if}
+			{#if m.reason && m.outcome !== 'covered'}<div><dt>Why</dt><dd>{m.reason}</dd></div>{/if}
 		</dl>
 	</div>
 {/if}

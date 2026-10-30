@@ -15,7 +15,7 @@
 	import { createResource } from '$lib/state/resource.svelte';
 	import { formatAgo, formatStamp } from '$lib/format/time';
 	import { isActiveRun, isProblemRun, runStatusLabel, runStatusTone } from '$lib/status';
-	import { overlapHelp } from '$lib/operate/labels';
+	import { overlapHelp, overlapPlain } from '$lib/operate/labels';
 
 	const jobs = createResource((client, scope) => client.listJobs(scope), ['jobs', 'runs']);
 	const triggers = createResource((client, scope) => client.listTriggers(scope), ['triggers']);
@@ -62,7 +62,7 @@
 	placeholder="Search jobs and groups"
 	total="{filtered.length} of {all.length}"
 	counts={[
-		{ tone: 'var(--sb-success)', count: scheduledCount, label: 'with a running trigger' },
+		{ tone: 'var(--sb-success)', count: scheduledCount, label: 'start automatically' },
 		{ tone: 'var(--sb-error)', count: failingCount, label: 'last run failed or partial' }
 	]}
 >
@@ -98,8 +98,8 @@
 				<th>Job</th>
 				<th>Selection</th>
 				<th class="num">Nodes</th>
-				<th>Overlap</th>
-				<th>Triggers</th>
+				<th title="What happens when it's asked to run while a run is already waiting or running">If already running</th>
+				<th>Started by</th>
 				<th>Owner</th>
 				<th>Last run</th>
 			</tr>
@@ -125,15 +125,15 @@
 						{/if}
 					</td>
 					<td class="num muted">{j.nodeCount}</td>
-					<td class="muted nowrap" title={overlapHelp[j.overlap]}><code>{j.overlap}</code>{#if j.priority}<span> · priority {j.priority}</span>{/if}</td>
+					<td class="muted nowrap" title="{overlapHelp[j.overlap]} (overlap = {j.overlap})">{overlapPlain[j.overlap]}{#if j.priority}<span title="Higher priority runs go first when they wait for the same slot"> · priority {j.priority}</span>{/if}</td>
 					<td>
 						{#if jobTriggers.length === 0}
-							<span class="muted">Manual only</span>
+							<span class="muted" title="No schedule or sensor starts it; start it from its page">Only by hand</span>
 						{:else}
 							<div class="flex flex-col gap-1">
 								{#each jobTriggers as t (t.id)}
 									<div class="flex items-center gap-2.5">
-										<span title={canToggle ? (t.state === 'running' ? 'Pause trigger' : 'Enable trigger') : 'Requires trigger.toggle'}>
+										<span title={canToggle ? (t.state === 'running' ? `Pause ${t.name}: it stops starting runs` : `Turn ${t.name} on`) : "You don't have permission to pause or turn on schedules and sensors (trigger.toggle)"}>
 											<button
 												class="sb-toggle"
 												class:on={t.state === 'running'}
@@ -142,7 +142,7 @@
 													e.stopPropagation();
 													void toggle(t);
 												}}
-												aria-label="Toggle trigger {t.name}"
+												aria-label="{t.state === 'running' ? 'Pause' : 'Turn on'} {t.name}"
 											></button>
 										</span>
 										<a class:muted={t.state === 'paused'} href="/triggers/{t.id}" title={t.cadence} onclick={(e) => e.stopPropagation()}>{t.name}</a>
@@ -164,7 +164,7 @@
 					</td>
 				</tr>
 			{:else}
-				<LoadRow colspan={7} resource={jobs} empty={all.length ? 'No jobs match the filter.' : 'No jobs or groups are defined in this snapshot.'} />
+				<LoadRow colspan={7} resource={jobs} empty={all.length ? 'No jobs match the filter.' : 'No jobs yet. Declare jobs and groups in the project code and deploy; they show up here.'} />
 			{/each}
 		</tbody>
 	</table>

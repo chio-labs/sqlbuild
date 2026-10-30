@@ -36,7 +36,7 @@
 		rejected: 'var(--sb-error)',
 		superseded: 'var(--sb-text-faint)'
 	};
-	const sourceLabel: Record<RoleSource, string> = { built_in: 'Built-in', server_config: 'Server config', project: 'Project' };
+	const sourceLabel: Record<RoleSource, string> = { built_in: 'Built in', server_config: 'Server config', project: 'Project code' };
 
 	function grantLine(g: RoleGrant): string {
 		return `nodes = [${g.nodes.map((n) => `"${n}"`).join(', ')}]  ${g.permissions.join(', ')}`;
@@ -134,10 +134,10 @@
 	<PageTabs
 		bind:value={tab}
 		tabs={[
-			{ value: 'approvals', label: 'Pending approvals', count: pending.length },
-			{ value: 'assignments', label: 'Assignments', count: assignments.data?.length },
+			{ value: 'approvals', label: 'Waiting for approval', count: pending.length },
+			{ value: 'assignments', label: 'Who has which role', count: assignments.data?.length },
 			{ value: 'roles', label: 'Roles', count: roles.data?.length },
-			{ value: 'explain', label: 'Explain access' }
+			{ value: 'explain', label: 'Why can or can’t they?' }
 		]}
 	/>
 
@@ -147,13 +147,13 @@
 		{#if tab === 'approvals'}
 			<div class="px-6 pt-5">
 				<p class="lede">
-					Role definitions in code are proposals. Narrowing applies on publish; widening waits here, and the previously approved definition stays in force until an admin approves it.
+					Roles defined in the project code are only proposals. Taking permissions away applies when the code is deployed. Giving more waits here: the approved version stays in force until an admin approves the change.
 				</p>
 				{#each pending as a (a.id)}
 					<div class="approval">
 						<div class="approval-head">
 							<b>{a.role}</b>
-							<span class="muted">{locationName(locations, a.locationId)} · snapshot generation {a.snapshotGeneration} · <code>{a.gitRevision}</code> by {a.gitAuthor} · proposed {formatAgo(a.proposedAt, app.now)}</span>
+							<span class="muted" title="Snapshot generation {a.snapshotGeneration}">{locationName(locations, a.locationId)} · version {a.snapshotGeneration} · commit <code>{a.gitRevision}</code> by {a.gitAuthor} · proposed {formatAgo(a.proposedAt, app.now)}</span>
 						</div>
 						<div class="diff" aria-label="Proposed change">
 							{#each unchangedGrants(a) as g (grantLine(g))}
@@ -168,16 +168,16 @@
 						</div>
 						<div class="decide">
 							<input class="field" placeholder="Note for the audit log (optional)" bind:value={() => notes[a.id] ?? '', (v) => (notes = { ...notes, [a.id]: v })} />
-							<GatedButton requires="role.assign" variant="default" busy={busy === a.id} onclick={() => decide(a, 'approve')}>Approve widening</GatedButton>
+							<GatedButton requires="role.assign" variant="default" busy={busy === a.id} onclick={() => decide(a, 'approve')}>Approve</GatedButton>
 							<GatedButton requires="role.assign" variant="destructive" busy={busy === a.id} onclick={() => decide(a, 'reject')}>Reject</GatedButton>
 						</div>
 					</div>
 				{:else}
-					<p class="muted mb-6">{approvals.data ? 'No role changes are waiting for approval.' : approvals.error ? `Couldn't load: ${approvals.error}` : 'Loading…'}</p>
+					<p class="muted mb-6">{approvals.data ? 'Nothing is waiting for approval.' : approvals.error ? `Couldn't load: ${approvals.error}` : 'Loading…'}</p>
 				{/each}
 
 				{#if decided.length}
-					<Panel title="Decided">
+					<Panel title="Already decided">
 						<table class="sb-list static framed">
 							<thead>
 								<tr>
@@ -214,11 +214,11 @@
 			<div class="create-bar">
 				{#if accounts.data?.length}
 					<select class="field" bind:value={newPrincipal} aria-label="Principal">
-						<option value="">Principal…</option>
+						<option value="">Person or service account…</option>
 						{#each accounts.data as p (p.name)}<option value={p.name}>{p.name}</option>{/each}
 					</select>
 				{:else}
-					<input class="field" placeholder="Principal" bind:value={newPrincipal} aria-label="Principal" />
+					<input class="field" placeholder="Person or service account" bind:value={newPrincipal} aria-label="Person or service account" />
 				{/if}
 				<select class="field" bind:value={newRole} aria-label="Role">
 					<option value="">Role…</option>
@@ -238,10 +238,10 @@
 			<table class="sb-list static">
 				<thead>
 					<tr>
-						<th>Principal</th>
+						<th>Who</th>
 						<th>Role</th>
-						<th>Scope</th>
-						<th>Source</th>
+						<th>Where</th>
+						<th>Given by</th>
 						<th>Assigned</th>
 						<th></th>
 					</tr>
@@ -255,8 +255,8 @@
 							</td>
 							<td>
 								{a.role}
-								{#if a.stale}<div class="cell-desc warn">Stale: role removed from code; grants nothing</div>{/if}
-								{#if isOwnLastAdmin(a)}<div class="cell-desc warn">Your last admin assignment: removing it locks you out of administration</div>{/if}
+								{#if a.stale}<div class="cell-desc warn">This role no longer exists in the code, so it gives nothing</div>{/if}
+								{#if isOwnLastAdmin(a)}<div class="cell-desc warn">Your last admin role: removing it locks you out of administration</div>{/if}
 							</td>
 							<td class="muted">{formatAssignmentScope(a.scope, locations)}</td>
 							<td class="muted">{a.source === 'sso' ? `SSO group ${a.ssoGroup}` : 'Manual'}</td>
@@ -268,12 +268,12 @@
 								{#if a.source === 'manual'}
 									<GatedButton requires="role.assign" size="xs" variant="destructive" busy={busy === a.id} onclick={() => remove(a)}>Remove</GatedButton>
 								{:else}
-									<span class="faint" title="Change the group mapping in the server config">via SSO</span>
+									<span class="faint" title="Comes from their SSO group; change the group mapping in the server config">from their SSO group</span>
 								{/if}
 							</td>
 						</tr>
 					{:else}
-						<LoadRow colspan={6} resource={assignments} empty="No role assignments." />
+						<LoadRow colspan={6} resource={assignments} empty="No one has a role yet. Give one above." />
 					{/each}
 				</tbody>
 			</table>
@@ -287,7 +287,7 @@
 						<tr>
 							<th>Role</th>
 							<th>Source</th>
-							<th>Approved grants</th>
+							<th>What it allows</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -296,7 +296,7 @@
 								<td>
 									<strong>{r.name}</strong>
 									<div class="cell-desc">{r.description}</div>
-									{#if r.pendingApprovalId}<div class="cell-desc warn">Widening pending approval</div>{/if}
+									{#if r.pendingApprovalId}<div class="cell-desc warn">A change giving it more is waiting for approval</div>{/if}
 								</td>
 								<td class="muted">{sourceLabel[r.source]}{#if r.sourceFile}<div class="cell-desc"><code>{r.sourceFile}</code></div>{/if}</td>
 								<td>
@@ -313,7 +313,7 @@
 			</div>
 		{:else}
 			<div class="px-6 pt-5">
-				<p class="lede">Why can or can't a principal do something? The server's authorizer explains which roles grant it, or which would.</p>
+				<p class="lede">Why can or can't someone do something? The server shows which of their roles allow it, or which roles would.</p>
 				<ExplainAccess principals={accounts.data ?? []} />
 			</div>
 		{/if}

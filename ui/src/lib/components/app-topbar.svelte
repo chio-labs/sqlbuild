@@ -18,6 +18,12 @@
 		reconnecting: 'var(--sb-warning)',
 		offline: 'var(--sb-error)'
 	};
+	const connectionTitle: Record<ConnectionState, string> = {
+		live: 'Pages update as things change.',
+		connecting: 'Connecting for live updates…',
+		reconnecting: 'Lost the live connection; trying again. Pages may be behind.',
+		offline: 'Not receiving live updates. Refresh pages to see changes.'
+	};
 	const connectionLabel: Record<ConnectionState, string> = {
 		live: 'Live',
 		connecting: 'Connecting',
@@ -34,14 +40,14 @@
 	<div class="ml-auto flex items-center gap-2.5">
 		<span
 			class="text-muted-foreground flex items-center gap-[7px] text-[12px]"
-			title={snapshot
-				? `Snapshot generation ${snapshot.generation} · ${snapshot.gitRevision}${snapshot.gitDirty ? ' (uncommitted changes)' : ''} · ${snapshot.gitAuthor}`
-				: 'No snapshot published for this target'}
+			title={`${connectionTitle[app.connection]}\n${snapshot
+				? `Version ${snapshot.generation}: commit ${snapshot.gitRevision}${snapshot.gitDirty ? ' (with uncommitted changes)' : ''} by ${snapshot.gitAuthor} (snapshot ${snapshot.id}, generation ${snapshot.generation})`
+				: 'Nothing deployed to this target yet'}`}
 		>
 			<span class="h-[7px] w-[7px] rounded-full" style:background={connectionTone[app.connection]}></span>
 			{connectionLabel[app.connection]}
 			<span class="text-[var(--sb-text-faint)]">·</span>
-			{snapshot ? `snapshot ${formatAgo(snapshot.publishedAt, app.now)}` : 'no snapshot'}
+			{snapshot ? `Version ${snapshot.generation}, deployed ${formatAgo(snapshot.publishedAt, app.now)}` : 'nothing deployed yet'}
 		</span>
 		<span class="text-[var(--sb-text-faint)]">·</span>
 		<WarehouseSyncStatus />

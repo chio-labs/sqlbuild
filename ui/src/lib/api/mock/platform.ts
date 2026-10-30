@@ -454,7 +454,7 @@ function createPlatformFixtures(now: number) {
 		{
 			migrationEventId: 'mig-5', destinationModel: 'customer_status', old: relation('MARTS', 'CUSTOMER_STATUS_V2'), new: relation('MARTS', 'CUSTOMER_STATUS'), retention: '30d',
 			archiveName: '_SQB_ARCHIVE__20261027T010000Z__CUSTOMER_STATUS_V2', columnAliases: [], grantsCopied: 2, expiresAt: null,
-			dropReason: 'Dropped early with --drop-old-name-view',
+			dropReason: 'Removed early on request (--drop-old-name-view)',
 			steps: [step('required', days(1) + 340, 'run-77b3'), step('origin_archived', days(1) + 339, 'run-77b3'), step('view_created', days(1) + 339, 'run-77b3'), step('view_dropped', 600, 'run-0c7d')]
 		},
 		{
@@ -475,7 +475,7 @@ function createPlatformFixtures(now: number) {
 		},
 		{
 			migrationEventId: 'mig-0', destinationModel: 'fact_orders', old: relation('ANALYTICS', 'ORDERS_V1'), new: relation('ANALYTICS', 'FACT_ORDERS'), retention: '30d',
-			archiveName: '_SQB_ARCHIVE__20260918T020000Z__ORDERS_V1', columnAliases: [{ old: 'order_total', new: 'amount' }], grantsCopied: 4, expiresAt: ago(days(11)), dropReason: 'Expired',
+			archiveName: '_SQB_ARCHIVE__20260918T020000Z__ORDERS_V1', columnAliases: [{ old: 'order_total', new: 'amount' }], grantsCopied: 4, expiresAt: ago(days(11)), dropReason: 'Removed at its end date',
 			steps: [step('required', days(41), 'run-c40e'), step('origin_archived', days(41), 'run-c40e'), step('view_created', days(41), 'run-c40e'), step('view_dropped', days(10), 'run-jan-8b1')]
 		},
 		{
@@ -959,12 +959,12 @@ export class MockPlatformApi implements PlatformApi {
 			authMode: 'oidc',
 			schedulerEnabled: true,
 			retention: [
-				{ name: 'Run history', value: '90 days', description: 'Runs, ticks and their events; dropped by partition.' },
+				{ name: 'Run history', value: '90 days', description: 'Runs, schedule history and their events.' },
 				{ name: 'Run logs', value: '30 days', description: 'Captured run output.' },
-				{ name: 'Platform events', value: '30 days', description: 'Watchdog events; the latest sensor cursors are always kept.' },
-				{ name: 'Security audit log', value: '400 days', description: 'Append-only; export through a sink for longer retention.' },
-				{ name: 'Warehouse statistics', value: '90 days', description: 'Sampled row and byte counts.' },
-				{ name: 'Activity telemetry', value: '14 days', description: 'Best-effort page views, kept separate from the audit log.' }
+				{ name: 'Platform events', value: '30 days', description: 'Problems such as late schedules. Where each sensor is up to is always kept.' },
+				{ name: 'Security audit log', value: '400 days', description: 'Can’t be changed or deleted early. Forward events to keep them longer.' },
+				{ name: 'Warehouse statistics', value: '90 days', description: 'Row counts and table sizes, sampled over time.' },
+				{ name: 'Activity telemetry', value: '14 days', description: 'Page views, kept apart from the audit log.' }
 			]
 		});
 	}

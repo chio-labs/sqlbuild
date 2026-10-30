@@ -14,18 +14,18 @@
 <div class="stages">
 	{#each stages as stage, i (i)}
 		<div class="stage">
-			<div class="label">Stage {i + 1}</div>
+			<div class="label" title="Jobs in the same step run side by side">Step {i + 1}</div>
 			{#each stage as m (m.jobKey)}
 				<a class="member" href="/jobs/{m.jobKey}">
 					<b>{m.jobKey}</b>
 					{#if m.upstream.length}
 						{#each m.upstream as u (u.jobKey)}
-							<span class="edge" class:after={u.source === 'after'} title={u.source === 'after' ? 'Declared with after=' : 'Derived from lineage'}>
-								after {u.jobKey} · {u.source === 'after' ? 'after=' : 'lineage'}
+							<span class="edge" class:after={u.source === 'after'} title={u.source === 'after' ? 'Set in the code with after=' : 'Because it reads data that job builds (lineage)'}>
+								after {u.jobKey} · {u.source === 'after' ? 'set in code' : 'uses its data'}
 							</span>
 						{/each}
 					{:else}
-						<span class="edge">no upstream member</span>
+						<span class="edge">starts first</span>
 					{/if}
 				</a>
 			{/each}
@@ -35,7 +35,7 @@
 </div>
 {#if job.criticalNodes.length}
 	<p class="critical">
-		Critical nodes (a failure stops the group):
+		Critical nodes (if one fails, the whole group stops):
 		{#each job.criticalNodes as n, i (n)}{i ? ', ' : ''}<a href="/catalog/{n}"><code>{n}</code></a>{/each}
 	</p>
 {/if}

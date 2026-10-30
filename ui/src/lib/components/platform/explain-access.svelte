@@ -43,7 +43,7 @@
 <div class="explain">
 	<div class="form">
 		<label>
-			<span>Principal</span>
+			<span>Who</span>
 			{#if principals.length}
 				<select bind:value={principal}>
 					<option value="">{app.user?.name} (me)</option>
@@ -89,7 +89,7 @@
 				<span>{result.summary}</span>
 			</div>
 			{#if result.grantedBy.length}
-				<div class="group-title">Granted by (grants are a union of roles)</div>
+				<div class="group-title" title="Permissions add up across all their roles">Allowed by</div>
 				<ul>
 					{#each result.grantedBy as g (g.assignmentId)}
 						<li>
@@ -100,11 +100,11 @@
 				</ul>
 			{/if}
 			{#if !result.allowed && result.wouldBeGrantedBy.length}
-				<div class="group-title">Would be granted by</div>
+				<div class="group-title">Roles that would allow it</div>
 				<p>{result.wouldBeGrantedBy.join(', ')}</p>
 			{/if}
 			{#if result.ignored.length}
-				<div class="group-title">Assignments that don't apply</div>
+				<div class="group-title">Their roles that don't apply here</div>
 				<ul>
 					{#each result.ignored as i (i.assignmentId)}
 						<li><b>{i.role}</b> · {i.reason}</li>

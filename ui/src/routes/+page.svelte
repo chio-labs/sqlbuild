@@ -97,7 +97,7 @@
 			{#if m}
 				<div class="metric">
 					<span class="metric-label">Models</span>
-					<div><strong>{m.models.total}</strong><small>in snapshot</small></div>
+					<div><strong>{m.models.total}</strong><small>deployed</small></div>
 					<span class:success-note={m.models.addedThisWeek > 0}>{m.models.addedThisWeek || m.models.removedThisWeek ? `+${m.models.addedThisWeek} / −${m.models.removedThisWeek} this week` : 'No changes this week'}</span>
 				</div>
 				<div class="metric">
@@ -127,7 +127,7 @@
 
 		<section class="surface-panel flex min-w-0 flex-col">
 			<div class="panel-heading">
-				<div><h2>Activity</h2><span>Past runs and projected schedule and calendar ticks</span></div>
+				<div><h2>Activity</h2><span>Past runs, and when schedules will run next</span></div>
 				<a href="/runs?view=timeline">Open full timeline →</a>
 			</div>
 			<RunTimeline scroll={false} stickyTop={0} />
@@ -155,19 +155,19 @@
 							<b class:error-text={g.failed}>{g.failed || '—'}</b>
 						</a>
 					{:else}
-						<div class="empty">{overview.loading ? 'Loading…' : 'No nodes in this snapshot.'}</div>
+						<div class="empty">{overview.loading ? 'Loading…' : 'Nothing deployed yet. Deploy the project to see its models here.'}</div>
 					{/each}
 				</div>
 			</section>
 			<section class="surface-panel">
 				<div class="panel-heading">
-					<div><h2>Recent changes</h2><span>Published snapshots</span></div>
+					<div><h2>Recent changes</h2><span>Recent deploys</span></div>
 					<a href="/changes">All changes →</a>
 				</div>
 				<div>
 					{#each data?.recentChanges ?? [] as c (c.snapshotId)}
 						<a class="change" href="/changes#gen-{c.generation}">
-							<span class="change-rev"><code>{c.gitRevision}</code><small>gen {c.generation}</small></span>
+							<span class="change-rev" title="Snapshot generation {c.generation}"><code>{c.gitRevision}</code><small>version {c.generation}</small></span>
 							<span class="change-copy">
 								<strong>{summarizeChange(c)}</strong>
 								<span>{c.nodes.slice(0, 3).map((n) => `${changeOpLabel[n.op].toLowerCase()} ${n.key}`).join(' · ') || 'No node changes'}</span>
@@ -175,7 +175,7 @@
 							<small>{c.gitAuthor} · {formatAgo(c.publishedAt, app.now)}</small>
 						</a>
 					{:else}
-						<div class="empty">{overview.loading ? 'Loading…' : 'No snapshots published yet.'}</div>
+						<div class="empty">{overview.loading ? 'Loading…' : 'Nothing deployed yet.'}</div>
 					{/each}
 				</div>
 			</section>
